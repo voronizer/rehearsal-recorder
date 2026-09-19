@@ -63,9 +63,10 @@ class PublishQueue:
     Takes waiting to be copied into the cloud folder.
 
     One worker and one job at a time, so two takes are never mixed at once,
-    and nothing at all while `paused()` is true — the audio callback is not
-    something to compete with for a copy that can just as well happen in the
-    gap before the next take.
+    and no job is started while `paused()` is true — the audio callback is not
+    something to start competing with, for a copy that can just as well happen
+    in the gap before the next take. The check is per job, not during one: a
+    copy already under way runs to the end.
 
     The loop body is `run_next`, which the tests call directly. The thread is
     only started by the real app, so a test never races it.

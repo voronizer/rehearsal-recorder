@@ -20,8 +20,11 @@ already filters on the decision a person made anyway.
 
 - Takes are published **during** the rehearsal, in the background, not in one
   batch at the end.
-- The queue **stops while a take is recording**, so mixing and encoding never
-  compete with the audio callback.
+- **No job starts while a take is recording**, so a copy is not begun in
+  competition with the audio callback. The check is per job, not during one:
+  a mixdown already running when Record is pressed carries on to the end of
+  that take, which is a few seconds of overlap and not worth chopping the
+  copy into chunks to avoid.
 - **What** gets published is a setting, not a fixed choice.
 - A rename or a new balance **re-publishes** the take, replacing the old copy.
 
@@ -114,7 +117,8 @@ hand.
 One daemon thread, started with the app, sleeping on an event when the queue
 is empty. Each pass:
 
-1. If `self._recorder is not None`, wait. Recording wins.
+1. If `self._recorder is not None`, wait. Recording wins — at the start of a
+   job; the one in hand is not interrupted partway.
 2. Take the next job. If auto-publish is off, drop it.
 3. If the fingerprint already matches, drop it.
 4. Call `share_take`, then write the fingerprint and clear any `cloud_error`.
@@ -183,7 +187,7 @@ logged out, a disk that may be full, a folder that may have been moved.
 - the second pass over an unchanged take copies nothing
 - renaming a take replaces its copy
 - changing the balance re-queues the current rehearsal's takes, not older ones
-- the queue does not run while a take is recording
+- the queue does not start a job while a take is recording
 - a failure is recorded on the take and the take is retried later
 
 `tests/test_interface.py`:

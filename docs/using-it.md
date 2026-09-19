@@ -136,8 +136,8 @@ Two ways to get them there, and they do the same work underneath:
   one take out of an old rehearsal, or one the setting below skipped.
 - **On their own**, if **Send saved takes automatically** is ticked in
   Settings. Every take you keep is copied in the background, in the gap after
-  it is saved and never while the next one is recording — mixing a take is
-  not something to have competing with the sound card. The take's row says
+  it is saved: no copy is begun while a take is recording, because mixing one
+  is not something to start competing with the sound card. The take's row says
   where it has got to: "Waiting for the cloud", "Copying to the cloud", the
   green cloud button once it is there, or "Not in the cloud" with the reason
   when something went wrong.

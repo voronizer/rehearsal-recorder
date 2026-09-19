@@ -753,13 +753,15 @@ def main():
     # A take modified during publishing must be re-published with the new state,
     # so the cloud copy does not stay stale. A step that re-enqueues its own job
     # models the app calling enqueue() after the take changed mid-publish.
-    reruns, recording = [], {"now": False}
+    # A name of its own: the queue above captured `recording` by name, and
+    # rebinding it here would quietly change what that one is paused by.
+    reruns, recording2 = [], {"now": False}
     q2 = cloudmod.PublishQueue(
         step=lambda folder, n: (
             reruns.append((folder, n)),
             q2.enqueue(folder, n) if len(reruns) == 1 else None
         ),
-        paused=lambda: recording["now"],
+        paused=lambda: recording2["now"],
     )
     q2.enqueue("/rec/X", 5)
     ok("a job re-enqueued from its own step is queued again",
