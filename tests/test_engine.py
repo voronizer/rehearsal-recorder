@@ -721,6 +721,29 @@ def main():
     ok("a take that was never copied is not current",
        not cloudmod.is_current({"name": "x", "tracks": []}, "mix", volumes, "wav"))
 
+    print("\n[11d] The publishing queue")
+    done, recording = [], {"now": False}
+    q = cloudmod.PublishQueue(
+        step=lambda folder, n: done.append((folder, n)),
+        paused=lambda: recording["now"],
+    )
+    q.enqueue("/rec/One", 1)
+    q.enqueue("/rec/One", 2)
+    q.enqueue("/rec/One", 1)
+    ok("the same take is not queued twice",
+       q.states("/rec/One") == {1: "queued", 2: "queued"})
+    ok("another rehearsal's queue is its own", q.states("/rec/Two") == {})
+
+    recording["now"] = True
+    ok("nothing runs while a take is being recorded", q.run_next() is False)
+    ok("and the job is still waiting", q.states("/rec/One") == {1: "queued", 2: "queued"})
+
+    recording["now"] = False
+    ok("a job runs once recording stops", q.run_next() is True)
+    ok("in the order they arrived", done == [("/rec/One", 1)])
+    ok("the second one follows", q.run_next() is True and done[-1] == ("/rec/One", 2))
+    ok("and then there is nothing to do", q.run_next() is False)
+
     print("\n[12] The mix does not clip")
     loud = tmp / "loud"
     write_wav(loud / "one.wav", 20000, seconds=0.5)
