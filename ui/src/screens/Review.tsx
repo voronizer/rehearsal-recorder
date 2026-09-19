@@ -67,7 +67,6 @@ export function Review({
     setMarkers((prev) => prev.filter((m) => Math.abs(m.at - at) > 0.01))
   }
 
-  useSpacebar(player.toggle, !busy)
   usePlayerKeys(player.skip, !busy)
 
   const keep = async () => {
@@ -90,6 +89,9 @@ export function Review({
     }
     onKept()
   }
+
+  // Declared after keep, because that is what it runs.
+  useSpacebar(keep, !busy)
 
   const discard = async () => {
     if (busy) return
@@ -117,7 +119,7 @@ export function Review({
               Save take
             </Button>
           </div>
-          <SpaceHint>play / pause</SpaceHint>
+          <SpaceHint>save take</SpaceHint>
         </div>
       }
     >

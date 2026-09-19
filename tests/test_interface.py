@@ -435,12 +435,36 @@ def main():
         ok("a silent input is called out", page.locator("text=silent").count() > 0)
         page.screenshot(path=str(SHOTS / "52-recording.png"))
 
-        print("\n[6] Review: the name carries over")
+        print("\n[6] Review: space saves, the name carries over")
         page.click("text=Stop")
         page.wait_for_selector("#take-name")
         ok("first take gets a number", page.input_value("#take-name") == "Take 1")
+        ok("the hint says what space does here",
+           page.get_by_text("save take", exact=True).count() == 1)
+
+        # Space no longer plays here, so the button is the way to listen.
+        page.wait_for_selector("button[aria-label='Play']", timeout=8000)
+        page.click("button[aria-label='Play']")
+        page.wait_for_timeout(400)
+        ok("the take can still be listened to before saving",
+           len(calls("player_toggle")) == 1)
+        page.click("button[aria-label='Pause']")
+
+        # The name field is on this screen, so space typed in it is a space.
         page.fill("#take-name", "Polyn")
-        page.click("text=Save take")
+        page.keyboard.press("Space")
+        page.wait_for_timeout(300)
+        ok("space while naming the take does not save it",
+           len(calls("keep_take")) == 0)
+
+        # Everywhere else in the app space runs the screen's main action, and
+        # here that action is saving the take.
+        page.fill("#take-name", "Polyn")
+        page.locator("#take-name").blur()
+        page.keyboard.press("Space")
+        page.wait_for_timeout(600)
+        ok("space saves the take", len(calls("keep_take")) == 1)
+
         page.wait_for_selector("text=Record take 2")
         page.click("text=Record take 2")
         page.wait_for_selector("text=Stop")
