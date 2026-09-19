@@ -1009,6 +1009,30 @@ def main():
     ok("so it does not claim to be current",
        not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav"))
 
+    # A listing can run while the worker is writing. Whatever a reader sees
+    # at the worst moment must be a whole document, so the file is swapped
+    # into place rather than truncated and refilled.
+    seen = {}
+    real_replace = apimod.os.replace
+
+    def watch_replace(src, dst):
+        seen["during"] = Path(dst).read_text()
+        return real_replace(src, dst)
+
+    meta_before = a._read_meta(folder9)
+    apimod.os.replace = watch_replace
+    try:
+        a.rename_take(str(folder9), 9, "Renamed once more")
+    finally:
+        apimod.os.replace = real_replace
+
+    ok("the meta is swapped into place, never half-written",
+       json.loads(seen["during"])["takes"] == meta_before["takes"])
+    ok("and the new name is there once the swap is done",
+       a._read_meta(folder9)["takes"][-1]["name"] == "Renamed once more")
+    ok("no leftover temporary files",
+       not list(Path(folder9).glob("session.json.*")))
+
     # Restoring auto-publish above re-queued every take of the still-open
     # session (that is what turning it on does) — drain that before handing
     # off to the next section, which should start from an empty queue.

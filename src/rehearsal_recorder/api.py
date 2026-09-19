@@ -13,6 +13,7 @@ client's folder and the recordings sync themselves.
 """
 
 import json
+import os
 import re
 import shutil
 import threading
@@ -534,9 +535,14 @@ class Api:
 
     @staticmethod
     def _write_meta(folder, meta):
-        (Path(folder) / "session.json").write_text(
-            json.dumps(meta, ensure_ascii=False, indent=2)
-        )
+        # Written beside the real file and moved onto it, because the
+        # publishing thread writes this while the interface is listing
+        # rehearsals off it — a truncate-then-fill would let a listing read
+        # half a document. os.replace is atomic on every system we ship on.
+        folder = Path(folder)
+        tmp = folder / "session.json.writing"
+        tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+        os.replace(tmp, folder / "session.json")
 
     @staticmethod
     def _read_meta(folder):
