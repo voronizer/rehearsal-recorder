@@ -46,15 +46,25 @@ it produced. Add to it a record of what the copy was made *from*:
     "what": "mix",
     "name": "Polyn",
     "format": "flac",
+    "dir": "…/Google Drive/Band/Tuesday jam - 2026-09-19 20-00",
     "volumes": {"Guitar": 1.0, "Vocals": 0.8}
   }
 }
 ```
 
 `volumes` holds only the tracks in that take, so changing an unrelated track's
-level does not invalidate it. A take whose current name, format, chosen `what`
-and balance differ from `source` has a stale copy in the cloud. A take with no
+level does not invalidate it. `dir` is where the copy was actually written,
+which depends on the cloud folder and on the rehearsal's name — without it a
+take points the app at a different Drive folder and still reports itself as
+published. A take whose current name, format, chosen `what`, balance or
+destination differ from `source` has a stale copy in the cloud. A take with no
 `cloud` at all has none.
+
+The record describes files on somebody else's disk, so it is believed only
+while those files are still there: a sync client that logs out and re-creates
+its folder empty must not leave every take fingerprinted as published with
+nothing behind it. A fingerprint that cannot be disproved suppresses its own
+repair.
 
 This fingerprint is the guard, checked inside the worker just before it
 copies: if the take already matches, the job is dropped and nothing is
@@ -70,6 +80,8 @@ by triggers, not by scanning:
 | `rename_take` | that take, in any rehearsal |
 | `save_mix` | every take of the **active** rehearsal |
 | auto-publish switched on | every take of the active rehearsal |
+| `set_cloud_dir` | every take of the active rehearsal |
+| `rename_rehearsal` | every take of it, when it is the active one |
 
 There is deliberately no startup row. A rehearsal does not survive the
 process — `Api.__init__` starts with `self._session = None` — so at startup

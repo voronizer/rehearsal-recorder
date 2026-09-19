@@ -2,36 +2,60 @@
 Deciding whether what is in the cloud folder is still what the settings and
 the take say it should be.
 
-A copy is made from four things: which of the mix and the tracks was asked
-for, the take's name (the files are named after it), the format, and the
-balance the mix was rendered with. Recording those next to the copy is what
-lets a later pass skip a take that is already right, instead of mixing it
-again every time something nudges the queue.
+A copy is made from five things: which of the mix and the tracks was asked
+for, the take's name (the files are named after it), the format, the balance
+the mix was rendered with, and the folder it was written into. Recording
+those next to the copy is what lets a later pass skip a take that is already
+right, instead of mixing it again every time something nudges the queue.
+
+The record is a claim about a file on someone else's disk, so it is only
+believed while that file is still there. A sync client that logs out and
+re-creates its folder empty leaves every take fingerprinted as published with
+nothing behind it, and a fingerprint that cannot be disproved would suppress
+its own repair.
 """
 
 import sys
 import threading
+from pathlib import Path
 
 
-def source_of(take, what, volumes, fmt):
-    """What a copy of this take would be made from right now."""
+def source_of(take, what, volumes, fmt, target):
+    """What a copy of this take would be made from right now, and where it
+    would go."""
     names = [t.get("name") for t in take.get("tracks", []) if t.get("name")]
     return {
         "what": what,
         "name": take.get("name", ""),
         "format": fmt,
+        # The destination depends on the cloud folder and on the rehearsal's
+        # name, neither of which the rest of this record can see. Without it,
+        # pointing the app somewhere new leaves every take claiming to be in
+        # a folder nothing was ever copied to.
+        "dir": str(target) if target is not None else "",
         # Only this take's tracks: moving an unrelated fader must not make
         # every take in the folder look stale.
         "volumes": {n: float(volumes.get(n, 1.0)) for n in names},
     }
 
 
-def is_current(take, what, volumes, fmt):
+def copies_exist(shared):
+    """Whether what a record claims to have written is still on disk."""
+    for key in ("mix", "tracks"):
+        path = shared.get(key)
+        if path and not Path(path).exists():
+            return False
+    return True
+
+
+def is_current(take, what, volumes, fmt, target):
     """True when the cloud folder already holds this take in this shape."""
     shared = take.get("cloud") or {}
     if not shared:
         return False
-    return shared.get("source") == source_of(take, what, volumes, fmt)
+    if shared.get("source") != source_of(take, what, volumes, fmt, target):
+        return False
+    return copies_exist(shared)
 
 
 class PublishQueue:

@@ -265,12 +265,9 @@ class Api:
         current.update(volumes or {})
         self._config["volumes"] = current
         self._write_config()
-        # The balance lives in the config, not on the take, so "it changed" is
-        # true of every take ever recorded. Only the rehearsal in progress is
-        # the one this balance was set for; older ones keep what they sent.
-        if self._session is not None:
-            for t in self._session.get("takes", []):
-                self._enqueue_publish(self._session["folder"], t["take_number"])
+        # The mix carries the balance, so every copy of this rehearsal's takes
+        # is now made from something else.
+        self._enqueue_session_takes()
         return {"ok": True}
 
     def save_appearance(self, theme, ui_scale):
@@ -1006,6 +1003,11 @@ class Api:
                 self._session["name"] = display_name
                 self._session["takes"] = meta.get("takes", [])
 
+        # The copies sit in a cloud subfolder named after the rehearsal, so a
+        # new name is a new destination for all of them.
+        if self._session is not None and Path(self._session["folder"]) == folder:
+            self._enqueue_session_takes()
+
         return {
             "ok": True,
             "folder": str(folder),
@@ -1270,6 +1272,12 @@ class Api:
         path = self._config.get("cloud_dir")
         return Path(path) if path else None
 
+    def _cloud_target(self, folder):
+        """Where one rehearsal's copies go inside the cloud folder, or None
+        while there is no cloud folder to put them in."""
+        cloud = self._cloud_dir
+        return None if cloud is None else cloud / _safe_name(Path(folder).name)
+
     def set_cloud_dir(self, path):
         folder = Path(path).expanduser()
         if not folder.is_absolute():
@@ -1280,6 +1288,9 @@ class Api:
             return {"ok": False, "error": f"Could not open the folder: {e}"}
         self._config["cloud_dir"] = str(folder)
         self._write_config()
+        # Nothing of this rehearsal has ever been copied into a folder chosen
+        # a moment ago, whatever the takes still say about the old one.
+        self._enqueue_session_takes()
         return {"ok": True, "cloud_dir": str(folder)}
 
     def choose_cloud_dir(self):
@@ -1317,9 +1328,7 @@ class Api:
         if what is not None:
             self._config["auto_publish_what"] = what
         self._write_config()
-        if self._config["auto_publish"] and self._session is not None:
-            for t in self._session.get("takes", []):
-                self._enqueue_publish(self._session["folder"], t["take_number"])
+        self._enqueue_session_takes()
         return {
             "ok": True,
             "auto_publish": self._config["auto_publish"],
@@ -1336,6 +1345,22 @@ class Api:
         if not self._config.get("auto_publish"):
             return
         self._cloud_queue.enqueue(str(folder), take_number)
+
+    def _enqueue_session_takes(self):
+        """
+        Every take of the rehearsal in progress.
+
+        What a copy was made from is mostly settings — the balance, the
+        format, where the copies go — so "that changed" is true of every take
+        ever recorded. Re-publishing all of them because a fader moved would
+        be a storm of mixdowns. The rehearsal in progress is the one the
+        change was made during; older ones keep what they sent, and the share
+        dialog is still there to redo one by hand.
+        """
+        if self._session is None:
+            return
+        for t in self._session.get("takes", []):
+            self._enqueue_publish(self._session["folder"], t["take_number"])
 
     def _retry_failed_publishes(self):
         """
@@ -1368,7 +1393,8 @@ class Api:
         if take is None:
             return
         fmt = normalize_format(self._config.get("cloud_format"))
-        if cloudmod.is_current(take, what, self._config.get("volumes", {}), fmt):
+        target = self._cloud_target(folder)
+        if cloudmod.is_current(take, what, self._config.get("volumes", {}), fmt, target):
             return
         try:
             res = self.share_take(str(folder), take_number, what)
@@ -1439,8 +1465,8 @@ class Api:
 
         self._remove_shared(take)
 
-        target = cloud / _safe_name(folder.name)
-        base = f"{take_number:02d} - {_safe_name(take.get('name', '') or f'Take {take_number}')}"
+        target = self._cloud_target(folder)
+        base =f"{take_number:02d} - {_safe_name(take.get('name', '') or f'Take {take_number}')}"
         shared = {}
 
         fmt = normalize_format(self._config.get("cloud_format"))
@@ -1478,7 +1504,7 @@ class Api:
             shared["tracks"] = str(dest)
             shared["tracks_format"] = fmt
 
-        shared["source"] = cloudmod.source_of(take, what, volumes, fmt)
+        shared["source"] = cloudmod.source_of(take, what, volumes, fmt, target)
         with self._meta_lock:
             meta = self._read_meta(folder)
             if meta is None:

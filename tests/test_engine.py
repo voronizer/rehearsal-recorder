@@ -707,19 +707,25 @@ def main():
     a.share_take(str(new_folder), take["take_number"], "mix")
     take = a.get_rehearsal(str(new_folder))["takes"][0]
     volumes = a.get_settings()["volumes"]
+    where = a._cloud_target(new_folder)
     ok("the copy records what it was made from",
        take["cloud"]["source"]["what"] == "mix"
        and take["cloud"]["source"]["name"] == take["name"])
+    ok("and where it went",
+       take["cloud"]["source"].get("dir") == str(where))
     ok("and it counts as current",
-       cloudmod.is_current(take, "mix", volumes, "wav"))
+       cloudmod.is_current(take, "mix", volumes, "wav", where))
     ok("asking for more than was copied is not current",
-       not cloudmod.is_current(take, "both", volumes, "wav"))
+       not cloudmod.is_current(take, "both", volumes, "wav", where))
+    ok("and neither is another cloud folder",
+       not cloudmod.is_current(take, "mix", volumes, "wav", tmp / "Elsewhere"))
 
     renamed = dict(take, name="Something else")
     ok("a renamed take is not current",
-       not cloudmod.is_current(renamed, "mix", volumes, "wav"))
+       not cloudmod.is_current(renamed, "mix", volumes, "wav", where))
     ok("a take that was never copied is not current",
-       not cloudmod.is_current({"name": "x", "tracks": []}, "mix", volumes, "wav"))
+       not cloudmod.is_current({"name": "x", "tracks": []}, "mix", volumes,
+                               "wav", where))
 
     print("\n[11d] The publishing queue")
     done, recording = [], {"now": False}
@@ -1007,7 +1013,8 @@ def main():
     ok("and the copy still records the name it was written under",
        take9["cloud"]["source"]["name"] == "Before")
     ok("so it does not claim to be current",
-       not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav"))
+       not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav",
+                               a._cloud_target(folder9)))
 
     # The balance is the other half of the same fingerprint, and a fader can
     # move mid-publish exactly as a rename can land mid-publish. What is
@@ -1033,7 +1040,8 @@ def main():
     ok("the copy records the balance it was rendered with",
        take9["cloud"]["source"]["volumes"] == {"A": 0.9})
     ok("so a fader moved during the mix leaves it not current",
-       not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav"))
+       not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav",
+                               a._cloud_target(folder9)))
 
     # A listing can run while the worker is writing. Whatever a reader sees
     # at the worst moment must be a whole document, so the file is swapped
@@ -1084,7 +1092,8 @@ def main():
     a._cloud_queue.run_next()
     ok("and the take is current again",
        cloudmod.is_current(a.get_rehearsal(str(folder))["takes"][0], "mix",
-                           a.get_settings()["volumes"], "wav"))
+                           a.get_settings()["volumes"], "wav",
+                           a._cloud_target(folder)))
 
     print("\n[11h] When the cloud folder is not there")
 
@@ -1115,6 +1124,51 @@ def main():
     take = a.get_rehearsal(str(folder))["takes"][0]
     ok("a later run puts it there after all", Path(take["cloud"]["mix"]).exists())
     ok("and the complaint is gone", "cloud_error" not in take)
+
+    print("\n[11i] Where a copy went is part of what it was made from")
+
+    # [11h] left the rest of its backlog queued. Clear it, so what follows is
+    # about this take alone.
+    while a._cloud_queue.run_next():
+        pass
+
+    folder = Path(a.session_state()["folder"])
+    volumes = a.get_settings()["volumes"]
+    moved = tmp / "Drive" / "Moved"
+    a.set_cloud_dir(str(moved))
+    ok("pointing at another cloud folder queues the rehearsal's takes",
+       a.session_state()["cloud_queue"].get(1) == "queued")
+    ok("and a take copied to the old one no longer counts as current",
+       not cloudmod.is_current(a.get_rehearsal(str(folder))["takes"][0], "mix",
+                               volumes, "wav", a._cloud_target(folder)))
+    while a._cloud_queue.run_next():
+        pass
+    take = a.get_rehearsal(str(folder))["takes"][0]
+    ok("running the queue puts the copy in the new folder",
+       _is_inside(Path(take["cloud"]["mix"]), moved)
+       and Path(take["cloud"]["mix"]).exists())
+
+    # A sync client that logs out and re-creates its folder empty leaves the
+    # record pointing at nothing at all.
+    Path(take["cloud"]["mix"]).unlink()
+    ok("a copy deleted behind the app's back is not current",
+       not cloudmod.is_current(take, "mix", volumes, "wav",
+                               a._cloud_target(folder)))
+    a._enqueue_publish(folder, 1)
+    a._cloud_queue.run_next()
+    ok("so it is sent again",
+       Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"]).exists())
+
+    # The copies live in a folder named after the rehearsal, so renaming it
+    # leaves them under a name that is no longer anybody's.
+    folder = Path(a.rename_rehearsal(str(folder), "Late evening")["folder"])
+    ok("renaming the rehearsal queues its takes",
+       a.session_state()["cloud_queue"].get(1) == "queued")
+    while a._cloud_queue.run_next():
+        pass
+    take = a.get_rehearsal(str(folder))["takes"][0]
+    ok("and the copies follow it to a folder under the new name",
+       Path(take["cloud"]["mix"]).parent.name.startswith("Late evening"))
 
     print("\n" + "=" * 60)
     if problems:
