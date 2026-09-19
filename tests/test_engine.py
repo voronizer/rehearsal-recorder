@@ -763,6 +763,22 @@ def main():
        len(reruns) == 2 and reruns[-1] == ("/rec/X", 5))
     ok("then there is nothing to do", q2.run_next() is False)
 
+    print("\n[11e] Publishing on its own is a setting")
+    ok("off until it is asked for", a.get_settings()["auto_publish"] is False)
+    ok("and the mix is what it would send",
+       a.get_settings()["auto_publish_what"] == "mix")
+
+    res = a.set_auto_publish(True, "both")
+    ok("it can be turned on", res["ok"] and res["auto_publish"] is True)
+    ok("with what to send", a.get_settings()["auto_publish_what"] == "both")
+    ok("nonsense is refused", a.set_auto_publish(True, "everything")["ok"] is False)
+    ok("and the refusal changed nothing",
+       a.get_settings()["auto_publish_what"] == "both")
+    a.set_auto_publish(False)
+    ok("turning it off leaves the choice alone",
+       a.get_settings()["auto_publish"] is False
+       and a.get_settings()["auto_publish_what"] == "both")
+
     print("\n[12] The mix does not clip")
     loud = tmp / "loud"
     write_wav(loud / "one.wav", 20000, seconds=0.5)

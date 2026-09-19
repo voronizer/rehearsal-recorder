@@ -198,6 +198,8 @@ class Api:
             "cloud_dir": self._config.get("cloud_dir"),
             "cloud_format": normalize_format(self._config.get("cloud_format")),
             "cloud_formats": CLOUD_FORMATS_INFO,
+            "auto_publish": bool(self._config.get("auto_publish", False)),
+            "auto_publish_what": self._config.get("auto_publish_what") or "mix",
             "encoder": encoder_available(),
             "encoder_hint": (
                 None if encoder_available() else missing_encoder_hint()
@@ -1261,6 +1263,24 @@ class Api:
         self._config["cloud_format"] = chosen
         self._write_config()
         return {"ok": True, "cloud_format": chosen, "encoder": encoder_available()}
+
+    def set_auto_publish(self, enabled, what=None):
+        """
+        Whether a saved take goes to the cloud folder on its own, and what of
+        it. Turning it on picks up the takes of the rehearsal in progress —
+        the ones recorded before the switch was flipped.
+        """
+        if what is not None and what not in ("mix", "tracks", "both"):
+            return {"ok": False, "error": "Unknown share type"}
+        self._config["auto_publish"] = bool(enabled)
+        if what is not None:
+            self._config["auto_publish_what"] = what
+        self._write_config()
+        return {
+            "ok": True,
+            "auto_publish": self._config["auto_publish"],
+            "auto_publish_what": self._config.get("auto_publish_what") or "mix",
+        }
 
     def clear_cloud_dir(self):
         self._config.pop("cloud_dir", None)
