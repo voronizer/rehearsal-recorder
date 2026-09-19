@@ -11,7 +11,7 @@ import threading
 
 import sounddevice as sd
 
-from audio.devices import STREAM_LOCK
+from rehearsal_recorder.audio.devices import STREAM_LOCK
 
 BLOCK_FRAMES = 1024
 

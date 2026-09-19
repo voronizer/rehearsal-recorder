@@ -23,8 +23,8 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
-from audio.devices import STREAM_LOCK, usable_output
-from audio.format import unpack24
+from rehearsal_recorder.audio.devices import STREAM_LOCK, usable_output
+from rehearsal_recorder.audio.format import unpack24
 
 BLOCK_FRAMES = 1024
 

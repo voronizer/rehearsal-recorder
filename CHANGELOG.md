@@ -7,7 +7,16 @@ opening.
 
 ## Unreleased
 
-Nothing yet.
+Nothing that changes what the app does. Two changes to the repository:
+
+- The built interface (`ui/dist`) is no longer committed. It is build output:
+  the build scripts and CI produce it, and a clone builds it once with
+  `cd ui && npm install && npm run build`.
+- The Python moved into `src/rehearsal_recorder/`, installed with
+  `pip install -e .` and started with `python3 -m rehearsal_recorder`. The
+  PyInstaller spec and the debug-allocator script moved to `packaging/`;
+  `build.command` and `build.bat` stayed in the root, because they are meant
+  to be double-clicked.
 
 ## 0.1.0
 

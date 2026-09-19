@@ -15,7 +15,10 @@ import wave
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT))
+# The sources live under src/, so put that on the path rather than the
+# repository root. This means the suites run from a clone without the
+# package having been installed first.
+sys.path.insert(0, str(PROJECT / "src"))
 
 # Stub sounddevice: there is no real card here.
 _sd = types.ModuleType("sounddevice")
@@ -89,8 +92,8 @@ sys.modules["sounddevice"] = _sd
 
 import numpy as np  # noqa: E402
 
-from api import _is_inside  # noqa: E402
-from audio.player import TakePlayer  # noqa: E402
+from rehearsal_recorder.api import _is_inside  # noqa: E402
+from rehearsal_recorder.audio.player import TakePlayer  # noqa: E402
 
 SR = 48000
 problems = []
@@ -125,7 +128,7 @@ def settle(player, blocks=40, frames=512):
 
 
 def fresh_api(tmp):
-    import api as apimod
+    import rehearsal_recorder.api as apimod
 
     apimod.RECORDINGS_ROOT = tmp / "Rec"
     apimod.CONFIG_PATH = tmp / "config.json"
@@ -208,7 +211,7 @@ def main():
     p.close()
 
     print("\n[4c] Opening and closing the output")
-    from audio.devices import usable_output
+    from rehearsal_recorder.audio.devices import usable_output
 
     index, complaint = usable_output(0, SR)
     ok("a good device is used as asked", index == 0 and complaint is None)
@@ -359,14 +362,14 @@ def main():
        abs(int(settle(mixed)[:, 0].mean()) - 2000) < 30)
     mixed.close()
 
-    from audio.waveform import wav_peaks
+    from rehearsal_recorder.audio.waveform import wav_peaks
 
     peaks24, frames24, rate24 = wav_peaks(deep / "B.wav", buckets=8)
     ok("the waveform reads 24-bit", frames24 == SR and rate24 == SR)
     ok("and scales it the same as 16-bit",
        abs(peaks24[0] - 2000 / 32768) < 0.002)
 
-    from audio.mixdown import mixdown as _md
+    from rehearsal_recorder.audio.mixdown import mixdown as _md
 
     res24 = _md(deep_tracks, deep / "mix.wav")
     ok("the mix reads 24-bit sources", res24["ok"])
@@ -376,7 +379,7 @@ def main():
     ok("with the right level", abs(first - 3000) < 30)
 
     print("\n[5e] Recording at 24 bits")
-    from audio.capture import AudioRecorder as _Recorder, raw_to_wav
+    from rehearsal_recorder.audio.capture import AudioRecorder as _Recorder, raw_to_wav
 
     rec24 = _Recorder(0, SR, [{"name": "Gtr", "channel": 1}],
                       tmp / "rec24", bit_depth=24)
@@ -414,7 +417,7 @@ def main():
     ok("one track leaves more room", a.disk_estimate(1, SR)["minutes"] > est["minutes"] * 7)
 
     print("\n[7] Interface disconnect")
-    from audio.capture import AudioRecorder
+    from rehearsal_recorder.audio.capture import AudioRecorder
 
     rec = AudioRecorder.__new__(AudioRecorder)
     rec.error = None
@@ -620,7 +623,7 @@ def main():
        not a.get_rehearsal(str(new_folder))["takes"][0]["cloud"])
 
     print("\n[11b] Cloud copies can be compressed")
-    from audio.encode import available as _encoder
+    from rehearsal_recorder.audio.encode import available as _encoder
 
     a.set_cloud_format("flac")
     ok("the format is remembered",
@@ -699,7 +702,7 @@ def main():
     loud = tmp / "loud"
     write_wav(loud / "one.wav", 20000, seconds=0.5)
     write_wav(loud / "two.wav", 20000, seconds=0.5)
-    from audio.mixdown import mixdown as _mixdown
+    from rehearsal_recorder.audio.mixdown import mixdown as _mixdown
 
     res = _mixdown(
         [{"name": "one", "file": str(loud / "one.wav")},

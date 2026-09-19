@@ -77,7 +77,7 @@ def selftest():
 
     which is exactly what the build runs after packaging, on each system.
     """
-    from platform_support import app_root, trash_kind
+    from rehearsal_recorder.platform_support import app_root, trash_kind
 
     problems = []
 
@@ -102,7 +102,7 @@ def selftest():
         return f"PortAudio up, {len(devices)} devices, {len(ins)} with inputs"
 
     def encoder():
-        from audio.encode import available
+        from rehearsal_recorder.audio.encode import available
 
         name = available()
         if name is None:
@@ -159,7 +159,7 @@ def main():
 
     import webview
 
-    from api import Api
+    from rehearsal_recorder.api import Api
 
     keep_open = _arm_crash_log()  # noqa: F841 — the file must outlive main()
     api = Api(server_port=DEV_SERVER_PORT if dev else 0)

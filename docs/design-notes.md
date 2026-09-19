@@ -144,7 +144,7 @@ What to do if it happens again:
 1. `~/.rehearsal-recorder/crash.log` now holds a Python traceback for every
    thread at the moment of the crash — that says what this app was doing,
    which the native report does not.
-2. Reproduce it under `./run-debug.sh`. It runs with the allocator's own
+2. Reproduce it under `packaging/run-debug.sh`. It runs with the allocator's own
    checks turned on, so the crash lands on the bad write rather than on an
    innocent allocation later. The resulting report names the culprit.
 
@@ -170,4 +170,4 @@ What to do if it happens again:
   (see "The three systems"), and every branch is exercised by
   `tests/test_platform.py`, but it has never been run on Windows. Taking the
   branch correctly is not the same as working.
-- **Packaging into a .app** — for now it runs as `python3 app.py` in a venv.
+- **Packaging into a .app** — for now it runs as `python3 -m rehearsal_recorder` in a venv.

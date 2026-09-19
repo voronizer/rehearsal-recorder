@@ -11,7 +11,7 @@ import wave
 
 import numpy as np
 
-from audio.format import unpack24
+from rehearsal_recorder.audio.format import unpack24
 
 # Bars per track. ~900 covers the full window width.
 DEFAULT_BUCKETS = 900

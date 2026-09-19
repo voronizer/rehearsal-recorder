@@ -58,10 +58,10 @@ echo "==> Setting up a private environment"
 
 echo "==> Installing what the app needs"
 python -m pip install --upgrade pip --quiet
-pip install -r requirements.txt pyinstaller --quiet
+pip install -e . pyinstaller --quiet
 
 echo "==> Packaging"
-pyinstaller rehearsal-recorder.spec --noconfirm --log-level WARN
+pyinstaller packaging/rehearsal-recorder.spec --noconfirm --log-level WARN
 
 APP="dist/RehearsalRecorder.app"
 BIN="$APP/Contents/MacOS/RehearsalRecorder"

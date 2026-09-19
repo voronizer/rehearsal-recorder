@@ -27,19 +27,27 @@ WINDOWS = sys.platform == "win32"
 MACOS = sys.platform == "darwin"
 
 
+# This file is src/rehearsal_recorder/platform_support.py, so the folder that
+# holds ui/ is two levels up. Named here rather than computed by searching,
+# because a search would quietly find the wrong folder; if the package is
+# ever moved, this is the line that has to move with it.
+_SOURCE_ROOT = Path(__file__).resolve().parents[2]
+
+
 def app_root():
     """
     Where the app's own files live — the built interface, above all.
 
-    Running from source that is the folder this file sits in. Frozen into a
-    single executable it is the temporary folder PyInstaller unpacks into,
-    which is what sys._MEIPASS points at; `__file__` there points somewhere
-    that does not contain ui/dist, so it has to be asked for explicitly.
+    Running from source that is the repository root, which is where ui/dist
+    is built. Frozen into an executable it is the temporary folder PyInstaller
+    unpacks into, which is what sys._MEIPASS points at; `__file__` there
+    points somewhere that does not contain ui/dist, so it has to be asked for
+    explicitly.
     """
     bundled = getattr(sys, "_MEIPASS", None)
     if bundled:
         return Path(bundled)
-    return Path(__file__).resolve().parent
+    return _SOURCE_ROOT
 
 
 def _send2trash():

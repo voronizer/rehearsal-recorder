@@ -17,11 +17,11 @@ in the report.
 ```bash
 python3 -m venv venv
 source venv/bin/activate          # venv\Scripts\activate on Windows
-pip install -r requirements.txt
+pip install -e .
 pip install playwright && playwright install chromium   # for the interface suite
 
 cd ui && npm install && npm run build && cd ..
-python3 app.py
+python3 -m rehearsal_recorder
 ```
 
 Node is needed: `ui/dist` is what the app actually serves, and it is build
@@ -29,8 +29,9 @@ output rather than something in the repository, so a fresh clone has to build
 it once. **Rebuild it whenever you change anything under `ui/src/`**, or
 neither the running app nor the interface suite will see the change.
 
-While you are working on the interface, `npm run dev` plus `python3 app.py
---dev` gives you hot reload instead of a rebuild every time. The whole
+While you are working on the interface, `npm run dev` plus
+`python3 -m rehearsal_recorder --dev` gives you hot reload instead of a
+rebuild every time. The whole
 development loop — both halves, the proxy between them, what to check when
 the meters sit at zero — is in [docs/development.md](docs/development.md).
 
@@ -74,6 +75,9 @@ because `sys.platform` checks were scattered around. One file makes the next
 omission visible.
 
 ## Releasing
+
+Not pushed anywhere yet? [docs/pushing-to-github.md](docs/pushing-to-github.md)
+is the first-time part. After that:
 
 1. Update `CHANGELOG.md`.
 2. GitHub → Releases → Draft a new release → new tag (`v0.2.0`) → Publish.

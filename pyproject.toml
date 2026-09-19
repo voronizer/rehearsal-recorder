@@ -1,0 +1,33 @@
+# Packaging metadata, so the app can be installed into a venv and run as
+# `rehearsal-recorder` or `python -m rehearsal_recorder` from anywhere.
+#
+# The sources live under src/ rather than at the root, which means the only
+# way to import them is to install the package — there is no accidental
+# "it works because I happened to be standing in the right folder", and a
+# missing file in this list fails on a clean machine instead of at a
+# rehearsal.
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rehearsal-recorder"
+version = "0.1.0"
+description = "Multitrack recording for band rehearsals"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[project.scripts]
+rehearsal-recorder = "rehearsal_recorder.app:main"
+
+[tool.setuptools.dynamic]
+# One list of dependencies, not two. requirements.txt stays because it is
+# what CI and the build scripts install from, and because it is the file
+# people look in.
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -8,6 +8,8 @@ __pycache__/
 *.py[cod]
 venv/
 .venv/
+*.egg-info/
+src/*.egg-info/
 
 # ui/dist is build output and is not committed — the build scripts and CI
 # both produce it. See docs/development.md.

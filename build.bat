@@ -44,10 +44,10 @@ call venv\Scripts\activate.bat
 
 echo ==^> Installing what the app needs
 python -m pip install --upgrade pip --quiet
-pip install -r requirements.txt pyinstaller --quiet
+pip install -e . pyinstaller --quiet
 
 echo ==^> Packaging
-pyinstaller rehearsal-recorder.spec --noconfirm --log-level WARN
+pyinstaller packaging\rehearsal-recorder.spec --noconfirm --log-level WARN
 if errorlevel 1 goto failed
 
 echo.

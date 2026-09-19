@@ -23,10 +23,11 @@ anyway**. After that both open normally. macOS also asks for microphone
 permission the first time you record.
 
 No release yet, or you want to build it yourself? Double-click
-**`build.command`** on macOS or **`build.bat`** on Windows. It makes its own
-environment inside this folder, builds the interface, packages the app, tests
-it, and tells you where it landed. That step needs Python and Node installed;
-the app it produces needs neither.
+**`build.command`** on macOS or **`build.bat`** on Windows — they are in the
+root of this folder for exactly that reason. Each makes its own environment
+inside the folder, builds the interface, packages the app, tests it, and
+tells you where it landed. That step needs Python and Node installed; the app
+it produces needs neither.
 
 ## What it does
 
@@ -78,9 +79,9 @@ macOS and Linux:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 cd ui && npm install && npm run build && cd ..
-python3 app.py
+python3 -m rehearsal_recorder
 ```
 
 Windows:
@@ -88,10 +89,15 @@ Windows:
 ```
 py -3 -m venv venv
 venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .
 cd ui && npm install && npm run build && cd ..
-py -3 app.py
+py -3 -m rehearsal_recorder
 ```
+
+`pip install -e .` installs the package in place, dependencies and all, so
+the sources under `src/` are importable and edits to them take effect without
+reinstalling. It also gives you a `rehearsal-recorder` command, which is the
+same thing as the line above.
 
 `npm run build` writes `ui/dist`, which is what the app serves. It is build
 output, so it is not in the repository and a fresh clone needs that line once
@@ -99,8 +105,8 @@ output, so it is not in the repository and a fresh clone needs that line once
 Start the app without it and it says so rather than opening an empty window.
 
 Working on the interface itself is nicer with hot reload than with a rebuild
-every time: `npm run dev` in one terminal, `python3 app.py --dev` in another.
-That and the rest of the development loop is in
+every time: `npm run dev` in one terminal, `python3 -m rehearsal_recorder
+--dev` in another. That and the rest of the development loop is in
 [docs/development.md](docs/development.md).
 
 ## Tests
@@ -124,24 +130,32 @@ server on 127.0.0.1 hands the interface its files, serves the audio to the
 player, and answers the calls the meters poll many times a second.
 
 ```
-app.py                   entry point: the window, crash log, --selftest
-api.py                   the bridge to JS: rehearsals, takes, devices, history
-platform_support.py      where macOS, Windows and Linux differ — all of it
-mediaserver.py           the local HTTP server (interface, audio, polling)
-audio/capture.py         multichannel capture with continuous write
-audio/player.py          playback and mixing of a take
-audio/monitor.py         listening to inputs without recording
-audio/waveform.py        waveform peaks from a .wav
-audio/mixdown.py         bouncing a take down to one stereo .wav
-audio/drafts.py          unsaved takes: finding, describing, finalizing
-audio/devices.py         the stream lock, and asking a card what it can do
-audio/format.py          16- and 24-bit: packing, unpacking, what each costs
-audio/encode.py          compressing cloud copies (FLAC/MP3 via libsndfile)
-ui/src/screens/          one file per screen
-ui/src/components/       player, waveform, take list, meters, dialogs
-ui/dist/                 the built interface (build output, not in git)
-tests/                   the three suites
-rehearsal-recorder.spec  how the app is packaged
+src/rehearsal_recorder/     the Python application
+  __main__.py               what `python -m rehearsal_recorder` runs
+  app.py                    the window, the crash log, --selftest
+  api.py                    the bridge to JS: rehearsals, takes, devices
+  mediaserver.py            the local HTTP server (interface, audio, polling)
+  platform_support.py       where macOS, Windows and Linux differ — all of it
+  audio/capture.py          multichannel capture with continuous write
+  audio/player.py           playback and mixing of a take
+  audio/monitor.py          listening to inputs without recording
+  audio/waveform.py         waveform peaks from a .wav
+  audio/mixdown.py          bouncing a take down to one stereo .wav
+  audio/drafts.py           unsaved takes: finding, describing, finalizing
+  audio/devices.py          the stream lock, and asking a card what it can do
+  audio/format.py           16- and 24-bit: packing, unpacking, what each costs
+  audio/encode.py           compressing cloud copies (FLAC/MP3 via libsndfile)
+
+ui/src/screens/             one file per screen
+ui/src/components/          player, waveform, take list, meters, dialogs
+ui/dist/                    the built interface (build output, not in git)
+
+tests/                      the three suites
+docs/                       how to use it, build it, work on it, and why
+packaging/                  the PyInstaller spec and the debug-allocator run
+build.command, build.bat    in the root because you double-click them
+pyproject.toml              how the package installs; deps come from
+                            requirements.txt, which stays the one list
 ```
 
 Several decisions in here look odd until you know why — playback in Python

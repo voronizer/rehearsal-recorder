@@ -40,10 +40,13 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # `pip install -e .` rather than requirements.txt on purpose: it reads
+      # the same list through pyproject.toml, and it means every push also
+      # checks that the package metadata still installs.
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -e .
           pip install playwright
           playwright install --with-deps chromium
 
@@ -54,6 +57,11 @@ jobs:
 
       - name: Run every suite
         run: python tests/run_all.py
+
+      # The entry point the docs tell people to use. Cheap, and it catches a
+      # package that imports from a clone but not once installed.
+      - name: Does it start
+        run: python -m rehearsal_recorder --selftest
 
       # The screenshots the interface suite takes along the way. Worth having
       # when something fails and the message alone is not enough.

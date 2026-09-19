@@ -3,8 +3,12 @@
 Packaging: one file you double-click, nothing to install.
 
     pip install pyinstaller
-    pyinstaller rehearsal-recorder.spec
+    pyinstaller packaging/rehearsal-recorder.spec
     dist/RehearsalRecorder --selftest      # or the .app / .exe
+
+Run it from the repository root, not from this folder: dist/ and build/ are
+written next to where pyinstaller is invoked, and the paths below are
+resolved from this file rather than from the working directory.
 
 Everything goes in: Python itself, numpy, PortAudio (through sounddevice),
 libsndfile (through soundfile), the webview toolkit and the built interface.
@@ -15,8 +19,8 @@ Two things that are easy to get wrong and expensive to discover later:
 
   The interface. ui/dist has to be built before packaging, and has to be
   bundled under the same relative path the app looks for it at — see
-  app_root() in platform_support.py, which is what makes that path work both
-  from source and from inside a bundle.
+  app_root() in src/rehearsal_recorder/platform_support.py, which is what
+  makes that path work both from source and from inside a bundle.
 
   The microphone on macOS. Without NSMicrophoneUsageDescription in the
   Info.plist, macOS does not refuse politely: it kills the process the moment
@@ -28,10 +32,11 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files
 
-SPEC_DIR = Path(SPECPATH)
+# This file lives in packaging/, so the repository is one level up.
+ROOT = Path(SPECPATH).parent
 NAME = "RehearsalRecorder"
 
-ui_dist = SPEC_DIR / "ui" / "dist"
+ui_dist = ROOT / "ui" / "dist"
 if not (ui_dist / "index.html").exists():
     raise SystemExit(
         "ui/dist is not built — run `cd ui && npm install && npm run build` "
@@ -54,8 +59,11 @@ for package in ("soundfile", "_soundfile_data", "sounddevice", "_sounddevice_dat
         pass
 
 a = Analysis(
-    ["app.py"],
-    pathex=[str(SPEC_DIR)],
+    # Not app.py: a module run as a script is __main__, and the package
+    # imports inside app.py would have nothing to resolve against. __main__.py
+    # imports the package by name, exactly as `python -m` does.
+    [str(ROOT / "src" / "rehearsal_recorder" / "__main__.py")],
+    pathex=[str(ROOT / "src")],
     binaries=[],
     datas=datas,
     hiddenimports=["send2trash"],

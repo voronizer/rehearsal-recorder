@@ -21,29 +21,29 @@ from pathlib import Path
 
 import sounddevice as sd
 
-from audio.capture import AudioRecorder
-from audio.drafts import DRAFTS_DIR, describe, draft_dirs, finalize, has_audio
-from audio.encode import (
+from rehearsal_recorder.audio.capture import AudioRecorder
+from rehearsal_recorder.audio.drafts import DRAFTS_DIR, describe, draft_dirs, finalize, has_audio
+from rehearsal_recorder.audio.encode import (
     CLOUD_FORMATS_INFO,
     available as encoder_available,
     encode,
     missing_encoder_hint,
     normalize_format,
 )
-from audio.format import (
+from rehearsal_recorder.audio.format import (
     DEFAULT_DEPTH,
     LEGACY_DEPTH,
     SUPPORTED_DEPTHS,
     bytes_per_sample,
     normalize_depth,
 )
-from audio.mixdown import mixdown
-from audio.devices import recording_formats
-from audio.monitor import LevelMonitor
-from audio.player import TakePlayer
-from audio.waveform import DEFAULT_BUCKETS, wav_peaks
-from mediaserver import AppServer
-from platform_support import (
+from rehearsal_recorder.audio.mixdown import mixdown
+from rehearsal_recorder.audio.devices import recording_formats
+from rehearsal_recorder.audio.monitor import LevelMonitor
+from rehearsal_recorder.audio.player import TakePlayer
+from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
+from rehearsal_recorder.mediaserver import AppServer
+from rehearsal_recorder.platform_support import (
     FALLBACK_TRASH,
     app_root,
     describe_path_limit,

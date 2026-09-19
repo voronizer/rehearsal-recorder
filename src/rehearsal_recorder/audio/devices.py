@@ -20,7 +20,7 @@ import threading
 
 import sounddevice as sd
 
-from audio.format import SUPPORTED_DEPTHS, capture_dtype
+from rehearsal_recorder.audio.format import SUPPORTED_DEPTHS, capture_dtype
 
 STREAM_LOCK = threading.RLock()
 

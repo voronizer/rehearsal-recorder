@@ -1,6 +1,6 @@
 # Putting this on GitHub
 
-This folder is already a git repository with one commit on `main`, so there
+This folder is already a git repository with its history on `main`, so there
 is nothing to set up — only somewhere to push it.
 
 1. Make an empty repository on GitHub. **No** README, license or .gitignore:

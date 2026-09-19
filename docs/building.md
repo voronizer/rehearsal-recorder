@@ -5,7 +5,7 @@ release builds work.
 ## Packaging
 
     pip install pyinstaller
-    pyinstaller rehearsal-recorder.spec
+    pyinstaller packaging/rehearsal-recorder.spec
     dist/RehearsalRecorder/RehearsalRecorder --selftest
 
 One folder you open, with everything inside: Python, numpy, PortAudio through

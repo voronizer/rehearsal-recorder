@@ -10,8 +10,8 @@ This module finds those leftovers and turns them back into normal takes.
 
 from pathlib import Path
 
-from audio.capture import RAW_SUFFIX, raw_to_wav
-from audio.format import bytes_per_sample
+from rehearsal_recorder.audio.capture import RAW_SUFFIX, raw_to_wav
+from rehearsal_recorder.audio.format import bytes_per_sample
 
 DRAFTS_DIR = "_drafts"
 

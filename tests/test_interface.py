@@ -15,8 +15,11 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 PROJECT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT))
-from mediaserver import AppServer  # noqa: E402
+# The sources live under src/, so put that on the path rather than the
+# repository root. This means the suites run from a clone without the
+# package having been installed first.
+sys.path.insert(0, str(PROJECT / "src"))
+from rehearsal_recorder.mediaserver import AppServer  # noqa: E402
 
 SHOTS = Path(__file__).resolve().parent / "screenshots"
 TAKE_SECONDS = 6.0

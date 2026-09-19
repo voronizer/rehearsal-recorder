@@ -15,7 +15,10 @@ import types
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT))
+# The sources live under src/, so put that on the path rather than the
+# repository root. This means the suites run from a clone without the
+# package having been installed first.
+sys.path.insert(0, str(PROJECT / "src"))
 
 _sd = types.ModuleType("sounddevice")
 _sd.query_devices = lambda *a, **k: []
@@ -23,7 +26,7 @@ _sd.query_hostapis = lambda: []
 _sd.OutputStream = _sd.InputStream = None
 sys.modules["sounddevice"] = _sd
 
-import platform_support as ps  # noqa: E402
+import rehearsal_recorder.platform_support as ps  # noqa: E402
 
 problems = []
 
@@ -124,7 +127,7 @@ def main():
         ps.WINDOWS = was_windows
 
     print("\n[6] The app tells the interface what deleting will do")
-    import api as apimod
+    import rehearsal_recorder.api as apimod
 
     apimod.RECORDINGS_ROOT = tmp / "Rec2"
     apimod.CONFIG_PATH = tmp / "config.json"
@@ -141,7 +144,7 @@ def main():
        bool(settings["encoder_hint"]) != bool(settings["encoder"]))
 
     print("\n[7] Compressing no longer depends on the system")
-    from audio import encode
+    from rehearsal_recorder.audio import encode
 
     # This used to be three different sentences, because it was three
     # different external programs. Now it is one pip package everywhere, and

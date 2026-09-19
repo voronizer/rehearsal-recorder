@@ -17,7 +17,8 @@ export default defineConfig({
     emptyOutDir: true,
   },
 
-  // Development only (`npm run dev`, with `python3 app.py --dev` alongside).
+  // Development only (`npm run dev`, with `python3 -m rehearsal_recorder --dev`
+  // alongside).
   //
   // The interface is served by Vite here, so it gets hot reload, but the
   // audio still lives in Python. These two paths are forwarded there:
@@ -25,8 +26,9 @@ export default defineConfig({
   // .wav files the player reads. Without the forwarding the window would
   // load but every level meter would sit at zero.
   //
-  // The port is fixed to match DEV_SERVER_PORT in app.py — a config file
-  // cannot be told a port that is picked at random.
+  // The port is fixed to match DEV_SERVER_PORT in
+  // src/rehearsal_recorder/app.py — a config file cannot be told a port
+  // that is picked at random.
   server: {
     port: 5173,
     strictPort: true,

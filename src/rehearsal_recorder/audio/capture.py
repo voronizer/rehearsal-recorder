@@ -19,8 +19,8 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
-from audio.devices import STREAM_LOCK
-from audio.format import (
+from rehearsal_recorder.audio.devices import STREAM_LOCK
+from rehearsal_recorder.audio.format import (
     bytes_per_sample,
     capture_dtype,
     full_scale,

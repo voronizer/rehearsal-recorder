@@ -13,13 +13,13 @@
 # It is noticeably slower, and MallocStackLogging eats memory, so this is for
 # reproducing a crash, not for a rehearsal.
 #
-#   ./run-debug.sh
+#   packaging/run-debug.sh
 #
 # Afterwards: the native report is in Console.app under Crash Reports, and the
 # Python side of the same moment is in ~/.rehearsal-recorder/crash.log.
 
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."      # the repository root, whichever folder you ran this from
 
 if [ "$(uname)" != "Darwin" ]; then
   echo "This script is macOS only — the switches below are Apple's." >&2
@@ -41,4 +41,4 @@ export MallocStackLogging=1        # keep allocation stacks
 export MallocNanoZone=0            # the small-allocation zone off, so the
                                    # checks above cover everything
 
-exec python3 app.py
+exec python3 -m rehearsal_recorder
