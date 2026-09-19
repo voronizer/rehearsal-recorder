@@ -38,7 +38,7 @@ let takeCounter = 0;
 let drafts = window.__DRAFTS__ || [];
 let cloudDir = null;
 let cloudFormat = 'wav';
-let autoPublish = {on:false, what:'mix'};
+let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
 let recording = {device_index: 0, samplerate: 44100, bit_depth: 24};
 let cloudQueue = {};
 
@@ -748,7 +748,10 @@ def main():
             """window.__TRASH_KIND__ = 'folder';
                window.__NO_ENCODER__ = true;
                window.__HOST_API__ = 'Windows WASAPI';
-               window.__PATH_WARNING__ = "This folder's path is already 214 characters.";"""
+               window.__PATH_WARNING__ = "This folder's path is already 214 characters.";
+               // No cloud folder here, and automatic publishing on anyway:
+               // the state a config left behind by an older version can be in.
+               window.__AUTO_PUBLISH__ = {on:true, what:'mix'};"""
             + MOCK
         )
         win.goto(server.base_url, wait_until="networkidle")
@@ -775,6 +778,16 @@ def main():
         win.wait_for_selector("#recordings-dir")
         ok("the long-path warning is shown",
            win.locator("text=214 characters").count() == 1)
+
+        # Nothing here offers to publish automatically while there is nowhere
+        # to publish to — every take would only collect "No cloud folder
+        # chosen". The three choices turn the setting on as well, so greying
+        # out the checkbox alone leaves the way in wide open.
+        ok("publishing automatically is not on offer without a cloud folder",
+           win.locator("#auto-publish").is_disabled())
+        ok("and neither is choosing what it would send",
+           all(win.get_by_role("button", name=label, exact=True).is_disabled()
+               for label in ("The mix", "The original tracks", "Both")))
         win.get_by_role("button", name="Compressed (MP3)").click()
         win.wait_for_timeout(300)
         ok("and compression says why it cannot work here",

@@ -597,6 +597,10 @@ export function Settings({
                   type="button"
                   aria-label={o.label}
                   aria-pressed={settings?.auto_publish_what === o.id}
+                  // Each of these turns the setting on as well as choosing
+                  // what it sends, so without a cloud folder they are the
+                  // same mistake the checkbox above is greyed out to prevent.
+                  disabled={!settings?.cloud_dir}
                   onClick={async () => {
                     const res = await api().set_auto_publish(true, o.id)
                     if (!res.ok) {
@@ -608,6 +612,7 @@ export function Settings({
                   className={cn(
                     "rounded-lg border px-4 py-3 text-left transition-colors",
                     "hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+                    "disabled:pointer-events-none disabled:opacity-50",
                     settings?.auto_publish_what === o.id && "border-primary/50 bg-primary/5"
                   )}
                 >

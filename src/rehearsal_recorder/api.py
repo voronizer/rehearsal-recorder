@@ -1336,7 +1336,12 @@ class Api:
         }
 
     def clear_cloud_dir(self):
+        # Publishing on its own needs somewhere to publish to. Left on, every
+        # take saved afterwards is queued, refused and marked "No cloud folder
+        # chosen", and the list reads as failed when nothing went wrong. The
+        # invariant belongs here rather than in a greyed-out checkbox.
         self._config.pop("cloud_dir", None)
+        self._config["auto_publish"] = False
         self._write_config()
         return {"ok": True}
 

@@ -1170,6 +1170,24 @@ def main():
     ok("and the copies follow it to a folder under the new name",
        Path(take["cloud"]["mix"]).parent.name.startswith("Late evening"))
 
+    print("\n[11j] Forgetting the cloud folder stops publishing on its own")
+    # Left on with nowhere to publish to, every take saved afterwards is
+    # queued, refused and marked "No cloud folder chosen" — the whole list
+    # reads as failed when nothing has gone wrong.
+    a.clear_cloud_dir()
+    ok("the folder is forgotten", a.get_settings()["cloud_dir"] is None)
+    ok("and automatic publishing goes with it",
+       a.get_settings()["auto_publish"] is False)
+    a._enqueue_publish(folder, 1)
+    ok("so nothing is queued for nowhere",
+       a.session_state()["cloud_queue"] == {})
+
+    # Leave the fixture as it was found.
+    a.set_cloud_dir(str(moved))
+    a.set_auto_publish(True, "mix")
+    while a._cloud_queue.run_next():
+        pass
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
