@@ -17,5 +17,8 @@ ui/node_modules/
 
 .DS_Store
 
+# Personal Claude Code settings for this checkout, not the project's.
+.claude/settings.local.json
+
 # Screenshots the interface suite takes as it runs
 tests/screenshots/
