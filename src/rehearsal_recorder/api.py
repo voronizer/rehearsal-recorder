@@ -42,6 +42,7 @@ from rehearsal_recorder.audio.devices import recording_formats
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
+from rehearsal_recorder import cloud as cloudmod
 from rehearsal_recorder.mediaserver import AppServer
 from rehearsal_recorder.platform_support import (
     FALLBACK_TRASH,
@@ -1339,7 +1340,10 @@ class Api:
             shared["tracks"] = str(dest)
             shared["tracks_format"] = fmt
 
+        shared["source"] = cloudmod.source_of(take, what, self._config.get("volumes", {}), fmt)
         take["cloud"] = shared
+        # A copy that succeeded settles whatever went wrong last time.
+        take.pop("cloud_error", None)
         self._write_meta(folder, meta)
         if self._session is not None and Path(self._session["folder"]) == folder:
             self._session["takes"] = meta.get("takes", [])

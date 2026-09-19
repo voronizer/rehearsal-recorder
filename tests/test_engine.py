@@ -698,6 +698,29 @@ def main():
     ok("and the compressed copies are removable too", not mix_path.exists())
     a.set_cloud_format("wav")
 
+    print("\n[11c] A cloud copy remembers what it was made from")
+    from rehearsal_recorder import cloud as cloudmod
+
+    a.set_cloud_format("wav")
+    detail = a.get_rehearsal(str(new_folder))
+    take = detail["takes"][0]
+    a.share_take(str(new_folder), take["take_number"], "mix")
+    take = a.get_rehearsal(str(new_folder))["takes"][0]
+    volumes = a.get_settings()["volumes"]
+    ok("the copy records what it was made from",
+       take["cloud"]["source"]["what"] == "mix"
+       and take["cloud"]["source"]["name"] == take["name"])
+    ok("and it counts as current",
+       cloudmod.is_current(take, "mix", volumes, "wav"))
+    ok("asking for more than was copied is not current",
+       not cloudmod.is_current(take, "both", volumes, "wav"))
+
+    renamed = dict(take, name="Something else")
+    ok("a renamed take is not current",
+       not cloudmod.is_current(renamed, "mix", volumes, "wav"))
+    ok("a take that was never copied is not current",
+       not cloudmod.is_current({"name": "x", "tracks": []}, "mix", volumes, "wav"))
+
     print("\n[12] The mix does not clip")
     loud = tmp / "loud"
     write_wav(loud / "one.wav", 20000, seconds=0.5)
