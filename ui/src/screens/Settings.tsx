@@ -28,6 +28,7 @@ import {
   type Device,
   type OutputDevice,
   type Settings as SettingsData,
+  type ShareWhat,
 } from "@/lib/api"
 
 type TabId = "audio" | "folders" | "appearance" | "about"
@@ -56,6 +57,26 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[]
     label: "Under the hood",
     icon: <Info className="size-4" />,
     blurb: "Paths and the local server",
+  },
+]
+
+// Wording matches ShareDialog's manual share options, since the two places
+// talk about the same three choices.
+const AUTO_PUBLISH_OPTIONS: { id: ShareWhat; label: string; hint: string }[] = [
+  {
+    id: "mix",
+    label: "The mix",
+    hint: "One stereo file with the balance you set here. This is what you send people.",
+  },
+  {
+    id: "tracks",
+    label: "The original tracks",
+    hint: "Every track as recorded, untouched — for opening in a DAW later.",
+  },
+  {
+    id: "both",
+    label: "Both",
+    hint: "The mix to listen to, the tracks to work from.",
   },
 ]
 
@@ -564,6 +585,40 @@ export function Settings({
               </p>
             </div>
           </div>
+
+          {settings?.auto_publish && (
+            <div className="mt-2 flex flex-col gap-2">
+              <span className="text-sm text-muted-foreground">
+                What gets published
+              </span>
+              {AUTO_PUBLISH_OPTIONS.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  aria-label={o.label}
+                  aria-pressed={settings?.auto_publish_what === o.id}
+                  onClick={async () => {
+                    const res = await api().set_auto_publish(true, o.id)
+                    if (!res.ok) {
+                      setError(res.error ?? "Could not save that")
+                      return
+                    }
+                    setSettings(await api().get_settings())
+                  }}
+                  className={cn(
+                    "rounded-lg border px-4 py-3 text-left transition-colors",
+                    "hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+                    settings?.auto_publish_what === o.id && "border-primary/50 bg-primary/5"
+                  )}
+                >
+                  <span className="text-sm font-medium">{o.label}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {o.hint}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="mt-2 flex flex-col gap-2">
             <span className="text-sm text-muted-foreground">

@@ -704,6 +704,11 @@ def main():
         switched = calls("set_auto_publish")
         ok("the automatic switch reaches Python",
            bool(switched) and switched[-1]["args"][0] is True)
+        page.click("text=The original tracks")
+        page.wait_for_timeout(300)
+        chosen_what = calls("set_auto_publish")
+        ok("what to publish reaches Python",
+           chosen_what and chosen_what[-1]["args"][1] == "tracks")
         page.screenshot(path=str(SHOTS / "56-settings.png"))
         page.get_by_role("button", name="Appearance", exact=True).first.click()
         page.wait_for_selector("text=Scale")
