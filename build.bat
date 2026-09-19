@@ -20,6 +20,24 @@ if errorlevel 1 (
   exit /b 1
 )
 
+where npm >nul 2>&1
+if errorlevel 1 (
+  echo Node is not installed, and the interface has to be built from source.
+  echo Get it from https://nodejs.org/ and run this again.
+  echo.
+  echo If you only want to use the app rather than build it, the Releases
+  echo page has ready-made builds that need none of this.
+  pause
+  exit /b 1
+)
+
+echo ==^> Building the interface
+pushd ui
+call npm ci --silent || call npm install --silent
+call npm run build
+if errorlevel 1 goto failed
+popd
+
 echo ==^> Setting up a private environment
 if not exist venv py -3 -m venv venv
 call venv\Scripts\activate.bat

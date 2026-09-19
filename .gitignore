@@ -9,9 +9,8 @@ __pycache__/
 venv/
 .venv/
 
-# The built interface is committed on purpose: it is what app.py serves, and
-# it means the app runs from a clone without Node installed.
-!ui/dist/
+# ui/dist is build output and is not committed — the build scripts and CI
+# both produce it. See docs/development.md.
 ui/node_modules/
 
 .DS_Store

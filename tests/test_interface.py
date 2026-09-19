@@ -290,9 +290,24 @@ window.pywebview = { api: window.__MAKE_API__() };
 """.replace("TAKE", str(TAKE_SECONDS))
 
 
+UI_DIST = PROJECT / "ui" / "dist"
+
+
 def main():
+    # ui/dist is build output and is not in the repository, so on a fresh
+    # clone it is simply missing. Without this the suite would instead fail
+    # as a page of 404s and a dozen unrelated-looking assertions.
+    if not (UI_DIST / "index.html").exists():
+        print("The interface is not built, so there is nothing to test.")
+        print("Build it first:")
+        print("    cd ui && npm install && npm run build")
+        print()
+        print("It is build output, not something in git — see")
+        print("docs/development.md.")
+        return 1
+
     tmp = Path(tempfile.mkdtemp())
-    server = AppServer(PROJECT / "ui" / "dist", tmp / "rec")
+    server = AppServer(UI_DIST, tmp / "rec")
     problems = []
     SHOTS.mkdir(parents=True, exist_ok=True)
 

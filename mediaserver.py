@@ -161,7 +161,12 @@ def _parse_range(header, size):
 
 
 class AppServer:
-    def __init__(self, ui_dir, media_dir, api=None):
+    def __init__(self, ui_dir, media_dir, api=None, port=0):
+        """
+        port: 0 picks a free one, which is what the app does normally. A fixed
+        port is for development, where Vite's dev server has to be told in
+        advance where to forward /api and /media — see docs/development.md.
+        """
         self.ui_root = Path(ui_dir)
         self.media_root = Path(media_dir)
         self.media_root.mkdir(parents=True, exist_ok=True)
@@ -172,7 +177,7 @@ class AppServer:
             {"ui_root": self.ui_root, "media_root": self.media_root, "api": api},
         )
         self._httpd = http.server.ThreadingHTTPServer(
-            ("127.0.0.1", 0), self._handler_class
+            ("127.0.0.1", port), self._handler_class
         )
         self.port = self._httpd.server_address[1]
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)

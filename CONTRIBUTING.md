@@ -19,19 +19,20 @@ python3 -m venv venv
 source venv/bin/activate          # venv\Scripts\activate on Windows
 pip install -r requirements.txt
 pip install playwright && playwright install chromium   # for the interface suite
+
+cd ui && npm install && npm run build && cd ..
 python3 app.py
 ```
 
-Changing the interface needs Node:
+Node is needed: `ui/dist` is what the app actually serves, and it is build
+output rather than something in the repository, so a fresh clone has to build
+it once. **Rebuild it whenever you change anything under `ui/src/`**, or
+neither the running app nor the interface suite will see the change.
 
-```bash
-cd ui && npm install && npm run build
-```
-
-`ui/dist/` is committed on purpose — it means the app runs from a clone
-without Node, and it is what gets packaged. **Rebuild it and commit the
-result when you change anything under `ui/src/`**, or the change will not
-appear in the running app.
+While you are working on the interface, `npm run dev` plus `python3 app.py
+--dev` gives you hot reload instead of a rebuild every time. The whole
+development loop — both halves, the proxy between them, what to check when
+the meters sit at zero — is in [docs/development.md](docs/development.md).
 
 ## Tests
 

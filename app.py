@@ -141,29 +141,49 @@ def selftest():
     return 0
 
 
+# Where the local server listens while developing. Normally the port is
+# whatever is free, but Vite has to be told in advance where to forward /api
+# and /media, and a config file cannot guess a random number.
+DEV_SERVER_PORT = 17817
+DEV_UI_URL = "http://localhost:5173"
+
+
 def main():
     if "--selftest" in sys.argv:
         return selftest()
+
+    # --dev opens Vite's dev server instead of the built bundle, so changes
+    # to the interface appear without rebuilding. Python still does all the
+    # audio; Vite forwards the calls back to it. See docs/development.md.
+    dev = "--dev" in sys.argv
 
     import webview
 
     from api import Api
 
     keep_open = _arm_crash_log()  # noqa: F841 — the file must outlive main()
-    api = Api()
+    api = Api(server_port=DEV_SERVER_PORT if dev else 0)
 
-    if not api.ui_available:
-        print(
-            "The interface is not built: ui/dist/index.html is missing.\n"
-            "Build it once:\n"
-            "    cd ui && npm install && npm run build\n",
-            file=sys.stderr,
-        )
-        return 1
+    if dev:
+        url = DEV_UI_URL
+        print(f"Development mode.\n"
+              f"  interface: {url} (start it with: cd ui && npm run dev)\n"
+              f"  python:    {api.ui_url}\n")
+    else:
+        url = api.ui_url
+        if not api.ui_available:
+            print(
+                "The interface is not built: ui/dist/index.html is missing.\n"
+                "Build it:\n"
+                "    cd ui && npm install && npm run build\n"
+                "or run with --dev to use Vite's dev server instead.\n",
+                file=sys.stderr,
+            )
+            return 1
 
     window = webview.create_window(
-        "Rehearsal Recorder",
-        api.ui_url,
+        "Rehearsal Recorder" + (" (dev)" if dev else ""),
+        url,
         js_api=api,
         width=1180,
         height=820,

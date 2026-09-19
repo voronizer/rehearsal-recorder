@@ -8,11 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-
-# dist is NOT ignored, unlike in a normal web project. It is what app.py
-# serves and what gets packaged into the app, so committing it means the
-# thing runs from a clone without Node installed. Rebuild and commit it when
-# you change anything under src/ — see CONTRIBUTING.md.
+dist
 dist-ssr
 *.local
 

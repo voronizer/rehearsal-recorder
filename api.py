@@ -120,7 +120,7 @@ def _is_inside(path, root):
 
 
 class Api:
-    def __init__(self):
+    def __init__(self, server_port=0):
         self._recorder = None
         self._recorder_take_number = None
         self._recorder_temp_dir = None
@@ -140,7 +140,9 @@ class Api:
         # mediaserver.py for why not file://.
         # The server also answers the calls the interface polls — see
         # mediaserver.py for why those must not go over the pywebview bridge.
-        self._server = AppServer(UI_DIR, self._recordings_dir, api=self)
+        self._server = AppServer(
+            UI_DIR, self._recordings_dir, api=self, port=server_port
+        )
 
         # Clear out leftovers from previous runs (rehearsal started, nothing
         # recorded, app closed).

@@ -24,9 +24,9 @@ permission the first time you record.
 
 No release yet, or you want to build it yourself? Double-click
 **`build.command`** on macOS or **`build.bat`** on Windows. It makes its own
-environment inside this folder, builds the app, tests it, and tells you where
-it landed. You need Python installed for that step; the app it produces does
-not.
+environment inside this folder, builds the interface, packages the app, tests
+it, and tells you where it landed. That step needs Python and Node installed;
+the app it produces needs neither.
 
 ## What it does
 
@@ -71,12 +71,15 @@ nobody watches the gain, and the headroom is worth the extra disk.
 
 ## Running from source
 
+Both halves have to be built: Python for the audio, Node for the interface.
+
 macOS and Linux:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+cd ui && npm install && npm run build && cd ..
 python3 app.py
 ```
 
@@ -86,15 +89,19 @@ Windows:
 py -3 -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+cd ui && npm install && npm run build && cd ..
 py -3 app.py
 ```
 
-Node is not needed to run it — the built interface is committed in
-`ui/dist/`. It is needed to change the interface:
+`npm run build` writes `ui/dist`, which is what the app serves. It is build
+output, so it is not in the repository and a fresh clone needs that line once
+— after which you only repeat it when you change something under `ui/src/`.
+Start the app without it and it says so rather than opening an empty window.
 
-```bash
-cd ui && npm install && npm run build
-```
+Working on the interface itself is nicer with hot reload than with a rebuild
+every time: `npm run dev` in one terminal, `python3 app.py --dev` in another.
+That and the rest of the development loop is in
+[docs/development.md](docs/development.md).
 
 ## Tests
 
@@ -132,7 +139,7 @@ audio/format.py          16- and 24-bit: packing, unpacking, what each costs
 audio/encode.py          compressing cloud copies (FLAC/MP3 via libsndfile)
 ui/src/screens/          one file per screen
 ui/src/components/       player, waveform, take list, meters, dialogs
-ui/dist/                 the built interface, committed
+ui/dist/                 the built interface (build output, not in git)
 tests/                   the three suites
 rehearsal-recorder.spec  how the app is packaged
 ```
@@ -145,8 +152,10 @@ that were wrong the first time.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports about something that went
-wrong at an actual rehearsal are the most useful thing there is.
+See [CONTRIBUTING.md](CONTRIBUTING.md), and
+[docs/development.md](docs/development.md) for how to run it while you work
+on it. Bug reports about something that went wrong at an actual rehearsal are
+the most useful thing there is.
 
 ## License
 

@@ -35,6 +35,23 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Node is not installed, and the interface has to be built from source."
+  echo "Get it from https://nodejs.org/ and run this again."
+  echo
+  echo "If you only want to use the app rather than build it, the Releases"
+  echo "page has ready-made builds that need none of this."
+  echo
+  read -n 1 -s -r -p "Press any key to close."
+  exit 1
+fi
+
+echo "==> Building the interface"
+cd ui
+npm ci --silent || npm install --silent
+npm run build
+cd ..
+
 echo "==> Setting up a private environment"
 [ -d venv ] || python3 -m venv venv
 . venv/bin/activate
