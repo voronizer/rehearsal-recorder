@@ -81,6 +81,7 @@ by triggers, not by scanning:
 | `rename_take` | that take, in any rehearsal |
 | `save_mix` | every take of the **active** rehearsal |
 | auto-publish switched on | every take of the active rehearsal |
+| `set_cloud_format` | every take of the active rehearsal |
 | `set_cloud_dir` | every take of the active rehearsal |
 | `rename_rehearsal` | every take of it, when it is the active one |
 

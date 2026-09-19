@@ -1170,6 +1170,15 @@ def main():
     ok("and the copies follow it to a folder under the new name",
        Path(take["cloud"]["mix"]).parent.name.startswith("Late evening"))
 
+    # The format is in the fingerprint as well, so choosing another one makes
+    # every copy of this rehearsal stale by definition.
+    a.set_cloud_format("flac")
+    ok("changing the format queues the rehearsal's takes",
+       a.session_state()["cloud_queue"].get(1) == "queued")
+    a.set_cloud_format("wav")
+    while a._cloud_queue.run_next():
+        pass
+
     print("\n[11j] Forgetting the cloud folder stops publishing on its own")
     # Left on with nowhere to publish to, every take saved afterwards is
     # queued, refused and marked "No cloud folder chosen" — the whole list

@@ -1339,6 +1339,9 @@ class Api:
         chosen = normalize_format(fmt)
         self._config["cloud_format"] = chosen
         self._write_config()
+        # Every copy was written in the old format, which is the whole of what
+        # this setting is about.
+        self._enqueue_session_takes()
         return {"ok": True, "cloud_format": chosen, "encoder": encoder_available()}
 
     def set_auto_publish(self, enabled, what=None):
