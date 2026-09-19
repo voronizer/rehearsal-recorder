@@ -1009,6 +1009,32 @@ def main():
     ok("so it does not claim to be current",
        not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav"))
 
+    # The balance is the other half of the same fingerprint, and a fader can
+    # move mid-publish exactly as a rename can land mid-publish. What is
+    # recorded has to be the balance the mix was actually rendered with — a
+    # fingerprint describing a balance the file was never made from would
+    # make the take report itself current and keep the wrong mix in the
+    # cloud folder for good.
+    a.save_mix({"A": 0.9})
+
+    def fade_midway(*args, **kwargs):
+        out = real_mixdown(*args, **kwargs)
+        a.save_mix({"A": 0.2})
+        return out
+
+    apimod.mixdown = fade_midway
+    try:
+        a.share_take(str(folder9), 9, "mix")
+    finally:
+        apimod.mixdown = real_mixdown
+
+    take9 = next(t for t in a.get_rehearsal(str(folder9))["takes"]
+                 if t["take_number"] == 9)
+    ok("the copy records the balance it was rendered with",
+       take9["cloud"]["source"]["volumes"] == {"A": 0.9})
+    ok("so a fader moved during the mix leaves it not current",
+       not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav"))
+
     # A listing can run while the worker is writing. Whatever a reader sees
     # at the worst moment must be a whole document, so the file is swapped
     # into place rather than truncated and refilled.

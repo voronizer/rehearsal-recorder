@@ -258,7 +258,10 @@ class Api:
 
     def save_mix(self, volumes):
         """Per-track volume by name, so the balance survives between takes."""
-        current = self._config.get("volumes", {})
+        # A fresh dict rather than an update in place: the stored one may be
+        # the very object a mixdown on the publishing thread is reading the
+        # balance out of, and changing it under that render would tear it.
+        current = dict(self._config.get("volumes", {}))
         current.update(volumes or {})
         self._config["volumes"] = current
         self._write_config()
@@ -1441,12 +1444,16 @@ class Api:
         shared = {}
 
         fmt = normalize_format(self._config.get("cloud_format"))
+        # Taken once, before anything is written. A mixdown is seconds long
+        # and a fader can move during it; reading the balance again afterwards
+        # would fingerprint the copy with a balance it was never rendered
+        # with, and the take would then report itself current for a mix that
+        # is wrong — for good, since the fingerprint suppresses its own repair.
+        volumes = dict(self._config.get("volumes", {}))
         notes = []
 
         if what in ("mix", "both"):
-            res = mixdown(
-                tracks, target / f"{base}.wav", self._config.get("volumes", {})
-            )
+            res = mixdown(tracks, target / f"{base}.wav", volumes)
             if not res["ok"]:
                 return res
             packed = encode(res["file"], fmt)
@@ -1471,7 +1478,7 @@ class Api:
             shared["tracks"] = str(dest)
             shared["tracks_format"] = fmt
 
-        shared["source"] = cloudmod.source_of(take, what, self._config.get("volumes", {}), fmt)
+        shared["source"] = cloudmod.source_of(take, what, volumes, fmt)
         with self._meta_lock:
             meta = self._read_meta(folder)
             if meta is None:
