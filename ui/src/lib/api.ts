@@ -103,6 +103,8 @@ export type SessionState =
       next_take_number: number
       next_take_name: string
       recording: boolean
+      /** Takes the app is copying to the cloud folder right now. */
+      cloud_queue?: Record<number, "queued" | "working">
     }
 
 export type RehearsalSummary = {

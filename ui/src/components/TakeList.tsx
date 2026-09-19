@@ -53,6 +53,7 @@ export function TakeList({
   onSelect,
   onRename,
   onShare,
+  cloudStates,
   onDelete,
   onAddMarker,
   onEditMarker,
@@ -65,6 +66,7 @@ export function TakeList({
   onSelect: (take: Take) => void
   onRename?: (take: Take) => void
   onShare?: (take: Take) => void
+  cloudStates?: Record<number, "queued" | "working">
   onDelete?: (take: Take) => void
   onAddMarker?: (take: Take, seconds: number) => void
   onEditMarker?: (take: Take, marker: Marker) => void
@@ -87,6 +89,7 @@ export function TakeList({
       {takes.map((take) => {
         const isOpen = selected?.take_number === take.take_number
         const isShared = Boolean(take.cloud?.mix || take.cloud?.tracks)
+        const cloudState = cloudStates?.[take.take_number]
         return (
           <div
             key={take.take_number}
@@ -153,6 +156,16 @@ export function TakeList({
                 >
                   <Pencil />
                 </Button>
+              )}
+              {cloudState && (
+                <span className="text-xs text-muted-foreground">
+                  {cloudState === "working" ? "Copying to the cloud" : "Waiting for the cloud"}
+                </span>
+              )}
+              {!cloudState && take.cloud_error && (
+                <span className="text-xs text-destructive" title={take.cloud_error}>
+                  Not in the cloud
+                </span>
               )}
               {onShare && (
                 <Button

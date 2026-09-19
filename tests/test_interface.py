@@ -40,6 +40,7 @@ let cloudDir = null;
 let cloudFormat = 'wav';
 let autoPublish = {on:false, what:'mix'};
 let recording = {device_index: 0, samplerate: 44100, bit_depth: 24};
+let cloudQueue = {};
 
 // The Python config lives in a file and survives a reload, so keep it in its
 // own storage key rather than in page memory.
@@ -128,11 +129,16 @@ window.__MAKE_API__ = () => ({
     takeCounter = 0;
     return {ok:true, folder:session.folder};
   }),
-  session_state: async () => session
-    ? {active:true, name:session.name, folder:session.folder, tracks:session.tracks,
+  session_state: async () => {
+    if (!session) return {active:false};
+    // Drain on read, the way the real queue empties once a take is copied —
+    // otherwise the interface would see the same take "queued" forever.
+    const cq = cloudQueue;
+    cloudQueue = {};
+    return {active:true, name:session.name, folder:session.folder, tracks:session.tracks,
        takes:session.takes, next_take_number:takeCounter + 1, next_take_name:suggestName(),
-       recording:false}
-    : {active:false},
+       recording:false, cloud_queue:cq};
+  },
   finish_rehearsal: async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
     session = null;
@@ -148,6 +154,7 @@ window.__MAKE_API__ = () => ({
     const take = {take_number:n, name:name || ('Take ' + n), duration_sec:dur,
                   tracks, markers: markers || []};
     session.takes.push(take);
+    cloudQueue = {...cloudQueue, [n]: 'queued'};
     return {ok:true, take};
   }),
   discard_take: track('discard_take', async () => ({ok:true})),
@@ -470,6 +477,14 @@ def main():
         page.keyboard.press("Space")
         page.wait_for_timeout(600)
         ok("space saves the take", len(calls("keep_take")) == 1)
+
+        ok("a saved take says it is on its way to the cloud",
+           page.locator("text=Waiting for the cloud").count() > 0)
+        # The mock's queue drains on the next read, same as the real one once
+        # the copy is done — the status should follow it away.
+        page.wait_for_timeout(1800)
+        ok("the status clears once the cloud queue drains",
+           page.locator("text=Waiting for the cloud").count() == 0)
 
         page.wait_for_selector("text=Record take 2")
         page.click("text=Record take 2")

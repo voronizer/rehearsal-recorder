@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Circle, FolderOpen, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -63,6 +63,15 @@ export function Rehearsal({
   // start a new take in the middle of listening.
   useSpacebar(selected ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, selected !== null)
+
+  // While takes are being copied the only thing that changes is on the Python
+  // side, so ask — but only until the queue drains.
+  const inFlight = Object.keys(session.cloud_queue ?? {}).length > 0
+  useEffect(() => {
+    if (!inFlight) return
+    const id = setInterval(() => onChanged(), 1500)
+    return () => clearInterval(id)
+  }, [inFlight, onChanged])
 
   const finish = async () => {
     player.pause()
@@ -192,6 +201,7 @@ export function Rehearsal({
           onSelect={select}
           onRename={setToRename}
           onShare={setToShare}
+          cloudStates={session.cloud_queue}
           onDelete={setToDelete}
           onAddMarker={addMarker}
           onEditMarker={(take, marker) => setMarkerEdit({ take, marker })}
