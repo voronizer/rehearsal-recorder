@@ -50,8 +50,12 @@ Apple Developer certificate ($99/year) or an Authenticode certificate, so:
 Signing removes both. It is the only remaining thing between this and a clean
 double-click, and it is a purchase, not code.
 
-**Builds for both systems** are in `.github/workflows/build.yml`: push a tag
-starting with `v` and it builds on a real Mac and a real Windows machine, runs
-the self-test on each, and attaches the zips to the release. This is also the
-only way this app has ever been built on Windows — there is no Windows in the
-environment it was written in.
+**Builds for both systems** are in `.github/workflows/release.yml`. Publish a
+release on GitHub and it builds on a real Mac and a real Windows machine,
+runs every test suite plus `--selftest` on the app it just made, and attaches
+the zips to that release. `workflow_dispatch` runs the same thing without
+cutting a release, leaving the builds as workflow artifacts.
+
+This is also the only way this app has ever been built on Windows — there is
+no Windows in the environment it was written in, so the first real Windows
+build will be the one that workflow makes.

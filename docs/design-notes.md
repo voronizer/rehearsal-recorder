@@ -45,7 +45,7 @@ as five copies of the same device. For multitrack, ASIO if the interface
 offers it, otherwise WASAPI; MME is the default and the worst of them.
 
 What none of this is: proof. There is no Windows machine in the environment
-this was built in. `verify_platform.py` drives the code into each shape — no
+this was built in. `tests/test_platform.py` drives the code into each shape — no
 recycle bin, no encoder, Windows naming rules — and checks it takes the right
 branch, which is worth something but is not the same as having run it there.
 The first Windows run will find things.
@@ -168,6 +168,6 @@ What to do if it happens again:
   already solves in practice.
 - **Proof that Windows works** — the code no longer assumes macOS anywhere
   (see "The three systems"), and every branch is exercised by
-  `verify_platform.py`, but it has never been run on Windows. Taking the
+  `tests/test_platform.py`, but it has never been run on Windows. Taking the
   branch correctly is not the same as working.
 - **Packaging into a .app** — for now it runs as `python3 app.py` in a venv.
