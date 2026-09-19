@@ -66,11 +66,23 @@ by triggers, not by scanning:
 
 | Trigger | What is enqueued |
 |---|---|
-| `keep_take` | that take |
+| `keep_take` | that take, and any take of this rehearsal that failed earlier |
 | `rename_take` | that take, in any rehearsal |
 | `save_mix` | every take of the **active** rehearsal |
 | auto-publish switched on | every take of the active rehearsal |
-| startup | takes of the active rehearsal whose fingerprint does not match, including ones carrying a `cloud_error` |
+
+There is deliberately no startup row. A rehearsal does not survive the
+process — `Api.__init__` starts with `self._session = None` — so at startup
+there is never an active rehearsal to seed the queue from, and scanning the
+recordings folder for stale copies is exactly the sweep this design avoids.
+Takes left unsaved when the app died are the drafts screen's business, and a
+recovered draft becomes a take through `keep_take` like any other.
+
+That is what the first row's second half is for. The realistic failure is a
+sync folder that is briefly not there — logged out, unmounted, full — and the
+rehearsal carries on regardless. Retrying this rehearsal's failed takes each
+time a new one is saved means the backlog clears itself the moment the folder
+comes back, without a retry loop and without anybody noticing.
 
 The `save_mix` row is the one worth pausing on. The balance lives in the
 config globally, not per take (`api.py:245`), so "the balance changed" is true
@@ -94,7 +106,9 @@ is empty. Each pass:
 Every trigger above is scoped to the rehearsal in progress, except a rename,
 which is about one named take wherever it lives. So a failure in a rehearsal
 that has since been finished is not retried on its own — it is shown in
-History with its error, and the share dialog republishes it.
+History with its error, and the share dialog republishes it. Within the
+rehearsal in progress, the next saved take is what sweeps up the earlier
+failures.
 
 The loop body is a method of its own (`publish_next_pending()`), called by the
 thread and by the tests, so the behaviour can be driven one step at a time
@@ -138,8 +152,8 @@ logged out, a disk that may be full, a folder that may have been moved.
 - Missing or unwritable folder, full disk, encoder failure — `share_take`
   already returns `{"ok": false, "error": …}`. That text is stored on the take
   and shown in the list.
-- A failed take in the rehearsal in progress is retried when the setting is
-  touched and at the next startup, not in a tight loop.
+- A failed take in the rehearsal in progress is retried the next time a take
+  is saved, or when the setting is touched — not in a tight loop.
 - Nothing about a failure touches the originals. The recordings under the
   recordings folder are never the copy.
 
