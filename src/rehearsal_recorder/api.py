@@ -123,6 +123,9 @@ def _is_inside(path, root):
 class Api:
     def __init__(self, server_port=0):
         self._recorder = None
+        self._cloud_queue = cloudmod.PublishQueue(
+            step=self._publish_step, paused=lambda: self._recorder is not None
+        )
         self._recorder_take_number = None
         self._recorder_temp_dir = None
         self._session = None
@@ -152,6 +155,9 @@ class Api:
     def attach_window(self, window):
         """Needed for native dialogs (folder picker)."""
         self._window = window
+        # Only the real app runs the worker. The suites drive run_next
+        # themselves, so nothing races them.
+        self._cloud_queue.start()
 
     @property
     def ui_url(self):
@@ -550,6 +556,7 @@ class Api:
             "next_take_number": s["take_counter"] + 1,
             "next_take_name": self.suggest_take_name(),
             "recording": self._recorder is not None,
+            "cloud_queue": self._cloud_queue.states(s["folder"]),
         }
 
     def suggest_take_name(self, take_number=None):
@@ -718,6 +725,8 @@ class Api:
         }
         s["takes"].append(take_info)
         self._save_session_meta()
+        self._enqueue_publish(s["folder"], take_number)
+        self._retry_failed_publishes()
         return {"ok": True, "take": take_info}
 
     def discard_take(self, temp_dir):
@@ -1276,6 +1285,9 @@ class Api:
         if what is not None:
             self._config["auto_publish_what"] = what
         self._write_config()
+        if self._config["auto_publish"] and self._session is not None:
+            for t in self._session.get("takes", []):
+                self._enqueue_publish(self._session["folder"], t["take_number"])
         return {
             "ok": True,
             "auto_publish": self._config["auto_publish"],
@@ -1286,6 +1298,68 @@ class Api:
         self._config.pop("cloud_dir", None)
         self._write_config()
         return {"ok": True}
+
+    def _enqueue_publish(self, folder, take_number):
+        """Ask for a take to be copied, if copying is switched on at all."""
+        if not self._config.get("auto_publish"):
+            return
+        self._cloud_queue.enqueue(str(folder), take_number)
+
+    def _retry_failed_publishes(self):
+        """
+        The realistic failure is a sync folder that is briefly not there. The
+        next saved take sweeps up whatever the rehearsal could not send while
+        it was gone, so the backlog clears itself with no retry loop.
+        """
+        if self._session is None:
+            return
+        for t in self._session.get("takes", []):
+            if t.get("cloud_error"):
+                self._enqueue_publish(self._session["folder"], t["take_number"])
+
+    def _publish_step(self, folder, take_number):
+        """
+        One take, on the publishing thread. Skips a take that is already in
+        the cloud folder in the shape the settings ask for, so a burst of
+        requests costs one mixdown, not several.
+        """
+        if not self._config.get("auto_publish"):
+            return
+        what = self._config.get("auto_publish_what") or "mix"
+        meta = self._read_meta(Path(folder))
+        if meta is None:
+            return
+        take = next(
+            (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
+            None,
+        )
+        if take is None:
+            return
+        fmt = normalize_format(self._config.get("cloud_format"))
+        if cloudmod.is_current(take, what, self._config.get("volumes", {}), fmt):
+            return
+        res = self.share_take(str(folder), take_number, what)
+        if not res.get("ok"):
+            self._record_cloud_error(
+                folder, take_number, res.get("error") or "Could not copy the take"
+            )
+
+    def _record_cloud_error(self, folder, take_number, message):
+        """Why a take is not in the cloud folder, kept with the take."""
+        folder = Path(folder)
+        meta = self._read_meta(folder)
+        if meta is None:
+            return
+        take = next(
+            (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
+            None,
+        )
+        if take is None:
+            return
+        take["cloud_error"] = message
+        self._write_meta(folder, meta)
+        if self._session is not None and Path(self._session["folder"]) == folder:
+            self._session["takes"] = meta.get("takes", [])
 
     def share_take(self, folder, take_number, what="mix"):
         """

@@ -891,6 +891,39 @@ def main():
     removed = b.cleanup_empty_rehearsals()["removed"]
     ok("the empty one is gone", removed == 1 and not stale.exists())
 
+    print("\n[11f] A saved take goes on its own")
+    solo = tmp / "Solo"
+    write_wav(solo / "one.wav", 1200)
+    a.set_cloud_dir(str(tmp / "Drive" / "Auto"))
+    a.set_cloud_format("wav")
+    a.set_auto_publish(True, "mix")
+    a.start_rehearsal("Evening", None, SR, [{"name": "A", "channel": 1}], 16)
+    kept = a.keep_take(1, str(solo), "Polyn", 2.0,
+                       [{"name": "A", "file": str(solo / "one.wav")}], [])
+    ok("the take was saved", kept["ok"])
+    ok("and is waiting to be published",
+       a.session_state()["cloud_queue"] == {1: "queued"})
+
+    a._cloud_queue.run_next()
+    folder = Path(a.session_state()["folder"])
+    take = a.get_rehearsal(str(folder))["takes"][0]
+    ok("the mix is in the cloud folder", Path(take["cloud"]["mix"]).exists())
+    ok("the queue is empty afterwards", a.session_state()["cloud_queue"] == {})
+    ok("and nothing failed", "cloud_error" not in take)
+
+    # A second pass must not mix it all over again.
+    a._enqueue_publish(folder, 1)
+    before = Path(take["cloud"]["mix"]).stat().st_mtime_ns
+    a._cloud_queue.run_next()
+    after = Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"]).stat().st_mtime_ns
+    ok("an unchanged take is not copied twice", before == after)
+
+    a.set_auto_publish(False)
+    a._enqueue_publish(folder, 1)
+    ok("with the setting off nothing is queued",
+       a.session_state()["cloud_queue"] == {})
+    a.set_auto_publish(True, "mix")
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
