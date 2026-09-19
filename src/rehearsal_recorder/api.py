@@ -132,6 +132,10 @@ class Api:
         self._monitor = None
         self._player = None
         self._player_lock = threading.RLock()
+        # share_take runs on the publishing thread while the interface writes
+        # the same file from its own; without this a rename lands between a
+        # read and a write and is silently undone.
+        self._meta_lock = threading.RLock()
         self._window = None
 
         self._config = self._read_config()
@@ -514,18 +518,19 @@ class Api:
     def _save_session_meta(self):
         """Writes session.json into the rehearsal folder so History can read
         the take list even after a restart."""
-        s = self._session
-        self._write_meta(
-            s["folder"],
-            {
-                "name": s["name"],
-                "created_at": s["created_at"],
-                "samplerate": s["samplerate"],
-                "bit_depth": s.get("bit_depth", LEGACY_DEPTH),
-                "tracks": s["tracks"],
-                "takes": s["takes"],
-            },
-        )
+        with self._meta_lock:
+            s = self._session
+            self._write_meta(
+                s["folder"],
+                {
+                    "name": s["name"],
+                    "created_at": s["created_at"],
+                    "samplerate": s["samplerate"],
+                    "bit_depth": s.get("bit_depth", LEGACY_DEPTH),
+                    "tracks": s["tracks"],
+                    "takes": s["takes"],
+                },
+            )
 
     @staticmethod
     def _write_meta(folder, meta):
@@ -891,42 +896,43 @@ class Api:
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        meta = self._read_meta(folder)
-        if meta is None:
-            return {"ok": False, "error": "Rehearsal not found"}
-
         display_name = (new_name or "").strip()
         if not display_name:
             return {"ok": False, "error": "Name cannot be empty"}
 
-        takes = meta.get("takes", [])
-        take = next((t for t in takes if t.get("take_number") == take_number), None)
-        if take is None:
-            return {"ok": False, "error": "Take not found"}
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return {"ok": False, "error": "Rehearsal not found"}
 
-        take["name"] = display_name
+            takes = meta.get("takes", [])
+            take = next((t for t in takes if t.get("take_number") == take_number), None)
+            if take is None:
+                return {"ok": False, "error": "Take not found"}
 
-        # The take's own folder is named after it, so rename that too — the
-        # names should still make sense when browsing the disk directly.
-        old_dirs = {
-            Path(t["file"]).parent for t in take.get("tracks", []) if t.get("file")
-        }
-        if len(old_dirs) == 1:
-            old_dir = old_dirs.pop()
-            new_dir = _unique_path(
-                folder / f"{take_number:02d} - {_safe_name(display_name)}"
-            )
-            if old_dir.exists() and old_dir != new_dir:
-                try:
-                    old_dir.rename(new_dir)
-                    for t in take.get("tracks", []):
-                        t["file"] = str(new_dir / Path(t["file"]).name)
-                except OSError as e:
-                    print(f"[rename] take folder: {e}")
+            take["name"] = display_name
 
-        self._write_meta(folder, meta)
-        if self._session is not None and Path(self._session["folder"]) == folder:
-            self._session["takes"] = takes
+            # The take's own folder is named after it, so rename that too — the
+            # names should still make sense when browsing the disk directly.
+            old_dirs = {
+                Path(t["file"]).parent for t in take.get("tracks", []) if t.get("file")
+            }
+            if len(old_dirs) == 1:
+                old_dir = old_dirs.pop()
+                new_dir = _unique_path(
+                    folder / f"{take_number:02d} - {_safe_name(display_name)}"
+                )
+                if old_dir.exists() and old_dir != new_dir:
+                    try:
+                        old_dir.rename(new_dir)
+                        for t in take.get("tracks", []):
+                            t["file"] = str(new_dir / Path(t["file"]).name)
+                    except OSError as e:
+                        print(f"[rename] take folder: {e}")
+
+            self._write_meta(folder, meta)
+            if self._session is not None and Path(self._session["folder"]) == folder:
+                self._session["takes"] = takes
 
         return {"ok": True, "take": take}
 
@@ -1354,19 +1360,20 @@ class Api:
     def _record_cloud_error(self, folder, take_number, message):
         """Why a take is not in the cloud folder, kept with the take."""
         folder = Path(folder)
-        meta = self._read_meta(folder)
-        if meta is None:
-            return
-        take = next(
-            (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
-            None,
-        )
-        if take is None:
-            return
-        take["cloud_error"] = message
-        self._write_meta(folder, meta)
-        if self._session is not None and Path(self._session["folder"]) == folder:
-            self._session["takes"] = meta.get("takes", [])
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return
+            take = next(
+                (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
+                None,
+            )
+            if take is None:
+                return
+            take["cloud_error"] = message
+            self._write_meta(folder, meta)
+            if self._session is not None and Path(self._session["folder"]) == folder:
+                self._session["takes"] = meta.get("takes", [])
 
     def share_take(self, folder, take_number, what="mix"):
         """
@@ -1442,12 +1449,22 @@ class Api:
             shared["tracks_format"] = fmt
 
         shared["source"] = cloudmod.source_of(take, what, self._config.get("volumes", {}), fmt)
-        take["cloud"] = shared
-        # A copy that succeeded settles whatever went wrong last time.
-        take.pop("cloud_error", None)
-        self._write_meta(folder, meta)
-        if self._session is not None and Path(self._session["folder"]) == folder:
-            self._session["takes"] = meta.get("takes", [])
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return {"ok": False, "error": "Rehearsal not found"}
+            current = next(
+                (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
+                None,
+            )
+            if current is None:
+                return {"ok": False, "error": "Take not found"}
+            # A copy that succeeded settles whatever went wrong last time.
+            current["cloud"] = shared
+            current.pop("cloud_error", None)
+            self._write_meta(folder, meta)
+            if self._session is not None and Path(self._session["folder"]) == folder:
+                self._session["takes"] = meta.get("takes", [])
 
         return {
             "ok": True,

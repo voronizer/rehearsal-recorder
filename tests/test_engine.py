@@ -974,6 +974,36 @@ def main():
     take4 = a.get_rehearsal(str(folder))["takes"][3]
     ok("and now it is in the cloud folder", Path(take4["cloud"]["mix"]).exists())
 
+    # A rename that lands while the mix is being written must survive it, and
+    # the copy must not claim to be current for a name it was not written
+    # under. `mixdown` is where the slow part happens, so that is where a
+    # real rename would land.
+    a.set_auto_publish(False)
+    write_wav(solo / "three.wav", 700)
+    a.keep_take(9, str(solo), "Before", 2.0,
+                [{"name": "A", "file": str(solo / "three.wav")}], [])
+    folder9 = Path(a.session_state()["folder"])
+    real_mixdown = apimod.mixdown
+
+    def rename_midway(*args, **kwargs):
+        out = real_mixdown(*args, **kwargs)
+        a.rename_take(str(folder9), 9, "After")
+        return out
+
+    apimod.mixdown = rename_midway
+    try:
+        a.share_take(str(folder9), 9, "mix")
+    finally:
+        apimod.mixdown = real_mixdown
+
+    take9 = next(t for t in a.get_rehearsal(str(folder9))["takes"]
+                 if t["take_number"] == 9)
+    ok("a rename during the mix is not reverted by it", take9["name"] == "After")
+    ok("and the copy still records the name it was written under",
+       take9["cloud"]["source"]["name"] == "Before")
+    ok("so it does not claim to be current",
+       not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav"))
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
