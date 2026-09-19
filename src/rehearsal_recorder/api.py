@@ -28,6 +28,7 @@ from rehearsal_recorder.audio.encode import (
     CLOUD_FORMATS_INFO,
     available as encoder_available,
     encode,
+    extension,
     missing_encoder_hint,
     normalize_format,
 )
@@ -65,9 +66,24 @@ LOW_SPACE_MINUTES = 15
 DEFAULT_SAMPLERATE = 44100
 
 
+# What a cloud copy is called while it is still being written. The worker is
+# killed at interpreter exit, possibly mid-copy, and nothing is recorded on
+# the take until the copy has succeeded — so a file left under its real name
+# would be a plausible-looking truncated take that no record points at, that
+# nothing ever cleans up, and that the sync client uploads. Under this name it
+# is obviously unfinished instead.
+WRITING_PREFIX = ".writing-"
+
+
 def _safe_name(name):
     """Legal on macOS, Windows and Linux alike — see platform_support.py."""
     return safe_filename(name or "", fallback="Untitled")
+
+
+def _writing_path(path):
+    """Where a copy is written before it is moved onto its real name."""
+    path = Path(path)
+    return path.with_name(WRITING_PREFIX + path.name)
 
 
 def _timestamp_suffix(created_at):
@@ -163,6 +179,11 @@ class Api:
         # Only the real app runs the worker. The suites drive run_next
         # themselves, so nothing races them.
         self._cloud_queue.start()
+
+    def shutdown(self):
+        """The window has closed: stand the publishing worker down instead of
+        leaving it to be killed wherever it happens to be."""
+        self._cloud_queue.stop()
 
     @property
     def ui_url(self):
@@ -1471,7 +1492,7 @@ class Api:
         self._remove_shared(take)
 
         target = self._cloud_target(folder)
-        base =f"{take_number:02d} - {_safe_name(take.get('name', '') or f'Take {take_number}')}"
+        base = f"{take_number:02d} - {_safe_name(take.get('name', '') or f'Take {take_number}')}"
         shared = {}
 
         fmt = normalize_format(self._config.get("cloud_format"))
@@ -1483,28 +1504,44 @@ class Api:
         volumes = dict(self._config.get("volumes", {}))
         notes = []
 
+        # Every copy is written beside its real name and moved onto it when it
+        # is whole, the same way session.json is — see WRITING_PREFIX.
         if what in ("mix", "both"):
-            res = mixdown(tracks, target / f"{base}.wav", volumes)
+            writing = _writing_path(target / f"{base}.wav")
+            res = mixdown(tracks, writing, volumes)
             if not res["ok"]:
+                writing.unlink(missing_ok=True)
                 return res
             packed = encode(res["file"], fmt)
             if packed.get("note"):
                 notes.append(packed["note"])
-            shared["mix"] = packed["file"]
+            mix = target / f"{base}{extension(packed['format'])}"
+            os.replace(packed["file"], mix)
+            shared["mix"] = str(mix)
             shared["mix_format"] = packed["format"]
             shared["gain"] = res["gain"]
 
         if what in ("tracks", "both"):
             dest = target / base
+            writing = None
             try:
                 dest.mkdir(parents=True, exist_ok=True)
                 for t in tracks:
-                    copy = dest / Path(t["file"]).name
-                    shutil.copy2(t["file"], copy)
-                    packed = encode(copy, fmt)
+                    source = Path(t["file"])
+                    writing = _writing_path(dest / source.name)
+                    shutil.copy2(source, writing)
+                    packed = encode(writing, fmt)
+                    writing = Path(packed["file"])
+                    os.replace(
+                        writing,
+                        dest / f"{source.stem}{extension(packed['format'])}",
+                    )
+                    writing = None
                     if packed.get("note") and packed["note"] not in notes:
                         notes.append(packed["note"])
             except OSError as e:
+                if writing is not None:
+                    writing.unlink(missing_ok=True)
                 return {"ok": False, "error": f"Could not copy the tracks: {e}"}
             shared["tracks"] = str(dest)
             shared["tracks_format"] = fmt

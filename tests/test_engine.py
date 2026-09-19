@@ -1188,6 +1188,82 @@ def main():
     while a._cloud_queue.run_next():
         pass
 
+    print("\n[11k] A copy cut off half-written is not left looking like a take")
+    # Nothing is written on the take until the copy succeeds, so a plausible
+    # half file in the synced folder has no record anywhere and can never be
+    # cleaned up — and the sync client uploads it. Finishing a rehearsal and
+    # closing the app while the last take publishes is the normal end of an
+    # evening, so this is the ordinary case, not the unlucky one.
+    target = a._cloud_target(folder)
+    plain_mixdown = apimod.mixdown
+    asked = []
+
+    def watch_mixdown(tracks, out_path, volumes=None):
+        asked.append(Path(out_path))
+        return plain_mixdown(tracks, out_path, volumes)
+
+    apimod.mixdown = watch_mixdown
+    try:
+        res = a.share_take(str(folder), 1, "both")
+    finally:
+        apimod.mixdown = plain_mixdown
+
+    take1 = a.get_rehearsal(str(folder))["takes"][0]
+    ok("the mix is written under a name nobody would take for a take",
+       bool(asked) and asked[-1].name.startswith(apimod.WRITING_PREFIX))
+    ok("and lands on its real name once it is whole",
+       Path(res["cloud"]["mix"]).exists()
+       and Path(res["cloud"]["mix"]).name == f"01 - {take1['name']}.wav")
+    ok("the tracks go the same way",
+       all(not f.name.startswith(apimod.WRITING_PREFIX)
+           for f in Path(res["cloud"]["tracks"]).iterdir()))
+    ok("with nothing half-written left behind",
+       not list(target.rglob(apimod.WRITING_PREFIX + "*")))
+
+    def die_midway(tracks, out_path, volumes=None):
+        # What being killed mid-mixdown leaves on disk: a real file, opened
+        # and part written.
+        Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(out_path).write_bytes(b"RIFF" + b"\0" * 64)
+        raise OSError("the app was closed")
+
+    apimod.mixdown = die_midway
+    try:
+        a.share_take(str(folder), 1, "mix")
+    except OSError:
+        pass
+    finally:
+        apimod.mixdown = plain_mixdown
+
+    # The folder holds the other takes of the rehearsal too; what matters is
+    # that nothing under this take's own name was left behind.
+    left = [p for p in target.iterdir()
+            if p.is_file() and f"01 - {take1['name']}" in p.name]
+    ok("a copy cut off mid-write is left obviously unfinished",
+       bool(left) and all(p.name.startswith(apimod.WRITING_PREFIX) for p in left))
+    ok("and the take does not claim the copy that was trashed for it",
+       not cloudmod.is_current(a.get_rehearsal(str(folder))["takes"][0], "mix",
+                               a.get_settings()["volumes"], "wav", target))
+
+    for p in left:
+        p.unlink()
+    a._enqueue_publish(folder, 1)
+    while a._cloud_queue.run_next():
+        pass
+    ok("and the next pass puts a whole one there",
+       Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"]).exists())
+
+    # The worker is a daemon thread: unless it is told, it is killed at
+    # interpreter exit wherever it happens to be.
+    idle = cloudmod.PublishQueue(step=lambda f, n: None, paused=lambda: False)
+    idle.start()
+    real_queue, a._cloud_queue = a._cloud_queue, idle
+    try:
+        a.shutdown()
+    finally:
+        a._cloud_queue = real_queue
+    ok("closing the app stands the worker down", not idle._thread.is_alive())
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

@@ -127,9 +127,19 @@ class PublishQueue:
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
-    def stop(self):
+    def stop(self, timeout=2.0):
+        """
+        Asks the worker to stop and waits a moment for it.
+
+        Only between jobs: a copy already in flight is left to finish, and if
+        it takes longer than the wait the process exits on top of it anyway.
+        Which is why the copies are staged under a temporary name — that, not
+        this, is what keeps a half-written file out of the band's folder.
+        """
         self._stopping = True
         self._wake.set()
+        if self._thread is not None:
+            self._thread.join(timeout)
 
     def _loop(self):
         while not self._stopping:

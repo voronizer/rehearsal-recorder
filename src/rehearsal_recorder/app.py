@@ -191,7 +191,10 @@ def main():
     )
     # Needed for the native folder picker in Settings.
     api.attach_window(window)
-    webview.start()
+    try:
+        webview.start()  # returns when the window is closed
+    finally:
+        api.shutdown()
     return 0
 
 
