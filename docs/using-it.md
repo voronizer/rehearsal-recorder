@@ -13,9 +13,10 @@ What each screen is for, and the decisions behind how they behave.
 - **Settings** (the gear in the header) — four groups rather than one long
   column, because six sections stacked in a row was a wall nobody could scan:
   **Audio** (the recording interface, rate and depth; the card used for
-  playback), **Folders** (where rehearsals go, where cloud copies go and what
-  they are written as), **Appearance** (theme and scale) and **Under the
-  hood** (paths and the local server). The track layout is deliberately not
+  playback), **Folders** (where rehearsals go, where cloud copies go, whether
+  saved takes go there on their own and what they are written as),
+  **Appearance** (theme and scale) and **Under the hood** (paths and the
+  local server). The track layout is deliberately not
   duplicated here: it is edited where it is defined, on the setup screen. The
   interface and the quality are the opposite case — they belong to the room
   and the card, not to one evening, so they are settled once here and the
@@ -125,10 +126,28 @@ and every phone plays it.
 Syncing the whole recordings folder means syncing every failed attempt, and
 most of a rehearsal is failed attempts. So the cloud folder is a separate
 place — set it in Settings, to a folder some Drive or Dropbox client is
-already watching — and takes go there one at a time, from the cloud button on
-the take, after listening, when it is clear which ones are worth keeping.
+already watching — and only takes worth keeping go there. A failed attempt is
+discarded on the review screen and never becomes a take at all, so "the takes
+you saved" is already the list you would have picked by hand.
 
-Each take offers a choice:
+Two ways to get them there, and they do the same work underneath:
+
+- **By hand**, from the cloud button on the take, after listening. Right for
+  one take out of an old rehearsal, or one the setting below skipped.
+- **On their own**, if **Send saved takes automatically** is ticked in
+  Settings. Every take you keep is copied in the background, in the gap after
+  it is saved and never while the next one is recording — mixing a take is
+  not something to have competing with the sound card. The take's row says
+  where it has got to: "Waiting for the cloud", "Copying to the cloud", the
+  green cloud button once it is there, or "Not in the cloud" with the reason
+  when something went wrong.
+
+The setting needs a cloud folder and is greyed out until there is one.
+Forgetting the folder switches it off again, rather than leaving every take
+failing to reach nowhere.
+
+Either way, three things can be sent — by hand it is asked per take, and
+automatically it is chosen once in Settings:
 
 - **The mix** — one stereo .wav with the balance set in the player. This is
   what gets sent to people; nobody's phone is going to open eight files. The
@@ -142,6 +161,19 @@ The cloud button turns green once a take is up there, so the list shows at a
 glance what has been shared. Sharing the same take again replaces the earlier
 copy instead of piling up duplicates, and "Remove from the cloud" deletes the
 copies while leaving the recording itself alone.
+
+A copy remembers what it was made from: the take's name, what was sent, the
+format, the balance the mix was rendered with and the folder it went into.
+Change any of those — rename the take, move a fader, choose another format,
+point at a different cloud folder, rename the rehearsal — and the takes of
+the rehearsal in progress are sent again, replacing what was there. Change
+nothing and nothing is mixed twice for no reason. Older rehearsals keep what
+they sent; the cloud button is there for redoing one of those by hand.
+
+When the folder is not there — a client logged out, a drive unplugged — the
+take says so instead of failing quietly, and the next take you save sweeps up
+whatever could not be sent while it was gone. Nothing about a failure touches
+the recording itself.
 
 **What the copies are written as** is a setting, because the trade is
 different for everyone's connection:

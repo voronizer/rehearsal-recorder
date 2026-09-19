@@ -51,9 +51,10 @@ went wrong, do again — coloured on the waveform and on the take row, so a
 glance at the list says which take has red in it.
 
 **Sends the good ones to the cloud.** A whole rehearsal is mostly failed
-attempts, so nothing syncs by itself: you pick a take, pick the mix or the
-original tracks, and it is copied to a folder your Drive or Dropbox client
-watches — as WAV, FLAC or MP3.
+attempts, so the recordings folder does not sync — only the takes you keep,
+copied to a folder your Drive or Dropbox client watches, as WAV, FLAC or MP3.
+Pick them one at a time, or switch on automatic sending and every take you
+save goes up on its own, between takes rather than while one is recording.
 
 **Never destroys anything.** Deleting means the Trash, or a `_deleted` folder
 where there is no Trash to reach. A recording of a rehearsal cannot be made

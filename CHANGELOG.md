@@ -7,7 +7,14 @@ opening.
 
 ## Unreleased
 
-Nothing that changes what the app does. Two changes to the repository:
+- Saved takes can go to the cloud folder on their own. Switch on **Send saved
+  takes automatically** in Settings and every take you keep is copied in the
+  background, between takes rather than while one is recording, with the
+  take's row showing where it has got to. A take that is renamed or remixed
+  is sent again; one that has not changed is left alone. Off by default, and
+  not offered until there is a cloud folder to send to.
+
+Two changes to the repository:
 
 - The built interface (`ui/dist`) is no longer committed. It is build output:
   the build scripts and CI produce it, and a clone builds it once with
