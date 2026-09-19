@@ -38,6 +38,7 @@ let takeCounter = 0;
 let drafts = window.__DRAFTS__ || [];
 let cloudDir = null;
 let cloudFormat = 'wav';
+let autoPublish = {on:false, what:'mix'};
 let recording = {device_index: 0, samplerate: 44100, bit_depth: 24};
 
 // The Python config lives in a file and survives a reload, so keep it in its
@@ -99,6 +100,10 @@ window.__MAKE_API__ = () => ({
   set_cloud_format: track('set_cloud_format', async (f) => {
     cloudFormat = f;
     return {ok:true, cloud_format:f, encoder:'soundfile'};
+  }),
+  set_auto_publish: track('set_auto_publish', async (on, what) => {
+    autoPublish = {on, what: what || autoPublish.what};
+    return {ok:true, auto_publish:autoPublish.on, auto_publish_what:autoPublish.what};
   }),
   recording_formats: track('recording_formats', async () => ({
     ok:true, formats:{'44100':[16,24], '48000':[16,24], '96000':[24]}})),
@@ -267,6 +272,7 @@ window.__MAKE_API__ = () => ({
     bit_depth: recording.bit_depth, supported_bit_depths:[16, 24],
     tracks:[], volumes:{}, output_device_index:null,
     cloud_format: cloudFormat,
+    auto_publish: autoPublish.on, auto_publish_what: autoPublish.what,
     cloud_formats:[
       {id:'wav', label:'As recorded', hint:'Exactly the files on disk.'},
       {id:'flac', label:'Lossless (FLAC)', hint:'About half the size.'},
@@ -693,6 +699,11 @@ def main():
         page.wait_for_timeout(400)
         chosen = calls("set_cloud_format")
         ok("the choice reaches Python", chosen and chosen[-1]["args"][0] == "flac")
+        page.click("text=Send saved takes automatically")
+        page.wait_for_timeout(300)
+        switched = calls("set_auto_publish")
+        ok("the automatic switch reaches Python",
+           bool(switched) and switched[-1]["args"][0] is True)
         page.screenshot(path=str(SHOTS / "56-settings.png"))
         page.get_by_role("button", name="Appearance", exact=True).first.click()
         page.wait_for_selector("text=Scale")

@@ -39,6 +39,8 @@ export type Take = {
   markers?: Marker[]
   /** What of this take was copied into the cloud folder, if anything. */
   cloud?: CloudShare
+  /** Why this take is not in the cloud folder, if something went wrong. */
+  cloud_error?: string
 }
 
 /**
@@ -197,6 +199,8 @@ export type Settings = {
   cloud_dir: string | null
   cloud_format: CloudFormat
   cloud_formats: { id: CloudFormat; label: string; hint: string }[]
+  auto_publish: boolean
+  auto_publish_what: ShareWhat
   /** Which encoder the machine has, if any. */
   encoder: string | null
   /** What to say when there is none — the reason differs by system. */
@@ -283,6 +287,10 @@ type PyApi = {
   set_cloud_format(
     fmt: CloudFormat
   ): Promise<Ok<{ cloud_format?: CloudFormat; encoder?: string | null }>>
+  set_auto_publish(
+    enabled: boolean,
+    what?: ShareWhat
+  ): Promise<Ok<{ auto_publish?: boolean; auto_publish_what?: ShareWhat }>>
   set_recording_format(
     deviceIndex: number | null,
     samplerate: number,

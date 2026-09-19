@@ -543,6 +543,28 @@ export function Settings({
             </Button>
           )}
 
+          <div className="mt-4 flex items-start gap-3">
+            <input
+              id="auto-publish"
+              type="checkbox"
+              className="mt-1 size-4"
+              checked={settings?.auto_publish ?? false}
+              disabled={!settings?.cloud_dir}
+              onChange={async (e) => {
+                const on = e.target.checked
+                await api().set_auto_publish(on, settings?.auto_publish_what)
+                setSettings(await api().get_settings())
+              }}
+            />
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="auto-publish">Send saved takes automatically</Label>
+              <p className="text-xs text-muted-foreground">
+                Every take you keep is copied to the cloud folder on its own,
+                between takes rather than while one is recording.
+              </p>
+            </div>
+          </div>
+
           <div className="mt-2 flex flex-col gap-2">
             <span className="text-sm text-muted-foreground">
               What the copies are written as
