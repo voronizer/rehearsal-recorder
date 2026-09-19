@@ -744,6 +744,25 @@ def main():
     ok("the second one follows", q.run_next() is True and done[-1] == ("/rec/One", 2))
     ok("and then there is nothing to do", q.run_next() is False)
 
+    # A take modified during publishing must be re-published with the new state,
+    # so the cloud copy does not stay stale. A step that re-enqueues its own job
+    # models the app calling enqueue() after the take changed mid-publish.
+    reruns, recording = [], {"now": False}
+    q2 = cloudmod.PublishQueue(
+        step=lambda folder, n: (
+            reruns.append((folder, n)),
+            q2.enqueue(folder, n) if len(reruns) == 1 else None
+        ),
+        paused=lambda: recording["now"],
+    )
+    q2.enqueue("/rec/X", 5)
+    ok("a job re-enqueued from its own step is queued again",
+       q2.run_next() is True and reruns == [("/rec/X", 5)] and
+       q2.states("/rec/X") == {5: "queued"})
+    ok("and runs a second time", q2.run_next() is True and
+       len(reruns) == 2 and reruns[-1] == ("/rec/X", 5))
+    ok("then there is nothing to do", q2.run_next() is False)
+
     print("\n[12] The mix does not clip")
     loud = tmp / "loud"
     write_wav(loud / "one.wav", 20000, seconds=0.5)

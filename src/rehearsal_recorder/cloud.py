@@ -52,6 +52,7 @@ class PublishQueue:
         self._paused = paused
         self._jobs = []
         self._active = None
+        self._rerun_active = False
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._thread = None
@@ -60,8 +61,13 @@ class PublishQueue:
     def enqueue(self, folder, take_number):
         job = (str(folder), int(take_number))
         with self._lock:
-            if job not in self._jobs and job != self._active:
-                self._jobs.append(job)
+            if job not in self._jobs:
+                if job == self._active:
+                    # A request to re-publish the job currently in flight: arm it
+                    # to run again after this one finishes.
+                    self._rerun_active = True
+                else:
+                    self._jobs.append(job)
         self._wake.set()
 
     def states(self, folder):
@@ -85,6 +91,9 @@ class PublishQueue:
             self._step(*self._active)
         finally:
             with self._lock:
+                if self._rerun_active:
+                    self._jobs.append(self._active)
+                    self._rerun_active = False
                 self._active = None
         return True
 
