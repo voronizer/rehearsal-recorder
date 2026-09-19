@@ -80,10 +80,17 @@ Not pushed anywhere yet? [docs/pushing-to-github.md](docs/pushing-to-github.md)
 is the first-time part. After that:
 
 1. Update `CHANGELOG.md`.
-2. GitHub → Releases → Draft a new release → new tag (`v0.2.0`) → Publish.
+2. GitHub → Releases → Draft a new release → new tag (`0.2.0`, no `v`, to
+   match the tags already there) → Publish.
 3. `.github/workflows/release.yml` builds on a real Mac and a real Windows
    machine, runs every suite plus `--selftest` on the built app, and attaches
    the zips to the release.
+
+There is no version number to bump anywhere: the tag is the version.
+setuptools-scm reads it at build time and writes it into the package, which
+is what the app shows under Settings → Under the hood and what `--selftest`
+prints. Run from a clone that was never installed, it says `unknown`, which
+is the truth — there is no tag to read.
 
 A build that fails its own self-test is never attached. That check exists
 because the way a packaged app fails is specific: it starts, and then the

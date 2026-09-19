@@ -5,8 +5,11 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.2.0
 
+- The app says which version it is, under Settings → Under the hood, and in
+  what `--selftest` prints. The number is the release tag itself, read at
+  build time, so there is nothing to keep in step by hand.
 - Saved takes can go to the cloud folder on their own. Switch on **Send saved
   takes automatically** in Settings and every take you keep is copied in the
   background, between takes rather than while one is recording, with the

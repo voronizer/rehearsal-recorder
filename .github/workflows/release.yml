@@ -41,7 +41,11 @@ jobs:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
     steps:
+      # The whole history, because the version comes from the release
+      # tag — a shallow clone has no tags and would build a 0.0.0.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:

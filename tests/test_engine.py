@@ -7,6 +7,7 @@ the renderer is called directly and the samples themselves are inspected.
 """
 
 import json
+import re
 import struct
 import sys
 import tempfile
@@ -1294,6 +1295,19 @@ def main():
                      if t["take_number"] == rescued["take"]["take_number"])
     ok("and it lands in the cloud folder",
        Path((recovered.get("cloud") or {}).get("mix", "")).exists())
+
+    print("\n[15] The version the app is running")
+    import rehearsal_recorder
+
+    # The version comes from the release tag, written into the package when it
+    # is installed or built. This suite also runs from a clone that was never
+    # installed, where there is no such file and the honest answer is that it
+    # does not know — so both shapes are allowed, and nothing else is.
+    ok("the interface can be told which version it is running",
+       a.get_settings()["version"] == rehearsal_recorder.__version__)
+    reported = a.get_settings()["version"]
+    ok("and it is either the tag it was built from or an honest 'unknown'",
+       reported == "unknown" or re.match(r"\d+\.\d+", reported) is not None)
 
     print("\n" + "=" * 60)
     if problems:

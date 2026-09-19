@@ -8,17 +8,16 @@
 # rehearsal.
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "rehearsal-recorder"
-version = "0.1.0"
 description = "Multitrack recording for band rehearsals"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-dynamic = ["dependencies"]
+dynamic = ["dependencies", "version"]
 
 [project.scripts]
 rehearsal-recorder = "rehearsal_recorder.app:main"
@@ -28,6 +27,12 @@ rehearsal-recorder = "rehearsal_recorder.app:main"
 # what CI and the build scripts install from, and because it is the file
 # people look in.
 dependencies = { file = ["requirements.txt"] }
+
+# The version is the release tag, so there is no number to keep in step by
+# hand. setuptools-scm reads it from git at build time and writes it into
+# the package, which is how the built app knows it in a bundle with no git.
+[tool.setuptools_scm]
+version_file = "src/rehearsal_recorder/_version.py"
 
 [tool.setuptools.packages.find]
 where = ["src"]

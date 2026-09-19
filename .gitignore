@@ -22,3 +22,6 @@ ui/node_modules/
 
 # Screenshots the interface suite takes as it runs
 tests/screenshots/
+
+# Written by setuptools-scm from the git tag at build time.
+src/rehearsal_recorder/_version.py

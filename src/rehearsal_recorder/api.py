@@ -22,6 +22,7 @@ from pathlib import Path
 
 import sounddevice as sd
 
+from rehearsal_recorder import __version__
 from rehearsal_recorder.audio.capture import AudioRecorder
 from rehearsal_recorder.audio.drafts import DRAFTS_DIR, describe, draft_dirs, finalize, has_audio
 from rehearsal_recorder.audio.encode import (
@@ -247,6 +248,7 @@ class Api:
             "path_warning": describe_path_limit(self._recordings_dir),
             "server_url": self._server.base_url,
             "config_path": str(CONFIG_PATH),
+            "version": __version__,
         }
 
     def set_recordings_dir(self, path):

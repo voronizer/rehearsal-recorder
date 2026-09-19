@@ -293,7 +293,8 @@ window.__MAKE_API__ = () => ({
     path_warning: window.__PATH_WARNING__ || null,
     theme: readCfg().theme, ui_scale: readCfg().ui_scale,
     cloud_dir: cloudDir,
-    server_url:'http://127.0.0.1:1234/', config_path:'/Users/alex/.rehearsal-recorder/config.json'}),
+    server_url:'http://127.0.0.1:1234/', config_path:'/Users/alex/.rehearsal-recorder/config.json',
+    version:'0.2.0'}),
   set_recordings_dir: async (p) => ({ok:true, recordings_dir:p}),
   choose_recordings_dir: track('choose_recordings_dir', async () => ({ok:true, recordings_dir:'/Users/alex/Dropbox/Band'})),
   save_mix: track('save_mix', async () => ({ok:true})),
@@ -665,6 +666,15 @@ def main():
         ok("every group is reachable",
            all(page.get_by_role("button", name=name, exact=True).count() >= 1
                for name in ("Audio", "Folders", "Appearance", "Under the hood")))
+
+        # The version belongs next to the settings path: both are what somebody
+        # quotes when something has gone wrong.
+        page.get_by_role("button", name="Under the hood", exact=True).first.click()
+        page.wait_for_timeout(200)
+        ok("the version it is running is on screen",
+           page.locator("dd", has_text="0.2.0").count() == 1)
+        page.get_by_role("button", name="Audio", exact=True).first.click()
+        page.wait_for_timeout(200)
         page.screenshot(path=str(SHOTS / "58-settings-audio.png"))
 
         page.get_by_role("button", name="Folders", exact=True).first.click()

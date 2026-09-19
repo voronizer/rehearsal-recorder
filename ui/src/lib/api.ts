@@ -214,6 +214,8 @@ export type Settings = {
   path_warning: string | null
   server_url: string
   config_path: string
+  /** The release this was built from, or "unknown" outside a build. */
+  version: string
 }
 
 type Ok<T = object> = { ok: boolean; error?: string } & T

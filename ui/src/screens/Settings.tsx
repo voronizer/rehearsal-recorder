@@ -672,6 +672,8 @@ export function Settings({
         <section className="flex flex-col gap-2">
           <Label>Under the hood</Label>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
+            <dt>Version</dt>
+            <dd>{settings?.version}</dd>
             <dt>Settings</dt>
             <dd className="break-all">{settings?.config_path}</dd>
             <dt>Local server</dt>

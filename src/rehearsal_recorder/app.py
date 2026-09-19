@@ -77,6 +77,7 @@ def selftest():
 
     which is exactly what the build runs after packaging, on each system.
     """
+    from rehearsal_recorder import __version__
     from rehearsal_recorder.platform_support import app_root, trash_kind
 
     problems = []
@@ -90,7 +91,7 @@ def selftest():
             return
         print(f"  ok   {label}" + (f" — {detail}" if detail else ""))
 
-    print(f"Rehearsal Recorder self-test on {sys.platform}")
+    print(f"Rehearsal Recorder {__version__} self-test on {sys.platform}")
     print(f"  bundle root: {app_root()}")
     print(f"  frozen: {getattr(sys, 'frozen', False)}")
 
