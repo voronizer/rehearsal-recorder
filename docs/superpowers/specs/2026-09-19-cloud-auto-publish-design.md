@@ -77,6 +77,7 @@ by triggers, not by scanning:
 | Trigger | What is enqueued |
 |---|---|
 | `keep_take` | that take, and any take of this rehearsal that failed earlier |
+| `recover_draft` | the take it rescued |
 | `rename_take` | that take, in any rehearsal |
 | `save_mix` | every take of the **active** rehearsal |
 | auto-publish switched on | every take of the active rehearsal |
@@ -87,8 +88,11 @@ There is deliberately no startup row. A rehearsal does not survive the
 process — `Api.__init__` starts with `self._session = None` — so at startup
 there is never an active rehearsal to seed the queue from, and scanning the
 recordings folder for stale copies is exactly the sweep this design avoids.
-Takes left unsaved when the app died are the drafts screen's business, and a
-recovered draft becomes a take through `keep_take` like any other.
+Takes left unsaved when the app died are the drafts screen's business, and
+`recover_draft` enqueues the take it makes — it builds and writes that take
+itself rather than going through `keep_take`, so it has to. That recovery is
+the case the app dying mid-rehearsal is argued from, and nothing else would
+ever send the take.
 
 That is what the first row's second half is for. The realistic failure is a
 sync folder that is briefly not there — logged out, unmounted, full — and the

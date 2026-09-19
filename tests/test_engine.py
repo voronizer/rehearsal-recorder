@@ -1264,6 +1264,26 @@ def main():
         a._cloud_queue = real_queue
     ok("closing the app stands the worker down", not idle._thread.is_alive())
 
+    print("\n[11l] A recovered draft goes to the cloud like any other take")
+    # The app died mid-take and the draft is rescued on the next run. That is
+    # the very case the design argues from when it decides there is no
+    # startup sweep, so the recovered take has to reach the cloud folder the
+    # way a saved one does.
+    rescued_draft = folder / "_drafts" / "take 11"
+    rescued_draft.mkdir(parents=True, exist_ok=True)
+    (rescued_draft / "A.raw").write_bytes(struct.pack("<h", 1100) * SR)
+    rescued = a.recover_draft(str(rescued_draft), "Rescued")
+    ok("the draft became a take", rescued["ok"])
+    ok("and is waiting to be published",
+       a.session_state()["cloud_queue"].get(rescued["take"]["take_number"])
+       == "queued")
+    while a._cloud_queue.run_next():
+        pass
+    recovered = next(t for t in a.get_rehearsal(str(folder))["takes"]
+                     if t["take_number"] == rescued["take"]["take_number"])
+    ok("and it lands in the cloud folder",
+       Path((recovered.get("cloud") or {}).get("mix", "")).exists())
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

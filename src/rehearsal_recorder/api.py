@@ -872,6 +872,10 @@ class Api:
                     self._session["take_counter"], take_number
                 )
 
+        # A rescued take is a take. The app dying mid-rehearsal is exactly the
+        # case there is no startup sweep for, so this is the only thing that
+        # ever sends it.
+        self._enqueue_publish(folder, take_number)
         return {"ok": True, "take": take_info, "folder": str(folder)}
 
     def discard_draft(self, draft_dir):
