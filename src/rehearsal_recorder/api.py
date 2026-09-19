@@ -262,6 +262,12 @@ class Api:
         current.update(volumes or {})
         self._config["volumes"] = current
         self._write_config()
+        # The balance lives in the config, not on the take, so "it changed" is
+        # true of every take ever recorded. Only the rehearsal in progress is
+        # the one this balance was set for; older ones keep what they sent.
+        if self._session is not None:
+            for t in self._session.get("takes", []):
+                self._enqueue_publish(self._session["folder"], t["take_number"])
         return {"ok": True}
 
     def save_appearance(self, theme, ui_scale):
@@ -946,6 +952,8 @@ class Api:
             if self._session is not None and Path(self._session["folder"]) == folder:
                 self._session["takes"] = takes
 
+        # The copies in the cloud folder are named after the take.
+        self._enqueue_publish(folder, take_number)
         return {"ok": True, "take": take}
 
     def rename_rehearsal(self, folder, new_name):

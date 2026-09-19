@@ -1039,6 +1039,27 @@ def main():
     while a._cloud_queue.run_next():
         pass
 
+    print("\n[11g] A rename and a new balance send it again")
+    folder = Path(a.session_state()["folder"])
+    old_mix = Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"])
+    a.rename_take(str(folder), 1, "Polyn again")
+    ok("renaming queues the take again",
+       a.session_state()["cloud_queue"] == {1: "queued"})
+    a._cloud_queue.run_next()
+    new_mix = Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"])
+    ok("the copy is named after the new name", "Polyn again" in new_mix.name)
+    ok("and the copy under the old name is gone", not old_mix.exists())
+
+    a.save_mix({"A": 0.5})
+    queued = a.session_state()["cloud_queue"]
+    ok("a new balance queues the rehearsal's takes",
+       queued == {t["take_number"]: "queued" for t in a.session_state()["takes"]}
+       and len(queued) > 1)
+    a._cloud_queue.run_next()
+    ok("and the take is current again",
+       cloudmod.is_current(a.get_rehearsal(str(folder))["takes"][0], "mix",
+                           a.get_settings()["volumes"], "wav"))
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
