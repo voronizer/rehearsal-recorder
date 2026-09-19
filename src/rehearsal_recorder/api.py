@@ -86,6 +86,12 @@ def _writing_path(path):
     return path.with_name(WRITING_PREFIX + path.name)
 
 
+def _cloud_subfolder(cloud, folder):
+    """Where one rehearsal's copies go inside the cloud folder: a folder named
+    after it, so the cloud folder does not become a heap of takes."""
+    return Path(cloud) / _safe_name(Path(folder).name)
+
+
 def _timestamp_suffix(created_at):
     """'2026-09-18T19:00:00' -> '2026-09-18 19-00' for folder names."""
     try:
@@ -1298,10 +1304,10 @@ class Api:
         return Path(path) if path else None
 
     def _cloud_target(self, folder):
-        """Where one rehearsal's copies go inside the cloud folder, or None
-        while there is no cloud folder to put them in."""
+        """Where one rehearsal's copies go, or None while there is no cloud
+        folder to put them in."""
         cloud = self._cloud_dir
-        return None if cloud is None else cloud / _safe_name(Path(folder).name)
+        return None if cloud is None else _cloud_subfolder(cloud, folder)
 
     def set_cloud_dir(self, path):
         folder = Path(path).expanduser()
@@ -1498,7 +1504,9 @@ class Api:
 
         self._remove_shared(take)
 
-        target = self._cloud_target(folder)
+        # From the folder settled on above, not from the setting again: it can
+        # be cleared from the interface while this runs.
+        target = _cloud_subfolder(cloud, folder)
         base = f"{take_number:02d} - {_safe_name(take.get('name', '') or f'Take {take_number}')}"
         shared = {}
 
