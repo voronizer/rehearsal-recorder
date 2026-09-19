@@ -923,6 +923,56 @@ def main():
     ok("with the setting off nothing is queued",
        a.session_state()["cloud_queue"] == {})
     a.set_auto_publish(True, "mix")
+    # Turning it back on with a session in progress re-queues take 1 (already
+    # current) — drain that before the next checks so it doesn't interfere.
+    a._cloud_queue.run_next()
+
+    # A gap the review caught: a sync folder can vanish mid-write, raising
+    # instead of returning {"ok": False}. That must still land as a recorded,
+    # retryable failure — not a silently stalled take.
+    solo2 = tmp / "Solo2"
+    write_wav(solo2 / "two.wav", 1300)
+    real_share_take = a.share_take
+
+    def boom(*args, **kwargs):
+        raise OSError("sync folder went away")
+
+    a.share_take = boom
+    try:
+        a.keep_take(2, str(solo2), "Boom", 2.0,
+                    [{"name": "A", "file": str(solo2 / "two.wav")}], [])
+        a._cloud_queue.run_next()
+    finally:
+        a.share_take = real_share_take
+    broken = a.get_rehearsal(str(folder))["takes"][1]
+    ok("an exception from the publish is recorded",
+       "sync folder went away" in (broken.get("cloud_error") or ""))
+
+    solo3 = tmp / "Solo3"
+    write_wav(solo3 / "three.wav", 1400)
+    a.keep_take(3, str(solo3), "After", 2.0,
+                [{"name": "A", "file": str(solo3 / "three.wav")}], [])
+    ok("and a later save re-queues the failed take",
+       a.session_state()["cloud_queue"].get(2) == "queued")
+
+    # Drain the backlog (take 3, and the retried take 2) before the next
+    # check, which cares only about what happens while recording.
+    while a._cloud_queue.run_next():
+        pass
+
+    # Recording wins: the worker must never compete with the audio callback.
+    solo4 = tmp / "Solo4"
+    write_wav(solo4 / "four.wav", 1500)
+    a.keep_take(4, str(solo4), "Later", 2.0,
+                [{"name": "A", "file": str(solo4 / "four.wav")}], [])
+    a._recorder = object()  # sentinel: stands in for an active recorder
+    ok("nothing runs while recording", a._cloud_queue.run_next() is False)
+    take4 = a.get_rehearsal(str(folder))["takes"][3]
+    ok("and the take was not copied", "cloud" not in take4)
+    a._recorder = None
+    ok("but once recording stops it publishes", a._cloud_queue.run_next() is True)
+    take4 = a.get_rehearsal(str(folder))["takes"][3]
+    ok("and now it is in the cloud folder", Path(take4["cloud"]["mix"]).exists())
 
     print("\n" + "=" * 60)
     if problems:

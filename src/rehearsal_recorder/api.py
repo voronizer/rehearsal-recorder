@@ -1338,7 +1338,14 @@ class Api:
         fmt = normalize_format(self._config.get("cloud_format"))
         if cloudmod.is_current(take, what, self._config.get("volumes", {}), fmt):
             return
-        res = self.share_take(str(folder), take_number, what)
+        try:
+            res = self.share_take(str(folder), take_number, what)
+        except Exception as e:
+            # A sync folder that vanishes mid-write raises instead of
+            # returning {"ok": False} — that must still land as a recorded,
+            # retryable failure, not a silently stalled take.
+            self._record_cloud_error(folder, take_number, str(e))
+            return
         if not res.get("ok"):
             self._record_cloud_error(
                 folder, take_number, res.get("error") or "Could not copy the take"
