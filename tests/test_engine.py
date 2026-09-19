@@ -978,6 +978,7 @@ def main():
     # the copy must not claim to be current for a name it was not written
     # under. `mixdown` is where the slow part happens, so that is where a
     # real rename would land.
+    prior_publish = a.get_settings()
     a.set_auto_publish(False)
     write_wav(solo / "three.wav", 700)
     a.keep_take(9, str(solo), "Before", 2.0,
@@ -995,6 +996,10 @@ def main():
         a.share_take(str(folder9), 9, "mix")
     finally:
         apimod.mixdown = real_mixdown
+        # The later [11g]/[11h] sections assume auto-publish is on, same as
+        # every other check in this section left it — don't leave it off
+        # behind us just because this one check needed it off.
+        a.set_auto_publish(prior_publish["auto_publish"], prior_publish["auto_publish_what"])
 
     take9 = next(t for t in a.get_rehearsal(str(folder9))["takes"]
                  if t["take_number"] == 9)
@@ -1003,6 +1008,12 @@ def main():
        take9["cloud"]["source"]["name"] == "Before")
     ok("so it does not claim to be current",
        not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav"))
+
+    # Restoring auto-publish above re-queued every take of the still-open
+    # session (that is what turning it on does) — drain that before handing
+    # off to the next section, which should start from an empty queue.
+    while a._cloud_queue.run_next():
+        pass
 
     print("\n" + "=" * 60)
     if problems:

@@ -728,8 +728,13 @@ class Api:
             "tracks": moved,
             "markers": [self._as_marker(m) for m in (markers or [])],
         }
-        s["takes"].append(take_info)
-        self._save_session_meta()
+        # Appending and saving must be one step: a publish landing between them
+        # would rebind self._session["takes"] to a copy read before this take
+        # existed, and _save_session_meta would then write that take away.
+        # Safe to nest — _save_session_meta re-enters the same RLock.
+        with self._meta_lock:
+            s["takes"].append(take_info)
+            self._save_session_meta()
         self._enqueue_publish(s["folder"], take_number)
         self._retry_failed_publishes()
         return {"ok": True, "take": take_info}
@@ -786,52 +791,53 @@ class Api:
             return {"ok": False, "error": "Draft not found"}
 
         folder = draft_dir.parent.parent
-        meta = self._read_meta(folder)
-        if meta is None:
-            return {"ok": False, "error": "Rehearsal not found"}
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return {"ok": False, "error": "Rehearsal not found"}
 
-        samplerate = meta.get("samplerate", 48000)
-        result = finalize(draft_dir, samplerate, meta.get("bit_depth", LEGACY_DEPTH))
-        if not result["tracks"]:
-            return {"ok": False, "error": "Draft has no audio"}
+            samplerate = meta.get("samplerate", 48000)
+            result = finalize(draft_dir, samplerate, meta.get("bit_depth", LEGACY_DEPTH))
+            if not result["tracks"]:
+                return {"ok": False, "error": "Draft has no audio"}
 
-        takes = meta.get("takes", [])
-        take_number = max([t.get("take_number", 0) for t in takes], default=0) + 1
-        display_name = (name or "").strip() or f"Recovered take {take_number}"
+            takes = meta.get("takes", [])
+            take_number = max([t.get("take_number", 0) for t in takes], default=0) + 1
+            display_name = (name or "").strip() or f"Recovered take {take_number}"
 
-        take_dir = _unique_path(
-            folder / f"{take_number:02d} - {_safe_name(display_name)}"
-        )
-        take_dir.mkdir(parents=True, exist_ok=True)
-
-        moved = []
-        for t in result["tracks"]:
-            src = Path(t["file"])
-            dst = take_dir / src.name
-            if src.exists():
-                shutil.move(str(src), str(dst))
-            moved.append({"name": t["name"], "file": str(dst)})
-
-        shutil.rmtree(draft_dir, ignore_errors=True)
-        self._cleanup_drafts_dir(draft_dir)
-
-        take_info = {
-            "take_number": take_number,
-            "name": display_name,
-            "duration_sec": result["duration_sec"],
-            "tracks": moved,
-            # A rescued take was never listened to, so it has no marks yet.
-            "markers": [],
-        }
-        takes.append(take_info)
-        meta["takes"] = takes
-        self._write_meta(folder, meta)
-
-        if self._session is not None and Path(self._session["folder"]) == folder:
-            self._session["takes"] = takes
-            self._session["take_counter"] = max(
-                self._session["take_counter"], take_number
+            take_dir = _unique_path(
+                folder / f"{take_number:02d} - {_safe_name(display_name)}"
             )
+            take_dir.mkdir(parents=True, exist_ok=True)
+
+            moved = []
+            for t in result["tracks"]:
+                src = Path(t["file"])
+                dst = take_dir / src.name
+                if src.exists():
+                    shutil.move(str(src), str(dst))
+                moved.append({"name": t["name"], "file": str(dst)})
+
+            shutil.rmtree(draft_dir, ignore_errors=True)
+            self._cleanup_drafts_dir(draft_dir)
+
+            take_info = {
+                "take_number": take_number,
+                "name": display_name,
+                "duration_sec": result["duration_sec"],
+                "tracks": moved,
+                # A rescued take was never listened to, so it has no marks yet.
+                "markers": [],
+            }
+            takes.append(take_info)
+            meta["takes"] = takes
+            self._write_meta(folder, meta)
+
+            if self._session is not None and Path(self._session["folder"]) == folder:
+                self._session["takes"] = takes
+                self._session["take_counter"] = max(
+                    self._session["take_counter"], take_number
+                )
 
         return {"ok": True, "take": take_info, "folder": str(folder)}
 
@@ -942,45 +948,46 @@ class Api:
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        meta = self._read_meta(folder)
-        if meta is None:
-            return {"ok": False, "error": "Rehearsal not found"}
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return {"ok": False, "error": "Rehearsal not found"}
 
-        display_name = (new_name or "").strip()
-        if not display_name:
-            return {"ok": False, "error": "Name cannot be empty"}
+            display_name = (new_name or "").strip()
+            if not display_name:
+                return {"ok": False, "error": "Name cannot be empty"}
 
-        meta["name"] = display_name
-        suffix = _timestamp_suffix(meta.get("created_at", ""))
-        original = folder
-        new_folder = _unique_path(
-            self._recordings_dir / f"{_safe_name(display_name)} - {suffix}"
-        )
+            meta["name"] = display_name
+            suffix = _timestamp_suffix(meta.get("created_at", ""))
+            original = folder
+            new_folder = _unique_path(
+                self._recordings_dir / f"{_safe_name(display_name)} - {suffix}"
+            )
 
-        if new_folder != original:
-            try:
-                original.rename(new_folder)
-            except OSError as e:
-                return {"ok": False, "error": f"Could not rename the folder: {e}"}
+            if new_folder != original:
+                try:
+                    original.rename(new_folder)
+                except OSError as e:
+                    return {"ok": False, "error": f"Could not rename the folder: {e}"}
 
-            # Stored paths are absolute, so re-point them at the new folder.
-            for take in meta.get("takes", []):
-                for t in take.get("tracks", []):
-                    old = Path(t["file"])
-                    try:
-                        t["file"] = str(new_folder / old.relative_to(original))
-                    except ValueError:
-                        pass
-            folder = new_folder
+                # Stored paths are absolute, so re-point them at the new folder.
+                for take in meta.get("takes", []):
+                    for t in take.get("tracks", []):
+                        old = Path(t["file"])
+                        try:
+                            t["file"] = str(new_folder / old.relative_to(original))
+                        except ValueError:
+                            pass
+                folder = new_folder
 
-        self._write_meta(folder, meta)
+            self._write_meta(folder, meta)
 
-        # Only the rehearsal actually being renamed touches the live session —
-        # renaming an old one from history must leave it alone.
-        if self._session is not None and Path(self._session["folder"]) == original:
-            self._session["folder"] = folder
-            self._session["name"] = display_name
-            self._session["takes"] = meta.get("takes", [])
+            # Only the rehearsal actually being renamed touches the live session —
+            # renaming an old one from history must leave it alone.
+            if self._session is not None and Path(self._session["folder"]) == original:
+                self._session["folder"] = folder
+                self._session["name"] = display_name
+                self._session["takes"] = meta.get("takes", [])
 
         return {
             "ok": True,
@@ -1054,22 +1061,23 @@ class Api:
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        meta = self._read_meta(folder)
-        if meta is None:
-            return {"ok": False, "error": "Rehearsal not found"}
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return {"ok": False, "error": "Rehearsal not found"}
 
-        takes = meta.get("takes", [])
-        take = next((t for t in takes if t.get("take_number") == take_number), None)
-        if take is None:
-            return {"ok": False, "error": "Take not found"}
+            takes = meta.get("takes", [])
+            take = next((t for t in takes if t.get("take_number") == take_number), None)
+            if take is None:
+                return {"ok": False, "error": "Take not found"}
 
-        take["markers"] = fn(self._markers_of(take))
-        self._write_meta(folder, meta)
+            take["markers"] = fn(self._markers_of(take))
+            self._write_meta(folder, meta)
 
-        if self._session is not None and Path(self._session["folder"]) == folder:
-            self._session["takes"] = takes
+            if self._session is not None and Path(self._session["folder"]) == folder:
+                self._session["takes"] = takes
 
-        return {"ok": True, "markers": take["markers"]}
+            return {"ok": True, "markers": take["markers"]}
 
     # ---------- playback ----------
 
@@ -1192,34 +1200,35 @@ class Api:
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        meta = self._read_meta(folder)
-        if meta is None:
-            return {"ok": False, "error": "Rehearsal not found"}
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return {"ok": False, "error": "Rehearsal not found"}
 
-        takes = meta.get("takes", [])
-        target = next((t for t in takes if t.get("take_number") == take_number), None)
-        if target is None:
-            return {"ok": False, "error": "Take not found"}
+            takes = meta.get("takes", [])
+            target = next((t for t in takes if t.get("take_number") == take_number), None)
+            if target is None:
+                return {"ok": False, "error": "Take not found"}
 
-        # Find the take folder from its files rather than its name: the name
-        # could have been changed by hand.
-        take_dirs = {
-            str(Path(t["file"]).parent)
-            for t in target.get("tracks", [])
-            if t.get("file")
-        }
-        result = {"ok": True, "trashed": False, "location": None}
-        for d in take_dirs:
-            if Path(d).exists() and self._inside_recordings(d):
-                result = move_to_trash(d, self._recordings_dir)
+            # Find the take folder from its files rather than its name: the name
+            # could have been changed by hand.
+            take_dirs = {
+                str(Path(t["file"]).parent)
+                for t in target.get("tracks", [])
+                if t.get("file")
+            }
+            result = {"ok": True, "trashed": False, "location": None}
+            for d in take_dirs:
+                if Path(d).exists() and self._inside_recordings(d):
+                    result = move_to_trash(d, self._recordings_dir)
 
-        meta["takes"] = [t for t in takes if t.get("take_number") != take_number]
-        self._write_meta(folder, meta)
+            meta["takes"] = [t for t in takes if t.get("take_number") != take_number]
+            self._write_meta(folder, meta)
 
-        if self._session is not None and Path(self._session["folder"]) == folder:
-            self._session["takes"] = meta["takes"]
+            if self._session is not None and Path(self._session["folder"]) == folder:
+                self._session["takes"] = meta["takes"]
 
-        return {**result, "takes_left": len(meta["takes"])}
+            return {**result, "takes_left": len(meta["takes"])}
 
     def delete_rehearsal(self, folder):
         folder = Path(folder)
@@ -1466,6 +1475,12 @@ class Api:
             if self._session is not None and Path(self._session["folder"]) == folder:
                 self._session["takes"] = meta.get("takes", [])
 
+        # The persisted write above went to a freshly re-read take so a
+        # concurrent rename cannot be clobbered; the caller still gets back
+        # the take it asked to share, so it must carry the same result.
+        take["cloud"] = shared
+        take.pop("cloud_error", None)
+
         return {
             "ok": True,
             "take": take,
@@ -1478,21 +1493,22 @@ class Api:
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
-        meta = self._read_meta(folder)
-        if meta is None:
-            return {"ok": False, "error": "Rehearsal not found"}
-        take = next(
-            (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
-            None,
-        )
-        if take is None:
-            return {"ok": False, "error": "Take not found"}
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return {"ok": False, "error": "Rehearsal not found"}
+            take = next(
+                (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
+                None,
+            )
+            if take is None:
+                return {"ok": False, "error": "Take not found"}
 
-        result = self._remove_shared(take)
-        take["cloud"] = {}
-        self._write_meta(folder, meta)
-        if self._session is not None and Path(self._session["folder"]) == folder:
-            self._session["takes"] = meta.get("takes", [])
+            result = self._remove_shared(take)
+            take["cloud"] = {}
+            self._write_meta(folder, meta)
+            if self._session is not None and Path(self._session["folder"]) == folder:
+                self._session["takes"] = meta.get("takes", [])
         return {"ok": True, **result}
 
     def _remove_shared(self, take):
