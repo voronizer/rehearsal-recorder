@@ -1135,14 +1135,14 @@ def main():
         pass
 
     folder = Path(a.session_state()["folder"])
-    volumes = a.get_settings()["volumes"]
+    balance = a.get_settings()["volumes"]
     moved = tmp / "Drive" / "Moved"
     a.set_cloud_dir(str(moved))
     ok("pointing at another cloud folder queues the rehearsal's takes",
        a.session_state()["cloud_queue"].get(1) == "queued")
     ok("and a take copied to the old one no longer counts as current",
        not cloudmod.is_current(a.get_rehearsal(str(folder))["takes"][0], "mix",
-                               volumes, "wav", a._cloud_target(folder)))
+                               balance, "wav", a._cloud_target(folder)))
     while a._cloud_queue.run_next():
         pass
     take = a.get_rehearsal(str(folder))["takes"][0]
@@ -1154,7 +1154,7 @@ def main():
     # record pointing at nothing at all.
     Path(take["cloud"]["mix"]).unlink()
     ok("a copy deleted behind the app's back is not current",
-       not cloudmod.is_current(take, "mix", volumes, "wav",
+       not cloudmod.is_current(take, "mix", balance, "wav",
                                a._cloud_target(folder)))
     a._enqueue_publish(folder, 1)
     a._cloud_queue.run_next()
