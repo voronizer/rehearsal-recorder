@@ -79,17 +79,23 @@ jobs:
       - name: Does the build have everything
         run: ${{ matrix.selftest }} --selftest
 
+      # Windows runners don't have `zip` on PATH (even under the bash shell),
+      # so that leg uses PowerShell's Compress-Archive instead.
       - name: Zip it
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cd dist
-          if [ -d RehearsalRecorder.app ]; then
-            zip -qry ../RehearsalRecorder-${{ matrix.label }}.zip RehearsalRecorder.app
-          else
-            zip -qr ../RehearsalRecorder-${{ matrix.label }}.zip RehearsalRecorder
-          fi
+          zip -qry ../RehearsalRecorder-${{ matrix.label }}.zip RehearsalRecorder.app
           cd ..
           ls -lh RehearsalRecorder-${{ matrix.label }}.zip
+
+      - name: Zip it
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/RehearsalRecorder -DestinationPath RehearsalRecorder-${{ matrix.label }}.zip
+          Get-Item RehearsalRecorder-${{ matrix.label }}.zip | Format-List Name, Length
 
       # Kept whether or not there is a release to attach to, so
       # workflow_dispatch runs produce something to download too.
