@@ -1,0 +1,28 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+
+# dist is NOT ignored, unlike in a normal web project. It is what app.py
+# serves and what gets packaged into the app, so committing it means the
+# thing runs from a clone without Node installed. Rebuild and commit it when
+# you change anything under src/ — see CONTRIBUTING.md.
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

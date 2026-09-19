@@ -1,0 +1,608 @@
+import { useEffect, useState } from "react"
+import {
+  Check,
+  CloudUpload,
+  FolderOpen,
+  Mic,
+  Info,
+  Palette,
+  RotateCcw,
+  Sliders,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Shell } from "@/components/Shell"
+import { cn } from "@/lib/utils"
+import { SCALE_OPTIONS, THEME_LABELS, type Theme } from "@/lib/appearance"
+import {
+  api,
+  type CloudFormat,
+  type Device,
+  type OutputDevice,
+  type Settings as SettingsData,
+} from "@/lib/api"
+
+type TabId = "audio" | "folders" | "appearance" | "about"
+
+const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[] = [
+  {
+    id: "audio",
+    label: "Audio",
+    icon: <Sliders className="size-4" />,
+    blurb: "Which interface, what quality, where it plays back",
+  },
+  {
+    id: "folders",
+    label: "Folders",
+    icon: <FolderOpen className="size-4" />,
+    blurb: "Where rehearsals are kept and what goes to the cloud",
+  },
+  {
+    id: "appearance",
+    label: "Appearance",
+    icon: <Palette className="size-4" />,
+    blurb: "Theme and how big everything is",
+  },
+  {
+    id: "about",
+    label: "Under the hood",
+    icon: <Info className="size-4" />,
+    blurb: "Paths and the local server",
+  },
+]
+
+export function Settings({
+  onBack,
+  theme,
+  scale,
+  onAppearanceChange,
+}: {
+  onBack: () => void
+  theme: Theme
+  scale: number
+  onAppearanceChange: (theme: Theme, scale: number) => void
+}) {
+  const [settings, setSettings] = useState<SettingsData | null>(null)
+  const [outputs, setOutputs] = useState<OutputDevice[]>([])
+  const [inputs, setInputs] = useState<Device[]>([])
+  // What the chosen interface will actually accept: {"44100": [16, 24], ...}
+  const [formats, setFormats] = useState<Record<string, number[]>>({})
+  const [dir, setDir] = useState("")
+  const [cloudDir, setCloudDir] = useState("")
+  const [status, setStatus] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  // Six sections in one column was a wall. They are grouped by what a person
+  // came here to change, not by the order they happened to be written in.
+  const [tab, setTab] = useState<TabId>("audio")
+
+  useEffect(() => {
+    ;(async () => {
+      const s = await api().get_settings()
+      setSettings(s)
+      setDir(s.recordings_dir)
+      setCloudDir(s.cloud_dir ?? "")
+      setOutputs(await api().list_output_devices())
+      setInputs(await api().list_input_devices())
+    })()
+  }, [])
+
+  // The card is asked what it can do before anything is offered, and again
+  // whenever the interface changes.
+  useEffect(() => {
+    if (!settings || settings.device_index === null) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await api().recording_formats(settings.device_index!, 2)
+        if (!cancelled && res.ok && res.formats) setFormats(res.formats)
+      } catch {
+        /* the choice just stays as it is */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [settings?.device_index])
+
+  const applyRecording = async (
+    deviceIndex: number | null,
+    samplerate: number,
+    bitDepth: number
+  ) => {
+    setError(null)
+    const res = await api().set_recording_format(
+      deviceIndex,
+      samplerate,
+      bitDepth
+    )
+    if (!res.ok) {
+      setError(res.error ?? "Could not save the recording settings")
+      return
+    }
+    setSettings(await api().get_settings())
+  }
+
+  const applyDir = async (path: string) => {
+    setError(null)
+    const res = await api().set_recordings_dir(path)
+    if (!res.ok) {
+      setError(res.error ?? "Could not use that folder")
+      return
+    }
+    setDir(res.recordings_dir ?? path)
+    setStatus("Folder saved")
+    window.setTimeout(() => setStatus(null), 2500)
+  }
+
+  const applyCloudDir = async (path: string) => {
+    setError(null)
+    const res = await api().set_cloud_dir(path)
+    if (!res.ok) {
+      setError(res.error ?? "Could not use that folder")
+      return
+    }
+    setCloudDir(res.cloud_dir ?? path)
+    setSettings(await api().get_settings())
+    setStatus("Cloud folder saved")
+    window.setTimeout(() => setStatus(null), 2500)
+  }
+
+  const browseCloud = async () => {
+    setError(null)
+    const res = await api().choose_cloud_dir()
+    if (res.cancelled) return
+    if (!res.ok) {
+      setError(res.error ?? "Could not open the folder picker")
+      return
+    }
+    setCloudDir(res.cloud_dir ?? cloudDir)
+    setSettings(await api().get_settings())
+    setStatus("Cloud folder saved")
+    window.setTimeout(() => setStatus(null), 2500)
+  }
+
+  const browse = async () => {
+    setError(null)
+    const res = await api().choose_recordings_dir()
+    if (res.cancelled) return
+    if (!res.ok) {
+      setError(res.error ?? "Could not open the folder picker")
+      return
+    }
+    setDir(res.recordings_dir ?? dir)
+    setStatus("Folder saved")
+    window.setTimeout(() => setStatus(null), 2500)
+  }
+
+  // Whatever the card said, or the usual three while the answer is pending.
+  const rateOptions = (Object.keys(formats).length
+    ? Object.keys(formats).map(Number)
+    : [44100, 48000, 96000]
+  ).sort((a, b) => a - b)
+
+  const current = TABS.find((t) => t.id === tab) ?? TABS[0]
+
+  return (
+    <Shell title="Settings" onBack={onBack}>
+      <div className="mx-auto flex w-full max-w-4xl gap-8">
+        {/* The section list. Four groups is few enough to show at once, so
+            nothing is hidden behind a menu. */}
+        <nav className="hidden w-52 shrink-0 flex-col gap-1 sm:flex">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              aria-current={tab === t.id ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+                tab === t.id
+                  ? "bg-accent font-medium text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              )}
+            >
+              <span className="shrink-0">{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
+        {/* On a narrow window the list becomes a row above the panel. */}
+        <div className="flex min-w-0 flex-1 flex-col gap-6">
+          <div className="flex gap-1 overflow-x-auto sm:hidden">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                aria-current={tab === t.id ? "page" : undefined}
+                className={cn(
+                  "shrink-0 rounded-lg px-3 py-1.5 text-sm transition-colors",
+                  tab === t.id
+                    ? "bg-accent font-medium text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50"
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <h2 className="text-base font-semibold">{current.label}</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {current.blurb}
+            </p>
+          </div>
+
+          {/* Saved / failed messages belong where they can be seen from any
+              section, not buried inside the one that raised them. */}
+          {status && (
+            <p className="flex items-center gap-1.5 text-xs text-signal">
+              <Check className="size-3.5" />
+              {status}
+            </p>
+          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {tab === "appearance" && (
+        <section className="flex flex-col gap-3">
+          <div>
+            <Label>Appearance</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              The theme and scale are remembered and applied on the next launch.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {(["dark", "light", "system"] as Theme[]).map((t) => (
+              <Button
+                key={t}
+                variant={theme === t ? "default" : "outline"}
+                size="sm"
+                aria-pressed={theme === t}
+                onClick={() => onAppearanceChange(t, scale)}
+              >
+                {THEME_LABELS[t]}
+              </Button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-sm text-muted-foreground">Scale</span>
+            {SCALE_OPTIONS.map((s) => (
+              <Button
+                key={s}
+                variant={Math.abs(scale - s) < 0.001 ? "default" : "outline"}
+                size="sm"
+                aria-pressed={Math.abs(scale - s) < 0.001}
+                aria-label={`Scale ${Math.round(s * 100)} percent`}
+                onClick={() => onAppearanceChange(theme, s)}
+                className={cn("tnum")}
+              >
+                {Math.round(s * 100)}%
+              </Button>
+            ))}
+          </div>
+        </section>
+        )}
+
+        {tab === "audio" && (<>
+
+        <section className="flex flex-col gap-3">
+          <div>
+            <Label htmlFor="input-device">Recording</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Set once for the room and the card. The setup screen shows what
+              is in force but does not change it.
+            </p>
+          </div>
+
+          <Select
+            value={
+              settings?.device_index === null ||
+              settings?.device_index === undefined
+                ? ""
+                : String(settings.device_index)
+            }
+            onValueChange={(v) =>
+              void applyRecording(
+                Number(v),
+                settings?.samplerate ?? 44100,
+                settings?.bit_depth ?? 24
+              )
+            }
+          >
+            <SelectTrigger id="input-device" className="w-full">
+              <SelectValue placeholder="Pick an interface" />
+            </SelectTrigger>
+            <SelectContent>
+              {inputs.map((d) => (
+                <SelectItem key={d.index} value={String(d.index)}>
+                  {d.name}
+                  {/* On Windows one card appears once per audio system, with
+                      the same name each time — without this they are five
+                      identical rows. */}
+                  {d.host_api ? ` (${d.host_api})` : ""} · up to{" "}
+                  {d.max_input_channels} ch
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-sm text-muted-foreground">Rate</span>
+            {rateOptions.map((rate) => (
+              <Button
+                key={rate}
+                variant={settings?.samplerate === rate ? "default" : "outline"}
+                size="sm"
+                aria-pressed={settings?.samplerate === rate}
+                aria-label={`${rate / 1000} kHz`}
+                onClick={() => {
+                  const allowed = formats[String(rate)] ?? [16, 24]
+                  const depth = allowed.includes(settings?.bit_depth ?? 24)
+                    ? settings!.bit_depth
+                    : allowed[0]
+                  void applyRecording(
+                    settings?.device_index ?? null,
+                    rate,
+                    depth
+                  )
+                }}
+                className="tnum"
+              >
+                {rate / 1000} kHz
+              </Button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-sm text-muted-foreground">Depth</span>
+            {[16, 24].map((depth) => {
+              const allowed =
+                formats[String(settings?.samplerate ?? 44100)] ?? [16, 24]
+              return (
+                <Button
+                  key={depth}
+                  variant={settings?.bit_depth === depth ? "default" : "outline"}
+                  size="sm"
+                  aria-pressed={settings?.bit_depth === depth}
+                  aria-label={`${depth} bit`}
+                  disabled={!allowed.includes(depth)}
+                  onClick={() =>
+                    void applyRecording(
+                      settings?.device_index ?? null,
+                      settings?.samplerate ?? 44100,
+                      depth
+                    )
+                  }
+                  className="tnum"
+                >
+                  {depth} bit
+                </Button>
+              )
+            })}
+          </div>
+
+          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Mic className="mt-0.5 size-3.5 shrink-0" />
+            24 bits leaves enough headroom to set the inputs low and stop
+            worrying about the loud chorus, at half again as much disk. Only
+            what this interface accepts is shown.
+          </p>
+        </section>
+
+        <section className="flex flex-col gap-3 border-t pt-6">
+          <div>
+            <Label htmlFor="output-device">Playback output</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Where takes are played back — the headphones on the interface
+              itself, for instance, rather than the laptop speakers.
+            </p>
+          </div>
+          <Select
+            value={
+              settings?.output_device_index === null ||
+              settings?.output_device_index === undefined
+                ? "default"
+                : String(settings.output_device_index)
+            }
+            onValueChange={async (v) => {
+              const idx = v === "default" ? null : Number(v)
+              const res = await api().set_output_device(idx)
+              if (!res.ok) {
+                setError(res.error ?? "Could not switch the output")
+                return
+              }
+              setSettings(await api().get_settings())
+            }}
+          >
+            <SelectTrigger id="output-device" className="w-full">
+              <SelectValue placeholder="System output" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">System output</SelectItem>
+              {outputs.map((d) => (
+                <SelectItem key={d.index} value={String(d.index)}>
+                  {d.name}
+                  {d.host_api ? ` (${d.host_api})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </section>
+        </>)}
+
+        {tab === "folders" && (<>
+
+        <section className="flex flex-col gap-3">
+          <div>
+            <Label htmlFor="recordings-dir">Recordings folder</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Where everything is recorded to.
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              id="recordings-dir"
+              value={dir}
+              onChange={(e) => setDir(e.target.value)}
+              onBlur={() => {
+                if (settings && dir !== settings.recordings_dir) applyDir(dir)
+              }}
+              spellCheck={false}
+              className="font-mono text-xs"
+            />
+            <Button
+              variant="outline"
+              onClick={browse}
+              aria-label="Choose recordings folder"
+              className="shrink-0"
+            >
+              <FolderOpen />
+              Browse
+            </Button>
+          </div>
+
+          {settings?.path_warning && (
+            <p className="text-xs text-warn">{settings.path_warning}</p>
+          )}
+
+          {settings && dir !== settings.default_recordings_dir && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start text-muted-foreground"
+              onClick={() => applyDir(settings.default_recordings_dir)}
+            >
+              <RotateCcw />
+              Back to the default folder
+            </Button>
+          )}
+
+        </section>
+
+        <section className="flex flex-col gap-3 border-t pt-6">
+          <div>
+            <Label htmlFor="cloud-dir">Cloud folder</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Where the takes you pick out are copied. Point it at a Drive or
+              Dropbox folder — deliberately not the recordings folder, so only
+              the takes worth keeping go up, one at a time.
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <Input
+              id="cloud-dir"
+              value={cloudDir}
+              onChange={(e) => setCloudDir(e.target.value)}
+              onBlur={() => {
+                if (settings && cloudDir !== (settings.cloud_dir ?? ""))
+                  applyCloudDir(cloudDir)
+              }}
+              placeholder="Not set — nothing is copied anywhere"
+              spellCheck={false}
+              className="font-mono text-xs"
+            />
+            <Button
+              variant="outline"
+              onClick={browseCloud}
+              aria-label="Choose cloud folder"
+              className="shrink-0"
+            >
+              <CloudUpload />
+              Browse
+            </Button>
+          </div>
+
+          {settings?.cloud_dir && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start text-muted-foreground"
+              onClick={async () => {
+                await api().clear_cloud_dir()
+                setCloudDir("")
+                setSettings(await api().get_settings())
+              }}
+            >
+              <RotateCcw />
+              Forget the cloud folder
+            </Button>
+          )}
+
+          <div className="mt-2 flex flex-col gap-2">
+            <span className="text-sm text-muted-foreground">
+              What the copies are written as
+            </span>
+            {(settings?.cloud_formats ?? []).map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                aria-label={f.label}
+                aria-pressed={settings?.cloud_format === f.id}
+                onClick={async () => {
+                  const res = await api().set_cloud_format(f.id as CloudFormat)
+                  if (!res.ok) {
+                    setError(res.error ?? "Could not save that")
+                    return
+                  }
+                  setSettings(await api().get_settings())
+                }}
+                className={cn(
+                  "rounded-lg border px-4 py-3 text-left transition-colors",
+                  "hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+                  settings?.cloud_format === f.id && "border-primary/50 bg-primary/5"
+                )}
+              >
+                <span className="text-sm font-medium">{f.label}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {f.hint}
+                </span>
+              </button>
+            ))}
+
+            {settings?.encoder_hint && settings.cloud_format !== "wav" && (
+              <p className="text-xs text-warn">{settings.encoder_hint}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Only the copies are affected. What was recorded stays untouched
+              WAV on disk: it is the one thing here that cannot be made again.
+            </p>
+          </div>
+        </section>
+        </>)}
+
+        {tab === "about" && (
+
+        <section className="flex flex-col gap-2">
+          <Label>Under the hood</Label>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
+            <dt>Settings</dt>
+            <dd className="break-all">{settings?.config_path}</dd>
+            <dt>Local server</dt>
+            <dd>{settings?.server_url}</dd>
+          </dl>
+          <p className="text-xs text-muted-foreground">
+            The server hands the interface and the audio to this machine only
+            (127.0.0.1) and lives as long as the app is open.
+          </p>
+        </section>
+        )}
+        </div>
+      </div>
+    </Shell>
+  )
+}

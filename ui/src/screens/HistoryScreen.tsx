@@ -1,0 +1,311 @@
+import { useEffect, useState } from "react"
+import { FolderOpen, Library, Pencil } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Shell, EmptyState } from "@/components/Shell"
+import { RehearsalRow, TakeList, useTakeListPlayer } from "@/components/TakeList"
+import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
+import { ShareDialog } from "@/components/ShareDialog"
+import { MarkerDialog } from "@/components/MarkerDialog"
+import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
+import {
+  api,
+  type Marker,
+  type MarkerKind,
+  type RehearsalDetail,
+  type RehearsalSummary,
+  type Take,
+} from "@/lib/api"
+import { formatDateHuman, takesLabel } from "@/lib/format"
+import { canBePutBack, goPlural, goesTo } from "@/lib/deletion"
+
+/**
+ * History: past rehearsals and their takes. Read from disk, so it survives a
+ * restart of the app.
+ */
+export function HistoryScreen({ onBack }: { onBack: () => void }) {
+  const [rehearsals, setRehearsals] = useState<RehearsalSummary[] | null>(null)
+  const [opened, setOpened] = useState<RehearsalDetail | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [takeToDelete, setTakeToDelete] = useState<Take | null>(null)
+  const [takeToRename, setTakeToRename] = useState<Take | null>(null)
+  const [takeToShare, setTakeToShare] = useState<Take | null>(null)
+  const [markerEdit, setMarkerEdit] = useState<{
+    take: Take
+    marker: Marker
+  } | null>(null)
+  const [rehearsalToDelete, setRehearsalToDelete] =
+    useState<RehearsalSummary | null>(null)
+  const [rehearsalToRename, setRehearsalToRename] =
+    useState<RehearsalSummary | null>(null)
+  const [renamingOpened, setRenamingOpened] = useState(false)
+  const { selected, select, reselect, player } = useTakeListPlayer()
+
+  const refresh = async () => setRehearsals(await api().list_rehearsals())
+
+  useEffect(() => {
+    void refresh()
+  }, [])
+
+  useSpacebar(player.toggle, selected !== null)
+  usePlayerKeys(player.skip, selected !== null)
+
+  const open = async (summary: RehearsalSummary) => {
+    const res = await api().get_rehearsal(summary.folder)
+    if (!res.ok) {
+      setError(res.error ?? "Could not open the rehearsal")
+      return
+    }
+    select(null)
+    setOpened(res)
+  }
+
+  const reopen = async (folder: string) => {
+    const fresh = await api().get_rehearsal(folder)
+    if (fresh.ok) setOpened(fresh)
+  }
+
+  const back = () => {
+    player.pause()
+    if (opened) {
+      select(null)
+      setOpened(null)
+      void refresh()
+    } else {
+      onBack()
+    }
+  }
+
+  const deleteTake = async (take: Take) => {
+    if (!opened) return
+    player.pause()
+    const res = await api().delete_take(opened.folder, take.take_number)
+    if (!res.ok) {
+      setError(res.error ?? "Could not delete the take")
+      return
+    }
+    if (selected?.take_number === take.take_number) reselect(null)
+    await reopen(opened.folder)
+  }
+
+  const renameTake = async (take: Take, name: string) => {
+    if (!opened) return
+    const res = await api().rename_take(opened.folder, take.take_number, name)
+    if (!res.ok) {
+      setError(res.error ?? "Could not rename the take")
+      return
+    }
+    // The take folder moved with the name, so point the player at the fresh
+    // paths — without closing it, since someone may be listening right now.
+    if (selected?.take_number === take.take_number && res.take) reselect(res.take)
+    await reopen(opened.folder)
+  }
+
+  const renameRehearsal = async (folder: string, name: string) => {
+    const res = await api().rename_rehearsal(folder, name)
+    if (!res.ok) {
+      setError(res.error ?? "Could not rename the rehearsal")
+      return
+    }
+    if (selected && res.takes) {
+      const fresh = res.takes.find(
+        (t) => t.take_number === selected.take_number
+      )
+      if (fresh) reselect(fresh)
+    }
+    await refresh()
+    return res.folder
+  }
+
+  const renameOpenedRehearsal = async (name: string) => {
+    if (!opened) return
+    // Renaming moves the folder, so reopen on the new path.
+    const folder = await renameRehearsal(opened.folder, name)
+    if (folder) await reopen(folder)
+  }
+
+  const deleteRehearsal = async (r: RehearsalSummary) => {
+    player.pause()
+    const res = await api().delete_rehearsal(r.folder)
+    if (!res.ok) {
+      setError(res.error ?? "Could not delete the rehearsal")
+      return
+    }
+    await refresh()
+  }
+
+  // Dropping a marker opens its note straight away: the thought about what
+  // just went wrong lasts about five seconds. Playback carries on.
+  const addMarker = async (take: Take, seconds: number) => {
+    if (!opened) return
+    const res = await api().add_take_marker(opened.folder, take.take_number, seconds)
+    await reopen(opened.folder)
+    const fresh = res.markers?.find((m) => Math.abs(m.at - seconds) < 0.02)
+    setMarkerEdit(fresh ? { take, marker: fresh } : null)
+  }
+
+  const saveMarker = async (
+    take: Take,
+    at: number,
+    note: string,
+    kind: MarkerKind
+  ) => {
+    if (!opened) return
+    await api().update_take_marker(opened.folder, take.take_number, at, note, kind)
+    await reopen(opened.folder)
+  }
+
+  const removeMarker = async (take: Take, seconds: number) => {
+    if (!opened) return
+    await api().remove_take_marker(opened.folder, take.take_number, seconds)
+    await reopen(opened.folder)
+  }
+
+  if (opened) {
+    return (
+      <Shell
+        subtitle={formatDateHuman(opened.created_at)}
+        title={opened.name}
+        onBack={back}
+        headerAction={
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Rename rehearsal"
+            onClick={() => setRenamingOpened(true)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Pencil />
+          </Button>
+        }
+      >
+        <div className="mx-auto flex max-w-3xl flex-col gap-4">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <FolderOpen className="size-3.5 shrink-0" />
+            <span className="truncate font-mono">{opened.folder}</span>
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <TakeList
+            takes={opened.takes}
+            selected={selected}
+            onSelect={select}
+            onRename={setTakeToRename}
+            onShare={setTakeToShare}
+            onDelete={setTakeToDelete}
+            onAddMarker={addMarker}
+            onEditMarker={(take, marker) => setMarkerEdit({ take, marker })}
+            onRemoveMarker={removeMarker}
+            player={player}
+          />
+        </div>
+
+        <ConfirmDialog
+          open={takeToDelete !== null}
+          onOpenChange={(open) => !open && setTakeToDelete(null)}
+          title={`Delete “${takeToDelete?.name ?? ""}”?`}
+          description={`The take and all its tracks ${goPlural()}. ${canBePutBack()}`}
+          onConfirm={() => {
+            if (takeToDelete) void deleteTake(takeToDelete)
+            setTakeToDelete(null)
+          }}
+        />
+
+        <PromptDialog
+          open={takeToRename !== null}
+          onOpenChange={(open) => !open && setTakeToRename(null)}
+          title="Rename take"
+          label="The folder on disk is renamed too."
+          initialValue={takeToRename?.name ?? ""}
+          onSubmit={(name) => {
+            if (takeToRename) void renameTake(takeToRename, name)
+            setTakeToRename(null)
+          }}
+        />
+
+        <MarkerDialog
+          marker={markerEdit?.marker ?? null}
+          onOpenChange={(open) => !open && setMarkerEdit(null)}
+          onSave={(at, note, kind) => {
+            if (markerEdit) void saveMarker(markerEdit.take, at, note, kind)
+          }}
+          onDelete={(at) => {
+            if (markerEdit) void removeMarker(markerEdit.take, at)
+          }}
+        />
+
+        <ShareDialog
+          take={takeToShare}
+          folder={opened.folder}
+          onOpenChange={(open) => !open && setTakeToShare(null)}
+          onDone={() => void reopen(opened.folder)}
+        />
+
+        <PromptDialog
+          open={renamingOpened}
+          onOpenChange={setRenamingOpened}
+          title="Rename rehearsal"
+          label="The folder keeps its date and gets the new name."
+          initialValue={opened.name}
+          onSubmit={(name) => void renameOpenedRehearsal(name)}
+        />
+      </Shell>
+    )
+  }
+
+  return (
+    <Shell title="Rehearsal history" onBack={back}>
+      <div className="mx-auto flex max-w-3xl flex-col gap-2">
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {rehearsals === null && (
+          <p className="text-sm text-muted-foreground">Reading the folder…</p>
+        )}
+
+        {rehearsals?.length === 0 && (
+          <EmptyState
+            icon={<Library className="size-6" />}
+            title="No past rehearsals yet"
+            hint="Every rehearsal where you saved at least one take shows up here."
+          />
+        )}
+
+        {rehearsals?.map((r) => (
+          <RehearsalRow
+            key={r.folder}
+            name={r.name}
+            date={formatDateHuman(r.created_at)}
+            takesText={takesLabel(r.take_count)}
+            onClick={() => open(r)}
+            onRename={() => setRehearsalToRename(r)}
+            onDelete={() => setRehearsalToDelete(r)}
+          />
+        ))}
+      </div>
+
+      <ConfirmDialog
+        open={rehearsalToDelete !== null}
+        onOpenChange={(open) => !open && setRehearsalToDelete(null)}
+        title={`Delete “${rehearsalToDelete?.name ?? ""}”?`}
+        description={`The whole folder, with all its takes (${takesLabel(
+          rehearsalToDelete?.take_count ?? 0
+        )}), ${goesTo()}. ${canBePutBack()}`}
+        onConfirm={() => {
+          if (rehearsalToDelete) void deleteRehearsal(rehearsalToDelete)
+          setRehearsalToDelete(null)
+        }}
+      />
+
+      <PromptDialog
+        open={rehearsalToRename !== null}
+        onOpenChange={(open) => !open && setRehearsalToRename(null)}
+        title="Rename rehearsal"
+        label="The folder keeps its date and gets the new name."
+        initialValue={rehearsalToRename?.name ?? ""}
+        onSubmit={(name) => {
+          if (rehearsalToRename)
+            void renameRehearsal(rehearsalToRename.folder, name)
+          setRehearsalToRename(null)
+        }}
+      />
+    </Shell>
+  )
+}

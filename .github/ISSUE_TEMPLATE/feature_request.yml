@@ -1,0 +1,19 @@
+name: An idea
+description: Something the app should do and does not
+labels: [idea]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is awkward now
+      description: |
+        The problem rather than the solution, if you can — the best changes
+        here have come from someone describing what went wrong at a
+        rehearsal, not from a feature name.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you had in mind

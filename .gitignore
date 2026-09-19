@@ -1,0 +1,20 @@
+# Packaging output
+build/
+dist/
+*.spec.bak
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# The built interface is committed on purpose: it is what app.py serves, and
+# it means the app runs from a clone without Node installed.
+!ui/dist/
+ui/node_modules/
+
+.DS_Store
+
+# Screenshots the interface suite takes as it runs
+tests/screenshots/

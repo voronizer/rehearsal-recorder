@@ -1,0 +1,60 @@
+name: Something went wrong
+description: A crash, a take that did not save, anything that misbehaved
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If a recording is involved, the most useful thing you can tell me is
+        what was happening at the moment — recording, listening back, copying
+        to the cloud, or just sitting there.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      placeholder: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: System
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: From the release you downloaded, or the commit if you built it.
+
+  - type: input
+    id: interface
+    attributes:
+      label: Audio interface
+      placeholder: e.g. Universal Audio Apollo, 8 inputs, 48 kHz / 24 bit
+
+  - type: textarea
+    id: crashlog
+    attributes:
+      label: Crash log
+      description: |
+        If the app died, `~/.rehearsal-recorder/crash.log` holds a Python
+        traceback for every thread at that moment. It is usually the single
+        most useful thing in the report.
+      render: text
+
+  - type: textarea
+    id: selftest
+    attributes:
+      label: Self-test output
+      description: |
+        Only if the app will not start. On macOS, in Terminal:
+        `/Applications/RehearsalRecorder.app/Contents/MacOS/RehearsalRecorder --selftest`
+      render: text

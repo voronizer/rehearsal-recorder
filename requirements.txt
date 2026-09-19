@@ -1,0 +1,14 @@
+pywebview
+sounddevice
+numpy
+
+# libsndfile, for compressing the copies that go to the cloud (FLAC and MP3).
+# A prebuilt wheel on macOS, Windows and Linux — about a megabyte, and it
+# replaces shelling out to afconvert or ffmpeg, which only ever worked on a
+# Mac. Without it the app runs fine and cloud copies stay WAV.
+soundfile
+
+# The real Trash / Recycle Bin. Optional: without it nothing is destroyed
+# either, deleted takes just move to a _deleted folder instead. It earns its
+# place on Windows, where there is no trash folder a plain move can reach.
+send2trash

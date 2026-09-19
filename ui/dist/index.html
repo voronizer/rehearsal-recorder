@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rehearsal Recorder</title>
+    <script>
+      // Theme and scale are applied before the first paint — otherwise the
+      // window would flash dark for a moment at somebody who chose light.
+      // The values come from localStorage; the source of truth is the Python
+      // config, which the interface checks as soon as the bridge is up.
+      (function () {
+        try {
+          var theme = localStorage.getItem("rr-theme") || "dark";
+          var scale = parseFloat(localStorage.getItem("rr-scale")) || 1;
+          var dark =
+            theme === "system"
+              ? window.matchMedia("(prefers-color-scheme: dark)").matches
+              : theme !== "light";
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.fontSize = 16 * scale + "px";
+        } catch (e) {
+          /* storage unavailable — the default theme stays */
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-BpTDms_A.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-3DrHGZXl.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
