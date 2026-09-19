@@ -1060,6 +1060,36 @@ def main():
        cloudmod.is_current(a.get_rehearsal(str(folder))["takes"][0], "mix",
                            a.get_settings()["volumes"], "wav"))
 
+    print("\n[11h] When the cloud folder is not there")
+
+    # [11g] leaves takes queued behind it. Clear them while there is still a
+    # cloud folder to publish into, so what follows is about this take alone.
+    while a._cloud_queue.run_next():
+        pass
+
+    folder = Path(a.session_state()["folder"])
+    a._config.pop("cloud_dir", None)
+    a.rename_take(str(folder), 1, "Polyn third")
+    a._cloud_queue.run_next()
+    take = a.get_rehearsal(str(folder))["takes"][0]
+    ok("the take says why it is not in the cloud",
+       "cloud folder" in (take.get("cloud_error") or "").lower())
+    ok("and the recording itself is untouched",
+       Path(take["tracks"][0]["file"]).exists())
+
+    # Saving the next take is what sweeps up what the folder's absence broke.
+    a.set_cloud_dir(str(tmp / "Drive" / "Auto"))
+    write_wav(solo / "ten.wav", 900)
+    a.keep_take(10, str(solo), "Later", 2.0,
+                [{"name": "A", "file": str(solo / "ten.wav")}], [])
+    ok("the failed take is queued again alongside the new one",
+       a.session_state()["cloud_queue"].get(1) == "queued")
+    a._cloud_queue.run_next()
+    a._cloud_queue.run_next()
+    take = a.get_rehearsal(str(folder))["takes"][0]
+    ok("a later run puts it there after all", Path(take["cloud"]["mix"]).exists())
+    ok("and the complaint is gone", "cloud_error" not in take)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
