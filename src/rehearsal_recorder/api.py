@@ -153,6 +153,36 @@ def _songs_of(takes):
     return songs
 
 
+def _folder_bytes(folder):
+    """
+    How much of the disk a folder is using, walked rather than worked out from
+    the durations: a take encoded differently, one that never finished, or one
+    somebody moved makes any such guess wrong, and this number sits next to a
+    Delete button, where wrong is not good enough.
+
+    Only metadata is read, never a file, so this stays cheap enough to run for
+    every rehearsal each time History opens. Anything that cannot be measured
+    — a file that disappears mid-walk, a folder that cannot be opened — is
+    skipped rather than raised: the history list must still come back.
+    """
+    total = 0
+    stack = [str(folder)]
+    while stack:
+        try:
+            with os.scandir(stack.pop()) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+                        elif entry.is_file(follow_symlinks=False):
+                            total += entry.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return total
+
+
 def _is_empty_rehearsal(folder):
     """
     A rehearsal that produced nothing: no saved takes and no audio on disk.
@@ -959,6 +989,7 @@ class Api:
                 "take_count": len(takes),
                 "total_duration_sec": sum(t.get("duration_sec", 0) for t in takes),
                 "songs": _songs_of(takes),
+                "disk_bytes": _folder_bytes(folder),
             })
 
         items.sort(key=lambda x: x["created_at"], reverse=True)

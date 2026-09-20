@@ -1357,6 +1357,34 @@ def main():
     ok("without dropping the unnamed one from the count",
        by_name["Half"]["take_count"] == 3)
 
+    print("\n[16b] And how much of the disk it is using")
+    # Walked rather than estimated from the durations: a take encoded
+    # differently, or one that never finished, makes any guess wrong.
+    sized = past_rehearsal("Sized", "2026-09-07T19:00:00", ["Polyn"])
+    def bytes_of(name):
+        return {r["name"]: r for r in d.list_rehearsals()}[name]["disk_bytes"]
+
+    empty_handed = bytes_of("Sized")
+    ok("a folder is measured, not guessed at", empty_handed > 0)
+
+    (sized / "01 - Polyn").mkdir(parents=True)
+    (sized / "01 - Polyn" / "Gtr.wav").write_bytes(b"\0" * 5000)
+    (sized / "_drafts" / "take 2").mkdir(parents=True)
+    (sized / "_drafts" / "take 2" / "Gtr.raw").write_bytes(b"\0" * 1000)
+    with_audio = bytes_of("Sized")
+    ok("every file counts, the unfinished draft included",
+       with_audio - empty_handed == 6000)
+
+    # Deleting moves a take out to _deleted beside the rehearsals, so the
+    # rehearsal stops being charged for it — which is what makes the number
+    # worth showing next to a Delete button.
+    gone = tmp4 / "Rec" / "_deleted" / "old take"
+    gone.mkdir(parents=True)
+    (gone / "Gtr.wav").write_bytes(b"\0" * 9000)
+    ok("what was deleted is charged to nobody", bytes_of("Sized") == with_audio)
+    ok("and the bin is not mistaken for a rehearsal",
+       "_deleted" not in {r["name"] for r in d.list_rehearsals()})
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

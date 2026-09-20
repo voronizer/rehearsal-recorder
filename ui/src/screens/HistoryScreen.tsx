@@ -16,6 +16,7 @@ import {
   type Take,
 } from "@/lib/api"
 import {
+  formatBytes,
   formatDateHuman,
   formatDuration,
   songsLabel,
@@ -24,14 +25,24 @@ import {
 import { canBePutBack, goPlural, goesTo } from "@/lib/deletion"
 
 /**
- * When it was and how long it ran: "18 Sep 2026, 19:00 · 42 min". Under half
- * a minute there is no honest number of minutes to give, so the row just says
- * when — rounding that to "0 min" would be worse than leaving it out.
+ * When it was, how long it ran and what it weighs:
+ * "18 Sep 2026, 19:00 · 42 min · 1.2 GB". Under half a minute there is no
+ * honest number of minutes to give, so that part is left out — rounding it
+ * to "0 min" would be worse than saying nothing.
  */
-function when(r: RehearsalSummary): string {
-  const date = formatDateHuman(r.created_at)
-  if (r.total_duration_sec < 30) return date
-  return `${date} · ${formatDuration(r.total_duration_sec / 60)}`
+function subtitleOf(r: RehearsalSummary): string {
+  const parts = [formatDateHuman(r.created_at)]
+  if (r.total_duration_sec >= 30) {
+    parts.push(formatDuration(r.total_duration_sec / 60))
+  }
+  parts.push(formatBytes(r.disk_bytes))
+  return parts.join(" · ")
+}
+
+/** "9 takes, 1.2 GB" — what deleting a rehearsal takes away and gives back. */
+function takesAndSize(r: RehearsalSummary | null): string {
+  if (!r) return takesLabel(0)
+  return `${takesLabel(r.take_count)}, ${formatBytes(r.disk_bytes)}`
 }
 
 /**
@@ -288,7 +299,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
           <RehearsalRow
             key={r.folder}
             name={r.name}
-            date={when(r)}
+            subtitle={subtitleOf(r)}
             songsText={songsLabel(r.songs)}
             takesText={takesLabel(r.take_count)}
             onClick={() => open(r)}
@@ -302,8 +313,8 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
         open={rehearsalToDelete !== null}
         onOpenChange={(open) => !open && setRehearsalToDelete(null)}
         title={`Delete “${rehearsalToDelete?.name ?? ""}”?`}
-        description={`The whole folder, with all its takes (${takesLabel(
-          rehearsalToDelete?.take_count ?? 0
+        description={`The whole folder, with all its takes (${takesAndSize(
+          rehearsalToDelete
         )}), ${goesTo()}. ${canBePutBack()}`}
         onConfirm={() => {
           if (rehearsalToDelete) void deleteRehearsal(rehearsalToDelete)

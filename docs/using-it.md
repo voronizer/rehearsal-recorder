@@ -34,12 +34,15 @@ What each screen is for, and the decisions behind how they behave.
   with it if it is discarded. It is the same player component throughout;
   earlier it simply had nothing to attach a mark to and so did not offer one.
 - **History** — every past rehearsal, read from disk, so it survives a
-  restart. Each row says when it was, how long it ran and what was played in
-  it — "Polyn ×3 · Vesna ×2 · Ogon" — because a date and a take count are not
-  how anybody recognises a rehearsal from three months ago. Inside are the
+  restart. Each row says when it was, how long it ran, what it weighs on disk
+  and what was played in it — "Polyn ×3 · Vesna ×2 · Ogon" — because a date
+  and a take count are not how anybody recognises a rehearsal from three
+  months ago. The size is measured by walking the folder, not worked out from
+  the durations, so it is the number Finder would give you. Inside are the
   same expanding takes as on the rehearsal screen — literally the same
   component. Takes and whole rehearsals can be renamed and deleted; deletion
-  asks first and is not permanent, the folder goes to the Trash.
+  asks first and says how much space is coming back, and is not permanent —
+  the folder goes to the Trash.
 - **Unsaved takes** — shown before anything else on startup when a take was
   recorded but never saved (see "If the app dies mid-take" below).
 - **Finished** — the rehearsal summary and the path to its folder.

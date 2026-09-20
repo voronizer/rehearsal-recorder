@@ -31,6 +31,25 @@ export function takesLabel(n: number): string {
   return `${n} ${n === 1 ? "take" : "takes"}`
 }
 
+/**
+ * "1.2 GB" / "340 MB" / "412 B": how much of the disk something is using.
+ * Counted in thousands, the way the file manager the person will go and look
+ * in counts it, so the two numbers agree.
+ */
+export function formatBytes(bytes: number): string {
+  if (!isFinite(bytes) || bytes <= 0) return "0 B"
+  const units = ["B", "kB", "MB", "GB", "TB"]
+  let n = bytes
+  let unit = 0
+  while (n >= 1000 && unit < units.length - 1) {
+    n /= 1000
+    unit++
+  }
+  // Below ten of a unit the first decimal still carries information; above
+  // it, it is noise on a number nobody reads that closely.
+  return `${n.toFixed(unit === 0 || n >= 10 ? 0 : 1)} ${units[unit]}`
+}
+
 /** How many songs a rehearsal row names before it stops being a glance. */
 const SONGS_SHOWN = 4
 

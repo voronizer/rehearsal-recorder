@@ -124,6 +124,8 @@ export type RehearsalSummary = {
   total_duration_sec: number
   /** Empty when the takes were never named — there is nothing to report. */
   songs: Song[]
+  /** What the whole folder weighs, measured on disk rather than estimated. */
+  disk_bytes: number
 }
 
 export type RehearsalDetail = {

@@ -244,11 +244,11 @@ window.__MAKE_API__ = () => ({
 
   list_rehearsals: async () => ([
     {folder:'/rec/old', name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
-     take_count:9, total_duration_sec:2520,
+     take_count:9, total_duration_sec:2520, disk_bytes:1200000000,
      songs:[{name:'Polyn', takes:3}, {name:'Vesna', takes:2}, {name:'Ogon', takes:1},
             {name:'Sonce', takes:1}, {name:'Dym', takes:1}, {name:'Ptaha', takes:1}]},
     {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
-     take_count:2, total_duration_sec:600, songs:[]}]),
+     take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[]}]),
   get_rehearsal: async (folder) => ({ok:true, folder, name:'Tuesday jam',
     created_at:'2026-09-10T19:00:00',
     takes:[{take_number:1, name:'Polyn', duration_sec:TAKE, markers:[],
@@ -654,8 +654,8 @@ def main():
         quiet = page.locator("button", has_text="Wednesday jam").first
         ok("the row says what was rehearsed, and cuts a long list short",
            "Polyn ×3 · Vesna ×2 · Ogon · Sonce · and 2 more" in named.inner_text())
-        ok("and how long the whole thing ran",
-           "10 Sep 2026, 19:00 · 42 min" in named.inner_text())
+        ok("and how long it ran, and what it costs on disk",
+           "10 Sep 2026, 19:00 · 42 min · 1.2 GB" in named.inner_text())
         # Takes the app named itself are not songs, and there is nothing
         # truthful to put on that line — so the line is not there.
         ok("a rehearsal where nothing was named gets no song line",
@@ -664,6 +664,10 @@ def main():
 
         page.click("button[aria-label='Delete rehearsal Tuesday jam']")
         page.wait_for_selector("text=goes to the Trash")
+        # The space is the reason people delete a rehearsal at all, so the
+        # confirmation says how much of it is coming back.
+        ok("the confirmation says what is being freed",
+           page.get_by_text("9 takes, 1.2 GB").count() == 1)
         page.click("text=Cancel")
         page.wait_for_timeout(200)
         ok("cancel deletes nothing", len(calls("delete_rehearsal")) == 0)

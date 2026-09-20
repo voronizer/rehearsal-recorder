@@ -12,6 +12,8 @@ opening.
   It is read from the take names, so nothing extra has to be filled in during
   a rehearsal; a rehearsal whose takes were never named says nothing rather
   than repeating its own take count.
+- Each rehearsal also says what it weighs on disk, measured rather than
+  estimated, and deleting one says how much space that gives back.
 
 ## 0.2.0
 

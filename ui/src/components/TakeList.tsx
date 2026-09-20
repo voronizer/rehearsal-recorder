@@ -231,7 +231,7 @@ export function TakeList({
 /** A rehearsal row in history. */
 export function RehearsalRow({
   name,
-  date,
+  subtitle,
   songsText,
   takesText,
   onClick,
@@ -239,7 +239,8 @@ export function RehearsalRow({
   onDelete,
 }: {
   name: string
-  date: string
+  /** When it was, how long it ran, what it weighs. */
+  subtitle: string
   /** What was played, if the takes were named. Empty means no line at all. */
   songsText?: string
   takesText: string
@@ -256,7 +257,9 @@ export function RehearsalRow({
       >
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{name}</div>
-          <div className="tnum mt-0.5 text-xs text-muted-foreground">{date}</div>
+          <div className="tnum mt-0.5 text-xs text-muted-foreground">
+            {subtitle}
+          </div>
           {songsText && (
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
               {songsText}
