@@ -41,13 +41,13 @@ export function TakePlayer({
   onEditMarker?: (marker: Marker) => void
   onRemoveMarker?: (seconds: number) => void
 }) {
-  const { media, duration, position, markers: abMarkers } = player
+  const { media, duration, position } = player
 
   // The region is shown on the waveform as soon as one mark is set, before
   // the repeat itself is switched on.
   const region =
-    abMarkers.a !== null || abMarkers.b !== null
-      ? { a: abMarkers.a ?? 0, b: abMarkers.b ?? duration }
+    player.region.a !== null || player.region.b !== null
+      ? { a: player.region.a ?? 0, b: player.region.b ?? duration }
       : null
 
   return (
@@ -224,7 +224,7 @@ function Transport({
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
 }) {
-  const { markers: abMarkers, looping, position, duration } = player
+  const { looping, position, duration } = player
 
   // A marker within a second of the cursor counts as "this one".
   const nearby = markers.find((m) => Math.abs(m.at - position) < 1)
@@ -313,7 +313,7 @@ function Transport({
           aria-pressed={looping}
           aria-label="Repeat"
           title={
-            abMarkers.a !== null || abMarkers.b !== null
+            player.region.a !== null || player.region.b !== null
               ? "Loop the A–B region"
               : "Loop the whole take"
           }
@@ -330,7 +330,7 @@ function Transport({
           disabled={player.loading}
           title="Start of the loop region — at the current position"
         >
-          A{abMarkers.a !== null ? ` ${formatMMSS(abMarkers.a)}` : ""}
+          A{player.region.a !== null ? ` ${formatMMSS(player.region.a)}` : ""}
         </Button>
         <Button
           variant="outline"
@@ -339,13 +339,13 @@ function Transport({
           disabled={player.loading}
           title="End of the loop region — at the current position"
         >
-          B{abMarkers.b !== null ? ` ${formatMMSS(abMarkers.b)}` : ""}
+          B{player.region.b !== null ? ` ${formatMMSS(player.region.b)}` : ""}
         </Button>
-        {(abMarkers.a !== null || abMarkers.b !== null) && (
+        {(player.region.a !== null || player.region.b !== null) && (
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={player.clearMarkers}
+            onClick={player.clearRegion}
             aria-label="Clear A and B"
             title="Clear the region — repeat will loop the whole take"
           >
