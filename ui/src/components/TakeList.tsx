@@ -207,7 +207,6 @@ export function TakeList({
               <div className="border-t bg-background/40 px-5 py-4">
                 <TakePlayer
                   player={player}
-                  compact
                   markers={take.markers ?? []}
                   onAddMarker={
                     onAddMarker ? (sec) => onAddMarker(take, sec) : undefined

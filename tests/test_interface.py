@@ -610,6 +610,64 @@ def main():
         loop = calls("player_set_loop")
         ok("repeat covers the whole take",
            loop and loop[-1]["args"] == [0, TAKE_SECONDS])
+
+        # The region is drawn across the tracks, not clicked together out of
+        # two buttons. A press that does not travel is still a seek, which is
+        # what makes one surface able to serve both.
+        surface = page.get_by_role("group", name="Take timeline")
+        box = surface.bounding_box()
+        mid_y = box["y"] + box["height"] / 2
+
+        def drag(from_ratio, to_ratio):
+            page.mouse.move(box["x"] + box["width"] * from_ratio, mid_y)
+            page.mouse.down()
+            page.mouse.move(box["x"] + box["width"] * to_ratio, mid_y, steps=10)
+            page.mouse.up()
+            page.wait_for_timeout(200)
+
+        drag(0.25, 0.75)
+        loop = calls("player_set_loop")
+        ok("dragging across the tracks sets the loop region",
+           loop and abs(loop[-1]["args"][0] - TAKE_SECONDS * 0.25) < 0.4
+           and abs(loop[-1]["args"][1] - TAKE_SECONDS * 0.75) < 0.4)
+        ok("and the buttons read it back",
+           "A 0:01" in page.locator("button", has_text="A 0:").inner_text())
+
+        drag(0.75, 0.25)
+        loop_back = calls("player_set_loop")
+        ok("dragging the other way gives the same region",
+           abs(loop_back[-1]["args"][0] - loop[-1]["args"][0]) < 0.4
+           and abs(loop_back[-1]["args"][1] - loop[-1]["args"][1]) < 0.4)
+
+        seeks_before = len(calls("player_seek"))
+        page.mouse.move(box["x"] + box["width"] * 0.5, mid_y)
+        page.mouse.down()
+        page.mouse.up()
+        page.wait_for_timeout(200)
+        ok("a press that does not travel seeks instead",
+           len(calls("player_seek")) == seeks_before + 1
+           and len(calls("player_set_loop")) == len(loop_back))
+
+        # An edge moves on its own: grabbing B must not drag A along with it.
+        drag(0.25, 0.75)
+        started = calls("player_set_loop")[-1]["args"]
+        page.mouse.move(box["x"] + box["width"] * 0.75, mid_y)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] * 0.5, mid_y, steps=8)
+        page.mouse.up()
+        page.wait_for_timeout(200)
+        moved = calls("player_set_loop")[-1]["args"]
+        ok("dragging an edge moves that edge",
+           abs(moved[1] - TAKE_SECONDS * 0.5) < 0.4)
+        ok("and leaves the other one where it was",
+           abs(moved[0] - started[0]) < 0.05)
+
+        # The clock is chosen from a ladder, so a six-second take gets five
+        # second steps. The other end of that ladder is checked on the long
+        # take in history.
+        ok("the ruler's clock fits the take",
+           "0:05" in page.get_by_role("group", name="Timeline clock").inner_text())
+
         page.click("button[aria-label='Mute Guitar']")
         page.click("button[aria-label='Solo Vocals']")
         page.wait_for_timeout(300)
