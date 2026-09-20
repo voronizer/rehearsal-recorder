@@ -3,7 +3,8 @@ import { Circle, FolderOpen, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Shell, SpaceHint } from "@/components/Shell"
-import { TakeList, useTakeListPlayer } from "@/components/TakeList"
+import { TakeStrip, useTakeStripPlayer } from "@/components/TakeStrip"
+import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
@@ -20,7 +21,7 @@ import { canBePutBack, goPlural } from "@/lib/deletion"
 
 /**
  * The rehearsal hub: what has been recorded, and a big button to record more.
- * Any saved take plays right here, expanding in its row.
+ * Any saved take plays right here, in the player below the strip of takes.
  */
 export function Rehearsal({
   session,
@@ -33,7 +34,7 @@ export function Rehearsal({
   onFinished: (folder: string, takeCount: number) => void
   onChanged: () => void
 }) {
-  const { selected, select, reselect, player } = useTakeListPlayer()
+  const { selected, select, reselect, player } = useTakeStripPlayer()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toDelete, setToDelete] = useState<Take | null>(null)
@@ -195,20 +196,32 @@ export function Rehearsal({
           <span className="truncate font-mono">{session.folder}</span>
         </div>
 
-        <TakeList
+        <TakeStrip
           takes={session.takes}
           selected={selected}
           onSelect={select}
           onRename={setToRename}
           onShare={setToShare}
-          cloudStates={session.cloud_queue}
           onDelete={setToDelete}
-          onAddMarker={addMarker}
-          onEditMarker={(take, marker) => setMarkerEdit({ take, marker })}
-          onRemoveMarker={removeMarker}
-          player={player}
+          cloudStates={session.cloud_queue}
           emptyHint="Hit Record or press Space — takes show up here and can be played straight away."
         />
+
+        {selected ? (
+          <TakePlayer
+            player={player}
+            markers={selected.markers ?? []}
+            onAddMarker={(sec) => addMarker(selected, sec)}
+            onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
+            onRemoveMarker={(sec) => removeMarker(selected, sec)}
+          />
+        ) : (
+          session.takes.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Pick a take to listen back to it.
+            </p>
+          )
+        )}
 
         <p className="text-xs text-muted-foreground">
           Same tracks as at the start of the rehearsal:{" "}

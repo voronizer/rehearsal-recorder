@@ -2,7 +2,9 @@ import { useEffect, useState } from "react"
 import { FolderOpen, Library, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Shell, EmptyState } from "@/components/Shell"
-import { RehearsalRow, TakeList, useTakeListPlayer } from "@/components/TakeList"
+import { RehearsalRow } from "@/components/RehearsalRow"
+import { TakeStrip, useTakeStripPlayer } from "@/components/TakeStrip"
+import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
@@ -65,7 +67,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   const [rehearsalToRename, setRehearsalToRename] =
     useState<RehearsalSummary | null>(null)
   const [renamingOpened, setRenamingOpened] = useState(false)
-  const { selected, select, reselect, player } = useTakeListPlayer()
+  const { selected, select, reselect, player } = useTakeStripPlayer()
 
   const refresh = async () => setRehearsals(await api().list_rehearsals())
 
@@ -211,18 +213,30 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
             <span className="truncate font-mono">{opened.folder}</span>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <TakeList
+          <TakeStrip
             takes={opened.takes}
             selected={selected}
             onSelect={select}
             onRename={setTakeToRename}
             onShare={setTakeToShare}
             onDelete={setTakeToDelete}
-            onAddMarker={addMarker}
-            onEditMarker={(take, marker) => setMarkerEdit({ take, marker })}
-            onRemoveMarker={removeMarker}
-            player={player}
           />
+
+          {selected ? (
+            <TakePlayer
+              player={player}
+              markers={selected.markers ?? []}
+              onAddMarker={(sec) => addMarker(selected, sec)}
+              onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
+              onRemoveMarker={(sec) => removeMarker(selected, sec)}
+            />
+          ) : (
+            opened.takes.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                Pick a take to listen back to it.
+              </p>
+            )
+          )}
         </div>
 
         <ConfirmDialog

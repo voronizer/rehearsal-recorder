@@ -40,6 +40,10 @@ let cloudDir = null;
 let cloudFormat = 'wav';
 let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
 let recording = {device_index: 0, samplerate: 44100, bit_depth: 24};
+// Real playback reads each file's own length off disk; the mock has no disk,
+// so a take's tracks are looked up here by path when they are not the
+// live session's freshly-recorded ones (which are always TAKE seconds).
+let fileDurations = {};
 let cloudQueue = {};
 
 // The Python config lives in a file and survives a reload, so keep it in its
@@ -159,12 +163,15 @@ window.__MAKE_API__ = () => ({
   }),
   discard_take: track('discard_take', async () => ({ok:true})),
 
-  take_media: async (tracks) => tracks.map(t => ({
-    name:t.name, url:'about:blank', frames:48000*TAKE, samplerate:48000, duration_sec:TAKE,
-    peaks: Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9)})),
+  take_media: async (tracks) => tracks.map(t => {
+    const dur = fileDurations[t.file] ?? TAKE;
+    return {name:t.name, url:'about:blank', frames:48000*dur, samplerate:48000, duration_sec:dur,
+      peaks: Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9)};
+  }),
 
   player_open: track('player_open', async (tracks) => {
-    P = {playing:false, position:0, t0:clock(), duration:TAKE, loop:null, muted:[], soloed:null,
+    const dur = tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
+    P = {playing:false, position:0, t0:clock(), duration:dur, loop:null, muted:[], soloed:null,
          volumes:Object.fromEntries(tracks.map(t => [t.name, 1]))};
     const out = {ok:true, ...playerState()};
     if (window.__OUTPUT_GONE__) out.warning = 'That playback device is gone — using the system output.';
@@ -249,10 +256,13 @@ window.__MAKE_API__ = () => ({
             {name:'Sonce', takes:1}, {name:'Dym', takes:1}, {name:'Ptaha', takes:1}]},
     {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
      take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[]}]),
-  get_rehearsal: async (folder) => ({ok:true, folder, name:'Tuesday jam',
-    created_at:'2026-09-10T19:00:00',
-    takes:[{take_number:1, name:'Polyn', duration_sec:TAKE, markers:[],
-            tracks:[{name:'Guitar', file:'/rec/g.wav'}]}]}),
+  get_rehearsal: async (folder) => {
+    fileDurations['/rec/g.wav'] = 600;
+    return {ok:true, folder, name:'Tuesday jam',
+      created_at:'2026-09-10T19:00:00',
+      takes:[{take_number:1, name:'Polyn', duration_sec:600, markers:[],
+              tracks:[{name:'Guitar', file:'/rec/g.wav'}]}]};
+  },
   delete_take: track('delete_take', async () => ({ok:true, trashed:true, takes_left:0})),
   delete_rehearsal: track('delete_rehearsal', async () => ({ok:true, trashed:true})),
 
@@ -521,8 +531,13 @@ def main():
            bool(saved_markers) and saved_markers[0]["kind"] == "good")
 
         print("\n[7] Markers while listening back")
-        page.click("text=Polyn 2")
+        page.click("button[aria-label='Take 2 Polyn 2']")
         page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
+        ok("picking a take opens it in the player below",
+           page.get_by_role("group", name="Take timeline").count() == 1)
+        ok("and the pill says it is the open one",
+           page.locator("button[aria-label='Take 2 Polyn 2']")
+               .get_attribute("aria-current") == "true")
 
         # The mark made on the review screen, before this take had a folder,
         # is here waiting — same take, same marker, one player.
@@ -577,9 +592,9 @@ def main():
         # A saved device index goes stale the moment the interface is
         # unplugged. The take must still play, and say where it is coming out.
         page.evaluate("() => { window.__OUTPUT_GONE__ = true }")
-        page.click("text=Polyn 2")   # close
+        page.click("button[aria-label='Take 1 Polyn']")      # away
         page.wait_for_timeout(200)
-        page.click("text=Polyn 2")   # and open again
+        page.click("button[aria-label='Take 2 Polyn 2']")    # and back
         page.wait_for_selector("text=using the system output", timeout=8000)
         ok("it says where the sound went", True)
         ok("and the take still opened",
@@ -709,6 +724,14 @@ def main():
         page.click("text=Finish")
         page.wait_for_selector("text=Rehearsal finished")
         page.click("text=History")
+        page.wait_for_selector("text=Tuesday jam")
+
+        page.click("text=Tuesday jam")
+        page.click("button[aria-label='Take 1 Polyn']")
+        page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
+        ok("a ten-minute take gets a clock in minutes",
+           "2:00" in page.get_by_role("group", name="Timeline clock").inner_text())
+        page.click("button[aria-label='Back']")
         page.wait_for_selector("text=Tuesday jam")
 
         # Months later a rehearsal is recognised by what was played in it, so
