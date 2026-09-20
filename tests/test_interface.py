@@ -616,7 +616,7 @@ def main():
         # what makes one surface able to serve both.
         surface = page.get_by_role("group", name="Take timeline")
         box = surface.bounding_box()
-        lane = page.locator("canvas").first.bounding_box()
+        lane = page.locator("canvas").first.locator("xpath=..").bounding_box()
         ok("the timeline surface sits exactly over the lanes",
            abs(lane["x"] - box["x"]) < 1.5 and abs(lane["width"] - box["width"]) < 1.5)
         mid_y = box["y"] + box["height"] / 2
