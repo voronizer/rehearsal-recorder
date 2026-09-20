@@ -13,7 +13,7 @@ const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
 const LANE_MIN_PX = 64
 const LANE_MAX_PX = 160
-const RULER_PX = 34
+const RULER_PX = 44
 const ROW_GAP_PX = 8
 
 /**
@@ -41,7 +41,13 @@ export function Timeline({
     toX: number
     to: number
   } | null>(null)
-  const [grab, setGrab] = useState<"a" | "b" | "position" | null>(null)
+  // The live value of whichever edge (or the playhead) is currently grabbed.
+  // It stays local while the pointer is down and is sent to Python exactly
+  // once, on release — not on every move, which would fire dozens of racing
+  // IPC round-trips whose answers can arrive back out of order.
+  const [grab, setGrab] = useState<
+    { which: "a" | "b" | "position"; at: number } | null
+  >(null)
 
   useEffect(() => {
     const el = surfaceRef.current
@@ -65,15 +71,29 @@ export function Timeline({
   const travelled = drag ? Math.abs(drag.toX - drag.fromX) : 0
   // While the pointer is down the band follows it; the committed region only
   // takes over once the drag is over.
-  const live =
+  const freshLive =
     drag && travelled >= DRAG_THRESHOLD_PX
       ? { a: Math.min(drag.from, drag.to), b: Math.max(drag.from, drag.to) }
       : null
-  const band =
-    live ??
-    (region.a !== null && region.b !== null
-      ? { a: region.a, b: region.b }
-      : null)
+  // While an edge is being grabbed, the band tracks that edge's local value;
+  // the region itself only commits once, on release (see finishPointer).
+  const grabLive =
+    grab?.which === "a"
+      ? { a: grab.at, b: region.b ?? duration }
+      : grab?.which === "b"
+        ? { a: region.a ?? 0, b: grab.at }
+        : null
+  // The region is shown on the timeline as soon as either end is set, before
+  // the repeat itself is switched on.
+  const committed =
+    region.a !== null || region.b !== null
+      ? { a: region.a ?? 0, b: region.b ?? duration }
+      : null
+  const band = freshLive ?? grabLive ?? committed
+
+  // The playhead follows the pointer while it is being dragged, and only
+  // tells Python where it landed once the pointer is released.
+  const displayPosition = grab?.which === "position" ? grab.at : position
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (duration <= 0) return
@@ -83,41 +103,58 @@ export function Timeline({
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (grab === "position") {
-      player.seek(secondsAt(e.clientX))
-      return
-    }
-    // An edge dragged past its opposite stops there rather than turning the
-    // region inside out, which is disorienting when you are watching it.
-    if (grab === "a") {
-      const at = Math.min(secondsAt(e.clientX), region.b ?? duration)
-      player.setRegion(at, region.b ?? duration)
-      return
-    }
-    if (grab === "b") {
-      const at = Math.max(secondsAt(e.clientX), region.a ?? 0)
-      player.setRegion(region.a ?? 0, at)
+    // A second pointer's release can clear one piece of gesture state and
+    // leave the other stranded (see finishPointer); without this guard a
+    // stranded `drag`/`grab` would keep following the bare cursor on hover
+    // and commit a region the next time anything is pressed.
+    if (e.buttons !== 1) return
+    if (grab) {
+      const raw = secondsAt(e.clientX)
+      // An edge dragged past its opposite stops there rather than turning
+      // the region inside out, which is disorienting when you are watching
+      // it.
+      if (grab.which === "a") {
+        setGrab({ ...grab, at: Math.min(raw, region.b ?? duration) })
+      } else if (grab.which === "b") {
+        setGrab({ ...grab, at: Math.max(raw, region.a ?? 0) })
+      } else {
+        setGrab({ ...grab, at: raw })
+      }
       return
     }
     if (!drag) return
     setDrag({ ...drag, toX: e.clientX, to: secondsAt(e.clientX) })
   }
 
+  // Committing happens exactly once, here — not on every move — so Python
+  // sees one call per gesture instead of a burst of racing seeks or loop
+  // updates whose answers could arrive back out of order.
   const finishPointer = () => {
     if (grab) {
-      setGrab(null)
-      return
+      if (grab.which === "position") player.seek(grab.at)
+      else if (grab.which === "a") player.setRegion(grab.at, region.b ?? duration)
+      else player.setRegion(region.a ?? 0, grab.at)
+    } else if (drag) {
+      if (Math.abs(drag.toX - drag.fromX) < DRAG_THRESHOLD_PX) player.seek(drag.from)
+      else player.setRegion(drag.from, drag.to)
     }
-    if (!drag) return
-    if (Math.abs(drag.toX - drag.fromX) < DRAG_THRESHOLD_PX) player.seek(drag.from)
-    else player.setRegion(drag.from, drag.to)
     setDrag(null)
+    setGrab(null)
+  }
+
+  // A cancelled gesture (the browser taking a touch over for scrolling, most
+  // often) commits nothing — the user didn't let go on purpose.
+  const cancelPointer = () => {
+    setDrag(null)
+    setGrab(null)
   }
 
   const grabHandle = (which: "a" | "b" | "position") => (e: React.PointerEvent) => {
     e.stopPropagation()
     surfaceRef.current?.setPointerCapture(e.pointerId)
-    setGrab(which)
+    const at =
+      which === "a" ? (region.a ?? 0) : which === "b" ? (region.b ?? duration) : position
+    setGrab({ which, at })
   }
 
   const rows = media.length
@@ -126,7 +163,7 @@ export function Timeline({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div
-        className="grid"
+        className="grid min-h-0 flex-1"
         style={{
           gridTemplateColumns: `${GUTTER_PX}px 1fr`,
           gridTemplateRows: `${RULER_PX}px repeat(${rows}, minmax(${LANE_MIN_PX}px, 1fr))`,
@@ -137,11 +174,23 @@ export function Timeline({
           maxHeight: RULER_PX + rows * (LANE_MAX_PX + ROW_GAP_PX),
         }}
       >
-        <div className="flex items-end pb-1 text-xs text-muted-foreground">
+        {/* Every child below is placed explicitly. The surface (further down)
+            is also explicitly placed, spanning all of column 2 — leaving any
+            other child to auto-place would make CSS grid skip that occupied
+            column entirely and stack everything into column 1 instead. */}
+        <div
+          className="flex items-end pb-1 text-xs text-muted-foreground"
+          style={{ gridColumn: 1, gridRow: 1 }}
+        >
           {band ? "Drag the edges" : "Drag across to loop"}
         </div>
 
-        <div role="group" aria-label="Timeline clock" className="relative border-b">
+        <div
+          role="group"
+          aria-label="Timeline clock"
+          className="relative border-b"
+          style={{ gridColumn: 2, gridRow: 1 }}
+        >
           {ticks.map((t) => (
             <Fragment key={t}>
               <span
@@ -158,13 +207,16 @@ export function Timeline({
           ))}
         </div>
 
-        {media.map((m) => {
+        {media.map((m, i) => {
           const muted = player.isMuted(m.name)
           const soloed = player.isSoloed(m.name)
           const dimmed = muted || (player.hasSolo && !soloed)
           return (
             <Fragment key={m.name}>
-              <div className="flex flex-col justify-center gap-2.5 rounded-lg border bg-card px-3.5 py-3">
+              <div
+                className="flex flex-col justify-center gap-2.5 rounded-lg border bg-card px-3.5 py-3"
+                style={{ gridColumn: 1, gridRow: i + 2 }}
+              >
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
@@ -212,13 +264,15 @@ export function Timeline({
                 />
               </div>
 
-              <Waveform
-                peaks={m.peaks}
-                duration={duration}
-                position={position}
-                dimmed={dimmed}
-                className={cn("h-full rounded-lg border", dimmed && "opacity-60")}
-              />
+              <div className="min-w-0" style={{ gridColumn: 2, gridRow: i + 2 }}>
+                <Waveform
+                  peaks={m.peaks}
+                  duration={duration}
+                  position={position}
+                  dimmed={dimmed}
+                  className={cn("h-full rounded-lg border", dimmed && "opacity-60")}
+                />
+              </div>
             </Fragment>
           )
         })}
@@ -230,9 +284,9 @@ export function Timeline({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={finishPointer}
-          onPointerCancel={finishPointer}
+          onPointerCancel={cancelPointer}
           className="relative cursor-crosshair select-none"
-          style={{ gridColumn: 2, gridRow: "1 / -1" }}
+          style={{ gridColumn: 2, gridRow: "1 / -1", touchAction: "none" }}
         >
           {band && (
             <span
@@ -278,43 +332,47 @@ export function Timeline({
             </Fragment>
           ))}
 
-          {region.a !== null && region.b !== null && (
-            <>
-              {/* The grab target lives in the ruler band, not down the whole
-                  lane height — a press anywhere on the tracks should always
-                  start a fresh region, the way it does on an open take. The
-                  full-height band border above still marks the edge through
-                  the lanes; this is only where you take hold of it. 44px is
-                  this project's minimum touch target. */}
-              <span
-                onPointerDown={grabHandle("a")}
-                className="absolute flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
-                style={{ left: `${pct(region.a)}%`, top: RULER_PX - 22, height: 44 }}
-              >
-                <span className="h-11 w-1.5 rounded-full bg-warn" />
-              </span>
-              <span
-                onPointerDown={grabHandle("b")}
-                className="absolute flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
-                style={{ left: `${pct(region.b)}%`, top: RULER_PX - 22, height: 44 }}
-              >
-                <span className="h-11 w-1.5 rounded-full bg-warn" />
-              </span>
-            </>
+          {/* The grab target lives entirely inside the ruler band, not down
+              the whole lane height — a press anywhere on the tracks always
+              starts a fresh region. The full-height band border above still
+              marks the edge through the lanes; this is only where you take
+              hold of it. The ruler's own height is this project's minimum
+              touch target, and a higher z-index keeps it from losing presses
+              to the playhead grip, which occupies the same band. Each handle
+              only appears once its own end is actually set — a region with
+              just an A has nothing to grab at B yet. */}
+          {region.a !== null && (
+            <span
+              onPointerDown={grabHandle("a")}
+              className="absolute z-10 flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
+              style={{ left: `${pct(region.a)}%`, top: 0, height: RULER_PX }}
+            >
+              <span className="h-11 w-1.5 rounded-full bg-warn" />
+            </span>
+          )}
+          {region.b !== null && (
+            <span
+              onPointerDown={grabHandle("b")}
+              className="absolute z-10 flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
+              style={{ left: `${pct(region.b)}%`, top: 0, height: RULER_PX }}
+            >
+              <span className="h-11 w-1.5 rounded-full bg-warn" />
+            </span>
           )}
 
           <span
             className="pointer-events-none absolute w-0.5 bg-primary"
-            style={{ left: `${pct(position)}%`, top: RULER_PX - 14, bottom: 0 }}
+            style={{ left: `${pct(displayPosition)}%`, top: RULER_PX - 14, bottom: 0 }}
           />
           {/* Dragging the waveform used to scrub. That gesture now draws the
               region, so scrubbing gets a grip of its own rather than being
-              quietly dropped. */}
+              quietly dropped. Local while held, same as the edges — see
+              `displayPosition`. */}
           <span
             onPointerDown={grabHandle("position")}
             aria-hidden="true"
             className="absolute size-3 -translate-x-1.5 cursor-ew-resize rounded-full bg-primary"
-            style={{ left: `${pct(position)}%`, top: RULER_PX - 20 }}
+            style={{ left: `${pct(displayPosition)}%`, top: RULER_PX - 20 }}
           />
         </div>
       </div>

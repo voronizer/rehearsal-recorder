@@ -616,6 +616,9 @@ def main():
         # what makes one surface able to serve both.
         surface = page.get_by_role("group", name="Take timeline")
         box = surface.bounding_box()
+        lane = page.locator("canvas").first.bounding_box()
+        ok("the timeline surface sits exactly over the lanes",
+           abs(lane["x"] - box["x"]) < 1.5 and abs(lane["width"] - box["width"]) < 1.5)
         mid_y = box["y"] + box["height"] / 2
 
         def drag(from_ratio, to_ratio):
@@ -663,7 +666,7 @@ def main():
         ok("dragging an edge moves that edge",
            abs(moved[1] - TAKE_SECONDS * 0.5) < 0.4)
         ok("and leaves the other one where it was",
-           abs(moved[0] - started[0]) < 0.05)
+           abs(moved[0] - TAKE_SECONDS * 0.25) < 0.05)
 
         # The clock is chosen from a ladder, so a six-second take gets five
         # second steps. The other end of that ladder is checked on the long

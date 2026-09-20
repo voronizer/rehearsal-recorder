@@ -21,9 +21,10 @@ import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 const SKIP_SECONDS = 10
 
 /**
- * The take player: shared transport, A–B repeat, listening markers, and one
- * row per track with its waveform, volume and M/S. The same component right
- * after recording and when listening back to old takes.
+ * The take player: shared transport, A–B repeat, listening markers, and the
+ * `Timeline` beneath them — the ruler, the per-track lanes with their
+ * waveform/volume/M-S, and the loop band all live there now. The same
+ * component right after recording and when listening back to old takes.
  */
 export function TakePlayer({
   player,
