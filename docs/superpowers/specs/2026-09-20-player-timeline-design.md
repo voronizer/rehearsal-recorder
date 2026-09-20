@@ -99,8 +99,9 @@ playhead and every gesture above. It is the only component that knows the
 mapping between an x position and a second, which is precisely what was
 missing: that mapping used to be copied into each waveform.
 
-**`Waveform` becomes a lane renderer.** It draws peaks and nothing else — no
-markers, no loop tint, no playhead, no pointer handling. Those were per-track
+**`Waveform` becomes a lane renderer.** It draws the peaks, with the played
+part still highlighted as it is today, and nothing else — no markers, no loop
+tint, no playhead of its own, no pointer handling. Those were per-track
 copies of things that are properly one thing across the take, and the
 Timeline draws them once, over all lanes. The component gets smaller and its
 job gets sayable in one line.
