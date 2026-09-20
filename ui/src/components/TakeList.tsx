@@ -232,6 +232,7 @@ export function TakeList({
 export function RehearsalRow({
   name,
   date,
+  songsText,
   takesText,
   onClick,
   onRename,
@@ -239,6 +240,8 @@ export function RehearsalRow({
 }: {
   name: string
   date: string
+  /** What was played, if the takes were named. Empty means no line at all. */
+  songsText?: string
   takesText: string
   onClick: () => void
   onRename?: () => void
@@ -254,6 +257,11 @@ export function RehearsalRow({
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{name}</div>
           <div className="tnum mt-0.5 text-xs text-muted-foreground">{date}</div>
+          {songsText && (
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              {songsText}
+            </div>
+          )}
         </div>
         <span className="shrink-0 text-sm text-muted-foreground">{takesText}</span>
         <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground" />

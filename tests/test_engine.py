@@ -1309,6 +1309,54 @@ def main():
     ok("and it is either the tag it was built from or an honest 'unknown'",
        reported == "unknown" or re.match(r"\d+\.\d+", reported) is not None)
 
+    print("\n[16] History says what was rehearsed")
+    # The history list shows a name, a date and a take count, which is not
+    # enough to recognise a rehearsal months later. What was played is already
+    # on disk: take names carry the song, because each new take inherits the
+    # last one's name with the attempt number bumped.
+    tmp4 = Path(tempfile.mkdtemp())
+    apimod4, d = fresh_api(tmp4)
+
+    def past_rehearsal(name, created_at, take_names, seconds=60.0):
+        folder = tmp4 / "Rec" / f"{name} - {created_at[:10]} 19-00"
+        folder.mkdir(parents=True)
+        (folder / "session.json").write_text(json.dumps({
+            "name": name, "created_at": created_at, "samplerate": SR,
+            "tracks": [{"name": "Gtr", "channel": 1}],
+            "takes": [
+                {"take_number": i + 1, "name": n,
+                 "duration_sec": seconds, "tracks": []}
+                for i, n in enumerate(take_names)
+            ],
+        }))
+        return folder
+
+    past_rehearsal("Songs", "2026-09-10T19:00:00",
+                   ["Polyn", "Polyn 2", "Polyn 3", "Vesna", "Vesna 2", "Ogon"])
+    past_rehearsal("Unnamed", "2026-09-09T19:00:00", ["Take 1", "Take 2"])
+    past_rehearsal("Half", "2026-09-08T19:00:00", ["Take 1", "Polyn", "polyn 2"])
+
+    by_name = {r["name"]: r for r in d.list_rehearsals()}
+
+    ok("each song is named once, with the attempts counted",
+       [(s["name"], s["takes"]) for s in by_name["Songs"]["songs"]]
+       == [("Polyn", 3), ("Vesna", 2), ("Ogon", 1)])
+    ok("in the order they were first played",
+       [s["name"] for s in by_name["Songs"]["songs"]][0] == "Polyn")
+    ok("and the rehearsal knows how long it ran",
+       abs(by_name["Songs"]["total_duration_sec"] - 360.0) < 0.01)
+
+    # "Take 2" is what the app calls a take nobody named. Reporting that as a
+    # song is worse than saying nothing: "Take ×2" next to "2 takes".
+    ok("takes nobody named are not songs", by_name["Unnamed"]["songs"] == [])
+    ok("but they are still takes", by_name["Unnamed"]["take_count"] == 2)
+
+    ok("a half-named rehearsal reports what it has, case and all",
+       [(s["name"], s["takes"]) for s in by_name["Half"]["songs"]]
+       == [("Polyn", 2)])
+    ok("without dropping the unnamed one from the count",
+       by_name["Half"]["take_count"] == 3)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

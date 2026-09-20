@@ -31,6 +31,19 @@ export function takesLabel(n: number): string {
   return `${n} ${n === 1 ? "take" : "takes"}`
 }
 
+/** How many songs a rehearsal row names before it stops being a glance. */
+const SONGS_SHOWN = 4
+
+/** "Polyn ×3 · Vesna ×2 · Ogon": what a rehearsal was spent on. */
+export function songsLabel(songs: { name: string; takes: number }[]): string {
+  const shown = songs
+    .slice(0, SONGS_SHOWN)
+    .map((s) => (s.takes > 1 ? `${s.name} ×${s.takes}` : s.name))
+  const rest = songs.length - shown.length
+  if (rest > 0) shown.push(`and ${rest} more`)
+  return shown.join(" · ")
+}
+
 /** Minutes -> "3 h 20 min" / "45 min": for the disk-space estimate. */
 export function formatDuration(minutes: number): string {
   if (!isFinite(minutes) || minutes < 0) minutes = 0

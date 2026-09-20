@@ -5,6 +5,14 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- A rehearsal in History says what was played in it: how long it ran and the
+  songs, with the number of goes each one got — "Polyn ×3 · Vesna ×2 · Ogon".
+  It is read from the take names, so nothing extra has to be filled in during
+  a rehearsal; a rehearsal whose takes were never named says nothing rather
+  than repeating its own take count.
+
 ## 0.2.0
 
 - The app says which version it is, under Settings → Under the hood, and in

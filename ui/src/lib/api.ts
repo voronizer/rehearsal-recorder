@@ -107,12 +107,23 @@ export type SessionState =
       cloud_queue?: Record<number, "queued" | "working">
     }
 
+/**
+ * A song a rehearsal was spent on, and how many goes it got. Worked out from
+ * the take names, which already carry it: "Polyn", "Polyn 2", "Polyn 3".
+ */
+export type Song = {
+  name: string
+  takes: number
+}
+
 export type RehearsalSummary = {
   folder: string
   name: string
   created_at: string
   take_count: number
   total_duration_sec: number
+  /** Empty when the takes were never named — there is nothing to report. */
+  songs: Song[]
 }
 
 export type RehearsalDetail = {

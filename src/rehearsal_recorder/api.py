@@ -114,6 +114,45 @@ def _unique_path(path):
         counter += 1
 
 
+# A take the app named itself, as suggest_take_name writes it.
+_UNNAMED_TAKE = re.compile(r"^Take \d+$")
+# The attempt number a take name carries: "Polyn 3" -> "Polyn", "3".
+_ATTEMPT_NUMBER = re.compile(r"^(.*?)[\s]+(\d+)$")
+
+
+def _songs_of(takes):
+    """
+    What was played, as [{"name", "takes"}] in the order things were first
+    played. Nobody types this in: a take inherits the previous one's name with
+    the attempt number bumped (see suggest_take_name), so "Polyn", "Polyn 2"
+    and "Polyn 3" are three goes at one song, and dropping that trailing
+    number is enough to group them.
+
+    Takes the app named itself are left out. "Take ×4" beside a take count
+    that already says four is noise, and a rehearsal where nothing was named
+    is better off saying nothing at all.
+    """
+    songs = []
+    by_key = {}
+    for take in takes:
+        name = (take.get("name") or "").strip()
+        if not name or _UNNAMED_TAKE.match(name):
+            continue
+        attempt = _ATTEMPT_NUMBER.match(name)
+        base = attempt.group(1).strip() if attempt else name
+        if not base:
+            continue
+        # Case folded only to group: what shows is the first spelling used.
+        key = base.casefold()
+        if key in by_key:
+            by_key[key]["takes"] += 1
+        else:
+            song = {"name": base, "takes": 1}
+            by_key[key] = song
+            songs.append(song)
+    return songs
+
+
 def _is_empty_rehearsal(folder):
     """
     A rehearsal that produced nothing: no saved takes and no audio on disk.
@@ -919,6 +958,7 @@ class Api:
                 "created_at": meta.get("created_at", ""),
                 "take_count": len(takes),
                 "total_duration_sec": sum(t.get("duration_sec", 0) for t in takes),
+                "songs": _songs_of(takes),
             })
 
         items.sort(key=lambda x: x["created_at"], reverse=True)

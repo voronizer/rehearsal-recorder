@@ -15,8 +15,24 @@ import {
   type RehearsalSummary,
   type Take,
 } from "@/lib/api"
-import { formatDateHuman, takesLabel } from "@/lib/format"
+import {
+  formatDateHuman,
+  formatDuration,
+  songsLabel,
+  takesLabel,
+} from "@/lib/format"
 import { canBePutBack, goPlural, goesTo } from "@/lib/deletion"
+
+/**
+ * When it was and how long it ran: "18 Sep 2026, 19:00 · 42 min". Under half
+ * a minute there is no honest number of minutes to give, so the row just says
+ * when — rounding that to "0 min" would be worse than leaving it out.
+ */
+function when(r: RehearsalSummary): string {
+  const date = formatDateHuman(r.created_at)
+  if (r.total_duration_sec < 30) return date
+  return `${date} · ${formatDuration(r.total_duration_sec / 60)}`
+}
 
 /**
  * History: past rehearsals and their takes. Read from disk, so it survives a
@@ -272,7 +288,8 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
           <RehearsalRow
             key={r.folder}
             name={r.name}
-            date={formatDateHuman(r.created_at)}
+            date={when(r)}
+            songsText={songsLabel(r.songs)}
             takesText={takesLabel(r.take_count)}
             onClick={() => open(r)}
             onRename={() => setRehearsalToRename(r)}

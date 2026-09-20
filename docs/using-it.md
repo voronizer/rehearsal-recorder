@@ -34,10 +34,12 @@ What each screen is for, and the decisions behind how they behave.
   with it if it is discarded. It is the same player component throughout;
   earlier it simply had nothing to attach a mark to and so did not offer one.
 - **History** — every past rehearsal, read from disk, so it survives a
-  restart. Inside are the same expanding takes as on the rehearsal screen —
-  literally the same component. Takes and whole rehearsals can be renamed and
-  deleted; deletion asks first and is not permanent, the folder goes to the
-  Trash.
+  restart. Each row says when it was, how long it ran and what was played in
+  it — "Polyn ×3 · Vesna ×2 · Ogon" — because a date and a take count are not
+  how anybody recognises a rehearsal from three months ago. Inside are the
+  same expanding takes as on the rehearsal screen — literally the same
+  component. Takes and whole rehearsals can be renamed and deleted; deletion
+  asks first and is not permanent, the folder goes to the Trash.
 - **Unsaved takes** — shown before anything else on startup when a take was
   recorded but never saved (see "If the app dies mid-take" below).
 - **Finished** — the rehearsal summary and the path to its folder.
@@ -48,6 +50,12 @@ A take inherits the previous take's name with the counter bumped: name the
 first one "Verse riff" and the next ones come up as "Verse riff 2", "Verse
 riff 3". It is the same song until somebody says otherwise, which is how a
 rehearsal actually goes.
+
+That counter is also what History reads to say what a rehearsal was spent on:
+the name without its trailing number is the song, so "Verse riff 3" counts as
+a third go at "Verse riff". Naming the first take of each song is the whole
+price of that summary. Takes nobody named stay "Take 4" and are left out of
+it — they are still counted as takes, but they are not a song.
 
 Takes and rehearsals can be renamed afterwards, from the rehearsal screen and
 from history, with the pencil button. The folder on disk is renamed with them,
