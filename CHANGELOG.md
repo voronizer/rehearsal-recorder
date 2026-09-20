@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.3.0
 
 - A rehearsal in History says what was played in it: how long it ran and the
   songs, with the number of goes each one got — "Polyn ×3 · Vesna ×2 · Ogon".
