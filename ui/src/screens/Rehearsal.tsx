@@ -189,7 +189,7 @@ export function Rehearsal({
         </div>
       }
     >
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <FolderOpen className="size-3.5 shrink-0" />
           <span className="truncate font-mono">{session.folder}</span>

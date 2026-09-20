@@ -123,8 +123,9 @@ export function Review({
         </div>
       }
     >
-      <div className="mx-auto flex max-w-3xl flex-col gap-6">
-        <div className="flex flex-col gap-2">
+      {/* The player wants the width; the name field does not. */}
+      <div className="flex w-full flex-col gap-6">
+        <div className="flex max-w-xl flex-col gap-2">
           <Label htmlFor="take-name">Take name</Label>
           <Input
             id="take-name"
