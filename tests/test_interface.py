@@ -649,11 +649,14 @@ def main():
            and len(calls("player_set_loop")) == len(loop_back))
 
         # An edge moves on its own: grabbing B must not drag A along with it.
+        # The grab target lives in the ruler band, not down the whole lane
+        # height, so taking hold of an edge means pressing up there.
         drag(0.25, 0.75)
         started = calls("player_set_loop")[-1]["args"]
-        page.mouse.move(box["x"] + box["width"] * 0.75, mid_y)
+        edge_y = box["y"] + 12
+        page.mouse.move(box["x"] + box["width"] * 0.75, edge_y)
         page.mouse.down()
-        page.mouse.move(box["x"] + box["width"] * 0.5, mid_y, steps=8)
+        page.mouse.move(box["x"] + box["width"] * 0.5, edge_y, steps=8)
         page.mouse.up()
         page.wait_for_timeout(200)
         moved = calls("player_set_loop")[-1]["args"]

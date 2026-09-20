@@ -41,11 +41,7 @@ export function Timeline({
     toX: number
     to: number
   } | null>(null)
-  // `origin` is the grabbed edge's own position before this gesture touched
-  // it — needed once the gesture crosses the opposite edge (see below).
-  const [grab, setGrab] = useState<
-    { which: "a" | "b" | "position"; origin: number } | null
-  >(null)
+  const [grab, setGrab] = useState<"a" | "b" | "position" | null>(null)
 
   useEffect(() => {
     const el = surfaceRef.current
@@ -87,26 +83,20 @@ export function Timeline({
   }
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (grab?.which === "position") {
+    if (grab === "position") {
       player.seek(secondsAt(e.clientX))
       return
     }
-    // An edge normally stays on its own side of the other one. Once it is
-    // dragged onto or past the opposite edge, that edge lets go and the
-    // region becomes the span between where this edge started and where the
-    // pointer is now — a fresh region, not a sliver collapsed to nothing.
-    if (grab?.which === "a") {
-      const raw = secondsAt(e.clientX)
-      const anchor = region.b ?? duration
-      if (raw < anchor) player.setRegion(raw, anchor)
-      else player.setRegion(grab.origin, raw)
+    // An edge dragged past its opposite stops there rather than turning the
+    // region inside out, which is disorienting when you are watching it.
+    if (grab === "a") {
+      const at = Math.min(secondsAt(e.clientX), region.b ?? duration)
+      player.setRegion(at, region.b ?? duration)
       return
     }
-    if (grab?.which === "b") {
-      const raw = secondsAt(e.clientX)
-      const anchor = region.a ?? 0
-      if (raw > anchor) player.setRegion(anchor, raw)
-      else player.setRegion(raw, grab.origin)
+    if (grab === "b") {
+      const at = Math.max(secondsAt(e.clientX), region.a ?? 0)
+      player.setRegion(region.a ?? 0, at)
       return
     }
     if (!drag) return
@@ -127,9 +117,7 @@ export function Timeline({
   const grabHandle = (which: "a" | "b" | "position") => (e: React.PointerEvent) => {
     e.stopPropagation()
     surfaceRef.current?.setPointerCapture(e.pointerId)
-    const origin =
-      which === "a" ? (region.a ?? 0) : which === "b" ? (region.b ?? duration) : 0
-    setGrab({ which, origin })
+    setGrab(which)
   }
 
   const rows = media.length
@@ -292,17 +280,23 @@ export function Timeline({
 
           {region.a !== null && region.b !== null && (
             <>
+              {/* The grab target lives in the ruler band, not down the whole
+                  lane height — a press anywhere on the tracks should always
+                  start a fresh region, the way it does on an open take. The
+                  full-height band border above still marks the edge through
+                  the lanes; this is only where you take hold of it. 44px is
+                  this project's minimum touch target. */}
               <span
                 onPointerDown={grabHandle("a")}
-                className="absolute flex w-3 -translate-x-1.5 cursor-ew-resize items-center justify-center"
-                style={{ left: `${pct(region.a)}%`, top: RULER_PX, bottom: 0 }}
+                className="absolute flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
+                style={{ left: `${pct(region.a)}%`, top: RULER_PX - 22, height: 44 }}
               >
                 <span className="h-11 w-1.5 rounded-full bg-warn" />
               </span>
               <span
                 onPointerDown={grabHandle("b")}
-                className="absolute flex w-3 -translate-x-1.5 cursor-ew-resize items-center justify-center"
-                style={{ left: `${pct(region.b)}%`, top: RULER_PX, bottom: 0 }}
+                className="absolute flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
+                style={{ left: `${pct(region.b)}%`, top: RULER_PX - 22, height: 44 }}
               >
                 <span className="h-11 w-1.5 rounded-full bg-warn" />
               </span>
