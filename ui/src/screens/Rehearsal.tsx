@@ -46,6 +46,7 @@ export function Rehearsal({
     marker: Marker
   } | null>(null)
   const [renamingRehearsal, setRenamingRehearsal] = useState(false)
+  const [finishing, setFinishing] = useState(false)
 
   const startTake = async () => {
     if (busy) return
@@ -65,7 +66,16 @@ export function Rehearsal({
   // Escape below is what points Space at recording again.
   useSpacebar(selected ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, selected !== null)
-  useEscape(() => select(null), selected !== null)
+  // Escape climbs the same ladder here as everywhere: the open take first,
+  // and then the rehearsal itself, because finishing is the only way up from
+  // this screen. It asks once there are takes in the rehearsal — ending it by
+  // accident would leave the rest of the evening in a second folder — but an
+  // empty one has nothing to protect, and Python takes its folder with it.
+  useEscape(() => {
+    if (selected) select(null)
+    else if (session.takes.length === 0) void finish()
+    else setFinishing(true)
+  }, !busy)
 
   // While takes are being copied the only thing that changes is on the Python
   // side, so ask — but only until the queue drains.
@@ -232,6 +242,19 @@ export function Rehearsal({
           {session.tracks.map((t) => t.name).join(", ")}.
         </p>
       </div>
+
+      <ConfirmDialog
+        open={finishing}
+        onOpenChange={setFinishing}
+        title="Finish this rehearsal?"
+        description={`${takesLabel(
+          session.takes.length
+        )} are saved and stay where they are. You cannot add to this rehearsal afterwards — a later one starts its own folder.`}
+        confirmLabel="Finish"
+        cancelLabel="Keep going"
+        destructive={false}
+        onConfirm={() => void finish()}
+      />
 
       <ConfirmDialog
         open={toDelete !== null}

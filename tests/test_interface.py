@@ -150,11 +150,11 @@ window.__MAKE_API__ = () => ({
        tracks:session.tracks, takes:session.takes, next_take_number:takeCounter + 1,
        next_take_name:suggestName(), recording:false, cloud_queue:cq}));
   },
-  finish_rehearsal: async () => {
+  finish_rehearsal: track('finish_rehearsal', async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
     session = null;
     return r;
-  },
+  }),
 
   start_take: track('start_take', async () => { takeCounter += 1; return {ok:true, take_number:takeCounter}; }),
   get_levels: async () => ({'Guitar':0.99, 'Vocals':0.005}),
@@ -472,6 +472,21 @@ def main():
         ok("and starts the rehearsal with exactly that",
            started and started[-1]["args"][2] == 44100
            and started[-1]["args"][4] == 24)
+
+        # Nothing has been recorded yet, so there is nothing to protect: one
+        # level up from an empty rehearsal is what the Finish button does, and
+        # it goes without asking. Python takes the empty folder with it.
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Rehearsal finished")
+        ok("escape leaves a rehearsal that has nothing in it yet",
+           len(calls("finish_rehearsal")) == 1)
+        ok("and it says plainly that nothing was saved",
+           page.locator("text=Saved: 0 takes").count() == 1)
+        page.click("text=New rehearsal")
+        page.wait_for_selector("text=Start rehearsal")
+        page.click("text=Start rehearsal")
+        page.wait_for_selector("text=Record take 1")
+
         page.click("text=Record take 1")
         page.wait_for_selector("text=Recording")
         page.wait_for_timeout(2500)
@@ -833,6 +848,24 @@ def main():
            page.locator("button[aria-label='Copy Polyn (best) to the cloud']").count() == 1)
 
         print("\n[11] Finishing and history")
+        # On the rehearsal screen the ladder is the open take, then the
+        # rehearsal itself — and by now the rehearsal has takes in it, so that
+        # rung is a decision and asks.
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+        ok("escape closes the open take first",
+           page.get_by_role("group", name="Take timeline").count() == 0)
+        finishes = len(calls("finish_rehearsal"))
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Finish this rehearsal?")
+        ok("and then asks before ending a rehearsal with takes in it",
+           len(calls("finish_rehearsal")) == finishes)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+        ok("a second escape closes the question instead of answering it",
+           page.locator("text=Finish this rehearsal?").count() == 0
+           and len(calls("finish_rehearsal")) == finishes)
+
         page.click("text=Finish")
         page.wait_for_selector("text=Rehearsal finished")
         page.click("text=History")

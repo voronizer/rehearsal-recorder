@@ -254,17 +254,22 @@ not fire while the cursor is in a text field.
 Escape means one level up, and it takes one rung per press. A dialog closes
 first, because while one is open it is the topmost thing on screen. Then the
 take you are listening to, which on the rehearsal screen also hands the
-spacebar back to starting a new take. Then the screen itself, wherever there
-is a way back: out of a rehearsal in History into the list, out of the list,
-out of Settings.
+spacebar back to starting a new take. Then the screen itself: out of a
+rehearsal in History into the list, out of the list, out of Settings, and out
+of a rehearsal by finishing it, which is the only way up from that screen.
 
-What Escape will not do is climb past a decision. It does not end a rehearsal
-and it does not stop a recording — those are deliberate acts with a button
-each. On the review screen, where the only ways out are saving and giving the
-take up, it asks first: the take was played seconds ago and cannot be played
-again, and a key pressed by accident is exactly what a confirmation is for.
-The Discard button itself does not ask, because pressing a labelled button is
-not an accident.
+Where the rung is a decision, Escape asks rather than taking it. Finishing a
+rehearsal that has takes in it asks, because doing it by accident leaves the
+rest of the evening in a second folder; an empty rehearsal does not, because
+there is nothing to protect and Python removes the folder anyway. On the
+review screen, where the only ways out are saving and giving the take up, it
+asks too: the take was played seconds ago and cannot be played again, and a
+key pressed by accident is exactly what a confirmation is for. The buttons
+themselves — Finish, Discard — do not ask, because pressing a labelled button
+is not an accident.
+
+The one thing Escape never touches is a recording in progress. Stopping a
+take is a deliberate act with a button, and only that.
 
 ## Theme and scale
 

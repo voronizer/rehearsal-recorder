@@ -19,8 +19,10 @@ opening.
   takes.
 - Escape means one level up, one rung per press: a dialog, then the take you
   are listening to, then the screen — out of a rehearsal in History, out of
-  the list, out of Settings. It will not end a rehearsal or stop a recording,
-  and on the review screen it asks before giving a take up.
+  the list, out of Settings, and out of a rehearsal by finishing it. Where the
+  rung is a decision it asks first: before finishing a rehearsal with takes in
+  it, and before giving up a take on the review screen. An empty rehearsal it
+  simply leaves. A recording in progress it never touches.
 - Discarding a take on the review screen moves it to the Trash instead of
   deleting it. It was the one place left in the app where a recording was
   really destroyed, and the one that needed it least: that take was played
