@@ -1411,6 +1411,59 @@ def main():
     ok("a path outside the recordings folder is refused", not refused["ok"])
     ok("and nothing there is touched", (outside / "keep.txt").exists())
 
+    print("\n[18] Cutting a wav down to a range")
+    # The one operation under a crop: write the part worth keeping. Moving the
+    # original out of the way is the caller's job — in this app, the Trash.
+    from rehearsal_recorder.audio.crop import crop_wav
+
+    def wav_frames(path):
+        with wave.open(str(path)) as w:
+            return w.getnframes()
+
+    def wav_samples(path):
+        """Every sample of a mono wav, at its own scale."""
+        with wave.open(str(path)) as w:
+            frames, width = w.getnframes(), w.getsampwidth()
+            raw = w.readframes(frames)
+        if width == 2:
+            return list(struct.unpack("<%dh" % frames, raw))
+        return [int.from_bytes(raw[i * 3:i * 3 + 3], "little", signed=True)
+                for i in range(frames)]
+
+    tmp6 = Path(tempfile.mkdtemp())
+    write_wav(tmp6 / "long.wav", 1000, seconds=2.0)
+
+    cut = crop_wav(tmp6 / "long.wav", tmp6 / "cut.wav", 0.5, 1.5)
+    ok("a crop says how much it kept", cut["ok"] and cut["frames"] == SR)
+    with wave.open(str(tmp6 / "cut.wav")) as w:
+        ok("and writes exactly that",
+           w.getnframes() == SR and w.getframerate() == SR
+           and w.getsampwidth() == 2 and w.getnchannels() == 1)
+
+    middle = wav_samples(tmp6 / "cut.wav")
+    ok("the audio between the cuts is untouched", middle[SR // 2] == 1000)
+    # A cut lands on whatever sample was there, and a non-zero sample at the
+    # edge of a file is a click.
+    ok("but each cut edge is ramped rather than stepped",
+       middle[0] == 0 and abs(middle[-1]) < 50)
+
+    head = crop_wav(tmp6 / "long.wav", tmp6 / "head.wav", 0.0, 1.0)
+    ok("a region that starts at the beginning keeps the original attack",
+       head["ok"] and wav_samples(tmp6 / "head.wav")[0] == 1000)
+
+    write_wav(tmp6 / "deep.wav", 1000, seconds=1.0, depth=24)
+    deep = crop_wav(tmp6 / "deep.wav", tmp6 / "deepcut.wav", 0.25, 0.75)
+    with wave.open(str(tmp6 / "deepcut.wav")) as w:
+        ok("24-bit comes out 24-bit",
+           deep["ok"] and w.getsampwidth() == 3 and w.getnframes() == SR // 2)
+    ok("and its samples come through whole",
+       wav_samples(tmp6 / "deepcut.wav")[SR // 4] == 1000 * 256)
+
+    past = crop_wav(tmp6 / "long.wav", tmp6 / "nothing.wav", 5.0, 6.0)
+    ok("a range past the end of the file is refused", not past["ok"])
+    ok("and leaves nothing behind when it is",
+       not (tmp6 / "nothing.wav").exists())
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
