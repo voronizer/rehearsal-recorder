@@ -609,7 +609,7 @@ git commit -m "Crop a take to its region, with the originals going to the Trash"
 - Modify: `ui/src/screens/Rehearsal.tsx`, `ui/src/screens/HistoryScreen.tsx`,
   `ui/src/screens/Review.tsx`, `ui/src/App.tsx`
 - Test: `tests/test_interface.py` (mock handlers; a block in section `[6]`;
-  new section `[9c]`)
+  new section `[9e]`)
 
 **Interfaces:**
 - Consumes: `crop_take` / `crop_draft` from Task 2.
@@ -692,10 +692,12 @@ recorded take is still on the review screen:
 ```
 
 Add a new section immediately after the `page.screenshot(path=str(SHOTS /
-"54-player.png"))` line that ends section `[9]`, before `print("\n[10] ...")`:
+"54-player.png"))` line that ends section `[9]`, before `print("\n[10] ...")`.
+Tasks 5 and 6 later insert their sections into the gap this leaves above it,
+so this one is numbered `[9e]` even though nothing sits between yet:
 
 ```python
-        print("\n[9c] Cropping a take to the region")
+        print("\n[9e] Cropping a take to the region")
         # The region drove one thing until now. Trimming the take to it is the
         # other, and it is what makes a nine-minute take that holds three
         # minutes of music into a three-minute take.
@@ -978,7 +980,7 @@ and to its `<TakePlayer ... />`:
 - [ ] **Step 6: Run the suites and watch them pass**
 
 Run: `cd ui && npm run build && cd .. && python3 tests/run_all.py`
-Expected: every suite passes, including sections `[6]` and `[9c]`.
+Expected: every suite passes, including sections `[6]` and `[9e]`.
 
 If a section **after** `[6]` fails on a take's length, the crop in `[6]` landed
 on a take a later section depends on. Move that block to a take no later
@@ -1137,7 +1139,7 @@ git commit -m "Let the waveform be asked for one part of a take"
 - Modify: `ui/src/components/Waveform.tsx` (peaks window vs view window)
 - Modify: `ui/src/components/Timeline.tsx` (the window, the wheel, following,
   "Whole take")
-- Test: `tests/test_interface.py` (new section `[9d]`)
+- Test: `tests/test_interface.py` (new section `[9c]`)
 
 **Interfaces:**
 - Consumes: nothing from Tasks 1–4.
@@ -1150,10 +1152,15 @@ git commit -m "Let the waveform be asked for one part of a take"
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `tests/test_interface.py`, immediately after the new section `[9c]`:
+Add to `tests/test_interface.py`, immediately after the
+`page.screenshot(path=str(SHOTS / "54-player.png"))` line that ends section
+`[9]` — that is, **above** the existing `[9e]`, not below it. Zoom has to be
+exercised on the take at its full six seconds: `[9e]` crops it to three, and
+`MIN_VIEW_SEC = 2` would leave a three-second take almost nothing to zoom
+into.
 
 ```python
-        print("\n[9d] Zooming the timeline")
+        print("\n[9c] Zooming the timeline")
         # Fifteen seconds of a nine-minute take is twenty pixels wide: the
         # gesture built last release is at its worst exactly where it is
         # needed most.
@@ -1199,9 +1206,11 @@ Add to `tests/test_interface.py`, immediately after the new section `[9c]`:
         # that it would be pinned to the edge, pointing at the wrong second.
         ok("markers are on the timeline to start with",
            page.locator("[data-marker-at]").count() > 0)
-        wheel_at(0.95, 0, -900)
-        ok("but one outside the window is not drawn",
-           page.locator("[data-marker-at]").count() == 0)
+        wheel_at(0.98, 0, -900)   # the last seconds of the take
+        drawn = page.locator("[data-marker-at]").evaluate_all(
+            "els => els.map(e => Number(e.dataset.markerAt))")
+        ok("and only the ones inside the window are drawn",
+           all(at >= TAKE_SECONDS / 2 for at in drawn))
         page.screenshot(path=str(SHOTS / "56-zoom.png"))
 
         page.click("button[aria-label^='Take 1 Polyn']")
@@ -1552,7 +1561,7 @@ clamping its left edge:
 - [ ] **Step 7: Run the suites and watch them pass**
 
 Run: `cd ui && npm run build && cd .. && python3 tests/run_all.py`
-Expected: every suite passes, including the new section `[9d]`.
+Expected: every suite passes, including the new section `[9c]`.
 
 - [ ] **Step 8: Commit**
 
@@ -1569,7 +1578,7 @@ git commit -m "Zoom and pan the timeline with the wheel"
 - Modify: `ui/src/lib/api.ts` (`take_media` takes a range)
 - Modify: `ui/src/hooks/useMultitrackPlayer.ts` (`peaksWindow`, the settling refetch)
 - Modify: `ui/src/components/Timeline.tsx` (pass `peaksWindow` instead of `0`/`duration`)
-- Test: `tests/test_interface.py` (wrap the `take_media` mock; new section `[9e]`)
+- Test: `tests/test_interface.py` (wrap the `take_media` mock; new section `[9d]`)
 
 **Interfaces:**
 - Consumes: ranged `take_media` from Task 4; `view`/`setView` from Task 5.
@@ -1589,10 +1598,11 @@ are recorded, and let it answer a range:
   })),
 ```
 
-Add a new section immediately after `[9d]`:
+Add a new section immediately after `[9c]`, above `[9e]`. It reuses the `box`,
+`mid_y` and `calls` already in scope there:
 
 ```python
-        print("\n[9e] The waveform sharpens to what is on screen")
+        print("\n[9d] The waveform sharpens to what is on screen")
         # Stretching the same 900 bars over two seconds shows no more than it
         # did over nine minutes, so the peaks are fetched again for the window.
         # Not on every wheel tick, though: that would be a burst of calls into
@@ -1723,7 +1733,7 @@ Task 5:
 - [ ] **Step 6: Run the suites and watch them pass**
 
 Run: `cd ui && npm run build && cd .. && python3 tests/run_all.py`
-Expected: every suite passes, including `[9e]`.
+Expected: every suite passes, including `[9d]`.
 
 - [ ] **Step 7: Commit**
 
@@ -1759,7 +1769,7 @@ voice. Read the top of `CHANGELOG.md`: the most recent released heading is
 cp tests/screenshots/56-zoom.png docs/screenshots/zoom.png
 ```
 
-This file is written by section `[9d]`, so `python3 tests/run_all.py` must have
+This file is written by section `[9c]`, so `python3 tests/run_all.py` must have
 been run since Task 5 landed. Open it and check it actually shows a zoomed
 timeline with the "Whole take" control — a screenshot of the wrong state is
 worse than none.
