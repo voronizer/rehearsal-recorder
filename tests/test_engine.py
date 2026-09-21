@@ -1474,6 +1474,86 @@ def main():
     ok("and leaves nothing behind when it is",
        not (tmp6 / "nothing.wav").exists())
 
+    print("\n[19] Cropping a take to the region")
+    tmp7 = Path(tempfile.mkdtemp())
+    apimod7, c = fresh_api(tmp7)
+    c.start_rehearsal("Cutting", None, SR,
+                      [{"name": "Gtr", "channel": 1},
+                       {"name": "Bass", "channel": 2}], 16)
+    draft = Path(c._session["folder"]) / "_drafts" / "take 1"
+    write_wav(draft / "Gtr.wav", 1000, seconds=4.0)
+    write_wav(draft / "Bass.wav", 2000, seconds=4.0)
+    saved = c.keep_take(
+        1, str(draft), "Polyn", 4.0,
+        [{"name": "Gtr", "file": str(draft / "Gtr.wav")},
+         {"name": "Bass", "file": str(draft / "Bass.wav")}],
+        [{"at": 0.5, "note": "count-in", "kind": "note"},
+         {"at": 2.0, "note": "here", "kind": "good"},
+         {"at": 3.8, "note": "stopped", "kind": "bad"}],
+    )
+    folder = str(c._session["folder"])
+    take_dir = Path(saved["take"]["tracks"][0]["file"]).parent
+
+    # The player holds every track through a memmap, and Windows will not
+    # rename a mapped file — so cropping has to let go of them first.
+    c.player_open(saved["take"]["tracks"])
+    ok("a take can be open in the player", c.player_state().get("open") is True)
+
+    res = c.crop_take(folder, 1, 1.0, 3.0)
+    ok("cropping says what it kept",
+       res["ok"] and abs(res["take"]["duration_sec"] - 2.0) < 0.01)
+    ok("and let go of the files before rewriting them",
+       c.player_state().get("open") is not True)
+    ok("every track is the region now",
+       all(wav_frames(t["file"]) == 2 * SR for t in res["take"]["tracks"]))
+    ok("the markers move with the audio they pointed at",
+       [m["at"] for m in res["take"]["markers"]] == [1.0])
+    ok("and the ones outside it are counted, not silently dropped",
+       res["markers_dropped"] == 2)
+    ok("the originals leave as one folder, not eight loose files",
+       res["trashed"] is True
+       or Path(res["location"] or "").name.endswith("(before crop)"))
+    ok("and the take folder is left with only its tracks",
+       sorted(p.name for p in take_dir.iterdir()) == ["Bass.wav", "Gtr.wav"])
+
+    # The cloud fingerprint records the name, format, folder and balance —
+    # never the length. A cropped take would go on matching it, and the
+    # uncropped copy would stay in the cloud folder as the copy of record.
+    c.set_cloud_dir(str(tmp7 / "Cloud"))
+    c.share_take(folder, 1, "mix")
+    ok("a shared take knows where its copy is",
+       bool((c.session_state()["takes"][0].get("cloud") or {}).get("mix")))
+    c.crop_take(folder, 1, 0.25, 1.75)
+    ok("cropping forgets a copy that is now of a different take",
+       not (c.session_state()["takes"][0].get("cloud") or {}).get("mix"))
+
+    ok("a region shorter than a second is refused",
+       not c.crop_take(folder, 1, 0.1, 0.4)["ok"])
+    ok("and a folder outside the recordings directory is refused",
+       not c.crop_take(str(tmp7 / "elsewhere"), 1, 0.0, 2.0)["ok"])
+
+    # Nothing is replaced until every new file exists, so a track that cannot
+    # be read costs the crop and nothing else.
+    (take_dir / "Bass.wav").write_bytes(b"not a wav at all")
+    broken = c.crop_take(folder, 1, 0.25, 1.5)
+    ok("one unreadable track stops the whole crop", not broken["ok"])
+    ok("and leaves no half-written files behind",
+       not any(p.name.startswith(".writing-") for p in take_dir.iterdir()))
+    ok("with the other track still where it was",
+       wav_frames(take_dir / "Gtr.wav") > 0)
+
+    # A take on the review screen is a proper wav already; it just has no
+    # entry in session.json yet.
+    draft2 = Path(c._session["folder"]) / "_drafts" / "take 2"
+    write_wav(draft2 / "Gtr.wav", 1000, seconds=4.0)
+    pending = [{"name": "Gtr", "file": str(draft2 / "Gtr.wav")}]
+    early = c.crop_draft(str(draft2), pending, 1.0, 3.0)
+    ok("a take can be cropped before it is ever saved",
+       early["ok"] and abs(early["duration_sec"] - 2.0) < 0.01)
+    ok("in place, so saving it afterwards needs no new paths",
+       wav_frames(draft2 / "Gtr.wav") == 2 * SR
+       and early["tracks"][0]["file"] == str(draft2 / "Gtr.wav"))
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

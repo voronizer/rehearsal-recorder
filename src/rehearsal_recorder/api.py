@@ -40,6 +40,7 @@ from rehearsal_recorder.audio.format import (
     bytes_per_sample,
     normalize_depth,
 )
+from rehearsal_recorder.audio.crop import crop_wav
 from rehearsal_recorder.audio.mixdown import mixdown
 from rehearsal_recorder.audio.devices import recording_formats
 from rehearsal_recorder.audio.monitor import LevelMonitor
@@ -62,6 +63,9 @@ UI_DIR = app_root() / "ui" / "dist"
 
 # Warn below this much recording time left.
 LOW_SPACE_MINUTES = 15
+
+# A region shorter than this is a slip of the mouse, not an intention.
+MIN_CROP_SEC = 1.0
 
 # What a fresh install records at until Settings says otherwise.
 DEFAULT_SAMPLERATE = 44100
@@ -1207,6 +1211,174 @@ class Api:
                 self._session["takes"] = takes
 
             return {"ok": True, "markers": take["markers"]}
+
+    # ---------- cropping ----------
+
+    @staticmethod
+    def _crop_span(duration_sec, start_sec, end_sec):
+        """The region to keep, or why it cannot be kept."""
+        try:
+            start = max(0.0, float(start_sec))
+            end = float(end_sec)
+        except (TypeError, ValueError):
+            return {"error": "That is not a region"}
+        if duration_sec:
+            end = min(float(duration_sec), end)
+        if end - start < MIN_CROP_SEC:
+            return {"error":
+                    f"A take has to keep at least {MIN_CROP_SEC:g} second"}
+        return {"start": start, "end": end}
+
+    def _crop_tracks(self, tracks, start_sec, end_sec):
+        """
+        Rewrites every track shorter and puts the originals in the Trash as
+        one folder named after the take — what turns up there is then a
+        recognisable thing rather than eight loose files called Gtr.wav.
+
+        The order matters, because the app can be killed in the middle of it.
+        Every new file is written under WRITING_PREFIX first, so nothing is
+        replaced until all of them exist; then the originals move aside
+        together; then the new files take their names; then the folder of
+        originals goes. Die between those last two and the take folder holds
+        obviously-unfinished files with the originals in a folder beside it —
+        repairable by hand, which is the most a step that moves files can
+        promise.
+        """
+        take_dir = Path(tracks[0]["file"]).parent
+        written = []
+        for t in tracks:
+            source = Path(t["file"])
+            target = _writing_path(source)
+            res = crop_wav(source, target, start_sec, end_sec)
+            if not res["ok"]:
+                target.unlink(missing_ok=True)
+                for w in written:
+                    w.unlink(missing_ok=True)
+                return {"ok": False, "error": res["error"]}
+            written.append(target)
+
+        aside = _unique_path(take_dir.with_name(f"{take_dir.name} (before crop)"))
+        try:
+            aside.mkdir(parents=True)
+            for t in tracks:
+                source = Path(t["file"])
+                shutil.move(str(source), str(aside / source.name))
+            for t, target in zip(tracks, written):
+                os.replace(target, Path(t["file"]))
+        except OSError as e:
+            return {"ok": False, "error": f"Could not replace the tracks: {e}"}
+
+        gone = move_to_trash(aside, self._recordings_dir)
+        return {
+            "ok": True,
+            "duration_sec": end_sec - start_sec,
+            "trashed": bool(gone.get("trashed")),
+            "location": gone.get("location"),
+        }
+
+    def crop_take(self, folder, take_number, start_sec, end_sec):
+        """
+        Keeps only [start, end) of a saved take. The take keeps its number,
+        its name and its folder: from the outside it is the same take, shorter.
+        """
+        folder = Path(folder)
+        if not self._inside_recordings(folder):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+
+        # _meta_lock then _player_lock, and never the other way round — this
+        # is the only place that takes both.
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return {"ok": False, "error": "Rehearsal not found"}
+            take = next(
+                (t for t in meta.get("takes", [])
+                 if t.get("take_number") == take_number),
+                None,
+            )
+            if take is None:
+                return {"ok": False, "error": "Take not found"}
+
+            tracks = [t for t in take.get("tracks", [])
+                      if Path(t.get("file", "")).exists()]
+            if not tracks:
+                return {"ok": False, "error": "The take has no files left on disk"}
+
+            span = self._crop_span(take.get("duration_sec", 0), start_sec, end_sec)
+            if "error" in span:
+                return {"ok": False, "error": span["error"]}
+
+            # Tracks are played through a memmap, and Windows will not let a
+            # mapped file be renamed or removed. macOS will, which is exactly
+            # how this would have reached a Windows rehearsal unnoticed.
+            self.player_close()
+
+            done = self._crop_tracks(tracks, span["start"], span["end"])
+            if not done["ok"]:
+                return done
+
+            kept, dropped = [], 0
+            for m in self._markers_of(take):
+                if span["start"] <= m["at"] <= span["end"]:
+                    kept.append({**m, "at": round(m["at"] - span["start"], 2)})
+                else:
+                    dropped += 1
+            take["markers"] = kept
+            take["duration_sec"] = done["duration_sec"]
+
+            # The fingerprint in cloud.source_of records what was asked for,
+            # the name, the format, the folder and the balance — there is no
+            # length in it. A cropped take would go on matching it, and
+            # auto-publish would skip it for good, leaving the uncropped
+            # version in the cloud folder as the copy of record.
+            self._remove_shared(take)
+            take["cloud"] = {}
+            take.pop("cloud_error", None)
+
+            self._write_meta(folder, meta)
+            if self._session is not None and Path(self._session["folder"]) == folder:
+                self._session["takes"] = meta.get("takes", [])
+
+        self._enqueue_publish(folder, take_number)
+        self._retry_failed_publishes()
+        return {
+            "ok": True,
+            "take": take,
+            "trashed": done["trashed"],
+            "location": done["location"],
+            "markers_dropped": dropped,
+        }
+
+    def crop_draft(self, temp_dir, tracks, start_sec, end_sec):
+        """
+        The same cut, one folder over. A take that has been stopped is proper
+        .wav already — capture wraps the raw PCM on stop — it just has no
+        entry in session.json yet, so there is nothing here to fix up. The
+        files keep their paths, so the caller saves the take as it would have.
+        """
+        temp_dir = Path(temp_dir)
+        if not self._inside_recordings(temp_dir):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+
+        live = [t for t in (tracks or []) if Path(t.get("file", "")).exists()]
+        if not live:
+            return {"ok": False, "error": "The take has no files left on disk"}
+
+        span = self._crop_span(0, start_sec, end_sec)
+        if "error" in span:
+            return {"ok": False, "error": span["error"]}
+
+        self.player_close()
+        done = self._crop_tracks(live, span["start"], span["end"])
+        if not done["ok"]:
+            return done
+        return {
+            "ok": True,
+            "tracks": live,
+            "duration_sec": done["duration_sec"],
+            "trashed": done["trashed"],
+            "location": done["location"],
+        }
 
     # ---------- playback ----------
 
