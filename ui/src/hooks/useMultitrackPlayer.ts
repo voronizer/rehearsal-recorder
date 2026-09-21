@@ -31,7 +31,7 @@ export function useMultitrackPlayer(
   const [soloed, setSoloed] = useState<string | null>(null)
   const [volumes, setVolumes] = useState<Record<string, number>>({})
   const [looping, setLooping] = useState(false)
-  const [markers, setMarkers] = useState<{ a: number | null; b: number | null }>(
+  const [region, setRegionState] = useState<{ a: number | null; b: number | null }>(
     { a: null, b: null }
   )
 
@@ -70,7 +70,7 @@ export function useMultitrackPlayer(
     setMedia([])
     setPlaying(false)
     setPosition(0)
-    setMarkers({ a: null, b: null })
+    setRegionState({ a: null, b: null })
     setLooping(false)
     setLoadError(null)
     setDuration(fallbackDuration)
@@ -192,34 +192,42 @@ export function useMultitrackPlayer(
     playing,
     position,
     duration,
-    markers,
+    region,
     looping,
 
     toggle: () => void call(() => api().player_toggle()),
     play: () => void call(() => api().player_play()),
     pause: () => void call(() => api().player_pause()),
-    restart: () => seek(markers.a !== null && looping ? markers.a : 0),
+    restart: () => seek(region.a !== null && looping ? region.a : 0),
     skip: (delta: number) => seek(position + delta),
     seek,
 
     toggleLoop: () => {
       const next = !looping
       setLooping(next)
-      applyLoop(markers, next)
+      applyLoop(region, next)
     },
     markA: () => {
-      const next = { a: position, b: markers.b }
-      setMarkers(next)
+      const next = { a: position, b: region.b }
+      setRegionState(next)
       if (looping) applyLoop(next, true)
     },
     markB: () => {
-      const next = { a: markers.a, b: position }
-      setMarkers(next)
+      const next = { a: region.a, b: position }
+      setRegionState(next)
       if (looping) applyLoop(next, true)
     },
-    clearMarkers: () => {
+    // A drag hands over both ends at once. Going through markA and then markB
+    // would apply the loop twice, and in between would apply a region nobody
+    // asked for — the old A with the new B.
+    setRegion: (a: number, b: number) => {
+      const next = { a: Math.min(a, b), b: Math.max(a, b) }
+      setRegionState(next)
+      if (looping) applyLoop(next, true)
+    },
+    clearRegion: () => {
       const next = { a: null, b: null }
-      setMarkers(next)
+      setRegionState(next)
       if (looping) applyLoop(next, true)
     },
 

@@ -40,6 +40,12 @@ let cloudDir = null;
 let cloudFormat = 'wav';
 let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
 let recording = {device_index: 0, samplerate: 44100, bit_depth: 24};
+// Real playback reads each file's own length off disk; the mock has no
+// disk, so a track's duration is looked up here by its own file path,
+// falling back to the live session's TAKE-second default. Every path used
+// for a "real" length has to be unique, or it leaks into whichever other
+// take happens to reuse that dummy path.
+let fileDurations = {};
 let cloudQueue = {};
 
 // The Python config lives in a file and survives a reload, so keep it in its
@@ -135,15 +141,20 @@ window.__MAKE_API__ = () => ({
     // otherwise the interface would see the same take "queued" forever.
     const cq = cloudQueue;
     cloudQueue = {};
-    return {active:true, name:session.name, folder:session.folder, tracks:session.tracks,
-       takes:session.takes, next_take_number:takeCounter + 1, next_take_name:suggestName(),
-       recording:false, cloud_queue:cq};
+    // The real bridge deserializes its own JSON on every call, so the
+    // interface never gets the same object twice. Handing out session.takes
+    // directly would let the interface's "selected" take alias the mock's
+    // own mutable state, silently hiding any bug where a listener keeps
+    // rendering a stale copy instead of reading the fresh one.
+    return JSON.parse(JSON.stringify({active:true, name:session.name, folder:session.folder,
+       tracks:session.tracks, takes:session.takes, next_take_number:takeCounter + 1,
+       next_take_name:suggestName(), recording:false, cloud_queue:cq}));
   },
-  finish_rehearsal: async () => {
+  finish_rehearsal: track('finish_rehearsal', async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
     session = null;
     return r;
-  },
+  }),
 
   start_take: track('start_take', async () => { takeCounter += 1; return {ok:true, take_number:takeCounter}; }),
   get_levels: async () => ({'Guitar':0.99, 'Vocals':0.005}),
@@ -159,12 +170,15 @@ window.__MAKE_API__ = () => ({
   }),
   discard_take: track('discard_take', async () => ({ok:true})),
 
-  take_media: async (tracks) => tracks.map(t => ({
-    name:t.name, url:'about:blank', frames:48000*TAKE, samplerate:48000, duration_sec:TAKE,
-    peaks: Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9)})),
+  take_media: async (tracks) => tracks.map(t => {
+    const dur = fileDurations[t.file] ?? TAKE;
+    return {name:t.name, url:'about:blank', frames:48000*dur, samplerate:48000, duration_sec:dur,
+      peaks: Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9)};
+  }),
 
   player_open: track('player_open', async (tracks) => {
-    P = {playing:false, position:0, t0:clock(), duration:TAKE, loop:null, muted:[], soloed:null,
+    const dur = tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
+    P = {playing:false, position:0, t0:clock(), duration:dur, loop:null, muted:[], soloed:null,
          volumes:Object.fromEntries(tracks.map(t => [t.name, 1]))};
     const out = {ok:true, ...playerState()};
     if (window.__OUTPUT_GONE__) out.warning = 'That playback device is gone — using the system output.';
@@ -203,7 +217,10 @@ window.__MAKE_API__ = () => ({
       take.markers = [...kept, {at, note: note || '', kind: kind || 'note'}]
         .sort((a, b) => a.at - b.at);
     }
-    return {ok:true, markers: take ? take.markers : []};
+    // Same reason as session_state/get_rehearsal: a live handle here would
+    // let the interface alias the mock's own mutable state, which the real
+    // bridge's JSON round-trip never allows.
+    return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
   update_take_marker: track('update_take_marker', async (folder, n, sec, note, kind) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
@@ -224,7 +241,10 @@ window.__MAKE_API__ = () => ({
   rename_take: track('rename_take', async (folder, n, name) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (take) take.name = name;
-    return {ok:true, take};
+    // Deep copy, same as session_state/get_rehearsal — a live handle would
+    // alias the mock's own state, which the real bridge's JSON round-trip
+    // never allows.
+    return JSON.parse(JSON.stringify({ok:true, take}));
   }),
   rename_rehearsal: track('rename_rehearsal', async (folder, name) => {
     if (session) session.name = name;
@@ -249,10 +269,15 @@ window.__MAKE_API__ = () => ({
             {name:'Sonce', takes:1}, {name:'Dym', takes:1}, {name:'Ptaha', takes:1}]},
     {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
      take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[]}]),
-  get_rehearsal: async (folder) => ({ok:true, folder, name:'Tuesday jam',
-    created_at:'2026-09-10T19:00:00',
-    takes:[{take_number:1, name:'Polyn', duration_sec:TAKE, markers:[],
-            tracks:[{name:'Guitar', file:'/rec/g.wav'}]}]}),
+  get_rehearsal: async (folder) => {
+    // Its own path, distinct from the live session's /rec/g.wav — two takes
+    // sharing a dummy path would let one's mocked length leak onto the other.
+    fileDurations['/rec/old/g.wav'] = 600;
+    return JSON.parse(JSON.stringify({ok:true, folder, name:'Tuesday jam',
+      created_at:'2026-09-10T19:00:00',
+      takes:[{take_number:1, name:'Polyn', duration_sec:600, markers:[],
+              tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}]}));
+  },
   delete_take: track('delete_take', async () => ({ok:true, trashed:true, takes_left:0})),
   delete_rehearsal: track('delete_rehearsal', async () => ({ok:true, trashed:true})),
 
@@ -269,12 +294,15 @@ window.__MAKE_API__ = () => ({
     if (what === 'mix' || what === 'both') shared.mix = cloudDir + '/mix.wav';
     if (what === 'tracks' || what === 'both') shared.tracks = cloudDir + '/tracks';
     if (take) take.cloud = shared;
-    return {ok:true, take, cloud:shared};
+    // Deep copy, same as session_state/get_rehearsal — a live handle would
+    // alias the mock's own state, which the real bridge's JSON round-trip
+    // never allows.
+    return JSON.parse(JSON.stringify({ok:true, take, cloud:shared}));
   }),
   unshare_take: track('unshare_take', async (folder, n) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (take) take.cloud = {};
-    return {ok:true, removed:[], trashed:true};
+    return JSON.parse(JSON.stringify({ok:true, removed:[], trashed:true}));
   }),
 
   get_settings: async () => ({recordings_dir:'/Users/alex/RehearsalRecordings',
@@ -444,6 +472,21 @@ def main():
         ok("and starts the rehearsal with exactly that",
            started and started[-1]["args"][2] == 44100
            and started[-1]["args"][4] == 24)
+
+        # Nothing has been recorded yet, so there is nothing to protect: one
+        # level up from an empty rehearsal is what the Finish button does, and
+        # it goes without asking. Python takes the empty folder with it.
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Rehearsal finished")
+        ok("escape leaves a rehearsal that has nothing in it yet",
+           len(calls("finish_rehearsal")) == 1)
+        ok("and it says plainly that nothing was saved",
+           page.locator("text=Saved: 0 takes").count() == 1)
+        page.click("text=New rehearsal")
+        page.wait_for_selector("text=Start rehearsal")
+        page.click("text=Start rehearsal")
+        page.wait_for_selector("text=Record take 1")
+
         page.click("text=Record take 1")
         page.wait_for_selector("text=Recording")
         page.wait_for_timeout(2500)
@@ -499,6 +542,22 @@ def main():
         ok("the next take inherits the name",
            page.input_value("#take-name") == "Polyn 2")
 
+        # Escape is the way out of a screen, and the way out of this one is
+        # giving the take up — but not without asking. The take was played
+        # seconds ago and cannot be played again, and a stray key is exactly
+        # the accident a confirmation is for.
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Discard this take?")
+        ok("escape on review asks before dropping the take",
+           len(calls("discard_take")) == 0)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+        ok("a second escape closes the question instead of answering it",
+           page.locator("text=Discard this take?").count() == 0
+           and len(calls("discard_take")) == 0)
+        ok("and the take is still there to save",
+           page.input_value("#take-name") == "Polyn 2")
+
         # Marks can be made here too, before the take is saved. There is no
         # folder for them yet, so they ride along with keep_take.
         ok("the review screen offers marking",
@@ -521,8 +580,16 @@ def main():
            bool(saved_markers) and saved_markers[0]["kind"] == "good")
 
         print("\n[7] Markers while listening back")
-        page.click("text=Polyn 2")
+        # A prefix match: right after a take is saved its pill can still be
+        # showing "Waiting for the cloud" appended to the label, and the take
+        # is the same take either way.
+        page.click("button[aria-label^='Take 2 Polyn 2']")
         page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
+        ok("picking a take opens it in the player below",
+           page.get_by_role("group", name="Take timeline").count() == 1)
+        ok("and the pill says it is the open one",
+           page.locator("button[aria-label^='Take 2 Polyn 2']")
+               .get_attribute("aria-current") == "true")
 
         # The mark made on the review screen, before this take had a folder,
         # is here waiting — same take, same marker, one player.
@@ -549,6 +616,10 @@ def main():
         ok("the note reached Python",
            saved and saved[-1]["args"][3] == "guitar drifts here")
         ok("and its kind with it", saved and saved[-1]["args"][4] == "issue")
+        # This has to be true without ever clicking away from Take 2 and
+        # back — the player's "selected" take is only an identity now, so
+        # its fields (markers included) have to come from the live takes
+        # array, or a saved note would stay invisible until the next reopen.
         ok("the note is on the chip",
            page.locator("text=guitar drifts here").count() > 0)
 
@@ -576,15 +647,61 @@ def main():
         print("\n[7b] When the chosen output is not there any more")
         # A saved device index goes stale the moment the interface is
         # unplugged. The take must still play, and say where it is coming out.
-        page.evaluate("() => { window.__OUTPUT_GONE__ = true }")
-        page.click("text=Polyn 2")   # close
+        page.click("button[aria-label^='Take 1 Polyn']")      # away
         page.wait_for_timeout(200)
-        page.click("text=Polyn 2")   # and open again
+        page.evaluate("() => { window.__OUTPUT_GONE__ = true }")
+        page.click("button[aria-label^='Take 2 Polyn 2']")    # and back
         page.wait_for_selector("text=using the system output", timeout=8000)
         ok("it says where the sound went", True)
         ok("and the take still opened",
            page.locator("button[aria-label='Mute Guitar']").count() == 1)
         page.evaluate("() => { window.__OUTPUT_GONE__ = false }")
+
+        print("\n[7c] Escape closes a dialog first, the take second")
+        # A delete confirmation has no input to focus — the case the
+        # tag-only guard in useEscape missed. Radix closes the dialog on
+        # Escape without stopping the event from reaching the window
+        # listener, so that listener must not also give up the take
+        # underneath a dialog that is still open.
+        page.click("button[aria-label='Delete take Polyn 2']")
+        page.wait_for_selector("text=go to the Trash")
+        # Radix's own auto-focus actually lands on Cancel here, which
+        # useSpacebar's separate "don't fight a focused button" rule already
+        # excludes — clicking the description (nothing focusable there) is
+        # what moves focus to the dialog content itself, a DIV, which is the
+        # case a tag-only guard cannot see and the one that matters for the
+        # other two hooks too.
+        page.click("text=go to the Trash")
+
+        # A trusted keypress would also activate whatever has focus (e.g. a
+        # button, natively, on release) and confound the check, so this
+        # dispatches the keydown itself — exactly what the window listener
+        # sees — to isolate the guard from that native behaviour.
+        toggles_before = len(calls("player_toggle"))
+        page.evaluate(
+            "() => window.dispatchEvent(new KeyboardEvent("
+            "'keydown', {code:'Space', bubbles:true, cancelable:true}))"
+        )
+        page.wait_for_timeout(200)
+        ok("space does not toggle playback behind an open dialog",
+           len(calls("player_toggle")) == toggles_before)
+
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        ok("escape dismisses the confirmation instead of confirming it",
+           page.locator("text=go to the Trash").count() == 0)
+        ok("nothing was actually deleted", len(calls("delete_take")) == 0)
+        ok("and leaves the open take's player alone",
+           page.get_by_role("group", name="Take timeline").count() == 1)
+
+        # With no dialog left to claim it, the same key now gives the take up.
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        ok("and with nothing else open, escape closes the take",
+           page.get_by_role("group", name="Take timeline").count() == 0)
+
+        page.click("button[aria-label^='Take 2 Polyn 2']")
+        page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
 
         print("\n[8] Renaming")
         page.click("button[aria-label='Rename take Polyn 2']")
@@ -601,7 +718,11 @@ def main():
         ok("the rehearsal was renamed",
            calls("rename_rehearsal")[-1]["args"][1] == "Tuesday jam")
 
-        ok("renaming does not close the player",
+        # Renaming reopens the player from zero (a new `tracks` identity
+        # tears down and re-runs the open effect) — this only proves the
+        # take stays selected and on screen through that, not that playback
+        # or the A-B region survive it. They don't; see docs/using-it.md.
+        ok("renaming leaves a player on screen",
            page.locator("button[aria-label='Repeat']").count() == 1)
 
         print("\n[9] Repeat, mix and history")
@@ -610,6 +731,91 @@ def main():
         loop = calls("player_set_loop")
         ok("repeat covers the whole take",
            loop and loop[-1]["args"] == [0, TAKE_SECONDS])
+
+        # The region is drawn across the tracks, not clicked together out of
+        # two buttons. A press that does not travel is still a seek, which is
+        # what makes one surface able to serve both.
+        surface = page.get_by_role("group", name="Take timeline")
+        box = surface.bounding_box()
+        lane = page.locator("canvas").first.locator("xpath=..").bounding_box()
+        ok("the timeline surface sits exactly over the lanes",
+           abs(lane["x"] - box["x"]) < 1.5 and abs(lane["width"] - box["width"]) < 1.5)
+        mid_y = box["y"] + box["height"] / 2
+
+        def drag(from_ratio, to_ratio):
+            page.mouse.move(box["x"] + box["width"] * from_ratio, mid_y)
+            page.mouse.down()
+            page.mouse.move(box["x"] + box["width"] * to_ratio, mid_y, steps=10)
+            page.mouse.up()
+            page.wait_for_timeout(200)
+
+        # markA/markB changed job in this branch — each now commits only its
+        # own edge instead of the pair together — and the plan wrongly
+        # claimed this section already drove them; it only ever drove Repeat.
+        drag(0.2, 0.2)  # a press that does not travel is a seek
+        pos_a = calls("player_seek")[-1]["args"][0]
+        page.get_by_role("button", name="A", exact=True).click()
+        page.wait_for_timeout(200)
+        loop = calls("player_set_loop")
+        ok("marking A loops from here to the end",
+           abs(loop[-1]["args"][0] - pos_a) < 0.4
+           and loop[-1]["args"][1] == TAKE_SECONDS)
+
+        drag(0.7, 0.7)
+        pos_b = calls("player_seek")[-1]["args"][0]
+        page.get_by_role("button", name="B", exact=True).click()
+        page.wait_for_timeout(200)
+        loop = calls("player_set_loop")
+        ok("marking B keeps A where it was and commits the new end",
+           abs(loop[-1]["args"][0] - pos_a) < 0.4
+           and abs(loop[-1]["args"][1] - pos_b) < 0.4)
+
+        drag(0.25, 0.75)
+        loop = calls("player_set_loop")
+        ok("dragging across the tracks sets the loop region",
+           loop and abs(loop[-1]["args"][0] - TAKE_SECONDS * 0.25) < 0.4
+           and abs(loop[-1]["args"][1] - TAKE_SECONDS * 0.75) < 0.4)
+        ok("and the buttons read it back",
+           "A 0:01" in page.locator("button", has_text="A 0:").inner_text())
+
+        drag(0.75, 0.25)
+        loop_back = calls("player_set_loop")
+        ok("dragging the other way gives the same region",
+           abs(loop_back[-1]["args"][0] - loop[-1]["args"][0]) < 0.4
+           and abs(loop_back[-1]["args"][1] - loop[-1]["args"][1]) < 0.4)
+
+        seeks_before = len(calls("player_seek"))
+        page.mouse.move(box["x"] + box["width"] * 0.5, mid_y)
+        page.mouse.down()
+        page.mouse.up()
+        page.wait_for_timeout(200)
+        ok("a press that does not travel seeks instead",
+           len(calls("player_seek")) == seeks_before + 1
+           and len(calls("player_set_loop")) == len(loop_back))
+
+        # An edge moves on its own: grabbing B must not drag A along with it.
+        # The grab target lives in the ruler band, not down the whole lane
+        # height, so taking hold of an edge means pressing up there.
+        drag(0.25, 0.75)
+        started = calls("player_set_loop")[-1]["args"]
+        edge_y = box["y"] + 12
+        page.mouse.move(box["x"] + box["width"] * 0.75, edge_y)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] * 0.5, edge_y, steps=8)
+        page.mouse.up()
+        page.wait_for_timeout(200)
+        moved = calls("player_set_loop")[-1]["args"]
+        ok("dragging an edge moves that edge",
+           abs(moved[1] - TAKE_SECONDS * 0.5) < 0.4)
+        ok("and leaves the other one where it was",
+           abs(moved[0] - TAKE_SECONDS * 0.25) < 0.05)
+
+        # The clock is chosen from a ladder, so a six-second take gets five
+        # second steps. The other end of that ladder is checked on the long
+        # take in history.
+        ok("the ruler's clock fits the take",
+           "0:05" in page.get_by_role("group", name="Timeline clock").inner_text())
+
         page.click("button[aria-label='Mute Guitar']")
         page.click("button[aria-label='Solo Vocals']")
         page.wait_for_timeout(300)
@@ -642,10 +848,45 @@ def main():
            page.locator("button[aria-label='Copy Polyn (best) to the cloud']").count() == 1)
 
         print("\n[11] Finishing and history")
+        # On the rehearsal screen the ladder is the open take, then the
+        # rehearsal itself — and by now the rehearsal has takes in it, so that
+        # rung is a decision and asks.
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+        ok("escape closes the open take first",
+           page.get_by_role("group", name="Take timeline").count() == 0)
+        finishes = len(calls("finish_rehearsal"))
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Finish this rehearsal?")
+        ok("and then asks before ending a rehearsal with takes in it",
+           len(calls("finish_rehearsal")) == finishes)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+        ok("a second escape closes the question instead of answering it",
+           page.locator("text=Finish this rehearsal?").count() == 0
+           and len(calls("finish_rehearsal")) == finishes)
+
         page.click("text=Finish")
         page.wait_for_selector("text=Rehearsal finished")
         page.click("text=History")
         page.wait_for_selector("text=Tuesday jam")
+
+        page.click("text=Tuesday jam")
+        page.click("button[aria-label='Take 1 Polyn']")
+        page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
+        ok("a ten-minute take gets a clock in minutes",
+           "2:00" in page.get_by_role("group", name="Timeline clock").inner_text())
+        # Escape peels one layer at a time: first the open take, then the
+        # rehearsal it was in.
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+        ok("escape closes the open take",
+           page.get_by_role("group", name="Take timeline").count() == 0
+           and page.locator("button[aria-label='Take 1 Polyn']").count() == 1)
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Wednesday jam")
+        ok("and escape again leaves the rehearsal",
+           page.locator("button[aria-label='Take 1 Polyn']").count() == 0)
 
         # Months later a rehearsal is recognised by what was played in it, so
         # the row carries the songs, not just a count of takes. A long list is
@@ -680,6 +921,13 @@ def main():
         print("\n[12] Settings: output, folders, appearance")
         page.click("button[aria-label='Back']")
         page.wait_for_selector("text=Start rehearsal")
+        page.click("button[aria-label='Settings']")
+        page.wait_for_selector("text=Recording")
+
+        # A screen with a way back has one on the keyboard too.
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Start rehearsal")
+        ok("escape leaves settings", page.locator("#input-device").count() == 0)
         page.click("button[aria-label='Settings']")
         page.wait_for_selector("text=Recording")
 

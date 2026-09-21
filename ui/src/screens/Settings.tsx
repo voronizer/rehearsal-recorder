@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Shell } from "@/components/Shell"
+import { useEscape } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 import { SCALE_OPTIONS, THEME_LABELS, type Theme } from "@/lib/appearance"
 import {
@@ -91,6 +92,10 @@ export function Settings({
   scale: number
   onAppearanceChange: (theme: Theme, scale: number) => void
 }) {
+  // Nothing here is a decision in flight — every setting is saved as it is
+  // changed — so Escape means what the back button means.
+  useEscape(onBack)
+
   const [settings, setSettings] = useState<SettingsData | null>(null)
   const [outputs, setOutputs] = useState<OutputDevice[]>([])
   const [inputs, setInputs] = useState<Device[]>([])

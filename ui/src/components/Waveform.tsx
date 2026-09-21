@@ -1,35 +1,28 @@
 import { useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
-import { markerStyle } from "@/lib/markers"
-import type { Marker } from "@/lib/api"
 
 /**
- * One track's waveform. The peaks arrive ready-made from Python (one value
- * per bar), so drawing costs nothing and the browser never has to decode
- * audio just to show a picture.
+ * One track's waveform, and nothing else. The peaks arrive ready-made from
+ * Python (one value per bar), so drawing costs nothing and the browser never
+ * has to decode audio just to show a picture.
  *
- * The played part is highlighted, the A–B region is tinted, markers are drawn
- * as ticks. Click and drag to scrub.
+ * The played part is highlighted; the loop region, the markers and the
+ * playhead belong to the whole take rather than to one track, so Timeline
+ * draws them once across every lane instead of each waveform drawing its own.
  */
 export function Waveform({
   peaks,
   duration,
   position,
-  loop,
-  markers,
   dimmed,
-  onSeek,
   className,
 }: {
   peaks: number[]
   duration: number
   position: number
-  loop?: { a: number; b: number } | null
-  markers?: Marker[]
   dimmed?: boolean
-  onSeek?: (seconds: number) => void
-  /** Height comes from a class (h-9 / h-12) so the waveform grows with the
-   *  interface scale, which changes the base font size. */
+  /** Height comes from the caller's class — Timeline gives each lane
+   *  `h-full` so it fills the row height the grid assigns it. */
   className?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -56,15 +49,6 @@ export function Waveform({
       const styles = getComputedStyle(canvas)
       const playedColor = styles.getPropertyValue("--wf-played").trim()
       const restColor = styles.getPropertyValue("--wf-rest").trim()
-      const loopColor = styles.getPropertyValue("--wf-loop").trim()
-      const markerColor = styles.getPropertyValue("--wf-marker").trim()
-
-      if (loop && duration > 0) {
-        ctx.fillStyle = loopColor
-        const x1 = (loop.a / duration) * width
-        const x2 = (loop.b / duration) * width
-        ctx.fillRect(x1, 0, Math.max(1, x2 - x1), height)
-      }
 
       const mid = height / 2
       const n = peaks.length
@@ -79,74 +63,31 @@ export function Waveform({
         ctx.fillStyle = x + barWidth <= playedX ? playedColor : restColor
         ctx.fillRect(x, mid - h / 2, Math.max(0.5, barWidth - 0.5), h)
       }
-
-      if (markers && duration > 0) {
-        for (const m of markers) {
-          // The colour carries the meaning: red is where it fell apart.
-          ctx.fillStyle =
-            styles.getPropertyValue(markerStyle(m.kind).cssVar).trim() ||
-            markerColor
-          const x = (m.at / duration) * width
-          ctx.fillRect(x - 1, 0, 2, height)
-          // a little flag on top, so a marker is visible even on a loud part
-          ctx.beginPath()
-          ctx.moveTo(x - 1, 0)
-          ctx.lineTo(x + 6, 0)
-          ctx.lineTo(x - 1, 7)
-          ctx.closePath()
-          ctx.fill()
-        }
-      }
     }
 
     draw()
     const ro = new ResizeObserver(draw)
     ro.observe(box)
     return () => ro.disconnect()
-  }, [peaks, duration, position, loop, markers])
-
-  const seekFromEvent = (clientX: number) => {
-    const box = boxRef.current
-    if (!box || !onSeek || duration <= 0) return
-    const rect = box.getBoundingClientRect()
-    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-    onSeek(ratio * duration)
-  }
+  }, [peaks, duration, position])
 
   return (
     <div
       ref={boxRef}
-      onPointerDown={(e) => {
-        if (!onSeek) return
-        e.currentTarget.setPointerCapture(e.pointerId)
-        seekFromEvent(e.clientX)
-      }}
-      onPointerMove={(e) => {
-        if (e.buttons === 1) seekFromEvent(e.clientX)
-      }}
       style={
         {
           "--wf-played": "var(--color-primary)",
           "--wf-rest": dimmed
             ? "color-mix(in oklab, var(--color-muted-foreground) 35%, transparent)"
             : "color-mix(in oklab, var(--color-muted-foreground) 70%, transparent)",
-          "--wf-loop": "color-mix(in oklab, var(--color-warn) 14%, transparent)",
-          "--wf-marker": "var(--color-signal)",
         } as React.CSSProperties
       }
       className={cn(
         "relative w-full overflow-hidden rounded-md bg-background",
-        onSeek && "cursor-pointer",
         className
       )}
     >
       <canvas ref={canvasRef} className="block size-full" />
-      {duration > 0 && (
-        <div
-          className="pointer-events-none absolute inset-y-0 w-px bg-foreground/70"
-          style={{ left: `${(position / duration) * 100}%` }}
-        />
-      )}
     </div>
   )
 }

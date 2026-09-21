@@ -3,11 +3,13 @@ import { Circle, FolderOpen, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Shell, SpaceHint } from "@/components/Shell"
-import { TakeList, useTakeListPlayer } from "@/components/TakeList"
+import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
-import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
+import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
+import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
   type Marker,
@@ -20,7 +22,7 @@ import { canBePutBack, goPlural } from "@/lib/deletion"
 
 /**
  * The rehearsal hub: what has been recorded, and a big button to record more.
- * Any saved take plays right here, expanding in its row.
+ * Any saved take plays right here, in the player below the strip of takes.
  */
 export function Rehearsal({
   session,
@@ -33,7 +35,7 @@ export function Rehearsal({
   onFinished: (folder: string, takeCount: number) => void
   onChanged: () => void
 }) {
-  const { selected, select, reselect, player } = useTakeListPlayer()
+  const { selected, select, reselect, player } = useTakeStripPlayer()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toDelete, setToDelete] = useState<Take | null>(null)
@@ -44,6 +46,7 @@ export function Rehearsal({
     marker: Marker
   } | null>(null)
   const [renamingRehearsal, setRenamingRehearsal] = useState(false)
+  const [finishing, setFinishing] = useState(false)
 
   const startTake = async () => {
     if (busy) return
@@ -59,10 +62,20 @@ export function Rehearsal({
     onStartTake(res.take_number, session.next_take_name)
   }
 
-  // While a take is expanded Space drives the player — otherwise it would
-  // start a new take in the middle of listening.
+  // With a take open, Space plays it back rather than starting a new one;
+  // Escape below is what points Space at recording again.
   useSpacebar(selected ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, selected !== null)
+  // Escape climbs the same ladder here as everywhere: the open take first,
+  // and then the rehearsal itself, because finishing is the only way up from
+  // this screen. It asks once there are takes in the rehearsal — ending it by
+  // accident would leave the rest of the evening in a second folder — but an
+  // empty one has nothing to protect, and Python takes its folder with it.
+  useEscape(() => {
+    if (selected) select(null)
+    else if (session.takes.length === 0) void finish()
+    else setFinishing(true)
+  }, !busy)
 
   // While takes are being copied the only thing that changes is on the Python
   // side, so ask — but only until the queue drains.
@@ -101,7 +114,9 @@ export function Rehearsal({
       return
     }
     // The take folder moved with the name, so point the player at the fresh
-    // paths — without closing it, since someone may be listening right now.
+    // paths. That is a new `tracks` identity, so the open effect underneath
+    // tears down and reopens from zero — the take stays selected and on
+    // screen, but playback and the A–B region do not survive this.
     if (selected?.take_number === take.take_number && res.take) reselect(res.take)
     onChanged()
   }
@@ -189,32 +204,57 @@ export function Rehearsal({
         </div>
       }
     >
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <FolderOpen className="size-3.5 shrink-0" />
           <span className="truncate font-mono">{session.folder}</span>
         </div>
 
-        <TakeList
+        <TakeStrip
           takes={session.takes}
           selected={selected}
           onSelect={select}
           onRename={setToRename}
           onShare={setToShare}
-          cloudStates={session.cloud_queue}
           onDelete={setToDelete}
-          onAddMarker={addMarker}
-          onEditMarker={(take, marker) => setMarkerEdit({ take, marker })}
-          onRemoveMarker={removeMarker}
-          player={player}
+          cloudStates={session.cloud_queue}
           emptyHint="Hit Record or press Space — takes show up here and can be played straight away."
         />
+
+        {selected ? (
+          <TakePlayer
+            player={player}
+            markers={liveTake(session.takes, selected)?.markers ?? []}
+            onAddMarker={(sec) => addMarker(selected, sec)}
+            onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
+            onRemoveMarker={(sec) => removeMarker(selected, sec)}
+          />
+        ) : (
+          session.takes.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Pick a take to listen back to it.
+            </p>
+          )
+        )}
 
         <p className="text-xs text-muted-foreground">
           Same tracks as at the start of the rehearsal:{" "}
           {session.tracks.map((t) => t.name).join(", ")}.
         </p>
       </div>
+
+      <ConfirmDialog
+        open={finishing}
+        onOpenChange={setFinishing}
+        title="Finish this rehearsal?"
+        description={`${takesLabel(
+          session.takes.length
+        )} are saved and stay where they are. You cannot add to this rehearsal afterwards — a later one starts its own folder.`}
+        confirmLabel="Finish"
+        cancelLabel="Keep going"
+        destructive={false}
+        onConfirm={() => void finish()}
+      />
 
       <ConfirmDialog
         open={toDelete !== null}

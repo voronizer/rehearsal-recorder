@@ -5,6 +5,30 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- The player runs on one timeline across the window instead of a column in
+  the middle of it. Every track shares the same time axis, so where one of
+  them came apart is now a thing you can point at.
+- The repeat region is drawn with the mouse across the tracks, in either
+  direction, and its edges can be dragged afterwards. A press that does not
+  travel still seeks, as it always did. A and B keep their jobs for when you
+  have just heard the exact spot and want it to the tenth of a second.
+- Takes in a rehearsal and in history are a strip along the top rather than
+  rows that expand. The player sits below and stops moving when you switch
+  takes.
+- Escape means one level up, one rung per press: a dialog, then the take you
+  are listening to, then the screen — out of a rehearsal in History, out of
+  the list, out of Settings, and out of a rehearsal by finishing it. Where the
+  rung is a decision it asks first: before finishing a rehearsal with takes in
+  it, and before giving up a take on the review screen. An empty rehearsal it
+  simply leaves. A recording in progress it never touches.
+- Discarding a take on the review screen moves it to the Trash instead of
+  deleting it. It was the one place left in the app where a recording was
+  really destroyed, and the one that needed it least: that take was played
+  seconds earlier and cannot be played again. It also refuses a path outside
+  the recordings folder rather than removing whatever it is handed.
+
 ## 0.3.0
 
 - A rehearsal in History says what was played in it: how long it ran and the

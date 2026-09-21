@@ -850,9 +850,15 @@ class Api:
         return {"ok": True, "take": take_info}
 
     def discard_take(self, temp_dir):
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        self._cleanup_drafts_dir(temp_dir)
-        return {"ok": True}
+        """
+        A take dropped on the review screen and a draft rescued after a crash
+        are the same thing on disk — an unfinished take folder — so they leave
+        the same way, into the Trash. This used to be an rmtree of whatever
+        path it was handed: the one place in the app where a recording was
+        really destroyed, and the one that needed it least, because the take
+        was recorded seconds earlier and cannot be played again.
+        """
+        return self.discard_draft(temp_dir)
 
     @staticmethod
     def _cleanup_drafts_dir(temp_dir):

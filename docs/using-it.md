@@ -22,7 +22,10 @@ What each screen is for, and the decisions behind how they behave.
   and the card, not to one evening, so they are settled once here and the
   setup screen only reports them.
 - **Rehearsal** — the hub: the takes recorded so far and a big "Record take"
-  button. Any saved take expands in its own row and plays right there.
+  button. Takes are a strip along the top; click one to listen to it in the
+  player below. Nothing is selected until you pick one, so opening a rehearsal
+  does not start reading audio files nobody asked for. Clicking a take again
+  keeps it open — selecting is sticky.
 - **Recording** — a large timer, a level meter per track, and a status line
   that is always visible: interface connected, how much recording time the
   disk has left, and any warning. The meter shows the state as well as the
@@ -38,11 +41,11 @@ What each screen is for, and the decisions behind how they behave.
   and what was played in it — "Polyn ×3 · Vesna ×2 · Ogon" — because a date
   and a take count are not how anybody recognises a rehearsal from three
   months ago. The size is measured by walking the folder, not worked out from
-  the durations, so it is the number Finder would give you. Inside are the
-  same expanding takes as on the rehearsal screen — literally the same
-  component. Takes and whole rehearsals can be renamed and deleted; deletion
-  asks first and says how much space is coming back, and is not permanent —
-  the folder goes to the Trash.
+  the durations, so it is the number Finder would give you. Click a rehearsal
+  to open it; takes are a strip along the top, the same component as on the
+  rehearsal screen. Takes and whole rehearsals can be renamed and deleted;
+  deletion asks first and says how much space is coming back, and is not
+  permanent — the folder goes to the Trash.
 - **Unsaved takes** — shown before anything else on startup when a take was
   recorded but never saved (see "If the app dies mid-take" below).
 - **Finished** — the rehearsal summary and the path to its folder.
@@ -64,7 +67,9 @@ Takes and rehearsals can be renamed afterwards, from the rehearsal screen and
 from history, with the pencil button. The folder on disk is renamed with them,
 so what you see in the app and what you see in Finder stay the same thing. A
 rehearsal folder keeps its date stamp: "Tuesday jam - 2026-09-18 19-00".
-Renaming a take while you are listening to it does not stop playback.
+Renaming a take moves its files on disk, so the player reopens it from the
+start: the take stays open and on screen, but playback and the A–B region do
+not survive the rename.
 
 ## The player
 
@@ -73,6 +78,23 @@ output-device selection: on the web the output is switched with `setSinkId`,
 which this engine does not offer for `AudioContext`. The side benefits turned
 out to be just as large — the memory ceiling is gone, and so is the split
 between two playback modes.
+
+All the tracks of a take share one timeline: a ruler at the top with the
+clock, the markers and the playhead, a lane each underneath, and the fader
+with M and S in the gutter on the left. Anything that belongs to the take
+rather than to one track — the A–B region, the marker lines, the playhead —
+is drawn once across every lane, which is what makes it possible to see that
+two tracks parted company at 1:12.
+
+Drag across the timeline to set the repeat region, in either direction; its
+edges are grips on the ruler and can be dragged afterwards. A press that does
+not travel is a click, and a click seeks, as it always did — that is what lets
+one surface do both jobs without a mode switch. Because the edges are grabbed
+on the ruler rather than down the lanes, a press on the lanes always begins a
+new region, so you can redraw one starting exactly where the old one ended.
+The A and B buttons put an edge exactly at the current playback position for
+when you have found the spot by ear. The playhead has a grip of its own on the
+ruler: dragging that scrubs, which is what dragging the waveform used to do.
 
 - **Sync.** All tracks are mixed into one stream from one position, so they
   cannot drift apart even in principle.
@@ -87,15 +109,16 @@ between two playback modes.
 - **Markers.** "Mark" drops a marker at the current position and opens a note
   for it, because the thought about what just went wrong lasts about five
   seconds. A marker has a kind — a plain note, "keep this", "went wrong",
-  "do again" — and the kind is a colour, on the waveform and on the take row,
-  so a glance says which take has red in it. Clicking a marker jumps there;
+  "do again" — and the kind is a colour, on the waveform and on the take pill
+  in the strip, so a glance says which take has red in it. Clicking a marker
+  jumps there;
   the note can be edited or left empty. Markers are placed while listening
   back, not while recording, because nobody is looking at the screen during a
   take.
 - **Repeat** loops: the whole take, or just the stretch between the A and B
   marks when they are set. The marks are independent of repeat, so you can
   place them in advance and switch looping on when you want it.
-- **Transport.** To start (|◀), ±10 seconds, click the waveform to seek. At
+- **Transport.** To start (|◀), ±10 seconds, click the timeline to seek. At
   the end of a take the player returns to the start instead of sitting at the
   tail.
 - **The balance is remembered.** Track volumes are stored by name in the
@@ -148,7 +171,7 @@ Two ways to get them there, and they do the same work underneath:
 - **On their own**, if **Send saved takes automatically** is ticked in
   Settings. Every take you keep is copied in the background, in the gap after
   it is saved: no copy is begun while a take is recording, because mixing one
-  is not something to start competing with the sound card. The take's row says
+  is not something to start competing with the sound card. The take says
   where it has got to: "Waiting for the cloud", "Copying to the cloud", the
   green cloud button once it is there, or "Not in the cloud" with the reason
   when something went wrong.
@@ -228,6 +251,26 @@ play/pause while listening. On screens with a player the left and right arrows
 seek ±10 seconds. The `Space` hint is shown next to the button. Shortcuts do
 not fire while the cursor is in a text field.
 
+Escape means one level up, and it takes one rung per press. A dialog closes
+first, because while one is open it is the topmost thing on screen. Then the
+take you are listening to, which on the rehearsal screen also hands the
+spacebar back to starting a new take. Then the screen itself: out of a
+rehearsal in History into the list, out of the list, out of Settings, and out
+of a rehearsal by finishing it, which is the only way up from that screen.
+
+Where the rung is a decision, Escape asks rather than taking it. Finishing a
+rehearsal that has takes in it asks, because doing it by accident leaves the
+rest of the evening in a second folder; an empty rehearsal does not, because
+there is nothing to protect and Python removes the folder anyway. On the
+review screen, where the only ways out are saving and giving the take up, it
+asks too: the take was played seconds ago and cannot be played again, and a
+key pressed by accident is exactly what a confirmation is for. The buttons
+themselves — Finish, Discard — do not ask, because pressing a labelled button
+is not an accident.
+
+The one thing Escape never touches is a recording in progress. Stopping a
+take is a deliberate act with a button, and only that.
+
 ## Theme and scale
 
 The theme (dark, light or match system) and the interface scale (90–150%) are
@@ -259,8 +302,10 @@ padding, the buttons and the waveform grow with it, not just the text.
 Until a take is saved it is written to `_drafts` inside the rehearsal folder,
 next to `session.json`, rather than a system temp folder — the path is
 predictable and visible in Finder. "Save take" moves the files into the take's
-own folder, "Discard" deletes them, and an empty `_drafts` folder cleans
-itself up.
+own folder, "Discard" moves them to the Trash — the same place everything else
+deleted in this app goes, and for the same reason: a take recorded two minutes
+ago is the one recording in the whole app that cannot be made again. An empty
+`_drafts` folder cleans itself up either way.
 
 ## What protects a recording
 

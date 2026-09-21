@@ -42,13 +42,23 @@ buried in a menu: on screen during the take, because that is the only moment
 anyone would act on it.
 
 **Plays the take back immediately**, all tracks in sync, with per-track
-volume, mute and solo, A–B repeat, and markers you drop while listening.
+volume, mute and solo, and markers you drop while listening. Every track
+shares one timeline, so where two of them parted company is something you can
+point at rather than guess. Drag across it to set the repeat region — no
+picking A and B out of two buttons.
 
-![A take with markers on the waveform](docs/screenshots/player-markers.png)
+![A take on the timeline, with the repeat region drawn across both tracks](docs/screenshots/player-markers.png)
 
 **Markers say what happened, not just where.** A note and a kind — keep this,
-went wrong, do again — coloured on the waveform and on the take row, so a
-glance at the list says which take has red in it.
+went wrong, do again — coloured on the timeline and on the take's pill, so a
+glance at the strip says which take has red in it.
+
+**Tells you what a rehearsal was.** Months later a date and a take count are
+not how anyone recognises an evening, so each one says what was played in it,
+how long it ran and what it weighs on disk. It is read from the take names,
+so nothing extra has to be filled in while you are playing.
+
+![Past rehearsals, each saying what was played in it](docs/screenshots/history.png)
 
 **Sends the good ones to the cloud.** A whole rehearsal is mostly failed
 attempts, so the recordings folder does not sync — only the takes you keep,

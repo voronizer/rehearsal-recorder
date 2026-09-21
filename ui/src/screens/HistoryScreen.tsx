@@ -2,11 +2,14 @@ import { useEffect, useState } from "react"
 import { FolderOpen, Library, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Shell, EmptyState } from "@/components/Shell"
-import { RehearsalRow, TakeList, useTakeListPlayer } from "@/components/TakeList"
+import { RehearsalRow } from "@/components/RehearsalRow"
+import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
-import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
+import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
+import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
   type Marker,
@@ -65,7 +68,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   const [rehearsalToRename, setRehearsalToRename] =
     useState<RehearsalSummary | null>(null)
   const [renamingOpened, setRenamingOpened] = useState(false)
-  const { selected, select, reselect, player } = useTakeListPlayer()
+  const { selected, select, reselect, player } = useTakeStripPlayer()
 
   const refresh = async () => setRehearsals(await api().list_rehearsals())
 
@@ -75,6 +78,10 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
 
   useSpacebar(player.toggle, selected !== null)
   usePlayerKeys(player.skip, selected !== null)
+  // Escape peels one layer at a time: the open take first, then the rehearsal
+  // it was in, then history itself — the same ladder the back button climbs,
+  // one rung per press.
+  useEscape(() => (selected ? select(null) : back()))
 
   const open = async (summary: RehearsalSummary) => {
     const res = await api().get_rehearsal(summary.folder)
@@ -122,7 +129,9 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
       return
     }
     // The take folder moved with the name, so point the player at the fresh
-    // paths — without closing it, since someone may be listening right now.
+    // paths. That is a new `tracks` identity, so the open effect underneath
+    // tears down and reopens from zero — the take stays selected and on
+    // screen, but playback and the A–B region do not survive this.
     if (selected?.take_number === take.take_number && res.take) reselect(res.take)
     await reopen(opened.folder)
   }
@@ -205,24 +214,37 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
           </Button>
         }
       >
-        <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <div className="flex w-full flex-col gap-4">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <FolderOpen className="size-3.5 shrink-0" />
             <span className="truncate font-mono">{opened.folder}</span>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <TakeList
+          <TakeStrip
             takes={opened.takes}
             selected={selected}
             onSelect={select}
             onRename={setTakeToRename}
             onShare={setTakeToShare}
             onDelete={setTakeToDelete}
-            onAddMarker={addMarker}
-            onEditMarker={(take, marker) => setMarkerEdit({ take, marker })}
-            onRemoveMarker={removeMarker}
-            player={player}
+            emptyHint="Nothing was kept from this rehearsal, or every take since got deleted."
           />
+
+          {selected ? (
+            <TakePlayer
+              player={player}
+              markers={liveTake(opened.takes, selected)?.markers ?? []}
+              onAddMarker={(sec) => addMarker(selected, sec)}
+              onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
+              onRemoveMarker={(sec) => removeMarker(selected, sec)}
+            />
+          ) : (
+            opened.takes.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                Pick a take to listen back to it.
+              </p>
+            )
+          )}
         </div>
 
         <ConfirmDialog

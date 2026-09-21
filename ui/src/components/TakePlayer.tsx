@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Waveform } from "@/components/Waveform"
+import { Timeline } from "@/components/Timeline"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { markerStyle } from "@/lib/markers"
@@ -21,37 +21,27 @@ import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 const SKIP_SECONDS = 10
 
 /**
- * The take player: shared transport, A–B repeat, listening markers, and one
- * row per track with its waveform, volume and M/S. The same component right
- * after recording and when listening back to old takes.
+ * The take player: shared transport, A–B repeat, listening markers, and the
+ * `Timeline` beneath them — the ruler, the per-track lanes with their
+ * waveform/volume/M-S, and the loop band all live there now. The same
+ * component right after recording and when listening back to old takes.
  */
 export function TakePlayer({
   player,
-  compact = false,
   markers = [],
   onAddMarker,
   onEditMarker,
   onRemoveMarker,
 }: {
   player: MultitrackPlayer
-  compact?: boolean
   /** Saved listening markers, in order. */
   markers?: Marker[]
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
   onRemoveMarker?: (seconds: number) => void
 }) {
-  const { media, duration, position, markers: abMarkers } = player
-
-  // The region is shown on the waveform as soon as one mark is set, before
-  // the repeat itself is switched on.
-  const region =
-    abMarkers.a !== null || abMarkers.b !== null
-      ? { a: abMarkers.a ?? 0, b: abMarkers.b ?? duration }
-      : null
-
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <Transport
         player={player}
         markers={markers}
@@ -71,86 +61,7 @@ export function TakePlayer({
         </div>
       )}
 
-      <div className={cn("flex flex-col", compact ? "gap-1.5" : "gap-2")}>
-        {media.map((m) => {
-          const muted = player.isMuted(m.name)
-          const soloed = player.isSoloed(m.name)
-          const dimmed = muted || (player.hasSolo && !soloed)
-          return (
-            <div
-              key={m.name}
-              className={cn(
-                "flex items-center gap-3 rounded-lg border bg-card px-4",
-                compact ? "py-2" : "py-3"
-              )}
-            >
-              <div className="w-32 shrink-0">
-                <div
-                  className={cn(
-                    "truncate text-sm",
-                    dimmed && "text-muted-foreground"
-                  )}
-                >
-                  {m.name}
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={player.getVolume(m.name)}
-                  onChange={(e) =>
-                    player.setVolume(m.name, Number(e.target.value))
-                  }
-                  onPointerUp={player.persistVolumes}
-                  onKeyUp={player.persistVolumes}
-                  aria-label={`${m.name} volume`}
-                  className="mt-1 h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
-                />
-              </div>
-
-              <Waveform
-                peaks={m.peaks}
-                duration={duration}
-                position={position}
-                loop={region}
-                markers={markers}
-                dimmed={dimmed}
-                onSeek={player.seek}
-                className={cn(
-                  "flex-1",
-                  compact ? "h-9" : "h-12",
-                  dimmed && "opacity-60"
-                )}
-              />
-
-              <Button
-                variant={muted ? "default" : "outline"}
-                size="icon-sm"
-                aria-pressed={muted}
-                aria-label={`Mute ${m.name}`}
-                onClick={() => player.toggleMute(m.name)}
-                className={cn(
-                  "shrink-0 font-semibold",
-                  muted && "bg-warn text-warn-foreground hover:bg-warn/90"
-                )}
-              >
-                M
-              </Button>
-              <Button
-                variant={soloed ? "default" : "outline"}
-                size="icon-sm"
-                aria-pressed={soloed}
-                aria-label={`Solo ${m.name}`}
-                onClick={() => player.toggleSolo(m.name)}
-                className="shrink-0 font-semibold"
-              >
-                S
-              </Button>
-            </div>
-          )
-        })}
-      </div>
+      <Timeline player={player} markers={markers} />
 
       {markers.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
@@ -224,7 +135,7 @@ function Transport({
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
 }) {
-  const { markers: abMarkers, looping, position, duration } = player
+  const { looping, position, duration } = player
 
   // A marker within a second of the cursor counts as "this one".
   const nearby = markers.find((m) => Math.abs(m.at - position) < 1)
@@ -313,7 +224,7 @@ function Transport({
           aria-pressed={looping}
           aria-label="Repeat"
           title={
-            abMarkers.a !== null || abMarkers.b !== null
+            player.region.a !== null || player.region.b !== null
               ? "Loop the A–B region"
               : "Loop the whole take"
           }
@@ -329,8 +240,9 @@ function Transport({
           onClick={player.markA}
           disabled={player.loading}
           title="Start of the loop region — at the current position"
+          className="tnum"
         >
-          A{abMarkers.a !== null ? ` ${formatMMSS(abMarkers.a)}` : ""}
+          A{player.region.a !== null ? ` ${formatMMSS(player.region.a)}` : ""}
         </Button>
         <Button
           variant="outline"
@@ -338,14 +250,15 @@ function Transport({
           onClick={player.markB}
           disabled={player.loading}
           title="End of the loop region — at the current position"
+          className="tnum"
         >
-          B{abMarkers.b !== null ? ` ${formatMMSS(abMarkers.b)}` : ""}
+          B{player.region.b !== null ? ` ${formatMMSS(player.region.b)}` : ""}
         </Button>
-        {(abMarkers.a !== null || abMarkers.b !== null) && (
+        {(player.region.a !== null || player.region.b !== null) && (
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={player.clearMarkers}
+            onClick={player.clearRegion}
             aria-label="Clear A and B"
             title="Clear the region — repeat will loop the whole take"
           >
