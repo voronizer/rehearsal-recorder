@@ -48,10 +48,14 @@ export function useEscape(handler: () => void, enabled = true) {
       const el = document.activeElement as HTMLElement | null
       if (el) {
         const tag = el.tagName
-        // A dialog's own Escape handling (closing it) is what should happen
-        // while its input has focus, not also clearing the take underneath.
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
         if (el.isContentEditable) return
+        // Escape belongs to the topmost thing on screen. Radix closes a
+        // dialog on Escape without stopping the event from reaching here,
+        // so while one is open — even a plain confirm with no input to
+        // focus, which is why this can't just check the tag above — it
+        // is the dialog's to close, not this take's to give up.
+        if (el.closest('[role="dialog"]')) return
       }
       handlerRef.current()
     }

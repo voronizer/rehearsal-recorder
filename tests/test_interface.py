@@ -576,15 +576,12 @@ def main():
         ok("the note reached Python",
            saved and saved[-1]["args"][3] == "guitar drifts here")
         ok("and its kind with it", saved and saved[-1]["args"][4] == "issue")
+        # This has to be true without ever clicking away from Take 2 and
+        # back — the player's "selected" take is only an identity now, so
+        # its fields (markers included) have to come from the live takes
+        # array, or a saved note would stay invisible until the next reopen.
         ok("the note is on the chip",
            page.locator("text=guitar drifts here").count() > 0)
-        # This has to be true without ever clicking away from Take 2 and back
-        # — the player's "selected" take is only an identity now, so its
-        # fields (markers included) have to come from the live takes array,
-        # or a saved note would stay invisible until the next reopen.
-        ok("and it showed up live, without leaving the take to see it",
-           page.locator("button[aria-label^='Take 2 Polyn 2']")
-               .get_attribute("aria-current") == "true")
 
         # Landing on an existing marker opens it rather than adding a second
         # one on top — the take already has one at the very start.
@@ -619,6 +616,31 @@ def main():
         ok("and the take still opened",
            page.locator("button[aria-label='Mute Guitar']").count() == 1)
         page.evaluate("() => { window.__OUTPUT_GONE__ = false }")
+
+        print("\n[7c] Escape closes a dialog first, the take second")
+        # A delete confirmation has no input to focus — the case the
+        # tag-only guard in useEscape missed. Radix closes the dialog on
+        # Escape without stopping the event from reaching the window
+        # listener, so that listener must not also give up the take
+        # underneath a dialog that is still open.
+        page.click("button[aria-label='Delete take Polyn 2']")
+        page.wait_for_selector("text=go to the Trash")
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        ok("escape dismisses the confirmation instead of confirming it",
+           page.locator("text=go to the Trash").count() == 0)
+        ok("nothing was actually deleted", len(calls("delete_take")) == 0)
+        ok("and leaves the open take's player alone",
+           page.get_by_role("group", name="Take timeline").count() == 1)
+
+        # With no dialog left to claim it, the same key now gives the take up.
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        ok("and with nothing else open, escape closes the take",
+           page.get_by_role("group", name="Take timeline").count() == 0)
+
+        page.click("button[aria-label^='Take 2 Polyn 2']")
+        page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
 
         print("\n[8] Renaming")
         page.click("button[aria-label='Rename take Polyn 2']")
