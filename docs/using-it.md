@@ -84,13 +84,15 @@ rather than to one track — the A–B region, the marker lines, the playhead �
 is drawn once across every lane, which is what makes it possible to see that
 two tracks parted company at 1:12.
 
-Drag across the timeline to set the repeat region, in either direction; the
-edges are grips on the ruler and can be dragged afterwards to adjust them.
-A press anywhere in the lanes that does not travel starts a fresh region — it
-always seeks, as it did before — which lets you redraw one starting exactly
-where the old one ended. The A and B buttons put an edge exactly at the cursor
-for when you have found the spot by ear. The playhead has a grip of its own on
-the ruler: dragging that scrubs, which is what dragging the waveform used to do.
+Drag across the timeline to set the repeat region, in either direction; its
+edges are grips on the ruler and can be dragged afterwards. A press that does
+not travel is a click, and a click seeks, as it always did — that is what lets
+one surface do both jobs without a mode switch. Because the edges are grabbed
+on the ruler rather than down the lanes, a press on the lanes always begins a
+new region, so you can redraw one starting exactly where the old one ended.
+The A and B buttons put an edge exactly at the current playback position for
+when you have found the spot by ear. The playhead has a grip of its own on the
+ruler: dragging that scrubs, which is what dragging the waveform used to do.
 
 - **Sync.** All tracks are mixed into one stream from one position, so they
   cannot drift apart even in principle.
@@ -105,15 +107,16 @@ the ruler: dragging that scrubs, which is what dragging the waveform used to do.
 - **Markers.** "Mark" drops a marker at the current position and opens a note
   for it, because the thought about what just went wrong lasts about five
   seconds. A marker has a kind — a plain note, "keep this", "went wrong",
-  "do again" — and the kind is a colour, on the waveform and on the take row,
-  so a glance says which take has red in it. Clicking a marker jumps there;
+  "do again" — and the kind is a colour, on the waveform and on the take pill
+  in the strip, so a glance says which take has red in it. Clicking a marker
+  jumps there;
   the note can be edited or left empty. Markers are placed while listening
   back, not while recording, because nobody is looking at the screen during a
   take.
 - **Repeat** loops: the whole take, or just the stretch between the A and B
   marks when they are set. The marks are independent of repeat, so you can
   place them in advance and switch looping on when you want it.
-- **Transport.** To start (|◀), ±10 seconds, click the waveform to seek. At
+- **Transport.** To start (|◀), ±10 seconds, click the timeline to seek. At
   the end of a take the player returns to the start instead of sitting at the
   tail.
 - **The balance is remembered.** Track volumes are stored by name in the
@@ -166,7 +169,7 @@ Two ways to get them there, and they do the same work underneath:
 - **On their own**, if **Send saved takes automatically** is ticked in
   Settings. Every take you keep is copied in the background, in the gap after
   it is saved: no copy is begun while a take is recording, because mixing one
-  is not something to start competing with the sound card. The take's row says
+  is not something to start competing with the sound card. The take says
   where it has got to: "Waiting for the cloud", "Copying to the cloud", the
   green cloud button once it is there, or "Not in the cloud" with the reason
   when something went wrong.
@@ -245,8 +248,9 @@ the mouse mid-rehearsal: start the rehearsal, start the take, stop recording,
 play/pause while listening. On screens with a player the left and right arrows
 seek ±10 seconds. The `Space` hint is shown next to the button. Shortcuts do
 not fire while the cursor is in a text field. Escape closes the take you are
-listening to on the rehearsal screen, which hands the spacebar back to recording
-on the setup screen; while a dialog is open, Escape belongs to the dialog.
+listening to on the rehearsal screen, which hands the spacebar back to starting
+a new take on the same screen; while a dialog is open, Escape belongs to the
+dialog.
 
 ## Theme and scale
 
