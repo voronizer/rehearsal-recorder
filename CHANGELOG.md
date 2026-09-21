@@ -17,6 +17,15 @@ opening.
 - Takes in a rehearsal and in history are a strip along the top rather than
   rows that expand. The player sits below and stops moving when you switch
   takes.
+- Escape means one level up, one rung per press: a dialog, then the take you
+  are listening to, then the screen — out of a rehearsal in History, out of
+  the list, out of Settings. It will not end a rehearsal or stop a recording,
+  and on the review screen it asks before giving a take up.
+- Discarding a take on the review screen moves it to the Trash instead of
+  deleting it. It was the one place left in the app where a recording was
+  really destroyed, and the one that needed it least: that take was played
+  seconds earlier and cannot be played again. It also refuses a path outside
+  the recordings folder rather than removing whatever it is handed.
 
 ## 0.3.0
 

@@ -527,6 +527,22 @@ def main():
         ok("the next take inherits the name",
            page.input_value("#take-name") == "Polyn 2")
 
+        # Escape is the way out of a screen, and the way out of this one is
+        # giving the take up — but not without asking. The take was played
+        # seconds ago and cannot be played again, and a stray key is exactly
+        # the accident a confirmation is for.
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Discard this take?")
+        ok("escape on review asks before dropping the take",
+           len(calls("discard_take")) == 0)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+        ok("a second escape closes the question instead of answering it",
+           page.locator("text=Discard this take?").count() == 0
+           and len(calls("discard_take")) == 0)
+        ok("and the take is still there to save",
+           page.input_value("#take-name") == "Polyn 2")
+
         # Marks can be made here too, before the take is saved. There is no
         # folder for them yet, so they ride along with keep_take.
         ok("the review screen offers marking",
@@ -827,8 +843,17 @@ def main():
         page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
         ok("a ten-minute take gets a clock in minutes",
            "2:00" in page.get_by_role("group", name="Timeline clock").inner_text())
-        page.click("button[aria-label='Back']")
-        page.wait_for_selector("text=Tuesday jam")
+        # Escape peels one layer at a time: first the open take, then the
+        # rehearsal it was in.
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+        ok("escape closes the open take",
+           page.get_by_role("group", name="Take timeline").count() == 0
+           and page.locator("button[aria-label='Take 1 Polyn']").count() == 1)
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Wednesday jam")
+        ok("and escape again leaves the rehearsal",
+           page.locator("button[aria-label='Take 1 Polyn']").count() == 0)
 
         # Months later a rehearsal is recognised by what was played in it, so
         # the row carries the songs, not just a count of takes. A long list is
@@ -863,6 +888,13 @@ def main():
         print("\n[12] Settings: output, folders, appearance")
         page.click("button[aria-label='Back']")
         page.wait_for_selector("text=Start rehearsal")
+        page.click("button[aria-label='Settings']")
+        page.wait_for_selector("text=Recording")
+
+        # A screen with a way back has one on the keyboard too.
+        page.keyboard.press("Escape")
+        page.wait_for_selector("text=Start rehearsal")
+        ok("escape leaves settings", page.locator("#input-device").count() == 0)
         page.click("button[aria-label='Settings']")
         page.wait_for_selector("text=Recording")
 

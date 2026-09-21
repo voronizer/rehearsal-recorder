@@ -46,10 +46,11 @@ export function useSpacebar(handler: () => void, enabled = true) {
 }
 
 /**
- * Escape is the way back out of a take. A strip pill deliberately does not
- * close on a second click the way the old expanding row did — there is
- * nothing to gain by emptying the player — so something else has to give a
- * take up, and Escape is the conventional key for it.
+ * Escape means one level up, and each screen decides what its level is: the
+ * open take first, then the rehearsal it was in, then the screen itself. It
+ * never climbs past a decision — it will not end a rehearsal, stop a
+ * recording, or throw a take away without asking — because a key pressed by
+ * accident should cost nothing that cannot be got back.
  */
 export function useEscape(handler: () => void, enabled = true) {
   const handlerRef = useRef(handler)

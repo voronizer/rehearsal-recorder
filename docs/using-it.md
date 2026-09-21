@@ -249,10 +249,22 @@ On every screen the spacebar does the main thing, so nobody has to reach for
 the mouse mid-rehearsal: start the rehearsal, start the take, stop recording,
 play/pause while listening. On screens with a player the left and right arrows
 seek ±10 seconds. The `Space` hint is shown next to the button. Shortcuts do
-not fire while the cursor is in a text field. Escape closes the take you are
-listening to, on the rehearsal screen and in History alike; on the rehearsal
-screen that also hands the spacebar back to starting a new take on the same
-screen. While a dialog is open, Escape belongs to the dialog.
+not fire while the cursor is in a text field.
+
+Escape means one level up, and it takes one rung per press. A dialog closes
+first, because while one is open it is the topmost thing on screen. Then the
+take you are listening to, which on the rehearsal screen also hands the
+spacebar back to starting a new take. Then the screen itself, wherever there
+is a way back: out of a rehearsal in History into the list, out of the list,
+out of Settings.
+
+What Escape will not do is climb past a decision. It does not end a rehearsal
+and it does not stop a recording — those are deliberate acts with a button
+each. On the review screen, where the only ways out are saving and giving the
+take up, it asks first: the take was played seconds ago and cannot be played
+again, and a key pressed by accident is exactly what a confirmation is for.
+The Discard button itself does not ask, because pressing a labelled button is
+not an accident.
 
 ## Theme and scale
 
@@ -285,8 +297,10 @@ padding, the buttons and the waveform grow with it, not just the text.
 Until a take is saved it is written to `_drafts` inside the rehearsal folder,
 next to `session.json`, rather than a system temp folder — the path is
 predictable and visible in Finder. "Save take" moves the files into the take's
-own folder, "Discard" deletes them, and an empty `_drafts` folder cleans
-itself up.
+own folder, "Discard" moves them to the Trash — the same place everything else
+deleted in this app goes, and for the same reason: a take recorded two minutes
+ago is the one recording in the whole app that cannot be made again. An empty
+`_drafts` folder cleans itself up either way.
 
 ## What protects a recording
 

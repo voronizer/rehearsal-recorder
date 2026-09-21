@@ -1385,6 +1385,32 @@ def main():
     ok("and the bin is not mistaken for a rehearsal",
        "_deleted" not in {r["name"] for r in d.list_rehearsals()})
 
+    print("\n[17] A discarded take is moved, not destroyed")
+    # "Discard" on the review screen used to be the one place in this app where
+    # a recording really did vanish: an rmtree of whatever path it was handed,
+    # with no check that the path was even inside the recordings folder. A take
+    # dropped there and a draft rescued after a crash are the same thing on
+    # disk, so they now go the same way.
+    tmp5 = Path(tempfile.mkdtemp())
+    apimod5, e = fresh_api(tmp5)
+    e.start_rehearsal("Evening", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    draft = Path(e._session["folder"]) / "_drafts" / "take 1"
+    write_wav(draft / "Gtr.wav", 1000, seconds=1.0)
+
+    gone = e.discard_take(str(draft))
+    ok("discarding a take says where it went", gone["ok"])
+    ok("it leaves the rehearsal", not draft.exists())
+    ok("but it is somewhere, not gone",
+       gone.get("trashed") is True
+       or Path(gone.get("location") or "/nowhere").exists())
+
+    outside = tmp5 / "not-ours"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("someone else's")
+    refused = e.discard_take(str(outside))
+    ok("a path outside the recordings folder is refused", not refused["ok"])
+    ok("and nothing there is touched", (outside / "keep.txt").exists())
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

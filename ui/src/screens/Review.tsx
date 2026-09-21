@@ -6,8 +6,10 @@ import { Label } from "@/components/ui/label"
 import { Shell, SpaceHint } from "@/components/Shell"
 import { TakePlayer } from "@/components/TakePlayer"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
-import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
+import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import { MarkerDialog } from "@/components/MarkerDialog"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { canBePutBack, goesTo } from "@/lib/deletion"
 import {
   api,
   type Marker,
@@ -45,6 +47,14 @@ export function Review({
   // keep_take, and go away with the take if it is discarded.
   const [markers, setMarkers] = useState<Marker[]>([])
   const [editing, setEditing] = useState<Marker | null>(null)
+
+  // This screen is a fork — save or give up — so Escape, which everywhere else
+  // means one level up, has only the one way out to offer. It asks first: the
+  // take was played seconds ago and cannot be played again, and a key pressed
+  // by accident is exactly what a confirmation is for. The Discard button does
+  // not ask, because pressing a labelled button is not an accident.
+  const [discarding, setDiscarding] = useState(false)
+  useEscape(() => setDiscarding(true), !busy)
 
   const addMarker = (at: number) => {
     const rounded = Math.round(at * 100) / 100
@@ -150,6 +160,16 @@ export function Review({
         onOpenChange={(open) => !open && setEditing(null)}
         onSave={saveMarker}
         onDelete={removeMarker}
+      />
+
+      <ConfirmDialog
+        open={discarding}
+        onOpenChange={setDiscarding}
+        title="Discard this take?"
+        description={`The recording ${goesTo()}. ${canBePutBack()}`}
+        confirmLabel="Discard"
+        cancelLabel="Keep it"
+        onConfirm={discard}
       />
     </Shell>
   )

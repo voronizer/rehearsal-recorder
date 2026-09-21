@@ -78,7 +78,10 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
 
   useSpacebar(player.toggle, selected !== null)
   usePlayerKeys(player.skip, selected !== null)
-  useEscape(() => select(null), selected !== null)
+  // Escape peels one layer at a time: the open take first, then the rehearsal
+  // it was in, then history itself — the same ladder the back button climbs,
+  // one rung per press.
+  useEscape(() => (selected ? select(null) : back()))
 
   const open = async (summary: RehearsalSummary) => {
     const res = await api().get_rehearsal(summary.folder)
