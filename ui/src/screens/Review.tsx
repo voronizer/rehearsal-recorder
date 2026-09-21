@@ -27,11 +27,13 @@ export function Review({
   rehearsalName,
   onKept,
   onDiscarded,
+  onCropped,
 }: {
   take: PendingTake
   rehearsalName: string
   onKept: () => void
   onDiscarded: () => void
+  onCropped: (take: PendingTake) => void
 }) {
   // A new take is usually another go at the same song, so the name carries
   // over from the previous one with the counter bumped.
@@ -112,6 +114,31 @@ export function Review({
     onDiscarded()
   }
 
+  // The markers here are held in memory — the take has no folder on disk yet —
+  // so they move with the audio by hand rather than coming back from Python.
+  const cropDraft = async (from: number, to: number) => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    player.pause()
+    const res = await api().crop_draft(take.temp_dir, take.tracks, from, to)
+    setBusy(false)
+    if (!res.ok) {
+      setError(res.error ?? "Could not crop the take")
+      return
+    }
+    setMarkers((prev) =>
+      prev
+        .filter((m) => m.at >= from && m.at <= to)
+        .map((m) => ({ ...m, at: Math.round((m.at - from) * 100) / 100 }))
+    )
+    onCropped({
+      ...take,
+      tracks: res.tracks ?? take.tracks,
+      duration_sec: res.duration_sec ?? take.duration_sec,
+    })
+  }
+
   return (
     <Shell
       subtitle={`${rehearsalName} · ${formatMMSS(take.duration_sec)}`}
@@ -152,6 +179,7 @@ export function Review({
           onAddMarker={addMarker}
           onEditMarker={setEditing}
           onRemoveMarker={removeMarker}
+          onCrop={(from, to) => void cropDraft(from, to)}
         />
       </div>
 

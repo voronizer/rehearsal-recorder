@@ -1,3 +1,4 @@
+import { useState } from "react"
 import {
   Flag,
   Loader2,
@@ -5,6 +6,7 @@ import {
   Pause,
   Play,
   Repeat,
+  Scissors,
   SkipBack,
   Undo2,
   Redo2,
@@ -12,6 +14,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/Timeline"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { canBePutBack, goesTo } from "@/lib/deletion"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { markerStyle } from "@/lib/markers"
@@ -19,6 +23,10 @@ import type { Marker } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 
 const SKIP_SECONDS = 10
+/** A region shorter than this is a slip of the mouse, not an intention. */
+const MIN_CROP_SEC = 1
+/** A region this close to covering the whole take has nothing to remove. */
+const WHOLE_TAKE_SLACK_SEC = 0.05
 
 /**
  * The take player: shared transport, A–B repeat, listening markers, and the
@@ -32,6 +40,7 @@ export function TakePlayer({
   onAddMarker,
   onEditMarker,
   onRemoveMarker,
+  onCrop,
 }: {
   player: MultitrackPlayer
   /** Saved listening markers, in order. */
@@ -39,7 +48,22 @@ export function TakePlayer({
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
   onRemoveMarker?: (seconds: number) => void
+  /** Trim the take down to the region. Absent where that is not offered. */
+  onCrop?: (startSec: number, endSec: number) => void
 }) {
+  const [cropping, setCropping] = useState(false)
+  // The same rule the timeline draws by: one end set reaches to the take's
+  // own start or end.
+  const { region, duration } = player
+  const band =
+    region.a !== null || region.b !== null
+      ? { a: region.a ?? 0, b: region.b ?? duration }
+      : null
+  const lost = band ? duration - (band.b - band.a) : 0
+  const lostMarkers = band
+    ? markers.filter((m) => m.at < band.a || m.at > band.b).length
+    : 0
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <Transport
@@ -47,6 +71,12 @@ export function TakePlayer({
         markers={markers}
         onAddMarker={onAddMarker}
         onEditMarker={onEditMarker}
+        onCropClick={onCrop ? () => setCropping(true) : undefined}
+        canCrop={
+          band !== null &&
+          band.b - band.a >= MIN_CROP_SEC &&
+          lost > WHOLE_TAKE_SLACK_SEC
+        }
       />
 
       {player.outputWarning && !player.loadError && (
@@ -120,6 +150,26 @@ export function TakePlayer({
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={cropping}
+        onOpenChange={setCropping}
+        title={
+          band
+            ? `Keep only ${formatMMSS(band.a)} – ${formatMMSS(band.b)}?`
+            : "Keep only this part?"
+        }
+        description={`The rest of the take — ${formatMMSS(lost)} — ${goesTo()}${
+          lostMarkers > 0
+            ? `, and ${lostMarkers} ${
+                lostMarkers === 1 ? "marker" : "markers"
+              } outside it go with it`
+            : ""
+        }. ${canBePutBack()}`}
+        confirmLabel="Crop"
+        cancelLabel="Keep it all"
+        onConfirm={() => band && onCrop?.(band.a, band.b)}
+      />
     </div>
   )
 }
@@ -129,11 +179,15 @@ function Transport({
   markers,
   onAddMarker,
   onEditMarker,
+  onCropClick,
+  canCrop,
 }: {
   player: MultitrackPlayer
   markers: Marker[]
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
+  onCropClick?: () => void
+  canCrop?: boolean
 }) {
   const { looping, position, duration } = player
 
@@ -255,15 +309,34 @@ function Transport({
           B{player.region.b !== null ? ` ${formatMMSS(player.region.b)}` : ""}
         </Button>
         {(player.region.a !== null || player.region.b !== null) && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={player.clearRegion}
-            aria-label="Clear A and B"
-            title="Clear the region — repeat will loop the whole take"
-          >
-            <X />
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={player.clearRegion}
+              aria-label="Clear A and B"
+              title="Clear the region — repeat will loop the whole take"
+            >
+              <X />
+            </Button>
+            {onCropClick && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCropClick}
+                disabled={player.loading || !canCrop}
+                aria-label="Crop to the region"
+                title={
+                  canCrop
+                    ? "Keep only this part of the take"
+                    : "Mark a shorter part of the take to keep"
+                }
+              >
+                <Scissors />
+                Crop
+              </Button>
+            )}
+          </>
         )}
       </div>
     </div>

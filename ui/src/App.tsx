@@ -230,6 +230,7 @@ export function App() {
         await refreshSession()
         setScreen({ name: "rehearsal" })
       }}
+      onCropped={(take) => setScreen({ name: "review", take })}
     />
   )
 }

@@ -121,6 +121,18 @@ export function Rehearsal({
     onChanged()
   }
 
+  // Python let go of the files before rewriting them, so the take has to be
+  // opened again; the fresh `tracks` array is what tells the player that.
+  const cropTake = async (take: Take, from: number, to: number) => {
+    const res = await api().crop_take(session.folder, take.take_number, from, to)
+    if (!res.ok) {
+      setError(res.error ?? "Could not crop the take")
+      return
+    }
+    if (res.take) reselect(res.take)
+    onChanged()
+  }
+
   const renameRehearsal = async (name: string) => {
     const res = await api().rename_rehearsal(session.folder, name)
     if (!res.ok) {
@@ -228,6 +240,7 @@ export function Rehearsal({
             onAddMarker={(sec) => addMarker(selected, sec)}
             onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
             onRemoveMarker={(sec) => removeMarker(selected, sec)}
+            onCrop={(from, to) => void cropTake(selected, from, to)}
           />
         ) : (
           session.takes.length > 0 && (

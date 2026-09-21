@@ -136,6 +136,17 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     await reopen(opened.folder)
   }
 
+  const cropTake = async (take: Take, from: number, to: number) => {
+    if (!opened) return
+    const res = await api().crop_take(opened.folder, take.take_number, from, to)
+    if (!res.ok) {
+      setError(res.error ?? "Could not crop the take")
+      return
+    }
+    if (res.take) reselect(res.take)
+    await reopen(opened.folder)
+  }
+
   const renameRehearsal = async (folder: string, name: string) => {
     const res = await api().rename_rehearsal(folder, name)
     if (!res.ok) {
@@ -237,6 +248,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
               onAddMarker={(sec) => addMarker(selected, sec)}
               onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
               onRemoveMarker={(sec) => removeMarker(selected, sec)}
+              onCrop={(from, to) => void cropTake(selected, from, to)}
             />
           ) : (
             opened.takes.length > 0 && (

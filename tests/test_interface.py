@@ -24,6 +24,18 @@ from rehearsal_recorder.mediaserver import AppServer  # noqa: E402
 SHOTS = Path(__file__).resolve().parent / "screenshots"
 TAKE_SECONDS = 6.0
 
+
+def drag_region(page, from_ratio, to_ratio):
+    """Draw a region across the timeline, the way a person does."""
+    box = page.get_by_role("group", name="Take timeline").bounding_box()
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(box["x"] + box["width"] * from_ratio, y)
+    page.mouse.down()
+    page.mouse.move(box["x"] + box["width"] * to_ratio, y, steps=10)
+    page.mouse.up()
+    page.wait_for_timeout(250)
+
+
 MOCK = """
 window.__CALLS__ = [];
 const track = (name, fn) => async (...args) => {
@@ -169,6 +181,31 @@ window.__MAKE_API__ = () => ({
     return {ok:true, take};
   }),
   discard_take: track('discard_take', async () => ({ok:true})),
+  crop_take: track('crop_take', async (folder, n, a, b) => {
+    const take = (session ? session.takes : []).find(t => t.take_number === n);
+    if (!take) return {ok:false, error:'Take not found'};
+    let dropped = 0;
+    take.markers = (take.markers || [])
+      .filter(m => { const keep = m.at >= a && m.at <= b; if (!keep) dropped++; return keep; })
+      .map(m => ({...m, at: Math.round((m.at - a) * 100) / 100}));
+    take.duration_sec = b - a;
+    // A rewritten file is a different file as far as the player is
+    // concerned, and the mock looks lengths up by path, so give it one.
+    take.tracks = take.tracks.map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
+    for (const t of take.tracks) fileDurations[t.file] = take.duration_sec;
+    P = null;   // Python lets go of the files before rewriting them
+    // Deep copy, same as rename_take — a live handle would let the interface
+    // alias the mock's own state, which the real bridge never allows.
+    return JSON.parse(JSON.stringify(
+      {ok:true, take, trashed:true, location:null, markers_dropped:dropped}));
+  }),
+  crop_draft: track('crop_draft', async (dir, tracks, a, b) => {
+    const cut = (tracks || []).map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
+    for (const t of cut) fileDurations[t.file] = b - a;
+    P = null;
+    return JSON.parse(JSON.stringify(
+      {ok:true, tracks:cut, duration_sec: b - a, trashed:true, location:null}));
+  }),
 
   take_media: async (tracks) => tracks.map(t => {
     const dur = fileDurations[t.file] ?? TAKE;
@@ -518,6 +555,27 @@ def main():
         ok("space while naming the take does not save it",
            len(calls("keep_take")) == 0)
 
+        # The dead air at the start of a take is visible on the waveform the
+        # moment you stop recording, which makes this the screen where
+        # trimming is most obviously wanted. Take 1 is cropped here and is
+        # not opened again by any later section; takes 2 onward keep their
+        # full length, which the region checks in [9] depend on.
+        page.wait_for_selector("button[aria-label='Crop to the region']", state="hidden")
+        ok("with no region there is nothing to crop to",
+           page.locator("button[aria-label='Crop to the region']").count() == 0)
+        drag_region(page, 0.25, 0.75)
+        page.click("button[aria-label='Crop to the region']")
+        page.wait_for_selector("text=Keep only")
+        page.get_by_role("button", name="Crop", exact=True).click()
+        page.wait_for_timeout(600)
+        cut = calls("crop_draft")
+        ok("a take can be trimmed before it is ever saved",
+           len(cut) == 1
+           and abs(cut[0]["args"][2] - TAKE_SECONDS * 0.25) < 0.4
+           and abs(cut[0]["args"][3] - TAKE_SECONDS * 0.75) < 0.4)
+        ok("and the take on screen is that region now",
+           page.locator("span", has_text="/ 0:03").count() >= 1)
+
         # Everywhere else in the app space runs the screen's main action, and
         # here that action is saving the take.
         page.fill("#take-name", "Polyn")
@@ -822,6 +880,37 @@ def main():
         ok("mute reached Python", calls("player_set_muted")[-1]["args"] == ["Guitar", True])
         ok("solo reached Python", calls("player_set_solo")[-1]["args"] == ["Vocals"])
         page.screenshot(path=str(SHOTS / "54-player.png"))
+
+        print("\n[9e] Cropping a take to the region")
+        # The region drove one thing until now. Trimming the take to it is the
+        # other, and it is what makes a nine-minute take that holds three
+        # minutes of music into a three-minute take.
+        # A region that is the whole take has nothing to remove, so the button
+        # is there but will not do anything.
+        drag_region(page, 0.0, 1.0)
+        ok("a region covering the whole take offers no crop",
+           page.get_by_role("button", name="Crop to the region").is_disabled())
+
+        drag_region(page, 0.25, 0.75)
+        crop = page.get_by_role("button", name="Crop to the region")
+        ok("a region offers to trim the take to itself", crop.count() == 1)
+        crop.click()
+        page.wait_for_selector("text=Keep only")
+        asked = page.locator("[role=dialog]").inner_text()
+        ok("the question names the part being kept", "Keep only 0:01" in asked)
+        ok("and says where what it removes is going",
+           "Trash" in asked or "_deleted" in asked)
+        page.get_by_role("button", name="Crop", exact=True).click()
+        page.wait_for_timeout(700)
+        cropped = calls("crop_take")
+        ok("cropping reached Python with the region",
+           len(cropped) == 1
+           and abs(cropped[0]["args"][2] - TAKE_SECONDS * 0.25) < 0.4
+           and abs(cropped[0]["args"][3] - TAKE_SECONDS * 0.75) < 0.4)
+        ok("the take is the region now — three seconds, not six",
+           page.locator("span", has_text="/ 0:03").count() >= 1)
+        ok("and the region is cleared, because the take is that region",
+           page.locator("button", has_text="A 0:").count() == 0)
 
         print("\n[10] Sharing a take to the cloud")
         page.click("button[aria-label='Copy Polyn (best) to the cloud']")

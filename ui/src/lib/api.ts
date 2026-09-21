@@ -271,6 +271,20 @@ type PyApi = {
     markers?: Marker[]
   ): Promise<Ok<{ take?: Take }>>
   discard_take(tempDir: string): Promise<Ok>
+  /** Keep only [startSec, endSec) of a saved take; the rest goes to the Trash. */
+  crop_take(
+    folder: string,
+    takeNumber: number,
+    startSec: number,
+    endSec: number
+  ): Promise<Ok<{ take?: Take; markers_dropped?: number }>>
+  /** The same, for a take that is still on the review screen. */
+  crop_draft(
+    tempDir: string,
+    tracks: TrackFile[],
+    startSec: number,
+    endSec: number
+  ): Promise<Ok<{ tracks?: TrackFile[]; duration_sec?: number }>>
 
   list_rehearsals(): Promise<RehearsalSummary[]>
   get_rehearsal(folder: string): Promise<RehearsalDetail>
