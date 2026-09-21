@@ -5,6 +5,19 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- The player runs on one timeline across the window instead of a column in
+  the middle of it. Every track shares the same time axis, so where one of
+  them came apart is now a thing you can point at.
+- The repeat region is drawn with the mouse across the tracks, in either
+  direction, and its edges can be dragged afterwards. A press that does not
+  travel still seeks, as it always did. A and B keep their jobs for when you
+  have just heard the exact spot and want it to the tenth of a second.
+- Takes in a rehearsal and in history are a strip along the top rather than
+  rows that expand. The player sits below and stops moving when you switch
+  takes.
+
 ## 0.3.0
 
 - A rehearsal in History says what was played in it: how long it ran and the

@@ -22,7 +22,10 @@ What each screen is for, and the decisions behind how they behave.
   and the card, not to one evening, so they are settled once here and the
   setup screen only reports them.
 - **Rehearsal** — the hub: the takes recorded so far and a big "Record take"
-  button. Any saved take expands in its own row and plays right there.
+  button. Takes are a strip along the top; click one to listen to it in the
+  player below. Nothing is selected until you pick one, so opening a rehearsal
+  does not start reading audio files nobody asked for. Clicking a take again
+  keeps it open — selecting is sticky.
 - **Recording** — a large timer, a level meter per track, and a status line
   that is always visible: interface connected, how much recording time the
   disk has left, and any warning. The meter shows the state as well as the
@@ -38,11 +41,11 @@ What each screen is for, and the decisions behind how they behave.
   and what was played in it — "Polyn ×3 · Vesna ×2 · Ogon" — because a date
   and a take count are not how anybody recognises a rehearsal from three
   months ago. The size is measured by walking the folder, not worked out from
-  the durations, so it is the number Finder would give you. Inside are the
-  same expanding takes as on the rehearsal screen — literally the same
-  component. Takes and whole rehearsals can be renamed and deleted; deletion
-  asks first and says how much space is coming back, and is not permanent —
-  the folder goes to the Trash.
+  the durations, so it is the number Finder would give you. Click a rehearsal
+  to open it; takes are a strip along the top, the same component as on the
+  rehearsal screen. Takes and whole rehearsals can be renamed and deleted;
+  deletion asks first and says how much space is coming back, and is not
+  permanent — the folder goes to the Trash.
 - **Unsaved takes** — shown before anything else on startup when a take was
   recorded but never saved (see "If the app dies mid-take" below).
 - **Finished** — the rehearsal summary and the path to its folder.
@@ -73,6 +76,21 @@ output-device selection: on the web the output is switched with `setSinkId`,
 which this engine does not offer for `AudioContext`. The side benefits turned
 out to be just as large — the memory ceiling is gone, and so is the split
 between two playback modes.
+
+All the tracks of a take share one timeline: a ruler at the top with the
+clock, the markers and the playhead, a lane each underneath, and the fader
+with M and S in the gutter on the left. Anything that belongs to the take
+rather than to one track — the A–B region, the marker lines, the playhead —
+is drawn once across every lane, which is what makes it possible to see that
+two tracks parted company at 1:12.
+
+Drag across the timeline to set the repeat region, in either direction; the
+edges are grips on the ruler and can be dragged afterwards to adjust them.
+A press anywhere in the lanes that does not travel starts a fresh region — it
+always seeks, as it did before — which lets you redraw one starting exactly
+where the old one ended. The A and B buttons put an edge exactly at the cursor
+for when you have found the spot by ear. The playhead has a grip of its own on
+the ruler: dragging that scrubs, which is what dragging the waveform used to do.
 
 - **Sync.** All tracks are mixed into one stream from one position, so they
   cannot drift apart even in principle.
@@ -226,7 +244,9 @@ On every screen the spacebar does the main thing, so nobody has to reach for
 the mouse mid-rehearsal: start the rehearsal, start the take, stop recording,
 play/pause while listening. On screens with a player the left and right arrows
 seek ±10 seconds. The `Space` hint is shown next to the button. Shortcuts do
-not fire while the cursor is in a text field.
+not fire while the cursor is in a text field. Escape closes the take you are
+listening to on the rehearsal screen, which hands the spacebar back to recording
+on the setup screen; while a dialog is open, Escape belongs to the dialog.
 
 ## Theme and scale
 
