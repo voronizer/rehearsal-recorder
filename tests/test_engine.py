@@ -1456,8 +1456,18 @@ def main():
     with wave.open(str(tmp6 / "deepcut.wav")) as w:
         ok("24-bit comes out 24-bit",
            deep["ok"] and w.getsampwidth() == 3 and w.getnframes() == SR // 2)
+    deep_samples = wav_samples(tmp6 / "deepcut.wav")
     ok("and its samples come through whole",
-       wav_samples(tmp6 / "deepcut.wav")[SR // 4] == 1000 * 256)
+       deep_samples[SR // 4] == 1000 * 256)
+    # SR // 4 above lands in the untouched raw-copy middle, so it never runs
+    # the unpack24 / scale / << 8 / pack24 round trip in _faded — the most
+    # bit-fragile code in the module. The head ramp's first frame is exactly
+    # 0 either way, but the tail ramp's last frame (240 frames = 0.005s at
+    # 48000Hz) is round(256000 * 1/240) = 1067; a missing `<< 8` would instead
+    # produce 4 (the value divided by 256 and truncated by pack24 keeping the
+    # wrong three bytes), so this is precise enough to actually catch that.
+    ok("and a 24-bit edge is ramped through the same pack24 path",
+       deep_samples[0] == 0 and deep_samples[-1] == 1067)
 
     past = crop_wav(tmp6 / "long.wav", tmp6 / "nothing.wav", 5.0, 6.0)
     ok("a range past the end of the file is refused", not past["ok"])
