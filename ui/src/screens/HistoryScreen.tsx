@@ -3,12 +3,13 @@ import { FolderOpen, Library, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Shell, EmptyState } from "@/components/Shell"
 import { RehearsalRow } from "@/components/RehearsalRow"
-import { TakeStrip, useTakeStripPlayer } from "@/components/TakeStrip"
+import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
-import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
+import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
+import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
   type Marker,
@@ -77,6 +78,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
 
   useSpacebar(player.toggle, selected !== null)
   usePlayerKeys(player.skip, selected !== null)
+  useEscape(() => select(null), selected !== null)
 
   const open = async (summary: RehearsalSummary) => {
     const res = await api().get_rehearsal(summary.folder)
@@ -225,7 +227,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
           {selected ? (
             <TakePlayer
               player={player}
-              markers={selected.markers ?? []}
+              markers={liveTake(opened.takes, selected)?.markers ?? []}
               onAddMarker={(sec) => addMarker(selected, sec)}
               onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
               onRemoveMarker={(sec) => removeMarker(selected, sec)}

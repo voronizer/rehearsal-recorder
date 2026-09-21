@@ -3,12 +3,13 @@ import { Circle, FolderOpen, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Shell, SpaceHint } from "@/components/Shell"
-import { TakeStrip, useTakeStripPlayer } from "@/components/TakeStrip"
+import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
-import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
+import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
+import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
   type Marker,
@@ -60,10 +61,11 @@ export function Rehearsal({
     onStartTake(res.take_number, session.next_take_name)
   }
 
-  // While a take is expanded Space drives the player — otherwise it would
-  // start a new take in the middle of listening.
+  // With a take open, Space plays it back rather than starting a new one;
+  // Escape below is what points Space at recording again.
   useSpacebar(selected ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, selected !== null)
+  useEscape(() => select(null), selected !== null)
 
   // While takes are being copied the only thing that changes is on the Python
   // side, so ask — but only until the queue drains.
@@ -210,7 +212,7 @@ export function Rehearsal({
         {selected ? (
           <TakePlayer
             player={player}
-            markers={selected.markers ?? []}
+            markers={liveTake(session.takes, selected)?.markers ?? []}
             onAddMarker={(sec) => addMarker(selected, sec)}
             onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
             onRemoveMarker={(sec) => removeMarker(selected, sec)}

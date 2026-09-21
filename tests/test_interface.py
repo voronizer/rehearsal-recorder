@@ -40,9 +40,11 @@ let cloudDir = null;
 let cloudFormat = 'wav';
 let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
 let recording = {device_index: 0, samplerate: 44100, bit_depth: 24};
-// Real playback reads each file's own length off disk; the mock has no disk,
-// so a take's tracks are looked up here by path when they are not the
-// live session's freshly-recorded ones (which are always TAKE seconds).
+// Real playback reads each file's own length off disk; the mock has no
+// disk, so a track's duration is looked up here by its own file path,
+// falling back to the live session's TAKE-second default. Every path used
+// for a "real" length has to be unique, or it leaks into whichever other
+// take happens to reuse that dummy path.
 let fileDurations = {};
 let cloudQueue = {};
 
@@ -139,9 +141,14 @@ window.__MAKE_API__ = () => ({
     // otherwise the interface would see the same take "queued" forever.
     const cq = cloudQueue;
     cloudQueue = {};
-    return {active:true, name:session.name, folder:session.folder, tracks:session.tracks,
-       takes:session.takes, next_take_number:takeCounter + 1, next_take_name:suggestName(),
-       recording:false, cloud_queue:cq};
+    // The real bridge deserializes its own JSON on every call, so the
+    // interface never gets the same object twice. Handing out session.takes
+    // directly would let the interface's "selected" take alias the mock's
+    // own mutable state, silently hiding any bug where a listener keeps
+    // rendering a stale copy instead of reading the fresh one.
+    return JSON.parse(JSON.stringify({active:true, name:session.name, folder:session.folder,
+       tracks:session.tracks, takes:session.takes, next_take_number:takeCounter + 1,
+       next_take_name:suggestName(), recording:false, cloud_queue:cq}));
   },
   finish_rehearsal: async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
@@ -257,11 +264,13 @@ window.__MAKE_API__ = () => ({
     {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
      take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[]}]),
   get_rehearsal: async (folder) => {
-    fileDurations['/rec/g.wav'] = 600;
-    return {ok:true, folder, name:'Tuesday jam',
+    // Its own path, distinct from the live session's /rec/g.wav — two takes
+    // sharing a dummy path would let one's mocked length leak onto the other.
+    fileDurations['/rec/old/g.wav'] = 600;
+    return JSON.parse(JSON.stringify({ok:true, folder, name:'Tuesday jam',
       created_at:'2026-09-10T19:00:00',
       takes:[{take_number:1, name:'Polyn', duration_sec:600, markers:[],
-              tracks:[{name:'Guitar', file:'/rec/g.wav'}]}]};
+              tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}]}));
   },
   delete_take: track('delete_take', async () => ({ok:true, trashed:true, takes_left:0})),
   delete_rehearsal: track('delete_rehearsal', async () => ({ok:true, trashed:true})),
@@ -531,12 +540,15 @@ def main():
            bool(saved_markers) and saved_markers[0]["kind"] == "good")
 
         print("\n[7] Markers while listening back")
-        page.click("button[aria-label='Take 2 Polyn 2']")
+        # A prefix match: right after a take is saved its pill can still be
+        # showing "Waiting for the cloud" appended to the label, and the take
+        # is the same take either way.
+        page.click("button[aria-label^='Take 2 Polyn 2']")
         page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
         ok("picking a take opens it in the player below",
            page.get_by_role("group", name="Take timeline").count() == 1)
         ok("and the pill says it is the open one",
-           page.locator("button[aria-label='Take 2 Polyn 2']")
+           page.locator("button[aria-label^='Take 2 Polyn 2']")
                .get_attribute("aria-current") == "true")
 
         # The mark made on the review screen, before this take had a folder,
@@ -566,6 +578,13 @@ def main():
         ok("and its kind with it", saved and saved[-1]["args"][4] == "issue")
         ok("the note is on the chip",
            page.locator("text=guitar drifts here").count() > 0)
+        # This has to be true without ever clicking away from Take 2 and back
+        # — the player's "selected" take is only an identity now, so its
+        # fields (markers included) have to come from the live takes array,
+        # or a saved note would stay invisible until the next reopen.
+        ok("and it showed up live, without leaving the take to see it",
+           page.locator("button[aria-label^='Take 2 Polyn 2']")
+               .get_attribute("aria-current") == "true")
 
         # Landing on an existing marker opens it rather than adding a second
         # one on top — the take already has one at the very start.
@@ -591,10 +610,10 @@ def main():
         print("\n[7b] When the chosen output is not there any more")
         # A saved device index goes stale the moment the interface is
         # unplugged. The take must still play, and say where it is coming out.
-        page.evaluate("() => { window.__OUTPUT_GONE__ = true }")
-        page.click("button[aria-label='Take 1 Polyn']")      # away
+        page.click("button[aria-label^='Take 1 Polyn']")      # away
         page.wait_for_timeout(200)
-        page.click("button[aria-label='Take 2 Polyn 2']")    # and back
+        page.evaluate("() => { window.__OUTPUT_GONE__ = true }")
+        page.click("button[aria-label^='Take 2 Polyn 2']")    # and back
         page.wait_for_selector("text=using the system output", timeout=8000)
         ok("it says where the sound went", True)
         ok("and the take still opened",

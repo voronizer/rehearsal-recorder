@@ -30,6 +30,37 @@ export function useSpacebar(handler: () => void, enabled = true) {
   }, [enabled])
 }
 
+/**
+ * Escape is the way back out of a take. A strip pill deliberately does not
+ * close on a second click the way the old expanding row did — there is
+ * nothing to gain by emptying the player — so something else has to give a
+ * take up, and Escape is the conventional key for it.
+ */
+export function useEscape(handler: () => void, enabled = true) {
+  const handlerRef = useRef(handler)
+  handlerRef.current = handler
+
+  useEffect(() => {
+    if (!enabled) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      const el = document.activeElement as HTMLElement | null
+      if (el) {
+        const tag = el.tagName
+        // A dialog's own Escape handling (closing it) is what should happen
+        // while its input has focus, not also clearing the take underneath.
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
+        if (el.isContentEditable) return
+      }
+      handlerRef.current()
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [enabled])
+}
+
 const SKIP_SECONDS = 10
 
 /**

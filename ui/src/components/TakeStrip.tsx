@@ -1,31 +1,23 @@
-import { useState } from "react"
 import { Cloud, CloudCheck, Music2, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/Shell"
-import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { cn } from "@/lib/utils"
 import { MARKER_KINDS } from "@/lib/markers"
 import { formatMMSS } from "@/lib/format"
 import type { Take } from "@/lib/api"
 
-export function useTakeStripPlayer() {
-  const [selected, setSelected] = useState<Take | null>(null)
-  const player = useMultitrackPlayer(
-    selected?.tracks ?? null,
-    selected?.duration_sec ?? 0
-  )
-
-  // Nothing is open until somebody picks a take: opening a rehearsal should
-  // not start reading audio files nobody asked for. Once one is open it
-  // stays open — with a strip there is nothing to gain by emptying the
-  // player, and the old rows only closed because they had to make room.
-  const select = (take: Take | null) => setSelected(take)
-
-  // After a rename the take's files have moved, so the player has to be
-  // pointed at the fresh paths.
-  const reselect = (take: Take | null) => setSelected(take)
-
-  return { selected, select, reselect, player }
+/**
+ * `selected` is the take object captured at click time, kept only so the
+ * player has a stable identity to open and does not reopen on every poll.
+ * Everything that can go stale after that click — a new marker, a rename, a
+ * cloud share — lands on the `takes` array, not on that captured copy. This
+ * is what a real backend forces on you (every call deserializes its own
+ * fresh JSON), so anything that renders a field of the open take should read
+ * it from here, not from `selected` directly.
+ */
+export function liveTake(takes: Take[], selected: Take | null): Take | null {
+  if (!selected) return null
+  return takes.find((t) => t.take_number === selected.take_number) ?? selected
 }
 
 /**
@@ -62,7 +54,8 @@ export function TakeStrip({
     )
   }
 
-  const isShared = Boolean(selected?.cloud?.mix || selected?.cloud?.tracks)
+  const live = liveTake(takes, selected)
+  const isShared = Boolean(live?.cloud?.mix || live?.cloud?.tracks)
 
   return (
     <div className="flex items-center gap-2">
@@ -73,16 +66,29 @@ export function TakeStrip({
       <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto py-1">
         {takes.map((take) => {
           const open = selected?.take_number === take.take_number
-          // A pending upload is something to notice at a glance, not
-          // something you have to open the take to find out — the old rows
-          // showed it unconditionally, and a pill collapsing that away would
-          // be a silent regression, not a simplification.
           const cloudState = cloudStates?.[take.take_number]
+          // A pending upload or an error is something to notice at a
+          // glance, not something you have to open the take to find out —
+          // the old rows showed it unconditionally, and a pill collapsing
+          // that away would be a silent regression, not a simplification.
+          const statusText = cloudState
+            ? cloudState === "working"
+              ? "Copying to the cloud"
+              : "Waiting for the cloud"
+            : take.cloud_error
+              ? "Not in the cloud"
+              : null
           return (
             <button
               key={take.take_number}
               type="button"
-              aria-label={`Take ${take.take_number} ${take.name}`}
+              aria-label={
+                // The status has to come after the "Take N name" the tests
+                // and screen readers both key off, not replace it.
+                statusText
+                  ? `Take ${take.take_number} ${take.name} — ${statusText}`
+                  : `Take ${take.take_number} ${take.name}`
+              }
               aria-current={open ? "true" : undefined}
               onClick={(e) => {
                 onSelect(take)
@@ -101,28 +107,34 @@ export function TakeStrip({
                 {String(take.take_number).padStart(2, "0")}
               </span>
               <span className="max-w-40 truncate">{take.name}</span>
-              {MARKER_KINDS.filter((k) =>
-                take.markers?.some((m) => m.kind === k.kind)
-              ).map((k) => (
-                <span
-                  key={k.kind}
-                  title={k.label}
-                  className={cn("size-1.5 shrink-0 rounded-full", k.dot)}
-                />
-              ))}
+              {take.markers && take.markers.length > 0 && (
+                <span className="flex shrink-0 items-center gap-1">
+                  {MARKER_KINDS.filter((k) =>
+                    take.markers?.some((m) => m.kind === k.kind)
+                  ).map((k) => (
+                    <span
+                      key={k.kind}
+                      title={k.label}
+                      className={cn("size-1.5 shrink-0 rounded-full", k.dot)}
+                    />
+                  ))}
+                  <span className="tnum text-[11px] text-muted-foreground">
+                    {take.markers.length}
+                  </span>
+                </span>
+              )}
               <span className="tnum text-[11px] text-muted-foreground">
                 {formatMMSS(take.duration_sec)}
               </span>
-              {cloudState && (
-                <span className="text-[11px] text-muted-foreground">
-                  {cloudState === "working"
-                    ? "Copying to the cloud"
-                    : "Waiting for the cloud"}
-                </span>
-              )}
-              {!cloudState && take.cloud_error && (
-                <span className="text-[11px] text-destructive" title={take.cloud_error}>
-                  Not in the cloud
+              {statusText && (
+                <span
+                  className={cn(
+                    "text-[11px]",
+                    cloudState ? "text-muted-foreground" : "text-destructive"
+                  )}
+                  title={cloudState ? undefined : take.cloud_error}
+                >
+                  {statusText}
                 </span>
               )}
             </button>
@@ -130,14 +142,14 @@ export function TakeStrip({
         })}
       </div>
 
-      {selected && (
+      {live && (
         <div className="flex shrink-0 items-center gap-1">
           {onRename && (
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`Rename take ${selected.name}`}
-              onClick={() => onRename(selected)}
+              aria-label={`Rename take ${live.name}`}
+              onClick={() => onRename(live)}
               className="text-muted-foreground hover:text-foreground"
             >
               <Pencil />
@@ -149,13 +161,13 @@ export function TakeStrip({
               size="icon-sm"
               aria-label={
                 isShared
-                  ? `Cloud copies of ${selected.name}`
-                  : `Copy ${selected.name} to the cloud`
+                  ? `Cloud copies of ${live.name}`
+                  : `Copy ${live.name} to the cloud`
               }
               title={
                 isShared ? "In the cloud folder" : "Copy this take to the cloud folder"
               }
-              onClick={() => onShare(selected)}
+              onClick={() => onShare(live)}
               className={cn(
                 isShared
                   ? "text-signal hover:text-signal"
@@ -169,8 +181,8 @@ export function TakeStrip({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={`Delete take ${selected.name}`}
-              onClick={() => onDelete(selected)}
+              aria-label={`Delete take ${live.name}`}
+              onClick={() => onDelete(live)}
               className="text-muted-foreground hover:text-destructive"
             >
               <Trash2 />
