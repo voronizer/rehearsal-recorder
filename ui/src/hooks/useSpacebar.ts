@@ -1,6 +1,25 @@
 import { useEffect, useRef } from "react"
 
 /**
+ * True when the focused element has already claimed the keyboard for its own
+ * purpose, so none of the shortcuts below should fire. Typing is the obvious
+ * case; a dialog is the one that is easy to miss, because Radix closes it on
+ * Escape without stopping the keydown from reaching these window listeners,
+ * and `ConfirmDialog`/`ShareDialog` have no input to focus — Radix focuses
+ * the dialog *content* instead, a plain `DIV` that a tag-only check waves
+ * through. One rule here, shared by every hook below, instead of three
+ * copies that drift apart.
+ */
+function keyIsClaimed(el: Element | null): boolean {
+  if (!el) return false
+  const tag = el.tagName
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true
+  if ((el as HTMLElement).isContentEditable) return true
+  if (el.closest('[role="dialog"]')) return true
+  return false
+}
+
+/**
  * Space = the main action of the current screen, so nobody has to hunt for
  * the mouse mid-rehearsal. It stays out of the way while someone is typing,
  * and does not fight a focused button (space already presses that).
@@ -14,13 +33,9 @@ export function useSpacebar(handler: () => void, enabled = true) {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code !== "Space" || e.repeat) return
-      const el = document.activeElement as HTMLElement | null
-      if (el) {
-        const tag = el.tagName
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
-        if (el.isContentEditable) return
-        if (tag === "BUTTON" || tag === "A") return
-      }
+      const el = document.activeElement
+      if (keyIsClaimed(el)) return
+      if (el && (el.tagName === "BUTTON" || el.tagName === "A")) return
       e.preventDefault()
       handlerRef.current()
     }
@@ -45,18 +60,9 @@ export function useEscape(handler: () => void, enabled = true) {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
-      const el = document.activeElement as HTMLElement | null
-      if (el) {
-        const tag = el.tagName
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
-        if (el.isContentEditable) return
-        // Escape belongs to the topmost thing on screen. Radix closes a
-        // dialog on Escape without stopping the event from reaching here,
-        // so while one is open — even a plain confirm with no input to
-        // focus, which is why this can't just check the tag above — it
-        // is the dialog's to close, not this take's to give up.
-        if (el.closest('[role="dialog"]')) return
-      }
+      // Escape belongs to the topmost thing on screen, which is the dialog's
+      // to close while one is open — see keyIsClaimed above.
+      if (keyIsClaimed(document.activeElement)) return
       handlerRef.current()
     }
 
@@ -80,14 +86,10 @@ export function usePlayerKeys(skip: (delta: number) => void, enabled = true) {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
-      const el = document.activeElement as HTMLElement | null
-      if (el) {
-        const tag = el.tagName
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return
-        if (el.isContentEditable) return
-        // On the volume slider and the seek bar the arrows mean their own thing
-        if (el.getAttribute("role") === "slider") return
-      }
+      const el = document.activeElement
+      if (keyIsClaimed(el)) return
+      // On the volume slider and the seek bar the arrows mean their own thing
+      if (el?.getAttribute("role") === "slider") return
       e.preventDefault()
       skipRef.current(e.key === "ArrowRight" ? SKIP_SECONDS : -SKIP_SECONDS)
     }

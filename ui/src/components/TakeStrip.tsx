@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { Cloud, CloudCheck, Music2, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/Shell"
@@ -44,6 +45,17 @@ export function TakeStrip({
   cloudStates?: Record<number, "queued" | "working">
   emptyHint?: string
 }) {
+  const openPillRef = useRef<HTMLButtonElement | null>(null)
+
+  // The strip doesn't wrap (see the note below), so on a rehearsal with many
+  // takes the one you just picked can land outside the visible row — this is
+  // what keeps the vertical budget fixed without also hiding the take. The
+  // hook has to run before the empty-state return below, or the count of
+  // hooks called would change between an empty and a non-empty rehearsal.
+  useEffect(() => {
+    openPillRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [selected?.take_number])
+
   if (takes.length === 0) {
     return (
       <EmptyState
@@ -81,6 +93,7 @@ export function TakeStrip({
           return (
             <button
               key={take.take_number}
+              ref={open ? openPillRef : undefined}
               type="button"
               aria-label={
                 // The status has to come after the "Take N name" the tests

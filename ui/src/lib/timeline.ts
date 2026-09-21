@@ -9,7 +9,7 @@ const TICK_LADDER = [5, 10, 15, 30, 60, 120, 300]
 /** Ticks closer together than this stop being a scale and become noise. */
 const MIN_TICK_GAP_PX = 80
 
-export function tickStep(duration: number, width: number): number {
+function tickStep(duration: number, width: number): number {
   const last = TICK_LADDER[TICK_LADDER.length - 1]
   if (duration <= 0 || width <= 0) return last
   for (const step of TICK_LADDER) {

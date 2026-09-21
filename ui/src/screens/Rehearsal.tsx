@@ -104,7 +104,9 @@ export function Rehearsal({
       return
     }
     // The take folder moved with the name, so point the player at the fresh
-    // paths — without closing it, since someone may be listening right now.
+    // paths. That is a new `tracks` identity, so the open effect underneath
+    // tears down and reopens from zero — the take stays selected and on
+    // screen, but playback and the A–B region do not survive this.
     if (selected?.take_number === take.take_number && res.take) reselect(res.take)
     onChanged()
   }

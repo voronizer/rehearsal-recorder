@@ -96,6 +96,10 @@ export function Timeline({
   const displayPosition = grab?.which === "position" ? grab.at : position
 
   const onPointerDown = (e: React.PointerEvent) => {
+    // Move already filters everything but the primary button (e.buttons !==
+    // 1), but a right- or middle-click still reaches release with zero
+    // travel, which finishPointer reads as a click and commits a seek.
+    if (e.button !== 0) return
     if (duration <= 0) return
     surfaceRef.current?.setPointerCapture(e.pointerId)
     const at = secondsAt(e.clientX)
@@ -166,7 +170,13 @@ export function Timeline({
         className="grid min-h-0 flex-1"
         style={{
           gridTemplateColumns: `${GUTTER_PX}px 1fr`,
-          gridTemplateRows: `${RULER_PX}px repeat(${rows}, minmax(${LANE_MIN_PX}px, 1fr))`,
+          // `repeat(0, …)` is invalid, which drops the whole declaration —
+          // and rows is 0 on every load until the first track's media
+          // arrives, permanently so once loadError is set.
+          gridTemplateRows:
+            rows > 0
+              ? `${RULER_PX}px repeat(${rows}, minmax(${LANE_MIN_PX}px, 1fr))`
+              : `${RULER_PX}px`,
           gap: `${ROW_GAP_PX}px 12px`,
           // Two tracks in a tall window would otherwise give lanes the height
           // of a door. Past this the leftover space simply stays empty, which
@@ -327,7 +337,6 @@ export function Timeline({
                   top: RULER_PX - 13,
                   background: `var(${markerStyle(m.kind).cssVar})`,
                 }}
-                title={m.note || markerStyle(m.kind).label}
               />
             </Fragment>
           ))}

@@ -21,8 +21,8 @@ export function Waveform({
   duration: number
   position: number
   dimmed?: boolean
-  /** Height comes from a class (h-9 / h-12) so the waveform grows with the
-   *  interface scale, which changes the base font size. */
+  /** Height comes from the caller's class — Timeline gives each lane
+   *  `h-full` so it fills the row height the grid assigns it. */
   className?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)

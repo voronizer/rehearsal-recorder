@@ -217,7 +217,10 @@ window.__MAKE_API__ = () => ({
       take.markers = [...kept, {at, note: note || '', kind: kind || 'note'}]
         .sort((a, b) => a.at - b.at);
     }
-    return {ok:true, markers: take ? take.markers : []};
+    // Same reason as session_state/get_rehearsal: a live handle here would
+    // let the interface alias the mock's own mutable state, which the real
+    // bridge's JSON round-trip never allows.
+    return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
   update_take_marker: track('update_take_marker', async (folder, n, sec, note, kind) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
@@ -238,7 +241,10 @@ window.__MAKE_API__ = () => ({
   rename_take: track('rename_take', async (folder, n, name) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (take) take.name = name;
-    return {ok:true, take};
+    // Deep copy, same as session_state/get_rehearsal — a live handle would
+    // alias the mock's own state, which the real bridge's JSON round-trip
+    // never allows.
+    return JSON.parse(JSON.stringify({ok:true, take}));
   }),
   rename_rehearsal: track('rename_rehearsal', async (folder, name) => {
     if (session) session.name = name;
@@ -288,12 +294,15 @@ window.__MAKE_API__ = () => ({
     if (what === 'mix' || what === 'both') shared.mix = cloudDir + '/mix.wav';
     if (what === 'tracks' || what === 'both') shared.tracks = cloudDir + '/tracks';
     if (take) take.cloud = shared;
-    return {ok:true, take, cloud:shared};
+    // Deep copy, same as session_state/get_rehearsal — a live handle would
+    // alias the mock's own state, which the real bridge's JSON round-trip
+    // never allows.
+    return JSON.parse(JSON.stringify({ok:true, take, cloud:shared}));
   }),
   unshare_take: track('unshare_take', async (folder, n) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (take) take.cloud = {};
-    return {ok:true, removed:[], trashed:true};
+    return JSON.parse(JSON.stringify({ok:true, removed:[], trashed:true}));
   }),
 
   get_settings: async () => ({recordings_dir:'/Users/alex/RehearsalRecordings',
@@ -625,6 +634,27 @@ def main():
         # underneath a dialog that is still open.
         page.click("button[aria-label='Delete take Polyn 2']")
         page.wait_for_selector("text=go to the Trash")
+        # Radix's own auto-focus actually lands on Cancel here, which
+        # useSpacebar's separate "don't fight a focused button" rule already
+        # excludes — clicking the description (nothing focusable there) is
+        # what moves focus to the dialog content itself, a DIV, which is the
+        # case a tag-only guard cannot see and the one that matters for the
+        # other two hooks too.
+        page.click("text=go to the Trash")
+
+        # A trusted keypress would also activate whatever has focus (e.g. a
+        # button, natively, on release) and confound the check, so this
+        # dispatches the keydown itself — exactly what the window listener
+        # sees — to isolate the guard from that native behaviour.
+        toggles_before = len(calls("player_toggle"))
+        page.evaluate(
+            "() => window.dispatchEvent(new KeyboardEvent("
+            "'keydown', {code:'Space', bubbles:true, cancelable:true}))"
+        )
+        page.wait_for_timeout(200)
+        ok("space does not toggle playback behind an open dialog",
+           len(calls("player_toggle")) == toggles_before)
+
         page.keyboard.press("Escape")
         page.wait_for_timeout(200)
         ok("escape dismisses the confirmation instead of confirming it",
@@ -657,7 +687,11 @@ def main():
         ok("the rehearsal was renamed",
            calls("rename_rehearsal")[-1]["args"][1] == "Tuesday jam")
 
-        ok("renaming does not close the player",
+        # Renaming reopens the player from zero (a new `tracks` identity
+        # tears down and re-runs the open effect) — this only proves the
+        # take stays selected and on screen through that, not that playback
+        # or the A-B region survive it. They don't; see docs/using-it.md.
+        ok("renaming leaves a player on screen",
            page.locator("button[aria-label='Repeat']").count() == 1)
 
         print("\n[9] Repeat, mix and history")
@@ -683,6 +717,27 @@ def main():
             page.mouse.move(box["x"] + box["width"] * to_ratio, mid_y, steps=10)
             page.mouse.up()
             page.wait_for_timeout(200)
+
+        # markA/markB changed job in this branch — each now commits only its
+        # own edge instead of the pair together — and the plan wrongly
+        # claimed this section already drove them; it only ever drove Repeat.
+        drag(0.2, 0.2)  # a press that does not travel is a seek
+        pos_a = calls("player_seek")[-1]["args"][0]
+        page.get_by_role("button", name="A", exact=True).click()
+        page.wait_for_timeout(200)
+        loop = calls("player_set_loop")
+        ok("marking A loops from here to the end",
+           abs(loop[-1]["args"][0] - pos_a) < 0.4
+           and loop[-1]["args"][1] == TAKE_SECONDS)
+
+        drag(0.7, 0.7)
+        pos_b = calls("player_seek")[-1]["args"][0]
+        page.get_by_role("button", name="B", exact=True).click()
+        page.wait_for_timeout(200)
+        loop = calls("player_set_loop")
+        ok("marking B keeps A where it was and commits the new end",
+           abs(loop[-1]["args"][0] - pos_a) < 0.4
+           and abs(loop[-1]["args"][1] - pos_b) < 0.4)
 
         drag(0.25, 0.75)
         loop = calls("player_set_loop")

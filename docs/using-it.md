@@ -67,7 +67,9 @@ Takes and rehearsals can be renamed afterwards, from the rehearsal screen and
 from history, with the pencil button. The folder on disk is renamed with them,
 so what you see in the app and what you see in Finder stay the same thing. A
 rehearsal folder keeps its date stamp: "Tuesday jam - 2026-09-18 19-00".
-Renaming a take while you are listening to it does not stop playback.
+Renaming a take moves its files on disk, so the player reopens it from the
+start: the take stays open and on screen, but playback and the A–B region do
+not survive the rename.
 
 ## The player
 
@@ -248,9 +250,9 @@ the mouse mid-rehearsal: start the rehearsal, start the take, stop recording,
 play/pause while listening. On screens with a player the left and right arrows
 seek ±10 seconds. The `Space` hint is shown next to the button. Shortcuts do
 not fire while the cursor is in a text field. Escape closes the take you are
-listening to on the rehearsal screen, which hands the spacebar back to starting
-a new take on the same screen; while a dialog is open, Escape belongs to the
-dialog.
+listening to, on the rehearsal screen and in History alike; on the rehearsal
+screen that also hands the spacebar back to starting a new take on the same
+screen. While a dialog is open, Escape belongs to the dialog.
 
 ## Theme and scale
 
