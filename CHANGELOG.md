@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.4.0
 
 - The player runs on one timeline across the window instead of a column in
   the middle of it. Every track shares the same time axis, so where one of
