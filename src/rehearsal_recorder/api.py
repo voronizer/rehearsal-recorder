@@ -1268,13 +1268,22 @@ class Api:
         except OSError as e:
             return {"ok": False, "error": f"Could not replace the tracks: {e}"}
 
+        # The crop itself is already done — the new files are in place — so
+        # this can only report the sweep of the originals, never undo it.
+        # When even the _deleted fallback cannot move the aside folder, it is
+        # still sitting right where this function put it: that path is the
+        # one thing worth keeping, since it is how a person finds the
+        # originals back.
         gone = move_to_trash(aside, self._recordings_dir)
-        return {
+        result = {
             "ok": True,
             "duration_sec": end_sec - start_sec,
             "trashed": bool(gone.get("trashed")),
-            "location": gone.get("location"),
+            "location": gone.get("location") if gone.get("ok") else str(aside),
         }
+        if not gone.get("ok"):
+            result["error"] = gone.get("error")
+        return result
 
     def crop_take(self, folder, take_number, start_sec, end_sec):
         """
@@ -1347,6 +1356,10 @@ class Api:
             "trashed": done["trashed"],
             "location": done["location"],
             "markers_dropped": dropped,
+            # Present only when the sweep of the originals itself failed —
+            # the crop still succeeded, but this is why "trashed" is False
+            # and "location" is not the Trash.
+            **({"error": done["error"]} if "error" in done else {}),
         }
 
     def crop_draft(self, temp_dir, tracks, start_sec, end_sec):
@@ -1378,6 +1391,7 @@ class Api:
             "duration_sec": done["duration_sec"],
             "trashed": done["trashed"],
             "location": done["location"],
+            **({"error": done["error"]} if "error" in done else {}),
         }
 
     # ---------- playback ----------

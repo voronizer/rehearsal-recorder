@@ -1532,6 +1532,28 @@ def main():
     ok("and a folder outside the recordings directory is refused",
        not c.crop_take(str(tmp7 / "elsewhere"), 1, 0.0, 2.0)["ok"])
 
+    # By the time the originals are swept up, the crop has already succeeded
+    # — the new files are in place. A full disk or a permissions problem on
+    # the sweep must not be reported as a failed crop, and it must not lose
+    # track of where the originals actually are: that folder is the only way
+    # back to them. Full range, so the take's duration comes out exactly
+    # what it already was — the checks below still assume a 1.5s take.
+    real_move_to_trash = apimod7.move_to_trash
+    apimod7.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
+    try:
+        stuck = c.crop_take(folder, 1, 0.0, 1.5)
+    finally:
+        apimod7.move_to_trash = real_move_to_trash
+    ok("a crop still succeeds even when the sweep of the originals fails",
+       stuck["ok"])
+    ok("and is not mistaken for having reached the Trash",
+       stuck["trashed"] is False)
+    stuck_dir = Path(stuck["location"] or "")
+    ok("its location names the folder the originals are actually still in",
+       stuck_dir.name.endswith("(before crop)") and stuck_dir.is_dir())
+    ok("with the originals really inside it, not just a claim",
+       sorted(p.name for p in stuck_dir.iterdir()) == ["Bass.wav", "Gtr.wav"])
+
     # Nothing is replaced until every new file exists, so a track that cannot
     # be read costs the crop and nothing else.
     (take_dir / "Bass.wav").write_bytes(b"not a wav at all")
