@@ -303,6 +303,23 @@ function Transport({
       )}
 
       <div className="ml-auto flex items-center gap-1.5">
+        {/* Clear comes before Repeat: it is about the region, and the region
+            is what the eye arrives from — the timeline sits directly under
+            all this. No times here either; the band on the timeline already
+            carries them, written across the stretch they describe. */}
+        {loopBand && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={player.clearRegion}
+            aria-label="Clear the loop region"
+            title="Clear it — Repeat then loops the whole take"
+          >
+            <X />
+            Clear
+          </Button>
+        )}
+
         <Button
           variant={looping ? "default" : "outline"}
           size="sm"
@@ -310,45 +327,27 @@ function Transport({
           disabled={player.loading}
           aria-pressed={looping}
           aria-label="Repeat"
-          title={
-            loopBand ? "Loop the marked stretch" : "Loop the whole take"
-          }
+          title={loopBand ? "Loop the marked stretch" : "Loop the whole take"}
           className={cn(looping && "bg-warn text-warn-foreground hover:bg-warn/90")}
         >
           <Repeat />
           Repeat
         </Button>
 
-        {/* No times here: the band on the timeline already carries them,
-            written on the stretch they describe. Repeating them beside the
-            buttons was the same thing said twice, once away from the thing
-            it was about. */}
-        {loopBand && (
+        {loopBand && onCropClick && (
           <>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              onClick={player.clearRegion}
-              aria-label="Clear the loop region"
-              title="Clear it — Repeat then loops the whole take"
+              onClick={onCropClick}
+              disabled={player.loading || !canCrop}
+              aria-label="Crop to the region"
+              title={cropTitle}
             >
-              <X />
-              Clear
+              <Scissors />
+              Crop
             </Button>
-            {onCropClick && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onCropClick}
-                disabled={player.loading || !canCrop}
-                aria-label="Crop to the region"
-                title={cropTitle}
-              >
-                <Scissors />
-                Crop
-              </Button>
-            )}
-            {onCropClick && cropWhyOff && (
+            {cropWhyOff && (
               <span className="text-xs text-muted-foreground">
                 {cropWhyOff}
               </span>

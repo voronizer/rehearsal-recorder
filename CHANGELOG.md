@@ -7,9 +7,9 @@ opening.
 
 ## Unreleased
 
-- Each track's fader stands up beside its lane, with a meter next to it saying
-  how loud that track is coming out — after its own fader and mute, measured
-  in the mix rather than guessed from the picture.
+- Each track has a meter under its fader saying how loud it is coming out —
+  after its own fader and mute, measured in the mix rather than guessed from
+  the picture.
 - The A and B buttons are gone. They existed to put an edge of the repeat
   region at the playback position, which was the only way to place one to the
   tenth of a second; the timeline zooms now, and a drag there is finer than
