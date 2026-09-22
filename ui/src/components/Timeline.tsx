@@ -357,8 +357,8 @@ export function Timeline({
               <div className="min-w-0" style={{ gridColumn: 2, gridRow: i + 2 }}>
                 <Waveform
                   peaks={m.peaks}
-                  peaksFrom={0}
-                  peaksTo={duration}
+                  peaksFrom={player.peaksWindow.from}
+                  peaksTo={player.peaksWindow.to}
                   viewFrom={from}
                   viewTo={to}
                   position={position}

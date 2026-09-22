@@ -207,11 +207,11 @@ window.__MAKE_API__ = () => ({
       {ok:true, tracks:cut, duration_sec: b - a, trashed:true, location:null}));
   }),
 
-  take_media: async (tracks) => tracks.map(t => {
+  take_media: track('take_media', async (tracks, buckets, from, to) => tracks.map(t => {
     const dur = fileDurations[t.file] ?? TAKE;
     return {name:t.name, url:'about:blank', frames:48000*dur, samplerate:48000, duration_sec:dur,
       peaks: Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9)};
-  }),
+  })),
 
   player_open: track('player_open', async (tracks) => {
     const dur = tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
@@ -953,6 +953,28 @@ def main():
            page.locator("text=Whole take").count() == 0)
         page.click("button[aria-label^='Take 2 Polyn (best)']")
         page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
+
+        print("\n[9d] The waveform sharpens to what is on screen")
+        # Stretching the same 900 bars over two seconds shows no more than it
+        # did over nine minutes, so the peaks are fetched again for the window.
+        # Not on every wheel tick, though: that would be a burst of calls into
+        # Python for a picture nobody has finished aiming yet.
+        ranged_before = len([c for c in calls("take_media")
+                             if len(c["args"]) > 2 and c["args"][2] is not None])
+        page.mouse.move(box["x"] + box["width"] * 0.5, mid_y)
+        for _ in range(6):
+            page.mouse.wheel(0, -120)
+        page.wait_for_timeout(900)
+        ranged = [c for c in calls("take_media")
+                  if len(c["args"]) > 2 and c["args"][2] is not None]
+        fresh = len(ranged) - ranged_before
+        ok("the peaks are fetched again for the part on screen", fresh >= 1)
+        ok("once the wheel settles, not once per notch", fresh <= 3)
+        ok("and for the window that is actually showing",
+           abs(ranged[-1]["args"][2] - ranged[-1]["args"][3]) > 0
+           and ranged[-1]["args"][3] > ranged[-1]["args"][2])
+        page.click("text=Whole take")
+        page.wait_for_timeout(700)
 
         print("\n[9e] Cropping a take to the region")
         # The region drove one thing until now. Trimming the take to it is the

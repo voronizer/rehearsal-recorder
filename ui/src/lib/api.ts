@@ -240,7 +240,14 @@ type PyApi = {
   load_default_tracks(): Promise<TrackTemplate | null>
   save_default_tracks(config: TrackTemplate): Promise<Ok>
   media_url(absPath: string): Promise<string | null>
-  take_media(tracks: TrackFile[], buckets?: number): Promise<TrackMedia[]>
+  /** A track's address, length and waveform. A range narrows the waveform to
+   *  the part on screen; the lengths returned are always the whole file's. */
+  take_media(
+    tracks: TrackFile[],
+    buckets?: number,
+    startSec?: number,
+    endSec?: number
+  ): Promise<TrackMedia[]>
 
   start_rehearsal(
     name: string,
