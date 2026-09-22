@@ -12,8 +12,8 @@ import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 /** A press that never travelled this far is a click, and a click seeks. */
 const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
-/** Name and buttons, the fader, and the meter under it. */
-const LANE_MIN_PX = 76
+/** The name row, then the fader and its meter, with room between. */
+const LANE_MIN_PX = 92
 const LANE_MAX_PX = 160
 const RULER_PX = 44
 const ROW_GAP_PX = 8
