@@ -137,6 +137,15 @@ export function Review({
       tracks: res.tracks ?? take.tracks,
       duration_sec: res.duration_sec ?? take.duration_sec,
     })
+    // The crop itself went through — only the sweep of the original is what
+    // failed — so this adds to the success path rather than standing in for it.
+    if (res.error) {
+      setError(
+        `The take was cropped, but the original could not be moved out of the way (${res.error})${
+          res.location ? `, and is still at ${res.location}` : ""
+        }.`
+      )
+    }
   }
 
   return (

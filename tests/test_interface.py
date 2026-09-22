@@ -912,6 +912,37 @@ def main():
         ok("and the region is cleared, because the take is that region",
            page.locator("button", has_text="A 0:").count() == 0)
 
+        # A crop can succeed while the sweep of the pre-crop original still
+        # fails — a full disk, a permissions problem — and that must not
+        # vanish silently: the take as it was recorded is sitting somewhere
+        # outside the Trash, and this message is the only thing that says
+        # where. Wraps the real handler rather than replacing session logic,
+        # and puts it back afterwards so no later section inherits it.
+        page.evaluate(
+            """() => {
+                window.__REAL_CROP_TAKE__ = window.pywebview.api.crop_take;
+                window.pywebview.api.crop_take = async (...args) => {
+                    const res = await window.__REAL_CROP_TAKE__(...args);
+                    return {...res, error: 'Could not remove it: no space left on device',
+                            location: '/rec/Tuesday jam/_deleted/take 2 (original)'};
+                };
+            }"""
+        )
+        drag_region(page, 0.2, 0.8)
+        page.get_by_role("button", name="Crop to the region").click()
+        page.wait_for_selector("text=Keep only")
+        page.get_by_role("button", name="Crop", exact=True).click()
+        page.wait_for_timeout(700)
+        ok("a crop that could not sweep its original still says so",
+           page.get_by_text("could not be moved out of the way").count() > 0)
+        ok("and names where the original actually is",
+           page.get_by_text("/rec/Tuesday jam/_deleted/take 2 (original)").count() > 0)
+        ok("but the crop itself still went through",
+           page.locator("button[aria-label='Crop to the region']").count() == 0)
+        page.evaluate(
+            "() => { window.pywebview.api.crop_take = window.__REAL_CROP_TAKE__; }"
+        )
+
         print("\n[10] Sharing a take to the cloud")
         page.click("button[aria-label='Copy Polyn (best) to the cloud']")
         page.wait_for_selector("text=No cloud folder chosen yet")
