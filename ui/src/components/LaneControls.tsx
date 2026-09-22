@@ -84,11 +84,37 @@ export function LaneControls({
         </Button>
       </div>
 
-      {/* The fader and the meter are one block — what comes out and how much
-          of it — so they sit tight together and stand away from the name and
-          its buttons above, rather than everything being equally spaced and
-          reading as one crowded stack. */}
-      <div className="flex flex-col gap-1.5">
+      {/* One control instead of two bars. The level cannot overtake the
+          thumb — what comes out is the source's peak times the fader, and a
+          peak cannot exceed full scale — so the thumb reads as the ceiling
+          you set, the green as how close the track is getting to it, and the
+          gap between them as the headroom left. Two separate bars could not
+          say that; side by side they only invited being mistaken for each
+          other.
+
+          The slider stays a native range input, so it keeps its keyboard
+          behaviour; only its track is made transparent so the meter shows
+          through, which means the thumb has to be drawn here rather than
+          left to the engine. */}
+      <div className="relative h-4 w-full">
+        <div
+          role="meter"
+          aria-label={`${name} level`}
+          aria-valuenow={Math.round(level * 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          data-clipping={clipping || undefined}
+          className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className={cn(
+              "absolute inset-y-0 left-0 rounded-full transition-[width] duration-75",
+              clipping ? "bg-destructive" : "bg-signal"
+            )}
+            style={{ width: `${Math.min(100, Math.max(0, level * 100))}%` }}
+          />
+        </div>
+
         <input
           type="range"
           min={0}
@@ -99,28 +125,16 @@ export function LaneControls({
           onPointerUp={onVolumeCommit}
           onKeyUp={onVolumeCommit}
           aria-label={`${name} volume`}
-          className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+          className={cn(
+            "absolute inset-0 w-full cursor-pointer appearance-none bg-transparent",
+            "focus-visible:outline-none",
+            "[&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none",
+            "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary",
+            "[&::-webkit-slider-thumb]:ring-2 [&::-webkit-slider-thumb]:ring-card",
+            "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:border-0",
+            "[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary"
+          )}
         />
-
-        {/* Green rather than the fader's blue: a meter must not look like
-            something you can take hold of. */}
-        <div
-          role="meter"
-          aria-label={`${name} level`}
-          aria-valuenow={Math.round(level * 100)}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          data-clipping={clipping || undefined}
-          className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted"
-        >
-          <div
-            className={cn(
-              "absolute inset-y-0 left-0 rounded-full transition-[width] duration-75",
-              clipping ? "bg-destructive" : "bg-signal"
-            )}
-            style={{ width: `${Math.min(100, Math.max(0, level * 100))}%` }}
-          />
-        </div>
       </div>
     </div>
   )
