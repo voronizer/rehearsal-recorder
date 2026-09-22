@@ -228,6 +228,9 @@ class Api:
         self._session = None
         self._monitor = None
         self._player = None
+        # What the open player was opened with, so a step that has to let go of
+        # the files can put back exactly the take that was playing.
+        self._open_tracks = None
         self._player_lock = threading.RLock()
         # share_take runs on the publishing thread while the interface writes
         # the same file from its own; without this a rename lands between a
@@ -1250,10 +1253,18 @@ class Api:
         originals goes. Die between those last two and the take folder holds
         obviously-unfinished files with the originals in a folder beside it —
         repairable by hand, which is the most a step that moves files can
-        promise.
+        promise. A move that fails while the app is alive is undone instead:
+        the take goes back to exactly what it was, because a half-cropped take
+        behind the words "could not crop" is a take nobody goes looking at.
         """
         take_dir = Path(tracks[0]["file"]).parent
         written = []
+        # What the new files really came out as. Tracks of a take may differ in
+        # length, so the take is as long as its longest one — and the region
+        # that was asked for is not that length: it is not clamped to the file
+        # for a draft, and a legacy take with no stored duration is not clamped
+        # at all.
+        kept_sec = 0.0
         for t in tracks:
             source = Path(t["file"])
             target = _writing_path(source)
@@ -1264,16 +1275,44 @@ class Api:
                     w.unlink(missing_ok=True)
                 return {"ok": False, "error": res["error"]}
             written.append(target)
+            kept_sec = max(kept_sec, res["frames"] / res["samplerate"])
 
         aside = _unique_path(take_dir.with_name(f"{take_dir.name} (before crop)"))
+        # Every original that reached the aside folder, oldest first. On
+        # Windows, renaming a file another process has open raises, and a move
+        # that stops half way used to leave some tracks aside, some in place
+        # and meta.json pointing at paths that had moved — behind an error
+        # message that reads as if nothing had happened.
+        moved = []
         try:
             aside.mkdir(parents=True)
             for t in tracks:
                 source = Path(t["file"])
                 shutil.move(str(source), str(aside / source.name))
+                moved.append((aside / source.name, source))
             for t, target in zip(tracks, written):
                 os.replace(target, Path(t["file"]))
-        except OSError as e:
+        except (OSError, shutil.Error) as e:
+            # Backwards, so that an original lands on top of a replacement
+            # already made rather than under it. os.replace rather than
+            # shutil.move because the aside folder is a sibling of the take —
+            # the same filesystem — and only os.replace overwrites on Windows
+            # as well. Each step gets its own guard: a rollback that gives up
+            # part way is worse than one that does what it can.
+            for stored, original in reversed(moved):
+                try:
+                    os.replace(stored, original)
+                except OSError:
+                    pass
+            for w in written:
+                try:
+                    w.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            try:
+                aside.rmdir()  # only when it is empty, which is the point
+            except OSError:
+                pass
             return {"ok": False, "error": f"Could not replace the tracks: {e}"}
 
         # The crop itself is already done — the new files are in place — so
@@ -1285,7 +1324,7 @@ class Api:
         gone = move_to_trash(aside, self._recordings_dir)
         result = {
             "ok": True,
-            "duration_sec": end_sec - start_sec,
+            "duration_sec": round(kept_sec, 2),
             "trashed": bool(gone.get("trashed")),
             "location": gone.get("location") if gone.get("ok") else str(aside),
         }
@@ -1328,10 +1367,20 @@ class Api:
             # Tracks are played through a memmap, and Windows will not let a
             # mapped file be renamed or removed. macOS will, which is exactly
             # how this would have reached a Windows rehearsal unnoticed.
+            playing = self._open_tracks
             self.player_close()
 
             done = self._crop_tracks(tracks, span["start"], span["end"])
             if not done["ok"]:
+                # Nothing else will put the player back: the take's tracks are
+                # what the interface reopens on, and a failed crop leaves them
+                # exactly as they were, so its open effect never re-runs. The
+                # transport would go on looking alive over a player Python has
+                # closed. Reopening here is safe where it sits — the lock order
+                # in this file is metadata then player, and nothing takes them
+                # the other way round.
+                if playing:
+                    self.player_open(playing)
                 return done
 
             kept, dropped = [], 0
@@ -1389,9 +1438,14 @@ class Api:
         if "error" in span:
             return {"ok": False, "error": span["error"]}
 
+        playing = self._open_tracks
         self.player_close()
         done = self._crop_tracks(live, span["start"], span["end"])
         if not done["ok"]:
+            # See crop_take: the files the interface would reopen on have not
+            # changed, so nothing over there will reopen them.
+            if playing:
+                self.player_open(playing)
             return done
         return {
             "ok": True,
@@ -1422,6 +1476,7 @@ class Api:
                 player.set_volume(name, v)
 
             self._player = player
+            self._open_tracks = tracks
             result = {"ok": True, **player.state()}
             if warning:
                 result["warning"] = warning
@@ -1430,6 +1485,7 @@ class Api:
     def player_close(self):
         with self._player_lock:
             player, self._player = self._player, None
+            self._open_tracks = None
             if player is not None:
                 player.close()
             return {"ok": True}

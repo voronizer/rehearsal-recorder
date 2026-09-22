@@ -1554,6 +1554,45 @@ def main():
     ok("with the originals really inside it, not just a claim",
        sorted(p.name for p in stuck_dir.iterdir()) == ["Bass.wav", "Gtr.wav"])
 
+    # Moving the originals aside is the one step that can stop half way: on
+    # Windows, renaming a file another process holds open raises. Half the
+    # tracks aside and half in place, behind an error that reads as "nothing
+    # happened", is how a take ends up with tracks of different lengths — the
+    # next crop quietly drops the missing ones and cuts only the survivors.
+    c.player_open(c.session_state()["takes"][0]["tracks"])
+    was = {p.name: wav_frames(p) for p in take_dir.iterdir()}
+    beside = sorted(p.name for p in take_dir.parent.iterdir())
+    real_move = apimod7.shutil.move
+    moves = {"n": 0}
+
+    def flaky_move(src, dst):
+        moves["n"] += 1
+        if moves["n"] == 2:            # the second track, mid-way through
+            raise PermissionError("the file is open in another process")
+        return real_move(src, dst)
+
+    apimod7.shutil.move = flaky_move
+    try:
+        half = c.crop_take(folder, 1, 0.25, 1.25)
+    finally:
+        # Not in an `if`: a stub left behind here would poison every section
+        # after this one.
+        apimod7.shutil.move = real_move
+    ok("a move that fails part way is a failed crop", not half["ok"])
+    ok("and the take is exactly what it was, not half of a crop",
+       {p.name: wav_frames(p) for p in take_dir.iterdir()} == was)
+    ok("with no half-written file left over",
+       not any(p.name.startswith(".writing-") for p in take_dir.iterdir()))
+    ok("and no empty folder of originals beside the take",
+       sorted(p.name for p in take_dir.parent.iterdir()) == beside)
+    # Python let go of the files before rewriting them. On the failure path
+    # nothing else puts the player back — the take's tracks have not changed,
+    # so the interface's open effect never re-runs — and the transport would
+    # go on driving a player that is not there.
+    ok("and the take it was playing is still open",
+       c.player_state().get("open") is True)
+    c.player_close()
+
     # Nothing is replaced until every new file exists, so a track that cannot
     # be read costs the crop and nothing else.
     (take_dir / "Bass.wav").write_bytes(b"not a wav at all")
@@ -1575,6 +1614,16 @@ def main():
     ok("in place, so saving it afterwards needs no new paths",
        wav_frames(draft2 / "Gtr.wav") == 2 * SR
        and early["tracks"][0]["file"] == str(draft2 / "Gtr.wav"))
+
+    # A draft has no stored length to clamp the end against, so the region
+    # asked for can run past the audio. The length reported is the length
+    # written — Review hands this straight to keep_take and it ends up in
+    # meta.json, where a number nobody measured is a lie that outlives the
+    # take.
+    past_end = c.crop_draft(str(draft2), pending, 1.5, 3.0)
+    ok("a crop running past the end reports what it really kept",
+       past_end["ok"] and abs(past_end["duration_sec"] - 0.5) < 0.01
+       and wav_frames(draft2 / "Gtr.wav") == SR // 2)
 
     print("\n[20] The waveform can be asked for one part of a take")
     # Zoomed in, the same 900 bars have to describe two seconds instead of
