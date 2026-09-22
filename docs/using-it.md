@@ -96,38 +96,6 @@ The A and B buttons put an edge exactly at the current playback position for
 when you have found the spot by ear. The playhead has a grip of its own on the
 ruler: dragging that scrubs, which is what dragging the waveform used to do.
 
-### Trimming a take
-
-Mark the part worth keeping — drag across the tracks, or set A and B — and
-press **Crop**. The take becomes that part: same number, same name, and the
-markers inside it move along with the audio. What is removed is not destroyed;
-it goes to the Trash, or a `_deleted` folder where there is no Trash to reach,
-as one folder named after the take, so an over-eager crop is undone by putting
-that folder back and dropping its files into the take folder.
-
-Two things worth knowing. Markers outside the region go with the audio they
-pointed at, and the question says how many before you agree. And a take that
-has been copied to the cloud folder loses that copy when it is cropped — the
-copy is of a different take now — so send it again afterwards.
-
-Cropping works right after recording as well, on the review screen, which is
-usually where you can see the twenty seconds of nothing at the start.
-
-### Looking closer
-
-The whole take is on screen by default, which for a nine-minute take is about a
-second and a half per centimetre. Roll the wheel over the tracks to zoom in —
-the moment under the pointer stays under the pointer — and two fingers sideways
-(or Shift and the wheel) to move along the take. The waveform is redrawn for
-the part on screen, so zooming in shows detail rather than a stretched picture.
-**Whole take**, at the left of the ruler, gives it all back.
-
-The wheel over the track names on the left still scrolls the list of tracks, so
-a rehearsal with eight of them is still reachable.
-
-While a take is playing the window follows the playhead. If you move along the
-take by hand it stops following until the playhead comes back into view.
-
 - **Sync.** All tracks are mixed into one stream from one position, so they
   cannot drift apart even in principle.
 - **Memory.** Tracks are read through `memmap`: the system pulls in the parts
@@ -155,6 +123,50 @@ take by hand it stops following until the playhead comes back into view.
   tail.
 - **The balance is remembered.** Track volumes are stored by name in the
   config and picked up on the next take and after a restart.
+
+### Trimming a take
+
+Mark the part worth keeping — drag across the tracks, or set A and B — and
+press **Crop**. The take becomes that part: same number, same name, and the
+markers inside it move along with the audio. What is removed is not destroyed;
+it goes to the Trash, or a `_deleted` folder where there is no Trash to reach,
+as one folder named after the take, so the audio of an over-eager crop comes
+back by dropping that folder's files into the take folder. The audio is all
+that comes back: the take's stored length is still the short one, and the
+markers stay where the crop moved them, with the ones outside it still gone.
+
+**Crop** is greyed out for two kinds of region: one shorter than a second,
+which at that length is far more likely a slip of the mouse than an intention,
+and one that covers the whole take, which has nothing to remove. Both are worth
+knowing, because a greyed-out button beside a region you have just drawn
+otherwise looks broken.
+
+Two things worth knowing. Markers outside the region go with the audio they
+pointed at, and the question says how many before you agree. And a take that
+has been copied to the cloud folder loses that copy when it is cropped — the
+copy is of a different take now. With automatic sending on the cropped take is
+queued straight away and goes up by itself; with it off, send it again by hand
+when you want it there.
+
+Cropping works right after recording as well, on the review screen, which is
+usually where you can see the twenty seconds of nothing at the start.
+
+### Looking closer
+
+The whole take is on screen by default, which for a nine-minute take is about a
+second and a half per centimetre. Roll the wheel over the tracks to zoom in —
+the moment under the pointer stays under the pointer — and two fingers sideways
+(or Shift and the wheel) to move along the take. The waveform is redrawn for
+the part on screen, so zooming in shows detail rather than a stretched picture.
+**Whole take**, at the left of the ruler, gives it all back. Zooming stops at
+two seconds across the screen; closer than that is detail nobody is looking for
+and a gesture that has become twitchy.
+
+The wheel over the track names on the left still scrolls the list of tracks, so
+a rehearsal with eight of them is still reachable.
+
+While a take is playing the window follows the playhead. If you move along the
+take by hand it stops following until the playhead comes back into view.
 
 ## Recording quality
 
