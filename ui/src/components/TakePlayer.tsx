@@ -89,6 +89,16 @@ export function TakePlayer({
               ? "Mark at least a second of the take to keep"
               : "Mark a shorter part of the take to keep"
         }
+        // And the title above never reaches anybody while it matters: a
+        // disabled button takes no pointer events, so it cannot be hovered.
+        // The reason has to be on screen, beside the button it explains.
+        cropWhyOff={
+          cropRegionOk
+            ? undefined
+            : tooShort
+              ? "at least a second to crop"
+              : "that is the whole take"
+        }
       />
 
       {player.outputWarning && !player.loadError && (
@@ -194,6 +204,7 @@ function Transport({
   onCropClick,
   canCrop,
   cropTitle,
+  cropWhyOff,
 }: {
   player: MultitrackPlayer
   markers: Marker[]
@@ -202,6 +213,8 @@ function Transport({
   onCropClick?: () => void
   canCrop?: boolean
   cropTitle?: string
+  /** Why Crop is off, in a few words, or absent when it is usable. */
+  cropWhyOff?: string
 }) {
   const { looping, position, duration } = player
 
@@ -345,6 +358,11 @@ function Transport({
                 <Scissors />
                 Crop
               </Button>
+            )}
+            {onCropClick && cropWhyOff && (
+              <span className="text-xs text-muted-foreground">
+                {cropWhyOff}
+              </span>
             )}
           </>
         )}

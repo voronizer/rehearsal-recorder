@@ -262,8 +262,13 @@ export function Timeline({
         >
           {player.view ? (
             <>
-              <span className="tnum truncate">
-                {formatMMSS(from)} – {formatMMSS(to)}
+              <span className="truncate">
+                <span className="tnum">
+                  {formatMMSS(from)} – {formatMMSS(to)}
+                </span>
+                {/* Otherwise the wheel simply stops answering and the reason
+                    is invisible — the window is as narrow as it goes. */}
+                {span <= MIN_VIEW_SEC + 0.01 && " · closest"}
               </span>
               <Button
                 variant="ghost"

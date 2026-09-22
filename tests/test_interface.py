@@ -101,8 +101,14 @@ function suggestName(n) {
 
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
-  list_input_devices: async () => ([
-    {index:0, name:'Universal Audio Thunderbolt', host_api: window.__HOST_API__ || '',
+  // With a host API named, this is the Windows shape: one card listed once
+  // per audio system, same name every time, and not the same channel count.
+  list_input_devices: async () => (window.__HOST_API__ ? [
+    {index:0, name:'Universal Audio Thunderbolt', host_api: window.__HOST_API__,
+     max_input_channels:8, max_output_channels:0, default_samplerate:48000},
+    {index:1, name:'Universal Audio Thunderbolt', host_api:'MME',
+     max_input_channels:2, max_output_channels:0, default_samplerate:48000}] : [
+    {index:0, name:'Universal Audio Thunderbolt', host_api:'',
      max_input_channels:18, max_output_channels:0, default_samplerate:48000}]),
   list_output_devices: async () => ([
     {index:0, name:'UA Monitors', host_api:'', max_input_channels:0,
@@ -966,6 +972,10 @@ def main():
             "els => els.map(e => Number(e.dataset.markerAt))")
         ok("markers are on the timeline to start with", len(all_markers) > 1)
         wheel_at(0.98, 0, -900)   # the last seconds of the take
+        # Past this the wheel simply stops answering, and without a word
+        # saying so that reads as the zoom having broken.
+        ok("the closest window says it is the closest",
+           page.locator("text=closest").count() == 1)
         wheel_at(0.5, 300, 0)     # and right up against the end itself
         drawn = page.locator("[data-marker-at]").evaluate_all(
             "els => els.map(e => Number(e.dataset.markerAt))")
@@ -1029,6 +1039,18 @@ def main():
         drag_region(page, 0.0, 1.0)
         ok("a region covering the whole take offers no crop",
            page.get_by_role("button", name="Crop to the region").is_disabled())
+        # The button's own title cannot say so — a disabled button takes no
+        # pointer events, so it is never hovered.
+        ok("and the reason is on screen rather than in a tooltip",
+           page.locator("text=that is the whole take").count() == 1)
+
+        # A slip of the mouse is the opposite mistake, and the advice for one
+        # is no use at all for the other.
+        drag_region(page, 0.40, 0.45)
+        ok("a region too short to keep offers no crop either",
+           page.get_by_role("button", name="Crop to the region").is_disabled())
+        ok("and gets the opposite advice",
+           page.locator("text=at least a second to crop").count() == 1)
 
         drag_region(page, 0.25, 0.75)
         crop = page.get_by_role("button", name="Crop to the region")
@@ -1238,6 +1260,12 @@ def main():
         page.wait_for_selector("#input-device")
         ok("the interface is chosen here",
            page.locator("#input-device").count() == 1)
+        # One card, one entry: the note about duplicates would be noise here,
+        # and a note that is always on is a note nobody reads.
+        ok("and nothing is said about duplicates when there are none",
+           page.locator(
+               "text=they do not all offer the same number of inputs"
+           ).count() == 0)
         ok("the rates the card can do are offered",
            page.locator("button[aria-label='44.1 kHz']").count() == 1
            and page.locator("button[aria-label='96 kHz']").count() == 1)
@@ -1324,6 +1352,13 @@ def main():
         win.wait_for_selector("#input-device")
         ok("the audio system is shown next to the card",
            win.locator("text=Windows WASAPI").count() > 0)
+        # Somebody who knows their desk has sixteen inputs and is offered
+        # eight has no way to guess that the other rows with the same name
+        # are the same desk seen through another system.
+        ok("and a card listed twice says why one entry may look smaller",
+           win.locator(
+               "text=they do not all offer the same number of inputs"
+           ).count() == 1)
 
         win.get_by_role("button", name="Folders", exact=True).first.click()
         win.wait_for_selector("#recordings-dir")

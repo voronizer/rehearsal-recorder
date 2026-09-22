@@ -365,6 +365,19 @@ export function Settings({
             </SelectContent>
           </Select>
 
+          {/* Only where it can actually happen: one card listed once per
+              audio system. Somebody who knows their desk has sixteen inputs
+              and sees eight has no way to guess that the other rows with the
+              same name are the same desk seen another way. */}
+          {new Set(inputs.map((d) => d.name)).size < inputs.length && (
+            <p className="text-xs text-muted-foreground">
+              One interface can appear more than once here, once per audio
+              system this machine has, and they do not all offer the same
+              number of inputs. If yours shows fewer channels than it has, try
+              its other entries.
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
             <span className="mr-1 text-sm text-muted-foreground">Rate</span>
             {rateOptions.map((rate) => (
