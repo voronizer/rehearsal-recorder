@@ -557,9 +557,11 @@ def main():
 
         # The dead air at the start of a take is visible on the waveform the
         # moment you stop recording, which makes this the screen where
-        # trimming is most obviously wanted. Take 1 is cropped here and is
-        # not opened again by any later section; takes 2 onward keep their
-        # full length, which the region checks in [9] depend on.
+        # trimming is most obviously wanted. Take 1 is cropped here, and the
+        # only later section that opens it again is [9c], which clicks it to
+        # prove the zoom resets and does not care how long it is; takes 2
+        # onward keep their full length, which the region checks in [9]
+        # depend on.
         page.wait_for_selector("button[aria-label='Crop to the region']", state="hidden")
         ok("with no region there is nothing to crop to",
            page.locator("button[aria-label='Crop to the region']").count() == 0)
@@ -1054,11 +1056,17 @@ def main():
         # vanish silently: the take as it was recorded is sitting somewhere
         # outside the Trash, and this message is the only thing that says
         # where. Wraps the real handler rather than replacing session logic,
-        # and puts it back afterwards so no later section inherits it.
+        # and puts it back afterwards so no later section inherits it. The
+        # answer is held back until this section lets it go, which is also the
+        # only way to see the screen a person is looking at while eight long
+        # tracks are rewritten — a second Crop then is not a no-op: Python
+        # re-reads the now shorter take and cuts it again.
         page.evaluate(
             """() => {
                 window.__REAL_CROP_TAKE__ = window.pywebview.api.crop_take;
+                window.__RELEASE_CROP__ = null;
                 window.pywebview.api.crop_take = async (...args) => {
+                    await new Promise(go => { window.__RELEASE_CROP__ = go; });
                     const res = await window.__REAL_CROP_TAKE__(...args);
                     return {...res, error: 'Could not remove it: no space left on device',
                             location: '/rec/Tuesday jam/_deleted/take 2 (original)'};
@@ -1069,6 +1077,10 @@ def main():
         page.get_by_role("button", name="Crop to the region").click()
         page.wait_for_selector("text=Keep only")
         page.get_by_role("button", name="Crop", exact=True).click()
+        page.wait_for_timeout(400)
+        ok("a crop already running does not offer to run again",
+           page.get_by_role("button", name="Crop to the region").is_disabled())
+        page.evaluate("() => window.__RELEASE_CROP__()")
         page.wait_for_timeout(700)
         ok("a crop that could not sweep its original still says so",
            page.get_by_text("could not be moved out of the way").count() > 0)

@@ -189,6 +189,7 @@ export function Review({
           onEditMarker={setEditing}
           onRemoveMarker={removeMarker}
           onCrop={(from, to) => void cropDraft(from, to)}
+          canCrop={!busy}
         />
       </div>
 

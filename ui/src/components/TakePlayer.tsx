@@ -41,6 +41,7 @@ export function TakePlayer({
   onEditMarker,
   onRemoveMarker,
   onCrop,
+  canCrop = true,
 }: {
   player: MultitrackPlayer
   /** Saved listening markers, in order. */
@@ -50,6 +51,10 @@ export function TakePlayer({
   onRemoveMarker?: (seconds: number) => void
   /** Trim the take down to the region. Absent where that is not offered. */
   onCrop?: (startSec: number, endSec: number) => void
+  /** False while a crop is already running. Rewriting eight long tracks takes
+   *  real seconds, and a second click is not a no-op: Python re-reads the now
+   *  shorter take and cuts it again. */
+  canCrop?: boolean
 }) {
   const [cropping, setCropping] = useState(false)
   // The same rule the timeline draws by: one end set reaches to the take's
@@ -63,6 +68,8 @@ export function TakePlayer({
   const lostMarkers = band
     ? markers.filter((m) => m.at < band.a || m.at > band.b).length
     : 0
+  const tooShort = band === null || band.b - band.a < MIN_CROP_SEC
+  const cropRegionOk = !tooShort && lost > WHOLE_TAKE_SLACK_SEC
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -72,10 +79,15 @@ export function TakePlayer({
         onAddMarker={onAddMarker}
         onEditMarker={onEditMarker}
         onCropClick={onCrop ? () => setCropping(true) : undefined}
-        canCrop={
-          band !== null &&
-          band.b - band.a >= MIN_CROP_SEC &&
-          lost > WHOLE_TAKE_SLACK_SEC
+        canCrop={cropRegionOk && canCrop}
+        // The two reasons the button can be off are opposite mistakes, and
+        // the advice for one is no help at all with the other.
+        cropTitle={
+          cropRegionOk
+            ? "Keep only this part of the take"
+            : tooShort
+              ? "Mark at least a second of the take to keep"
+              : "Mark a shorter part of the take to keep"
         }
       />
 
@@ -181,6 +193,7 @@ function Transport({
   onEditMarker,
   onCropClick,
   canCrop,
+  cropTitle,
 }: {
   player: MultitrackPlayer
   markers: Marker[]
@@ -188,6 +201,7 @@ function Transport({
   onEditMarker?: (marker: Marker) => void
   onCropClick?: () => void
   canCrop?: boolean
+  cropTitle?: string
 }) {
   const { looping, position, duration } = player
 
@@ -326,11 +340,7 @@ function Transport({
                 onClick={onCropClick}
                 disabled={player.loading || !canCrop}
                 aria-label="Crop to the region"
-                title={
-                  canCrop
-                    ? "Keep only this part of the take"
-                    : "Mark a shorter part of the take to keep"
-                }
+                title={cropTitle}
               >
                 <Scissors />
                 Crop
