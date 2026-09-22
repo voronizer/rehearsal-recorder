@@ -12,9 +12,10 @@ opening.
   kit, a false start, the silence after everyone stopped — and until now there
   was no way to say so: the whole thing sat in history, in the size on disk,
   and in the time it took to find the part worth hearing again. Cropping keeps
-  the take's number, name and markers, moving the markers with the audio they
-  pointed at. The originals go to the Trash as one folder named after the take,
-  so they can be put back.
+  the take's number and name, moving the markers inside the region with the
+  audio they pointed at — the rest go with what is removed. The originals go
+  to the Trash, or a `_deleted` folder where there is no Trash to reach, as one
+  folder named after the take, so they can be put back.
 - Cropping is offered on the review screen too, which is where the dead air at
   the start of a take is most obvious — you have just recorded it and can see it
   on the waveform.

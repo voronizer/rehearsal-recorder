@@ -101,9 +101,9 @@ ruler: dragging that scrubs, which is what dragging the waveform used to do.
 Mark the part worth keeping — drag across the tracks, or set A and B — and
 press **Crop**. The take becomes that part: same number, same name, and the
 markers inside it move along with the audio. What is removed is not destroyed;
-it goes to the Trash as one folder named after the take, so an over-eager crop
-is undone by putting that folder back and dropping its files into the take
-folder.
+it goes to the Trash, or a `_deleted` folder where there is no Trash to reach,
+as one folder named after the take, so an over-eager crop is undone by putting
+that folder back and dropping its files into the take folder.
 
 Two things worth knowing. Markers outside the region go with the audio they
 pointed at, and the question says how many before you agree. And a take that
