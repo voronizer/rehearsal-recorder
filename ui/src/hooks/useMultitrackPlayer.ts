@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api, type TrackFile, type TrackMedia, poll as pollPython } from "@/lib/api"
+import { MIN_VIEW_SEC } from "@/lib/timeline"
 
 export type MultitrackPlayer = ReturnType<typeof useMultitrackPlayer>
 
@@ -33,6 +34,12 @@ export function useMultitrackPlayer(
   const [looping, setLooping] = useState(false)
   const [region, setRegionState] = useState<{ a: number | null; b: number | null }>(
     { a: null, b: null }
+  )
+  // What part of the take the timeline is showing. null is all of it — the
+  // same state as never having zoomed, so there is only one way to be
+  // zoomed out.
+  const [view, setViewState] = useState<{ from: number; to: number } | null>(
+    null
   )
 
   // Anchor for smoothing the position between answers from Python.
@@ -71,6 +78,7 @@ export function useMultitrackPlayer(
     setPlaying(false)
     setPosition(0)
     setRegionState({ a: null, b: null })
+    setViewState(null)
     setLooping(false)
     setLoadError(null)
     setDuration(fallbackDuration)
@@ -173,6 +181,22 @@ export function useMultitrackPlayer(
     [call, duration]
   )
 
+  const setView = useCallback(
+    (from: number, to: number) => {
+      if (duration <= 0) return
+      const span = Math.min(duration, Math.max(MIN_VIEW_SEC, to - from))
+      if (span >= duration) {
+        setViewState(null)
+        return
+      }
+      const start = Math.max(0, Math.min(duration - span, from))
+      setViewState({ from: start, to: start + span })
+    },
+    [duration]
+  )
+
+  const resetView = useCallback(() => setViewState(null), [])
+
   const applyLoop = useCallback(
     (next: { a: number | null; b: number | null }, enabled: boolean) => {
       if (!enabled) {
@@ -194,6 +218,9 @@ export function useMultitrackPlayer(
     duration,
     region,
     looping,
+    view,
+    setView,
+    resetView,
 
     toggle: () => void call(() => api().player_toggle()),
     play: () => void call(() => api().player_play()),

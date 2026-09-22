@@ -6,19 +6,32 @@ import { cn } from "@/lib/utils"
  * Python (one value per bar), so drawing costs nothing and the browser never
  * has to decode audio just to show a picture.
  *
+ * The peaks cover [peaksFrom, peaksTo] and the lane shows [viewFrom, viewTo].
+ * Usually those are the same stretch; while a zoom is settling they are not,
+ * and the picture is then the right bars of the old peaks stretched over the
+ * new window — blurred, briefly, rather than wrong.
+ *
  * The played part is highlighted; the loop region, the markers and the
  * playhead belong to the whole take rather than to one track, so Timeline
  * draws them once across every lane instead of each waveform drawing its own.
  */
 export function Waveform({
   peaks,
-  duration,
+  peaksFrom,
+  peaksTo,
+  viewFrom,
+  viewTo,
   position,
   dimmed,
   className,
 }: {
   peaks: number[]
-  duration: number
+  /** The stretch of the take `peaks` covers. */
+  peaksFrom: number
+  peaksTo: number
+  /** The stretch of the take this lane is showing. */
+  viewFrom: number
+  viewTo: number
   position: number
   dimmed?: boolean
   /** Height comes from the caller's class — Timeline gives each lane
@@ -52,12 +65,22 @@ export function Waveform({
 
       const mid = height / 2
       const n = peaks.length
-      if (n === 0) return
-      const barWidth = width / n
-      const playedX = duration > 0 ? (position / duration) * width : 0
+      const peakSpan = peaksTo - peaksFrom
+      const viewSpan = viewTo - viewFrom
+      if (n === 0 || peakSpan <= 0 || viewSpan <= 0) return
 
-      for (let i = 0; i < n; i++) {
-        const x = i * barWidth
+      // Which of the bars we have cover the part being shown.
+      const perBar = peakSpan / n
+      const first = Math.max(0, Math.floor((viewFrom - peaksFrom) / perBar))
+      const last = Math.min(n, Math.ceil((viewTo - peaksFrom) / perBar))
+      const shown = last - first
+      if (shown <= 0) return
+
+      const barWidth = width / shown
+      const playedX = ((position - viewFrom) / viewSpan) * width
+
+      for (let i = first; i < last; i++) {
+        const x = (i - first) * barWidth
         // A minimum height so silence reads as a line rather than a gap
         const h = Math.max(1, peaks[i] * (height - 4))
         ctx.fillStyle = x + barWidth <= playedX ? playedColor : restColor
@@ -69,7 +92,7 @@ export function Waveform({
     const ro = new ResizeObserver(draw)
     ro.observe(box)
     return () => ro.disconnect()
-  }, [peaks, duration, position])
+  }, [peaks, peaksFrom, peaksTo, viewFrom, viewTo, position])
 
   return (
     <div

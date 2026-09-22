@@ -4,7 +4,7 @@ import { Waveform } from "@/components/Waveform"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { markerStyle } from "@/lib/markers"
-import { tickTimes } from "@/lib/timeline"
+import { MIN_VIEW_SEC, tickTimes } from "@/lib/timeline"
 import type { Marker } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 
@@ -15,6 +15,9 @@ const LANE_MIN_PX = 64
 const LANE_MAX_PX = 160
 const RULER_PX = 44
 const ROW_GAP_PX = 8
+/** How fast the wheel zooms. One notch of a mouse wheel is about 100 units,
+ *  so this makes a notch a fifth of the window. */
+const ZOOM_PER_PIXEL = 0.002
 
 /**
  * Every track of the take on one time axis: a ruler, a lane each, and one
@@ -33,6 +36,12 @@ export function Timeline({
   markers?: Marker[]
 }) {
   const { media, duration, position, region } = player
+  const from = player.view?.from ?? 0
+  const to = player.view?.to ?? duration
+  const span = Math.max(0.001, to - from)
+  // While the user is panning by hand during playback, the window does not
+  // chase the playhead — it resumes when the playhead comes back into view.
+  const followingRef = useRef(true)
   const surfaceRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
   const [drag, setDrag] = useState<{
@@ -59,14 +68,69 @@ export function Timeline({
     return () => ro.disconnect()
   }, [])
 
+  // The wheel belongs to the gesture surface, which covers the waveforms and
+  // nothing else — so a wheel over the track names beside them still scrolls
+  // the lane stack, which is the only way to reach the eighth track. It has
+  // to be a non-passive listener: React's onWheel cannot preventDefault, and
+  // without that the scroll container takes the gesture.
+  const { setView } = player
+  useEffect(() => {
+    const el = surfaceRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (duration <= 0) return
+      const box = el.getBoundingClientRect()
+      if (box.width === 0) return
+      e.preventDefault()
+      followingRef.current = false
+
+      // Sideways on a trackpad, shift+wheel on a mouse: along the take.
+      if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        const by = ((e.shiftKey ? e.deltaY : e.deltaX) / box.width) * span
+        setView(from + by, to + by)
+        return
+      }
+
+      // Anchored zoom: the second under the pointer stays under the pointer.
+      // A trackpad pinch arrives here too — the browser sends it as a wheel
+      // event with ctrlKey set — and lands in this branch, which is what
+      // stops it zooming the whole page instead.
+      const ratio = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width))
+      const anchor = from + ratio * span
+      const next = Math.min(
+        duration,
+        Math.max(MIN_VIEW_SEC, span * Math.exp(e.deltaY * ZOOM_PER_PIXEL))
+      )
+      setView(anchor - ratio * next, anchor + (1 - ratio) * next)
+    }
+    el.addEventListener("wheel", onWheel, { passive: false })
+    return () => el.removeEventListener("wheel", onWheel)
+  }, [setView, duration, from, to, span])
+
+  // Zoomed in, playback leaves the window within seconds. The window pages
+  // forward rather than sliding, which is calmer to watch.
+  useEffect(() => {
+    if (!player.playing || !player.view) {
+      followingRef.current = true
+      return
+    }
+    if (position >= from && position <= to) {
+      followingRef.current = true
+      return
+    }
+    if (!followingRef.current) return
+    setView(position - span / 8, position + (span * 7) / 8)
+  }, [setView, player.playing, player.view, position, from, to, span])
+
   const secondsAt = (clientX: number) => {
     const box = surfaceRef.current?.getBoundingClientRect()
     if (!box || box.width === 0 || duration <= 0) return 0
     const ratio = (clientX - box.left) / box.width
-    return Math.min(duration, Math.max(0, ratio * duration))
+    return Math.min(duration, Math.max(0, from + ratio * span))
   }
 
-  const pct = (seconds: number) => (duration > 0 ? (seconds / duration) * 100 : 0)
+  const pct = (seconds: number) =>
+    duration > 0 ? ((seconds - from) / span) * 100 : 0
 
   const travelled = drag ? Math.abs(drag.toX - drag.fromX) : 0
   // While the pointer is down the band follows it; the committed region only
@@ -162,7 +226,7 @@ export function Timeline({
   }
 
   const rows = media.length
-  const ticks = tickTimes(duration, width)
+  const ticks = tickTimes(from, to, width)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -189,10 +253,26 @@ export function Timeline({
             other child to auto-place would make CSS grid skip that occupied
             column entirely and stack everything into column 1 instead. */}
         <div
-          className="flex items-end pb-1 text-xs text-muted-foreground"
+          className="flex items-end justify-between gap-2 pb-1 text-xs text-muted-foreground"
           style={{ gridColumn: 1, gridRow: 1 }}
         >
-          {band ? "Drag the edges" : "Drag across to loop"}
+          {player.view ? (
+            <>
+              <span className="tnum truncate">
+                {formatMMSS(from)} – {formatMMSS(to)}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 shrink-0 px-2 text-xs"
+                onClick={player.resetView}
+              >
+                Whole take
+              </Button>
+            </>
+          ) : (
+            <span>{band ? "Drag the edges" : "Drag across to loop"}</span>
+          )}
         </div>
 
         <div
@@ -277,7 +357,10 @@ export function Timeline({
               <div className="min-w-0" style={{ gridColumn: 2, gridRow: i + 2 }}>
                 <Waveform
                   peaks={m.peaks}
-                  duration={duration}
+                  peaksFrom={0}
+                  peaksTo={duration}
+                  viewFrom={from}
+                  viewTo={to}
                   position={position}
                   dimmed={dimmed}
                   className={cn("h-full rounded-lg border", dimmed && "opacity-60")}
@@ -295,7 +378,7 @@ export function Timeline({
           onPointerMove={onPointerMove}
           onPointerUp={finishPointer}
           onPointerCancel={cancelPointer}
-          className="relative cursor-crosshair select-none"
+          className="relative cursor-crosshair overflow-hidden select-none"
           style={{ gridColumn: 2, gridRow: "1 / -1", touchAction: "none" }}
         >
           {band && (
@@ -313,33 +396,36 @@ export function Timeline({
           {band && (
             <span
               className="pointer-events-none absolute rounded bg-warn px-1.5 py-px text-[11px] text-warn-foreground tnum"
-              style={{ left: `${pct(band.a)}%`, top: RULER_PX + 6, marginLeft: 8 }}
+              style={{ left: `${Math.max(0, pct(band.a))}%`, top: RULER_PX + 6, marginLeft: 8 }}
             >
               {formatMMSS(band.a)} – {formatMMSS(band.b)}
             </span>
           )}
 
-          {markers.map((m) => (
-            <Fragment key={m.at}>
-              <span
-                className="pointer-events-none absolute w-0.5 opacity-60"
-                style={{
-                  left: `${pct(m.at)}%`,
-                  top: RULER_PX,
-                  bottom: 0,
-                  background: `var(${markerStyle(m.kind).cssVar})`,
-                }}
-              />
-              <span
-                className="pointer-events-none absolute size-2.5 -translate-x-1 rotate-45 rounded-[2px]"
-                style={{
-                  left: `${pct(m.at)}%`,
-                  top: RULER_PX - 13,
-                  background: `var(${markerStyle(m.kind).cssVar})`,
-                }}
-              />
-            </Fragment>
-          ))}
+          {markers
+            .filter((m) => m.at >= from && m.at <= to)
+            .map((m) => (
+              <Fragment key={m.at}>
+                <span
+                  className="pointer-events-none absolute w-0.5 opacity-60"
+                  style={{
+                    left: `${pct(m.at)}%`,
+                    top: RULER_PX,
+                    bottom: 0,
+                    background: `var(${markerStyle(m.kind).cssVar})`,
+                  }}
+                />
+                <span
+                  data-marker-at={m.at}
+                  className="pointer-events-none absolute size-2.5 -translate-x-1 rotate-45 rounded-[2px]"
+                  style={{
+                    left: `${pct(m.at)}%`,
+                    top: RULER_PX - 13,
+                    background: `var(${markerStyle(m.kind).cssVar})`,
+                  }}
+                />
+              </Fragment>
+            ))}
 
           {/* The grab target lives entirely inside the ruler band, not down
               the whole lane height — a press anywhere on the tracks always

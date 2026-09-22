@@ -881,6 +881,66 @@ def main():
         ok("solo reached Python", calls("player_set_solo")[-1]["args"] == ["Vocals"])
         page.screenshot(path=str(SHOTS / "54-player.png"))
 
+        print("\n[9c] Zooming the timeline")
+        # Fifteen seconds of a nine-minute take is twenty pixels wide: the
+        # gesture built last release is at its worst exactly where it is
+        # needed most.
+        box = page.get_by_role("group", name="Take timeline").bounding_box()
+        mid_y = box["y"] + box["height"] / 2
+        clock = page.get_by_role("group", name="Timeline clock")
+        whole_take_clock = clock.inner_text()
+
+        def seek_at(ratio):
+            """Where a click at this fraction of the width lands, in seconds."""
+            page.mouse.move(box["x"] + box["width"] * ratio, mid_y)
+            page.mouse.down()
+            page.mouse.up()
+            page.wait_for_timeout(250)
+            return calls("player_seek")[-1]["args"][0]
+
+        def wheel_at(ratio, dx, dy):
+            page.mouse.move(box["x"] + box["width"] * ratio, mid_y)
+            page.mouse.wheel(dx, dy)
+            page.wait_for_timeout(400)
+
+        before = seek_at(0.3)
+        wheel_at(0.3, 0, -500)
+        ok("the wheel zooms in", clock.inner_text() != whole_take_clock)
+        ok("and the timeline says what part of the take is on screen",
+           page.locator("text=Whole take").count() == 1)
+        # Anchored, not centred: the second under the pointer stays under the
+        # pointer, which is the difference between aiming and hunting.
+        ok("the second under the pointer stays under it",
+           abs(seek_at(0.3) - before) < 0.2)
+
+        mid_before = seek_at(0.6)
+        wheel_at(0.6, 200, 0)
+        ok("scrolling sideways moves along the take", seek_at(0.6) > mid_before)
+
+        page.click("text=Whole take")
+        page.wait_for_timeout(400)
+        ok("and Whole take gives the whole take back",
+           page.locator("text=Whole take").count() == 0
+           and clock.inner_text() == whole_take_clock)
+
+        # A marker off the side of the window is not drawn at all: without
+        # that it would be pinned to the edge, pointing at the wrong second.
+        ok("markers are on the timeline to start with",
+           page.locator("[data-marker-at]").count() > 0)
+        wheel_at(0.98, 0, -900)   # the last seconds of the take
+        drawn = page.locator("[data-marker-at]").evaluate_all(
+            "els => els.map(e => Number(e.dataset.markerAt))")
+        ok("and only the ones inside the window are drawn",
+           all(at >= TAKE_SECONDS / 2 for at in drawn))
+        page.screenshot(path=str(SHOTS / "56-zoom.png"))
+
+        page.click("button[aria-label^='Take 1 Polyn']")
+        page.wait_for_timeout(700)
+        ok("and picking another take starts from the whole of it",
+           page.locator("text=Whole take").count() == 0)
+        page.click("button[aria-label^='Take 2 Polyn (best)']")
+        page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
+
         print("\n[9e] Cropping a take to the region")
         # The region drove one thing until now. Trimming the take to it is the
         # other, and it is what makes a nine-minute take that holds three

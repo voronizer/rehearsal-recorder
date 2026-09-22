@@ -18,11 +18,16 @@ function tickStep(duration: number, width: number): number {
   return last
 }
 
-/** Tick positions in seconds, from zero, never reaching the very end — a
- *  label at the right edge would be cut in half by it. */
-export function tickTimes(duration: number, width: number): number[] {
-  const step = tickStep(duration, width)
+/** The shortest window the timeline will zoom to. Below this the picture is
+ *  detail nobody is looking for, and the gesture becomes twitchy. */
+export const MIN_VIEW_SEC = 2
+
+/** Tick positions in seconds across the visible window, never reaching its
+ *  very end — a label at the right edge would be cut in half by it. Ticks stay
+ *  on round numbers however far along the take the window has been moved. */
+export function tickTimes(from: number, to: number, width: number): number[] {
+  const step = tickStep(to - from, width)
   const out: number[] = []
-  for (let t = 0; t < duration; t += step) out.push(t)
+  for (let t = Math.ceil(from / step) * step; t < to; t += step) out.push(t)
   return out
 }
