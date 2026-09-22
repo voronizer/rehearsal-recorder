@@ -1292,7 +1292,7 @@ class Api:
                 moved.append((aside / source.name, source))
             for t, target in zip(tracks, written):
                 os.replace(target, Path(t["file"]))
-        except (OSError, shutil.Error) as e:
+        except OSError as e:
             # Backwards, so that an original lands on top of a replacement
             # already made rather than under it. os.replace rather than
             # shutil.move because the aside folder is a sibling of the take —
