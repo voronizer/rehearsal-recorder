@@ -393,8 +393,14 @@ export function Timeline({
             />
           )}
 
-          {band && (
+          {/* Only while the band actually overlaps the window — otherwise the
+              rectangle is correctly clipped away by overflow-hidden, but the
+              chip has nowhere honest to sit and would be left pinned to an
+              edge, labelling a stretch of the take it has nothing to do
+              with. */}
+          {band && band.b >= from && band.a <= to && (
             <span
+              data-region-span
               className="pointer-events-none absolute rounded bg-warn px-1.5 py-px text-[11px] text-warn-foreground tnum"
               style={{ left: `${Math.max(0, pct(band.a))}%`, top: RULER_PX + 6, marginLeft: 8 }}
             >

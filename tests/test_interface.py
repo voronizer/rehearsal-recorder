@@ -934,6 +934,19 @@ def main():
            all(at >= TAKE_SECONDS / 2 for at in drawn))
         page.screenshot(path=str(SHOTS / "56-zoom.png"))
 
+        # A region's duration chip is only about the region — it must not go
+        # on labelling a stretch of the take the region has nothing to do
+        # with once the window has moved away from it. A chip pinned to the
+        # edge of the wrong part of the take is worse than no chip.
+        page.click("text=Whole take")
+        page.wait_for_timeout(400)
+        drag_region(page, 0.05, 0.2)
+        ok("the region's read-out shows while the window overlaps it",
+           page.locator("[data-region-span]").count() == 1)
+        wheel_at(0.98, 0, -900)   # the far end, nowhere near the region
+        ok("and it is gone once the window has nothing to do with the region",
+           page.locator("[data-region-span]").count() == 0)
+
         page.click("button[aria-label^='Take 1 Polyn']")
         page.wait_for_timeout(700)
         ok("and picking another take starts from the whole of it",
