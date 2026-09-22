@@ -1,17 +1,19 @@
 import { Fragment, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { LaneControls } from "@/components/LaneControls"
 import { Waveform } from "@/components/Waveform"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { markerStyle } from "@/lib/markers"
 import { MIN_VIEW_SEC, tickTimes } from "@/lib/timeline"
-import type { Marker } from "@/lib/api"
+import type { Marker, TrackMedia } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 
 /** A press that never travelled this far is a click, and a click seeks. */
 const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
-const LANE_MIN_PX = 64
+/** A lane has to be tall enough for a vertical fader to be worth grabbing. */
+const LANE_MIN_PX = 96
 const LANE_MAX_PX = 160
 const RULER_PX = 44
 const ROW_GAP_PX = 8
@@ -135,6 +137,18 @@ export function Timeline({
 
   const pct = (seconds: number) =>
     duration > 0 ? ((seconds - from) / span) * 100 : 0
+
+  // How loud a track is at one moment, taken from the bars its lane is drawn
+  // from rather than measured while playing — see LaneControls for why, and
+  // for what that costs. The bars describe `peaksWindow`, not the take, which
+  // is what makes this sharpen as you zoom in.
+  const peakAt = (m: TrackMedia, seconds: number) => {
+    const { from: pFrom, to: pTo } = player.peaksWindow
+    const covered = pTo - pFrom
+    if (m.peaks.length === 0 || covered <= 0) return 0
+    const i = Math.floor(((seconds - pFrom) / covered) * m.peaks.length)
+    return i >= 0 && i < m.peaks.length ? m.peaks[i] : 0
+  }
 
   const travelled = drag ? Math.abs(drag.toX - drag.fromX) : 0
   // While the pointer is down the band follows it; the committed region only
@@ -313,53 +327,24 @@ export function Timeline({
           return (
             <Fragment key={m.name}>
               <div
-                className="flex flex-col justify-center gap-2.5 rounded-lg border bg-card px-3.5 py-3"
+                className="min-h-0"
                 style={{ gridColumn: 1, gridRow: i + 2 }}
               >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 truncate text-sm",
-                      dimmed && "text-muted-foreground"
-                    )}
-                  >
-                    {m.name}
-                  </span>
-                  <Button
-                    variant={muted ? "default" : "outline"}
-                    size="icon-sm"
-                    aria-pressed={muted}
-                    aria-label={`Mute ${m.name}`}
-                    onClick={() => player.toggleMute(m.name)}
-                    className={cn(
-                      "shrink-0 font-semibold",
-                      muted && "bg-warn text-warn-foreground hover:bg-warn/90"
-                    )}
-                  >
-                    M
-                  </Button>
-                  <Button
-                    variant={soloed ? "default" : "outline"}
-                    size="icon-sm"
-                    aria-pressed={soloed}
-                    aria-label={`Solo ${m.name}`}
-                    onClick={() => player.toggleSolo(m.name)}
-                    className="shrink-0 font-semibold"
-                  >
-                    S
-                  </Button>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={player.getVolume(m.name)}
-                  onChange={(e) => player.setVolume(m.name, Number(e.target.value))}
-                  onPointerUp={player.persistVolumes}
-                  onKeyUp={player.persistVolumes}
-                  aria-label={`${m.name} volume`}
-                  className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+                <LaneControls
+                  name={m.name}
+                  muted={muted}
+                  soloed={soloed}
+                  dimmed={dimmed}
+                  volume={player.getVolume(m.name)}
+                  level={
+                    dimmed
+                      ? 0
+                      : peakAt(m, displayPosition) * player.getVolume(m.name)
+                  }
+                  onToggleMute={() => player.toggleMute(m.name)}
+                  onToggleSolo={() => player.toggleSolo(m.name)}
+                  onVolume={(v) => player.setVolume(m.name, v)}
+                  onVolumeCommit={player.persistVolumes}
                 />
               </div>
 

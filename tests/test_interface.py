@@ -882,6 +882,28 @@ def main():
         ok("the ruler's clock fits the take",
            "0:05" in page.get_by_role("group", name="Timeline clock").inner_text())
 
+        # Nothing measures the level while a take plays. The meter is read out
+        # of the same peaks the lane is drawn from, at the playhead, and then
+        # put through the fader and the mute — so it has to answer to both, or
+        # it is a decoration that happens to move.
+        drag(0.13, 0.13)   # a press that does not travel is a seek
+        meter = page.get_by_role("meter", name="Guitar level")
+        loud = int(meter.get_attribute("aria-valuenow"))
+        ok("the meter reads the track where the playhead is standing", loud > 0)
+        page.locator("input[aria-label='Guitar volume']").fill("0.25")
+        page.wait_for_timeout(300)
+        quartered = int(meter.get_attribute("aria-valuenow"))
+        ok("and it is the level after the fader, not before it",
+           abs(quartered - loud / 4) <= 2)
+        page.click("button[aria-label='Mute Guitar']")
+        page.wait_for_timeout(300)
+        ok("and nothing at all on a muted track",
+           meter.get_attribute("aria-valuenow") == "0")
+        # Put both back: the checks below are about what reached Python.
+        page.click("button[aria-label='Mute Guitar']")
+        page.locator("input[aria-label='Guitar volume']").fill("1")
+        page.wait_for_timeout(300)
+
         page.click("button[aria-label='Mute Guitar']")
         page.click("button[aria-label='Solo Vocals']")
         page.wait_for_timeout(300)

@@ -47,6 +47,12 @@
 }
 
 :root {
+  /* Native controls — the vertical faders on the player, scrollbars — draw
+     themselves from this. Without it they render light whatever the theme
+     says, which on the dark one puts a white slider track in the middle of
+     the player. */
+  color-scheme: light;
+
   --radius: 0.75rem;
 
   --background: oklch(0.985 0 0);
@@ -74,6 +80,8 @@
 
 .dark {
   /* Dark is the working theme: the app always starts in it. */
+  color-scheme: dark;
+
   --background: oklch(0.18 0.006 285.9);
   --foreground: oklch(0.93 0.003 286.3);
   --card: oklch(0.22 0.007 285.9);
