@@ -128,15 +128,48 @@ instead of on some innocent allocation later.
 
 ## Where things are
 
+Python does the audio — capture, mixing and playback through
+sounddevice/PortAudio, with numpy for the sample work. The interface is React
++ Tailwind + shadcn/ui, running in a pywebview window. A small local HTTP
+server on 127.0.0.1 hands the interface its files, serves the audio to the
+player, and answers the calls the meters poll many times a second.
+
 ```
-src/rehearsal_recorder/   the app — python -m rehearsal_recorder
-ui/                       the interface; ui/dist is built, not committed
-tests/                    the three suites
-docs/                     this file and its neighbours
-packaging/                the PyInstaller spec, the debug-allocator script
-build.command, build.bat  in the root, because you double-click them
+src/rehearsal_recorder/     the Python application
+  __main__.py               what `python -m rehearsal_recorder` runs
+  app.py                    the window, the crash log, --selftest
+  api.py                    the bridge to JS: rehearsals, takes, devices
+  mediaserver.py            the local HTTP server (interface, audio, polling)
+  platform_support.py       where macOS, Windows and Linux differ — all of it
+  audio/capture.py          multichannel capture with continuous write
+  audio/player.py           playback and mixing of a take
+  audio/monitor.py          listening to inputs without recording
+  audio/waveform.py         waveform peaks from a .wav
+  audio/mixdown.py          bouncing a take down to one stereo .wav
+  audio/crop.py             cutting a take down to the part worth keeping
+  audio/drafts.py           unsaved takes: finding, describing, finalizing
+  audio/devices.py          the stream lock, and asking a card what it can do
+  audio/format.py           16- and 24-bit: packing, unpacking, what each costs
+  audio/encode.py           compressing cloud copies (FLAC/MP3 via libsndfile)
+
+ui/src/screens/             one file per screen
+ui/src/components/          player, timeline, waveform, take strip, dialogs
+ui/dist/                    the built interface (build output, not in git)
+
+tests/                      the three suites
+docs/                       this file and its neighbours
+packaging/                  the PyInstaller spec and the debug-allocator run
+build.command, build.bat    in the root because you double-click them
+pyproject.toml              how the package installs; deps come from
+                            requirements.txt, which stays the one list
 ```
 
 Nothing but the entry points, the package metadata and the files GitHub
 insists on reading from the root (`README`, `LICENSE`, `CHANGELOG`,
 `CONTRIBUTING`, `.github/`) lives there.
+
+Several decisions in here look odd until you know why — playback in Python
+rather than the browser, the meters deliberately not using the pywebview
+bridge, raw PCM on disk instead of WAV while recording. Those are written
+down in [design-notes.md](design-notes.md), along with the ones that were
+wrong the first time.

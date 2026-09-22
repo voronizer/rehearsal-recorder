@@ -76,114 +76,32 @@ copied to a folder your Drive or Dropbox client watches, as WAV, FLAC or MP3.
 Pick them one at a time, or switch on automatic sending and every take you
 save goes up on its own, between takes rather than while one is recording.
 
+**Records at the quality the card can actually do.** 16- or 24-bit, at 44.1,
+48 or 96 kHz, and only the combinations your interface accepts are offered —
+the card is asked before the choice is shown rather than after it fails.
+24-bit is the default: at a rehearsal nobody watches the gain, and the
+headroom is worth the extra disk.
+
+![Settings](docs/screenshots/settings.png)
+
 **Never destroys anything.** Deleting means the Trash, or a `_deleted` folder
 where there is no Trash to reach. A recording of a rehearsal cannot be made
 again.
 
-More on all of it in [docs/using-it.md](docs/using-it.md).
+## Where the rest of it is
 
-## Quality
-
-16- or 24-bit, at 44.1, 48 or 96 kHz, and only the combinations your
-interface actually accepts are shown — the card is asked before the choice is
-offered rather than after it fails. 24-bit is the default: at a rehearsal
-nobody watches the gain, and the headroom is worth the extra disk.
-
-![Settings](docs/screenshots/settings.png)
-
-## Running from source
-
-Both halves have to be built: Python for the audio, Node for the interface.
-
-macOS and Linux:
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -e .
-cd ui && npm install && npm run build && cd ..
-python3 -m rehearsal_recorder
-```
-
-Windows:
-
-```
-py -3 -m venv venv
-venv\Scripts\activate
-pip install -e .
-cd ui && npm install && npm run build && cd ..
-py -3 -m rehearsal_recorder
-```
-
-`pip install -e .` installs the package in place, dependencies and all, so
-the sources under `src/` are importable and edits to them take effect without
-reinstalling. It also gives you a `rehearsal-recorder` command, which is the
-same thing as the line above.
-
-`npm run build` writes `ui/dist`, which is what the app serves. It is build
-output, so it is not in the repository and a fresh clone needs that line once
-— after which you only repeat it when you change something under `ui/src/`.
-Start the app without it and it says so rather than opening an empty window.
-
-Working on the interface itself is nicer with hot reload than with a rebuild
-every time: `npm run dev` in one terminal, `python3 -m rehearsal_recorder
---dev` in another. That and the rest of the development loop is in
-[docs/development.md](docs/development.md).
-
-## Tests
-
-```bash
-python tests/run_all.py
-```
-
-Three suites: the audio itself with the sound card stubbed and the samples
-inspected directly, the places the three operating systems differ, and the
-built interface in a headless browser against a mocked Python bridge. They
-run on every push and before every release build. See
-[tests/README.md](tests/README.md).
-
-## How it is put together
-
-Python does the audio — capture, mixing and playback through
-sounddevice/PortAudio, with numpy for the sample work. The interface is React
-+ Tailwind + shadcn/ui, running in a pywebview window. A small local HTTP
-server on 127.0.0.1 hands the interface its files, serves the audio to the
-player, and answers the calls the meters poll many times a second.
-
-```
-src/rehearsal_recorder/     the Python application
-  __main__.py               what `python -m rehearsal_recorder` runs
-  app.py                    the window, the crash log, --selftest
-  api.py                    the bridge to JS: rehearsals, takes, devices
-  mediaserver.py            the local HTTP server (interface, audio, polling)
-  platform_support.py       where macOS, Windows and Linux differ — all of it
-  audio/capture.py          multichannel capture with continuous write
-  audio/player.py           playback and mixing of a take
-  audio/monitor.py          listening to inputs without recording
-  audio/waveform.py         waveform peaks from a .wav
-  audio/mixdown.py          bouncing a take down to one stereo .wav
-  audio/drafts.py           unsaved takes: finding, describing, finalizing
-  audio/devices.py          the stream lock, and asking a card what it can do
-  audio/format.py           16- and 24-bit: packing, unpacking, what each costs
-  audio/encode.py           compressing cloud copies (FLAC/MP3 via libsndfile)
-
-ui/src/screens/             one file per screen
-ui/src/components/          player, waveform, take list, meters, dialogs
-ui/dist/                    the built interface (build output, not in git)
-
-tests/                      the three suites
-docs/                       how to use it, build it, work on it, and why
-packaging/                  the PyInstaller spec and the debug-allocator run
-build.command, build.bat    in the root because you double-click them
-pyproject.toml              how the package installs; deps come from
-                            requirements.txt, which stays the one list
-```
-
-Several decisions in here look odd until you know why — playback in Python
-rather than the browser, the meters deliberately not using the pywebview
-bridge, raw PCM on disk instead of WAV while recording. Those are written
-down in [docs/design-notes.md](docs/design-notes.md), along with the ones
-that were wrong the first time.
+- **[docs/using-it.md](docs/using-it.md)** — the guide. Every screen, what the
+  player does, recording quality, cloud copies, where the files live, and what
+  protects a recording.
+- **[docs/development.md](docs/development.md)** — running it from source,
+  the hot-reload loop, and what every file in here is for.
+- **[docs/building.md](docs/building.md)** — packaging it into an app, and
+  cutting a release.
+- **[docs/design-notes.md](docs/design-notes.md)** — the decisions that look
+  odd until you know why, including the ones that were wrong the first time.
+- **[tests/README.md](tests/README.md)** — the three suites and what each is
+  for. `python tests/run_all.py` runs all of them.
+- **[CHANGELOG.md](CHANGELOG.md)** — what changed, newest first.
 
 ## Contributing
 
