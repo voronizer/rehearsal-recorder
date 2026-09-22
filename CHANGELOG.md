@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.5.0
 
 - A take can be trimmed to the region marked on the timeline. Most takes are a
   few minutes of music inside a longer recording — somebody walking back to the
@@ -15,7 +15,9 @@ opening.
   the take's number and name, moving the markers inside the region with the
   audio they pointed at — the rest go with what is removed. The originals go
   to the Trash, or a `_deleted` folder where there is no Trash to reach, as one
-  folder named after the take, so they can be put back.
+  folder named after the take, so they can be put back. A take that had been
+  copied to the cloud folder loses that copy, because the copy is of a
+  different take now; with automatic sending on it goes up again by itself.
 - Cropping is offered on the review screen too, which is where the dead air at
   the start of a take is most obvious — you have just recorded it and can see it
   on the waveform.
