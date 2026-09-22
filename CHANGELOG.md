@@ -5,6 +5,14 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.6.1
+
+- At the closest zoom the window read-out was cut off mid-word — `0:04 – 0:06
+  · cl…` — because it does not fit beside the **Whole take** button on one
+  line. It wraps instead. Found by regenerating the screenshots for the
+  documentation, not by the tests, which check that the read-out is there and
+  that its first tick is inside the window but not that all of it is legible.
+
 ## 0.6.0
 
 - Each track's fader shows how loud that track is coming out, as a level
