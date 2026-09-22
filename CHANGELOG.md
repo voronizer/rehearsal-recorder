@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.6.0
 
 - Each track's fader shows how loud that track is coming out, as a level
   behind the slider itself. What comes out is the source's peak times the
