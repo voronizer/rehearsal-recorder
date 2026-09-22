@@ -55,7 +55,7 @@ shares one timeline, so where two of them parted company is something you can
 point at rather than guess. Drag across it to set the repeat region, and zoom
 into it with the wheel when the spot needs finding exactly.
 
-![A take on the timeline, with the repeat region drawn across both tracks](docs/screenshots/player-markers.png)
+![A take playing, with the repeat region drawn across both tracks and each fader showing how loud its track is coming out](docs/screenshots/player-markers.png)
 
 ![A take zoomed in](docs/screenshots/zoom.png)
 

@@ -264,7 +264,10 @@ export function Timeline({
         >
           {player.view ? (
             <>
-              <span className="truncate">
+              {/* Wraps rather than truncates: "0:04 - 0:06 · closest" does
+                  not fit the gutter beside the button on one line, and a
+                  read-out cut off mid-word says less than no read-out. */}
+              <span className="leading-tight">
                 <span className="tnum">
                   {formatMMSS(from)} – {formatMMSS(to)}
                 </span>

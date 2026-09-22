@@ -887,6 +887,9 @@ def main():
         page.wait_for_timeout(700)
         ok("the meter follows the take while it plays",
            int(meter.get_attribute("aria-valuenow")) > 0)
+        # Taken here, playing, because the level lives inside the fader: a
+        # paused player shows an empty one and says nothing about it.
+        page.screenshot(path=str(SHOTS / "54-player.png"))
         page.click("button[aria-label='Mute Guitar']")
         page.wait_for_timeout(400)
         ok("and reads nothing at all on a muted track",
@@ -903,7 +906,6 @@ def main():
         page.wait_for_timeout(300)
         ok("mute reached Python", calls("player_set_muted")[-1]["args"] == ["Guitar", True])
         ok("solo reached Python", calls("player_set_solo")[-1]["args"] == ["Vocals"])
-        page.screenshot(path=str(SHOTS / "54-player.png"))
 
         print("\n[9c] Zooming the timeline")
         # Fifteen seconds of a nine-minute take is twenty pixels wide: the
