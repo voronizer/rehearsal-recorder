@@ -1576,6 +1576,33 @@ def main():
        wav_frames(draft2 / "Gtr.wav") == 2 * SR
        and early["tracks"][0]["file"] == str(draft2 / "Gtr.wav"))
 
+    print("\n[20] The waveform can be asked for one part of a take")
+    # Zoomed in, the same 900 bars have to describe two seconds instead of
+    # nine minutes, or zooming only stretches the same smear.
+    tmp8 = Path(tempfile.mkdtemp())
+    with wave.open(str(tmp8 / "half.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(struct.pack("<h", 0) * SR)       # a second of silence
+        w.writeframes(struct.pack("<h", 8000) * SR)    # then a second of tone
+
+    whole, frames_whole, _ = wav_peaks(tmp8 / "half.wav", buckets=8)
+    ok("the whole file is half silence and half tone",
+       whole[0] == 0 and whole[7] > 0.2)
+
+    loud, frames_loud, _ = wav_peaks(tmp8 / "half.wav", buckets=8,
+                                     start_sec=1.0, end_sec=2.0)
+    ok("asked for the second half, every bar is the tone",
+       all(p > 0.2 for p in loud))
+    quiet, _, _ = wav_peaks(tmp8 / "half.wav", buckets=8,
+                            start_sec=0.0, end_sec=1.0)
+    ok("and asked for the first, none of them is", all(p == 0 for p in quiet))
+    # take_media turns this into the player's duration, which must not change
+    # when the view does.
+    ok("the file still reports its own length, not the window's",
+       frames_loud == frames_whole == 2 * SR)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

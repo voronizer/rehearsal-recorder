@@ -393,9 +393,15 @@ class Api:
     def media_url(self, abs_path):
         return self._server.media_url(abs_path)
 
-    def take_media(self, tracks, buckets=DEFAULT_BUCKETS):
+    def take_media(self, tracks, buckets=DEFAULT_BUCKETS,
+                   start_sec=None, end_sec=None):
         """Everything the player needs about a take in one call: each track's
-        address, its length in samples and its waveform."""
+        address, its length in samples and its waveform.
+
+        start_sec/end_sec narrow the waveform to the part on screen. The
+        bridge turns a missing argument into None, so the bucket count falls
+        back here rather than being duplicated in the interface."""
+        buckets = buckets or DEFAULT_BUCKETS
         result = []
         for t in tracks:
             path = Path(t["file"])
@@ -412,7 +418,9 @@ class Api:
                 continue
 
             try:
-                peaks, frames, samplerate = wav_peaks(path, buckets)
+                peaks, frames, samplerate = wav_peaks(
+                    path, buckets, start_sec, end_sec
+                )
             except Exception as e:
                 peaks, frames, samplerate = [], 0, 0
                 print(f"[waveform] {path.name}: {e}")
