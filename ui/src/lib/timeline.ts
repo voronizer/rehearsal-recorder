@@ -2,9 +2,14 @@
  * Where the ruler puts its ticks. A forty-second take and a forty-minute one
  * both have to end up with a clock somebody can read, so the step is chosen
  * from a ladder rather than computed: the numbers people expect to see on a
- * clock are 5, 10, 15, 30 seconds and whole minutes, never 37.
+ * clock are 1, 2, 5, 10, 15, 30 seconds and whole minutes, never 37.
+ *
+ * It starts at one second because the shortest window zoom will give is two
+ * (MIN_VIEW_SEC): a ladder starting at five leaves a zoomed ruler with no
+ * ticks and no labels on it most of the time, flickering between one and none
+ * as the window is panned.
  */
-const TICK_LADDER = [5, 10, 15, 30, 60, 120, 300]
+const TICK_LADDER = [1, 2, 5, 10, 15, 30, 60, 120, 300]
 
 /** Ticks closer together than this stop being a scale and become noise. */
 const MIN_TICK_GAP_PX = 80

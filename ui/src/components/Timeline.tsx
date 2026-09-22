@@ -85,8 +85,12 @@ export function Timeline({
       followingRef.current = false
 
       // Sideways on a trackpad, shift+wheel on a mouse: along the take.
+      // Whichever axis carries the value, and that is not belt and braces:
+      // Chromium leaves a shifted wheel in deltaY, while WebKit and Firefox
+      // move it to deltaX and leave deltaY at zero — and WebKit is what this
+      // app runs in on macOS, where reading deltaY would pan by nothing.
       if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-        const by = ((e.shiftKey ? e.deltaY : e.deltaX) / box.width) * span
+        const by = ((e.deltaX || e.deltaY) / box.width) * span
         setView(from + by, to + by)
         return
       }

@@ -868,9 +868,9 @@ def main():
         ok("and leaves the other one where it was",
            abs(moved[0] - TAKE_SECONDS * 0.25) < 0.05)
 
-        # The clock is chosen from a ladder, so a six-second take gets five
-        # second steps. The other end of that ladder is checked on the long
-        # take in history.
+        # The clock is chosen from a ladder and from how much room a tick has,
+        # so a six-second take across this width gets one-second steps. The
+        # other end of that ladder is checked on the long take in history.
         ok("the ruler's clock fits the take",
            "0:05" in page.get_by_role("group", name="Timeline clock").inner_text())
 
@@ -903,11 +903,32 @@ def main():
             page.mouse.wheel(dx, dy)
             page.wait_for_timeout(400)
 
+        def clock_labels():
+            """The times written on the ruler, in seconds."""
+            out = []
+            for text in clock.locator("span.tnum").all_inner_texts():
+                minutes, seconds = text.strip().split(":")
+                out.append(int(minutes) * 60 + int(seconds))
+            return out
+
+        whole_take_labels = clock_labels()
         before = seek_at(0.3)
         wheel_at(0.3, 0, -500)
-        ok("the wheel zooms in", clock.inner_text() != whole_take_clock)
+        # A ruler with nothing left on it also reads differently from the whole
+        # take's, so "the text changed" is not enough: a tick ladder that
+        # starts above the shortest zoom window empties the ruler instead of
+        # rescaling it, and it flickers between one label and none as the
+        # window is panned. This asks the zoomed ruler for a clock, and asks
+        # that the clock belongs to the part of the take being shown.
+        zoomed = clock_labels()
+        ok("the wheel zooms in", zoomed != whole_take_labels)
         ok("and the timeline says what part of the take is on screen",
            page.locator("text=Whole take").count() == 1)
+        # Where a click at each end of the surface lands is the window itself,
+        # which is what the ruler has to be labelling.
+        window_from, window_to = seek_at(0.02), seek_at(0.98)
+        ok("and the zoomed ruler still has a time on it, inside the window",
+           zoomed != [] and window_from - 0.1 <= zoomed[0] <= window_to + 0.1)
         # Anchored, not centred: the second under the pointer stays under the
         # pointer, which is the difference between aiming and hunting.
         ok("the second under the pointer stays under it",
@@ -917,6 +938,20 @@ def main():
         wheel_at(0.6, 200, 0)
         ok("scrolling sideways moves along the take", seek_at(0.6) > mid_before)
 
+        # Shift and the wheel is the same gesture on a mouse, but not the same
+        # event: Chromium leaves the value in deltaY, while WebKit and Firefox
+        # move it to deltaX and leave deltaY at zero. This app runs on WebKit
+        # on macOS, and headless Chromium cannot produce that shape, so the
+        # event is dispatched as WebKit sends it.
+        shifted_before = seek_at(0.6)
+        page.get_by_role("group", name="Take timeline").evaluate(
+            "el => el.dispatchEvent(new WheelEvent('wheel', {shiftKey: true, "
+            "deltaX: 200, deltaY: 0, bubbles: true, cancelable: true}))"
+        )
+        page.wait_for_timeout(400)
+        ok("and so does shift with the wheel, whichever axis carries it",
+           seek_at(0.6) > shifted_before)
+
         page.click("text=Whole take")
         page.wait_for_timeout(400)
         ok("and Whole take gives the whole take back",
@@ -925,13 +960,20 @@ def main():
 
         # A marker off the side of the window is not drawn at all: without
         # that it would be pinned to the edge, pointing at the wrong second.
-        ok("markers are on the timeline to start with",
-           page.locator("[data-marker-at]").count() > 0)
+        all_markers = page.locator("[data-marker-at]").evaluate_all(
+            "els => els.map(e => Number(e.dataset.markerAt))")
+        ok("markers are on the timeline to start with", len(all_markers) > 1)
         wheel_at(0.98, 0, -900)   # the last seconds of the take
+        wheel_at(0.5, 300, 0)     # and right up against the end itself
         drawn = page.locator("[data-marker-at]").evaluate_all(
             "els => els.map(e => Number(e.dataset.markerAt))")
+        # An empty list satisfies "all of them are late in the take", so that
+        # on its own would pass against a timeline that drew nothing at all:
+        # the mark at the end of the take has to still be on it, and the one
+        # at the start has to be gone.
         ok("and only the ones inside the window are drawn",
-           all(at >= TAKE_SECONDS / 2 for at in drawn))
+           drawn and all(at >= TAKE_SECONDS / 2 for at in drawn)
+           and len(drawn) < len(all_markers))
         page.screenshot(path=str(SHOTS / "56-zoom.png"))
 
         # A region's duration chip is only about the region — it must not go
