@@ -319,20 +319,10 @@ function Transport({
           Repeat
         </Button>
 
-        {/* The region is drawn on the timeline and its edges are dragged
-            there, so this is a read-out rather than a control. It used to be
-            a pair of buttons that set each edge to the playhead, which was
-            the only way to place one to the tenth of a second — until the
-            timeline learned to zoom, where a drag is finer than that. */}
-        {loopBand && (
-          <span
-            aria-label="Loop region"
-            className="tnum rounded-md border px-2 py-1 text-xs text-muted-foreground"
-          >
-            {formatMMSS(loopBand.a)} – {formatMMSS(loopBand.b)}
-          </span>
-        )}
-
+        {/* No times here: the band on the timeline already carries them,
+            written on the stretch they describe. Repeating them beside the
+            buttons was the same thing said twice, once away from the thing
+            it was about. */}
         {loopBand && (
           <>
             <Button

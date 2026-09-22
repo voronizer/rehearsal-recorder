@@ -13,8 +13,9 @@ opening.
 - The A and B buttons are gone. They existed to put an edge of the repeat
   region at the playback position, which was the only way to place one to the
   tenth of a second; the timeline zooms now, and a drag there is finer than
-  that. The transport reads the marked stretch back instead, with a **Clear**
-  beside it that used to be an unlabelled ×.
+  that. The stretch says its own length on the band where it is drawn, so
+  beside **Repeat** there is now only a **Clear** — which also stops being an
+  unlabelled ×.
 - Where something stops working, the app says why: the greyed-out **Crop**
   gives its reason beside the button rather than in a tooltip no disabled
   button can show, the zoom says when it will go no closer, and an interface

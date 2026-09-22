@@ -92,10 +92,10 @@ not travel is a click, and a click seeks, as it always did — that is what lets
 one surface do both jobs without a mode switch. Because the edges are grabbed
 on the ruler rather than down the lanes, a press on the lanes always begins a
 new region, so you can redraw one starting exactly where the old one ended.
-The transport reads the stretch back beside **Repeat**, with a **Clear** next
-to it. That used to be a pair of buttons, A and B, that put an edge at the
-playback position — the only way to place one to the tenth of a second, until
-the timeline learned to zoom, where a drag is finer than that. The playhead
+The stretch says its own length, written on the band. Beside **Repeat** there
+is only a **Clear**. That used to be a pair of buttons, A and B, that put an
+edge at the playback position — the only way to place one to the tenth of a
+second, until the timeline learned to zoom, where a drag is finer than that. The playhead
 has a grip of its own on the ruler: dragging that scrubs, which is what
 dragging the waveform used to do.
 

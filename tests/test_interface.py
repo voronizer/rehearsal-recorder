@@ -826,27 +826,17 @@ def main():
             page.mouse.up()
             page.wait_for_timeout(200)
 
-        def mmss(sec):
-            """What formatMMSS renders, so the read-out can be checked against
-            the region that was actually sent rather than against a guess."""
-            return f"{int(sec // 60)}:{int(sec % 60):02d}"
-
         drag(0.25, 0.75)
         loop = calls("player_set_loop")
         ok("dragging across the tracks sets the loop region",
            loop and abs(loop[-1]["args"][0] - TAKE_SECONDS * 0.25) < 0.4
            and abs(loop[-1]["args"][1] - TAKE_SECONDS * 0.75) < 0.4)
-        # The region is drawn and its edges dragged on the timeline, so the
-        # transport carries a read-out of it rather than the pair of buttons
-        # that used to set each end.
-        a, b = loop[-1]["args"]
-        ok("and the transport reads that stretch back",
-           page.get_by_label("Loop region", exact=True).inner_text() == f"{mmss(a)} – {mmss(b)}")
-
+        # The times live on the band itself, checked in [9c]; the transport
+        # only offers to clear it.
         page.get_by_role("button", name="Clear the loop region").click()
         page.wait_for_timeout(250)
-        ok("clearing it takes the read-out with it",
-           page.get_by_label("Loop region", exact=True).count() == 0)
+        ok("clearing it takes the offer to clear with it",
+           page.get_by_role("button", name="Clear the loop region").count() == 0)
         ok("and tells Python there is no region left",
            calls("player_set_loop")[-1]["args"] == [None, None]
            or calls("player_set_loop")[-1]["args"] == [0, TAKE_SECONDS])
@@ -1097,7 +1087,7 @@ def main():
         ok("the take is the region now — three seconds, not six",
            page.locator("span", has_text="/ 0:03").count() >= 1)
         ok("and the region is cleared, because the take is that region",
-           page.get_by_label("Loop region", exact=True).count() == 0)
+           page.get_by_role("button", name="Clear the loop region").count() == 0)
 
         # A crop can succeed while the sweep of the pre-crop original still
         # fails — a full disk, a permissions problem — and that must not
