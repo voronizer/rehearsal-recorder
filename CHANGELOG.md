@@ -5,6 +5,22 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- Each track's fader stands up beside its lane, with a meter next to it saying
+  how loud that track is coming out — after its own fader and mute, measured
+  in the mix rather than guessed from the picture.
+- The A and B buttons are gone. They existed to put an edge of the repeat
+  region at the playback position, which was the only way to place one to the
+  tenth of a second; the timeline zooms now, and a drag there is finer than
+  that. The transport reads the marked stretch back instead, with a **Clear**
+  beside it that used to be an unlabelled ×.
+- Where something stops working, the app says why: the greyed-out **Crop**
+  gives its reason beside the button rather than in a tooltip no disabled
+  button can show, the zoom says when it will go no closer, and an interface
+  listed once per audio system says so — which is how a card with sixteen
+  inputs ends up offering two.
+
 ## 0.5.0
 
 - A take can be trimmed to the region marked on the timeline. Most takes are a

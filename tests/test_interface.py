@@ -826,34 +826,30 @@ def main():
             page.mouse.up()
             page.wait_for_timeout(200)
 
-        # markA/markB changed job in this branch — each now commits only its
-        # own edge instead of the pair together — and the plan wrongly
-        # claimed this section already drove them; it only ever drove Repeat.
-        drag(0.2, 0.2)  # a press that does not travel is a seek
-        pos_a = calls("player_seek")[-1]["args"][0]
-        page.get_by_role("button", name="A", exact=True).click()
-        page.wait_for_timeout(200)
-        loop = calls("player_set_loop")
-        ok("marking A loops from here to the end",
-           abs(loop[-1]["args"][0] - pos_a) < 0.4
-           and loop[-1]["args"][1] == TAKE_SECONDS)
-
-        drag(0.7, 0.7)
-        pos_b = calls("player_seek")[-1]["args"][0]
-        page.get_by_role("button", name="B", exact=True).click()
-        page.wait_for_timeout(200)
-        loop = calls("player_set_loop")
-        ok("marking B keeps A where it was and commits the new end",
-           abs(loop[-1]["args"][0] - pos_a) < 0.4
-           and abs(loop[-1]["args"][1] - pos_b) < 0.4)
+        def mmss(sec):
+            """What formatMMSS renders, so the read-out can be checked against
+            the region that was actually sent rather than against a guess."""
+            return f"{int(sec // 60)}:{int(sec % 60):02d}"
 
         drag(0.25, 0.75)
         loop = calls("player_set_loop")
         ok("dragging across the tracks sets the loop region",
            loop and abs(loop[-1]["args"][0] - TAKE_SECONDS * 0.25) < 0.4
            and abs(loop[-1]["args"][1] - TAKE_SECONDS * 0.75) < 0.4)
-        ok("and the buttons read it back",
-           "A 0:01" in page.locator("button", has_text="A 0:").inner_text())
+        # The region is drawn and its edges dragged on the timeline, so the
+        # transport carries a read-out of it rather than the pair of buttons
+        # that used to set each end.
+        a, b = loop[-1]["args"]
+        ok("and the transport reads that stretch back",
+           page.get_by_label("Loop region", exact=True).inner_text() == f"{mmss(a)} – {mmss(b)}")
+
+        page.get_by_role("button", name="Clear the loop region").click()
+        page.wait_for_timeout(250)
+        ok("clearing it takes the read-out with it",
+           page.get_by_label("Loop region", exact=True).count() == 0)
+        ok("and tells Python there is no region left",
+           calls("player_set_loop")[-1]["args"] == [None, None]
+           or calls("player_set_loop")[-1]["args"] == [0, TAKE_SECONDS])
 
         drag(0.75, 0.25)
         loop_back = calls("player_set_loop")
@@ -1101,7 +1097,7 @@ def main():
         ok("the take is the region now — three seconds, not six",
            page.locator("span", has_text="/ 0:03").count() >= 1)
         ok("and the region is cleared, because the take is that region",
-           page.locator("button", has_text="A 0:").count() == 0)
+           page.get_by_label("Loop region", exact=True).count() == 0)
 
         # A crop can succeed while the sweep of the pre-crop original still
         # fails — a full disk, a permissions problem — and that must not

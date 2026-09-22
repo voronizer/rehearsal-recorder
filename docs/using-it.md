@@ -92,9 +92,12 @@ not travel is a click, and a click seeks, as it always did — that is what lets
 one surface do both jobs without a mode switch. Because the edges are grabbed
 on the ruler rather than down the lanes, a press on the lanes always begins a
 new region, so you can redraw one starting exactly where the old one ended.
-The A and B buttons put an edge exactly at the current playback position for
-when you have found the spot by ear. The playhead has a grip of its own on the
-ruler: dragging that scrubs, which is what dragging the waveform used to do.
+The transport reads the stretch back beside **Repeat**, with a **Clear** next
+to it. That used to be a pair of buttons, A and B, that put an edge at the
+playback position — the only way to place one to the tenth of a second, until
+the timeline learned to zoom, where a drag is finer than that. The playhead
+has a grip of its own on the ruler: dragging that scrubs, which is what
+dragging the waveform used to do.
 
 - **Sync.** All tracks are mixed into one stream from one position, so they
   cannot drift apart even in principle.
@@ -115,9 +118,10 @@ ruler: dragging that scrubs, which is what dragging the waveform used to do.
   the note can be edited or left empty. Markers are placed while listening
   back, not while recording, because nobody is looking at the screen during a
   take.
-- **Repeat** loops: the whole take, or just the stretch between the A and B
-  marks when they are set. The marks are independent of repeat, so you can
-  place them in advance and switch looping on when you want it.
+- **Repeat** loops: the whole take, or just the stretch marked on the
+  timeline when there is one. The region is independent of repeat, so you can
+  draw it in advance and switch looping on when you want it, and **Clear**
+  puts it back to the whole take.
 - **Transport.** To start (|◀), ±10 seconds, click the timeline to seek. At
   the end of a take the player returns to the start instead of sitting at the
   tail.
@@ -126,8 +130,7 @@ ruler: dragging that scrubs, which is what dragging the waveform used to do.
 
 ### Trimming a take
 
-Mark the part worth keeping — drag across the tracks, or set A and B — and
-press **Crop**. The take becomes that part: same number, same name, and the
+Mark the part worth keeping — drag across the tracks — and press **Crop**. The take becomes that part: same number, same name, and the
 markers inside it move along with the audio. What is removed is not destroyed;
 it goes to the Trash, or a `_deleted` folder where there is no Trash to reach,
 as one folder named after the take, so the audio of an over-eager crop comes

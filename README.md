@@ -52,8 +52,8 @@ anyone would act on it.
 **Plays the take back immediately**, all tracks in sync, with per-track
 volume, mute and solo, and markers you drop while listening. Every track
 shares one timeline, so where two of them parted company is something you can
-point at rather than guess. Drag across it to set the repeat region — no
-picking A and B out of two buttons.
+point at rather than guess. Drag across it to set the repeat region, and zoom
+into it with the wheel when the spot needs finding exactly.
 
 ![A take on the timeline, with the repeat region drawn across both tracks](docs/screenshots/player-markers.png)
 

@@ -216,7 +216,13 @@ function Transport({
   /** Why Crop is off, in a few words, or absent when it is usable. */
   cropWhyOff?: string
 }) {
-  const { looping, position, duration } = player
+  const { looping, position, duration, region } = player
+  // The same rule the timeline draws by: one end set reaches to the take's
+  // own start or end.
+  const loopBand =
+    region.a !== null || region.b !== null
+      ? { a: region.a ?? 0, b: region.b ?? duration }
+      : null
 
   // A marker within a second of the cursor counts as "this one".
   const nearby = markers.find((m) => Math.abs(m.at - position) < 1)
@@ -305,9 +311,7 @@ function Transport({
           aria-pressed={looping}
           aria-label="Repeat"
           title={
-            player.region.a !== null || player.region.b !== null
-              ? "Loop the A–B region"
-              : "Loop the whole take"
+            loopBand ? "Loop the marked stretch" : "Loop the whole take"
           }
           className={cn(looping && "bg-warn text-warn-foreground hover:bg-warn/90")}
         >
@@ -315,36 +319,31 @@ function Transport({
           Repeat
         </Button>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={player.markA}
-          disabled={player.loading}
-          title="Start of the loop region — at the current position"
-          className="tnum"
-        >
-          A{player.region.a !== null ? ` ${formatMMSS(player.region.a)}` : ""}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={player.markB}
-          disabled={player.loading}
-          title="End of the loop region — at the current position"
-          className="tnum"
-        >
-          B{player.region.b !== null ? ` ${formatMMSS(player.region.b)}` : ""}
-        </Button>
-        {(player.region.a !== null || player.region.b !== null) && (
+        {/* The region is drawn on the timeline and its edges are dragged
+            there, so this is a read-out rather than a control. It used to be
+            a pair of buttons that set each edge to the playhead, which was
+            the only way to place one to the tenth of a second — until the
+            timeline learned to zoom, where a drag is finer than that. */}
+        {loopBand && (
+          <span
+            aria-label="Loop region"
+            className="tnum rounded-md border px-2 py-1 text-xs text-muted-foreground"
+          >
+            {formatMMSS(loopBand.a)} – {formatMMSS(loopBand.b)}
+          </span>
+        )}
+
+        {loopBand && (
           <>
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="sm"
               onClick={player.clearRegion}
-              aria-label="Clear A and B"
-              title="Clear the region — repeat will loop the whole take"
+              aria-label="Clear the loop region"
+              title="Clear it — Repeat then loops the whole take"
             >
               <X />
+              Clear
             </Button>
             {onCropClick && (
               <Button

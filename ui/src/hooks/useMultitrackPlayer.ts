@@ -290,19 +290,10 @@ export function useMultitrackPlayer(
       setLooping(next)
       applyLoop(region, next)
     },
-    markA: () => {
-      const next = { a: position, b: region.b }
-      setRegionState(next)
-      if (looping) applyLoop(next, true)
-    },
-    markB: () => {
-      const next = { a: region.a, b: position }
-      setRegionState(next)
-      if (looping) applyLoop(next, true)
-    },
-    // A drag hands over both ends at once. Going through markA and then markB
-    // would apply the loop twice, and in between would apply a region nobody
-    // asked for — the old A with the new B.
+    // Both ends at once, because that is how the region is made: dragged
+    // across the timeline, or one edge of it moved. Setting them one at a
+    // time would apply the loop twice, and in between would apply a region
+    // nobody asked for — the old start with the new end.
     setRegion: (a: number, b: number) => {
       const next = { a: Math.min(a, b), b: Math.max(a, b) }
       setRegionState(next)
