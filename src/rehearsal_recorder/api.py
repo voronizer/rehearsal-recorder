@@ -40,6 +40,7 @@ from rehearsal_recorder.audio.format import (
     bytes_per_sample,
     normalize_depth,
 )
+from rehearsal_recorder.audio.crop import crop_wav
 from rehearsal_recorder.audio.mixdown import mixdown
 from rehearsal_recorder.audio.devices import recording_formats
 from rehearsal_recorder.audio.monitor import LevelMonitor
@@ -62,6 +63,9 @@ UI_DIR = app_root() / "ui" / "dist"
 
 # Warn below this much recording time left.
 LOW_SPACE_MINUTES = 15
+
+# A region shorter than this is a slip of the mouse, not an intention.
+MIN_CROP_SEC = 1.0
 
 # What a fresh install records at until Settings says otherwise.
 DEFAULT_SAMPLERATE = 44100
@@ -224,6 +228,9 @@ class Api:
         self._session = None
         self._monitor = None
         self._player = None
+        # What the open player was opened with, so a step that has to let go of
+        # the files can put back exactly the take that was playing.
+        self._open_tracks = None
         self._player_lock = threading.RLock()
         # share_take runs on the publishing thread while the interface writes
         # the same file from its own; without this a rename lands between a
@@ -389,9 +396,15 @@ class Api:
     def media_url(self, abs_path):
         return self._server.media_url(abs_path)
 
-    def take_media(self, tracks, buckets=DEFAULT_BUCKETS):
+    def take_media(self, tracks, buckets=DEFAULT_BUCKETS,
+                   start_sec=None, end_sec=None):
         """Everything the player needs about a take in one call: each track's
-        address, its length in samples and its waveform."""
+        address, its length in samples and its waveform.
+
+        start_sec/end_sec narrow the waveform to the part on screen. The
+        bridge turns a missing argument into None, so the bucket count falls
+        back here rather than being duplicated in the interface."""
+        buckets = buckets or DEFAULT_BUCKETS
         result = []
         for t in tracks:
             path = Path(t["file"])
@@ -408,7 +421,9 @@ class Api:
                 continue
 
             try:
-                peaks, frames, samplerate = wav_peaks(path, buckets)
+                peaks, frames, samplerate = wav_peaks(
+                    path, buckets, start_sec, end_sec
+                )
             except Exception as e:
                 peaks, frames, samplerate = [], 0, 0
                 print(f"[waveform] {path.name}: {e}")
@@ -1208,6 +1223,240 @@ class Api:
 
             return {"ok": True, "markers": take["markers"]}
 
+    # ---------- cropping ----------
+
+    @staticmethod
+    def _crop_span(duration_sec, start_sec, end_sec):
+        """The region to keep, or why it cannot be kept."""
+        try:
+            start = max(0.0, float(start_sec))
+            end = float(end_sec)
+        except (TypeError, ValueError):
+            return {"error": "That is not a region"}
+        if duration_sec:
+            end = min(float(duration_sec), end)
+        if end - start < MIN_CROP_SEC:
+            return {"error":
+                    f"A take has to keep at least {MIN_CROP_SEC:g} second"}
+        return {"start": start, "end": end}
+
+    def _crop_tracks(self, tracks, start_sec, end_sec):
+        """
+        Rewrites every track shorter and puts the originals in the Trash as
+        one folder named after the take — what turns up there is then a
+        recognisable thing rather than eight loose files called Gtr.wav.
+
+        The order matters, because the app can be killed in the middle of it.
+        Every new file is written under WRITING_PREFIX first, so nothing is
+        replaced until all of them exist; then the originals move aside
+        together; then the new files take their names; then the folder of
+        originals goes. Die between those last two and the take folder holds
+        obviously-unfinished files with the originals in a folder beside it —
+        repairable by hand, which is the most a step that moves files can
+        promise. A move that fails while the app is alive is undone instead:
+        the take goes back to exactly what it was, because a half-cropped take
+        behind the words "could not crop" is a take nobody goes looking at.
+        """
+        take_dir = Path(tracks[0]["file"]).parent
+        written = []
+        # What the new files really came out as. Tracks of a take may differ in
+        # length, so the take is as long as its longest one — and the region
+        # that was asked for is not that length: it is not clamped to the file
+        # for a draft, and a legacy take with no stored duration is not clamped
+        # at all.
+        kept_sec = 0.0
+        for t in tracks:
+            source = Path(t["file"])
+            target = _writing_path(source)
+            res = crop_wav(source, target, start_sec, end_sec)
+            if not res["ok"]:
+                target.unlink(missing_ok=True)
+                for w in written:
+                    w.unlink(missing_ok=True)
+                return {"ok": False, "error": res["error"]}
+            written.append(target)
+            kept_sec = max(kept_sec, res["frames"] / res["samplerate"])
+
+        aside = _unique_path(take_dir.with_name(f"{take_dir.name} (before crop)"))
+        # Every original that reached the aside folder, oldest first. On
+        # Windows, renaming a file another process has open raises, and a move
+        # that stops half way used to leave some tracks aside, some in place
+        # and meta.json pointing at paths that had moved — behind an error
+        # message that reads as if nothing had happened.
+        moved = []
+        try:
+            aside.mkdir(parents=True)
+            for t in tracks:
+                source = Path(t["file"])
+                shutil.move(str(source), str(aside / source.name))
+                moved.append((aside / source.name, source))
+            for t, target in zip(tracks, written):
+                os.replace(target, Path(t["file"]))
+        except OSError as e:
+            # Backwards, so that an original lands on top of a replacement
+            # already made rather than under it. os.replace rather than
+            # shutil.move because the aside folder is a sibling of the take —
+            # the same filesystem — and only os.replace overwrites on Windows
+            # as well. Each step gets its own guard: a rollback that gives up
+            # part way is worse than one that does what it can.
+            for stored, original in reversed(moved):
+                try:
+                    os.replace(stored, original)
+                except OSError:
+                    pass
+            for w in written:
+                try:
+                    w.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            try:
+                aside.rmdir()  # only when it is empty, which is the point
+            except OSError:
+                pass
+            return {"ok": False, "error": f"Could not replace the tracks: {e}"}
+
+        # The crop itself is already done — the new files are in place — so
+        # this can only report the sweep of the originals, never undo it.
+        # When even the _deleted fallback cannot move the aside folder, it is
+        # still sitting right where this function put it: that path is the
+        # one thing worth keeping, since it is how a person finds the
+        # originals back.
+        gone = move_to_trash(aside, self._recordings_dir)
+        result = {
+            "ok": True,
+            "duration_sec": round(kept_sec, 2),
+            "trashed": bool(gone.get("trashed")),
+            "location": gone.get("location") if gone.get("ok") else str(aside),
+        }
+        if not gone.get("ok"):
+            result["error"] = gone.get("error")
+        return result
+
+    def crop_take(self, folder, take_number, start_sec, end_sec):
+        """
+        Keeps only [start, end) of a saved take. The take keeps its number,
+        its name and its folder: from the outside it is the same take, shorter.
+        """
+        folder = Path(folder)
+        if not self._inside_recordings(folder):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+
+        # _meta_lock then _player_lock, and never the other way round — this
+        # is the only place that takes both.
+        with self._meta_lock:
+            meta = self._read_meta(folder)
+            if meta is None:
+                return {"ok": False, "error": "Rehearsal not found"}
+            take = next(
+                (t for t in meta.get("takes", [])
+                 if t.get("take_number") == take_number),
+                None,
+            )
+            if take is None:
+                return {"ok": False, "error": "Take not found"}
+
+            tracks = [t for t in take.get("tracks", [])
+                      if Path(t.get("file", "")).exists()]
+            if not tracks:
+                return {"ok": False, "error": "The take has no files left on disk"}
+
+            span = self._crop_span(take.get("duration_sec", 0), start_sec, end_sec)
+            if "error" in span:
+                return {"ok": False, "error": span["error"]}
+
+            # Tracks are played through a memmap, and Windows will not let a
+            # mapped file be renamed or removed. macOS will, which is exactly
+            # how this would have reached a Windows rehearsal unnoticed.
+            playing = self._open_tracks
+            self.player_close()
+
+            done = self._crop_tracks(tracks, span["start"], span["end"])
+            if not done["ok"]:
+                # Nothing else will put the player back: the take's tracks are
+                # what the interface reopens on, and a failed crop leaves them
+                # exactly as they were, so its open effect never re-runs. The
+                # transport would go on looking alive over a player Python has
+                # closed. Reopening here is safe where it sits — the lock order
+                # in this file is metadata then player, and nothing takes them
+                # the other way round.
+                if playing:
+                    self.player_open(playing)
+                return done
+
+            kept, dropped = [], 0
+            for m in self._markers_of(take):
+                if span["start"] <= m["at"] <= span["end"]:
+                    kept.append({**m, "at": round(m["at"] - span["start"], 2)})
+                else:
+                    dropped += 1
+            take["markers"] = kept
+            take["duration_sec"] = done["duration_sec"]
+
+            # What is in the cloud folder is a copy of a take that no longer
+            # exists, so it goes and its record goes with it. The length in
+            # the cloud.source_of fingerprint covers the other half of this: a
+            # copy already under way can write its record after this line, and
+            # a record that still matched the shorter take would suppress its
+            # own repair for good.
+            self._remove_shared(take)
+            take["cloud"] = {}
+            take.pop("cloud_error", None)
+
+            self._write_meta(folder, meta)
+            if self._session is not None and Path(self._session["folder"]) == folder:
+                self._session["takes"] = meta.get("takes", [])
+
+        self._enqueue_publish(folder, take_number)
+        self._retry_failed_publishes()
+        return {
+            "ok": True,
+            "take": take,
+            "trashed": done["trashed"],
+            "location": done["location"],
+            "markers_dropped": dropped,
+            # Present only when the sweep of the originals itself failed —
+            # the crop still succeeded, but this is why "trashed" is False
+            # and "location" is not the Trash.
+            **({"error": done["error"]} if "error" in done else {}),
+        }
+
+    def crop_draft(self, temp_dir, tracks, start_sec, end_sec):
+        """
+        The same cut, one folder over. A take that has been stopped is proper
+        .wav already — capture wraps the raw PCM on stop — it just has no
+        entry in session.json yet, so there is nothing here to fix up. The
+        files keep their paths, so the caller saves the take as it would have.
+        """
+        temp_dir = Path(temp_dir)
+        if not self._inside_recordings(temp_dir):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+
+        live = [t for t in (tracks or []) if Path(t.get("file", "")).exists()]
+        if not live:
+            return {"ok": False, "error": "The take has no files left on disk"}
+
+        span = self._crop_span(0, start_sec, end_sec)
+        if "error" in span:
+            return {"ok": False, "error": span["error"]}
+
+        playing = self._open_tracks
+        self.player_close()
+        done = self._crop_tracks(live, span["start"], span["end"])
+        if not done["ok"]:
+            # See crop_take: the files the interface would reopen on have not
+            # changed, so nothing over there will reopen them.
+            if playing:
+                self.player_open(playing)
+            return done
+        return {
+            "ok": True,
+            "tracks": live,
+            "duration_sec": done["duration_sec"],
+            "trashed": done["trashed"],
+            "location": done["location"],
+            **({"error": done["error"]} if "error" in done else {}),
+        }
+
     # ---------- playback ----------
 
     def player_open(self, tracks):
@@ -1228,6 +1477,7 @@ class Api:
                 player.set_volume(name, v)
 
             self._player = player
+            self._open_tracks = tracks
             result = {"ok": True, **player.state()}
             if warning:
                 result["warning"] = warning
@@ -1236,6 +1486,7 @@ class Api:
     def player_close(self):
         with self._player_lock:
             player, self._player = self._player, None
+            self._open_tracks = None
             if player is not None:
                 player.close()
             return {"ok": True}

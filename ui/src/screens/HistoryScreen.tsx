@@ -56,6 +56,9 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   const [rehearsals, setRehearsals] = useState<RehearsalSummary[] | null>(null)
   const [opened, setOpened] = useState<RehearsalDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Something slow enough to click twice by mistake is running. So far that
+  // is only a crop, which rewrites every track of the take.
+  const [busy, setBusy] = useState(false)
   const [takeToDelete, setTakeToDelete] = useState<Take | null>(null)
   const [takeToRename, setTakeToRename] = useState<Take | null>(null)
   const [takeToShare, setTakeToShare] = useState<Take | null>(null)
@@ -134,6 +137,34 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     // screen, but playback and the A–B region do not survive this.
     if (selected?.take_number === take.take_number && res.take) reselect(res.take)
     await reopen(opened.folder)
+  }
+
+  // Python let go of the files before rewriting them, so the take has to be
+  // opened again; the fresh `tracks` array is what tells the player that.
+  // Rewriting eight long tracks takes real seconds, so the screen is busy
+  // while it runs: a second Crop would cut the take the first one made.
+  const cropTake = async (take: Take, from: number, to: number) => {
+    if (!opened || busy) return
+    setBusy(true)
+    setError(null)
+    player.pause()
+    const res = await api().crop_take(opened.folder, take.take_number, from, to)
+    setBusy(false)
+    if (!res.ok) {
+      setError(res.error ?? "Could not crop the take")
+      return
+    }
+    if (res.take) reselect(res.take)
+    await reopen(opened.folder)
+    // The crop itself went through — only the sweep of the original is what
+    // failed — so this adds to the success path rather than standing in for it.
+    if (res.error) {
+      setError(
+        `The take was cropped, but the original could not be moved out of the way (${res.error})${
+          res.location ? `, and is still at ${res.location}` : ""
+        }.`
+      )
+    }
   }
 
   const renameRehearsal = async (folder: string, name: string) => {
@@ -237,6 +268,8 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
               onAddMarker={(sec) => addMarker(selected, sec)}
               onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
               onRemoveMarker={(sec) => removeMarker(selected, sec)}
+              onCrop={(from, to) => void cropTake(selected, from, to)}
+              canCrop={!busy}
             />
           ) : (
             opened.takes.length > 0 && (

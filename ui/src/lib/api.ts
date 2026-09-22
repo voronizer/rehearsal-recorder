@@ -240,7 +240,14 @@ type PyApi = {
   load_default_tracks(): Promise<TrackTemplate | null>
   save_default_tracks(config: TrackTemplate): Promise<Ok>
   media_url(absPath: string): Promise<string | null>
-  take_media(tracks: TrackFile[], buckets?: number): Promise<TrackMedia[]>
+  /** A track's address, length and waveform. A range narrows the waveform to
+   *  the part on screen; the lengths returned are always the whole file's. */
+  take_media(
+    tracks: TrackFile[],
+    buckets?: number,
+    startSec?: number,
+    endSec?: number
+  ): Promise<TrackMedia[]>
 
   start_rehearsal(
     name: string,
@@ -271,6 +278,29 @@ type PyApi = {
     markers?: Marker[]
   ): Promise<Ok<{ take?: Take }>>
   discard_take(tempDir: string): Promise<Ok>
+  /**
+   * Keep only [startSec, endSec) of a saved take; the rest goes to the Trash.
+   * `error` can be set even when `ok` is true — the crop itself went
+   * through, but the originals could not be swept away, and `location` is
+   * where they are sitting instead.
+   */
+  crop_take(
+    folder: string,
+    takeNumber: number,
+    startSec: number,
+    endSec: number
+  ): Promise<
+    Ok<{ take?: Take; markers_dropped?: number; location?: string | null }>
+  >
+  /** The same, for a take that is still on the review screen. */
+  crop_draft(
+    tempDir: string,
+    tracks: TrackFile[],
+    startSec: number,
+    endSec: number
+  ): Promise<
+    Ok<{ tracks?: TrackFile[]; duration_sec?: number; location?: string | null }>
+  >
 
   list_rehearsals(): Promise<RehearsalSummary[]>
   get_rehearsal(folder: string): Promise<RehearsalDetail>

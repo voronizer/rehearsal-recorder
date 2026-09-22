@@ -724,6 +724,15 @@ def main():
     renamed = dict(take, name="Something else")
     ok("a renamed take is not current",
        not cloudmod.is_current(renamed, "mix", volumes, "wav", where))
+    # A crop changes nothing else in this record — same name, same format,
+    # same folder, same balance — and share_take reads the take's files
+    # outside the metadata lock, so a copy that started before a crop can
+    # write its record after it. Without the length in there, that record
+    # matches the shorter take and the re-publish the crop asked for skips it,
+    # leaving the uncropped copy in the cloud folder reported as up to date.
+    shorter = dict(take, duration_sec=round(take["duration_sec"] / 2, 2))
+    ok("and neither is a take that has been cropped since",
+       not cloudmod.is_current(shorter, "mix", volumes, "wav", where))
     ok("a take that was never copied is not current",
        not cloudmod.is_current({"name": "x", "tracks": []}, "mix", volumes,
                                "wav", where))
@@ -1410,6 +1419,264 @@ def main():
     refused = e.discard_take(str(outside))
     ok("a path outside the recordings folder is refused", not refused["ok"])
     ok("and nothing there is touched", (outside / "keep.txt").exists())
+
+    print("\n[18] Cutting a wav down to a range")
+    # The one operation under a crop: write the part worth keeping. Moving the
+    # original out of the way is the caller's job — in this app, the Trash.
+    from rehearsal_recorder.audio.crop import crop_wav
+
+    def wav_frames(path):
+        with wave.open(str(path)) as w:
+            return w.getnframes()
+
+    def wav_samples(path):
+        """Every sample of a mono wav, at its own scale."""
+        with wave.open(str(path)) as w:
+            frames, width = w.getnframes(), w.getsampwidth()
+            raw = w.readframes(frames)
+        if width == 2:
+            return list(struct.unpack("<%dh" % frames, raw))
+        return [int.from_bytes(raw[i * 3:i * 3 + 3], "little", signed=True)
+                for i in range(frames)]
+
+    tmp6 = Path(tempfile.mkdtemp())
+    write_wav(tmp6 / "long.wav", 1000, seconds=2.0)
+
+    cut = crop_wav(tmp6 / "long.wav", tmp6 / "cut.wav", 0.5, 1.5)
+    ok("a crop says how much it kept", cut["ok"] and cut["frames"] == SR)
+    with wave.open(str(tmp6 / "cut.wav")) as w:
+        ok("and writes exactly that",
+           w.getnframes() == SR and w.getframerate() == SR
+           and w.getsampwidth() == 2 and w.getnchannels() == 1)
+
+    middle = wav_samples(tmp6 / "cut.wav")
+    ok("the audio between the cuts is untouched", middle[SR // 2] == 1000)
+    # A cut lands on whatever sample was there, and a non-zero sample at the
+    # edge of a file is a click.
+    ok("but each cut edge is ramped rather than stepped",
+       middle[0] == 0 and abs(middle[-1]) < 50)
+
+    head = crop_wav(tmp6 / "long.wav", tmp6 / "head.wav", 0.0, 1.0)
+    ok("a region that starts at the beginning keeps the original attack",
+       head["ok"] and wav_samples(tmp6 / "head.wav")[0] == 1000)
+
+    write_wav(tmp6 / "deep.wav", 1000, seconds=1.0, depth=24)
+    deep = crop_wav(tmp6 / "deep.wav", tmp6 / "deepcut.wav", 0.25, 0.75)
+    with wave.open(str(tmp6 / "deepcut.wav")) as w:
+        ok("24-bit comes out 24-bit",
+           deep["ok"] and w.getsampwidth() == 3 and w.getnframes() == SR // 2)
+    deep_samples = wav_samples(tmp6 / "deepcut.wav")
+    ok("and its samples come through whole",
+       deep_samples[SR // 4] == 1000 * 256)
+    # SR // 4 above lands in the untouched raw-copy middle, so it never runs
+    # the unpack24 / scale / << 8 / pack24 round trip in _faded — the most
+    # bit-fragile code in the module. The head ramp's first frame is exactly
+    # 0 either way, but the tail ramp's last frame (240 frames = 0.005s at
+    # 48000Hz) is round(256000 * 1/240) = 1067; a missing `<< 8` would instead
+    # produce 4 (the value divided by 256 and truncated by pack24 keeping the
+    # wrong three bytes), so this is precise enough to actually catch that.
+    ok("and a 24-bit edge is ramped through the same pack24 path",
+       deep_samples[0] == 0 and deep_samples[-1] == 1067)
+
+    past = crop_wav(tmp6 / "long.wav", tmp6 / "nothing.wav", 5.0, 6.0)
+    ok("a range past the end of the file is refused", not past["ok"])
+    ok("and leaves nothing behind when it is",
+       not (tmp6 / "nothing.wav").exists())
+
+    print("\n[19] Cropping a take to the region")
+    tmp7 = Path(tempfile.mkdtemp())
+    apimod7, c = fresh_api(tmp7)
+    c.start_rehearsal("Cutting", None, SR,
+                      [{"name": "Gtr", "channel": 1},
+                       {"name": "Bass", "channel": 2}], 16)
+    draft = Path(c._session["folder"]) / "_drafts" / "take 1"
+    write_wav(draft / "Gtr.wav", 1000, seconds=4.0)
+    write_wav(draft / "Bass.wav", 2000, seconds=4.0)
+    saved = c.keep_take(
+        1, str(draft), "Polyn", 4.0,
+        [{"name": "Gtr", "file": str(draft / "Gtr.wav")},
+         {"name": "Bass", "file": str(draft / "Bass.wav")}],
+        [{"at": 0.5, "note": "count-in", "kind": "note"},
+         {"at": 2.0, "note": "here", "kind": "good"},
+         {"at": 3.8, "note": "stopped", "kind": "bad"}],
+    )
+    folder = str(c._session["folder"])
+    take_dir = Path(saved["take"]["tracks"][0]["file"]).parent
+
+    # The player holds every track through a memmap, and Windows will not
+    # rename a mapped file — so cropping has to let go of them first.
+    c.player_open(saved["take"]["tracks"])
+    ok("a take can be open in the player", c.player_state().get("open") is True)
+
+    res = c.crop_take(folder, 1, 1.0, 3.0)
+    ok("cropping says what it kept",
+       res["ok"] and abs(res["take"]["duration_sec"] - 2.0) < 0.01)
+    ok("and let go of the files before rewriting them",
+       c.player_state().get("open") is not True)
+    ok("every track is the region now",
+       all(wav_frames(t["file"]) == 2 * SR for t in res["take"]["tracks"]))
+    ok("the markers move with the audio they pointed at",
+       [m["at"] for m in res["take"]["markers"]] == [1.0])
+    ok("and the ones outside it are counted, not silently dropped",
+       res["markers_dropped"] == 2)
+    ok("the originals leave as one folder, not eight loose files",
+       res["trashed"] is True
+       or Path(res["location"] or "").name.endswith("(before crop)"))
+    ok("and the take folder is left with only its tracks",
+       sorted(p.name for p in take_dir.iterdir()) == ["Bass.wav", "Gtr.wav"])
+
+    # The cloud fingerprint records the name, format, folder and balance —
+    # never the length. A cropped take would go on matching it, and the
+    # uncropped copy would stay in the cloud folder as the copy of record.
+    c.set_cloud_dir(str(tmp7 / "Cloud"))
+    c.share_take(folder, 1, "mix")
+    ok("a shared take knows where its copy is",
+       bool((c.session_state()["takes"][0].get("cloud") or {}).get("mix")))
+    c.crop_take(folder, 1, 0.25, 1.75)
+    ok("cropping forgets a copy that is now of a different take",
+       not (c.session_state()["takes"][0].get("cloud") or {}).get("mix"))
+
+    ok("a region shorter than a second is refused",
+       not c.crop_take(folder, 1, 0.1, 0.4)["ok"])
+    ok("and a folder outside the recordings directory is refused",
+       not c.crop_take(str(tmp7 / "elsewhere"), 1, 0.0, 2.0)["ok"])
+
+    # By the time the originals are swept up, the crop has already succeeded
+    # — the new files are in place. A full disk or a permissions problem on
+    # the sweep must not be reported as a failed crop, and it must not lose
+    # track of where the originals actually are: that folder is the only way
+    # back to them. Full range, so the take's duration comes out exactly
+    # what it already was — the checks below still assume a 1.5s take.
+    real_move_to_trash = apimod7.move_to_trash
+    apimod7.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
+    try:
+        stuck = c.crop_take(folder, 1, 0.0, 1.5)
+    finally:
+        apimod7.move_to_trash = real_move_to_trash
+    ok("a crop still succeeds even when the sweep of the originals fails",
+       stuck["ok"])
+    ok("and is not mistaken for having reached the Trash",
+       stuck["trashed"] is False)
+    stuck_dir = Path(stuck["location"] or "")
+    ok("its location names the folder the originals are actually still in",
+       stuck_dir.name.endswith("(before crop)") and stuck_dir.is_dir())
+    ok("with the originals really inside it, not just a claim",
+       sorted(p.name for p in stuck_dir.iterdir()) == ["Bass.wav", "Gtr.wav"])
+
+    # Moving the originals aside is the one step that can stop half way: on
+    # Windows, renaming a file another process holds open raises. Half the
+    # tracks aside and half in place, behind an error that reads as "nothing
+    # happened", is how a take ends up with tracks of different lengths — the
+    # next crop quietly drops the missing ones and cuts only the survivors.
+    c.player_open(c.session_state()["takes"][0]["tracks"])
+    was = {p.name: wav_frames(p) for p in take_dir.iterdir()}
+    beside = sorted(p.name for p in take_dir.parent.iterdir())
+    real_move = apimod7.shutil.move
+    moves = {"n": 0}
+
+    def flaky_move(src, dst):
+        moves["n"] += 1
+        if moves["n"] == 2:            # the second track, mid-way through
+            raise PermissionError("the file is open in another process")
+        return real_move(src, dst)
+
+    apimod7.shutil.move = flaky_move
+    try:
+        half = c.crop_take(folder, 1, 0.25, 1.25)
+    finally:
+        # Not in an `if`: a stub left behind here would poison every section
+        # after this one.
+        apimod7.shutil.move = real_move
+    ok("a move that fails part way is a failed crop", not half["ok"])
+    ok("and the take is exactly what it was, not half of a crop",
+       {p.name: wav_frames(p) for p in take_dir.iterdir()} == was)
+    ok("with no half-written file left over",
+       not any(p.name.startswith(".writing-") for p in take_dir.iterdir()))
+    ok("and no empty folder of originals beside the take",
+       sorted(p.name for p in take_dir.parent.iterdir()) == beside)
+    # Python let go of the files before rewriting them. On the failure path
+    # nothing else puts the player back — the take's tracks have not changed,
+    # so the interface's open effect never re-runs — and the transport would
+    # go on driving a player that is not there.
+    ok("and the take it was playing is still open",
+       c.player_state().get("open") is True)
+    c.player_close()
+
+    # Nothing is replaced until every new file exists, so a track that cannot
+    # be read costs the crop and nothing else.
+    (take_dir / "Bass.wav").write_bytes(b"not a wav at all")
+    broken = c.crop_take(folder, 1, 0.25, 1.5)
+    ok("one unreadable track stops the whole crop", not broken["ok"])
+    ok("and leaves no half-written files behind",
+       not any(p.name.startswith(".writing-") for p in take_dir.iterdir()))
+    ok("with the other track still where it was",
+       wav_frames(take_dir / "Gtr.wav") > 0)
+
+    # A take on the review screen is a proper wav already; it just has no
+    # entry in session.json yet.
+    draft2 = Path(c._session["folder"]) / "_drafts" / "take 2"
+    write_wav(draft2 / "Gtr.wav", 1000, seconds=4.0)
+    pending = [{"name": "Gtr", "file": str(draft2 / "Gtr.wav")}]
+    early = c.crop_draft(str(draft2), pending, 1.0, 3.0)
+    ok("a take can be cropped before it is ever saved",
+       early["ok"] and abs(early["duration_sec"] - 2.0) < 0.01)
+    ok("in place, so saving it afterwards needs no new paths",
+       wav_frames(draft2 / "Gtr.wav") == 2 * SR
+       and early["tracks"][0]["file"] == str(draft2 / "Gtr.wav"))
+
+    # A draft has no stored length to clamp the end against, so the region
+    # asked for can run past the audio. The length reported is the length
+    # written — Review hands this straight to keep_take and it ends up in
+    # meta.json, where a number nobody measured is a lie that outlives the
+    # take.
+    past_end = c.crop_draft(str(draft2), pending, 1.5, 3.0)
+    ok("a crop running past the end reports what it really kept",
+       past_end["ok"] and abs(past_end["duration_sec"] - 0.5) < 0.01
+       and wav_frames(draft2 / "Gtr.wav") == SR // 2)
+
+    print("\n[20] The waveform can be asked for one part of a take")
+    # Zoomed in, the same 900 bars have to describe two seconds instead of
+    # nine minutes, or zooming only stretches the same smear.
+    tmp8 = Path(tempfile.mkdtemp())
+    with wave.open(str(tmp8 / "half.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(struct.pack("<h", 0) * SR)       # a second of silence
+        w.writeframes(struct.pack("<h", 8000) * SR)    # then a second of tone
+
+    whole, frames_whole, _ = wav_peaks(tmp8 / "half.wav", buckets=8)
+    ok("the whole file is half silence and half tone",
+       whole[0] == 0 and whole[7] > 0.2)
+
+    loud, frames_loud, _ = wav_peaks(tmp8 / "half.wav", buckets=8,
+                                     start_sec=1.0, end_sec=2.0)
+    ok("asked for the second half, every bar is the tone",
+       all(p > 0.2 for p in loud))
+    quiet, _, _ = wav_peaks(tmp8 / "half.wav", buckets=8,
+                            start_sec=0.0, end_sec=1.0)
+    ok("and asked for the first, none of them is", all(p == 0 for p in quiet))
+    # take_media turns this into the player's duration, which must not change
+    # when the view does.
+    ok("the file still reports its own length, not the window's",
+       frames_loud == frames_whole == 2 * SR)
+
+    # Without bounding reads to the window, the loop reads whole bars past the
+    # end whenever the window is shorter than the bar count: per_bucket floors
+    # to 1, and nothing stops the loop but real EOF. This arrangement exposes
+    # it: a short silent window followed by loud audio.
+    tmp9 = Path(tempfile.mkdtemp())
+    with wave.open(str(tmp9 / "short_window.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(struct.pack("<h", 0) * int(0.01 * SR))  # 10ms silence
+        w.writeframes(struct.pack("<h", 8000) * SR)           # then a second of tone
+
+    short_silent, _, _ = wav_peaks(tmp9 / "short_window.wav", buckets=900,
+                                   start_sec=0.0, end_sec=0.01)
+    ok("a window shorter than the bar count does not leak past its end",
+       all(p == 0 for p in short_silent))
 
     print("\n" + "=" * 60)
     if problems:

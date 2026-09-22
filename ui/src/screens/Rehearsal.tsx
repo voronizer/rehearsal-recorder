@@ -121,6 +121,34 @@ export function Rehearsal({
     onChanged()
   }
 
+  // Python let go of the files before rewriting them, so the take has to be
+  // opened again; the fresh `tracks` array is what tells the player that.
+  // Rewriting eight long tracks takes real seconds, so the screen is busy
+  // while it runs: a second Crop would cut the take the first one made.
+  const cropTake = async (take: Take, from: number, to: number) => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    player.pause()
+    const res = await api().crop_take(session.folder, take.take_number, from, to)
+    setBusy(false)
+    if (!res.ok) {
+      setError(res.error ?? "Could not crop the take")
+      return
+    }
+    if (res.take) reselect(res.take)
+    onChanged()
+    // The crop itself went through — only the sweep of the original is what
+    // failed — so this adds to the success path rather than standing in for it.
+    if (res.error) {
+      setError(
+        `The take was cropped, but the original could not be moved out of the way (${res.error})${
+          res.location ? `, and is still at ${res.location}` : ""
+        }.`
+      )
+    }
+  }
+
   const renameRehearsal = async (name: string) => {
     const res = await api().rename_rehearsal(session.folder, name)
     if (!res.ok) {
@@ -228,6 +256,8 @@ export function Rehearsal({
             onAddMarker={(sec) => addMarker(selected, sec)}
             onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
             onRemoveMarker={(sec) => removeMarker(selected, sec)}
+            onCrop={(from, to) => void cropTake(selected, from, to)}
+            canCrop={!busy}
           />
         ) : (
           session.takes.length > 0 && (

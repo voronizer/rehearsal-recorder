@@ -24,6 +24,18 @@ from rehearsal_recorder.mediaserver import AppServer  # noqa: E402
 SHOTS = Path(__file__).resolve().parent / "screenshots"
 TAKE_SECONDS = 6.0
 
+
+def drag_region(page, from_ratio, to_ratio):
+    """Draw a region across the timeline, the way a person does."""
+    box = page.get_by_role("group", name="Take timeline").bounding_box()
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(box["x"] + box["width"] * from_ratio, y)
+    page.mouse.down()
+    page.mouse.move(box["x"] + box["width"] * to_ratio, y, steps=10)
+    page.mouse.up()
+    page.wait_for_timeout(250)
+
+
 MOCK = """
 window.__CALLS__ = [];
 const track = (name, fn) => async (...args) => {
@@ -169,12 +181,37 @@ window.__MAKE_API__ = () => ({
     return {ok:true, take};
   }),
   discard_take: track('discard_take', async () => ({ok:true})),
+  crop_take: track('crop_take', async (folder, n, a, b) => {
+    const take = (session ? session.takes : []).find(t => t.take_number === n);
+    if (!take) return {ok:false, error:'Take not found'};
+    let dropped = 0;
+    take.markers = (take.markers || [])
+      .filter(m => { const keep = m.at >= a && m.at <= b; if (!keep) dropped++; return keep; })
+      .map(m => ({...m, at: Math.round((m.at - a) * 100) / 100}));
+    take.duration_sec = b - a;
+    // A rewritten file is a different file as far as the player is
+    // concerned, and the mock looks lengths up by path, so give it one.
+    take.tracks = take.tracks.map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
+    for (const t of take.tracks) fileDurations[t.file] = take.duration_sec;
+    P = null;   // Python lets go of the files before rewriting them
+    // Deep copy, same as rename_take — a live handle would let the interface
+    // alias the mock's own state, which the real bridge never allows.
+    return JSON.parse(JSON.stringify(
+      {ok:true, take, trashed:true, location:null, markers_dropped:dropped}));
+  }),
+  crop_draft: track('crop_draft', async (dir, tracks, a, b) => {
+    const cut = (tracks || []).map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
+    for (const t of cut) fileDurations[t.file] = b - a;
+    P = null;
+    return JSON.parse(JSON.stringify(
+      {ok:true, tracks:cut, duration_sec: b - a, trashed:true, location:null}));
+  }),
 
-  take_media: async (tracks) => tracks.map(t => {
+  take_media: track('take_media', async (tracks, buckets, from, to) => tracks.map(t => {
     const dur = fileDurations[t.file] ?? TAKE;
     return {name:t.name, url:'about:blank', frames:48000*dur, samplerate:48000, duration_sec:dur,
       peaks: Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9)};
-  }),
+  })),
 
   player_open: track('player_open', async (tracks) => {
     const dur = tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
@@ -518,6 +555,29 @@ def main():
         ok("space while naming the take does not save it",
            len(calls("keep_take")) == 0)
 
+        # The dead air at the start of a take is visible on the waveform the
+        # moment you stop recording, which makes this the screen where
+        # trimming is most obviously wanted. Take 1 is cropped here, and the
+        # only later section that opens it again is [9c], which clicks it to
+        # prove the zoom resets and does not care how long it is; takes 2
+        # onward keep their full length, which the region checks in [9]
+        # depend on.
+        page.wait_for_selector("button[aria-label='Crop to the region']", state="hidden")
+        ok("with no region there is nothing to crop to",
+           page.locator("button[aria-label='Crop to the region']").count() == 0)
+        drag_region(page, 0.25, 0.75)
+        page.click("button[aria-label='Crop to the region']")
+        page.wait_for_selector("text=Keep only")
+        page.get_by_role("button", name="Crop", exact=True).click()
+        page.wait_for_timeout(600)
+        cut = calls("crop_draft")
+        ok("a take can be trimmed before it is ever saved",
+           len(cut) == 1
+           and abs(cut[0]["args"][2] - TAKE_SECONDS * 0.25) < 0.4
+           and abs(cut[0]["args"][3] - TAKE_SECONDS * 0.75) < 0.4)
+        ok("and the take on screen is that region now",
+           page.locator("span", has_text="/ 0:03").count() >= 1)
+
         # Everywhere else in the app space runs the screen's main action, and
         # here that action is saving the take.
         page.fill("#take-name", "Polyn")
@@ -810,9 +870,9 @@ def main():
         ok("and leaves the other one where it was",
            abs(moved[0] - TAKE_SECONDS * 0.25) < 0.05)
 
-        # The clock is chosen from a ladder, so a six-second take gets five
-        # second steps. The other end of that ladder is checked on the long
-        # take in history.
+        # The clock is chosen from a ladder and from how much room a tick has,
+        # so a six-second take across this width gets one-second steps. The
+        # other end of that ladder is checked on the long take in history.
         ok("the ruler's clock fits the take",
            "0:05" in page.get_by_role("group", name="Timeline clock").inner_text())
 
@@ -822,6 +882,215 @@ def main():
         ok("mute reached Python", calls("player_set_muted")[-1]["args"] == ["Guitar", True])
         ok("solo reached Python", calls("player_set_solo")[-1]["args"] == ["Vocals"])
         page.screenshot(path=str(SHOTS / "54-player.png"))
+
+        print("\n[9c] Zooming the timeline")
+        # Fifteen seconds of a nine-minute take is twenty pixels wide: the
+        # gesture built last release is at its worst exactly where it is
+        # needed most.
+        box = page.get_by_role("group", name="Take timeline").bounding_box()
+        mid_y = box["y"] + box["height"] / 2
+        clock = page.get_by_role("group", name="Timeline clock")
+        whole_take_clock = clock.inner_text()
+
+        def seek_at(ratio):
+            """Where a click at this fraction of the width lands, in seconds."""
+            page.mouse.move(box["x"] + box["width"] * ratio, mid_y)
+            page.mouse.down()
+            page.mouse.up()
+            page.wait_for_timeout(250)
+            return calls("player_seek")[-1]["args"][0]
+
+        def wheel_at(ratio, dx, dy):
+            page.mouse.move(box["x"] + box["width"] * ratio, mid_y)
+            page.mouse.wheel(dx, dy)
+            page.wait_for_timeout(400)
+
+        def clock_labels():
+            """The times written on the ruler, in seconds."""
+            out = []
+            for text in clock.locator("span.tnum").all_inner_texts():
+                minutes, seconds = text.strip().split(":")
+                out.append(int(minutes) * 60 + int(seconds))
+            return out
+
+        whole_take_labels = clock_labels()
+        before = seek_at(0.3)
+        wheel_at(0.3, 0, -500)
+        # A ruler with nothing left on it also reads differently from the whole
+        # take's, so "the text changed" is not enough: a tick ladder that
+        # starts above the shortest zoom window empties the ruler instead of
+        # rescaling it, and it flickers between one label and none as the
+        # window is panned. This asks the zoomed ruler for a clock, and asks
+        # that the clock belongs to the part of the take being shown.
+        zoomed = clock_labels()
+        ok("the wheel zooms in", zoomed != whole_take_labels)
+        ok("and the timeline says what part of the take is on screen",
+           page.locator("text=Whole take").count() == 1)
+        # Where a click at each end of the surface lands is the window itself,
+        # which is what the ruler has to be labelling.
+        window_from, window_to = seek_at(0.02), seek_at(0.98)
+        ok("and the zoomed ruler still has a time on it, inside the window",
+           zoomed != [] and window_from - 0.1 <= zoomed[0] <= window_to + 0.1)
+        # Anchored, not centred: the second under the pointer stays under the
+        # pointer, which is the difference between aiming and hunting.
+        ok("the second under the pointer stays under it",
+           abs(seek_at(0.3) - before) < 0.2)
+
+        mid_before = seek_at(0.6)
+        wheel_at(0.6, 200, 0)
+        ok("scrolling sideways moves along the take", seek_at(0.6) > mid_before)
+
+        # Shift and the wheel is the same gesture on a mouse, but not the same
+        # event: Chromium leaves the value in deltaY, while WebKit and Firefox
+        # move it to deltaX and leave deltaY at zero. This app runs on WebKit
+        # on macOS, and headless Chromium cannot produce that shape, so the
+        # event is dispatched as WebKit sends it.
+        shifted_before = seek_at(0.6)
+        page.get_by_role("group", name="Take timeline").evaluate(
+            "el => el.dispatchEvent(new WheelEvent('wheel', {shiftKey: true, "
+            "deltaX: 200, deltaY: 0, bubbles: true, cancelable: true}))"
+        )
+        page.wait_for_timeout(400)
+        ok("and so does shift with the wheel, whichever axis carries it",
+           seek_at(0.6) > shifted_before)
+
+        page.click("text=Whole take")
+        page.wait_for_timeout(400)
+        ok("and Whole take gives the whole take back",
+           page.locator("text=Whole take").count() == 0
+           and clock.inner_text() == whole_take_clock)
+
+        # A marker off the side of the window is not drawn at all: without
+        # that it would be pinned to the edge, pointing at the wrong second.
+        all_markers = page.locator("[data-marker-at]").evaluate_all(
+            "els => els.map(e => Number(e.dataset.markerAt))")
+        ok("markers are on the timeline to start with", len(all_markers) > 1)
+        wheel_at(0.98, 0, -900)   # the last seconds of the take
+        wheel_at(0.5, 300, 0)     # and right up against the end itself
+        drawn = page.locator("[data-marker-at]").evaluate_all(
+            "els => els.map(e => Number(e.dataset.markerAt))")
+        # An empty list satisfies "all of them are late in the take", so that
+        # on its own would pass against a timeline that drew nothing at all:
+        # the mark at the end of the take has to still be on it, and the one
+        # at the start has to be gone.
+        ok("and only the ones inside the window are drawn",
+           drawn and all(at >= TAKE_SECONDS / 2 for at in drawn)
+           and len(drawn) < len(all_markers))
+        page.screenshot(path=str(SHOTS / "56-zoom.png"))
+
+        # A region's duration chip is only about the region — it must not go
+        # on labelling a stretch of the take the region has nothing to do
+        # with once the window has moved away from it. A chip pinned to the
+        # edge of the wrong part of the take is worse than no chip.
+        page.click("text=Whole take")
+        page.wait_for_timeout(400)
+        drag_region(page, 0.05, 0.2)
+        ok("the region's read-out shows while the window overlaps it",
+           page.locator("[data-region-span]").count() == 1)
+        wheel_at(0.98, 0, -900)   # the far end, nowhere near the region
+        ok("and it is gone once the window has nothing to do with the region",
+           page.locator("[data-region-span]").count() == 0)
+
+        page.click("button[aria-label^='Take 1 Polyn']")
+        page.wait_for_timeout(700)
+        ok("and picking another take starts from the whole of it",
+           page.locator("text=Whole take").count() == 0)
+        page.click("button[aria-label^='Take 2 Polyn (best)']")
+        page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
+
+        print("\n[9d] The waveform sharpens to what is on screen")
+        # Stretching the same 900 bars over two seconds shows no more than it
+        # did over nine minutes, so the peaks are fetched again for the window.
+        # Not on every wheel tick, though: that would be a burst of calls into
+        # Python for a picture nobody has finished aiming yet.
+        ranged_before = len([c for c in calls("take_media")
+                             if len(c["args"]) > 2 and c["args"][2] is not None])
+        page.mouse.move(box["x"] + box["width"] * 0.5, mid_y)
+        for _ in range(6):
+            page.mouse.wheel(0, -120)
+        page.wait_for_timeout(900)
+        ranged = [c for c in calls("take_media")
+                  if len(c["args"]) > 2 and c["args"][2] is not None]
+        fresh = len(ranged) - ranged_before
+        ok("the peaks are fetched again for the part on screen", fresh >= 1)
+        ok("once the wheel settles, not once per notch", fresh <= 3)
+        ok("and for the window that is actually showing",
+           abs(ranged[-1]["args"][2] - ranged[-1]["args"][3]) > 0
+           and ranged[-1]["args"][3] > ranged[-1]["args"][2])
+        page.click("text=Whole take")
+        page.wait_for_timeout(700)
+
+        print("\n[9e] Cropping a take to the region")
+        # The region drove one thing until now. Trimming the take to it is the
+        # other, and it is what makes a nine-minute take that holds three
+        # minutes of music into a three-minute take.
+        # A region that is the whole take has nothing to remove, so the button
+        # is there but will not do anything.
+        drag_region(page, 0.0, 1.0)
+        ok("a region covering the whole take offers no crop",
+           page.get_by_role("button", name="Crop to the region").is_disabled())
+
+        drag_region(page, 0.25, 0.75)
+        crop = page.get_by_role("button", name="Crop to the region")
+        ok("a region offers to trim the take to itself", crop.count() == 1)
+        crop.click()
+        page.wait_for_selector("text=Keep only")
+        asked = page.locator("[role=dialog]").inner_text()
+        ok("the question names the part being kept", "Keep only 0:01" in asked)
+        ok("and says where what it removes is going",
+           "Trash" in asked or "_deleted" in asked)
+        page.get_by_role("button", name="Crop", exact=True).click()
+        page.wait_for_timeout(700)
+        cropped = calls("crop_take")
+        ok("cropping reached Python with the region",
+           len(cropped) == 1
+           and abs(cropped[0]["args"][2] - TAKE_SECONDS * 0.25) < 0.4
+           and abs(cropped[0]["args"][3] - TAKE_SECONDS * 0.75) < 0.4)
+        ok("the take is the region now — three seconds, not six",
+           page.locator("span", has_text="/ 0:03").count() >= 1)
+        ok("and the region is cleared, because the take is that region",
+           page.locator("button", has_text="A 0:").count() == 0)
+
+        # A crop can succeed while the sweep of the pre-crop original still
+        # fails — a full disk, a permissions problem — and that must not
+        # vanish silently: the take as it was recorded is sitting somewhere
+        # outside the Trash, and this message is the only thing that says
+        # where. Wraps the real handler rather than replacing session logic,
+        # and puts it back afterwards so no later section inherits it. The
+        # answer is held back until this section lets it go, which is also the
+        # only way to see the screen a person is looking at while eight long
+        # tracks are rewritten — a second Crop then is not a no-op: Python
+        # re-reads the now shorter take and cuts it again.
+        page.evaluate(
+            """() => {
+                window.__REAL_CROP_TAKE__ = window.pywebview.api.crop_take;
+                window.__RELEASE_CROP__ = null;
+                window.pywebview.api.crop_take = async (...args) => {
+                    await new Promise(go => { window.__RELEASE_CROP__ = go; });
+                    const res = await window.__REAL_CROP_TAKE__(...args);
+                    return {...res, error: 'Could not remove it: no space left on device',
+                            location: '/rec/Tuesday jam/_deleted/take 2 (original)'};
+                };
+            }"""
+        )
+        drag_region(page, 0.2, 0.8)
+        page.get_by_role("button", name="Crop to the region").click()
+        page.wait_for_selector("text=Keep only")
+        page.get_by_role("button", name="Crop", exact=True).click()
+        page.wait_for_timeout(400)
+        ok("a crop already running does not offer to run again",
+           page.get_by_role("button", name="Crop to the region").is_disabled())
+        page.evaluate("() => window.__RELEASE_CROP__()")
+        page.wait_for_timeout(700)
+        ok("a crop that could not sweep its original still says so",
+           page.get_by_text("could not be moved out of the way").count() > 0)
+        ok("and names where the original actually is",
+           page.get_by_text("/rec/Tuesday jam/_deleted/take 2 (original)").count() > 0)
+        ok("but the crop itself still went through",
+           page.locator("button[aria-label='Crop to the region']").count() == 0)
+        page.evaluate(
+            "() => { window.pywebview.api.crop_take = window.__REAL_CROP_TAKE__; }"
+        )
 
         print("\n[10] Sharing a take to the cloud")
         page.click("button[aria-label='Copy Polyn (best) to the cloud']")

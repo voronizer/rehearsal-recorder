@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api, type TrackFile, type TrackMedia, poll as pollPython } from "@/lib/api"
+import { MIN_VIEW_SEC } from "@/lib/timeline"
 
 export type MultitrackPlayer = ReturnType<typeof useMultitrackPlayer>
 
 /** How often the position is read back from Python while playing. */
 const STATE_POLL_MS = 120
+
+/** How long after the last wheel event the sharper peaks are fetched. Every
+ *  tick would be a burst of calls into Python for a picture nobody has
+ *  finished aiming yet. */
+const PEAKS_SETTLE_MS = 150
 
 /**
  * The take player. The audio itself is mixed in Python (audio/player.py) —
@@ -34,6 +40,16 @@ export function useMultitrackPlayer(
   const [region, setRegionState] = useState<{ a: number | null; b: number | null }>(
     { a: null, b: null }
   )
+  // What part of the take the timeline is showing. null is all of it — the
+  // same state as never having zoomed, so there is only one way to be
+  // zoomed out.
+  const [view, setViewState] = useState<{ from: number; to: number } | null>(
+    null
+  )
+  // The stretch of the take `media[].peaks` currently describe. It trails
+  // `view` by a moment, and Waveform is given both so the gap is drawn
+  // correctly — blurred, briefly — rather than drawn wrong.
+  const [peaksWindow, setPeaksWindow] = useState({ from: 0, to: 0 })
 
   // Anchor for smoothing the position between answers from Python.
   const anchor = useRef<{ position: number; at: number } | null>(null)
@@ -71,6 +87,8 @@ export function useMultitrackPlayer(
     setPlaying(false)
     setPosition(0)
     setRegionState({ a: null, b: null })
+    setViewState(null)
+    setPeaksWindow({ from: 0, to: 0 })
     setLooping(false)
     setLoadError(null)
     setDuration(fallbackDuration)
@@ -154,6 +172,42 @@ export function useMultitrackPlayer(
     return () => cancelAnimationFrame(raf)
   }, [playing, duration])
 
+  // Zoom redraws at once from the peaks already in hand; the ones that match
+  // the window arrive a moment later.
+  useEffect(() => {
+    if (!tracks || tracks.length === 0 || duration <= 0) return
+    const want = view ?? { from: 0, to: duration }
+    const have = peaksWindow.to > 0 ? peaksWindow : { from: 0, to: duration }
+    if (
+      Math.abs(want.from - have.from) < 0.01 &&
+      Math.abs(want.to - have.to) < 0.01
+    ) {
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const info = await api().take_media(
+            tracks,
+            undefined,
+            want.from,
+            want.to
+          )
+          if (cancelled) return
+          setMedia(info)
+          setPeaksWindow(want)
+        } catch {
+          /* the picture stays as it is; the take still plays */
+        }
+      })()
+    }, PEAKS_SETTLE_MS)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [tracks, view, duration, peaksWindow])
+
   const call = useCallback(
     async (fn: () => Promise<Record<string, unknown>>) => {
       if (!openedRef.current) return
@@ -172,6 +226,22 @@ export function useMultitrackPlayer(
     },
     [call, duration]
   )
+
+  const setView = useCallback(
+    (from: number, to: number) => {
+      if (duration <= 0) return
+      const span = Math.min(duration, Math.max(MIN_VIEW_SEC, to - from))
+      if (span >= duration) {
+        setViewState(null)
+        return
+      }
+      const start = Math.max(0, Math.min(duration - span, from))
+      setViewState({ from: start, to: start + span })
+    },
+    [duration]
+  )
+
+  const resetView = useCallback(() => setViewState(null), [])
 
   const applyLoop = useCallback(
     (next: { a: number | null; b: number | null }, enabled: boolean) => {
@@ -194,6 +264,12 @@ export function useMultitrackPlayer(
     duration,
     region,
     looping,
+    view,
+    setView,
+    resetView,
+    // Never zero-width for a consumer: before the first fetch answers, the
+    // peaks in hand are the whole take's.
+    peaksWindow: peaksWindow.to > 0 ? peaksWindow : { from: 0, to: duration },
 
     toggle: () => void call(() => api().player_toggle()),
     play: () => void call(() => api().player_play()),
