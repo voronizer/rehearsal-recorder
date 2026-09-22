@@ -1603,6 +1603,23 @@ def main():
     ok("the file still reports its own length, not the window's",
        frames_loud == frames_whole == 2 * SR)
 
+    # Without bounding reads to the window, the loop reads whole bars past the
+    # end whenever the window is shorter than the bar count: per_bucket floors
+    # to 1, and nothing stops the loop but real EOF. This arrangement exposes
+    # it: a short silent window followed by loud audio.
+    tmp9 = Path(tempfile.mkdtemp())
+    with wave.open(str(tmp9 / "short_window.wav"), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(struct.pack("<h", 0) * int(0.01 * SR))  # 10ms silence
+        w.writeframes(struct.pack("<h", 8000) * SR)           # then a second of tone
+
+    short_silent, _, _ = wav_peaks(tmp9 / "short_window.wav", buckets=900,
+                                   start_sec=0.0, end_sec=0.01)
+    ok("a window shorter than the bar count does not leak past its end",
+       all(p == 0 for p in short_silent))
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

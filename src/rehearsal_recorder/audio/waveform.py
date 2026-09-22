@@ -57,10 +57,14 @@ def wav_peaks(path, buckets=DEFAULT_BUCKETS, start_sec=None, end_sec=None):
         per_bucket = max(1, window // buckets)
         peaks = np.zeros(buckets, dtype=np.float32)
 
+        # Without tracking what is left in the window, the loop reads whole bars
+        # past end whenever the window is shorter than the bar count: per_bucket
+        # floors to 1 there, and real EOF is the only thing that stops it.
+        left = window
         bucket = 0
-        while bucket < buckets:
+        while bucket < buckets and left > 0:
             take = min(BUCKETS_PER_BLOCK, buckets - bucket)
-            raw = wf.readframes(per_bucket * take)
+            raw = wf.readframes(min(per_bucket * take, left))
             if not raw:
                 break
 
@@ -74,6 +78,7 @@ def wav_peaks(path, buckets=DEFAULT_BUCKETS, start_sec=None, end_sec=None):
                 unpack24(np.ascontiguousarray(packed[:, 0, :]), whole)
                 arr = whole
 
+            left -= arr.size
             usable = (arr.size // per_bucket) * per_bucket
             if usable == 0:
                 break
