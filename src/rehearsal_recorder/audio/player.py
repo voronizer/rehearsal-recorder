@@ -90,6 +90,10 @@ class Track:
         self.muted = False
         # Current smoothed coefficient, so mute/solo does not click.
         self.current_gain = 1.0
+        # Loudest sample this track contributed to the last block, after its
+        # gain — so it is what came out, not what is on disk. Written by the
+        # audio thread, read by whoever asks for state(), both under the lock.
+        self.level = 0.0
         # Everything is mixed at 16-bit scale, because that is what goes out
         # to the card. A 24-bit sample is 256 times larger for the same
         # loudness, so it is scaled down as it is read — one multiply that
@@ -185,7 +189,15 @@ class TakePlayer:
 
         if not self._playing:
             result.fill(0)
+            for track in self.tracks:
+                track.level = 0.0
             return result
+
+        # Cleared once per block rather than per segment: one block can cross
+        # a loop point and come back, and the meter wants the loudest of the
+        # whole block, not of whichever piece happened to be written last.
+        for track in self.tracks:
+            track.level = 0.0
 
         written = 0
         while written < frames:
@@ -228,6 +240,12 @@ class TakePlayer:
                 else:
                     np.copyto(seg, track.data[self._pos:end], casting="unsafe")
                 seg *= gain * track.scale
+                # Two reductions and a compare. np.abs(seg).max() would say
+                # the same thing and allocate an array to say it, on the one
+                # thread in this app that has a deadline.
+                loudest = max(float(seg.max()), -float(seg.min()))
+                if loudest > track.level:
+                    track.level = loudest
                 out[written:written + length, 0] += seg
                 out[written:written + length, 1] += seg
 
@@ -317,6 +335,13 @@ class TakePlayer:
                 "position": self._pos / self.samplerate,
                 "duration": self.total_frames / self.samplerate,
                 "finished": self._finished,
+                # 0..1 per track, as it came out of the mix a moment ago. The
+                # interface polls this several times a second, which is what
+                # the meters beside the faders are made of.
+                "levels": {
+                    t.name: round(min(1.0, t.level / 32768.0), 3)
+                    for t in self.tracks
+                },
                 "loop": (
                     {
                         "a": self._loop[0] / self.samplerate,

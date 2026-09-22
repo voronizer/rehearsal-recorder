@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { markerStyle } from "@/lib/markers"
 import { MIN_VIEW_SEC, tickTimes } from "@/lib/timeline"
-import type { Marker, TrackMedia } from "@/lib/api"
+import type { Marker } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 
 /** A press that never travelled this far is a click, and a click seeks. */
@@ -137,18 +137,6 @@ export function Timeline({
 
   const pct = (seconds: number) =>
     duration > 0 ? ((seconds - from) / span) * 100 : 0
-
-  // How loud a track is at one moment, taken from the bars its lane is drawn
-  // from rather than measured while playing — see LaneControls for why, and
-  // for what that costs. The bars describe `peaksWindow`, not the take, which
-  // is what makes this sharpen as you zoom in.
-  const peakAt = (m: TrackMedia, seconds: number) => {
-    const { from: pFrom, to: pTo } = player.peaksWindow
-    const covered = pTo - pFrom
-    if (m.peaks.length === 0 || covered <= 0) return 0
-    const i = Math.floor(((seconds - pFrom) / covered) * m.peaks.length)
-    return i >= 0 && i < m.peaks.length ? m.peaks[i] : 0
-  }
 
   const travelled = drag ? Math.abs(drag.toX - drag.fromX) : 0
   // While the pointer is down the band follows it; the committed region only
@@ -336,11 +324,7 @@ export function Timeline({
                   soloed={soloed}
                   dimmed={dimmed}
                   volume={player.getVolume(m.name)}
-                  level={
-                    dimmed
-                      ? 0
-                      : peakAt(m, displayPosition) * player.getVolume(m.name)
-                  }
+                  level={player.getLevel(m.name)}
                   onToggleMute={() => player.toggleMute(m.name)}
                   onToggleSolo={() => player.toggleSolo(m.name)}
                   onVolume={(v) => player.setVolume(m.name, v)}

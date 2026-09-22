@@ -159,6 +159,38 @@ def main():
     ok("tracks sum together", abs(int(out[:, 0].mean()) - 3000) < 30)
     ok("mono goes to both channels", bool((out[:, 0] == out[:, 1]).all()))
 
+    # What the meters beside the faders are made of. Measured in the mix,
+    # after each track's own gain, so it is what came out rather than what is
+    # on disk — the first version of this read the waveform peaks instead and
+    # could only change about twice a second.
+    levels = p.state()["levels"]
+    ok("each track says how loud it came out",
+       abs(levels["A"] - 1000 / 32768) < 0.005
+       and abs(levels["B"] - 2000 / 32768) < 0.005)
+
+    p.set_volume("B", 0.5)
+    settle(p)
+    ok("and says it after the fader, not before",
+       abs(p.state()["levels"]["B"] - 1000 / 32768) < 0.005)
+    p.set_volume("B", 1.0)
+
+    p.set_muted("A", True)
+    settle(p)
+    ok("a muted track reads nothing at all", p.state()["levels"]["A"] == 0.0)
+    p.set_muted("A", False)
+    settle(p)
+
+    p.pause()
+    p._render(256)
+    ok("and nothing reads anything once playback stops",
+       all(v == 0.0 for v in p.state()["levels"].values()))
+
+    # Back to the start: the checks below carry on with this same player, and
+    # the settling above has already spent most of a two-second take.
+    p.seek(0)
+    p.play()
+    settle(p)
+
     print("\n[2] Mute / solo / volume")
     p.set_muted("B", True)
     ok("mute removes a track", abs(int(settle(p)[:, 0].mean()) - 1000) < 30)

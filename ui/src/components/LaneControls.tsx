@@ -8,17 +8,18 @@ const CLIP_THRESHOLD = 0.97
  * One track's controls, beside its lane: the name, mute and solo, a fader,
  * and how loud the track is where the playhead is standing.
  *
- * Nothing measures the level during playback. It is read out of the same
- * waveform peaks the lane is drawn from, at the playhead, and then put
- * through the fader and the mute — which makes it the level actually coming
- * out, without asking the audio callback to measure anything on a deadline.
- * What it costs is resolution: those peaks are bucketed, so zoomed all the
- * way out on a long take one bar covers a fraction of a second and the meter
- * moves in steps. Zoom in and it sharpens, for the same reason the picture
- * does.
+ * The level is measured in Python, in the mix, after this track's gain — so
+ * it is what came out, not what is on disk, and mute and solo are already in
+ * it. The interface reads it with the same poll that moves the playhead,
+ * several times a second.
  *
- * It reads at the playhead rather than only while playing, so a paused take
- * still says something about where you are standing.
+ * This was first built from the waveform peaks instead, which cost nothing
+ * and was useless: those bars cover a fraction of a second each on a long
+ * take, so the meter changed about twice a second and showed the loudest
+ * moment of each bar rather than the moment you were in. A meter that cannot
+ * follow the music is not a meter.
+ *
+ * It reads zero when nothing is playing, which is what a meter at rest does.
  */
 export function LaneControls({
   name,

@@ -82,10 +82,21 @@ function position() {
   }
   return t;
 }
+// Mirrors what audio/player.py measures in the mix: post-fader, silent when
+// muted or when another track is soloed, and nothing at all while stopped.
+function levels() {
+  if (!P || !P.playing) return {};
+  const t = position();
+  return Object.fromEntries(Object.keys(P.volumes).map(n => {
+    const silent = P.muted.includes(n) || (P.soloed && P.soloed !== n);
+    const raw = Math.abs(Math.sin(t * 2.7)) * 0.9;
+    return [n, silent ? 0 : Math.round(raw * P.volumes[n] * 1000) / 1000];
+  }));
+}
 function playerState() {
   if (!P) return {open:false};
   return {open:true, ok:true, playing:P.playing, position:position(), duration:P.duration,
-          loop:P.loop, muted:P.muted, soloed:P.soloed, volumes:P.volumes};
+          loop:P.loop, muted:P.muted, soloed:P.soloed, volumes:P.volumes, levels:levels()};
 }
 function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = clock(); }
 
@@ -882,27 +893,24 @@ def main():
         ok("the ruler's clock fits the take",
            "0:05" in page.get_by_role("group", name="Timeline clock").inner_text())
 
-        # Nothing measures the level while a take plays. The meter is read out
-        # of the same peaks the lane is drawn from, at the playhead, and then
-        # put through the fader and the mute — so it has to answer to both, or
-        # it is a decoration that happens to move.
-        drag(0.13, 0.13)   # a press that does not travel is a seek
+        # The meter is measured in the mix rather than derived from the
+        # picture, so it says nothing until something is playing — and what it
+        # says is what came out, after the fader and the mute.
         meter = page.get_by_role("meter", name="Guitar level")
-        loud = int(meter.get_attribute("aria-valuenow"))
-        ok("the meter reads the track where the playhead is standing", loud > 0)
-        page.locator("input[aria-label='Guitar volume']").fill("0.25")
-        page.wait_for_timeout(300)
-        quartered = int(meter.get_attribute("aria-valuenow"))
-        ok("and it is the level after the fader, not before it",
-           abs(quartered - loud / 4) <= 2)
+        page.click("button[aria-label='Play']")
+        page.wait_for_timeout(700)
+        ok("the meter follows the take while it plays",
+           int(meter.get_attribute("aria-valuenow")) > 0)
         page.click("button[aria-label='Mute Guitar']")
-        page.wait_for_timeout(300)
-        ok("and nothing at all on a muted track",
+        page.wait_for_timeout(400)
+        ok("and reads nothing at all on a muted track",
            meter.get_attribute("aria-valuenow") == "0")
-        # Put both back: the checks below are about what reached Python.
         page.click("button[aria-label='Mute Guitar']")
-        page.locator("input[aria-label='Guitar volume']").fill("1")
         page.wait_for_timeout(300)
+        page.click("button[aria-label='Pause']")
+        page.wait_for_timeout(400)
+        ok("and goes quiet again when the take stops",
+           meter.get_attribute("aria-valuenow") == "0")
 
         page.click("button[aria-label='Mute Guitar']")
         page.click("button[aria-label='Solo Vocals']")

@@ -168,6 +168,8 @@ export type PlayerState = {
   soloed?: string | null
   muted?: string[]
   volumes?: Record<string, number>
+  /** 0..1 per track, as it came out of the mix a moment ago. */
+  levels?: Record<string, number>
   /** The chosen output could not be used and the system one was taken. */
   warning?: string
 }

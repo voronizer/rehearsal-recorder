@@ -37,6 +37,10 @@ export function useMultitrackPlayer(
   const [soloed, setSoloed] = useState<string | null>(null)
   const [volumes, setVolumes] = useState<Record<string, number>>({})
   const [looping, setLooping] = useState(false)
+  // How loud each track came out of the mix, 0..1, measured in Python while
+  // it played. Empty whenever nothing is playing, which is what a meter at
+  // rest should read.
+  const [levels, setLevels] = useState<Record<string, number>>({})
   const [region, setRegionState] = useState<{ a: number | null; b: number | null }>(
     { a: null, b: null }
   )
@@ -63,6 +67,7 @@ export function useMultitrackPlayer(
       muted?: string[]
       soloed?: string | null
       volumes?: Record<string, number>
+      levels?: Record<string, number>
       loop?: { a: number; b: number } | null
     }) => {
       if (typeof s.playing === "boolean") setPlaying(s.playing)
@@ -74,6 +79,7 @@ export function useMultitrackPlayer(
       if (s.muted) setMuted(s.muted)
       if (s.soloed !== undefined) setSoloed(s.soloed)
       if (s.volumes) setVolumes(s.volumes)
+      if (s.levels) setLevels(s.levels)
       if (s.loop !== undefined) setLooping(s.loop !== null)
     },
     []
@@ -87,6 +93,7 @@ export function useMultitrackPlayer(
     setPlaying(false)
     setPosition(0)
     setRegionState({ a: null, b: null })
+    setLevels({})
     setViewState(null)
     setPeaksWindow({ from: 0, to: 0 })
     setLooping(false)
@@ -315,6 +322,8 @@ export function useMultitrackPlayer(
     toggleSolo: (name: string) =>
       void call(() => api().player_set_solo(soloed === name ? null : name)),
     getVolume: (name: string) => volumes[name] ?? 1,
+    /** 0..1 as it last came out of the mix; 0 while nothing plays. */
+    getLevel: (name: string) => levels[name] ?? 0,
     setVolume: (name: string, v: number) => {
       setVolumes((prev) => ({ ...prev, [name]: v }))
       void api().player_set_volume(name, v)
