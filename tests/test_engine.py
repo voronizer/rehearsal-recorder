@@ -724,6 +724,15 @@ def main():
     renamed = dict(take, name="Something else")
     ok("a renamed take is not current",
        not cloudmod.is_current(renamed, "mix", volumes, "wav", where))
+    # A crop changes nothing else in this record — same name, same format,
+    # same folder, same balance — and share_take reads the take's files
+    # outside the metadata lock, so a copy that started before a crop can
+    # write its record after it. Without the length in there, that record
+    # matches the shorter take and the re-publish the crop asked for skips it,
+    # leaving the uncropped copy in the cloud folder reported as up to date.
+    shorter = dict(take, duration_sec=round(take["duration_sec"] / 2, 2))
+    ok("and neither is a take that has been cropped since",
+       not cloudmod.is_current(shorter, "mix", volumes, "wav", where))
     ok("a take that was never copied is not current",
        not cloudmod.is_current({"name": "x", "tracks": []}, "mix", volumes,
                                "wav", where))

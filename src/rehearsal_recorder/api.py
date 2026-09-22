@@ -1392,11 +1392,12 @@ class Api:
             take["markers"] = kept
             take["duration_sec"] = done["duration_sec"]
 
-            # The fingerprint in cloud.source_of records what was asked for,
-            # the name, the format, the folder and the balance — there is no
-            # length in it. A cropped take would go on matching it, and
-            # auto-publish would skip it for good, leaving the uncropped
-            # version in the cloud folder as the copy of record.
+            # What is in the cloud folder is a copy of a take that no longer
+            # exists, so it goes and its record goes with it. The length in
+            # the cloud.source_of fingerprint covers the other half of this: a
+            # copy already under way can write its record after this line, and
+            # a record that still matched the shorter take would suppress its
+            # own repair for good.
             self._remove_shared(take)
             take["cloud"] = {}
             take.pop("cloud_error", None)

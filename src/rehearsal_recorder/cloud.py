@@ -2,11 +2,12 @@
 Deciding whether what is in the cloud folder is still what the settings and
 the take say it should be.
 
-A copy is made from five things: which of the mix and the tracks was asked
+A copy is made from six things: which of the mix and the tracks was asked
 for, the take's name (the files are named after it), the format, the balance
-the mix was rendered with, and the folder it was written into. Recording
-those next to the copy is what lets a later pass skip a take that is already
-right, instead of mixing it again every time something nudges the queue.
+the mix was rendered with, the folder it was written into, and how long the
+take is. Recording those next to the copy is what lets a later pass skip a
+take that is already right, instead of mixing it again every time something
+nudges the queue.
 
 The record is a claim about a file on someone else's disk, so it is only
 believed while that file is still there. A sync client that logs out and
@@ -36,6 +37,16 @@ def source_of(take, what, volumes, fmt, target):
         # Only this take's tracks: moving an unrelated fader must not make
         # every take in the folder look stale.
         "volumes": {n: float(volumes.get(n, 1.0)) for n in names},
+        # The odd one out: everything else here is about naming and
+        # destination, and a crop changes none of it. share_take reads a
+        # take's files outside the metadata lock and only takes it to write
+        # this record, so a copy that started before a crop can finish after
+        # it — and without the length, the record it writes still matches the
+        # shorter take. The re-publish the crop asked for would then find the
+        # take current and skip it, leaving the uncropped version in the cloud
+        # folder for good, reported as up to date. Rounded like the markers
+        # are, so a re-read of the same take cannot drift.
+        "duration_sec": round(float(take.get("duration_sec") or 0), 2),
     }
 
 
