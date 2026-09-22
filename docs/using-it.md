@@ -96,6 +96,38 @@ The A and B buttons put an edge exactly at the current playback position for
 when you have found the spot by ear. The playhead has a grip of its own on the
 ruler: dragging that scrubs, which is what dragging the waveform used to do.
 
+### Trimming a take
+
+Mark the part worth keeping — drag across the tracks, or set A and B — and
+press **Crop**. The take becomes that part: same number, same name, and the
+markers inside it move along with the audio. What is removed is not destroyed;
+it goes to the Trash as one folder named after the take, so an over-eager crop
+is undone by putting that folder back and dropping its files into the take
+folder.
+
+Two things worth knowing. Markers outside the region go with the audio they
+pointed at, and the question says how many before you agree. And a take that
+has been copied to the cloud folder loses that copy when it is cropped — the
+copy is of a different take now — so send it again afterwards.
+
+Cropping works right after recording as well, on the review screen, which is
+usually where you can see the twenty seconds of nothing at the start.
+
+### Looking closer
+
+The whole take is on screen by default, which for a nine-minute take is about a
+second and a half per centimetre. Roll the wheel over the tracks to zoom in —
+the moment under the pointer stays under the pointer — and two fingers sideways
+(or Shift and the wheel) to move along the take. The waveform is redrawn for
+the part on screen, so zooming in shows detail rather than a stretched picture.
+**Whole take**, at the left of the ruler, gives it all back.
+
+The wheel over the track names on the left still scrolls the list of tracks, so
+a rehearsal with eight of them is still reachable.
+
+While a take is playing the window follows the playhead. If you move along the
+take by hand it stops following until the playhead comes back into view.
+
 - **Sync.** All tracks are mixed into one stream from one position, so they
   cannot drift apart even in principle.
 - **Memory.** Tracks are read through `memmap`: the system pulls in the parts

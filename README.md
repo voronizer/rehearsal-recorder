@@ -49,6 +49,8 @@ picking A and B out of two buttons.
 
 ![A take on the timeline, with the repeat region drawn across both tracks](docs/screenshots/player-markers.png)
 
+![A take zoomed in](docs/screenshots/zoom.png)
+
 **Markers say what happened, not just where.** A note and a kind — keep this,
 went wrong, do again — coloured on the timeline and on the take's pill, so a
 glance at the strip says which take has red in it.
