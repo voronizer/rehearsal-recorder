@@ -16,11 +16,19 @@ Download the build for your system from
 [Releases](../../releases), unzip, open. Nothing to install — Python, the
 audio libraries and the interface are all inside.
 
-The first launch has one hurdle, once, because the app is not signed with a
-paid developer certificate: on macOS right-click it and choose **Open**
-instead of double-clicking; on Windows click **More info** then **Run
-anyway**. After that both open normally. macOS also asks for microphone
-permission the first time you record.
+**On Windows, unblock the zip before you unpack it.** Right-click the
+downloaded file, choose **Properties**, tick **Unblock** at the bottom, then
+extract. Windows marks everything that arrives from the internet and passes
+that mark on to every file unpacked from a marked archive, and it will not
+load the app's audio libraries while they carry it — the app fails to start
+with errors that do not say why. Unblocking the zip clears it for everything
+inside in one go. Unpack first and you are unblocking fifty files by hand.
+
+The first launch then has one more hurdle, once, because the app is not
+signed with a paid developer certificate: on macOS right-click it and choose
+**Open** instead of double-clicking; on Windows click **More info** then
+**Run anyway**. After that both open normally. macOS also asks for
+microphone permission the first time you record.
 
 No release yet, or you want to build it yourself? Double-click
 **`build.command`** on macOS or **`build.bat`** on Windows — they are in the
