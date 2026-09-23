@@ -1,12 +1,20 @@
 # The test suites, on every push and every pull request.
 #
-# These do not need a sound card, a screen or a microphone: PortAudio is
-# stubbed where the audio is checked, and the interface runs headless against
-# a mocked Python bridge. So they run on Linux, quickly, and say something
-# real about every change.
+# On the two systems the app is actually used on. These suites need no sound
+# card, screen or microphone — PortAudio is stubbed where the audio is
+# checked, and the interface runs headless against a mocked Python bridge —
+# so for a long time they ran on Linux, on the reasoning that what they test
+# is the same everywhere and Linux is the quickest runner to get.
 #
-# Building the actual apps is release.yml — that needs a Mac and a Windows
-# machine, and only matters when there is something to hand people.
+# It is not the same everywhere. A Mac's filesystem does not tell "Other"
+# from "other" and Linux's does, so a check written against exactly that
+# skipped itself on every push and reached main broken. Windows differs
+# again: a file open for playing cannot be moved, cp1252 has no Cyrillic,
+# and paths compare without case. Those branches are most of what breaks,
+# and a runner that never takes them has nothing to say about them.
+#
+# Building the actual apps is release.yml — that needs the same two machines
+# and only matters when there is something to hand people.
 
 name: Tests
 
@@ -18,7 +26,19 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      # One platform failing is a result about that platform, not a reason
+      # to stop asking about the other.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macos
+          - os: windows-latest
+            label: windows
+
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
     steps:
       # The whole history, because the version comes from the release
       # tag — a shallow clone has no tags and would build a 0.0.0.
@@ -47,17 +67,15 @@ jobs:
       # `pip install -e .` rather than requirements.txt on purpose: it reads
       # the same list through pyproject.toml, and it means every push also
       # checks that the package metadata still installs.
+      #
+      # `playwright install` without `--with-deps`: that flag installs system
+      # libraries with apt and exists only on Linux.
       - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -e .
           pip install playwright
-          playwright install --with-deps chromium
-
-      # PortAudio is not bundled in the Linux wheel, and the suites stub
-      # sounddevice anyway — but importing it has to at least work.
-      - name: Install PortAudio
-        run: sudo apt-get install -y libportaudio2
+          playwright install chromium
 
       - name: Run every suite
         run: python tests/run_all.py
@@ -68,10 +86,11 @@ jobs:
         run: python -m rehearsal_recorder --selftest
 
       # The screenshots the interface suite takes along the way. Worth having
-      # when something fails and the message alone is not enough.
+      # when something fails and the message alone is not enough. Named per
+      # platform: two jobs uploading one name is an error, not a merge.
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: interface-screenshots
+          name: interface-screenshots-${{ matrix.label }}
           path: tests/screenshots/
           if-no-files-found: ignore
