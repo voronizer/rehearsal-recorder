@@ -52,14 +52,17 @@ def _arm_crash_log():
         # trace kept. It is written here too, and the interface points to
         # this file when it says a call failed. One handler, however many
         # times this runs.
-        bridge_log = logging.getLogger("pywebview")
-        for old in [h for h in bridge_log.handlers if getattr(h, "_ours", False)]:
-            bridge_log.removeHandler(old)
+        # The app's own errors that it survives — a recordings database it
+        # cannot open, an old session.json it cannot read — go the same way.
         handler = logging.StreamHandler(log)
         handler.setLevel(logging.ERROR)
         handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
         handler._ours = True
-        bridge_log.addHandler(handler)
+        for name in ("pywebview", "rehearsal_recorder"):
+            logger = logging.getLogger(name)
+            for old in [h for h in logger.handlers if getattr(h, "_ours", False)]:
+                logger.removeHandler(old)
+            logger.addHandler(handler)
 
         register = getattr(faulthandler, "register", None)  # Unix only
         if register is not None:

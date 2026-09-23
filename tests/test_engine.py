@@ -780,6 +780,9 @@ def main():
     # session.json and config.json were written in the system's code page.
     # On Windows that is cp1252, which has no Cyrillic: renaming a take
     # "Полынь" raised UnicodeEncodeError and nothing was renamed.
+    from rehearsal_recorder.store.importer import import_all
+    from rehearsal_recorder.store.library import Library
+
     _, ru = fresh_api(tmp / "names")
     ru.start_rehearsal("Names", 0, SR, [{"name": "Gtr", "channel": 1}])
     ru_folder = Path(ru._session["folder"])
@@ -789,10 +792,12 @@ def main():
                          [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
     renamed = ru.rename_take(str(ru_folder), 1, "Полынь")
     ok("a take can be named in Cyrillic", renamed.get("ok"))
-    ok("and the name is on disk, readable back",
-       ru._read_meta(ru_folder)["takes"][0]["name"] == "Полынь")
-    ok("in UTF-8, whatever the system's code page",
-       "Полынь" in (ru_folder / "session.json").read_bytes().decode("utf-8"))
+    ok("and the name is kept, readable back",
+       ru._lib.rehearsal(ru_folder)["takes"][0]["name"] == "Полынь")
+    reopened = Library(ru.recordings_dir)
+    ok("from the file on disk too, whatever the system's code page",
+       reopened.rehearsal(ru_folder)["takes"][0]["name"] == "Полынь")
+    reopened.close()
 
     # The rehearsal screen plays the take it offers to rename, and Windows
     # will not rename a folder holding a mapped file — the folder stayed
@@ -808,7 +813,7 @@ def main():
     whole = ru.rename_rehearsal(str(ru_folder), "Репетиция")
     ok("and so does renaming the rehearsal it is in",
        whole.get("ok") and Path(whole["folder"]).exists()
-       and ru._read_meta(Path(whole["folder"]))["name"] == "Репетиция")
+       and ru._lib.rehearsal(whole["folder"])["name"] == "Репетиция")
     ru.player_close()
 
     names_cfg = ru.save_default_tracks({"tracks": [{"name": "Гитара", "channel": 1}]})
@@ -818,12 +823,13 @@ def main():
 
     # A file an older version wrote on Windows is in cp1252. Reading it as
     # UTF-8 alone would make the rehearsal vanish from History.
-    legacy = tmp / "legacy"
+    legacy = ru.recordings_dir / "Café - 2026-08-01 19-00"
     legacy.mkdir()
     (legacy / "session.json").write_bytes(
         json.dumps({"name": "Café", "takes": []}, ensure_ascii=False).encode("cp1252"))
+    import_all(ru._lib, ru._cloud_dir)
     ok("a session.json an older version wrote is still read",
-       (ru._read_meta(legacy) or {}).get("name") == "Café")
+       (ru._lib.rehearsal(legacy) or {}).get("name") == "Café")
 
     print("\n[9] Renaming")
     r = a.rename_take(str(folder), 1, "Polyn (best)")
@@ -875,17 +881,24 @@ def main():
        [m["at"] for m in a.get_rehearsal(str(new_folder))["takes"][0]["markers"]]
        == [3.25])
 
-    # Rehearsals recorded before markers had notes stored plain numbers.
-    legacy = a._read_meta(str(new_folder))
-    legacy["takes"][0]["markers"] = [7.5, 1.25]
-    a._write_meta(new_folder, legacy)
-    upgraded = a.get_rehearsal(str(new_folder))["takes"][0]["markers"]
+    # Rehearsals recorded before markers had notes stored plain numbers, in
+    # a session.json the importer brings in.
+    old_markers = a.recordings_dir / "Old marks - 2026-08-02 19-00"
+    old_markers.mkdir()
+    (old_markers / "session.json").write_text(json.dumps({
+        "name": "Old marks", "created_at": "2026-08-02T19:00:00",
+        "samplerate": SR, "tracks": [{"name": "Gtr", "channel": 1}],
+        "takes": [{"take_number": 1, "name": "Take 1", "duration_sec": 10.0,
+                   "tracks": [], "markers": [7.5, 1.25]}],
+    }), encoding="utf-8")
+    import_all(a._lib, a._cloud_dir)
+    upgraded = a.get_rehearsal(str(old_markers))["takes"][0]["markers"]
     ok("old numeric markers still load",
        [m["at"] for m in upgraded] == [1.25, 7.5])
     ok("and come back as proper markers",
        all(m["kind"] == "note" and m["note"] == "" for m in upgraded))
-    a.remove_take_marker(str(new_folder), 1, 7.5)
-    a.remove_take_marker(str(new_folder), 1, 1.25)
+    a._lib.forget_rehearsal(old_markers)
+    old_markers.rmdir()
 
     print("\n[11] Sharing to the cloud")
     cloud = tmp / "Drive" / "Band"
@@ -966,16 +979,14 @@ def main():
 
         # And the same for a 24-bit take, which is the new default: the depth
         # has to survive compression, not quietly drop to 16.
-        deep_take = folder / "24 - Deep take"
+        deep_take = new_folder / "24 - Deep take"
         deep_take.mkdir(parents=True, exist_ok=True)
         write_wav(deep_take / "Gtr.wav", 1500, seconds=1.0, depth=24)
-        meta24 = a._read_meta(str(new_folder))
-        meta24["takes"].append({
+        a._lib.add_take(new_folder, {
             "take_number": 24, "name": "Deep take", "duration_sec": 1.0,
             "tracks": [{"name": "Gtr", "file": str(deep_take / "Gtr.wav")}],
             "markers": [],
         })
-        a._write_meta(new_folder, meta24)
         deep_shared = a.share_take(str(new_folder), 24, "tracks")
         deep_files = list(Path(deep_shared["cloud"]["tracks"]).iterdir())
         ok("a 24-bit take compresses too",
@@ -1015,15 +1026,15 @@ def main():
        cloudmod.is_current(take, "mix", volumes, "wav", where))
     ok("asking for more than was copied is not current",
        not cloudmod.is_current(take, "both", volumes, "wav", where))
-    ok("and neither is another cloud folder",
-       not cloudmod.is_current(take, "mix", volumes, "wav", tmp / "Elsewhere"))
+    ok("and neither is another subfolder of the cloud folder",
+       not cloudmod.is_current(take, "mix", volumes, "wav", "Elsewhere"))
 
     renamed = dict(take, name="Something else")
     ok("a renamed take is not current",
        not cloudmod.is_current(renamed, "mix", volumes, "wav", where))
     # A crop changes nothing else in this record — same name, same format,
     # same folder, same balance — and share_take reads the take's files
-    # outside the metadata lock, so a copy that started before a crop can
+    # outside any transaction, so a copy that started before a crop can
     # write its record after it. Without the length in there, that record
     # matches the shorter take and the re-publish the crop asked for skips it,
     # leaving the uncropped copy in the cloud folder reported as up to date.
@@ -1163,7 +1174,7 @@ def main():
     ok("no drafts left", b.list_drafts() == [])
 
     print("\n[13b] A crashed 24-bit take recovers as 24-bit")
-    # The depth lives in session.json, because the raw bytes on disk do not
+    # The depth lives with the rehearsal, because the raw bytes on disk do not
     # say how wide they are. Get that wrong and a rescued take is noise.
     tmp3 = Path(tempfile.mkdtemp())
     apimod3, _ = fresh_api(tmp3)
@@ -1203,6 +1214,7 @@ def main():
         "name": "Nothing", "created_at": "2026-09-02T10:00:00",
         "samplerate": SR, "tracks": [], "takes": [],
     }))
+    import_all(b._lib, b._cloud_dir)
     removed = b.cleanup_empty_rehearsals()["removed"]
     ok("the empty one is gone", removed == 1 and not stale.exists())
 
@@ -1233,7 +1245,7 @@ def main():
     while c._cloud_queue.run_next():
         pass
     ok("so it never reaches the cloud folder",
-       "cloud" not in c.get_rehearsal(str(choice_folder))["takes"][0])
+       not c.get_rehearsal(str(choice_folder))["takes"][0]["cloud"])
 
     c.set_auto_publish(False)
     keep_one(2, True)
@@ -1325,7 +1337,7 @@ def main():
     a._recorder = object()  # sentinel: stands in for an active recorder
     ok("nothing runs while recording", a._cloud_queue.run_next() is False)
     take4 = a.get_rehearsal(str(folder))["takes"][3]
-    ok("and the take was not copied", "cloud" not in take4)
+    ok("and the take was not copied", not take4["cloud"])
     a._recorder = None
     ok("but once recording stops it publishes", a._cloud_queue.run_next() is True)
     take4 = a.get_rehearsal(str(folder))["takes"][3]
@@ -1394,29 +1406,16 @@ def main():
        not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav",
                                a._cloud_target(folder9)))
 
-    # A listing can run while the worker is writing. Whatever a reader sees
-    # at the worst moment must be a whole document, so the file is swapped
-    # into place rather than truncated and refilled.
-    seen = {}
-    real_replace = apimod.os.replace
-
-    def watch_replace(src, dst):
-        seen["during"] = Path(dst).read_text()
-        return real_replace(src, dst)
-
-    meta_before = a._read_meta(folder9)
-    apimod.os.replace = watch_replace
-    try:
-        a.rename_take(str(folder9), 9, "Renamed once more")
-    finally:
-        apimod.os.replace = real_replace
-
-    ok("the meta is swapped into place, never half-written",
-       json.loads(seen["during"])["takes"] == meta_before["takes"])
-    ok("and the new name is there once the swap is done",
-       a._read_meta(folder9)["takes"][-1]["name"] == "Renamed once more")
-    ok("no leftover temporary files",
-       not list(Path(folder9).glob("session.json.*")))
+    # A listing can run while the worker is writing. The rename is one
+    # transaction in the database, so a reader sees all of it or none of it,
+    # and nothing is left half done beside the rehearsal.
+    a.rename_take(str(folder9), 9, "Renamed once more")
+    renamed9 = a._lib.take(folder9, 9)
+    ok("the new name is in the database once the rename is done",
+       renamed9["name"] == "Renamed once more"
+       and all(Path(t["file"]).exists() for t in renamed9["tracks"]))
+    ok("and no session.json is written beside it",
+       not list(Path(folder9).glob("session.json*")))
 
     # Restoring auto-publish above re-queued every take of the still-open
     # session (that is what turning it on does) — drain that before handing
@@ -1554,7 +1553,7 @@ def main():
     # cleaned up — and the sync client uploads it. Finishing a rehearsal and
     # closing the app while the last take publishes is the normal end of an
     # evening, so this is the ordinary case, not the unlucky one.
-    target = a._cloud_target(folder)
+    target = apimod._cloud_subfolder(a._cloud_dir, folder)
     plain_mixdown = apimod.mixdown
     asked = []
 
@@ -1603,7 +1602,8 @@ def main():
        bool(left) and all(p.name.startswith(apimod.WRITING_PREFIX) for p in left))
     ok("and the take does not claim the copy that was trashed for it",
        not cloudmod.is_current(a.get_rehearsal(str(folder))["takes"][0], "mix",
-                               a.get_settings()["volumes"], "wav", target))
+                               a.get_settings()["volumes"], "wav",
+                               a._cloud_target(folder)))
 
     for p in left:
         p.unlink()
@@ -1677,6 +1677,7 @@ def main():
                 for i, n in enumerate(take_names)
             ],
         }))
+        import_all(d._lib, d._cloud_dir)
         return folder
 
     past_rehearsal("Songs", "2026-09-10T19:00:00",
@@ -1733,8 +1734,9 @@ def main():
     def bytes_of(name):
         return {r["name"]: r for r in d.list_rehearsals()}[name]["disk_bytes"]
 
+    # Its takes say a minute of audio, but nothing of it is on disk yet.
     empty_handed = bytes_of("Sized")
-    ok("a folder is measured, not guessed at", empty_handed > 0)
+    ok("a folder is measured, not guessed at", empty_handed == 0)
 
     (sized / "01 - Polyn").mkdir(parents=True)
     (sized / "01 - Polyn" / "Gtr.wav").write_bytes(b"\0" * 5000)
@@ -1973,7 +1975,7 @@ def main():
        wav_frames(take_dir / "Gtr.wav") > 0)
 
     # A take on the review screen is a proper wav already; it just has no
-    # entry in session.json yet.
+    # record in the database yet.
     draft2 = Path(c._session["folder"]) / "_drafts" / "take 2"
     write_wav(draft2 / "Gtr.wav", 1000, seconds=4.0)
     pending = [{"name": "Gtr", "file": str(draft2 / "Gtr.wav")}]
@@ -2037,6 +2039,257 @@ def main():
                                    start_sec=0.0, end_sec=0.01)
     ok("a window shorter than the bar count does not leak past its end",
        all(p == 0 for p in short_silent))
+
+    print("\n[21] The history lives in the database")
+    import logging
+    import shutil as _shutil
+
+    from sqlalchemy import text as _sql
+
+    from rehearsal_recorder.store.db import (
+        NEWER_DATABASE, LibraryUnavailable, database_path, make_engine,
+    )
+
+    class _Collect(logging.Handler):
+        """Keeps what was logged, so it can be looked at — and so nothing
+        falls through to Python's last-resort print while it is attached."""
+
+        def __init__(self):
+            super().__init__(logging.DEBUG)
+            self.records = []
+
+        def emit(self, record):
+            self.records.append(record)
+
+    api_log = logging.getLogger("rehearsal_recorder.api")
+
+    tmp10 = Path(tempfile.mkdtemp())
+    apimod10, h = fresh_api(tmp10)
+    h.start_rehearsal("Stored", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    hf = Path(h._session["folder"])
+    ok("a started rehearsal is in the database",
+       h._lib.has(hf) and h._lib.rehearsal(hf)["name"] == "Stored")
+
+    draft = hf / "_drafts" / "take 1"
+    write_wav(draft / "Gtr.wav", 1000, seconds=2.0)
+    h._session["take_counter"] = 1
+    kept = h.keep_take(1, str(draft), "Polyn", 2.0,
+                       [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    ok("a kept take is in session_state without anything copied over",
+       kept["ok"] and [t["name"] for t in h.session_state()["takes"]] == ["Polyn"])
+
+    h.rename_take(str(hf), 1, "Polyn best")
+    hf = Path(h.rename_rehearsal(str(hf), "Stored again")["folder"])
+    h.add_take_marker(str(hf), 1, 0.5, "the riff", "good")
+    h.crop_take(str(hf), 1, 0.0, 1.5)
+    h.set_cloud_dir(str(tmp10 / "Cloud"))
+    h.share_take(str(hf), 1, "mix")
+    stored = h._lib.take(hf, 1)
+    ok("renames, markers, a crop and a copy all reach the database",
+       stored["name"] == "Polyn best"
+       and [m["at"] for m in stored["markers"]] == [0.5]
+       and abs(stored["duration_sec"] - 1.5) < 0.01
+       and Path(stored["cloud"].get("mix", "")).exists())
+
+    # A publish that fails on the worker is seen by the rehearsal screen at
+    # once: there is no copy in memory to bring up to date.
+    draft = hf / "_drafts" / "take 2"
+    write_wav(draft / "Gtr.wav", 1000, seconds=2.0)
+    h._session["take_counter"] = 2
+    h.keep_take(2, str(draft), "Polyn 2", 2.0,
+                [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    cloud_setting = h._config.pop("cloud_dir")
+    h._config["auto_publish"] = True
+    h._publish_step(str(hf), 2)
+    h._config["cloud_dir"], h._config["auto_publish"] = cloud_setting, False
+    ok("a cloud error from the publishing step shows in session_state",
+       "cloud folder" in (h.session_state()["takes"][1].get("cloud_error") or "").lower())
+
+    h.delete_take(str(hf), 1)
+    ok("a deleted take leaves the database",
+       [t["take_number"] for t in h._lib.rehearsal(hf)["takes"]] == [2])
+    ok("and no session.json was written anywhere along the way",
+       not list(h.recordings_dir.rglob("session.json*")))
+
+    # A folder deleted by hand, or on a drive that is not plugged in.
+    h.finish_rehearsal()
+    h.player_close()
+    _shutil.rmtree(hf)
+    item = next(r for r in h.list_rehearsals() if r["folder"] == str(hf))
+    ok("a rehearsal whose folder is gone stays in History, marked",
+       item["missing"] is True and item["take_count"] == 1)
+    ok("and is not measured", item["disk_bytes"] == 0)
+    ok("an existing one is not marked",
+       all(r["missing"] is False for r in h.list_rehearsals() if r["folder"] != str(hf)))
+    ok("it cannot be opened",
+       h.get_rehearsal(str(hf)) == {"ok": False, "missing": True,
+                                     "error": "The rehearsal's folder is not on disk"})
+
+    h.start_rehearsal("Other", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    other = Path(h._session["folder"])
+    draft = other / "_drafts" / "take 1"
+    write_wav(draft / "Gtr.wav", 1000, seconds=1.0)
+    h._session["take_counter"] = 1
+    h.keep_take(1, str(draft), "Kept", 1.0,
+                [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    refused = h.forget_rehearsal(str(other))
+    ok("the rehearsal in progress cannot be forgotten",
+       not refused["ok"] and h._lib.has(other))
+
+    # Files are moved first and the record written after. When the record
+    # cannot be written, the move is undone: a folder nothing points at never
+    # shows up anywhere.
+    def refuse(*args, **kwargs):
+        raise OSError("disk full")
+
+    def raises(call):
+        try:
+            call()
+        except OSError:
+            return True
+        return False
+
+    draft = other / "_drafts" / "take 2"
+    write_wav(draft / "Gtr.wav", 1000, seconds=1.0)
+    h._session["take_counter"] = 2
+    h._library.add_take = refuse
+    try:
+        failed = raises(lambda: h.keep_take(
+            2, str(draft), "Unkept", 1.0,
+            [{"name": "Gtr", "file": str(draft / "Gtr.wav")}]))
+    finally:
+        del h._library.add_take
+    ok("a take whose record cannot be written stays a draft",
+       failed and (draft / "Gtr.wav").exists()
+       and not (other / "02 - Unkept").exists())
+
+    take_dir = Path(h._lib.take(other, 1)["tracks"][0]["file"]).parent
+    h._library.update_take = refuse
+    try:
+        failed = raises(lambda: h.rename_take(str(other), 1, "Renamed"))
+    finally:
+        del h._library.update_take
+    ok("a take folder is renamed back when its record cannot be",
+       failed and take_dir.is_dir() and not (other / "01 - Renamed").exists())
+
+    h._library.move_rehearsal = refuse
+    try:
+        failed = raises(lambda: h.rename_rehearsal(str(other), "Moved"))
+    finally:
+        del h._library.move_rehearsal
+    ok("and so is a rehearsal folder",
+       failed and other.is_dir() and Path(h._session["folder"]) == other)
+    h.finish_rehearsal()
+
+    outside = tmp10 / "Somewhere else"
+    outside.mkdir()
+    ok("locating onto a folder outside the recordings folder is refused",
+       h.locate_rehearsal(str(hf), str(outside))
+       == {"ok": False, "error": "Pick a folder inside the recordings folder"})
+    a_file = h.recordings_dir / "notes.txt"
+    a_file.write_text("not a folder")
+    ok("so is locating onto a file",
+       not h.locate_rehearsal(str(hf), str(a_file))["ok"])
+    ok("and onto another rehearsal's folder",
+       h.locate_rehearsal(str(hf), str(other))
+       == {"ok": False, "error": "That folder is already another rehearsal"})
+    found = h.recordings_dir / "Found again"
+    found.mkdir()
+    located = h.locate_rehearsal(str(hf), str(found))
+    ok("a real folder is accepted",
+       located == {"ok": True, "folder": str(found)})
+    ok("and the rehearsal opens again",
+       h.get_rehearsal(str(found)).get("ok") is True
+       and not h._lib.has(hf))
+
+    _shutil.rmtree(found)
+    ok("a missing rehearsal can be taken out of History",
+       h.forget_rehearsal(str(found)) == {"ok": True}
+       and all(r["folder"] != str(found) for r in h.list_rehearsals()))
+    ok("once", h.forget_rehearsal(str(found))
+       == {"ok": False, "error": "Rehearsal not found"})
+
+    # A recordings folder a newer version has already migrated past.
+    def newer_folder(path):
+        path.mkdir(parents=True)
+        engine = make_engine(database_path(path))
+        with engine.begin() as c:
+            c.execute(_sql("CREATE TABLE alembic_version "
+                           "(version_num VARCHAR(32) NOT NULL)"))
+            c.execute(_sql("INSERT INTO alembic_version VALUES ('9999')"))
+        engine.dispose()
+        return path
+
+    newer = newer_folder(tmp10 / "Newer")
+    collected = _Collect()
+    api_log.addHandler(collected)
+    try:
+        before = h.recordings_dir
+        switched = h.set_recordings_dir(str(newer))
+    finally:
+        api_log.removeHandler(collected)
+    ok("switching to a folder a newer version opened is refused",
+       switched == {"ok": False, "error": NEWER_DATABASE})
+    ok("and the old folder stays in use",
+       h.recordings_dir == before and h._lib.has(other))
+
+    tmp11 = Path(tempfile.mkdtemp())
+    newer_folder(tmp11 / "Rec")
+    collected = _Collect()
+    api_log.addHandler(collected)
+    try:
+        _, stuck = fresh_api(tmp11)
+    finally:
+        api_log.removeHandler(collected)
+    ok("the app still starts on such a folder, and says why once",
+       stuck.startup_problems()
+       == [{"name": "LibraryUnavailable", "message": NEWER_DATABASE}]
+       and stuck.startup_problems() == [])
+    ok("the reason goes to the log, at ERROR",
+       any(r.levelno == logging.ERROR and r.name == "rehearsal_recorder.api"
+           for r in collected.records))
+    try:
+        stuck.list_rehearsals()
+        listed = "listed"
+    except LibraryUnavailable as e:
+        listed = str(e)
+    ok("History says the folder cannot be used", listed == NEWER_DATABASE)
+    ok("and Settings still work",
+       stuck.get_settings()["recordings_dir"] == str(tmp11 / "Rec"))
+
+    tmp12 = Path(tempfile.mkdtemp())
+    broken_dir = tmp12 / "Rec" / "Broken - 2026-09-04 19-00"
+    broken_dir.mkdir(parents=True)
+    (broken_dir / "session.json").write_text("{not json")
+    collected = _Collect()
+    api_log.addHandler(collected)
+    try:
+        _, damaged = fresh_api(tmp12)
+    finally:
+        api_log.removeHandler(collected)
+    problems_seen = damaged.startup_problems()
+    ok("a session.json that cannot be read is reported once, by folder",
+       len(problems_seen) == 1 and broken_dir.name in problems_seen[0]["message"])
+    ok("and left where it is", (broken_dir / "session.json").exists())
+
+    # The config is written beside itself and swapped in, as session.json was.
+    swaps = []
+    real_replace = apimod10.os.replace
+
+    def watch_replace(src, dst):
+        swaps.append((Path(src).name, Path(dst).name))
+        return real_replace(src, dst)
+
+    apimod10.os.replace = watch_replace
+    try:
+        h.save_appearance("light", 1.25)
+    finally:
+        apimod10.os.replace = real_replace
+    ok("config.json is written through config.json.writing",
+       ("config.json.writing", "config.json") in swaps)
+    ok("which is not left behind, and the file is whole",
+       not apimod10.CONFIG_PATH.with_name("config.json.writing").exists()
+       and json.loads(apimod10.CONFIG_PATH.read_text(encoding="utf-8"))["theme"] == "light")
 
     print("\n" + "=" * 60)
     if problems:
