@@ -5,6 +5,21 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- On Windows, ASIO is offered. A 16-channel mixer was listed with 2 or 8
+  inputs because the PortAudio loaded by default has no ASIO; the one with
+  ASIO ships in the same package and is now loaded instead. Starting the app
+  can briefly interrupt other sound playing through a device in exclusive
+  mode — once, at launch.
+- The recording interface and the playback output are chosen through their
+  driver first when there is more than one, instead of one list with the
+  same card in it four or five times. On a Mac nothing changes.
+- Device choices are remembered by name and driver, not only by position in
+  the list, so plugging something in no longer moves them. On Windows a
+  choice saved by an older version has to be made once more.
+- The self-test fails a Windows build that lacks ASIO.
+
 ## 0.6.1
 
 - At the closest zoom the window read-out was cut off mid-word — `0:04 – 0:06

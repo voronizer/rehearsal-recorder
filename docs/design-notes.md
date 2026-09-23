@@ -39,10 +39,19 @@ Windows also stops at 260-character paths, and Settings warns when the
 recordings folder is already close.
 
 **Picking an interface.** On Windows one card appears once per audio system —
-MME, DirectSound, WASAPI, WDM-KS, ASIO if the card has a driver — with the
-same name each time. The list shows which is which, because otherwise it reads
-as five copies of the same device. For multitrack, ASIO if the interface
-offers it, otherwise WASAPI; MME is the default and the worst of them.
+MME, DirectSound, WASAPI, WDM-KS, ASIO — with the same name each time and a
+different number of channels. Settings therefore asks for the driver first and
+then the device, as every audio program does; with one driver, as on a Mac,
+only the device is asked. ASIO is there because `SD_ENABLE_ASIO` is set before
+`sounddevice` is imported, which makes the pip wheel load its PortAudio built
+with ASIO. It is on unconditionally: as a setting it would need a restart, and
+as one entry in the driver list it needs nothing. For multitrack, ASIO if the
+interface has a driver, otherwise WASAPI; MME is the default and the worst.
+
+Turning ASIO on moved every later device index, so a choice is saved as the
+device's name and audio system beside its index and found again by those. An
+index saved before that is not trusted on Windows: the person is asked to
+choose again rather than recorded from the wrong card.
 
 What none of this is: proof. There is no Windows machine in the environment
 this was built in. `tests/test_platform.py` drives the code into each shape — no
