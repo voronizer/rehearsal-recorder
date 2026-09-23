@@ -195,6 +195,27 @@ def _folder_bytes(folder):
     return total
 
 
+def _read_text(path):
+    """
+    A JSON file of ours, as text. Written as UTF-8 now; an older version wrote
+    whatever the system's code page was, which on Windows is cp1252 — so a
+    file that is not UTF-8 is read that way rather than taken for damaged.
+    Read as damaged, a rehearsal with a "Café" in it would simply vanish from
+    History.
+    """
+    raw = Path(path).read_bytes()
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace")
+
+
+def _write_text(path, text):
+    """Always UTF-8. Left to the default, Windows writes cp1252, which has no
+    Cyrillic: a take named "Полынь" failed to save with UnicodeEncodeError."""
+    Path(path).write_text(text, encoding="utf-8")
+
+
 def _is_empty_rehearsal(folder):
     """
     A rehearsal that produced nothing: no saved takes and no audio on disk.
@@ -209,7 +230,7 @@ def _is_empty_rehearsal(folder):
     if not meta_path.exists():
         return False
     try:
-        meta = json.loads(meta_path.read_text())
+        meta = json.loads(_read_text(meta_path))
     except Exception:
         return False
     if meta.get("takes"):
@@ -309,14 +330,14 @@ class Api:
         if not CONFIG_PATH.exists():
             return {}
         try:
-            data = json.loads(CONFIG_PATH.read_text())
+            data = json.loads(_read_text(CONFIG_PATH))
             return data if isinstance(data, dict) else {}
         except Exception:
             return {}
 
     def _write_config(self):
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(self._config, ensure_ascii=False, indent=2))
+        _write_text(CONFIG_PATH, json.dumps(self._config, ensure_ascii=False, indent=2))
 
     def _remember_device(self, key, index):
         """Saves a device choice as its index and what it is. `key` is
@@ -698,7 +719,7 @@ class Api:
         # half a document. os.replace is atomic on every system we ship on.
         folder = Path(folder)
         tmp = folder / "session.json.writing"
-        tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+        _write_text(tmp, json.dumps(meta, ensure_ascii=False, indent=2))
         os.replace(tmp, folder / "session.json")
 
     @staticmethod
@@ -707,7 +728,7 @@ class Api:
         if not path.exists():
             return None
         try:
-            return json.loads(path.read_text())
+            return json.loads(_read_text(path))
         except Exception:
             return None
 
@@ -1119,20 +1140,34 @@ class Api:
             old_dirs = {
                 Path(t["file"]).parent for t in take.get("tracks", []) if t.get("file")
             }
+            moved = None
             if len(old_dirs) == 1:
                 old_dir = old_dirs.pop()
                 new_dir = _unique_path(
                     folder / f"{take_number:02d} - {_safe_name(display_name)}"
                 )
                 if old_dir.exists() and old_dir != new_dir:
+                    # Windows will not rename a folder holding a file the
+                    # player has mapped, and the rehearsal screen is usually
+                    # playing the very take it offers to rename. The interface
+                    # reopens the take from its new path afterwards.
+                    self._release_player_in(old_dir)
                     try:
                         old_dir.rename(new_dir)
+                        moved = (old_dir, new_dir)
                         for t in take.get("tracks", []):
                             t["file"] = str(new_dir / Path(t["file"]).name)
                     except OSError as e:
                         print(f"[rename] take folder: {e}")
 
-            self._write_meta(folder, meta)
+            try:
+                self._write_meta(folder, meta)
+            except Exception:
+                # The folder must not stay renamed under a session.json that
+                # still points at the old one: the take would stop opening.
+                if moved:
+                    moved[1].rename(moved[0])
+                raise
             if self._session is not None and Path(self._session["folder"]) == folder:
                 self._session["takes"] = takes
 
@@ -1163,6 +1198,8 @@ class Api:
             )
 
             if new_folder != original:
+                # See rename_take: a take playing from in here holds its files.
+                self._release_player_in(original)
                 try:
                     original.rename(new_folder)
                 except OSError as e:
@@ -1178,7 +1215,14 @@ class Api:
                             pass
                 folder = new_folder
 
-            self._write_meta(folder, meta)
+            try:
+                self._write_meta(folder, meta)
+            except Exception:
+                # As in rename_take: never leave the folder renamed under a
+                # session.json whose paths still point at the old one.
+                if folder != original:
+                    folder.rename(original)
+                raise
 
             # Only the rehearsal actually being renamed touches the live session —
             # renaming an old one from history must leave it alone.

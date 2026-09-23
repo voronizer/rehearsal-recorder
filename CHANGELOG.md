@@ -28,6 +28,14 @@ opening.
   not move a file that is open for playing. Deleting a take or a rehearsal
   while it played failed the same way. The player now lets go of those files
   first. On a Mac the move had always worked, which is why this was not seen.
+- On Windows a take or rehearsal could not be renamed to anything in
+  Cyrillic — or in any script outside Western European — and nothing said
+  so. The rehearsal's file and the settings were written in the system's
+  code page, cp1252 there; they are UTF-8 now, and files an older version
+  wrote are still read. Renaming the take that was playing also left its
+  folder under the old name without a word; the player now lets go of it
+  first. And a folder is never left renamed under a record that could not
+  be written.
 - The keys are on the buttons they press: Space on the main button of each
   screen, Esc on Back, on Discard and on Finish. The line under the main
   button that said the same thing for Space alone is gone. A key is shown

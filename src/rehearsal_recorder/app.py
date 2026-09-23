@@ -38,7 +38,7 @@ def _arm_crash_log():
     """
     try:
         CRASH_LOG.parent.mkdir(parents=True, exist_ok=True)
-        log = open(CRASH_LOG, "a", buffering=1)
+        log = open(CRASH_LOG, "a", buffering=1, encoding="utf-8")
         log.write(
             f"\n===== started {datetime.now().isoformat(timespec='seconds')} "
             f"on {sys.platform} =====\n"

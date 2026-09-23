@@ -776,6 +776,55 @@ def main():
     ok("a take saved without marks has none",
        a.get_rehearsal(str(folder))["takes"][-1]["markers"] == [])
 
+    print("\n[8c] Names in any script, and renaming what is playing")
+    # session.json and config.json were written in the system's code page.
+    # On Windows that is cp1252, which has no Cyrillic: renaming a take
+    # "Полынь" raised UnicodeEncodeError and nothing was renamed.
+    _, ru = fresh_api(tmp / "names")
+    ru.start_rehearsal("Names", 0, SR, [{"name": "Gtr", "channel": 1}])
+    ru_folder = Path(ru._session["folder"])
+    d = ru_folder / "_drafts" / "take 1"
+    write_wav(d / "Gtr.wav", 100, seconds=1.0)
+    first = ru.keep_take(1, str(d), "Take 1", 1.0,
+                         [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
+    renamed = ru.rename_take(str(ru_folder), 1, "Полынь")
+    ok("a take can be named in Cyrillic", renamed.get("ok"))
+    ok("and the name is on disk, readable back",
+       ru._read_meta(ru_folder)["takes"][0]["name"] == "Полынь")
+    ok("in UTF-8, whatever the system's code page",
+       "Полынь" in (ru_folder / "session.json").read_bytes().decode("utf-8"))
+
+    # The rehearsal screen plays the take it offers to rename, and Windows
+    # will not rename a folder holding a mapped file — the folder stayed
+    # "01 - Take 1" without a word.
+    ru.player_open(renamed["take"]["tracks"])
+    again = ru.rename_take(str(ru_folder), 1, "Весна")
+    ok("renaming the take that is playing renames its folder too",
+       again.get("ok")
+       and Path(again["take"]["tracks"][0]["file"]).parent.name == "01 - Весна"
+       and Path(again["take"]["tracks"][0]["file"]).exists())
+
+    ru.player_open(again["take"]["tracks"])
+    whole = ru.rename_rehearsal(str(ru_folder), "Репетиция")
+    ok("and so does renaming the rehearsal it is in",
+       whole.get("ok") and Path(whole["folder"]).exists()
+       and ru._read_meta(Path(whole["folder"]))["name"] == "Репетиция")
+    ru.player_close()
+
+    names_cfg = ru.save_default_tracks({"tracks": [{"name": "Гитара", "channel": 1}]})
+    ok("the config takes Cyrillic track names",
+       names_cfg.get("ok")
+       and "Гитара" in (tmp / "names" / "config.json").read_bytes().decode("utf-8"))
+
+    # A file an older version wrote on Windows is in cp1252. Reading it as
+    # UTF-8 alone would make the rehearsal vanish from History.
+    legacy = tmp / "legacy"
+    legacy.mkdir()
+    (legacy / "session.json").write_bytes(
+        json.dumps({"name": "Café", "takes": []}, ensure_ascii=False).encode("cp1252"))
+    ok("a session.json an older version wrote is still read",
+       (ru._read_meta(legacy) or {}).get("name") == "Café")
+
     print("\n[9] Renaming")
     r = a.rename_take(str(folder), 1, "Polyn (best)")
     ok("take renamed", r["ok"])
