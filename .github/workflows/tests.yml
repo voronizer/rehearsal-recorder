@@ -24,6 +24,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Reading the repository is all these need — they build it and run it, and
+# write nothing back. Said here because the default token can write, and a
+# pull request from a fork runs this workflow.
+permissions:
+  contents: read
+
 jobs:
   test:
     strategy:
