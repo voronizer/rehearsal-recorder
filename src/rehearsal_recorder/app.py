@@ -52,14 +52,17 @@ def _arm_crash_log():
         # trace kept. It is written here too, and the interface points to
         # this file when it says a call failed. One handler, however many
         # times this runs.
-        bridge_log = logging.getLogger("pywebview")
-        for old in [h for h in bridge_log.handlers if getattr(h, "_ours", False)]:
-            bridge_log.removeHandler(old)
+        # The app's own errors that it survives — a recordings database it
+        # cannot open, an old session.json it cannot read — go the same way.
         handler = logging.StreamHandler(log)
         handler.setLevel(logging.ERROR)
         handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
         handler._ours = True
-        bridge_log.addHandler(handler)
+        for name in ("pywebview", "rehearsal_recorder"):
+            logger = logging.getLogger(name)
+            for old in [h for h in logger.handlers if getattr(h, "_ours", False)]:
+                logger.removeHandler(old)
+            logger.addHandler(handler)
 
         register = getattr(faulthandler, "register", None)  # Unix only
         if register is not None:
@@ -150,6 +153,30 @@ def selftest():
 
         return f"numpy {np.__version__}"
 
+    def database():
+        import tempfile
+
+        from alembic.script import ScriptDirectory
+
+        from rehearsal_recorder.store import db
+        from rehearsal_recorder.store.library import Library
+
+        with tempfile.TemporaryDirectory() as tmp:
+            library = Library(tmp)
+            head = ScriptDirectory.from_config(db.alembic_config()).get_current_head()
+            current = db.current_revision(library._engine)
+            library.close()
+            # No head at all is the bundle without a single migration in it:
+            # the database would then be "at head" by being empty.
+            if head is None:
+                raise RuntimeError("no migrations found — the bundle is missing them")
+            if current != head:
+                raise RuntimeError(
+                    f"migrated to {current!r}, not head {head!r} — "
+                    "the bundle is missing a migration"
+                )
+            return f"migrations up to {head}"
+
     def window_toolkit():
         import webview
 
@@ -162,6 +189,7 @@ def selftest():
         check("ASIO", asio)
     check("sample formats", encoder)
     check("numpy", numpy_works)
+    check("history database", database)
     check("window toolkit", window_toolkit)
     check("built interface", interface)
     check("deleting", lambda: f"goes to the {trash_kind()}")

@@ -16,6 +16,7 @@ import {
   type PendingTake,
   type SessionState,
 } from "@/lib/api"
+import { reportBridgeError } from "@/lib/bridgeErrors"
 import { loadDeletionKind } from "@/lib/deletion"
 import {
   applyAppearance,
@@ -67,6 +68,21 @@ export function App() {
     setScreen({ name: "loading" })
     try {
       await waitForApi()
+
+      // Whatever went wrong on the way up — a rehearsal's history that
+      // could not be read, say — is said once here, the same bar as any
+      // other bridge failure, rather than dropped silently.
+      try {
+        const problems = await api().startup_problems()
+        for (const p of problems) {
+          reportBridgeError(
+            "startup",
+            Object.assign(new Error(p.message), { name: p.name })
+          )
+        }
+      } catch (e) {
+        console.error("Could not read startup problems:", e)
+      }
 
       // What deleting does differs by system, and a confirmation must not
       // promise a Trash this machine has not got.

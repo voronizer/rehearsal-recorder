@@ -4,15 +4,22 @@ The Python side of the bridge between the window (pywebview) and the audio layer
 Model: one "rehearsal" (start_rehearsal) lives as long as the app is open and
 holds several "takes" (start_take / stop_take / keep_take / discard_take).
 Until a take is saved it is written into the rehearsal's own drafts folder,
-next to session.json rather than somewhere in a system temp directory — so it
-is visible and findable if something goes wrong. Saving moves the files into
-a permanent take folder inside the same rehearsal; discarding deletes them.
+inside the rehearsal's folder rather than somewhere in a system temp directory
+— so it is visible and findable if something goes wrong. Saving moves the
+files into a permanent take folder inside the same rehearsal; discarding
+deletes them.
 
-The recordings folder is configurable (Settings). Point it at a cloud
-client's folder and the recordings sync themselves.
+What is known about the rehearsals and their takes lives in the recordings
+folder's database (store/, library.sqlite); the audio stays in the folders.
+
+The recordings folder is configurable (Settings). It belongs to this
+computer: the database in it is written while the app runs, and a sync
+client or a network share cannot be trusted with that. Sharing takes is what
+the separate cloud folder is for — only the takes worth keeping go there.
 """
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -52,6 +59,10 @@ from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
 from rehearsal_recorder import cloud as cloudmod
 from rehearsal_recorder.mediaserver import AppServer
+from rehearsal_recorder.store import library as librarymod
+from rehearsal_recorder.store.db import LibraryUnavailable
+from rehearsal_recorder.store.importer import import_all, read_text
+from rehearsal_recorder.store.library import Library, as_marker
 from rehearsal_recorder.platform_support import (
     FALLBACK_TRASH,
     app_root,
@@ -195,47 +206,10 @@ def _folder_bytes(folder):
     return total
 
 
-def _read_text(path):
-    """
-    A JSON file of ours, as text. Written as UTF-8 now; an older version wrote
-    whatever the system's code page was, which on Windows is cp1252 — so a
-    file that is not UTF-8 is read that way rather than taken for damaged.
-    Read as damaged, a rehearsal with a "Café" in it would simply vanish from
-    History.
-    """
-    raw = Path(path).read_bytes()
-    try:
-        return raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return raw.decode("cp1252", errors="replace")
-
-
 def _write_text(path, text):
     """Always UTF-8. Left to the default, Windows writes cp1252, which has no
     Cyrillic: a take named "Полынь" failed to save with UnicodeEncodeError."""
     Path(path).write_text(text, encoding="utf-8")
-
-
-def _is_empty_rehearsal(folder):
-    """
-    A rehearsal that produced nothing: no saved takes and no audio on disk.
-    Such a folder can be removed without asking — there is nothing to lose.
-
-    A folder holding a draft (the app died mid-take) is deliberately kept:
-    that draft is a real recording, just not accepted yet. Note that a draft
-    is raw PCM, not .wav, which is exactly why has_audio() looks for both.
-    """
-    folder = Path(folder)
-    meta_path = folder / "session.json"
-    if not meta_path.exists():
-        return False
-    try:
-        meta = json.loads(_read_text(meta_path))
-    except Exception:
-        return False
-    if meta.get("takes"):
-        return False
-    return not has_audio(folder)
 
 
 def _is_inside(path, root):
@@ -276,10 +250,6 @@ class Api:
         # the files can put back exactly the take that was playing.
         self._open_tracks = None
         self._player_lock = threading.RLock()
-        # share_take runs on the publishing thread while the interface writes
-        # the same file from its own; without this a rename lands between a
-        # read and a write and is silently undone.
-        self._meta_lock = threading.RLock()
         self._window = None
 
         self._config = self._read_config()
@@ -287,6 +257,15 @@ class Api:
             self._config.get("recordings_dir") or RECORDINGS_ROOT
         )
         self._recordings_dir.mkdir(parents=True, exist_ok=True)
+
+        # What went wrong while starting, for the interface to say once.
+        self._library = None
+        self._library_error = None
+        self._problems = []
+        error = self._open_library()
+        if error is not None:
+            self._library_error = error
+            self._problems.append({"name": "LibraryUnavailable", "message": error})
 
         # Serves both the interface itself and the .wav files — see
         # mediaserver.py for why not file://.
@@ -311,6 +290,55 @@ class Api:
         """The window has closed: stand the publishing worker down instead of
         leaving it to be killed wherever it happens to be."""
         self._cloud_queue.stop()
+        if self._library is not None:
+            self._library.close()
+
+    # ---------- the database ----------
+
+    def _open_library(self, recordings_dir=None):
+        """
+        The recordings folder's database, opened and brought up to date, with
+        any old session.json files moved into it. When it cannot be used — a
+        newer app's database, a migration that failed — the reason is kept and
+        everything that needs the history says so, rather than the app not
+        starting: Settings still work, and another folder can be chosen.
+        Returns the error message, or None.
+        """
+        folder = Path(recordings_dir or self._recordings_dir)
+        try:
+            library = Library(folder, cloud_dir=lambda: self._cloud_dir)
+        except LibraryUnavailable as e:
+            logging.getLogger(__name__).error("recordings database: %s", e, exc_info=True)
+            return str(e)
+        if getattr(self, "_library", None) is not None:
+            self._library.close()
+        self._library, self._library_error = library, None
+        import_all(library, self._cloud_dir, report=self._report_import_failure)
+        return None
+
+    def _report_import_failure(self, folder, e):
+        """An old session.json that could not be read: it stays where it is
+        for the next start, and the interface says so once."""
+        logging.getLogger(__name__).error(
+            "could not import %s", folder, exc_info=(type(e), e, e.__traceback__)
+        )
+        self._problems.append({
+            "name": type(e).__name__,
+            "message": f"Could not read the history of “{Path(folder).name}”: {e}. "
+                       "The file was left as it is and will be tried again next time.",
+        })
+
+    def startup_problems(self):
+        """What went wrong while starting, each said once: returned, then
+        forgotten."""
+        problems, self._problems = self._problems, []
+        return problems
+
+    @property
+    def _lib(self):
+        if self._library is None:
+            raise LibraryUnavailable(self._library_error or "The recordings database is not open")
+        return self._library
 
     @property
     def ui_url(self):
@@ -330,14 +358,19 @@ class Api:
         if not CONFIG_PATH.exists():
             return {}
         try:
-            data = json.loads(_read_text(CONFIG_PATH))
+            data = json.loads(read_text(CONFIG_PATH))
             return data if isinstance(data, dict) else {}
         except Exception:
             return {}
 
     def _write_config(self):
+        # Written beside the real file and moved onto it, so an app killed
+        # mid-write leaves the old settings rather than half of new ones.
+        # os.replace is atomic on every system we ship on.
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _write_text(CONFIG_PATH, json.dumps(self._config, ensure_ascii=False, indent=2))
+        writing = CONFIG_PATH.with_name("config.json.writing")
+        _write_text(writing, json.dumps(self._config, ensure_ascii=False, indent=2))
+        os.replace(writing, CONFIG_PATH)
 
     def _remember_device(self, key, index):
         """Saves a device choice as its index and what it is. `key` is
@@ -384,10 +417,20 @@ class Api:
         folder = Path(path).expanduser()
         if not folder.is_absolute():
             return {"ok": False, "error": "A full path is required"}
+        # The rehearsal in progress is kept in the current folder's database;
+        # moving to another one under it would leave its next takes nowhere.
+        if self._session is not None:
+            return {"ok": False,
+                    "error": "Finish the rehearsal before changing the recordings folder"}
         try:
             folder.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             return {"ok": False, "error": f"Could not open the folder: {e}"}
+        # Opened before anything else changes: a folder whose database cannot
+        # be used leaves the current one in use, exactly as it was.
+        error = self._open_library(folder)
+        if error is not None:
+            return {"ok": False, "error": error}
 
         self._recordings_dir = folder
         self._config["recordings_dir"] = str(folder)
@@ -669,6 +712,9 @@ class Api:
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
         bit_depth = normalize_depth(bit_depth)
+        # Asked first: with no database there is nowhere to keep the takes,
+        # and nothing should be created on disk for them.
+        library = self._lib
 
         # The signal check and the recording cannot hold the input at once.
         self.stop_monitor()
@@ -689,60 +735,38 @@ class Api:
             "bit_depth": bit_depth,
             "tracks": tracks,
             "take_counter": 0,
-            "takes": [],
         }
-        self._save_session_meta()
+        # In the database from the start, so History can read the take list
+        # even after a restart.
+        try:
+            library.create_rehearsal(
+                folder, name, created_at, samplerate, bit_depth, tracks
+            )
+        except Exception:
+            self._session = None
+            raise
         return {"ok": True, "folder": str(folder)}
 
-    def _save_session_meta(self):
-        """Writes session.json into the rehearsal folder so History can read
-        the take list even after a restart."""
-        with self._meta_lock:
-            s = self._session
-            self._write_meta(
-                s["folder"],
-                {
-                    "name": s["name"],
-                    "created_at": s["created_at"],
-                    "samplerate": s["samplerate"],
-                    "bit_depth": s.get("bit_depth", LEGACY_DEPTH),
-                    "tracks": s["tracks"],
-                    "takes": s["takes"],
-                },
-            )
-
-    @staticmethod
-    def _write_meta(folder, meta):
-        # Written beside the real file and moved onto it, because the
-        # publishing thread writes this while the interface is listing
-        # rehearsals off it — a truncate-then-fill would let a listing read
-        # half a document. os.replace is atomic on every system we ship on.
-        folder = Path(folder)
-        tmp = folder / "session.json.writing"
-        _write_text(tmp, json.dumps(meta, ensure_ascii=False, indent=2))
-        os.replace(tmp, folder / "session.json")
-
-    @staticmethod
-    def _read_meta(folder):
-        path = Path(folder) / "session.json"
-        if not path.exists():
-            return None
-        try:
-            return json.loads(_read_text(path))
-        except Exception:
-            return None
+    def _session_takes(self):
+        """The takes of the rehearsal in progress, from the database — the one
+        copy there is."""
+        if self._session is None:
+            return []
+        r = self._lib.rehearsal(self._session["folder"])
+        return r["takes"] if r else []
 
     def session_state(self):
         if self._session is None:
             return {"active": False}
         s = self._session
+        takes = self._session_takes()
         return {
             "active": True,
             "name": s["name"],
             "folder": str(s["folder"]),
             "tracks": s["tracks"],
-            "takes": s["takes"],
-            "songs": _songs_of(s["takes"]),
+            "takes": takes,
+            "songs": _songs_of(takes),
             "next_take_number": s["take_counter"] + 1,
             "next_take_name": self.suggest_take_name(),
             "recording": self._recorder is not None,
@@ -761,7 +785,7 @@ class Api:
         """
         if self._session is None:
             return "Take 1"
-        takes = self._session["takes"]
+        takes = self._session_takes()
         number = (
             take_number
             if take_number is not None
@@ -783,14 +807,14 @@ class Api:
         if self._session is None:
             return {"ok": False, "error": "No rehearsal in progress"}
         folder = Path(self._session["folder"])
-        take_count = len(self._session["takes"])
+        rehearsal = self._lib.rehearsal(folder)
+        take_count = len(rehearsal["takes"]) if rehearsal else 0
         self._session = None
 
         # A rehearsal where nothing was saved should not leave a folder behind.
         removed = False
-        if _is_empty_rehearsal(folder):
-            shutil.rmtree(folder, ignore_errors=True)
-            removed = True
+        if rehearsal is not None and self._is_empty(rehearsal):
+            removed = self._remove_empty(folder)
 
         return {
             "ok": True,
@@ -799,22 +823,78 @@ class Api:
             "folder_removed": removed,
         }
 
+    @staticmethod
+    def _is_empty(rehearsal):
+        """
+        A rehearsal that produced nothing: no saved takes and no audio on disk.
+        Such a folder can be removed without asking — there is nothing to lose.
+
+        A folder holding a draft (the app died mid-take) is deliberately kept:
+        that draft is a real recording, just not accepted yet. Note that a draft
+        is raw PCM, not .wav, which is exactly why has_audio() looks for both.
+        """
+        return not rehearsal["takes"] and not has_audio(Path(rehearsal["folder"]))
+
     def cleanup_empty_rehearsals(self):
-        """Removes rehearsal folders without a single saved take and without
-        any audio (including unfinished drafts)."""
-        if not self._recordings_dir.exists():
+        """Removes rehearsals without a single saved take and without any
+        audio (including unfinished drafts), folder and record both."""
+        # It runs from __init__, where a database that cannot be opened must
+        # not stop the app from starting.
+        if self._library is None:
             return {"ok": True, "removed": 0}
 
+        live = Path(self._session["folder"]) if self._session is not None else None
         removed = 0
-        for folder in list(self._recordings_dir.iterdir()):
-            if not folder.is_dir():
+        for rehearsal in self._lib.rehearsals():
+            folder = Path(rehearsal["folder"])
+            if rehearsal["missing"] or folder == live:
                 continue
-            if self._session is not None and Path(self._session["folder"]) == folder:
-                continue
-            if _is_empty_rehearsal(folder):
-                shutil.rmtree(folder, ignore_errors=True)
+            if self._is_empty(rehearsal) and self._remove_empty(folder):
                 removed += 1
         return {"ok": True, "removed": removed}
+
+    def _remove_empty(self, folder):
+        """
+        The folder, then its record — the record only once the folder is
+        really gone, so one that could not be removed is tried again next
+        time rather than left on disk with nothing pointing at it. Returns
+        whether the folder is gone.
+
+        Only a folder with nothing but empty directories left in it (an
+        empty _drafts, say) is removed. A record in the database is no proof
+        the app made the folder: "Locate folder…" can point a rehearsal at
+        any folder, and one full of someone's mixes and lyrics has no audio
+        the app would recognise, yet is anything but empty. A file of any
+        kind, or a link, keeps the folder where it is.
+        """
+        folder = Path(folder)
+        if self._holds_anything(folder):
+            return False
+        shutil.rmtree(folder, ignore_errors=True)
+        if folder.exists():
+            return False
+        self._lib.forget_rehearsal(folder)
+        return True
+
+    @staticmethod
+    def _holds_anything(folder):
+        """Anything in the tree that is not a plain directory. Links are not
+        followed, and count: what they point at is not ours to judge.
+
+        os.path.isjunction only exists from Python 3.12, but pyproject.toml
+        allows 3.10; on an older Python, getattr leaves it as "not a
+        junction" rather than raising. is_symlink() still catches a
+        symlink on every supported version, junction or not.
+        """
+        isjunction = getattr(os.path, "isjunction", None)
+        for root, dirs, files in os.walk(folder, followlinks=False):
+            if files:
+                return True
+            for d in dirs:
+                sub = Path(root) / d
+                if sub.is_symlink() or (isjunction is not None and isjunction(sub)):
+                    return True
+        return False
 
     # ---------- take ----------
 
@@ -912,16 +992,7 @@ class Api:
         # The review screen is still playing these very files.
         self._release_player_in(temp_dir)
 
-        moved = []
-        for t in tracks:
-            src = Path(t["file"])
-            dst = take_dir / src.name
-            if src.exists():
-                shutil.move(str(src), str(dst))
-            moved.append({"name": t["name"], "file": str(dst)})
-
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        self._cleanup_drafts_dir(temp_dir)
+        moved, undo = self._move_tracks(tracks, take_dir)
 
         take_info = {
             "take_number": take_number,
@@ -934,16 +1005,61 @@ class Api:
             take_info["cloud_skip"] = True
         elif send_to_cloud is True:
             take_info["cloud_send"] = True
-        # Appending and saving must be one step: a publish landing between them
-        # would rebind self._session["takes"] to a copy read before this take
-        # existed, and _save_session_meta would then write that take away.
-        # Safe to nest — _save_session_meta re-enters the same RLock.
-        with self._meta_lock:
-            s["takes"].append(take_info)
-            self._save_session_meta()
-        self._enqueue_publish(s["folder"], take_number, take=take_info)
+        kept = self._add_moved_take(s["folder"], take_info, undo, take_dir)
+        if kept is None:
+            return {"ok": False, "error": "Rehearsal not found"}
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        self._cleanup_drafts_dir(temp_dir)
+        self._enqueue_publish(s["folder"], take_number, take=kept)
         self._retry_failed_publishes()
-        return {"ok": True, "take": take_info}
+        return {"ok": True, "take": kept}
+
+    @staticmethod
+    def _move_tracks(tracks, take_dir):
+        """
+        A take's files into its folder. Returns them at their new paths, and
+        the (new, old) pairs that put them back.
+        """
+        moved, undo = [], []
+        for t in tracks:
+            src = Path(t["file"])
+            dst = take_dir / src.name
+            if src.exists():
+                shutil.move(str(src), str(dst))
+                undo.append((dst, src))
+            moved.append({"name": t["name"], "file": str(dst)})
+        return moved, undo
+
+    def _add_moved_take(self, folder, take_info, undo, take_dir):
+        """
+        Records a take whose files were just moved into take_dir. If the
+        record cannot be written, the files go back where they came from: a
+        take folder nothing points at would never show up anywhere, while
+        the draft left in place is still found and can be saved again.
+        Returns the take as kept, or None without the rehearsal.
+        """
+        try:
+            kept = self._lib.add_take(folder, take_info)
+        except Exception:
+            self._unmove(undo, take_dir)
+            raise
+        if kept is None:
+            self._unmove(undo, take_dir)
+        return kept
+
+    @staticmethod
+    def _unmove(undo, take_dir):
+        for dst, src in reversed(undo):
+            try:
+                src.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(dst), str(src))
+            except OSError as e:
+                print(f"[keep] could not put {dst} back: {e}")
+        try:
+            take_dir.rmdir()  # only when it is empty, which is the point
+        except OSError:
+            pass
 
     def discard_take(self, temp_dir):
         """
@@ -989,23 +1105,17 @@ class Api:
         Takes that were recorded but never saved — the app was closed or died
         mid-take. Their audio is on disk as raw PCM; here we just report it.
         """
-        if not self._recordings_dir.exists():
-            return []
-
         found = []
-        for folder in sorted(self._recordings_dir.iterdir()):
-            if not folder.is_dir():
+        # By folder name, as they sit on disk.
+        for r in sorted(self._lib.rehearsals(), key=lambda r: Path(r["folder"]).name):
+            if r["missing"]:
                 continue
-            meta = self._read_meta(folder)
-            if meta is None:
-                continue
-            samplerate = meta.get("samplerate", 48000)
-            depth = meta.get("bit_depth", LEGACY_DEPTH)
+            folder = Path(r["folder"])
             for take_dir in draft_dirs(folder):
-                info = describe(take_dir, samplerate, depth)
+                info = describe(take_dir, r["samplerate"], r["bit_depth"])
                 info["rehearsal_folder"] = str(folder)
-                info["rehearsal_name"] = meta.get("name", folder.name)
-                info["created_at"] = meta.get("created_at", "")
+                info["rehearsal_name"] = r["name"]
+                info["created_at"] = r["created_at"]
                 found.append(info)
         return found
 
@@ -1018,59 +1128,48 @@ class Api:
             return {"ok": False, "error": "Draft not found"}
 
         folder = draft_dir.parent.parent
-        with self._meta_lock:
-            meta = self._read_meta(folder)
-            if meta is None:
-                return {"ok": False, "error": "Rehearsal not found"}
+        r = self._lib.rehearsal(folder)
+        if r is None:
+            return {"ok": False, "error": "Rehearsal not found"}
 
-            samplerate = meta.get("samplerate", 48000)
-            result = finalize(draft_dir, samplerate, meta.get("bit_depth", LEGACY_DEPTH))
-            if not result["tracks"]:
-                return {"ok": False, "error": "Draft has no audio"}
+        result = finalize(draft_dir, r["samplerate"], r["bit_depth"])
+        if not result["tracks"]:
+            return {"ok": False, "error": "Draft has no audio"}
 
-            takes = meta.get("takes", [])
-            take_number = max([t.get("take_number", 0) for t in takes], default=0) + 1
-            display_name = (name or "").strip() or f"Recovered take {take_number}"
+        take_number = max((t["take_number"] for t in r["takes"]), default=0) + 1
+        display_name = (name or "").strip() or f"Recovered take {take_number}"
 
-            take_dir = _unique_path(
-                folder / f"{take_number:02d} - {_safe_name(display_name)}"
+        take_dir = _unique_path(
+            folder / f"{take_number:02d} - {_safe_name(display_name)}"
+        )
+        take_dir.mkdir(parents=True, exist_ok=True)
+
+        moved, undo = self._move_tracks(result["tracks"], take_dir)
+        take_info = {
+            "take_number": take_number,
+            "name": display_name,
+            "duration_sec": result["duration_sec"],
+            "tracks": moved,
+            # A rescued take was never listened to, so it has no marks yet.
+            "markers": [],
+        }
+        kept = self._add_moved_take(folder, take_info, undo, take_dir)
+        if kept is None:
+            return {"ok": False, "error": "Rehearsal not found"}
+
+        shutil.rmtree(draft_dir, ignore_errors=True)
+        self._cleanup_drafts_dir(draft_dir)
+
+        if self._session is not None and Path(self._session["folder"]) == folder:
+            self._session["take_counter"] = max(
+                self._session["take_counter"], take_number
             )
-            take_dir.mkdir(parents=True, exist_ok=True)
-
-            moved = []
-            for t in result["tracks"]:
-                src = Path(t["file"])
-                dst = take_dir / src.name
-                if src.exists():
-                    shutil.move(str(src), str(dst))
-                moved.append({"name": t["name"], "file": str(dst)})
-
-            shutil.rmtree(draft_dir, ignore_errors=True)
-            self._cleanup_drafts_dir(draft_dir)
-
-            take_info = {
-                "take_number": take_number,
-                "name": display_name,
-                "duration_sec": result["duration_sec"],
-                "tracks": moved,
-                # A rescued take was never listened to, so it has no marks yet.
-                "markers": [],
-            }
-            takes.append(take_info)
-            meta["takes"] = takes
-            self._write_meta(folder, meta)
-
-            if self._session is not None and Path(self._session["folder"]) == folder:
-                self._session["takes"] = takes
-                self._session["take_counter"] = max(
-                    self._session["take_counter"], take_number
-                )
 
         # A rescued take is a take. The app dying mid-rehearsal is exactly the
         # case there is no startup sweep for, so this is the only thing that
         # ever sends it.
         self._enqueue_publish(folder, take_number)
-        return {"ok": True, "take": take_info, "folder": str(folder)}
+        return {"ok": True, "take": kept, "folder": str(folder)}
 
     def discard_draft(self, draft_dir):
         draft_dir = Path(draft_dir)
@@ -1084,47 +1183,41 @@ class Api:
     # ---------- history ----------
 
     def list_rehearsals(self):
-        """All rehearsals on disk (by session.json in each folder), newest
-        first. Rehearsals recorded before this feature existed (no
-        session.json) do not show up."""
-        if not self._recordings_dir.exists():
-            return []
-
+        """Every rehearsal in the database, newest first. One whose folder is
+        not on disk is still listed, as missing — the folder may be on a
+        drive that is not plugged in. Folders the database has no record of
+        (recorded before there was any history) do not show up."""
         self.cleanup_empty_rehearsals()
 
         items = []
-        for folder in self._recordings_dir.iterdir():
-            if not folder.is_dir():
-                continue
-            meta = self._read_meta(folder)
-            if meta is None:
-                continue
-            takes = meta.get("takes", [])
+        for r in self._lib.rehearsals():
+            takes = r["takes"]
             items.append({
-                "folder": str(folder),
-                "name": meta.get("name", folder.name),
-                "created_at": meta.get("created_at", ""),
+                "folder": r["folder"],
+                "name": r["name"],
+                "created_at": r["created_at"],
                 "take_count": len(takes),
-                "total_duration_sec": sum(t.get("duration_sec", 0) for t in takes),
+                "total_duration_sec": sum(t["duration_sec"] for t in takes),
                 "songs": _songs_of(takes),
-                "disk_bytes": _folder_bytes(folder),
+                # Not walked when it is not there to walk.
+                "disk_bytes": 0 if r["missing"] else _folder_bytes(r["folder"]),
+                "missing": r["missing"],
             })
-
-        items.sort(key=lambda x: x["created_at"], reverse=True)
         return items
 
     def get_rehearsal(self, folder):
-        meta = self._read_meta(folder)
-        if meta is None:
+        r = self._lib.rehearsal(folder)
+        if r is None:
             return {"ok": False, "error": "Rehearsal not found"}
-        takes = meta.get("takes", [])
-        for take in takes:
-            take["markers"] = self._markers_of(take)
+        if r["missing"]:
+            return {"ok": False, "missing": True,
+                    "error": "The rehearsal's folder is not on disk"}
+        takes = r["takes"]
         return {
             "ok": True,
             "folder": str(folder),
-            "name": meta.get("name", ""),
-            "created_at": meta.get("created_at", ""),
+            "name": r["name"],
+            "created_at": r["created_at"],
             "takes": takes,
             "songs": _songs_of(takes),
         }
@@ -1141,113 +1234,109 @@ class Api:
         if not display_name:
             return {"ok": False, "error": "Name cannot be empty"}
 
-        with self._meta_lock:
-            meta = self._read_meta(folder)
-            if meta is None:
+        take = self._lib.take(folder, take_number)
+        if take is None:
+            if not self._lib.has(folder):
                 return {"ok": False, "error": "Rehearsal not found"}
+            return {"ok": False, "error": "Take not found"}
 
-            takes = meta.get("takes", [])
-            take = next((t for t in takes if t.get("take_number") == take_number), None)
-            if take is None:
-                return {"ok": False, "error": "Take not found"}
+        # The take's own folder is named after it, so rename that too — the
+        # names should still make sense when browsing the disk directly.
+        old_dirs = {
+            Path(t["file"]).parent for t in take["tracks"] if t.get("file")
+        }
+        moved = None
+        new_tracks = None
+        if len(old_dirs) == 1:
+            old_dir = old_dirs.pop()
+            new_dir = _unique_path(
+                folder / f"{take_number:02d} - {_safe_name(display_name)}"
+            )
+            if old_dir.exists() and old_dir != new_dir:
+                # Windows will not rename a folder holding a file the
+                # player has mapped, and the rehearsal screen is usually
+                # playing the very take it offers to rename. The interface
+                # reopens the take from its new path afterwards.
+                self._release_player_in(old_dir)
+                try:
+                    old_dir.rename(new_dir)
+                    moved = (old_dir, new_dir)
+                    new_tracks = [
+                        {**t, "file": str(new_dir / Path(t["file"]).name)}
+                        for t in take["tracks"]
+                    ]
+                except OSError as e:
+                    print(f"[rename] take folder: {e}")
 
-            take["name"] = display_name
-
-            # The take's own folder is named after it, so rename that too — the
-            # names should still make sense when browsing the disk directly.
-            old_dirs = {
-                Path(t["file"]).parent for t in take.get("tracks", []) if t.get("file")
-            }
-            moved = None
-            if len(old_dirs) == 1:
-                old_dir = old_dirs.pop()
-                new_dir = _unique_path(
-                    folder / f"{take_number:02d} - {_safe_name(display_name)}"
-                )
-                if old_dir.exists() and old_dir != new_dir:
-                    # Windows will not rename a folder holding a file the
-                    # player has mapped, and the rehearsal screen is usually
-                    # playing the very take it offers to rename. The interface
-                    # reopens the take from its new path afterwards.
-                    self._release_player_in(old_dir)
-                    try:
-                        old_dir.rename(new_dir)
-                        moved = (old_dir, new_dir)
-                        for t in take.get("tracks", []):
-                            t["file"] = str(new_dir / Path(t["file"]).name)
-                    except OSError as e:
-                        print(f"[rename] take folder: {e}")
-
-            try:
-                self._write_meta(folder, meta)
-            except Exception:
-                # The folder must not stay renamed under a session.json that
-                # still points at the old one: the take would stop opening.
-                if moved:
-                    moved[1].rename(moved[0])
-                raise
-            if self._session is not None and Path(self._session["folder"]) == folder:
-                self._session["takes"] = takes
+        try:
+            updated = self._lib.update_take(
+                folder, take_number, name=display_name, tracks=new_tracks
+            )
+        except Exception:
+            # The folder must not stay renamed under a record that still
+            # points at the old one: the take would stop opening.
+            if moved:
+                moved[1].rename(moved[0])
+            raise
+        if updated is None:
+            # Deleted while the folder was being renamed.
+            if moved:
+                moved[1].rename(moved[0])
+            return {"ok": False, "error": "Take not found"}
 
         # The copies in the cloud folder are named after the take.
         self._enqueue_publish(folder, take_number)
-        return {"ok": True, "take": take}
+        return {"ok": True, "take": updated}
 
     def rename_rehearsal(self, folder, new_name):
-        """Renames a rehearsal and its folder, rewriting the stored track paths."""
+        """Renames a rehearsal and its folder. Its takes' files are kept
+        relative to the folder, so they follow it with nothing to rewrite."""
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        with self._meta_lock:
-            meta = self._read_meta(folder)
-            if meta is None:
-                return {"ok": False, "error": "Rehearsal not found"}
+        r = self._lib.rehearsal(folder)
+        if r is None:
+            return {"ok": False, "error": "Rehearsal not found"}
 
-            display_name = (new_name or "").strip()
-            if not display_name:
-                return {"ok": False, "error": "Name cannot be empty"}
+        display_name = (new_name or "").strip()
+        if not display_name:
+            return {"ok": False, "error": "Name cannot be empty"}
 
-            meta["name"] = display_name
-            suffix = _timestamp_suffix(meta.get("created_at", ""))
-            original = folder
-            new_folder = _unique_path(
-                self._recordings_dir / f"{_safe_name(display_name)} - {suffix}"
-            )
+        suffix = _timestamp_suffix(r["created_at"])
+        original = folder
+        new_folder = _unique_path(
+            self._recordings_dir / f"{_safe_name(display_name)} - {suffix}"
+        )
 
-            if new_folder != original:
-                # See rename_take: a take playing from in here holds its files.
-                self._release_player_in(original)
-                try:
-                    original.rename(new_folder)
-                except OSError as e:
-                    return {"ok": False, "error": f"Could not rename the folder: {e}"}
-
-                # Stored paths are absolute, so re-point them at the new folder.
-                for take in meta.get("takes", []):
-                    for t in take.get("tracks", []):
-                        old = Path(t["file"])
-                        try:
-                            t["file"] = str(new_folder / old.relative_to(original))
-                        except ValueError:
-                            pass
-                folder = new_folder
-
+        if new_folder != original:
+            # See rename_take: a take playing from in here holds its files.
+            self._release_player_in(original)
             try:
-                self._write_meta(folder, meta)
-            except Exception:
-                # As in rename_take: never leave the folder renamed under a
-                # session.json whose paths still point at the old one.
-                if folder != original:
-                    folder.rename(original)
-                raise
+                original.rename(new_folder)
+            except OSError as e:
+                return {"ok": False, "error": f"Could not rename the folder: {e}"}
+            folder = new_folder
 
-            # Only the rehearsal actually being renamed touches the live session —
-            # renaming an old one from history must leave it alone.
-            if self._session is not None and Path(self._session["folder"]) == original:
-                self._session["folder"] = folder
-                self._session["name"] = display_name
-                self._session["takes"] = meta.get("takes", [])
+        try:
+            moved = self._lib.move_rehearsal(original, folder, display_name)
+        except Exception:
+            # As in rename_take: never leave the folder renamed under a
+            # record that still points at the old one.
+            if folder != original:
+                folder.rename(original)
+            raise
+        if not moved:
+            # Its record went while the folder was being renamed.
+            if folder != original:
+                folder.rename(original)
+            return {"ok": False, "error": "Rehearsal not found"}
+
+        # Only the rehearsal actually being renamed touches the live session —
+        # renaming an old one from history must leave it alone.
+        if self._session is not None and Path(self._session["folder"]) == original:
+            self._session["folder"] = folder
+            self._session["name"] = display_name
 
         # The copies sit in a cloud subfolder named after the rehearsal, so a
         # new name is a new destination for all of them.
@@ -1258,36 +1347,17 @@ class Api:
             "ok": True,
             "folder": str(folder),
             "name": display_name,
-            "takes": meta.get("takes", []),
+            "takes": self._lib.rehearsal(folder)["takes"],
         }
 
     # ---------- markers ----------
     #
-    # A marker is a spot in a take plus what you wanted to say about it. Early
-    # versions stored a bare number, so anything read from disk is normalised
-    # first — old rehearsals keep working, they just have empty notes.
+    # A marker is a spot in a take plus what you wanted to say about it. What
+    # one is kept as is the store's rule (library.as_marker); early versions
+    # stored a bare number, which the importer turns into a proper marker.
 
-    MARKER_KINDS = ("note", "good", "issue", "redo")
-
-    @staticmethod
-    def _as_marker(value):
-        if isinstance(value, dict):
-            at = round(float(value.get("at", 0.0)), 2)
-            kind = value.get("kind", "note")
-            note = str(value.get("note", "")).strip()[:200]
-        else:
-            at = round(float(value), 2)
-            kind, note = "note", ""
-        if kind not in Api.MARKER_KINDS:
-            kind = "note"
-        return {"at": at, "kind": kind, "note": note}
-
-    @staticmethod
-    def _markers_of(take):
-        return sorted(
-            (Api._as_marker(m) for m in take.get("markers", [])),
-            key=lambda m: m["at"],
-        )
+    MARKER_KINDS = librarymod.MARKER_KINDS
+    _as_marker = staticmethod(as_marker)
 
     def add_take_marker(self, folder, take_number, seconds, note="", kind="note"):
         """Markers are placed while listening back: 'this bit worked'."""
@@ -1326,23 +1396,12 @@ class Api:
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        with self._meta_lock:
-            meta = self._read_meta(folder)
-            if meta is None:
-                return {"ok": False, "error": "Rehearsal not found"}
-
-            takes = meta.get("takes", [])
-            take = next((t for t in takes if t.get("take_number") == take_number), None)
-            if take is None:
-                return {"ok": False, "error": "Take not found"}
-
-            take["markers"] = fn(self._markers_of(take))
-            self._write_meta(folder, meta)
-
-            if self._session is not None and Path(self._session["folder"]) == folder:
-                self._session["takes"] = takes
-
-            return {"ok": True, "markers": take["markers"]}
+        if not self._lib.has(folder):
+            return {"ok": False, "error": "Rehearsal not found"}
+        markers = self._lib.edit_markers(folder, take_number, fn)
+        if markers is None:
+            return {"ok": False, "error": "Take not found"}
+        return {"ok": True, "markers": markers}
 
     # ---------- cropping ----------
 
@@ -1402,7 +1461,7 @@ class Api:
         # Every original that reached the aside folder, oldest first. On
         # Windows, renaming a file another process has open raises, and a move
         # that stops half way used to leave some tracks aside, some in place
-        # and meta.json pointing at paths that had moved — behind an error
+        # and the take's record pointing at paths that had moved — behind an error
         # message that reads as if nothing had happened.
         moved = []
         try:
@@ -1462,76 +1521,72 @@ class Api:
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        # _meta_lock then _player_lock, and never the other way round — this
-        # is the only place that takes both.
-        with self._meta_lock:
-            meta = self._read_meta(folder)
-            if meta is None:
+        take = self._lib.take(folder, take_number)
+        if take is None:
+            if not self._lib.has(folder):
                 return {"ok": False, "error": "Rehearsal not found"}
-            take = next(
-                (t for t in meta.get("takes", [])
-                 if t.get("take_number") == take_number),
-                None,
-            )
-            if take is None:
-                return {"ok": False, "error": "Take not found"}
+            return {"ok": False, "error": "Take not found"}
 
-            tracks = [t for t in take.get("tracks", [])
-                      if Path(t.get("file", "")).exists()]
-            if not tracks:
-                return {"ok": False, "error": "The take has no files left on disk"}
+        tracks = [t for t in take["tracks"] if Path(t.get("file", "")).exists()]
+        if not tracks:
+            return {"ok": False, "error": "The take has no files left on disk"}
 
-            span = self._crop_span(take.get("duration_sec", 0), start_sec, end_sec)
-            if "error" in span:
-                return {"ok": False, "error": span["error"]}
+        span = self._crop_span(take["duration_sec"], start_sec, end_sec)
+        if "error" in span:
+            return {"ok": False, "error": span["error"]}
 
-            # Tracks are played through a memmap, and Windows will not let a
-            # mapped file be renamed or removed. macOS will, which is exactly
-            # how this would have reached a Windows rehearsal unnoticed.
-            playing = self._open_tracks
-            self.player_close()
+        # Tracks are played through a memmap, and Windows will not let a
+        # mapped file be renamed or removed. macOS will, which is exactly
+        # how this would have reached a Windows rehearsal unnoticed.
+        playing = self._open_tracks
+        self.player_close()
 
-            done = self._crop_tracks(tracks, span["start"], span["end"])
-            if not done["ok"]:
-                # Nothing else will put the player back: the take's tracks are
-                # what the interface reopens on, and a failed crop leaves them
-                # exactly as they were, so its open effect never re-runs. The
-                # transport would go on looking alive over a player Python has
-                # closed. Reopening here is safe where it sits — the lock order
-                # in this file is metadata then player, and nothing takes them
-                # the other way round.
-                if playing:
-                    self.player_open(playing)
-                return done
+        done = self._crop_tracks(tracks, span["start"], span["end"])
+        if not done["ok"]:
+            # Nothing else will put the player back: the take's tracks are
+            # what the interface reopens on, and a failed crop leaves them
+            # exactly as they were, so its open effect never re-runs. The
+            # transport would go on looking alive over a player Python has
+            # closed.
+            if playing:
+                self.player_open(playing)
+            return done
 
-            kept, dropped = [], 0
-            for m in self._markers_of(take):
+        # The markers are read and rewritten in one transaction, now that the
+        # crop is done: it takes seconds, and a marker placed on the take
+        # meanwhile must move with the audio rather than be written over by
+        # a list read before it existed.
+        dropped = 0
+
+        def shift(markers):
+            nonlocal dropped
+            kept = []
+            for m in markers:
                 if span["start"] <= m["at"] <= span["end"]:
                     kept.append({**m, "at": round(m["at"] - span["start"], 2)})
                 else:
                     dropped += 1
-            take["markers"] = kept
-            take["duration_sec"] = done["duration_sec"]
+            return kept
 
-            # What is in the cloud folder is a copy of a take that no longer
-            # exists, so it goes and its record goes with it. The length in
-            # the cloud.source_of fingerprint covers the other half of this: a
-            # copy already under way can write its record after this line, and
-            # a record that still matched the shorter take would suppress its
-            # own repair for good.
-            self._remove_shared(take)
-            take["cloud"] = {}
-            take.pop("cloud_error", None)
-
-            self._write_meta(folder, meta)
-            if self._session is not None and Path(self._session["folder"]) == folder:
-                self._session["takes"] = meta.get("takes", [])
+        # What is in the cloud folder is a copy of a take that no longer
+        # exists, so it goes and its record goes with it. The length in
+        # the cloud.source_of fingerprint covers the other half of this: a
+        # copy already under way can write its record after this line, and
+        # a record that still matched the shorter take would suppress its
+        # own repair.
+        self._remove_shared(take)
+        if (self._lib.edit_markers(folder, take_number, shift) is None
+                or self._lib.update_take(
+                    folder, take_number, duration_sec=done["duration_sec"]) is None):
+            # Deleted while it was being cropped.
+            return {"ok": False, "error": "Take not found"}
+        self._lib.set_cloud_copy(folder, take_number, None, None)
 
         self._enqueue_publish(folder, take_number)
         self._retry_failed_publishes()
         return {
             "ok": True,
-            "take": take,
+            "take": self._lib.take(folder, take_number),
             "trashed": done["trashed"],
             "location": done["location"],
             "markers_dropped": dropped,
@@ -1545,7 +1600,7 @@ class Api:
         """
         The same cut, one folder over. A take that has been stopped is proper
         .wav already — capture wraps the raw PCM on stop — it just has no
-        entry in session.json yet, so there is nothing here to fix up. The
+        record in the database yet, so there is nothing here to fix up. The
         files keep their paths, so the caller saves the take as it would have.
         """
         temp_dir = Path(temp_dir)
@@ -1725,36 +1780,27 @@ class Api:
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        with self._meta_lock:
-            meta = self._read_meta(folder)
-            if meta is None:
+        target = self._lib.take(folder, take_number)
+        if target is None:
+            if not self._lib.has(folder):
                 return {"ok": False, "error": "Rehearsal not found"}
+            return {"ok": False, "error": "Take not found"}
 
-            takes = meta.get("takes", [])
-            target = next((t for t in takes if t.get("take_number") == take_number), None)
-            if target is None:
-                return {"ok": False, "error": "Take not found"}
+        # Find the take folder from its files rather than its name: the name
+        # could have been changed by hand.
+        take_dirs = {
+            str(Path(t["file"]).parent)
+            for t in target["tracks"]
+            if t.get("file")
+        }
+        result = {"ok": True, "trashed": False, "location": None}
+        for d in take_dirs:
+            if Path(d).exists() and self._inside_recordings(d):
+                self._release_player_in(d)
+                result = move_to_trash(d, self._recordings_dir)
 
-            # Find the take folder from its files rather than its name: the name
-            # could have been changed by hand.
-            take_dirs = {
-                str(Path(t["file"]).parent)
-                for t in target.get("tracks", [])
-                if t.get("file")
-            }
-            result = {"ok": True, "trashed": False, "location": None}
-            for d in take_dirs:
-                if Path(d).exists() and self._inside_recordings(d):
-                    self._release_player_in(d)
-                    result = move_to_trash(d, self._recordings_dir)
-
-            meta["takes"] = [t for t in takes if t.get("take_number") != take_number]
-            self._write_meta(folder, meta)
-
-            if self._session is not None and Path(self._session["folder"]) == folder:
-                self._session["takes"] = meta["takes"]
-
-            return {**result, "takes_left": len(meta["takes"])}
+        left = self._lib.delete_take(folder, take_number)
+        return {**result, "takes_left": left}
 
     def delete_rehearsal(self, folder):
         folder = Path(folder)
@@ -1765,8 +1811,97 @@ class Api:
         if self._session is not None and Path(self._session["folder"]) == folder:
             return {"ok": False, "error": "Cannot delete the rehearsal in progress"}
         self._release_player_in(folder)
-        return move_to_trash(folder, self._recordings_dir)
+        result = move_to_trash(folder, self._recordings_dir)
+        if result.get("ok"):
+            self._lib.forget_rehearsal(folder)
+        return result
 
+    # ---------- a rehearsal whose folder went missing ----------
+
+    def forget_rehearsal(self, folder):
+        """Takes a rehearsal out of History. Only the record: whatever is on
+        disk is not touched — this is for a folder that is gone."""
+        folder = Path(folder)
+        if not self._inside_recordings(folder):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+        if self._session is not None and Path(self._session["folder"]) == folder:
+            return {"ok": False, "error": "Cannot remove the rehearsal in progress"}
+        if not self._lib.forget_rehearsal(folder):
+            return {"ok": False, "error": "Rehearsal not found"}
+        return {"ok": True}
+
+    def locate_rehearsal(self, folder, new_folder):
+        """
+        Points a rehearsal whose folder went missing at where it is now.
+
+        Only a rehearsal that really is missing, and only onto a folder that
+        belongs to no other: once pointed at a folder, the app treats it as
+        its own — an empty rehearsal's folder is removed by the cleanup, and
+        two rehearsals sharing files would each delete the other's takes.
+        """
+        folder = Path(folder)
+        new_folder = Path(new_folder)
+        if not self._inside_recordings(folder):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+        live = Path(self._session["folder"]) if self._session is not None else None
+        if live is not None and folder == live:
+            return {"ok": False, "error": "Cannot relocate the rehearsal in progress"}
+        if (not self._inside_recordings(new_folder)
+                or new_folder.resolve() == self._recordings_dir.resolve()):
+            return {"ok": False, "error": "Pick a folder inside the recordings folder"}
+        if not new_folder.is_dir():
+            return {"ok": False, "error": "That is not a folder"}
+
+        # Where deleted things go is not a rehearsal's to have either: the
+        # next thing sent there would land inside it, and the next cleanup
+        # would carry the rehearsal's own files away with it.
+        target = new_folder.resolve()
+        trash = (self._recordings_dir / FALLBACK_TRASH).resolve()
+        if target == trash or trash in target.parents:
+            return {"ok": False, "error": "That folder is where deleted things go"}
+
+        rehearsals = self._lib.rehearsals()
+        me = next((r for r in rehearsals if Path(r["folder"]) == folder), None)
+        if me is None:
+            return {"ok": False, "error": "Rehearsal not found"}
+        if not me["missing"]:
+            return {"ok": False, "error": "That rehearsal's folder is not missing"}
+
+        part = {"ok": False, "error": "That folder is part of another rehearsal"}
+        if live is not None and target == live.resolve():
+            return part
+        if self._lib.has(new_folder):
+            return {"ok": False, "error": "That folder is already another rehearsal"}
+        others = [Path(r["folder"]).resolve() for r in rehearsals if r is not me]
+        if live is not None:
+            others.append(live.resolve())
+        # A folder can be renamed to a different case alone (WindowsPath
+        # equality ignores it, so this also covers a resolve() that finds
+        # the same folder a different way): "in target.parents" alone never
+        # matches the folder itself, only something above or below it.
+        if any(o == target or o in target.parents or target in o.parents for o in others):
+            return part
+
+        if not self._lib.move_rehearsal(folder, new_folder):
+            return {"ok": False, "error": "Rehearsal not found"}
+        return {"ok": True, "folder": str(new_folder)}
+
+    def choose_rehearsal_folder(self, folder):
+        """The folder dialog for locate_rehearsal, opened in the recordings
+        folder."""
+        if self._window is None:
+            return {"ok": False, "error": "No window available"}
+        try:
+            import webview
+
+            picked = self._window.create_file_dialog(
+                webview.FOLDER_DIALOG, directory=str(self._recordings_dir)
+            )
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+        if not picked:
+            return {"ok": False, "cancelled": True}
+        return self.locate_rehearsal(folder, picked[0])
 
     # ---------- sharing to the cloud ----------
     #
@@ -1781,10 +1916,14 @@ class Api:
         return Path(path) if path else None
 
     def _cloud_target(self, folder):
-        """Where one rehearsal's copies go, or None while there is no cloud
-        folder to put them in."""
-        cloud = self._cloud_dir
-        return None if cloud is None else _cloud_subfolder(cloud, folder)
+        """Which subfolder of the cloud folder one rehearsal's copies go to,
+        or None while there is no cloud folder to put them in. The name, not
+        the whole path: that is what a copy's record keeps, so pointing the
+        setting at the same folder moved elsewhere does not make every take
+        look stale."""
+        if self._cloud_dir is None:
+            return None
+        return _safe_name(Path(folder).name)
 
     def set_cloud_dir(self, path):
         folder = Path(path).expanduser()
@@ -1871,13 +2010,8 @@ class Api:
         self._cloud_queue.enqueue(str(folder), take_number)
 
     def _take_in(self, folder, take_number):
-        """A take's record: from the rehearsal in progress when it is that
-        one, which is in memory, otherwise read off its folder."""
-        if self._session is not None and Path(self._session["folder"]) == Path(folder):
-            takes = self._session.get("takes", [])
-        else:
-            takes = (self._read_meta(Path(folder)) or {}).get("takes", [])
-        return next((t for t in takes if t.get("take_number") == take_number), None)
+        """A take's record, or None."""
+        return self._lib.take(folder, take_number)
 
     def _enqueue_session_takes(self):
         """
@@ -1892,8 +2026,8 @@ class Api:
         """
         if self._session is None:
             return
-        for t in self._session.get("takes", []):
-            self._enqueue_publish(self._session["folder"], t["take_number"])
+        for t in self._session_takes():
+            self._enqueue_publish(self._session["folder"], t["take_number"], take=t)
 
     def _retry_failed_publishes(self):
         """
@@ -1903,9 +2037,9 @@ class Api:
         """
         if self._session is None:
             return
-        for t in self._session.get("takes", []):
+        for t in self._session_takes():
             if t.get("cloud_error"):
-                self._enqueue_publish(self._session["folder"], t["take_number"])
+                self._enqueue_publish(self._session["folder"], t["take_number"], take=t)
 
     def _publish_step(self, folder, take_number):
         """
@@ -1914,13 +2048,7 @@ class Api:
         requests costs one mixdown, not several.
         """
         what = self._config.get("auto_publish_what") or "mix"
-        meta = self._read_meta(Path(folder))
-        if meta is None:
-            return
-        take = next(
-            (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
-            None,
-        )
+        take = self._lib.take(folder, take_number)
         if take is None:
             return
         # Asked again here, not only when queued: the setting or the take's
@@ -1948,21 +2076,7 @@ class Api:
 
     def _record_cloud_error(self, folder, take_number, message):
         """Why a take is not in the cloud folder, kept with the take."""
-        folder = Path(folder)
-        with self._meta_lock:
-            meta = self._read_meta(folder)
-            if meta is None:
-                return
-            take = next(
-                (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
-                None,
-            )
-            if take is None:
-                return
-            take["cloud_error"] = message
-            self._write_meta(folder, meta)
-            if self._session is not None and Path(self._session["folder"]) == folder:
-                self._session["takes"] = meta.get("takes", [])
+        self._lib.set_cloud_error(folder, take_number, message)
 
     def share_take(self, folder, take_number, what="mix"):
         """
@@ -1986,17 +2100,13 @@ class Api:
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
-        meta = self._read_meta(folder)
-        if meta is None:
-            return {"ok": False, "error": "Rehearsal not found"}
-        take = next(
-            (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
-            None,
-        )
+        take = self._lib.take(folder, take_number)
         if take is None:
+            if not self._lib.has(folder):
+                return {"ok": False, "error": "Rehearsal not found"}
             return {"ok": False, "error": "Take not found"}
 
-        tracks = [t for t in take.get("tracks", []) if Path(t.get("file", "")).exists()]
+        tracks = [t for t in take["tracks"] if Path(t.get("file", "")).exists()]
         if not tracks:
             return {"ok": False, "error": "The take has no files left on disk"}
 
@@ -2018,7 +2128,7 @@ class Api:
         notes = []
 
         # Every copy is written beside its real name and moved onto it when it
-        # is whole, the same way session.json is — see WRITING_PREFIX.
+        # is whole, the same way config.json is — see WRITING_PREFIX.
         if what in ("mix", "both"):
             writing = _writing_path(target / f"{base}.wav")
             res = mixdown(tracks, writing, volumes)
@@ -2059,27 +2169,16 @@ class Api:
             shared["tracks"] = str(dest)
             shared["tracks_format"] = fmt
 
-        shared["source"] = cloudmod.source_of(take, what, volumes, fmt, target)
-        with self._meta_lock:
-            meta = self._read_meta(folder)
-            if meta is None:
-                return {"ok": False, "error": "Rehearsal not found"}
-            current = next(
-                (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
-                None,
-            )
-            if current is None:
-                return {"ok": False, "error": "Take not found"}
-            # A copy that succeeded settles whatever went wrong last time.
-            current["cloud"] = shared
-            current.pop("cloud_error", None)
-            self._write_meta(folder, meta)
-            if self._session is not None and Path(self._session["folder"]) == folder:
-                self._session["takes"] = meta.get("takes", [])
+        shared["source"] = cloudmod.source_of(
+            take, what, volumes, fmt, _safe_name(folder.name)
+        )
+        # Only the take's cloud fields are written, so a rename that landed
+        # while the copy was being made is kept; a copy that succeeded settles
+        # whatever went wrong last time.
+        if not self._lib.set_cloud_copy(folder, take_number, shared, cloud):
+            return {"ok": False, "error": "Take not found"}
 
-        # The persisted write above went to a freshly re-read take so a
-        # concurrent rename cannot be clobbered; the caller still gets back
-        # the take it asked to share, so it must carry the same result.
+        # The caller gets back the take it asked to share, carrying the result.
         take["cloud"] = shared
         take.pop("cloud_error", None)
 
@@ -2095,22 +2194,14 @@ class Api:
         folder = Path(folder)
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
-        with self._meta_lock:
-            meta = self._read_meta(folder)
-            if meta is None:
+        take = self._lib.take(folder, take_number)
+        if take is None:
+            if not self._lib.has(folder):
                 return {"ok": False, "error": "Rehearsal not found"}
-            take = next(
-                (t for t in meta.get("takes", []) if t.get("take_number") == take_number),
-                None,
-            )
-            if take is None:
-                return {"ok": False, "error": "Take not found"}
+            return {"ok": False, "error": "Take not found"}
 
-            result = self._remove_shared(take)
-            take["cloud"] = {}
-            self._write_meta(folder, meta)
-            if self._session is not None and Path(self._session["folder"]) == folder:
-                self._session["takes"] = meta.get("takes", [])
+        result = self._remove_shared(take)
+        self._lib.set_cloud_copy(folder, take_number, None, None)
         return {"ok": True, **result}
 
     def _remove_shared(self, take):

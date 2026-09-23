@@ -157,14 +157,75 @@ What to do if it happens again:
    checks turned on, so the crash lands on the bad write rather than on an
    innocent allocation later. The resulting report names the culprit.
 
+## The history database
+
+Every rehearsal, take, marker and cloud copy lives in one SQLite database,
+`library.sqlite`, at the top of the recordings folder — `store/` has the
+models, the migrations and the code that reads and writes it.
+
+**It sits in the recordings folder, not in `~/.rehearsal-recorder`.** The
+recordings folder is the thing that actually gets moved — onto another drive,
+a new computer, or copied to a NAS as a backup — and the history has to go
+with it or it stops meaning anything. Putting it next to the audio it
+describes means moving the folder is still just moving the folder, with the
+app closed.
+
+What that costs: the recordings folder now belongs to one computer at a time
+and has to be on a local disk. The database is written while the app runs,
+in WAL mode, and WAL needs shared memory that a network filesystem does not
+provide; a sync client can upload `library.sqlite` without its `-wal` file,
+or make conflicting copies of it; and two machines on one synced folder each
+keep a history the other never sees. The recordings folder was never the
+thing to sync — the cloud folder is — so `using-it.md` says to keep it on the
+computer's own disk and to move it with the app closed.
+
+**One file, not one per rehearsal.** Before this, every rehearsal wrote its
+own `session.json`, and building History meant opening every one of them.
+That is a directory listing and N file reads for something that should be one
+query, and it only gets slower as the folder fills up with years of
+rehearsals. A shared database also lets rehearsals refer to a single settled
+schema instead of each file guessing at whatever the app looked like the day
+it was written.
+
+**Paths inside it are relative, not absolute.** A rehearsal's folder is
+relative to the recordings folder, a take's files to the rehearsal folder, and
+a cloud copy to the cloud folder. Renaming or moving any of the three moves
+everything that points into it without touching a row — a rename is one
+`UPDATE`, not a rewrite of every path it contains.
+
+**Settings stayed JSON.** `config.json` is a flat set of keys, each with a
+default, and it holds `recordings_dir` — the setting that says where the
+database is, so it cannot itself live inside that database. It changed only
+once, from a device index to a name and audio system, and that was handled in
+code (`saved_device`) without needing a migration; there has been nothing
+here that a schema would have bought.
+
+**Songs are still not stored.** They are derived from take names by
+`_songs_of` — "Verse riff 3" counts as a third go at "Verse riff" — and that
+is a rule, not a fact. Storing its output would just be a second copy that
+could disagree with the names themselves.
+
+**Import runs on every open, not once.** A rehearsal folder copied in from a
+machine still on an older version brings its `session.json` with it, and
+that folder needs picking up the first time *this* recordings folder sees it,
+whichever open that is — not only the very first time the app runs.
+
+Every connection also turns on `PRAGMA foreign_keys` and WAL, and its "begin"
+hook emits `BEGIN IMMEDIATE` rather than SQLite's default deferred begin: a
+transaction takes the write lock the moment it starts, so the interface
+thread and the publishing thread wait for each other instead of one of them
+failing with "database is locked" after doing some of its work.
+
 ## Deliberately not done
 
 - **Panning per track** — volume and mute/solo only.
 - **A separate recording level** — only the listening volume is adjustable; it
   does not touch the files themselves, and should not.
-- **Old rehearsals without `session.json`** — they will not appear in History
-  (the file is written starting from the version that introduced History). The
-  recordings themselves are untouched on disk.
+- **Folders with no entry in the database** — a folder copied into the
+  recordings folder without a `session.json` (or already imported, with
+  nothing left to import) does not appear in History; nothing scans the
+  recordings folder for loose audio looking for one. The recordings
+  themselves are untouched on disk.
 - **Compressed recording** — libsndfile is now in the app, so writing FLAC
   straight from the recorder is no longer far-fetched. It is still not done,
   for one reason: the crash-safe design writes raw bytes continuously and

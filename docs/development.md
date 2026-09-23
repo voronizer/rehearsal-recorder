@@ -106,6 +106,44 @@ Builds the interface, makes a private venv, packages everything with
 PyInstaller, and runs the built app's own self-test. Details and what the
 self-test is for: [building.md](building.md).
 
+## Changing the history's schema
+
+The rehearsal history — `library.sqlite`, in the recordings folder — is
+described twice on purpose: `store/models.py` says what the code expects,
+and the migrations under `store/migrations/versions/` say how a database on
+disk gets there. `tests/test_store.py` fails the moment the two drift apart,
+so a schema change always means writing the migration for it, not just
+editing the models.
+
+1. Edit `store/models.py`.
+2. Regenerate the migration against a clean database:
+
+   ```bash
+   rm -f .alembic-scratch.sqlite*
+   alembic -c alembic.ini upgrade head
+   alembic -c alembic.ini revision --autogenerate -m "<what changed>"
+   ```
+
+3. Read the file Alembic just wrote — autogenerate gets the shape right and
+   the judgement wrong:
+   - SQLite can barely `ALTER` a table, so every change needs batch mode
+     (`with op.batch_alter_table(...) as batch:`), which rebuilds the table
+     instead. `env.py` already renders migrations that way; check the
+     generated file uses it.
+   - A new column that is `NOT NULL` needs a `server_default` — the existing
+     rows have no value to put there otherwise, and the `ALTER` fails against
+     real data even though it succeeds against an empty test database.
+   - Moving data from one shape to another (splitting a column, backfilling
+     from another table) is not something autogenerate can write. Add it by
+     hand, with `op.execute` or a small `sa.table()` for the rows it touches.
+4. Add a check to `tests/test_store.py` that loads data in the *previous*
+   revision's shape and confirms it still reads correctly after the upgrade —
+   see `migrations_with` there for building a database on an older revision.
+   This is what caught the previous migration's backup-and-rollback behaviour
+   before there was a second real migration to exercise it.
+5. `alembic -c alembic.ini check` should say "No new upgrade operations
+   detected" — if it does not, `models.py` and the migrations still disagree.
+
 ## A few things that will save you time
 
 **The audio callback must not allocate.** Buffers are preallocated and
@@ -151,6 +189,9 @@ src/rehearsal_recorder/     the Python application
   audio/devices.py          the stream lock, and asking a card what it can do
   audio/format.py           16- and 24-bit: packing, unpacking, what each costs
   audio/encode.py           compressing cloud copies (FLAC/MP3 via libsndfile)
+  store/                    the rehearsal history: models.py, db.py
+                            (open + migrate), library.py (what api.py calls),
+                            importer.py (session.json → rows), migrations/
 
 ui/src/screens/             one file per screen
 ui/src/components/          player, timeline, waveform, take strip, dialogs

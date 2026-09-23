@@ -7,6 +7,29 @@ opening.
 
 ## Unreleased
 
+- The rehearsal history moved from a `session.json` in every rehearsal folder
+  into one database, `library.sqlite`, at the top of the recordings folder.
+  Old rehearsals move themselves in the first time this version opens the
+  folder — nothing to do by hand, and the recordings on disk do not change.
+  An older version opened on the folder afterwards shows an empty History,
+  since the `session.json` files are gone; nothing is lost — the recordings
+  are untouched, and anything that old version records is moved in the next
+  time this version opens the folder.
+- Keep the recordings folder on this computer's own disk — not in a synced
+  folder or on a network share — open it from one computer at a time, and
+  move or copy it with the app closed: the history database in it is written
+  while the app runs.
+- A rehearsal whose folder cannot be found — moved, renamed outside the app,
+  or on a drive that is not plugged in — stays in History instead of
+  vanishing, marked "Not found on disk", with "Locate folder…" and "Remove
+  from history".
+- The cloud folder can be moved to a new place — another drive, another
+  machine — without every take being sent again: a cloud copy is kept
+  relative to the cloud folder, so it is found again wherever that folder is
+  now instead of at the absolute path it was copied to.
+- Settings are written atomically — beside the real file, then moved onto
+  it — so an app killed mid-write leaves the old settings rather than half of
+  new ones.
 - On Windows, ASIO is offered. A 16-channel mixer was listed with 2 or 8
   inputs because the PortAudio loaded by default has no ASIO; the one with
   ASIO ships in the same package and is now loaded instead. Starting the app

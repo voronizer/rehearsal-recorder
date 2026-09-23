@@ -23,23 +23,26 @@ from pathlib import Path
 
 def source_of(take, what, volumes, fmt, target):
     """What a copy of this take would be made from right now, and where it
-    would go."""
+    would go. `target` is the name of the rehearsal's subfolder inside the
+    cloud folder, not a whole path."""
     names = [t.get("name") for t in take.get("tracks", []) if t.get("name")]
     return {
         "what": what,
         "name": take.get("name", ""),
         "format": fmt,
-        # The destination depends on the cloud folder and on the rehearsal's
-        # name, neither of which the rest of this record can see. Without it,
-        # pointing the app somewhere new leaves every take claiming to be in
-        # a folder nothing was ever copied to.
+        # The rehearsal's subfolder inside the cloud folder, which follows the
+        # rehearsal's name — something the rest of this record cannot see.
+        # Only the subfolder: pointing the setting at the same cloud folder
+        # moved elsewhere finds the copies where they are, and does not make
+        # every take look stale. A setting pointed at a different, empty
+        # folder is caught by copies_exist instead.
         "dir": str(target) if target is not None else "",
         # Only this take's tracks: moving an unrelated fader must not make
         # every take in the folder look stale.
         "volumes": {n: float(volumes.get(n, 1.0)) for n in names},
         # The odd one out: everything else here is about naming and
         # destination, and a crop changes none of it. share_take reads a
-        # take's files outside the metadata lock and only takes it to write
+        # take's files outside any transaction and only opens one to write
         # this record, so a copy that started before a crop can finish after
         # it — and without the length, the record it writes still matches the
         # shorter take. The re-publish the crop asked for would then find the

@@ -30,7 +30,7 @@ Two things that are easy to get wrong and expensive to discover later:
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 # This file lives in packaging/, so the repository is one level up.
 ROOT = Path(SPECPATH).parent
@@ -44,6 +44,15 @@ if not (ui_dist / "index.html").exists():
     )
 
 datas = [(str(ui_dist), "ui/dist")]
+
+# The history's migrations. Alembic reads them from disk by path — a
+# ScriptDirectory walk of the versions/ folder — rather than importing them
+# by name, so PyInstaller's analysis never sees them used and would leave
+# them out unless they are named as data here.
+datas += [(
+    str(ROOT / "src" / "rehearsal_recorder" / "store" / "migrations"),
+    "rehearsal_recorder/store/migrations",
+)]
 
 # The native libraries the audio wheels carry with them. PyInstaller has hooks
 # for both packages, but naming them here as well means a missing library
@@ -66,7 +75,11 @@ a = Analysis(
     pathex=[str(ROOT / "src")],
     binaries=[],
     datas=datas,
-    hiddenimports=["send2trash"],
+    # Each migration module imports alembic.op and sqlalchemy only once
+    # Alembic runs it, by path, at start — not at import time, so the
+    # analysis above cannot see them used and misses them without help.
+    hiddenimports=["send2trash", "sqlalchemy.dialects.sqlite", "mako",
+                   *collect_submodules("alembic")],
     hookspath=[],
     excludes=[
         # Nothing here draws with these, and they are large.

@@ -133,6 +133,9 @@ export type RehearsalSummary = {
   songs: Song[]
   /** What the whole folder weighs, measured on disk rather than estimated. */
   disk_bytes: number
+  /** The folder is not on disk — deleted, renamed outside the app, or on a
+   *  drive that is not plugged in. */
+  missing?: boolean
 }
 
 export type RehearsalDetail = {
@@ -143,6 +146,9 @@ export type RehearsalDetail = {
   created_at: string
   takes: Take[]
   songs: Song[]
+  /** The folder is not on disk — deleted, renamed outside the app, or on a
+   *  drive that is not plugged in. */
+  missing?: boolean
 }
 
 export type TrackTemplate = {
@@ -319,6 +325,13 @@ type PyApi = {
 
   list_rehearsals(): Promise<RehearsalSummary[]>
   get_rehearsal(folder: string): Promise<RehearsalDetail>
+  /** Takes a rehearsal whose folder is gone out of history. Nothing on disk
+   *  is touched — there is nothing left to touch. */
+  forget_rehearsal(folder: string): Promise<Ok>
+  /** The folder dialog for pointing a missing rehearsal at where it is now. */
+  choose_rehearsal_folder(
+    folder: string
+  ): Promise<Ok<{ folder?: string; cancelled?: boolean }>>
   rename_take(
     folder: string,
     takeNumber: number,
@@ -429,6 +442,9 @@ type PyApi = {
     bitDepth?: number
   ): Promise<DiskEstimate>
   recording_health(): Promise<RecordingHealth>
+  /** What went wrong while starting, each said once: returned, then
+   *  forgotten on the Python side. */
+  startup_problems(): Promise<{ name: string; message: string }[]>
 }
 
 declare global {
@@ -512,6 +528,7 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "list_rehearsals",
   "list_drafts",
   "get_settings",
+  "startup_problems",
 ])
 
 let guarded: { raw: PyApi; proxy: PyApi } | null = null

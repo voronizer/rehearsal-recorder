@@ -16,6 +16,9 @@ things to be true:
                        on purpose — no recycle bin, no encoder, Windows
                        naming rules.
 
+    test_store.py      the history database — schema, migrations, and the move of
+                       old session.json files into it.
+
     test_interface.py  the built interface in a headless browser against a
                        mocked Python bridge. Needs `ui/dist` built and
                        Playwright installed.
@@ -31,7 +34,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SUITES = ("test_engine.py", "test_platform.py", "test_interface.py")
+SUITES = ("test_engine.py", "test_platform.py", "test_store.py", "test_interface.py")
 
 
 def main():

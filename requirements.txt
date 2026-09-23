@@ -12,3 +12,8 @@ soundfile
 # either, deleted takes just move to a _deleted folder instead. It earns its
 # place on Windows, where there is no trash folder a plain move can reach.
 send2trash
+
+# The rehearsal history: one SQLite database per recordings folder, its
+# schema kept by Alembic migrations — see store/db.py.
+sqlalchemy
+alembic
