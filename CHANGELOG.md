@@ -36,6 +36,12 @@ opening.
   folder under the old name without a word; the player now lets go of it
   first. And a folder is never left renamed under a record that could not
   be written.
+- When something fails inside the app, it says so. A red bar gives the
+  error's own words and where the full traceback is kept
+  (`~/.rehearsal-recorder/crash.log`, which a windowed build now actually
+  writes it to), and the screen that asked gets an answer — a button no
+  longer dims and stays dimmed. Saving a take and renaming one both failed
+  on Windows with nothing on screen at all, which is what this is for.
 - The keys are on the buttons they press: Space on the main button of each
   screen, Esc on Back, on Discard and on Finish. The line under the main
   button that said the same thing for Space alone is gone. A key is shown

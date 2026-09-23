@@ -439,6 +439,15 @@ window.__MAKE_API__ = () => ({
   }),
 });
 window.pywebview = { api: window.__MAKE_API__() };
+// A page can make a call fail the way pywebview fails one whose Python
+// raised: the promise rejects with an Error carrying the exception's name.
+for (const [method, message] of Object.entries(window.__FAIL__ || {})) {
+  window.pywebview.api[method] = async () => {
+    const e = new Error(message);
+    e.name = 'UnicodeEncodeError';
+    throw e;
+  };
+}
 """.replace("TAKE", str(TAKE_SECONDS))
 
 
@@ -1674,6 +1683,36 @@ def main():
         ok("a take in the overview opens it",
            "Polyn 2" in eve.locator("button[aria-current='true']").inner_text())
         eve.close()
+
+        print("\n[12g] A call that fails in Python says so")
+        # Save take on Windows raised inside Python; the promise rejected, no
+        # screen caught it, and the button just dimmed and stayed dimmed.
+        bad = browser.new_page(viewport={"width": 1180, "height": 820})
+        bad.add_init_script(
+            "window.__FAIL__ = {keep_take: \"'charmap' codec can't encode characters\"};"
+            + MOCK)
+        bad.goto(server.base_url, wait_until="networkidle")
+        bad.wait_for_selector("text=Start rehearsal")
+        bad.click("text=Start rehearsal")
+        bad.wait_for_selector("text=Record take 1")
+        bad.click("text=Record take 1")
+        bad.wait_for_selector("text=Stop")
+        bad.click("text=Stop")
+        bad.wait_for_selector("#take-name")
+        bad.click("button:has-text('Save take')")
+        bad.wait_for_selector("[role='alert'][aria-label='Something went wrong']")
+        bar = bad.locator("[role='alert'][aria-label='Something went wrong']").inner_text()
+        ok("a bar says what failed", "charmap" in bar and "UnicodeEncodeError" in bar)
+        ok("and where the whole of it is written down", "crash.log" in bar)
+        ok("the screen gets an answer, so Save take is not left dimmed",
+           bad.locator("button:has-text('Save take')").is_enabled())
+        ok("and says it could not save, in its own place",
+           bad.locator("text=charmap").count() >= 2)
+        bad.get_by_role("button", name="Dismiss").click()
+        bad.wait_for_timeout(200)
+        ok("the bar can be put away",
+           bad.locator("[role='alert'][aria-label='Something went wrong']").count() == 0)
+        bad.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})

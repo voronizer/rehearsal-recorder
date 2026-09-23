@@ -178,6 +178,39 @@ def main():
     ok("a value someone set by hand is left alone",
        env["SD_ENABLE_ASIO"] == "0")
 
+    print("\n[9] A failed call from the interface is written down")
+    # pywebview logs the traceback of any exception an interface call raises,
+    # to stderr — which a windowed build does not have. Save take and rename
+    # both failed that way on Windows with nothing kept anywhere.
+    import faulthandler
+    import logging
+
+    import rehearsal_recorder.app as appmod
+
+    original_log = appmod.CRASH_LOG
+    appmod.CRASH_LOG = tmp / "crash.log"
+    handlers_before = list(logging.getLogger("pywebview").handlers)
+    try:
+        kept_open = appmod._arm_crash_log()
+        logging.getLogger("pywebview").error(
+            "Traceback (most recent call last):\nUnicodeEncodeError: 'charmap'")
+        text = appmod.CRASH_LOG.read_text(encoding="utf-8")
+        ok("the traceback lands in crash.log", "UnicodeEncodeError" in text)
+        appmod._arm_crash_log()
+        logging.getLogger("pywebview").error("once")
+        ok("arming twice does not write everything twice",
+           appmod.CRASH_LOG.read_text(encoding="utf-8").count("once") == 1)
+    finally:
+        faulthandler.disable()
+        logger = logging.getLogger("pywebview")
+        for h in list(logger.handlers):
+            if h not in handlers_before:
+                logger.removeHandler(h)
+                h.close()
+        if kept_open:
+            kept_open.close()
+        appmod.CRASH_LOG = original_log
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

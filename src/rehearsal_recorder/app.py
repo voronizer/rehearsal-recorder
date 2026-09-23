@@ -8,6 +8,7 @@ modules nor the audio files.
 """
 
 import faulthandler
+import logging
 import signal
 import sys
 from datetime import datetime
@@ -44,6 +45,21 @@ def _arm_crash_log():
             f"on {sys.platform} =====\n"
         )
         faulthandler.enable(file=log, all_threads=True)
+
+        # An exception in a call from the interface is logged by pywebview —
+        # to stderr, which a windowed build does not have, so it went
+        # nowhere: Save take and renaming both failed on Windows without a
+        # trace kept. It is written here too, and the interface points to
+        # this file when it says a call failed. One handler, however many
+        # times this runs.
+        bridge_log = logging.getLogger("pywebview")
+        for old in [h for h in bridge_log.handlers if getattr(h, "_ours", False)]:
+            bridge_log.removeHandler(old)
+        handler = logging.StreamHandler(log)
+        handler.setLevel(logging.ERROR)
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        handler._ours = True
+        bridge_log.addHandler(handler)
 
         register = getattr(faulthandler, "register", None)  # Unix only
         if register is not None:
