@@ -221,6 +221,21 @@ def _is_inside(path, root):
         return False
 
 
+def _is_output_choice(channels):
+    """A pair of outputs the way cards label them — 1–2, 3–4, 5–6 — or one
+    output on its own. 2–3 is refused: no card wires its stereo outs that
+    way, and offering it would only double the list."""
+    if not isinstance(channels, (list, tuple)):
+        return False
+    if not all(isinstance(c, int) and not isinstance(c, bool) and c >= 1
+               for c in channels):
+        return False
+    if len(channels) == 1:
+        return True
+    return (len(channels) == 2 and channels[0] % 2 == 1
+            and channels[1] == channels[0] + 1)
+
+
 class Api:
     def __init__(self, server_port=0):
         self._recorder = None
@@ -322,6 +337,7 @@ class Api:
             "output_device_index": saved_device(
                 self._config, "output_device", False
             ),
+            "output_channels": list(self._output_channels()),
             "cloud_dir": self._config.get("cloud_dir"),
             "cloud_format": normalize_format(self._config.get("cloud_format")),
             "cloud_formats": CLOUD_FORMATS_INFO,
@@ -1486,7 +1502,8 @@ class Api:
             try:
                 player = TakePlayer(tracks)
                 warning = player.open_output(
-                    saved_device(self._config, "output_device", False)
+                    saved_device(self._config, "output_device", False),
+                    self._output_channels(),
                 )
             except Exception as e:
                 return {"ok": False, "error": str(e)}
@@ -1562,11 +1579,31 @@ class Api:
         self._player.set_solo(name)
         return {"ok": True, **self._player.state()}
 
-    def set_output_device(self, device_index):
-        """Switching the output applies immediately, even mid-take."""
-        self._remember_device("output_device", device_index)
-        self._write_config()
+    def _output_channels(self):
+        """The outputs saved for playback, (1, 2) when nothing usable is."""
+        saved = self._config.get("output_channels")
+        return tuple(saved) if _is_output_choice(saved) else (1, 2)
 
+    def set_output_device(self, device_index):
+        """Switching the output applies immediately, even mid-take.
+
+        The outputs go back to 1–2: which pair is which belongs to one card,
+        and 7–8 on the desk means nothing — or something else — on another."""
+        self._remember_device("output_device", device_index)
+        self._config["output_channels"] = [1, 2]
+        self._write_config()
+        return self._reopen_output()
+
+    def set_output_channels(self, channels):
+        """Which outputs of the playback card the mix comes out of: a pair
+        such as [3, 4], or one output on its own, [5]. Counted from 1."""
+        if not _is_output_choice(channels):
+            return {"ok": False, "error": f"Not a pair of outputs: {channels}"}
+        self._config["output_channels"] = list(channels)
+        self._write_config()
+        return self._reopen_output()
+
+    def _reopen_output(self):
         with self._player_lock:
             if self._player is None:
                 return {"ok": True}
@@ -1576,7 +1613,10 @@ class Api:
             # but silence after a device change.
             state = self._player.state()
             try:
-                warning = self._player.open_output(device_index)
+                warning = self._player.open_output(
+                    saved_device(self._config, "output_device", False),
+                    self._output_channels(),
+                )
             except Exception as e:
                 return {"ok": False, "error": str(e)}
             self._player.seek(state["position"])

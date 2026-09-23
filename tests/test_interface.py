@@ -134,7 +134,11 @@ window.__MAKE_API__ = () => ({
     {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
      max_output_channels:2, default_samplerate:48000}]),
   set_output_device: track('set_output_device', async (idx) => {
-    outputDevice = {index: idx};
+    outputDevice = {index: idx, channels: [1, 2]};
+    return {ok:true};
+  }),
+  set_output_channels: track('set_output_channels', async (channels) => {
+    outputDevice = {...outputDevice, channels};
     return {ok:true};
   }),
   load_default_tracks: async () => ({
@@ -374,6 +378,7 @@ window.__MAKE_API__ = () => ({
     device_index: recording.device_index, samplerate: recording.samplerate,
     bit_depth: recording.bit_depth, supported_bit_depths:[16, 24],
     tracks:[], volumes:{}, output_device_index: outputDevice.index,
+    output_channels: outputDevice.channels || [1, 2],
     cloud_format: cloudFormat,
     auto_publish: autoPublish.on, auto_publish_what: autoPublish.what,
     cloud_formats:[
@@ -1312,6 +1317,8 @@ def main():
            and page.locator("#output-device-driver").count() == 0)
         ok("and nothing is said about drivers",
            page.locator("text=Each driver can offer").count() == 0)
+        ok("nor about outputs, with the system output chosen",
+           page.locator("#output-channels").count() == 0)
         ok("the rates the card can do are offered",
            page.locator("button[aria-label='44.1 kHz']").count() == 1
            and page.locator("button[aria-label='96 kHz']").count() == 1)
@@ -1445,6 +1452,23 @@ def main():
         win.wait_for_timeout(300)
         ok("and picking a card switches to it",
            win_calls("set_output_device")[-1]["args"][0] == 3)
+
+        # A 16-output desk: which of its outputs the mix comes out of.
+        win.wait_for_selector("#output-channels")
+        ok("a card with more than a pair asks which outputs",
+           "1–2" in win.inner_text("#output-channels"))
+        win.click("#output-channels")
+        offered = win.get_by_role("option").all_inner_texts()
+        ok("pairs first, the way cards label them",
+           offered[:3] == ["1–2", "3–4", "5–6"] and "2–3" not in offered)
+        ok("then each output on its own",
+           "1 (mono)" in offered and "16 (mono)" in offered
+           and len(offered) == 8 + 16)
+        win.get_by_role("option", name="3–4", exact=True).click()
+        win.wait_for_timeout(300)
+        ok("picking a pair reaches Python",
+           win_calls("set_output_channels")[-1]["args"][0] == [3, 4])
+        ok("and stays shown", "3–4" in win.inner_text("#output-channels"))
 
         # The chosen card is on ASIO; switching to a driver that does not
         # carry it must not read as "System output" — nothing was unchosen.

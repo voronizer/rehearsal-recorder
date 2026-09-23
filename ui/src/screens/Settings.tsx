@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DevicePicker } from "@/components/DevicePicker"
+import { OutputChannels } from "@/components/OutputChannels"
 import { Shell } from "@/components/Shell"
 import { useEscape } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
@@ -439,6 +440,29 @@ export function Settings({
               setSettings(await api().get_settings())
             }}
           />
+
+          {/* Only for a card with more than a pair: on a stereo output there
+              is nothing to choose, and the system output is the system's. */}
+          {(() => {
+            const card = outputs.find(
+              (d) => d.index === settings?.output_device_index
+            )
+            if (!card || card.max_output_channels <= 2) return null
+            return (
+              <OutputChannels
+                count={card.max_output_channels}
+                value={settings?.output_channels ?? [1, 2]}
+                onChange={async (channels) => {
+                  const res = await api().set_output_channels(channels)
+                  if (!res.ok) {
+                    setError(res.error ?? "Could not switch the outputs")
+                    return
+                  }
+                  setSettings(await api().get_settings())
+                }}
+              />
+            )
+          })()}
         </section>
         </>)}
 

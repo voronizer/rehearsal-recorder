@@ -13,9 +13,10 @@ What each screen is for, and the decisions behind how they behave.
 - **Settings** (the gear in the header) — four groups rather than one long
   column, because six sections stacked in a row was a wall nobody could scan:
   **Audio** (the recording interface, rate and depth; the card used for
-  playback — on Windows each through its driver first, since one card offers a
-  different number of inputs through each), **Folders** (where rehearsals go,
-  where cloud copies go, whether
+  playback and, on a card with more than two outputs, which pair — or which
+  single output — the takes come out of; on Windows each card through its
+  driver first, since one card offers a different number of inputs through
+  each), **Folders** (where rehearsals go, where cloud copies go, whether
   saved takes go there on their own and what they are written as),
   **Appearance** (theme and scale) and **Under the hood** (paths and the
   local server). The track layout is deliberately not

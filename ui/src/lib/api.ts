@@ -213,6 +213,8 @@ export type Settings = {
   theme: "dark" | "light" | "system"
   ui_scale: number
   output_device_index: number | null
+  /** Outputs of that card the mix comes out of, from 1: [3, 4] or [5]. */
+  output_channels: number[]
   cloud_dir: string | null
   cloud_format: CloudFormat
   cloud_formats: { id: CloudFormat; label: string; hint: string }[]
@@ -385,6 +387,7 @@ type PyApi = {
   save_mix(volumes: Record<string, number>): Promise<Ok>
   save_appearance(theme: string, uiScale: number): Promise<Ok>
   set_output_device(deviceIndex: number | null): Promise<Ok>
+  set_output_channels(channels: number[]): Promise<Ok>
 
   start_monitor(
     deviceIndex: number,

@@ -19,6 +19,10 @@ opening.
   the list, so plugging something in no longer moves them. On Windows a
   choice saved by an older version has to be made once more.
 - The self-test fails a Windows build that lacks ASIO.
+- Playback can come out of any stereo pair of a card with more than two
+  outputs — 3–4 into the headphone amp, say — or out of one output on its
+  own. It used to be 1–2, always. Choosing another card starts it again from
+  1–2, since a pair means something different on every card.
 
 ## 0.6.1
 

@@ -48,7 +48,7 @@ class _FakeStream:
 
 
 # The devices this fake machine has: 0 is a proper interface, 1 is an input
-# only, and 2 refuses anything but 44100.
+# only, 2 refuses anything but 44100, and 3 is a desk with eight outputs.
 _DEVICES = [
     {"name": "Interface", "max_output_channels": 2, "max_input_channels": 8,
      "hostapi": 0, "default_samplerate": 48000},
@@ -56,6 +56,8 @@ _DEVICES = [
      "hostapi": 0, "default_samplerate": 44100},
     {"name": "Fussy DAC", "max_output_channels": 2, "max_input_channels": 0,
      "hostapi": 0, "default_samplerate": 44100},
+    {"name": "Desk", "max_output_channels": 8, "max_input_channels": 0,
+     "hostapi": 0, "default_samplerate": 48000},
 ]
 
 
@@ -383,6 +385,65 @@ def main():
        saved2.get("device") == saved.get("device") == {"name": "Interface", "host_api": "CoreAudio"})
     ok("but the rate and depth still change",
        saved2.get("samplerate") == 44100 and saved2.get("bit_depth") == 16)
+
+    print("\n[4f] Playback through a chosen pair of outputs")
+    p4 = TakePlayer(tracks)
+    complaint = p4.open_output(3, (3, 4))
+    ok("the stream is opened wide enough to reach 3–4",
+       p4._stream.kw["channels"] == 4 and complaint is None)
+    p4.play()
+    settle(p4)
+    block = np.zeros((512, 4), dtype=np.int16)
+    p4._callback(block, 512, None, None)
+    ok("the mix comes out of 3 and 4",
+       abs(int(block[:, 2].mean()) - 3000) < 30
+       and abs(int(block[:, 3].mean()) - 3000) < 30)
+    ok("and 1 and 2 stay silent", not block[:, :2].any())
+
+    complaint = p4.open_output(3, (5,))
+    ok("one output on its own opens as far as that output",
+       p4._stream.kw["channels"] == 5 and complaint is None)
+    block = np.full((512, 5), 7, dtype=np.int16)
+    p4._callback(block, 512, None, None)
+    ok("the mix comes out of that one alone, at the same level",
+       abs(int(block[:, 4].mean()) - 3000) < 30 and not block[:, :4].any())
+
+    complaint = p4.open_output(0, (3, 4))
+    ok("a card without those outputs plays through 1–2",
+       p4._stream.kw["channels"] == 2)
+    ok("and says so", complaint and "3–4" in complaint and "1–2" in complaint)
+
+    complaint = p4.open_output(None, (3, 4))
+    ok("the system output is always 1–2, without a word",
+       p4._stream.kw["channels"] == 2 and complaint is None)
+    p4.close()
+
+    a.set_output_device(3)
+    ok("a new card starts on 1–2", a.get_settings()["output_channels"] == [1, 2])
+    res = a.set_output_channels([3, 4])
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("a pair is saved", res["ok"] and saved.get("output_channels") == [3, 4])
+    ok("and reported back", a.get_settings()["output_channels"] == [3, 4])
+    ok("so is a single output", a.set_output_channels([5])["ok"]
+       and a.get_settings()["output_channels"] == [5])
+    ok("two outputs that are not a pair are refused",
+       not a.set_output_channels([2, 3])["ok"])
+    ok("and so is output 0", not a.set_output_channels([0])["ok"])
+    ok("and nothing refused was saved", a.get_settings()["output_channels"] == [5])
+
+    a.set_output_channels([3, 4])
+    opened = a.player_open(tracks)
+    ok("a take opens on the saved pair",
+       opened["ok"] and a._player._stream.kw["channels"] == 4)
+    a.set_output_channels([1, 2])
+    ok("changing the pair mid-take reopens the output",
+       a._player._stream.kw["channels"] == 2)
+    a.set_output_channels([3, 4])
+    a.set_output_device(0)
+    ok("choosing another card starts it again from 1–2",
+       a.get_settings()["output_channels"] == [1, 2]
+       and a._player._stream.kw["channels"] == 2)
+    a.player_close()
 
     print("\n[5] Tracks of different length do not break the mix")
     write_wav(tmp / "short.wav", 500, seconds=0.5)
