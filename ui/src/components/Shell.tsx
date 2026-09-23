@@ -99,6 +99,24 @@ export function Kbd({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * The same, for a row of small buttons where a boxed key each was too much:
+ * the player's transport, where six of them side by side widened every icon
+ * button and read as clutter. A quiet index in the button's corner instead;
+ * the button keeps its size. The button needs `relative`.
+ */
+export function KeyCorner({ children }: { children: ReactNode }) {
+  return (
+    <span
+      aria-hidden
+      data-key
+      className="pointer-events-none absolute -right-1 -bottom-1 font-mono text-[9px] leading-none font-normal opacity-60"
+    >
+      {children}
+    </span>
+  )
+}
+
 /** Empty list state — the same everywhere. */
 export function EmptyState({
   icon,

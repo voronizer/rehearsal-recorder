@@ -438,7 +438,7 @@ def main():
 
     def key_on(page, selector):
         """The key shown on a button, or None when it shows none."""
-        found = page.locator(f"{selector} kbd")
+        found = page.locator(f"{selector} :is(kbd, [data-key])")
         return found.first.inner_text().strip() if found.count() else None
 
     with sync_playwright() as p:

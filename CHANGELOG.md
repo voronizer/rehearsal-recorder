@@ -30,7 +30,9 @@ opening.
   first. On a Mac the move had always worked, which is why this was not seen.
 - The keys are on the buttons they press: Space on the main button of each
   screen, or on Play while a take is open; ← and → on the ten-second skips;
-  Esc on Back, on Discard and on Finish. The line under the main button that
+  Esc on Back, on Discard and on Finish. In the player's row of small
+  buttons the key is a quiet index in the corner rather than a box, which
+  kept the row as compact as it was. The line under the main button that
   said the same thing for Space alone is gone. A key is shown only while it
   really does that — with a take open Escape closes the take, so Finish
   loses its Esc until then.
