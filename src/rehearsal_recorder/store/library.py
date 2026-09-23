@@ -357,6 +357,8 @@ class Library:
     def _cloud_row(shared, cloud_dir):
         if not shared:
             return None
+        if not shared.get("mix") and not shared.get("tracks"):
+            return None
         return CloudCopy(
             mix=_relative(shared["mix"], cloud_dir) if shared.get("mix") else None,
             mix_format=shared.get("mix_format"),

@@ -13,6 +13,8 @@ import json
 import shutil
 import sys
 import tempfile
+import threading
+import time
 import types
 from pathlib import Path
 
@@ -91,6 +93,39 @@ def main():
            c.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1)
         ok("the journal is WAL",
            c.exec_driver_sql("PRAGMA journal_mode").scalar() == "wal")
+
+    # Test that two writers meeting wait for each other (BEGIN IMMEDIATE)
+    path = db.database_path(rec)
+    e1 = db.make_engine(path)
+    e2 = db.make_engine(path)
+    c1 = e1.connect()
+    t1 = c1.begin()
+    c1.execute(text("SELECT COUNT(*) FROM rehearsal"))
+
+    exception_in_thread = [None]
+
+    def writer2():
+        try:
+            with e2.begin() as c2:
+                c2.execute(text("INSERT INTO rehearsal(folder,name,created_at,samplerate,bit_depth) VALUES ('b','B','x',1,1)"))
+        except Exception as e:
+            exception_in_thread[0] = e
+
+    thread = threading.Thread(target=writer2)
+    thread.start()
+    time.sleep(0.3)
+    c1.execute(text("INSERT INTO rehearsal(folder,name,created_at,samplerate,bit_depth) VALUES ('a','A','x',1,1)"))
+    t1.commit()
+    c1.close()
+    thread.join()
+
+    with e1.begin() as c_final:
+        final_rows = c_final.execute(text("SELECT folder FROM rehearsal ORDER BY folder")).scalars().all()
+    ok("two writers meeting wait for each other instead of failing",
+       exception_in_thread[0] is None and final_rows == ["a", "b"])
+    e1.dispose()
+    e2.dispose()
+
     ok("it is at the newest migration", db.current_revision(engine) == "0001")
     ok("it lives in the recordings folder", (rec / "library.sqlite").exists())
     ok("a new database is not backed up", not list(rec.glob("*.bak-*")))
@@ -191,6 +226,9 @@ def main():
     got = lib.take(jam, 1)
     ok("a copy comes back as it was recorded", got["cloud"] == shared)
     ok("and it settles the failure", "cloud_error" not in got)
+    lib.set_cloud_copy(jam, 1, {"source": {}}, cloud)
+    ok("a record of nothing copied must not read as in the cloud",
+       lib.take(jam, 1)["cloud"] == {})
     lib.set_cloud_copy(jam, 1, {**shared, "mix": str(sub / "01 - Полынь.mp3"),
                                 "mix_format": "mp3"}, cloud)
     ok("a new copy replaces the old one",

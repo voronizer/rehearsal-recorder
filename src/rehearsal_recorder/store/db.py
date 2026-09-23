@@ -60,7 +60,11 @@ def make_engine(path):
         # The driver's own transaction handling is switched off and SQLAlchemy
         # emits BEGIN itself (the "begin" hook below). Left to the driver, a
         # CREATE or ALTER runs outside any transaction, and a migration that
-        # fails half way would leave half a schema behind.
+        # fails half way would leave half a schema behind. BEGIN IMMEDIATE
+        # (not deferred) takes the write lock when the transaction starts, so
+        # a second writer waits (busy_timeout) instead of failing with
+        # SQLITE_BUSY_SNAPSHOT on a stale snapshot; the transactions are short
+        # (no file work inside one), so serialising them is cheap.
         dbapi_connection.isolation_level = None
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
@@ -70,7 +74,7 @@ def make_engine(path):
 
     @event.listens_for(engine, "begin")
     def _on_begin(connection):
-        connection.exec_driver_sql("BEGIN")
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
 
     return engine
 
