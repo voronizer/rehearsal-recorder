@@ -36,6 +36,25 @@ def drag_region(page, from_ratio, to_ratio):
     page.wait_for_timeout(250)
 
 
+def escape_closes(page, text):
+    """Press Escape and wait for that dialog to actually be gone.
+
+    Radix fades a dialog out, so one that has already been closed stays in
+    the DOM for as long as the animation runs. A check that sleeps a couple
+    of hundred milliseconds first is therefore a check on how loaded the
+    machine is: it passed on every developer's Mac and failed on the runner,
+    which is how [7c] flaked on 0.5.0 and how the key list failed the 0.7.0
+    build. Waiting for the thing itself cannot be tuned wrong.
+
+    What each caller is really watching for — an Escape that went further
+    than the dialog — needs no waiting at all: it opens its own dialog, or
+    calls into Python, on the same keydown. By the time this returns, that
+    would already have happened.
+    """
+    page.keyboard.press("Escape")
+    page.wait_for_selector(f"text={text}", state="detached")
+
+
 MOCK = """
 window.__CALLS__ = [];
 const track = (name, fn) => async (...args) => {
@@ -671,8 +690,7 @@ def main():
            all(k in listed for k in ("Home", "To the start", "Mark", "Repeat", "10 seconds")))
         ok("without Space here, where Space saves the take",
            "Play / pause" not in listed)
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(200)
+        escape_closes(page, "Keys in the player")
         ok("and Escape closes the list, not the take",
            page.locator("text=Keys in the player").count() == 0
            and page.locator("text=Discard this take?").count() == 0)
@@ -691,8 +709,7 @@ def main():
         page.keyboard.press("?")
         page.wait_for_selector("text=Keys in the player")
         page.evaluate("document.activeElement && document.activeElement.blur()")
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(250)
+        escape_closes(page, "Keys in the player")
         ok("with the list open and focus anywhere else, Escape is still the list's",
            page.locator("text=Keys in the player").count() == 0
            and page.locator("text=Discard this take?").count() == 0)
@@ -768,8 +785,7 @@ def main():
         page.wait_for_selector("text=Discard this take?")
         ok("escape on review asks before dropping the take",
            len(calls("discard_take")) == 0)
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(300)
+        escape_closes(page, "Discard this take?")
         ok("a second escape closes the question instead of answering it",
            page.locator("text=Discard this take?").count() == 0
            and len(calls("discard_take")) == 0)
@@ -915,8 +931,7 @@ def main():
         ok("space does not toggle playback behind an open dialog",
            len(calls("player_toggle")) == toggles_before)
 
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(200)
+        escape_closes(page, "go to the Trash")
         ok("escape dismisses the confirmation instead of confirming it",
            page.locator("text=go to the Trash").count() == 0)
         ok("nothing was actually deleted", len(calls("delete_take")) == 0)
