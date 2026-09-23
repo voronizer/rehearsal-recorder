@@ -879,13 +879,20 @@ class Api:
     @staticmethod
     def _holds_anything(folder):
         """Anything in the tree that is not a plain directory. Links are not
-        followed, and count: what they point at is not ours to judge."""
+        followed, and count: what they point at is not ours to judge.
+
+        os.path.isjunction only exists from Python 3.12, but pyproject.toml
+        allows 3.10; on an older Python, getattr leaves it as "not a
+        junction" rather than raising. is_symlink() still catches a
+        symlink on every supported version, junction or not.
+        """
+        isjunction = getattr(os.path, "isjunction", None)
         for root, dirs, files in os.walk(folder, followlinks=False):
             if files:
                 return True
             for d in dirs:
                 sub = Path(root) / d
-                if sub.is_symlink() or sub.is_junction():
+                if sub.is_symlink() or (isjunction is not None and isjunction(sub)):
                     return True
         return False
 
@@ -1845,6 +1852,14 @@ class Api:
         if not new_folder.is_dir():
             return {"ok": False, "error": "That is not a folder"}
 
+        # Where deleted things go is not a rehearsal's to have either: the
+        # next thing sent there would land inside it, and the next cleanup
+        # would carry the rehearsal's own files away with it.
+        target = new_folder.resolve()
+        trash = (self._recordings_dir / FALLBACK_TRASH).resolve()
+        if target == trash or trash in target.parents:
+            return {"ok": False, "error": "That folder is where deleted things go"}
+
         rehearsals = self._lib.rehearsals()
         me = next((r for r in rehearsals if Path(r["folder"]) == folder), None)
         if me is None:
@@ -1853,7 +1868,6 @@ class Api:
             return {"ok": False, "error": "That rehearsal's folder is not missing"}
 
         part = {"ok": False, "error": "That folder is part of another rehearsal"}
-        target = new_folder.resolve()
         if live is not None and target == live.resolve():
             return part
         if self._lib.has(new_folder):
@@ -1861,7 +1875,11 @@ class Api:
         others = [Path(r["folder"]).resolve() for r in rehearsals if r is not me]
         if live is not None:
             others.append(live.resolve())
-        if any(o in target.parents or target in o.parents for o in others):
+        # A folder can be renamed to a different case alone (WindowsPath
+        # equality ignores it, so this also covers a resolve() that finds
+        # the same folder a different way): "in target.parents" alone never
+        # matches the folder itself, only something above or below it.
+        if any(o == target or o in target.parents or target in o.parents for o in others):
             return part
 
         if not self._lib.move_rehearsal(folder, new_folder):

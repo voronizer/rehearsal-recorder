@@ -2346,6 +2346,47 @@ def main():
        g.locate_rehearsal(str(lost), str(box)) == part)
     ok("and the refused one is still where it was, missing",
        g._lib.rehearsal(lost)["missing"] is True)
+
+    # A folder can be renamed to a different case alone from Explorer
+    # ("Other" -> "other"); the database still has the old spelling, so the
+    # exact-case lookup that "already another rehearsal" relies on misses
+    # it. The "part of another rehearsal" check must catch the folder
+    # itself, not only its parents or children, or a second rehearsal can
+    # be pointed at the same files.
+    other_case = rec13 / "Other"
+    other_case.mkdir()
+    g._lib.create_rehearsal(other_case, "Other", "2026-09-04T20:00:00", SR, 16,
+                            [{"name": "Gtr", "channel": 1}])
+    renamed_tmp = rec13 / "Other-renaming"
+    other_case.rename(renamed_tmp)
+    renamed_tmp.rename(rec13 / "other")
+    # Only meaningful where the filesystem does not tell the two apart —
+    # on a case-sensitive one "other" is simply a different, unrelated
+    # folder, and there is nothing here to refuse.
+    if (rec13 / "OTHER").exists():
+        lost2 = rec13 / "Lost2 - 2026-09-06 20-00"
+        g._lib.create_rehearsal(lost2, "Lost2", "2026-09-06T20:00:00", SR, 16,
+                                [{"name": "Gtr", "channel": 1}])
+        ok("a folder that is another rehearsal's, only renamed by case, "
+           "is still refused",
+           g.locate_rehearsal(str(lost2), str(rec13 / "other")) == part)
+
+    # The fallback trash folder, and anything under it, is not a rehearsal's
+    # to have either: the next thing deleted would land inside a rehearsal,
+    # and the next cleanup would carry it away.
+    from rehearsal_recorder.platform_support import FALLBACK_TRASH
+
+    trash = rec13 / FALLBACK_TRASH
+    trash.mkdir()
+    ok("the fallback trash folder is refused",
+       g.locate_rehearsal(str(lost), str(trash))
+       == {"ok": False, "error": "That folder is where deleted things go"})
+    trashed = trash / "Old rehearsal - 2026-09-01 20-00"
+    trashed.mkdir()
+    ok("and so is anything under it",
+       g.locate_rehearsal(str(lost), str(trashed))
+       == {"ok": False, "error": "That folder is where deleted things go"})
+
     g.finish_rehearsal()
 
     # What the app itself left behind is still cleared away.
@@ -2361,6 +2402,27 @@ def main():
        not empty_one.exists() and not g._lib.has(empty_one))
     ok("and so is one holding only an empty _drafts",
        not with_drafts.exists() and not g._lib.has(with_drafts))
+
+    # os.path.isjunction only exists from Python 3.12 (pyproject.toml allows
+    # 3.10), so cleanup must not depend on it being there.
+    import os as _os
+
+    no_isjunction = rec13 / "Drafts too - 2026-09-03 22-00"
+    (no_isjunction / "_drafts").mkdir(parents=True)
+    g._lib.create_rehearsal(no_isjunction, "Drafts too", "2026-09-03T22:00:00", SR, 16,
+                            [{"name": "Gtr", "channel": 1}])
+    saved_isjunction = _os.path.isjunction
+    delattr(_os.path, "isjunction")
+    try:
+        raised = False
+        try:
+            g.cleanup_empty_rehearsals()
+        except AttributeError:
+            raised = True
+    finally:
+        _os.path.isjunction = saved_isjunction
+    ok("cleanup does not need os.path.isjunction, missing before Python 3.12",
+       not raised and not no_isjunction.exists() and not g._lib.has(no_isjunction))
 
     g.start_rehearsal("Nothing kept", None, SR, [{"name": "Gtr", "channel": 1}], 16)
     unkept = Path(g._session["folder"])
