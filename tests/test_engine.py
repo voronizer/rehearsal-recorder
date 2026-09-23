@@ -284,6 +284,63 @@ def main():
     p3.close()
     ok("a full close lets the audio go", p3.tracks == [])
 
+    print("\n[4d] A saved device is found again after the list moves")
+    from rehearsal_recorder.audio.devices import device_identity, saved_device
+
+    # The shape Windows takes once ASIO is loaded: the same mixer through
+    # three systems, ASIO inserted in the middle so later indices shift.
+    win_apis = [{"name": "MME"}, {"name": "ASIO"}, {"name": "Windows WASAPI"}]
+    win_devices = [
+        {"name": "X32", "hostapi": 0, "max_input_channels": 2,
+         "max_output_channels": 2, "default_samplerate": 48000},
+        {"name": "X32", "hostapi": 1, "max_input_channels": 16,
+         "max_output_channels": 16, "default_samplerate": 48000},
+        {"name": "X32", "hostapi": 2, "max_input_channels": 8,
+         "max_output_channels": 2, "default_samplerate": 48000},
+        {"name": "X32", "hostapi": 2, "max_input_channels": 8,
+         "max_output_channels": 2, "default_samplerate": 48000},
+    ]
+    real_q, real_h = _sd.query_devices, _sd.query_hostapis
+    _sd.query_hostapis = lambda: win_apis
+    _sd.query_devices = (
+        lambda index=None, kind=None:
+        win_devices if index is None else win_devices[index]
+    )
+    try:
+        ok("a device is described by name and audio system",
+           device_identity(2) == {"name": "X32", "host_api": "Windows WASAPI"})
+        ok("nothing chosen describes as nothing", device_identity(None) is None)
+        ok("an unknown index describes as nothing", device_identity(99) is None)
+
+        # Saved as WASAPI when it was index 1, before ASIO pushed it along.
+        cfg = {"device_index": 1,
+               "device": {"name": "X32", "host_api": "Windows WASAPI"}}
+        ok("it is found by name and system, not by the old index",
+           saved_device(cfg, "device", True, "win32") == 2)
+
+        cfg = {"device_index": 3,
+               "device": {"name": "X32", "host_api": "Windows WASAPI"}}
+        ok("of two identical cards the stored index still picks one",
+           saved_device(cfg, "device", True, "win32") == 3)
+
+        cfg = {"device_index": 0,
+               "device": {"name": "Behringer", "host_api": "ASIO"}}
+        ok("a card that is not plugged in is not chosen",
+           saved_device(cfg, "device", True, "win32") is None)
+
+        ok("on Windows an index with no name is not trusted",
+           saved_device({"device_index": 2}, "device", True, "win32") is None)
+        ok("elsewhere it is used as before",
+           saved_device({"device_index": 2}, "device", True, "darwin") == 2)
+        ok("nothing saved is nothing chosen",
+           saved_device({}, "device", True, "win32") is None)
+        ok("the output is read from its own keys",
+           saved_device({"output_device_index": 5,
+                         "output_device": {"name": "X32", "host_api": "ASIO"}},
+                        "output_device", False, "win32") == 1)
+    finally:
+        _sd.query_devices, _sd.query_hostapis = real_q, real_h
+
     print("\n[5] Tracks of different length do not break the mix")
     write_wav(tmp / "short.wav", 500, seconds=0.5)
     p2 = TakePlayer([
