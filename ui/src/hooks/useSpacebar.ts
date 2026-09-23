@@ -59,28 +59,43 @@ export function useEscape(handler: () => void, enabled = true) {
   useEffect(() => {
     if (!enabled) return
 
+    // Escape belongs to the topmost thing on screen, and while a dialog is
+    // open that is the dialog's. Deciding that takes both phases of the same
+    // keydown, for two different reasons.
+    //
+    // The decision has to be made first, in the capture phase, because Radix
+    // closes its dialog on this very keydown without stopping it. By the time
+    // the event has finished travelling, the dialog may be unmounted with
+    // focus back on the button that opened it — so a check made then sees no
+    // dialog and lets Escape climb a rung it should not have: closing the
+    // player's key list also asked to throw the take away.
+    //
+    // The acting has to be last, in the bubble phase on window, because a
+    // dialog this handler opens goes on screen while the same keydown is
+    // still travelling — and Radix's newly mounted layer then closes it
+    // again. On screen that is a flicker and a screen that will not leave:
+    // Escape on a rehearsal with takes in it never got to ask.
+    let claimed = false
+
+    const onCapture = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return
+      claimed =
+        document.querySelector('[role="dialog"]') !== null ||
+        keyIsClaimed(document.activeElement)
+    }
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
-      // Escape belongs to the topmost thing on screen, and while a dialog is
-      // open that is the dialog's. Asking what has focus is not a way to know
-      // it: Radix closes the dialog on this very keydown without stopping it,
-      // so by the time the event reaches a listener on window the dialog may
-      // already be gone and focus back on the button that opened it — or not,
-      // depending on when React flushed. Escape then climbs a rung it should
-      // not have: closing the key list also asked to throw the take away.
-      //
-      // So this listens in the capture phase, before the event has reached
-      // anything that could act on it, and asks the document rather than the
-      // focused element. Both halves are needed — the capture phase to be
-      // there first, the document to see a dialog that has focus nowhere in
-      // it.
-      if (document.querySelector('[role="dialog"]')) return
-      if (keyIsClaimed(document.activeElement)) return
+      if (claimed) return
       handlerRef.current()
     }
 
-    window.addEventListener("keydown", onKeyDown, true)
-    return () => window.removeEventListener("keydown", onKeyDown, true)
+    window.addEventListener("keydown", onCapture, true)
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      window.removeEventListener("keydown", onCapture, true)
+      window.removeEventListener("keydown", onKeyDown)
+    }
   }, [enabled])
 }
 
@@ -141,3 +156,4 @@ export function usePlayerKeys(skip: (delta: number) => void, enabled = true) {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [enabled])
 }
+

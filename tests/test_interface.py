@@ -1338,8 +1338,17 @@ def main():
         finishes = len(calls("finish_rehearsal"))
         page.keyboard.press("Escape")
         page.wait_for_selector("text=Finish this rehearsal?")
+        # And it is still there a moment later. Waiting for the question to
+        # appear says nothing about whether it stayed: a dialog opened by the
+        # same keydown that is still on its way through the page can be
+        # dismissed by that keydown, which looks like a flicker and leaves
+        # the screen where it was. The wait above would catch it mid-flicker
+        # and call it an answer.
+        page.wait_for_timeout(300)
         ok("and then asks before ending a rehearsal with takes in it",
-           len(calls("finish_rehearsal")) == finishes)
+           page.locator("text=Finish this rehearsal?").count() == 1
+           and len(calls("finish_rehearsal")) == finishes)
+
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
         ok("a second escape closes the question instead of answering it",
