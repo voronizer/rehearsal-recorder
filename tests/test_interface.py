@@ -68,7 +68,7 @@ let session = null;
 let takeCounter = 0;
 let drafts = window.__DRAFTS__ || [];
 let cloudDir = window.__CLOUD_DIR__ || null;
-let cloudFormat = 'wav';
+let cloudFormat = window.__CLOUD_FORMAT__ || 'wav';
 let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
 let recording = {device_index: window.__NO_DEVICE__ ? null : 0, samplerate: 44100, bit_depth: 24};
 let outputDevice = {index: null};
@@ -424,7 +424,15 @@ window.__MAKE_API__ = () => ({
     cloudDir = '/Users/alex/Google Drive/Band';
     return {ok:true, cloud_dir:cloudDir};
   }),
-  clear_cloud_dir: track('clear_cloud_dir', async () => { cloudDir = null; return {ok:true}; }),
+  // Python switches sending off with the folder (api.py, clear_cloud_dir):
+  // left on, every take saved afterwards is queued, refused and marked "No
+  // cloud folder chosen". The mock said only that the folder was gone, so
+  // the suite was checking a state the app never gets into.
+  clear_cloud_dir: track('clear_cloud_dir', async () => {
+    cloudDir = null;
+    autoPublish = {on:false, what:autoPublish.what};
+    return {ok:true};
+  }),
   share_take: track('share_take', async (folder, n, what) => {
     if (!cloudDir) return {ok:false, error:'No cloud folder chosen', needs_dir:true};
     const take = (session ? session.takes : []).find(t => t.take_number === n);
@@ -1565,6 +1573,42 @@ def main():
         ok("what to publish reaches Python",
            chosen_what and chosen_what[-1]["args"][1] == "tracks")
         page.screenshot(path=str(SHOTS / "56-settings.png"))
+
+        # Turning sending off does not take the question with it. A block
+        # that vanishes moves everything under it out from beneath the
+        # pointer, and leaves nothing on screen to say what would be sent if
+        # the box were ticked again — greyed out with its reason is what the
+        # checkbox beside it already does.
+        page.click("text=Send saved takes automatically")
+        page.wait_for_timeout(300)
+        ok("unticking leaves the question on screen",
+           page.locator("text=What gets published").count() == 1)
+        ok("and says why it is not in force",
+           page.locator("text=Not while sending is off").count() == 1)
+
+        # The cloud folder is the gate. Without one there are no copies, so
+        # none of the questions about a copy have a subject: what it is
+        # written as, whether it goes on its own, what of it goes. They are
+        # not greyed out but gone, and the folder says the whole of it —
+        # "Not set, nothing is copied anywhere" — with its own Browse beside
+        # it. Greyed out they were a wall of dead rows with three sentences
+        # explaining copies that cannot happen.
+        page.click("text=Forget the cloud folder")
+        page.wait_for_timeout(400)
+        ok("forgetting the folder switches sending off in Python too",
+           len(calls("clear_cloud_dir")) == 1)
+        ok("the field says nothing is copied anywhere",
+           "Not set" in page.input_value("#cloud-dir")
+           or page.locator("#cloud-dir").get_attribute("placeholder").startswith("Not set"))
+        ok("how a copy is written goes with it",
+           page.locator("button[aria-label='Lossless (FLAC)']").count() == 0)
+        ok("so does sending on its own",
+           page.locator("#auto-publish").count() == 0)
+        ok("and so does what would be sent",
+           page.locator("button[aria-label='The mix']").count() == 0)
+        ok("with no sentence left behind about copies",
+           page.locator("text=Only the copies are affected").count() == 0)
+        page.screenshot(path=str(SHOTS / "56-settings-no-cloud.png"))
         page.get_by_role("button", name="Appearance", exact=True).first.click()
         page.wait_for_selector("text=Scale")
         page.click("text=Light")
@@ -1591,7 +1635,13 @@ def main():
                window.__PATH_WARNING__ = "This folder's path is already 214 characters.";
                // No cloud folder here, and automatic publishing on anyway:
                // the state a config left behind by an older version can be in.
-               window.__AUTO_PUBLISH__ = {on:true, what:'mix'};"""
+               window.__AUTO_PUBLISH__ = {on:true, what:'mix'};
+               // Already set to MP3 by an earlier run, on a machine that
+               // cannot write one. Set rather than clicked, because with no
+               // cloud folder there is nothing to write and the choice is not
+               // a live one — but what it is set to still has to be answered
+               // for.
+               window.__CLOUD_FORMAT__ = 'mp3';"""
             + MOCK
         )
         win.goto(server.base_url, wait_until="networkidle")
@@ -1695,15 +1745,23 @@ def main():
 
         # Nothing here offers to publish automatically while there is nowhere
         # to publish to — every take would only collect "No cloud folder
-        # chosen". The three choices turn the setting on as well, so greying
-        # out the checkbox alone leaves the way in wide open.
+        # chosen" — and the config this window starts from has it switched on
+        # anyway, the way one left by an older version can.
         ok("publishing automatically is not on offer without a cloud folder",
-           win.locator("#auto-publish").is_disabled())
+           win.locator("#auto-publish").count() == 0)
         ok("and neither is choosing what it would send",
-           all(win.get_by_role("button", name=label, exact=True).is_disabled()
+           all(win.get_by_role("button", name=label, exact=True).count() == 0
                for label in ("The mix", "The original tracks", "Both")))
-        win.get_by_role("button", name="Compressed (MP3)").click()
-        win.wait_for_timeout(300)
+        ok("nor how a copy would be written, there being no copies",
+           win.get_by_role("button", name="Compressed (MP3)").count() == 0)
+
+        # Pick one and all of it appears — including what this machine has to
+        # say about the format it was already set to.
+        win.get_by_role("button", name="Choose cloud folder").click()
+        win.wait_for_timeout(400)
+        ok("choosing a folder brings the questions about copies with it",
+           win.get_by_role("button", name="Compressed (MP3)").is_enabled()
+           and win.locator("#auto-publish").count() == 1)
         ok("and compression says why it cannot work here",
            win.locator("text=soundfile package is missing").count() == 1)
         win.screenshot(path=str(SHOTS / "57-windows-shaped.png"))

@@ -566,13 +566,96 @@ export function Settings({
             </Button>
           )}
 
+          {/* The cloud folder is the gate. Without one there are no copies,
+              so none of the questions below have a subject: what a copy is
+              written as, whether it goes on its own, what of it goes. They
+              are not greyed out but absent — the field above says the whole
+              of it, "Not set, nothing is copied anywhere", with its own
+              Browse beside it. Greyed out they were five dead rows and three
+              sentences explaining copies that cannot happen, which is not
+              what "say why it will not work" is for: that is for a control
+              somebody is reaching for, not for a subject that does not exist
+              yet. */}
+          {settings?.cloud_dir && (
+            <>
+          {/* What a copy is written as comes first, right under the folder:
+              it is the one setting here that holds whether or not anything is
+              sent automatically, since it governs the takes sent by hand too.
+              Sending on its own, and what it sends, follow.
+
+              Both questions are a heading, their choices, and the word on the
+              choice in force — the heading carrying the weight of one, the
+              line under the row reading as its answer. All in the same muted
+              grey with the same gap above and below, the lines ran together
+              into one block nobody could parse.
+
+              Neither is hidden when it stops applying: a block that comes and
+              goes moves everything under it out from beneath the pointer, and
+              says nothing about what would happen if the switch above went
+              back on. They grey out, the way the checkbox between them
+              already does. */}
+          <div className="mt-5 flex flex-col gap-1.5">
+            <span className="text-sm font-medium">
+              What the copies are written as
+            </span>
+            <div
+              role="group"
+              aria-label="What the copies are written as"
+              className="flex flex-wrap items-center gap-2"
+            >
+              {(settings?.cloud_formats ?? []).map((f) => (
+                <Button
+                  key={f.id}
+                  variant={settings?.cloud_format === f.id ? "default" : "outline"}
+                  size="sm"
+                  aria-label={f.label}
+                  aria-pressed={settings?.cloud_format === f.id}
+                  // Only copies are written in these; with no cloud folder
+                  // there are none, and this was a live choice about files
+                  // nothing was going to write.
+                  onClick={async () => {
+                    const res = await api().set_cloud_format(f.id as CloudFormat)
+                    if (!res.ok) {
+                      setError(res.error ?? "Could not save that")
+                      return
+                    }
+                    setSettings(await api().get_settings())
+                  }}
+                >
+                  {f.label}
+                </Button>
+              ))}
+            </div>
+            {(settings?.cloud_formats ?? []).find(
+              (f) => f.id === settings?.cloud_format
+            ) && (
+              <p className="text-xs text-muted-foreground">
+                {
+                  (settings?.cloud_formats ?? []).find(
+                    (f) => f.id === settings?.cloud_format
+                  )?.hint
+                }
+              </p>
+            )}
+
+            {settings?.encoder_hint && settings.cloud_format !== "wav" && (
+              <p className="text-xs text-warn">{settings.encoder_hint}</p>
+            )}
+            {/* Not about the choice above but about all of them, so it is set
+                apart rather than stacked under the answer as a second
+                sentence of it. */}
+            <p className="mt-3 text-xs text-muted-foreground">
+              Only the copies are affected. What was recorded stays untouched
+              WAV on disk: it is the one thing here that cannot be made again.
+            </p>
+          </div>
+
           <div className="mt-4 flex items-start gap-3">
             <input
               id="auto-publish"
               type="checkbox"
               className="mt-1 size-4"
               checked={settings?.auto_publish ?? false}
-              disabled={!settings?.cloud_dir}
               onChange={async (e) => {
                 const on = e.target.checked
                 await api().set_auto_publish(on, settings?.auto_publish_what)
@@ -588,84 +671,59 @@ export function Settings({
             </div>
           </div>
 
-          {settings?.auto_publish && (
-            <div className="mt-2 flex flex-col gap-2">
-              <span className="text-sm text-muted-foreground">
-                What gets published
-              </span>
-              {AUTO_PUBLISH_OPTIONS.map((o) => (
-                <button
-                  key={o.id}
-                  type="button"
-                  aria-label={o.label}
-                  aria-pressed={settings?.auto_publish_what === o.id}
-                  // Each of these turns the setting on as well as choosing
-                  // what it sends, so without a cloud folder they are the
-                  // same mistake the checkbox above is greyed out to prevent.
-                  disabled={!settings?.cloud_dir}
-                  onClick={async () => {
-                    const res = await api().set_auto_publish(true, o.id)
-                    if (!res.ok) {
-                      setError(res.error ?? "Could not save that")
-                      return
-                    }
-                    setSettings(await api().get_settings())
-                  }}
-                  className={cn(
-                    "rounded-lg border px-4 py-3 text-left transition-colors",
-                    "hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                    "disabled:pointer-events-none disabled:opacity-50",
-                    settings?.auto_publish_what === o.id && "border-primary/50 bg-primary/5"
-                  )}
-                >
-                  <span className="text-sm font-medium">{o.label}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {o.hint}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-2 flex flex-col gap-2">
-            <span className="text-sm text-muted-foreground">
-              What the copies are written as
-            </span>
-            {(settings?.cloud_formats ?? []).map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                aria-label={f.label}
-                aria-pressed={settings?.cloud_format === f.id}
-                onClick={async () => {
-                  const res = await api().set_cloud_format(f.id as CloudFormat)
-                  if (!res.ok) {
-                    setError(res.error ?? "Could not save that")
-                    return
-                  }
-                  setSettings(await api().get_settings())
-                }}
-                className={cn(
-                  "rounded-lg border px-4 py-3 text-left transition-colors",
-                  "hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                  settings?.cloud_format === f.id && "border-primary/50 bg-primary/5"
-                )}
+          <div className="mt-4 flex flex-col gap-1.5">
+              <span className="text-sm font-medium">What gets published</span>
+              {/* A row of choices rather than a stack of cards, the way the
+                  theme and the scale are chosen: three of these with their
+                  explanations under each took most of the screen, and this
+                  is a decision made once. The explanation that is worth
+                  reading is the one belonging to the choice in force, so
+                  that is the one kept. */}
+              <div
+                role="group"
+                aria-label="What gets published"
+                className="flex flex-wrap items-center gap-2"
               >
-                <span className="text-sm font-medium">{f.label}</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  {f.hint}
-                </span>
-              </button>
-            ))}
-
-            {settings?.encoder_hint && settings.cloud_format !== "wav" && (
-              <p className="text-xs text-warn">{settings.encoder_hint}</p>
-            )}
+                {AUTO_PUBLISH_OPTIONS.map((o) => (
+                  <Button
+                    key={o.id}
+                    variant={
+                      settings?.auto_publish_what === o.id ? "default" : "outline"
+                    }
+                    size="sm"
+                    aria-label={o.label}
+                    aria-pressed={settings?.auto_publish_what === o.id}
+                    // This says what automatic sending sends, so it is live
+                    // only while automatic sending is: without a cloud folder
+                    // it is the same mistake the checkbox above is greyed out
+                    // to prevent, and with sending switched off it would be a
+                    // choice about something that is not happening.
+                    disabled={!settings?.auto_publish}
+                    onClick={async () => {
+                      const res = await api().set_auto_publish(true, o.id)
+                      if (!res.ok) {
+                        setError(res.error ?? "Could not save that")
+                        return
+                      }
+                      setSettings(await api().get_settings())
+                    }}
+                  >
+                    {o.label}
+                  </Button>
+                ))}
+              </div>
             <p className="text-xs text-muted-foreground">
-              Only the copies are affected. What was recorded stays untouched
-              WAV on disk: it is the one thing here that cannot be made again.
+              {settings?.auto_publish
+                ? AUTO_PUBLISH_OPTIONS.find(
+                    (o) => o.id === settings?.auto_publish_what
+                  )?.hint
+                : "Not while sending is off — this is what would go."}
             </p>
           </div>
+
+            </>
+          )}
+
         </section>
         </>)}
 
