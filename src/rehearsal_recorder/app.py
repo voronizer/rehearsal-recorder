@@ -102,6 +102,17 @@ def selftest():
         ins = [d for d in devices if d["max_input_channels"] > 0]
         return f"PortAudio up, {len(devices)} devices, {len(ins)} with inputs"
 
+    def asio():
+        import sounddevice as sd
+
+        names = [h["name"] for h in sd.query_hostapis()]
+        if "ASIO" not in names:
+            raise RuntimeError(
+                "PortAudio without ASIO — multichannel interfaces will be "
+                f"offered with too few inputs (found: {', '.join(names)})"
+            )
+        return "present"
+
     def encoder():
         from rehearsal_recorder.audio.encode import available
 
@@ -129,6 +140,10 @@ def selftest():
         return f"pywebview {getattr(webview, '__version__', '?')}"
 
     check("audio engine", audio)
+    # Checks the ASIO DLL reached the bundle. It needs no ASIO driver on the
+    # machine: the host API is listed, with no devices, even without one.
+    if sys.platform == "win32":
+        check("ASIO", asio)
     check("sample formats", encoder)
     check("numpy", numpy_works)
     check("window toolkit", window_toolkit)

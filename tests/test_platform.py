@@ -160,6 +160,24 @@ def main():
     ok("the formats no longer depend on an external tool",
        [f["id"] for f in encode.CLOUD_FORMATS_INFO] == ["wav", "flac", "mp3"])
 
+    print("\n[8] ASIO is switched on where it exists")
+    from rehearsal_recorder import enable_asio
+
+    env = {}
+    enable_asio("win32", env)
+    ok("on Windows the ASIO build of PortAudio is asked for",
+       env.get("SD_ENABLE_ASIO") == "1")
+
+    env = {}
+    enable_asio("darwin", env)
+    ok("elsewhere nothing is set — there is no ASIO there",
+       "SD_ENABLE_ASIO" not in env)
+
+    env = {"SD_ENABLE_ASIO": "0"}
+    enable_asio("win32", env)
+    ok("a value someone set by hand is left alone",
+       env["SD_ENABLE_ASIO"] == "0")
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
