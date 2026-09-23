@@ -2291,6 +2291,182 @@ def main():
        not apimod10.CONFIG_PATH.with_name("config.json.writing").exists()
        and json.loads(apimod10.CONFIG_PATH.read_text(encoding="utf-8"))["theme"] == "light")
 
+    print("\n[23] Locating a missing folder never hands a user's folder to cleanup")
+    # A record in the database is no proof the app made the folder it points
+    # at: "Locate folder…" can point it anywhere. The cleanup of empty
+    # rehearsals must then not take a folder full of someone's own files.
+    tmp13 = Path(tempfile.mkdtemp())
+    _, g = fresh_api(tmp13)
+    rec13 = g.recordings_dir
+    ghost = rec13 / "Ghost - 2026-09-01 20-00"
+    g._lib.create_rehearsal(ghost, "Ghost", "2026-09-01T20:00:00", SR, 16,
+                            [{"name": "Gtr", "channel": 1}])
+    mixes = rec13 / "Mixes for the band"
+    mixes.mkdir(parents=True)
+    (mixes / "final mix.mp3").write_bytes(b"ID3 not really audio")
+    (mixes / "lyrics.pdf").write_bytes(b"%PDF-1.4")
+    located = g.locate_rehearsal(str(ghost), str(mixes))
+    g.list_rehearsals()
+    ok("an empty rehearsal located onto a folder of other files leaves it be",
+       located.get("ok") is True and mixes.is_dir()
+       and (mixes / "final mix.mp3").exists() and (mixes / "lyrics.pdf").exists())
+
+    g.start_rehearsal("Live", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    live = Path(g._session["folder"])
+    draft = live / "_drafts" / "take 1"
+    write_wav(draft / "Gtr.wav", 1000, seconds=1.0)
+    g._session["take_counter"] = 1
+    g.keep_take(1, str(draft), "Kept", 1.0,
+                [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    lost = rec13 / "Lost - 2026-09-02 20-00"
+    g._lib.create_rehearsal(lost, "Lost", "2026-09-02T20:00:00", SR, 16,
+                            [{"name": "Gtr", "channel": 1}])
+    spare = rec13 / "Spare"
+    spare.mkdir()
+    ok("a rehearsal outside the recordings folder is refused",
+       g.locate_rehearsal(str(tmp13 / "Elsewhere"), str(spare))
+       == {"ok": False, "error": "Folder is outside the recordings directory"})
+    ok("so is the rehearsal in progress",
+       g.locate_rehearsal(str(live), str(spare))
+       == {"ok": False, "error": "Cannot relocate the rehearsal in progress"})
+    ok("and one whose folder is still there",
+       g.locate_rehearsal(str(mixes), str(spare))
+       == {"ok": False, "error": "That rehearsal's folder is not missing"})
+    part = {"ok": False, "error": "That folder is part of another rehearsal"}
+    ok("the live rehearsal's folder is not a place to locate onto",
+       g.locate_rehearsal(str(lost), str(live)) == part)
+    ok("nor a folder inside another rehearsal's",
+       g.locate_rehearsal(str(lost), str(live / "01 - Kept")) == part)
+    box = rec13 / "Box"
+    inner = box / "Old - 2026-08-01 20-00"
+    inner.mkdir(parents=True)
+    g._lib.create_rehearsal(inner, "Old", "2026-08-01T20:00:00", SR, 16,
+                            [{"name": "Gtr", "channel": 1}])
+    ok("nor a folder holding another rehearsal's",
+       g.locate_rehearsal(str(lost), str(box)) == part)
+    ok("and the refused one is still where it was, missing",
+       g._lib.rehearsal(lost)["missing"] is True)
+    g.finish_rehearsal()
+
+    # What the app itself left behind is still cleared away.
+    empty_one = rec13 / "Empty - 2026-09-03 20-00"
+    empty_one.mkdir()
+    with_drafts = rec13 / "Drafts - 2026-09-03 21-00"
+    (with_drafts / "_drafts").mkdir(parents=True)
+    for f, name in ((empty_one, "Empty"), (with_drafts, "Drafts")):
+        g._lib.create_rehearsal(f, name, "2026-09-03T20:00:00", SR, 16,
+                                [{"name": "Gtr", "channel": 1}])
+    g.cleanup_empty_rehearsals()
+    ok("an empty rehearsal folder is still cleaned up",
+       not empty_one.exists() and not g._lib.has(empty_one))
+    ok("and so is one holding only an empty _drafts",
+       not with_drafts.exists() and not g._lib.has(with_drafts))
+
+    g.start_rehearsal("Nothing kept", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    unkept = Path(g._session["folder"])
+    (unkept / "setlist.txt").write_text("1. Polyn")
+    finished = g.finish_rehearsal()
+    ok("finishing an empty rehearsal with a stray file keeps the folder",
+       unkept.is_dir() and (unkept / "setlist.txt").exists()
+       and finished["folder_removed"] is False)
+    g.start_rehearsal("Nothing at all", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    bare = Path(g._session["folder"])
+    finished = g.finish_rehearsal()
+    ok("and one with nothing in it is still removed",
+       not bare.exists() and finished["folder_removed"] is True)
+
+    print("\n[24] A marker placed while a take is being cropped is kept")
+    g.start_rehearsal("Cropping", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    cf = Path(g._session["folder"])
+    draft = cf / "_drafts" / "take 1"
+    write_wav(draft / "Gtr.wav", 1000, seconds=2.0)
+    g._session["take_counter"] = 1
+    g.keep_take(1, str(draft), "Polyn", 2.0,
+                [{"name": "Gtr", "file": str(draft / "Gtr.wav")}],
+                [{"at": 0.3, "note": "", "kind": "note"},
+                 {"at": 1.0, "note": "", "kind": "good"}])
+    real_crop = g._crop_tracks
+
+    def crop_with_a_marker(*args, **kwargs):
+        result = real_crop(*args, **kwargs)
+        g.add_take_marker(str(cf), 1, 1.2, "while cropping", "issue")
+        return result
+
+    g._crop_tracks = crop_with_a_marker
+    try:
+        cropped = g.crop_take(str(cf), 1, 0.5, 1.9)
+    finally:
+        del g._crop_tracks
+    ok("the marker added during the crop survives it, shifted",
+       cropped["ok"] and [m["at"] for m in cropped["take"]["markers"]] == [0.5, 0.7]
+       and cropped["take"]["markers"][1]["note"] == "while cropping")
+    ok("and the dropped ones are still counted", cropped["markers_dropped"] == 1)
+
+    def crop_and_delete(*args, **kwargs):
+        result = real_crop(*args, **kwargs)
+        g._lib.delete_take(cf, 1)
+        return result
+
+    g._crop_tracks = crop_and_delete
+    try:
+        vanished = g.crop_take(str(cf), 1, 0.1, 1.2)
+    finally:
+        del g._crop_tracks
+    ok("a take deleted during its crop is reported as not found",
+       vanished == {"ok": False, "error": "Take not found"})
+    g.finish_rehearsal()
+
+    print("\n[25] A rehearsal whose record vanishes during a rename")
+    g.start_rehearsal("Renaming", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    rf = Path(g._session["folder"])
+    draft = rf / "_drafts" / "take 1"
+    write_wav(draft / "Gtr.wav", 1000, seconds=1.0)
+    g._session["take_counter"] = 1
+    g.keep_take(1, str(draft), "Kept", 1.0,
+                [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    g._library.move_rehearsal = lambda *args, **kwargs: False
+    try:
+        renamed = g.rename_rehearsal(str(rf), "Renamed")
+    finally:
+        del g._library.move_rehearsal
+    ok("is reported as not found, with its folder named back",
+       renamed == {"ok": False, "error": "Rehearsal not found"}
+       and rf.is_dir() and not list(rec13.glob("Renamed - *")))
+    g.finish_rehearsal()
+
+    print("\n[26] session.json that cannot be deleted after its import")
+    tmp14 = Path(tempfile.mkdtemp())
+    sticky = tmp14 / "Rec" / "Sticky - 2026-09-05 19-00"
+    sticky.mkdir(parents=True)
+    (sticky / "session.json").write_text(json.dumps({
+        "name": "Sticky", "created_at": "2026-09-05T19:00:00", "samplerate": SR,
+        "tracks": [{"name": "Gtr", "channel": 1}], "takes": [],
+    }))
+    import rehearsal_recorder.store.importer as importer_mod
+    real_remove = importer_mod._remove
+
+    def locked(folder):
+        raise PermissionError("in use by another process")
+
+    importer_mod._remove = locked
+    collected = _Collect()
+    importer_log = logging.getLogger("rehearsal_recorder.store.importer")
+    importer_log.addHandler(collected)
+    try:
+        _, st = fresh_api(tmp14)
+        counted = import_all(st._lib, st._cloud_dir)
+    finally:
+        importer_mod._remove = real_remove
+        importer_log.removeHandler(collected)
+    ok("is not reported as a history that could not be read",
+       st.startup_problems() == [] and st._lib.has(sticky))
+    ok("it says so in the log, as a warning",
+       any(r.levelno == logging.WARNING for r in collected.records))
+    ok("nor while the file stays locked on later passes", counted["failed"] == 0)
+    ok("and it is removed once it can be",
+       import_all(st._lib, st._cloud_dir) == {"imported": 0, "failed": 0}
+       and not (sticky / "session.json").exists())
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

@@ -812,8 +812,7 @@ class Api:
         # A rehearsal where nothing was saved should not leave a folder behind.
         removed = False
         if rehearsal is not None and self._is_empty(rehearsal):
-            self._remove_empty(folder)
-            removed = True
+            removed = self._remove_empty(folder)
 
         return {
             "ok": True,
@@ -848,18 +847,45 @@ class Api:
             folder = Path(rehearsal["folder"])
             if rehearsal["missing"] or folder == live:
                 continue
-            if self._is_empty(rehearsal):
-                self._remove_empty(folder)
+            if self._is_empty(rehearsal) and self._remove_empty(folder):
                 removed += 1
         return {"ok": True, "removed": removed}
 
     def _remove_empty(self, folder):
-        """The folder, then its record — the record only once the folder is
+        """
+        The folder, then its record — the record only once the folder is
         really gone, so one that could not be removed is tried again next
-        time rather than left on disk with nothing pointing at it."""
+        time rather than left on disk with nothing pointing at it. Returns
+        whether the folder is gone.
+
+        Only a folder with nothing but empty directories left in it (an
+        empty _drafts, say) is removed. A record in the database is no proof
+        the app made the folder: "Locate folder…" can point a rehearsal at
+        any folder, and one full of someone's mixes and lyrics has no audio
+        the app would recognise, yet is anything but empty. A file of any
+        kind, or a link, keeps the folder where it is.
+        """
+        folder = Path(folder)
+        if self._holds_anything(folder):
+            return False
         shutil.rmtree(folder, ignore_errors=True)
-        if not Path(folder).exists():
-            self._lib.forget_rehearsal(folder)
+        if folder.exists():
+            return False
+        self._lib.forget_rehearsal(folder)
+        return True
+
+    @staticmethod
+    def _holds_anything(folder):
+        """Anything in the tree that is not a plain directory. Links are not
+        followed, and count: what they point at is not ours to judge."""
+        for root, dirs, files in os.walk(folder, followlinks=False):
+            if files:
+                return True
+            for d in dirs:
+                sub = Path(root) / d
+                if sub.is_symlink() or sub.is_junction():
+                    return True
+        return False
 
     # ---------- take ----------
 
@@ -1284,13 +1310,18 @@ class Api:
             folder = new_folder
 
         try:
-            self._lib.move_rehearsal(original, folder, display_name)
+            moved = self._lib.move_rehearsal(original, folder, display_name)
         except Exception:
             # As in rename_take: never leave the folder renamed under a
             # record that still points at the old one.
             if folder != original:
                 folder.rename(original)
             raise
+        if not moved:
+            # Its record went while the folder was being renamed.
+            if folder != original:
+                folder.rename(original)
+            return {"ok": False, "error": "Rehearsal not found"}
 
         # Only the rehearsal actually being renamed touches the live session —
         # renaming an old one from history must leave it alone.
@@ -1318,13 +1349,6 @@ class Api:
 
     MARKER_KINDS = librarymod.MARKER_KINDS
     _as_marker = staticmethod(as_marker)
-
-    @staticmethod
-    def _markers_of(take):
-        return sorted(
-            (Api._as_marker(m) for m in take.get("markers", [])),
-            key=lambda m: m["at"],
-        )
 
     def add_take_marker(self, folder, take_number, seconds, note="", kind="note"):
         """Markers are placed while listening back: 'this bit worked'."""
@@ -1519,12 +1543,21 @@ class Api:
                 self.player_open(playing)
             return done
 
-        kept, dropped = [], 0
-        for m in self._markers_of(take):
-            if span["start"] <= m["at"] <= span["end"]:
-                kept.append({**m, "at": round(m["at"] - span["start"], 2)})
-            else:
-                dropped += 1
+        # The markers are read and rewritten in one transaction, now that the
+        # crop is done: it takes seconds, and a marker placed on the take
+        # meanwhile must move with the audio rather than be written over by
+        # a list read before it existed.
+        dropped = 0
+
+        def shift(markers):
+            nonlocal dropped
+            kept = []
+            for m in markers:
+                if span["start"] <= m["at"] <= span["end"]:
+                    kept.append({**m, "at": round(m["at"] - span["start"], 2)})
+                else:
+                    dropped += 1
+            return kept
 
         # What is in the cloud folder is a copy of a take that no longer
         # exists, so it goes and its record goes with it. The length in
@@ -1533,9 +1566,11 @@ class Api:
         # a record that still matched the shorter take would suppress its
         # own repair.
         self._remove_shared(take)
-        self._lib.update_take(
-            folder, take_number, duration_sec=done["duration_sec"], markers=kept
-        )
+        if (self._lib.edit_markers(folder, take_number, shift) is None
+                or self._lib.update_take(
+                    folder, take_number, duration_sec=done["duration_sec"]) is None):
+            # Deleted while it was being cropped.
+            return {"ok": False, "error": "Take not found"}
         self._lib.set_cloud_copy(folder, take_number, None, None)
 
         self._enqueue_publish(folder, take_number)
@@ -1787,15 +1822,46 @@ class Api:
         return {"ok": True}
 
     def locate_rehearsal(self, folder, new_folder):
-        """Points a rehearsal whose folder went missing at where it is now."""
+        """
+        Points a rehearsal whose folder went missing at where it is now.
+
+        Only a rehearsal that really is missing, and only onto a folder that
+        belongs to no other: once pointed at a folder, the app treats it as
+        its own — an empty rehearsal's folder is removed by the cleanup, and
+        two rehearsals sharing files would each delete the other's takes.
+        """
+        folder = Path(folder)
         new_folder = Path(new_folder)
+        if not self._inside_recordings(folder):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+        live = Path(self._session["folder"]) if self._session is not None else None
+        if live is not None and folder == live:
+            return {"ok": False, "error": "Cannot relocate the rehearsal in progress"}
         if (not self._inside_recordings(new_folder)
                 or new_folder.resolve() == self._recordings_dir.resolve()):
             return {"ok": False, "error": "Pick a folder inside the recordings folder"}
         if not new_folder.is_dir():
             return {"ok": False, "error": "That is not a folder"}
+
+        rehearsals = self._lib.rehearsals()
+        me = next((r for r in rehearsals if Path(r["folder"]) == folder), None)
+        if me is None:
+            return {"ok": False, "error": "Rehearsal not found"}
+        if not me["missing"]:
+            return {"ok": False, "error": "That rehearsal's folder is not missing"}
+
+        part = {"ok": False, "error": "That folder is part of another rehearsal"}
+        target = new_folder.resolve()
+        if live is not None and target == live.resolve():
+            return part
         if self._lib.has(new_folder):
             return {"ok": False, "error": "That folder is already another rehearsal"}
+        others = [Path(r["folder"]).resolve() for r in rehearsals if r is not me]
+        if live is not None:
+            others.append(live.resolve())
+        if any(o in target.parents or target in o.parents for o in others):
+            return part
+
         if not self._lib.move_rehearsal(folder, new_folder):
             return {"ok": False, "error": "Rehearsal not found"}
         return {"ok": True, "folder": str(new_folder)}

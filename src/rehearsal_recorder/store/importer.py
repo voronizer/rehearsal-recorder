@@ -13,6 +13,7 @@ and everything past it reads complete rows.
 """
 
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from rehearsal_recorder.audio.format import LEGACY_DEPTH
 from rehearsal_recorder.store.library import as_marker
 
 SESSION_FILE = "session.json"
+
+log = logging.getLogger(__name__)
 
 
 def read_text(path):
@@ -93,7 +96,8 @@ def _take(folder, take):
 def import_folder(library, folder, cloud_dir):
     """
     One rehearsal folder's session.json into the database. Returns "imported",
-    "cleaned" (it was already in, the app died before deleting the file),
+    "cleaned" (it was already in: the app died before deleting the file, or
+    could not delete it),
     "absent", or raises for a file that cannot be read — which is left where
     it is.
     """
@@ -102,7 +106,7 @@ def import_folder(library, folder, cloud_dir):
     if not path.exists():
         return "absent"
     if library.has(folder):
-        _remove(folder)
+        _remove_after_import(folder)
         return "cleaned"
 
     meta = json.loads(read_text(path))
@@ -130,13 +134,29 @@ def import_folder(library, folder, cloud_dir):
         },
         cloud_dir=cloud_dir,
     )
-    _remove(folder)
+    _remove_after_import(folder)
     return "imported"
 
 
 def _remove(folder):
     for name in (SESSION_FILE, SESSION_FILE + ".writing"):
         (Path(folder) / name).unlink(missing_ok=True)
+
+
+def _remove_after_import(folder):
+    """
+    The file once its rehearsal is in the database. Failing to delete it (a
+    sync client or a virus scanner holding it, say) is not a failed import:
+    the history is in, and the next pass finds it there and deletes the file
+    then — so it is a warning, not the "could not read" the interface shows.
+    """
+    try:
+        _remove(folder)
+    except OSError as e:
+        log.warning(
+            "imported %s, but could not remove its %s (%s); it will be removed "
+            "next time", folder, SESSION_FILE, e,
+        )
 
 
 def import_all(library, cloud_dir, report=None):
