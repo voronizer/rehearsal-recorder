@@ -89,7 +89,12 @@ been built is a change the tests cannot see.
 python tests/run_all.py
 ```
 
-Three suites and what each is for: [tests/README.md](../tests/README.md).
+Four suites and what each is for: [tests/README.md](../tests/README.md).
+
+CI runs all of them on macOS and on Windows, on every push and every pull
+request. Both, because the two systems disagree about the things this app
+does most: a filesystem that ignores case, a file that cannot be moved while
+it is open, a code page with no Cyrillic.
 
 ## Packaging it into an app
 
@@ -197,7 +202,7 @@ ui/src/screens/             one file per screen
 ui/src/components/          player, timeline, waveform, take strip, dialogs
 ui/dist/                    the built interface (build output, not in git)
 
-tests/                      the three suites
+tests/                      the four suites
 docs/                       this file and its neighbours
 packaging/                  the PyInstaller spec and the debug-allocator run
 build.command, build.bat    in the root because you double-click them

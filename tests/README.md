@@ -4,7 +4,7 @@
 python tests/run_all.py
 ```
 
-Three suites, because they answer different questions.
+Four suites, because they answer different questions.
 
 ## test_engine.py — the audio
 
@@ -22,9 +22,20 @@ Only one operating system is ever present, so the code is driven into each
 shape deliberately: no recycle bin, no encoder, Windows naming rules, a path
 near the 260-character limit.
 
-This proves the code takes the right branch. It does not prove the app runs
-on Windows — nothing short of Windows does that. Worth remembering when
-reading a green run.
+This proves the code takes the right branch, not that the branch works where
+it runs: only the system itself shows that. CI runs every suite on macOS and
+on Windows for exactly that reason — it used to run them on Linux, where a
+check about a filesystem that ignores case had nothing to catch and skipped
+itself for weeks.
+
+## test_store.py — the history database
+
+The schema, the migrations and the move of every old `session.json` into the
+database. The migrations run for real on SQLite, the way the app runs them at
+start, and a chain of test-only migrations stands in for the ones later
+versions will add — so the backup taken first, and the rollback when one
+fails halfway, are checked before there is a second real migration to need
+them.
 
 ## test_interface.py — the built interface
 
