@@ -676,6 +676,27 @@ def main():
         ok("and Escape closes the list, not the take",
            page.locator("text=Keys in the player").count() == 0
            and page.locator("text=Discard this take?").count() == 0)
+
+        # The check above passes for the wrong reason as easily as the right
+        # one. Radix closes the dialog on Escape without stopping the keydown,
+        # so the app's own Escape runs too and decides whether to act by
+        # looking at what has focus — which by then may be the dialog, or may
+        # be the button that opened it, depending on when React got round to
+        # unmounting. It held here and lost on CI, where Escape closed the
+        # list and asked to throw the take away in the same press.
+        #
+        # Blurring first puts the losing side on screen every time: a dialog
+        # open, focus outside it, Escape pressed. Whatever the app does with
+        # Escape then, it cannot be reading focus to decide.
+        page.keyboard.press("?")
+        page.wait_for_selector("text=Keys in the player")
+        page.evaluate("document.activeElement && document.activeElement.blur()")
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(250)
+        ok("with the list open and focus anywhere else, Escape is still the list's",
+           page.locator("text=Keys in the player").count() == 0
+           and page.locator("text=Discard this take?").count() == 0)
+
         page.keyboard.press("r")
         page.wait_for_timeout(150)
         ok("R turns repeat on",

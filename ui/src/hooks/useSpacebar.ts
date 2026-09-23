@@ -61,14 +61,26 @@ export function useEscape(handler: () => void, enabled = true) {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
-      // Escape belongs to the topmost thing on screen, which is the dialog's
-      // to close while one is open — see keyIsClaimed above.
+      // Escape belongs to the topmost thing on screen, and while a dialog is
+      // open that is the dialog's. Asking what has focus is not a way to know
+      // it: Radix closes the dialog on this very keydown without stopping it,
+      // so by the time the event reaches a listener on window the dialog may
+      // already be gone and focus back on the button that opened it — or not,
+      // depending on when React flushed. Escape then climbs a rung it should
+      // not have: closing the key list also asked to throw the take away.
+      //
+      // So this listens in the capture phase, before the event has reached
+      // anything that could act on it, and asks the document rather than the
+      // focused element. Both halves are needed — the capture phase to be
+      // there first, the document to see a dialog that has focus nowhere in
+      // it.
+      if (document.querySelector('[role="dialog"]')) return
       if (keyIsClaimed(document.activeElement)) return
       handlerRef.current()
     }
 
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
   }, [enabled])
 }
 
