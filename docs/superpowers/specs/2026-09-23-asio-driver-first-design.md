@@ -126,8 +126,12 @@ drivers: "Each driver can offer a different number of inputs. If your
 interface shows fewer than it has, try another driver — ASIO, where there is
 one, usually offers all of them."
 
-Setup keeps doing what it does: it shows the interface in force, by name. It
-takes the index from `get_settings`, which is now already resolved.
+Setup shows the interface in force, by name, taking the index from
+`get_settings`, which is now already resolved. When nothing resolves it
+falls back to the first input only if every input comes through one driver,
+as on a Mac; with several drivers it shows "No interface chosen" and cannot
+start, because guessing there would undo the reason a legacy Windows choice
+is dropped.
 
 ## Not in this change
 
