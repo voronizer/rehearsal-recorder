@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/Timeline"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
-import { KeyCorner } from "@/components/Shell"
+import { PlayerKeys } from "@/components/PlayerKeys"
 import { useKey } from "@/hooks/useSpacebar"
 import { canBePutBack, goesTo } from "@/lib/deletion"
 import { cn } from "@/lib/utils"
@@ -245,7 +245,11 @@ function Transport({
   useKey("r", player.toggleLoop, !player.loading)
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3">
+    <div
+      role="toolbar"
+      aria-label="Transport"
+      className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"
+    >
       <Button
         variant="ghost"
         size="icon-sm"
@@ -254,10 +258,8 @@ function Transport({
         aria-keyshortcuts="Home"
         title="To start"
         disabled={player.loading}
-        className="relative"
       >
         <SkipBack />
-        <KeyCorner>Home</KeyCorner>
       </Button>
       <Button
         variant="ghost"
@@ -266,15 +268,13 @@ function Transport({
         aria-label={`Back ${SKIP_SECONDS} seconds`}
         aria-keyshortcuts="ArrowLeft"
         disabled={player.loading}
-        className="relative"
       >
         <Undo2 />
-        <KeyCorner>←</KeyCorner>
       </Button>
 
       <Button
         size="icon-lg"
-        className="relative rounded-full"
+        className="rounded-full"
         onClick={player.toggle}
         disabled={player.loading || !!player.loadError}
         aria-label={player.playing ? "Pause" : "Play"}
@@ -287,7 +287,6 @@ function Transport({
         ) : (
           <Play />
         )}
-        {spaceKey && <KeyCorner>Space</KeyCorner>}
       </Button>
 
       <Button
@@ -297,10 +296,8 @@ function Transport({
         aria-label={`Forward ${SKIP_SECONDS} seconds`}
         aria-keyshortcuts="ArrowRight"
         disabled={player.loading}
-        className="relative"
       >
         <Redo2 />
-        <KeyCorner>→</KeyCorner>
       </Button>
 
       <span className="tnum text-sm">
@@ -316,7 +313,6 @@ function Transport({
           disabled={player.loading}
           aria-label={nearby !== undefined ? "Edit marker" : "Add marker"}
           aria-keyshortcuts="M"
-          className="relative"
           title={
             nearby !== undefined
               ? "There is already a marker here — open it"
@@ -325,7 +321,6 @@ function Transport({
         >
           <Flag />
           {nearby !== undefined ? "Open mark" : "Mark"}
-          <KeyCorner>M</KeyCorner>
         </Button>
       )}
 
@@ -356,14 +351,10 @@ function Transport({
           aria-label="Repeat"
           aria-keyshortcuts="R"
           title={loopBand ? "Loop the marked stretch" : "Loop the whole take"}
-          className={cn(
-            "relative",
-            looping && "bg-warn text-warn-foreground hover:bg-warn/90"
-          )}
+          className={cn(looping && "bg-warn text-warn-foreground hover:bg-warn/90")}
         >
           <Repeat />
           Repeat
-          <KeyCorner>R</KeyCorner>
         </Button>
 
         {loopBand && onCropClick && (
@@ -386,6 +377,8 @@ function Transport({
             )}
           </>
         )}
+
+        <PlayerKeys spaceKey={spaceKey} />
       </div>
     </div>
   )

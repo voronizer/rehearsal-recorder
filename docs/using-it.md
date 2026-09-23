@@ -299,9 +299,10 @@ On every screen the spacebar does the main thing, so nobody has to reach for
 the mouse mid-rehearsal: start the rehearsal, start the take, stop recording,
 play/pause while listening. On screens with a player the left and right arrows
 seek ±10 seconds, Home goes back to the start, M drops a marker and R turns
-Repeat on and off. Every key is drawn on the button it presses, and only
-while it presses that button: with a take open, Space is on Play rather than
-on Record, and Escape is not on Finish because it closes the take first.
+Repeat on and off; **?** lists them. The main button of each screen shows
+its key, and only while the key presses it: with a take open Space plays the
+take instead of recording, and Escape is not on Finish because it closes the
+take first.
 Shortcuts do not fire while the cursor is in a text field.
 
 Escape means one level up, and it takes one rung per press. A dialog closes

@@ -598,14 +598,23 @@ def main():
            len(calls("player_toggle")) == 1)
         page.click("button[aria-label='Pause']")
 
-        ok("the transport shows its keys",
-           key_on(page, "button[aria-label='Back 10 seconds']") == "←"
-           and key_on(page, "button[aria-label='Forward 10 seconds']") == "→"
-           and key_on(page, "button[aria-label='To start']") == "Home"
-           and key_on(page, "button[aria-label='Add marker']") == "M"
-           and key_on(page, "button[aria-label='Repeat']") == "R")
-        ok("but Play has none here, where Space saves the take",
-           key_on(page, "button[aria-label='Play']") is None)
+        # The transport stays as it was: a key drawn on each small button
+        # was clutter however it was drawn. They are listed behind "?".
+        ok("the transport draws no keys on its buttons",
+           page.locator("[role='toolbar'][aria-label='Transport'] :is(kbd, [data-key])").count() == 0
+           and page.locator("[role='toolbar'][aria-label='Transport']").count() == 1)
+        page.keyboard.press("?")
+        page.wait_for_selector("text=Keys in the player")
+        listed = page.get_by_role("dialog").inner_text()
+        ok("? lists the player's keys",
+           all(k in listed for k in ("Home", "To the start", "Mark", "Repeat", "10 seconds")))
+        ok("without Space here, where Space saves the take",
+           "Play / pause" not in listed)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        ok("and Escape closes the list, not the take",
+           page.locator("text=Keys in the player").count() == 0
+           and page.locator("text=Discard this take?").count() == 0)
         page.keyboard.press("r")
         page.wait_for_timeout(150)
         ok("R turns repeat on",
@@ -723,8 +732,12 @@ def main():
         ok("a mark made before saving is on the saved take",
            page.locator("text=this one is the take").count() == 1)
 
-        ok("with a take open, Space is on Play",
-           key_on(page, "button[aria-label='Play']") == "Space")
+        page.click("button[aria-label='Player keys']")
+        page.wait_for_selector("text=Keys in the player")
+        ok("the ? button lists Space here, where it plays",
+           "Play / pause" in page.get_by_role("dialog").inner_text())
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
         ok("and not on Record take",
            key_on(page, "button:has-text('Record take')") is None)
         ok("nor Escape on Finish — here it closes the take",
