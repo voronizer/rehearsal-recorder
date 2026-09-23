@@ -212,7 +212,7 @@ export function Settings({
   const current = TABS.find((t) => t.id === tab) ?? TABS[0]
 
   return (
-    <Shell title="Settings" onBack={onBack}>
+    <Shell title="Settings" onBack={onBack} backKey>
       <div className="mx-auto flex w-full max-w-4xl gap-8">
         {/* The section list. Four groups is few enough to show at once, so
             nothing is hidden behind a menu. */}

@@ -28,6 +28,16 @@ opening.
   not move a file that is open for playing. Deleting a take or a rehearsal
   while it played failed the same way. The player now lets go of those files
   first. On a Mac the move had always worked, which is why this was not seen.
+- The keys are on the buttons they press: Space on the main button of each
+  screen, or on Play while a take is open; ← and → on the ten-second skips;
+  Esc on Back, on Discard and on Finish. The line under the main button that
+  said the same thing for Space alone is gone. A key is shown only while it
+  really does that — with a take open Escape closes the take, so Finish
+  loses its Esc until then.
+- Three new keys in the player: Home goes to the start, M marks, R turns
+  Repeat on and off. None of them fire while typing in a name.
+- A tick just before the end of a take no longer puts a sideways scrollbar
+  under the last track on Windows.
 
 ## 0.6.1
 

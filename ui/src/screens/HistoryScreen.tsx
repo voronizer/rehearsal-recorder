@@ -233,6 +233,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
         subtitle={formatDateHuman(opened.created_at)}
         title={opened.name}
         onBack={back}
+        backKey={selected === null}
         headerAction={
           <Button
             variant="ghost"
@@ -269,6 +270,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
               onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
               onRemoveMarker={(sec) => removeMarker(selected, sec)}
               onCrop={(from, to) => void cropTake(selected, from, to)}
+              spaceKey
               canCrop={!busy}
             />
           ) : (
@@ -334,7 +336,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <Shell title="Rehearsal history" onBack={back}>
+    <Shell title="Rehearsal history" onBack={back} backKey>
       <div className="mx-auto flex max-w-3xl flex-col gap-2">
         {error && <p className="text-sm text-destructive">{error}</p>}
 

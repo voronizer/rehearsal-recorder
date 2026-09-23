@@ -3,7 +3,7 @@ import { Check, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Shell, SpaceHint } from "@/components/Shell"
+import { Kbd, Shell } from "@/components/Shell"
 import { TakePlayer } from "@/components/TakePlayer"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
@@ -156,16 +156,29 @@ export function Review({
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex items-center gap-3">
-            <Button variant="ghost" onClick={discard} disabled={busy}>
+            {/* Escape asks before discarding; the button itself does not.
+                It is still the button Escape leads to. */}
+            <Button
+              variant="ghost"
+              onClick={discard}
+              disabled={busy}
+              aria-keyshortcuts="Escape"
+            >
               <Trash2 />
               Discard
+              <Kbd>Esc</Kbd>
             </Button>
-            <Button size="lg" onClick={keep} disabled={busy}>
+            <Button
+              size="lg"
+              onClick={keep}
+              disabled={busy}
+              aria-keyshortcuts="Space"
+            >
               <Check />
               Save take
+              <Kbd>Space</Kbd>
             </Button>
           </div>
-          <SpaceHint>save take</SpaceHint>
         </div>
       }
     >

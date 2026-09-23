@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { HardDrive, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Shell, SpaceHint } from "@/components/Shell"
+import { Kbd, Shell } from "@/components/Shell"
 import { LevelMeter } from "@/components/LevelMeter"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import {
@@ -122,11 +122,17 @@ export function Recording({
       footer={
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button size="xl" onClick={stop} disabled={stopping}>
+          <Button
+            size="xl"
+            onClick={stop}
+            disabled={stopping}
+            aria-keyshortcuts="Space"
+          >
             <Square className="fill-current" />
             Stop
+            <Kbd>Space</Kbd>
           </Button>
-          <SpaceHint>stops · autosaved every 30 s</SpaceHint>
+          <p className="text-xs text-muted-foreground">autosaved every 30 s</p>
         </div>
       }
     >

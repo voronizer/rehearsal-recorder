@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Shell, SpaceHint } from "@/components/Shell"
+import { Kbd, Shell } from "@/components/Shell"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 import { formatDuration } from "@/lib/format"
@@ -248,11 +248,16 @@ export function Setup({
       footer={
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button size="xl" onClick={start} disabled={!canStart}>
+          <Button
+            size="xl"
+            onClick={start}
+            disabled={!canStart}
+            aria-keyshortcuts="Space"
+          >
             <Radio />
             Start rehearsal
+            <Kbd>Space</Kbd>
           </Button>
-          <SpaceHint>starts the rehearsal</SpaceHint>
         </div>
       }
     >

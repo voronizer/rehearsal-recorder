@@ -298,8 +298,11 @@ both depths is checked by the test suite, not assumed.
 On every screen the spacebar does the main thing, so nobody has to reach for
 the mouse mid-rehearsal: start the rehearsal, start the take, stop recording,
 play/pause while listening. On screens with a player the left and right arrows
-seek ±10 seconds. The `Space` hint is shown next to the button. Shortcuts do
-not fire while the cursor is in a text field.
+seek ±10 seconds, Home goes back to the start, M drops a marker and R turns
+Repeat on and off. Every key is drawn on the button it presses, and only
+while it presses that button: with a take open, Space is on Play rather than
+on Record, and Escape is not on Finish because it closes the take first.
+Shortcuts do not fire while the cursor is in a text field.
 
 Escape means one level up, and it takes one rung per press. A dialog closes
 first, because while one is open it is the topmost thing on screen. Then the

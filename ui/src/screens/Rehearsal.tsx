@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Circle, FolderOpen, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Shell, SpaceHint } from "@/components/Shell"
+import { Kbd, Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
@@ -209,8 +209,15 @@ export function Rehearsal({
       headerAction={
         <div className="flex items-center gap-3">
           <Badge variant="outline">{takesLabel(session.takes.length)}</Badge>
-          <Button variant="ghost" onClick={finish}>
+          {/* Escape finishes only with no take open; with one, it closes
+              the take — see useEscape above. */}
+          <Button
+            variant="ghost"
+            onClick={finish}
+            aria-keyshortcuts={selected ? undefined : "Escape"}
+          >
             Finish
+            {!selected && <Kbd>Esc</Kbd>}
           </Button>
         </div>
       }
@@ -222,13 +229,18 @@ export function Rehearsal({
             variant="destructive"
             onClick={startTake}
             disabled={busy}
+            aria-keyshortcuts={selected ? undefined : "Space"}
           >
             <Circle className="fill-current" />
             Record take {session.next_take_number}
+            {/* With a take open Space plays it, and the key is on Play. */}
+            {!selected && <Kbd>Space</Kbd>}
           </Button>
-          <SpaceHint>
-            {selected ? "play / pause" : `records “${session.next_take_name}”`}
-          </SpaceHint>
+          {/* The name it will get can differ from the number — "Polyn 3" —
+              and this is the one place that says so before recording. */}
+          <p className="text-xs text-muted-foreground">
+            records “{session.next_take_name}”
+          </p>
         </div>
       }
     >
@@ -258,6 +270,7 @@ export function Rehearsal({
             onRemoveMarker={(sec) => removeMarker(selected, sec)}
             onCrop={(from, to) => void cropTake(selected, from, to)}
             canCrop={!busy}
+            spaceKey
           />
         ) : (
           session.takes.length > 0 && (

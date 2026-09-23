@@ -436,6 +436,11 @@ def main():
         if not cond:
             problems.append(label)
 
+    def key_on(page, selector):
+        """The key shown on a button, or None when it shows none."""
+        found = page.locator(f"{selector} kbd")
+        return found.first.inner_text().strip() if found.count() else None
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
 
@@ -527,6 +532,8 @@ def main():
         ok("one input shows signal", page.locator("text=signal").count() > 0)
         ok("the other shows silence", page.locator("text=silent").count() > 0)
         page.screenshot(path=str(SHOTS / "51-setup.png"))
+        ok("Start rehearsal carries its key",
+           key_on(page, "button:has-text('Start rehearsal')") == "Space")
         page.click("text=Stop checking")
 
         # With no /api route on this server, the meters can only have been
@@ -553,6 +560,8 @@ def main():
            len(calls("finish_rehearsal")) == 1)
         ok("and it says plainly that nothing was saved",
            page.locator("text=Saved: 0 takes").count() == 1)
+        ok("New rehearsal carries its key",
+           key_on(page, "button:has-text('New rehearsal')") == "Space")
         page.click("text=New rehearsal")
         page.wait_for_selector("text=Start rehearsal")
         page.click("text=Start rehearsal")
@@ -566,13 +575,20 @@ def main():
         ok("clipping is called out", page.locator("text=clipping").count() > 0)
         ok("a silent input is called out", page.locator("text=silent").count() > 0)
         page.screenshot(path=str(SHOTS / "52-recording.png"))
+        ok("Stop carries its key", key_on(page, "button:has-text('Stop')") == "Space")
+        ok("and the autosave note stays, without it",
+           page.get_by_text("autosaved every 30 s", exact=True).count() == 1)
 
         print("\n[6] Review: space saves, the name carries over")
         page.click("text=Stop")
         page.wait_for_selector("#take-name")
         ok("first take gets a number", page.input_value("#take-name") == "Take 1")
-        ok("the hint says what space does here",
-           page.get_by_text("save take", exact=True).count() == 1)
+        # The keys are on the buttons they press, not in a line underneath.
+        ok("Save take carries its key", key_on(page, "button:has-text('Save take')") == "Space")
+        ok("and Discard the one that asks to throw it away",
+           key_on(page, "button:has-text('Discard')") == "Esc")
+        ok("the line under the buttons is gone",
+           page.get_by_text("save take", exact=True).count() == 0)
 
         # Space no longer plays here, so the button is the way to listen.
         page.wait_for_selector("button[aria-label='Play']", timeout=8000)
@@ -581,6 +597,23 @@ def main():
         ok("the take can still be listened to before saving",
            len(calls("player_toggle")) == 1)
         page.click("button[aria-label='Pause']")
+
+        ok("the transport shows its keys",
+           key_on(page, "button[aria-label='Back 10 seconds']") == "←"
+           and key_on(page, "button[aria-label='Forward 10 seconds']") == "→"
+           and key_on(page, "button[aria-label='To start']") == "Home"
+           and key_on(page, "button[aria-label='Add marker']") == "M"
+           and key_on(page, "button[aria-label='Repeat']") == "R")
+        ok("but Play has none here, where Space saves the take",
+           key_on(page, "button[aria-label='Play']") is None)
+        page.keyboard.press("r")
+        page.wait_for_timeout(150)
+        ok("R turns repeat on",
+           page.get_attribute("button[aria-label='Repeat']", "aria-pressed") == "true")
+        page.keyboard.press("r")
+        page.wait_for_timeout(150)
+        ok("and off again",
+           page.get_attribute("button[aria-label='Repeat']", "aria-pressed") == "false")
 
         # The name field is on this screen, so space typed in it is a space.
         page.fill("#take-name", "Polyn")
@@ -690,12 +723,19 @@ def main():
         ok("a mark made before saving is on the saved take",
            page.locator("text=this one is the take").count() == 1)
 
+        ok("with a take open, Space is on Play",
+           key_on(page, "button[aria-label='Play']") == "Space")
+        ok("and not on Record take",
+           key_on(page, "button:has-text('Record take')") is None)
+        ok("nor Escape on Finish — here it closes the take",
+           key_on(page, "button:has-text('Finish')") is None)
+
         page.click("button[aria-label='Forward 10 seconds']")
         page.wait_for_timeout(200)
-        page.click("button[aria-label='Add marker']")
+        page.keyboard.press("m")
         page.wait_for_timeout(400)
         marker_calls = calls("add_take_marker")
-        ok("the marker went to Python", len(marker_calls) == 1)
+        ok("M drops a marker, and it went to Python", len(marker_calls) == 1)
         ok("at the current position", marker_calls and marker_calls[0]["args"][2] > 0)
 
         # The note opens by itself: the thought about what just went wrong
@@ -793,6 +833,10 @@ def main():
         page.wait_for_timeout(200)
         ok("and with nothing else open, escape closes the take",
            page.get_by_role("group", name="Take timeline").count() == 0)
+        ok("after which Space is back on Record take",
+           key_on(page, "button:has-text('Record take')") == "Space")
+        ok("and Escape is on Finish",
+           key_on(page, "button:has-text('Finish')") == "Esc")
 
         page.click("button[aria-label^='Take 2 Polyn 2']")
         page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
@@ -1269,6 +1313,7 @@ def main():
         page.wait_for_selector("text=Recording")
 
         # A screen with a way back has one on the keyboard too.
+        ok("the back button says so", key_on(page, "button[aria-label='Back']") == "Esc")
         page.keyboard.press("Escape")
         page.wait_for_selector("text=Start rehearsal")
         ok("escape leaves settings", page.locator("#input-device").count() == 0)
