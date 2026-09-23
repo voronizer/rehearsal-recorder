@@ -2467,6 +2467,39 @@ def main():
        import_all(st._lib, st._cloud_dir) == {"imported": 0, "failed": 0}
        and not (sticky / "session.json").exists())
 
+    print("\n[27] The disk and the settings are asked outside the transaction")
+    # A read holds the database's lock; a slow drive answering is_dir() must
+    # not hold it with it.
+    lib = g._lib
+    seen = []
+    real_cloud = lib._cloud_dir
+    real_is_dir = Path.is_dir
+
+    def watching_cloud():
+        seen.append(("cloud", lib._engine.pool.checkedout()))
+        return real_cloud()
+
+    def watching_is_dir(self, *args, **kwargs):
+        if self.parent == rec13:
+            seen.append(("disk", lib._engine.pool.checkedout()))
+        return real_is_dir(self, *args, **kwargs)
+
+    lib._cloud_dir = watching_cloud
+    Path.is_dir = watching_is_dir
+    try:
+        listed = lib.rehearsals()
+        one = lib.rehearsal(rf)
+        a_take = lib.take(rf, 1)
+    finally:
+        Path.is_dir = real_is_dir
+        lib._cloud_dir = real_cloud
+    ok("the reads still answer",
+       listed and one is not None and a_take is not None
+       and one["missing"] is False)
+    ok("with neither asked while the database is held",
+       {k for k, _ in seen} == {"cloud", "disk"}
+       and all(held == 0 for _, held in seen))
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

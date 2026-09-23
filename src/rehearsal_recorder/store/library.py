@@ -101,26 +101,49 @@ class Library:
         ).one_or_none()
 
     # ---------- shapes ----------
+    #
+    # Built in two steps. Inside the transaction, only what is in the rows is
+    # copied out (_take_data, _rehearsal_data); what needs the disk or the
+    # settings — whether the folder is there, where the cloud folder is — is
+    # added after it has closed (_take_out, _rehearsal_out). A transaction
+    # holds the database's write lock from its first statement, and a slow
+    # drive or a network folder answering is_dir() must not hold up every
+    # other thread's write for as long as it takes.
 
-    def _cloud_dict(self, copy):
-        cloud = self._cloud_dir()
+    @staticmethod
+    def _copy_data(copy):
+        if copy is None:
+            return None
+        return {
+            "mix": copy.mix,
+            "mix_format": copy.mix_format,
+            "gain": copy.gain,
+            "tracks": copy.tracks,
+            "tracks_format": copy.tracks_format,
+            "source": dict(copy.source or {}),
+        }
+
+    @staticmethod
+    def _cloud_dict(copy, cloud):
         if copy is None or cloud is None:
             return {}
         out = {}
-        if copy.mix:
-            out["mix"] = str(Path(cloud) / copy.mix)
-            if copy.mix_format is not None:
-                out["mix_format"] = copy.mix_format
-            if copy.gain is not None:
-                out["gain"] = copy.gain
-        if copy.tracks:
-            out["tracks"] = str(Path(cloud) / copy.tracks)
-            if copy.tracks_format is not None:
-                out["tracks_format"] = copy.tracks_format
-        out["source"] = dict(copy.source or {})
+        if copy["mix"]:
+            out["mix"] = str(Path(cloud) / copy["mix"])
+            if copy["mix_format"] is not None:
+                out["mix_format"] = copy["mix_format"]
+            if copy["gain"] is not None:
+                out["gain"] = copy["gain"]
+        if copy["tracks"]:
+            out["tracks"] = str(Path(cloud) / copy["tracks"])
+            if copy["tracks_format"] is not None:
+                out["tracks_format"] = copy["tracks_format"]
+        out["source"] = copy["source"]
         return out
 
-    def _take_dict(self, folder, take):
+    def _take_data(self, folder, take):
+        """The take as the interface gets it, but with "cloud" still the raw
+        row; _take_out finishes it."""
         out = {
             "take_number": take.take_number,
             "name": take.name,
@@ -131,7 +154,7 @@ class Library:
             "markers": [
                 {"at": m.at, "kind": m.kind, "note": m.note} for m in take.markers
             ],
-            "cloud": self._cloud_dict(take.cloud_copy),
+            "cloud": self._copy_data(take.cloud_copy),
             "cloud_skip": take.cloud_skip,
             "cloud_send": take.cloud_send,
         }
@@ -139,7 +162,13 @@ class Library:
             out["cloud_error"] = take.cloud_error
         return out
 
-    def _rehearsal_dict(self, rehearsal):
+    def _take_out(self, data, cloud):
+        if data is None:
+            return None
+        data["cloud"] = self._cloud_dict(data["cloud"], cloud)
+        return data
+
+    def _rehearsal_data(self, rehearsal):
         folder = self._folder(rehearsal.folder)
         return {
             "folder": str(folder),
@@ -148,9 +177,14 @@ class Library:
             "samplerate": rehearsal.samplerate,
             "bit_depth": rehearsal.bit_depth,
             "tracks": [{"name": t.name, "channel": t.channel} for t in rehearsal.tracks],
-            "takes": [self._take_dict(folder, t) for t in rehearsal.takes],
-            "missing": not folder.is_dir(),
+            "takes": [self._take_data(folder, t) for t in rehearsal.takes],
         }
+
+    def _rehearsal_out(self, data, cloud):
+        for take in data["takes"]:
+            self._take_out(take, cloud)
+        data["missing"] = not Path(data["folder"]).is_dir()
+        return data
 
     @staticmethod
     def _files(folder, tracks):
@@ -168,12 +202,15 @@ class Library:
             rows = db.scalars(
                 select(Rehearsal).options(*_WITH_TAKES).order_by(Rehearsal.created_at.desc())
             ).all()
-            return [self._rehearsal_dict(r) for r in rows]
+            data = [self._rehearsal_data(r) for r in rows]
+        cloud = self._cloud_dir()
+        return [self._rehearsal_out(d, cloud) for d in data]
 
     def rehearsal(self, folder):
         with self._session() as db:
             row = self._find(db, folder, *_WITH_TAKES)
-            return None if row is None else self._rehearsal_dict(row)
+            data = None if row is None else self._rehearsal_data(row)
+        return None if data is None else self._rehearsal_out(data, self._cloud_dir())
 
     def has(self, folder):
         with self._session() as db:
@@ -260,7 +297,8 @@ class Library:
                 selectinload(Take.files), selectinload(Take.markers),
                 selectinload(Take.cloud_copy),
             )
-            return None if row is None else self._take_dict(Path(folder), row)
+            data = None if row is None else self._take_data(Path(folder), row)
+        return self._take_out(data, self._cloud_dir())
 
     def add_take(self, folder, take):
         """
@@ -286,7 +324,8 @@ class Library:
             db.add(row)
             db.flush()
             db.refresh(row)
-            return self._take_dict(folder, row)
+            data = self._take_data(folder, row)
+        return self._take_out(data, self._cloud_dir())
 
     def update_take(self, folder, take_number, *, name=None, duration_sec=None,
                     tracks=None, markers=None):
@@ -307,7 +346,8 @@ class Library:
                 row.markers = [Marker(**as_marker(m)) for m in markers]
             db.flush()
             db.refresh(row)
-            return self._take_dict(folder, row)
+            data = self._take_data(folder, row)
+        return self._take_out(data, self._cloud_dir())
 
     def edit_markers(self, folder, take_number, fn):
         """fn(markers) -> markers, read and written in one transaction.
