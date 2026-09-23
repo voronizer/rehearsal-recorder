@@ -36,3 +36,12 @@ version_file = "src/rehearsal_recorder/_version.py"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The migrations are read from disk by Alembic, not imported as a package,
+# so they have to be named to be installed at all.
+[tool.setuptools.package-data]
+"rehearsal_recorder.store" = [
+    "migrations/*.py",
+    "migrations/*.mako",
+    "migrations/versions/*.py",
+]
