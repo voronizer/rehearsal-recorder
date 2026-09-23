@@ -100,6 +100,8 @@ export type SessionState =
       folder: string
       tracks: Track[]
       takes: Take[]
+      /** The takes grouped into songs, by Python's rule. */
+      songs: Song[]
       next_take_number: number
       next_take_name: string
       recording: boolean
@@ -114,6 +116,9 @@ export type SessionState =
 export type Song = {
   name: string
   takes: number
+  /** Which takes they were. Sent with an open rehearsal, for its overview;
+   *  the history list has only the count. */
+  take_numbers?: number[]
 }
 
 export type RehearsalSummary = {
@@ -135,6 +140,7 @@ export type RehearsalDetail = {
   name: string
   created_at: string
   takes: Take[]
+  songs: Song[]
 }
 
 export type TrackTemplate = {

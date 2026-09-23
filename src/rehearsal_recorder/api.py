@@ -130,8 +130,10 @@ _ATTEMPT_NUMBER = re.compile(r"^(.*?)[\s]+(\d+)$")
 
 def _songs_of(takes):
     """
-    What was played, as [{"name", "takes"}] in the order things were first
-    played. Nobody types this in: a take inherits the previous one's name with
+    What was played, as [{"name", "takes", "take_numbers"}] in the order
+    things were first played. `take_numbers` is which takes they were, for the
+    rehearsal's own overview — so the interface is handed the grouping rather
+    than keeping a second copy of the rule below that could drift from it. Nobody types this in: a take inherits the previous one's name with
     the attempt number bumped (see suggest_take_name), so "Polyn", "Polyn 2"
     and "Polyn 3" are three goes at one song, and dropping that trailing
     number is enough to group them.
@@ -154,8 +156,10 @@ def _songs_of(takes):
         key = base.casefold()
         if key in by_key:
             by_key[key]["takes"] += 1
+            by_key[key]["take_numbers"].append(take.get("take_number"))
         else:
-            song = {"name": base, "takes": 1}
+            song = {"name": base, "takes": 1,
+                    "take_numbers": [take.get("take_number")]}
             by_key[key] = song
             songs.append(song)
     return songs
@@ -717,6 +721,7 @@ class Api:
             "folder": str(s["folder"]),
             "tracks": s["tracks"],
             "takes": s["takes"],
+            "songs": _songs_of(s["takes"]),
             "next_take_number": s["take_counter"] + 1,
             "next_take_name": self.suggest_take_name(),
             "recording": self._recorder is not None,
@@ -1082,6 +1087,7 @@ class Api:
             "name": meta.get("name", ""),
             "created_at": meta.get("created_at", ""),
             "takes": takes,
+            "songs": _songs_of(takes),
         }
 
     # ---------- renaming ----------

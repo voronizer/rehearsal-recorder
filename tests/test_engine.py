@@ -1614,6 +1614,27 @@ def main():
     ok("without dropping the unnamed one from the count",
        by_name["Half"]["take_count"] == 3)
 
+    # The rehearsal's own overview groups its takes the same way, so it is
+    # told which takes each song is rather than working the rule out again.
+    opened = d.get_rehearsal(str(tmp4 / "Rec" / "Half - 2026-09-08 19-00"))
+    ok("an opened rehearsal says which takes each song is",
+       [(s["name"], s["take_numbers"]) for s in opened["songs"]]
+       == [("Polyn", [2, 3])])
+
+    d.start_rehearsal("Live", 0, SR, [{"name": "Gtr", "channel": 1}])
+    live_folder = Path(d._session["folder"])
+    for number, name in ((1, "Vesna"), (2, "Take 2"), (3, "Vesna 2")):
+        draft = live_folder / "_drafts" / f"take {number}"
+        write_wav(draft / "Gtr.wav", 100, seconds=0.5)
+        d._session["take_counter"] = number
+        d.keep_take(number, str(draft), name, 0.5,
+                    [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    ok("so does the one being recorded",
+       [(s["name"], s["take_numbers"]) for s in d.session_state()["songs"]]
+       == [("Vesna", [1, 3])])
+    ok("and the history list keeps its count",
+       all("takes" in s for s in by_name["Songs"]["songs"]))
+
     print("\n[16b] And how much of the disk it is using")
     # Walked rather than estimated from the durations: a take encoded
     # differently, or one that never finished, makes any guess wrong.

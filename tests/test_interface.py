@@ -111,6 +111,22 @@ function suggestName(n) {
   return m ? `${m[1]} ${Number(m[2]) + 1}` : `${last} 2`;
 }
 
+// Python groups takes into songs (api._songs_of) and hands the result over;
+// the mock does the same, simply: drop a trailing attempt number, skip the
+// takes the app named itself.
+function songsOf(takes) {
+  const songs = [], byKey = {};
+  for (const t of takes) {
+    const name = (t.name || '').trim();
+    if (!name || /^Take \\d+$/.test(name)) continue;
+    const base = name.replace(/\\s+\\d+$/, '');
+    const key = base.toLowerCase();
+    if (byKey[key]) { byKey[key].takes++; byKey[key].take_numbers.push(t.take_number); }
+    else { byKey[key] = {name: base, takes: 1, take_numbers: [t.take_number]}; songs.push(byKey[key]); }
+  }
+  return songs;
+}
+
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
   // With a host API named, this is the Windows shape once ASIO is loaded:
@@ -190,7 +206,8 @@ window.__MAKE_API__ = () => ({
     // own mutable state, silently hiding any bug where a listener keeps
     // rendering a stale copy instead of reading the fresh one.
     return JSON.parse(JSON.stringify({active:true, name:session.name, folder:session.folder,
-       tracks:session.tracks, takes:session.takes, next_take_number:takeCounter + 1,
+       tracks:session.tracks, takes:session.takes, songs:songsOf(session.takes),
+       next_take_number:takeCounter + 1,
        next_take_name:suggestName(), recording:false, cloud_queue:cq}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
@@ -343,10 +360,24 @@ window.__MAKE_API__ = () => ({
     // A page can ask for another length, to put a tick where it wants one.
     const oldLength = window.__OLD_LENGTH_SEC__ || 600;
     fileDurations['/rec/old/g.wav'] = oldLength;
+    // A page can ask for a fuller evening, for the rehearsal overview.
+    const takes = window.__FULL_EVENING__ ? [
+      {take_number:1, name:'Polyn', duration_sec:192, markers:[],
+       tracks:[{name:'Guitar', file:'/rec/old/p1.wav'}]},
+      {take_number:2, name:'Polyn 2', duration_sec:178,
+       markers:[{at:72, note:'this one is the take', kind:'good'}],
+       tracks:[{name:'Guitar', file:'/rec/old/p2.wav'}]},
+      {take_number:3, name:'Take 3', duration_sec:90,
+       markers:[{at:5, note:'', kind:'note'}],
+       tracks:[{name:'Guitar', file:'/rec/old/t3.wav'}]},
+      {take_number:4, name:'Vesna', duration_sec:250,
+       markers:[{at:40, note:'guitar drifts here', kind:'issue'}],
+       tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
+    ] : [{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
+          tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
+    for (const t of takes) fileDurations[t.tracks[0].file] = t.duration_sec;
     return JSON.parse(JSON.stringify({ok:true, folder, name:'Tuesday jam',
-      created_at:'2026-09-10T19:00:00',
-      takes:[{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
-              tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}]}));
+      created_at:'2026-09-10T19:00:00', takes, songs:songsOf(takes)}));
   },
   delete_take: track('delete_take', async () => ({ok:true, trashed:true, takes_left:0})),
   delete_rehearsal: track('delete_rehearsal', async () => ({ok:true, trashed:true})),
@@ -1592,6 +1623,48 @@ def main():
         }""")
         ok("and the last label is still there, inside the ruler", inside)
         edge.close()
+
+        print("\n[12f] An open rehearsal with no take picked shows the evening")
+        # It used to be one lonely "Pick a take" under the strip. What was
+        # played, how many goes each song got and every note left while
+        # listening are all known already, and are what you came back for.
+        eve = browser.new_page(viewport={"width": 1180, "height": 820})
+        eve.add_init_script("window.__FULL_EVENING__ = true;" + MOCK)
+        eve.goto(server.base_url, wait_until="networkidle")
+        eve.wait_for_selector("text=Start rehearsal")
+        eve.click("text=History")
+        eve.wait_for_selector("text=Tuesday jam")
+        eve.click("text=Tuesday jam")
+        eve.wait_for_selector("[aria-label='Rehearsal overview']")
+        overview = eve.locator("[aria-label='Rehearsal overview']").inner_text()
+        ok("it says how long and how many", "4 takes" in overview and "11:50" in overview)
+        ok("each song with its goes", "Polyn" in overview and "×2" in overview
+           and "Vesna" in overview)
+        ok("and the takes nobody named, together", "Not named" in overview)
+        ok("the notes are listed", "this one is the take" in overview
+           and "guitar drifts here" in overview)
+        ok("a plain mark with nothing written is not a note",
+           eve.locator("[aria-label='Rehearsal overview'] [data-note]").count() == 2)
+        ok("no lonely 'pick a take' line", eve.locator("text=Pick a take").count() == 0)
+        eve.screenshot(path=str(SHOTS / "60-overview.png"))
+
+        eve.click("[aria-label='Rehearsal overview'] >> text=guitar drifts here")
+        eve.wait_for_selector("[aria-label='Take timeline']")
+        eve.wait_for_timeout(600)
+        seeks = eve.evaluate("() => window.__CALLS__.filter(c => c.name === 'player_seek')")
+        ok("a note opens its take",
+           "Vesna" in eve.locator("button[aria-current='true']").inner_text())
+        ok("at the spot it was left", bool(seeks) and abs(seeks[-1]["args"][0] - 40) < 0.5)
+        ok("and the overview makes way for the player",
+           eve.locator("[aria-label='Rehearsal overview']").count() == 0)
+
+        eve.keyboard.press("Escape")
+        eve.wait_for_selector("[aria-label='Rehearsal overview']")
+        eve.click("[aria-label='Rehearsal overview'] button[aria-label='Open Polyn 2']")
+        eve.wait_for_selector("[aria-label='Take timeline']")
+        ok("a take in the overview opens it",
+           "Polyn 2" in eve.locator("button[aria-current='true']").inner_text())
+        eve.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})

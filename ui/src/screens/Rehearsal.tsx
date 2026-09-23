@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Kbd, Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
@@ -35,7 +36,7 @@ export function Rehearsal({
   onFinished: (folder: string, takeCount: number) => void
   onChanged: () => void
 }) {
-  const { selected, select, reselect, player } = useTakeStripPlayer()
+  const { selected, select, reselect, openAt, player } = useTakeStripPlayer()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toDelete, setToDelete] = useState<Take | null>(null)
@@ -274,9 +275,12 @@ export function Rehearsal({
           />
         ) : (
           session.takes.length > 0 && (
-            <p className="text-sm text-muted-foreground">
-              Pick a take to listen back to it.
-            </p>
+            <RehearsalOverview
+              takes={session.takes}
+              songs={session.songs ?? []}
+              onOpen={select}
+              onOpenAt={openAt}
+            />
           )
         )}
 

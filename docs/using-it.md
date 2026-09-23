@@ -27,7 +27,10 @@ What each screen is for, and the decisions behind how they behave.
 - **Rehearsal** — the hub: the takes recorded so far and a big "Record take"
   button. Takes are a strip along the top; click one to listen to it in the
   player below. Nothing is selected until you pick one, so opening a rehearsal
-  does not start reading audio files nobody asked for. Clicking a take again
+  does not start reading audio files nobody asked for; until then the space
+  where the player goes shows the evening — the songs with their goes and
+  lengths, and every note left while listening, each of which opens its take
+  at that spot. History shows the same overview for a past rehearsal. Clicking a take again
   keeps it open — selecting is sticky.
 - **Recording** — a large timer, a level meter per track, and a status line
   that is always visible: interface connected, how much recording time the

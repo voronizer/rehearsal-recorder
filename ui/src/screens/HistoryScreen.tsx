@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Shell, EmptyState } from "@/components/Shell"
 import { RehearsalRow } from "@/components/RehearsalRow"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
@@ -71,7 +72,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   const [rehearsalToRename, setRehearsalToRename] =
     useState<RehearsalSummary | null>(null)
   const [renamingOpened, setRenamingOpened] = useState(false)
-  const { selected, select, reselect, player } = useTakeStripPlayer()
+  const { selected, select, reselect, openAt, player } = useTakeStripPlayer()
 
   const refresh = async () => setRehearsals(await api().list_rehearsals())
 
@@ -275,9 +276,12 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
             />
           ) : (
             opened.takes.length > 0 && (
-              <p className="text-sm text-muted-foreground">
-                Pick a take to listen back to it.
-              </p>
+              <RehearsalOverview
+                takes={opened.takes}
+                songs={opened.songs ?? []}
+                onOpen={select}
+                onOpenAt={openAt}
+              />
             )
           )}
         </div>

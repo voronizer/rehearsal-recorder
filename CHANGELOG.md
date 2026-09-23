@@ -37,6 +37,11 @@ opening.
   end of the transport) rather than drawn on its small buttons, which kept
   the row as plain as it was. Three of them are new: Home goes to the start,
   M marks, R turns Repeat on and off. None of them fire while typing a name.
+- An open rehearsal with no take picked shows the evening instead of one
+  line asking you to pick a take: how long it ran, each song with its goes
+  and their lengths, the takes nobody named, and every note left while
+  listening. A take opens from there, and a note opens its take at the spot
+  it was left.
 - A tick just before the end of a take no longer puts a sideways scrollbar
   under the last track on Windows.
 
