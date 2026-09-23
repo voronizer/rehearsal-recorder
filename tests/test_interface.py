@@ -51,7 +51,7 @@ let drafts = window.__DRAFTS__ || [];
 let cloudDir = null;
 let cloudFormat = 'wav';
 let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
-let recording = {device_index: 0, samplerate: 44100, bit_depth: 24};
+let recording = {device_index: window.__NO_DEVICE__ ? null : 0, samplerate: 44100, bit_depth: 24};
 // Real playback reads each file's own length off disk; the mock has no
 // disk, so a track's duration is looked up here by its own file path,
 // falling back to the live session's TAKE-second default. Every path used
@@ -1233,6 +1233,24 @@ def main():
         page.wait_for_timeout(400)
         ok("confirming deletes", len(calls("delete_rehearsal")) == 1)
 
+        print("\n[11a] Setup does not guess a driver when several are offered")
+        # A Windows-shaped list (several drivers) with nothing resolved: a
+        # legacy choice dropped on upgrade, or an unplugged card. Guessing
+        # devs[0] here would usually land on an MME entry nobody chose.
+        nodev = browser.new_page(viewport={"width": 1180, "height": 820})
+        nodev.add_init_script(
+            """window.__HOST_API__ = 'Windows WASAPI';
+               window.__NO_DEVICE__ = true;"""
+            + MOCK
+        )
+        nodev.goto(server.base_url, wait_until="networkidle")
+        nodev.wait_for_selector("text=Start rehearsal")
+        ok("nothing resolved and several drivers: no interface chosen",
+           nodev.locator("text=No interface chosen").count() == 1)
+        ok("and starting is blocked",
+           nodev.get_by_role("button", name="Start rehearsal").is_disabled())
+        nodev.close()
+
         print("\n[12] Settings: output, folders, appearance")
         page.click("button[aria-label='Back']")
         page.wait_for_selector("text=Start rehearsal")
@@ -1409,6 +1427,8 @@ def main():
 
         ok("playback is chosen the same way",
            win.locator("#output-device-driver").count() == 1)
+        ok("with nothing saved the first driver is shown",
+           "MME" in win.inner_text("#output-device-driver"))
         win.click("#output-device-driver")
         ok("offering only drivers with an output",
            sorted(win.get_by_role("option").all_inner_texts()) == ["ASIO", "MME"])
