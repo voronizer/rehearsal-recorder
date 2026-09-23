@@ -28,6 +28,11 @@ from rehearsal_recorder.audio.format import unpack24
 
 BLOCK_FRAMES = 1024
 
+def channel_label(channels):
+    """How the person reads a choice of outputs: "3–4", or "5" for one."""
+    return "–".join(str(c) for c in channels)
+
+
 # How quickly gain follows a change. Switching the coefficient instantly
 # clicks, so it is eased towards the target over a few blocks.
 GAIN_SMOOTHING = 0.25
@@ -122,7 +127,12 @@ class TakePlayer:
         self._soloed = None
         self._finished = False
 
+        # The mix is always stereo. Where it goes on the card is separate: the
+        # stream is opened as wide as the highest output asked for, and
+        # `_route` names the columns (0-based) the mix is written into.
         self._out_channels = 2
+        self._stream_channels = 2
+        self._route = (0, 1)
         self._stream = None
 
         # Buffers are allocated once and reused. Allocating inside an audio
@@ -136,19 +146,36 @@ class TakePlayer:
         # numbers, once per block.
         self._i32 = None
 
-    def open_output(self, device_index=None):
+    def open_output(self, device_index=None, channels=(1, 2)):
         """
         Opens the output. Returns a complaint when the chosen device could not
         be used and the system one was taken instead — the take still plays,
         the person just needs to know it is coming out somewhere else.
+
+        `channels` is where on the card the mix comes out, counted from 1 the
+        way the card's own labels count: a pair such as (3, 4), or one output
+        on its own, (5,). The system output is always 1–2 — which of its
+        channels are which is the system's business, not ours.
         """
         index, complaint = usable_output(device_index, self.samplerate)
+        channels = tuple(channels) if index is not None else (1, 2)
+
+        if index is not None:
+            info = sd.query_devices(index)
+            if max(channels) > info.get("max_output_channels", 2):
+                complaint = (
+                    f"“{info.get('name', 'The chosen device')}” has no output "
+                    f"{channel_label(channels)} — playing through 1–2."
+                )
+                channels = (1, 2)
 
         with STREAM_LOCK:
             self.close_output()
+            self._route = tuple(c - 1 for c in channels)
+            self._stream_channels = max(channels)
             self._stream = sd.OutputStream(
                 device=index,
-                channels=self._out_channels,
+                channels=self._stream_channels,
                 samplerate=self.samplerate,
                 dtype="int16",
                 blocksize=BLOCK_FRAMES,
@@ -263,7 +290,20 @@ class TakePlayer:
         if status:
             self.last_status = str(status)
         with self._lock:
-            outdata[:] = self._render(frames)
+            mix = self._render(frames)
+            if self._stream_channels == 2 and self._route == (0, 1):
+                outdata[:] = mix
+                return
+            outdata.fill(0)
+            if len(self._route) == 2:
+                outdata[:, self._route[0]] = mix[:, 0]
+                outdata[:, self._route[1]] = mix[:, 1]
+            else:
+                # One output on its own takes the left side, which is the
+                # whole mix: every track goes to both sides equally, so left
+                # and right are the same samples. If tracks ever get a pan,
+                # this has to become the average of the two.
+                outdata[:, self._route[0]] = mix[:, 0]
 
     # ---------- transport ----------
 

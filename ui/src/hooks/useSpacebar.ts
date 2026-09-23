@@ -72,6 +72,36 @@ export function useEscape(handler: () => void, enabled = true) {
   }, [enabled])
 }
 
+/**
+ * One more key for a button that had none: Home to the start, M to mark,
+ * R to repeat. `key` is compared with `KeyboardEvent.key`, case-insensitive,
+ * so R works with Caps Lock on. The same rules as Space: nothing while
+ * typing or behind a dialog, nothing with Ctrl/Cmd/Alt held — those belong
+ * to the system — and nothing on a slider, where Home already means "to the
+ * bottom of this slider".
+ */
+export function useKey(key: string, handler: () => void, enabled = true) {
+  const handlerRef = useRef(handler)
+  handlerRef.current = handler
+
+  useEffect(() => {
+    if (!enabled) return
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== key.toLowerCase() || e.repeat) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const el = document.activeElement
+      if (keyIsClaimed(el)) return
+      if (el?.getAttribute("role") === "slider") return
+      e.preventDefault()
+      handlerRef.current()
+    }
+
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [key, enabled])
+}
+
 const SKIP_SECONDS = 10
 
 /**

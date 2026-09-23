@@ -15,6 +15,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Timeline } from "@/components/Timeline"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { PlayerKeys } from "@/components/PlayerKeys"
+import { useKey } from "@/hooks/useSpacebar"
 import { canBePutBack, goesTo } from "@/lib/deletion"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
@@ -42,6 +44,7 @@ export function TakePlayer({
   onRemoveMarker,
   onCrop,
   canCrop = true,
+  spaceKey = false,
 }: {
   player: MultitrackPlayer
   /** Saved listening markers, in order. */
@@ -55,6 +58,9 @@ export function TakePlayer({
    *  real seconds, and a second click is not a no-op: Python re-reads the now
    *  shorter take and cuts it again. */
   canCrop?: boolean
+  /** Space plays and pauses on this screen. On the review screen it saves
+   *  the take instead, and Play must not claim it. */
+  spaceKey?: boolean
 }) {
   const [cropping, setCropping] = useState(false)
   // The same rule the timeline draws by: one end set reaches to the take's
@@ -75,6 +81,7 @@ export function TakePlayer({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <Transport
         player={player}
+        spaceKey={spaceKey}
         markers={markers}
         onAddMarker={onAddMarker}
         onEditMarker={onEditMarker}
@@ -205,8 +212,10 @@ function Transport({
   canCrop,
   cropTitle,
   cropWhyOff,
+  spaceKey,
 }: {
   player: MultitrackPlayer
+  spaceKey: boolean
   markers: Marker[]
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
@@ -226,14 +235,27 @@ function Transport({
 
   // A marker within a second of the cursor counts as "this one".
   const nearby = markers.find((m) => Math.abs(m.at - position) < 1)
+  const mark = () =>
+    nearby !== undefined ? onEditMarker?.(nearby) : onAddMarker?.(position)
+
+  // The arrows are usePlayerKeys, bound by each screen; these three belong
+  // to buttons that only exist here, so they are bound where the buttons are.
+  useKey("Home", player.restart, !player.loading)
+  useKey("m", mark, !!onAddMarker && !player.loading)
+  useKey("r", player.toggleLoop, !player.loading)
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3">
+    <div
+      role="toolbar"
+      aria-label="Transport"
+      className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"
+    >
       <Button
         variant="ghost"
         size="icon-sm"
         onClick={player.restart}
         aria-label="To start"
+        aria-keyshortcuts="Home"
         title="To start"
         disabled={player.loading}
       >
@@ -244,6 +266,7 @@ function Transport({
         size="icon-sm"
         onClick={() => player.skip(-SKIP_SECONDS)}
         aria-label={`Back ${SKIP_SECONDS} seconds`}
+        aria-keyshortcuts="ArrowLeft"
         disabled={player.loading}
       >
         <Undo2 />
@@ -255,6 +278,7 @@ function Transport({
         onClick={player.toggle}
         disabled={player.loading || !!player.loadError}
         aria-label={player.playing ? "Pause" : "Play"}
+        aria-keyshortcuts={spaceKey ? "Space" : undefined}
       >
         {player.loading ? (
           <Loader2 className="animate-spin" />
@@ -270,6 +294,7 @@ function Transport({
         size="icon-sm"
         onClick={() => player.skip(SKIP_SECONDS)}
         aria-label={`Forward ${SKIP_SECONDS} seconds`}
+        aria-keyshortcuts="ArrowRight"
         disabled={player.loading}
       >
         <Redo2 />
@@ -284,13 +309,10 @@ function Transport({
         <Button
           variant={nearby !== undefined ? "default" : "outline"}
           size="sm"
-          onClick={() =>
-            nearby !== undefined
-              ? onEditMarker?.(nearby)
-              : onAddMarker(position)
-          }
+          onClick={mark}
           disabled={player.loading}
           aria-label={nearby !== undefined ? "Edit marker" : "Add marker"}
+          aria-keyshortcuts="M"
           title={
             nearby !== undefined
               ? "There is already a marker here — open it"
@@ -327,6 +349,7 @@ function Transport({
           disabled={player.loading}
           aria-pressed={looping}
           aria-label="Repeat"
+          aria-keyshortcuts="R"
           title={loopBand ? "Loop the marked stretch" : "Loop the whole take"}
           className={cn(looping && "bg-warn text-warn-foreground hover:bg-warn/90")}
         >
@@ -354,6 +377,8 @@ function Transport({
             )}
           </>
         )}
+
+        <PlayerKeys spaceKey={spaceKey} />
       </div>
     </div>
   )

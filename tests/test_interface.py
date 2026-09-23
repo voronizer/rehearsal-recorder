@@ -48,10 +48,11 @@ let P = null;                 // player state, mirroring audio/player.py
 let session = null;
 let takeCounter = 0;
 let drafts = window.__DRAFTS__ || [];
-let cloudDir = null;
+let cloudDir = window.__CLOUD_DIR__ || null;
 let cloudFormat = 'wav';
 let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
-let recording = {device_index: 0, samplerate: 44100, bit_depth: 24};
+let recording = {device_index: window.__NO_DEVICE__ ? null : 0, samplerate: 44100, bit_depth: 24};
+let outputDevice = {index: null};
 // Real playback reads each file's own length off disk; the mock has no
 // disk, so a track's duration is looked up here by its own file path,
 // falling back to the live session's TAKE-second default. Every path used
@@ -110,23 +111,52 @@ function suggestName(n) {
   return m ? `${m[1]} ${Number(m[2]) + 1}` : `${last} 2`;
 }
 
+// Python groups takes into songs (api._songs_of) and hands the result over;
+// the mock does the same, simply: drop a trailing attempt number, skip the
+// takes the app named itself.
+function songsOf(takes) {
+  const songs = [], byKey = {};
+  for (const t of takes) {
+    const name = (t.name || '').trim();
+    if (!name || /^Take \\d+$/.test(name)) continue;
+    const base = name.replace(/\\s+\\d+$/, '');
+    const key = base.toLowerCase();
+    if (byKey[key]) { byKey[key].takes++; byKey[key].take_numbers.push(t.take_number); }
+    else { byKey[key] = {name: base, takes: 1, take_numbers: [t.take_number]}; songs.push(byKey[key]); }
+  }
+  return songs;
+}
+
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
-  // With a host API named, this is the Windows shape: one card listed once
-  // per audio system, same name every time, and not the same channel count.
+  // With a host API named, this is the Windows shape once ASIO is loaded:
+  // one mixer through three systems with three different input counts.
   list_input_devices: async () => (window.__HOST_API__ ? [
-    {index:0, name:'Universal Audio Thunderbolt', host_api: window.__HOST_API__,
-     max_input_channels:8, max_output_channels:0, default_samplerate:48000},
-    {index:1, name:'Universal Audio Thunderbolt', host_api:'MME',
-     max_input_channels:2, max_output_channels:0, default_samplerate:48000}] : [
-    {index:0, name:'Universal Audio Thunderbolt', host_api:'',
+    {index:0, name:'X32 USB', host_api:'MME',
+     max_input_channels:2, max_output_channels:0, default_samplerate:48000},
+    {index:3, name:'X32 USB', host_api:'ASIO',
+     max_input_channels:16, max_output_channels:16, default_samplerate:48000},
+    {index:5, name:'X32 USB', host_api:window.__HOST_API__,
+     max_input_channels:8, max_output_channels:0, default_samplerate:48000}] : [
+    {index:0, name:'Universal Audio Thunderbolt', host_api:'Core Audio',
      max_input_channels:18, max_output_channels:0, default_samplerate:48000}]),
-  list_output_devices: async () => ([
-    {index:0, name:'UA Monitors', host_api:'', max_input_channels:0,
+  list_output_devices: async () => (window.__HOST_API__ ? [
+    {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
      max_output_channels:2, default_samplerate:48000},
-    {index:1, name:'MacBook Speakers', host_api:'', max_input_channels:0,
+    {index:3, name:'X32 USB', host_api:'ASIO', max_input_channels:16,
+     max_output_channels:16, default_samplerate:48000}] : [
+    {index:0, name:'UA Monitors', host_api:'Core Audio', max_input_channels:0,
+     max_output_channels:2, default_samplerate:48000},
+    {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
      max_output_channels:2, default_samplerate:48000}]),
-  set_output_device: track('set_output_device', async () => ({ok:true})),
+  set_output_device: track('set_output_device', async (idx) => {
+    outputDevice = {index: idx, channels: [1, 2]};
+    return {ok:true};
+  }),
+  set_output_channels: track('set_output_channels', async (channels) => {
+    outputDevice = {...outputDevice, channels};
+    return {ok:true};
+  }),
   load_default_tracks: async () => ({
     tracks:[{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]}),
   set_recording_format: track('set_recording_format', async (dev, rate, depth) => {
@@ -176,7 +206,8 @@ window.__MAKE_API__ = () => ({
     // own mutable state, silently hiding any bug where a listener keeps
     // rendering a stale copy instead of reading the fresh one.
     return JSON.parse(JSON.stringify({active:true, name:session.name, folder:session.folder,
-       tracks:session.tracks, takes:session.takes, next_take_number:takeCounter + 1,
+       tracks:session.tracks, takes:session.takes, songs:songsOf(session.takes),
+       next_take_number:takeCounter + 1,
        next_take_name:suggestName(), recording:false, cloud_queue:cq}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
@@ -326,11 +357,28 @@ window.__MAKE_API__ = () => ({
   get_rehearsal: async (folder) => {
     // Its own path, distinct from the live session's /rec/g.wav — two takes
     // sharing a dummy path would let one's mocked length leak onto the other.
-    fileDurations['/rec/old/g.wav'] = 600;
+    // A page can ask for another length, to put a tick where it wants one.
+    const oldLength = window.__OLD_LENGTH_SEC__ || 600;
+    fileDurations['/rec/old/g.wav'] = oldLength;
+    // A page can ask for a fuller evening, for the rehearsal overview.
+    const takes = window.__FULL_EVENING__ ? [
+      {take_number:1, name:'Polyn', duration_sec:192, markers:[],
+       tracks:[{name:'Guitar', file:'/rec/old/p1.wav'}]},
+      {take_number:2, name:'Polyn 2', duration_sec:178,
+       markers:[{at:72, note:'this one is the take', kind:'good'}],
+       cloud:{mix:'/cloud/Tuesday jam/02 - Polyn 2.mp3', mix_format:'mp3'},
+       tracks:[{name:'Guitar', file:'/rec/old/p2.wav'}]},
+      {take_number:3, name:'Take 3', duration_sec:90,
+       markers:[{at:5, note:'', kind:'note'}],
+       tracks:[{name:'Guitar', file:'/rec/old/t3.wav'}]},
+      {take_number:4, name:'Vesna', duration_sec:250,
+       markers:[{at:40, note:'guitar drifts here', kind:'issue'}],
+       tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
+    ] : [{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
+          tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
+    for (const t of takes) fileDurations[t.tracks[0].file] = t.duration_sec;
     return JSON.parse(JSON.stringify({ok:true, folder, name:'Tuesday jam',
-      created_at:'2026-09-10T19:00:00',
-      takes:[{take_number:1, name:'Polyn', duration_sec:600, markers:[],
-              tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}]}));
+      created_at:'2026-09-10T19:00:00', takes, songs:songsOf(takes)}));
   },
   delete_take: track('delete_take', async () => ({ok:true, trashed:true, takes_left:0})),
   delete_rehearsal: track('delete_rehearsal', async () => ({ok:true, trashed:true})),
@@ -363,7 +411,8 @@ window.__MAKE_API__ = () => ({
     default_recordings_dir:'/Users/alex/RehearsalRecordings',
     device_index: recording.device_index, samplerate: recording.samplerate,
     bit_depth: recording.bit_depth, supported_bit_depths:[16, 24],
-    tracks:[], volumes:{}, output_device_index:null,
+    tracks:[], volumes:{}, output_device_index: outputDevice.index,
+    output_channels: outputDevice.channels || [1, 2],
     cloud_format: cloudFormat,
     auto_publish: autoPublish.on, auto_publish_what: autoPublish.what,
     cloud_formats:[
@@ -390,6 +439,15 @@ window.__MAKE_API__ = () => ({
   }),
 });
 window.pywebview = { api: window.__MAKE_API__() };
+// A page can make a call fail the way pywebview fails one whose Python
+// raised: the promise rejects with an Error carrying the exception's name.
+for (const [method, message] of Object.entries(window.__FAIL__ || {})) {
+  window.pywebview.api[method] = async () => {
+    const e = new Error(message);
+    e.name = 'UnicodeEncodeError';
+    throw e;
+  };
+}
 """.replace("TAKE", str(TAKE_SECONDS))
 
 
@@ -418,6 +476,11 @@ def main():
         print(("  ok   " if cond else "  FAIL ") + label)
         if not cond:
             problems.append(label)
+
+    def key_on(page, selector):
+        """The key shown on a button, or None when it shows none."""
+        found = page.locator(f"{selector} :is(kbd, [data-key])")
+        return found.first.inner_text().strip() if found.count() else None
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -510,6 +573,8 @@ def main():
         ok("one input shows signal", page.locator("text=signal").count() > 0)
         ok("the other shows silence", page.locator("text=silent").count() > 0)
         page.screenshot(path=str(SHOTS / "51-setup.png"))
+        ok("Start rehearsal carries its key",
+           key_on(page, "button:has-text('Start rehearsal')") == "Space")
         page.click("text=Stop checking")
 
         # With no /api route on this server, the meters can only have been
@@ -536,6 +601,8 @@ def main():
            len(calls("finish_rehearsal")) == 1)
         ok("and it says plainly that nothing was saved",
            page.locator("text=Saved: 0 takes").count() == 1)
+        ok("New rehearsal carries its key",
+           key_on(page, "button:has-text('New rehearsal')") == "Space")
         page.click("text=New rehearsal")
         page.wait_for_selector("text=Start rehearsal")
         page.click("text=Start rehearsal")
@@ -549,13 +616,23 @@ def main():
         ok("clipping is called out", page.locator("text=clipping").count() > 0)
         ok("a silent input is called out", page.locator("text=silent").count() > 0)
         page.screenshot(path=str(SHOTS / "52-recording.png"))
+        ok("Stop carries its key", key_on(page, "button:has-text('Stop')") == "Space")
+        ok("and the autosave note stays, without it",
+           page.get_by_text("autosaved every 30 s", exact=True).count() == 1)
 
         print("\n[6] Review: space saves, the name carries over")
         page.click("text=Stop")
         page.wait_for_selector("#take-name")
         ok("first take gets a number", page.input_value("#take-name") == "Take 1")
-        ok("the hint says what space does here",
-           page.get_by_text("save take", exact=True).count() == 1)
+        # The keys are on the buttons they press, not in a line underneath.
+        ok("Save take carries its key", key_on(page, "button:has-text('Save take')") == "Space")
+        ok("and Discard the one that asks to throw it away",
+           key_on(page, "button:has-text('Discard')") == "Esc")
+        ok("the line under the buttons is gone",
+           page.get_by_text("save take", exact=True).count() == 0)
+        ok("with no cloud folder it says the take stays on this computer",
+           page.locator("text=Stays on this computer").count() == 1
+           and page.locator("#send-to-cloud").count() == 0)
 
         # Space no longer plays here, so the button is the way to listen.
         page.wait_for_selector("button[aria-label='Play']", timeout=8000)
@@ -564,6 +641,32 @@ def main():
         ok("the take can still be listened to before saving",
            len(calls("player_toggle")) == 1)
         page.click("button[aria-label='Pause']")
+
+        # The transport stays as it was: a key drawn on each small button
+        # was clutter however it was drawn. They are listed behind "?".
+        ok("the transport draws no keys on its buttons",
+           page.locator("[role='toolbar'][aria-label='Transport'] :is(kbd, [data-key])").count() == 0
+           and page.locator("[role='toolbar'][aria-label='Transport']").count() == 1)
+        page.keyboard.press("?")
+        page.wait_for_selector("text=Keys in the player")
+        listed = page.get_by_role("dialog").inner_text()
+        ok("? lists the player's keys",
+           all(k in listed for k in ("Home", "To the start", "Mark", "Repeat", "10 seconds")))
+        ok("without Space here, where Space saves the take",
+           "Play / pause" not in listed)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        ok("and Escape closes the list, not the take",
+           page.locator("text=Keys in the player").count() == 0
+           and page.locator("text=Discard this take?").count() == 0)
+        page.keyboard.press("r")
+        page.wait_for_timeout(150)
+        ok("R turns repeat on",
+           page.get_attribute("button[aria-label='Repeat']", "aria-pressed") == "true")
+        page.keyboard.press("r")
+        page.wait_for_timeout(150)
+        ok("and off again",
+           page.get_attribute("button[aria-label='Repeat']", "aria-pressed") == "false")
 
         # The name field is on this screen, so space typed in it is a space.
         page.fill("#take-name", "Polyn")
@@ -673,12 +776,23 @@ def main():
         ok("a mark made before saving is on the saved take",
            page.locator("text=this one is the take").count() == 1)
 
+        page.click("button[aria-label='Player keys']")
+        page.wait_for_selector("text=Keys in the player")
+        ok("the ? button lists Space here, where it plays",
+           "Play / pause" in page.get_by_role("dialog").inner_text())
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        ok("and not on Record take",
+           key_on(page, "button:has-text('Record take')") is None)
+        ok("nor Escape on Finish — here it closes the take",
+           key_on(page, "button:has-text('Finish')") is None)
+
         page.click("button[aria-label='Forward 10 seconds']")
         page.wait_for_timeout(200)
-        page.click("button[aria-label='Add marker']")
+        page.keyboard.press("m")
         page.wait_for_timeout(400)
         marker_calls = calls("add_take_marker")
-        ok("the marker went to Python", len(marker_calls) == 1)
+        ok("M drops a marker, and it went to Python", len(marker_calls) == 1)
         ok("at the current position", marker_calls and marker_calls[0]["args"][2] > 0)
 
         # The note opens by itself: the thought about what just went wrong
@@ -776,6 +890,10 @@ def main():
         page.wait_for_timeout(200)
         ok("and with nothing else open, escape closes the take",
            page.get_by_role("group", name="Take timeline").count() == 0)
+        ok("after which Space is back on Record take",
+           key_on(page, "button:has-text('Record take')") == "Space")
+        ok("and Escape is on Finish",
+           key_on(page, "button:has-text('Finish')") == "Esc")
 
         page.click("button[aria-label^='Take 2 Polyn 2']")
         page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
@@ -1227,6 +1345,24 @@ def main():
         page.wait_for_timeout(400)
         ok("confirming deletes", len(calls("delete_rehearsal")) == 1)
 
+        print("\n[11a] Setup does not guess a driver when several are offered")
+        # A Windows-shaped list (several drivers) with nothing resolved: a
+        # legacy choice dropped on upgrade, or an unplugged card. Guessing
+        # devs[0] here would usually land on an MME entry nobody chose.
+        nodev = browser.new_page(viewport={"width": 1180, "height": 820})
+        nodev.add_init_script(
+            """window.__HOST_API__ = 'Windows WASAPI';
+               window.__NO_DEVICE__ = true;"""
+            + MOCK
+        )
+        nodev.goto(server.base_url, wait_until="networkidle")
+        nodev.wait_for_selector("text=Start rehearsal")
+        ok("nothing resolved and several drivers: no interface chosen",
+           nodev.locator("text=No interface chosen").count() == 1)
+        ok("and starting is blocked",
+           nodev.get_by_role("button", name="Start rehearsal").is_disabled())
+        nodev.close()
+
         print("\n[12] Settings: output, folders, appearance")
         page.click("button[aria-label='Back']")
         page.wait_for_selector("text=Start rehearsal")
@@ -1234,6 +1370,7 @@ def main():
         page.wait_for_selector("text=Recording")
 
         # A screen with a way back has one on the keyboard too.
+        ok("the back button says so", key_on(page, "button[aria-label='Back']") == "Esc")
         page.keyboard.press("Escape")
         page.wait_for_selector("text=Start rehearsal")
         ok("escape leaves settings", page.locator("#input-device").count() == 0)
@@ -1278,12 +1415,14 @@ def main():
         page.wait_for_selector("#input-device")
         ok("the interface is chosen here",
            page.locator("#input-device").count() == 1)
-        # One card, one entry: the note about duplicates would be noise here,
-        # and a note that is always on is a note nobody reads.
-        ok("and nothing is said about duplicates when there are none",
-           page.locator(
-               "text=they do not all offer the same number of inputs"
-           ).count() == 0)
+        # One audio system: choosing it would be a question with one answer.
+        ok("there is no driver to choose on a Mac",
+           page.locator("#input-device-driver").count() == 0
+           and page.locator("#output-device-driver").count() == 0)
+        ok("and nothing is said about drivers",
+           page.locator("text=Each driver can offer").count() == 0)
+        ok("nor about outputs, with the system output chosen",
+           page.locator("#output-channels").count() == 0)
         ok("the rates the card can do are offered",
            page.locator("button[aria-label='44.1 kHz']").count() == 1
            and page.locator("button[aria-label='96 kHz']").count() == 1)
@@ -1353,6 +1492,14 @@ def main():
         )
         win.goto(server.base_url, wait_until="networkidle")
         win.wait_for_selector("text=Start rehearsal")
+
+        # `page` is closed by now, so `calls` (bound to it) cannot be reused
+        # here — this page has its own window.__CALLS__.
+        def win_calls(name):
+            return win.evaluate(
+                f"() => window.__CALLS__.filter(c => c.name === '{name}')"
+            )
+
         win.click("text=History")
         win.wait_for_selector("text=Tuesday jam")
         win.click("button[aria-label='Delete rehearsal Tuesday jam']")
@@ -1368,15 +1515,74 @@ def main():
         win.wait_for_selector("text=Start rehearsal")
         win.click("button[aria-label='Settings']")
         win.wait_for_selector("#input-device")
-        ok("the audio system is shown next to the card",
-           win.locator("text=Windows WASAPI").count() > 0)
-        # Somebody who knows their desk has sixteen inputs and is offered
-        # eight has no way to guess that the other rows with the same name
-        # are the same desk seen through another system.
-        ok("and a card listed twice says why one entry may look smaller",
-           win.locator(
-               "text=they do not all offer the same number of inputs"
-           ).count() == 1)
+        ok("the driver is chosen first",
+           win.locator("#input-device-driver").count() == 1)
+        ok("starting from the one the saved card is on",
+           "MME" in win.inner_text("#input-device-driver"))
+        ok("and the card itself no longer repeats it",
+           "(MME)" not in win.inner_text("#input-device"))
+        ok("with a line on why the driver matters",
+           win.locator("text=Each driver can offer").count() == 1)
+
+        win.click("#input-device-driver")
+        drivers = win.get_by_role("option").all_inner_texts()
+        ok("every driver with an input is offered, once each",
+           sorted(drivers) == ["ASIO", "MME", "Windows WASAPI"])
+        win.get_by_role("option", name="ASIO").click()
+        win.wait_for_timeout(200)
+        ok("changing the driver saves nothing on its own",
+           not any(c["args"][0] == 3 for c in win_calls("set_recording_format")))
+        win.click("#input-device")
+        ok("its devices are what is offered",
+           win.get_by_role("option").all_inner_texts() == ["X32 USB · up to 16 ch"])
+        win.get_by_role("option").first.click()
+        win.wait_for_timeout(300)
+        ok("and picking one saves it",
+           win_calls("set_recording_format")[-1]["args"][0] == 3)
+
+        ok("playback is chosen the same way",
+           win.locator("#output-device-driver").count() == 1)
+        ok("with nothing saved the first driver is shown",
+           "MME" in win.inner_text("#output-device-driver"))
+        win.click("#output-device-driver")
+        ok("offering only drivers with an output",
+           sorted(win.get_by_role("option").all_inner_texts()) == ["ASIO", "MME"])
+        win.get_by_role("option", name="ASIO").click()
+        win.click("#output-device")
+        ok("the system output is still there under any driver",
+           win.get_by_role("option").all_inner_texts()
+           == ["System output", "X32 USB"])
+        win.get_by_role("option", name="X32 USB").click()
+        win.wait_for_timeout(300)
+        ok("and picking a card switches to it",
+           win_calls("set_output_device")[-1]["args"][0] == 3)
+
+        # A 16-output desk: which of its outputs the mix comes out of.
+        win.wait_for_selector("#output-channels")
+        ok("a card with more than a pair asks which outputs",
+           "1–2" in win.inner_text("#output-channels"))
+        win.click("#output-channels")
+        offered = win.get_by_role("option").all_inner_texts()
+        ok("pairs first, the way cards label them",
+           offered[:3] == ["1–2", "3–4", "5–6"] and "2–3" not in offered)
+        ok("then each output on its own",
+           "1 (mono)" in offered and "16 (mono)" in offered
+           and len(offered) == 8 + 16)
+        win.get_by_role("option", name="3–4", exact=True).click()
+        win.wait_for_timeout(300)
+        ok("picking a pair reaches Python",
+           win_calls("set_output_channels")[-1]["args"][0] == [3, 4])
+        ok("and stays shown", "3–4" in win.inner_text("#output-channels"))
+
+        # The chosen card is on ASIO; switching to a driver that does not
+        # carry it must not read as "System output" — nothing was unchosen.
+        win.click("#output-device-driver")
+        win.get_by_role("option", name="MME").click()
+        win.wait_for_timeout(150)
+        ok("a card on another driver does not masquerade as system output",
+           "System output" not in win.inner_text("#output-device"))
+        ok("a neutral placeholder is shown instead",
+           "Pick an output" in win.inner_text("#output-device"))
 
         win.get_by_role("button", name="Folders", exact=True).first.click()
         win.wait_for_selector("#recordings-dir")
@@ -1398,6 +1604,160 @@ def main():
            win.locator("text=soundfile package is missing").count() == 1)
         win.screenshot(path=str(SHOTS / "57-windows-shaped.png"))
         win.close()
+
+        print("\n[12e] A tick at the very end does not push the lanes sideways")
+        # 10:06 puts the 10:00 tick at 99% of the ruler. Its label used to hang
+        # past the edge, and the lanes' scroll container — overflow-y: auto
+        # makes overflow-x auto as well — grew a horizontal scrollbar under
+        # the last track. Chromium headless hides scrollbars, so the overflow
+        # itself is measured rather than looked at.
+        edge = browser.new_page(viewport={"width": 1180, "height": 820})
+        edge.add_init_script("window.__OLD_LENGTH_SEC__ = 606;" + MOCK)
+        edge.goto(server.base_url, wait_until="networkidle")
+        edge.wait_for_selector("text=Start rehearsal")
+        edge.click("text=History")
+        edge.wait_for_selector("text=Tuesday jam")
+        edge.click("text=Tuesday jam")
+        edge.locator("button[aria-label='Take 1 Polyn']").click()
+        edge.wait_for_selector("[aria-label='Timeline clock'] >> text=10:00")
+        sideways = edge.evaluate("""() => {
+          const ruler = document.querySelector("[aria-label='Timeline clock']");
+          let el = ruler.parentElement;
+          while (el && getComputedStyle(el).overflowY !== 'auto') el = el.parentElement;
+          return el.scrollWidth - el.clientWidth;
+        }""")
+        ok("the lanes do not scroll sideways", sideways <= 0)
+        inside = edge.evaluate("""() => {
+          const ruler = document.querySelector("[aria-label='Timeline clock']");
+          const edge = ruler.getBoundingClientRect().right;
+          return [...ruler.querySelectorAll('span')]
+            .filter(s => s.textContent === '10:00')
+            .every(s => s.getBoundingClientRect().right <= edge + 0.5);
+        }""")
+        ok("and the last label is still there, inside the ruler", inside)
+        edge.close()
+
+        print("\n[12f] An open rehearsal with no take picked shows the evening")
+        # It used to be one lonely "Pick a take" under the strip. What was
+        # played, how many goes each song got and every note left while
+        # listening are all known already, and are what you came back for.
+        eve = browser.new_page(viewport={"width": 1180, "height": 820})
+        eve.add_init_script("window.__FULL_EVENING__ = true;" + MOCK)
+        eve.goto(server.base_url, wait_until="networkidle")
+        eve.wait_for_selector("text=Start rehearsal")
+        eve.click("text=History")
+        eve.wait_for_selector("text=Tuesday jam")
+        eve.click("text=Tuesday jam")
+        eve.wait_for_selector("[aria-label='Rehearsal overview']")
+        overview = eve.locator("[aria-label='Rehearsal overview']").inner_text()
+        ok("it says how long and how many", "4 takes" in overview and "11:50" in overview)
+        ok("each song with its goes", "Polyn" in overview and "×2" in overview
+           and "Vesna" in overview)
+        ok("and the takes nobody named, together", "Not named" in overview)
+        ok("the notes are listed", "this one is the take" in overview
+           and "guitar drifts here" in overview)
+        ok("a plain mark with nothing written is not a note",
+           eve.locator("[aria-label='Rehearsal overview'] [data-note]").count() == 2)
+        ok("no lonely 'pick a take' line", eve.locator("text=Pick a take").count() == 0)
+        ok("a take already in the cloud folder says so on its chip",
+           eve.locator("button[aria-label='Take 2 Polyn 2'] [data-in-cloud]").count() == 1)
+        ok("and the others do not",
+           eve.locator("[aria-label='Rehearsal overview'] [data-in-cloud]").count() == 1)
+        ok("and no strip of pills repeating it",
+           eve.get_by_role("group", name="Take strip").count() == 0)
+        eve.screenshot(path=str(SHOTS / "60-overview.png"))
+
+        eve.click("[aria-label='Rehearsal overview'] >> text=guitar drifts here")
+        eve.wait_for_selector("[aria-label='Take timeline']")
+        eve.wait_for_timeout(600)
+        seeks = eve.evaluate("() => window.__CALLS__.filter(c => c.name === 'player_seek')")
+        ok("a note opens its take",
+           "Vesna" in eve.locator("button[aria-current='true']").inner_text())
+        ok("at the spot it was left", bool(seeks) and abs(seeks[-1]["args"][0] - 40) < 0.5)
+        ok("and the overview makes way for the player",
+           eve.locator("[aria-label='Rehearsal overview']").count() == 0)
+        ok("and the strip is back, to switch takes without going back",
+           eve.get_by_role("group", name="Take strip").count() == 1)
+
+        eve.keyboard.press("Escape")
+        eve.wait_for_selector("[aria-label='Rehearsal overview']")
+        eve.click("[aria-label='Rehearsal overview'] button[aria-label='Take 2 Polyn 2']")
+        eve.wait_for_selector("[aria-label='Take timeline']")
+        ok("a take in the overview opens it",
+           "Polyn 2" in eve.locator("button[aria-current='true']").inner_text())
+        eve.close()
+
+        print("\n[12g] A call that fails in Python says so")
+        # Save take on Windows raised inside Python; the promise rejected, no
+        # screen caught it, and the button just dimmed and stayed dimmed.
+        bad = browser.new_page(viewport={"width": 1180, "height": 820})
+        bad.add_init_script(
+            "window.__FAIL__ = {keep_take: \"'charmap' codec can't encode characters\"};"
+            + MOCK)
+        bad.goto(server.base_url, wait_until="networkidle")
+        bad.wait_for_selector("text=Start rehearsal")
+        bad.click("text=Start rehearsal")
+        bad.wait_for_selector("text=Record take 1")
+        bad.click("text=Record take 1")
+        bad.wait_for_selector("text=Stop")
+        bad.click("text=Stop")
+        bad.wait_for_selector("#take-name")
+        bad.click("button:has-text('Save take')")
+        bad.wait_for_selector("[role='alert'][aria-label='Something went wrong']")
+        bar = bad.locator("[role='alert'][aria-label='Something went wrong']").inner_text()
+        ok("a bar says what failed", "charmap" in bar and "UnicodeEncodeError" in bar)
+        ok("and where the whole of it is written down", "crash.log" in bar)
+        ok("the screen gets an answer, so Save take is not left dimmed",
+           bad.locator("button:has-text('Save take')").is_enabled())
+        ok("and says it could not save, in its own place",
+           bad.locator("text=charmap").count() >= 2)
+        bad.get_by_role("button", name="Dismiss").click()
+        bad.wait_for_timeout(200)
+        ok("the bar can be put away",
+           bad.locator("[role='alert'][aria-label='Something went wrong']").count() == 0)
+        bad.close()
+
+        print("\n[12h] Saving a take says whether it goes to the cloud")
+        sky = browser.new_page(viewport={"width": 1180, "height": 820})
+        sky.add_init_script(
+            "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';"
+            "window.__AUTO_PUBLISH__ = {on:true, what:'mix'};" + MOCK)
+        sky.goto(server.base_url, wait_until="networkidle")
+        sky.wait_for_selector("text=Start rehearsal")
+        sky.click("text=Start rehearsal")
+
+        def record_and_review(n):
+            sky.wait_for_selector(f"text=Record take {n}")
+            sky.click(f"text=Record take {n}")
+            sky.wait_for_selector("text=Stop")
+            sky.click("text=Stop")
+            sky.wait_for_selector("#send-to-cloud")
+
+        def sent_as():
+            kept = sky.evaluate(
+                "() => window.__CALLS__.filter(c => c.name === 'keep_take')")
+            args = kept[-1]["args"]
+            return args[6] if len(args) > 6 else None
+
+        record_and_review(1)
+        ok("with sending on, the take is set to go",
+           sky.is_checked("#send-to-cloud"))
+        ok("and it says what goes",
+           "the mix" in sky.inner_text("label[for='send-to-cloud']")
+           and "WAV" in sky.inner_text("label[for='send-to-cloud']"))
+        sky.uncheck("#send-to-cloud")
+        # Space right after clicking the box must still save, not re-tick it.
+        sky.keyboard.press("Space")
+        sky.wait_for_timeout(400)
+        ok("unticked, this take is kept out", sent_as() is False)
+
+        record_and_review(2)
+        ok("the next take starts from the setting again, not from the last one",
+           sky.is_checked("#send-to-cloud"))
+        sky.click("button:has-text('Save take')")
+        sky.wait_for_timeout(400)
+        ok("and left alone it simply follows the setting", sent_as() is None)
+        sky.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})

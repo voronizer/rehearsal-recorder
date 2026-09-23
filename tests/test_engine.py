@@ -48,7 +48,7 @@ class _FakeStream:
 
 
 # The devices this fake machine has: 0 is a proper interface, 1 is an input
-# only, and 2 refuses anything but 44100.
+# only, 2 refuses anything but 44100, and 3 is a desk with eight outputs.
 _DEVICES = [
     {"name": "Interface", "max_output_channels": 2, "max_input_channels": 8,
      "hostapi": 0, "default_samplerate": 48000},
@@ -56,6 +56,8 @@ _DEVICES = [
      "hostapi": 0, "default_samplerate": 44100},
     {"name": "Fussy DAC", "max_output_channels": 2, "max_input_channels": 0,
      "hostapi": 0, "default_samplerate": 44100},
+    {"name": "Desk", "max_output_channels": 8, "max_input_channels": 0,
+     "hostapi": 0, "default_samplerate": 48000},
 ]
 
 
@@ -284,6 +286,165 @@ def main():
     p3.close()
     ok("a full close lets the audio go", p3.tracks == [])
 
+    print("\n[4d] A saved device is found again after the list moves")
+    from rehearsal_recorder.audio.devices import device_identity, saved_device
+
+    # The shape Windows takes once ASIO is loaded: the same mixer through
+    # three systems, ASIO inserted in the middle so later indices shift.
+    win_apis = [{"name": "MME"}, {"name": "ASIO"}, {"name": "Windows WASAPI"}]
+    win_devices = [
+        {"name": "X32", "hostapi": 0, "max_input_channels": 2,
+         "max_output_channels": 2, "default_samplerate": 48000},
+        {"name": "X32", "hostapi": 1, "max_input_channels": 16,
+         "max_output_channels": 16, "default_samplerate": 48000},
+        {"name": "X32", "hostapi": 2, "max_input_channels": 8,
+         "max_output_channels": 2, "default_samplerate": 48000},
+        {"name": "X32", "hostapi": 2, "max_input_channels": 8,
+         "max_output_channels": 2, "default_samplerate": 48000},
+    ]
+    real_q, real_h = _sd.query_devices, _sd.query_hostapis
+    _sd.query_hostapis = lambda: win_apis
+    _sd.query_devices = (
+        lambda index=None, kind=None:
+        win_devices if index is None else win_devices[index]
+    )
+    try:
+        ok("a device is described by name and audio system",
+           device_identity(2) == {"name": "X32", "host_api": "Windows WASAPI"})
+        ok("nothing chosen describes as nothing", device_identity(None) is None)
+        ok("an unknown index describes as nothing", device_identity(99) is None)
+
+        # Saved as WASAPI when it was index 1, before ASIO pushed it along.
+        cfg = {"device_index": 1,
+               "device": {"name": "X32", "host_api": "Windows WASAPI"}}
+        ok("it is found by name and system, not by the old index",
+           saved_device(cfg, "device", True, "win32") == 2)
+
+        cfg = {"device_index": 3,
+               "device": {"name": "X32", "host_api": "Windows WASAPI"}}
+        ok("of two identical cards the stored index still picks one",
+           saved_device(cfg, "device", True, "win32") == 3)
+
+        cfg = {"device_index": 0,
+               "device": {"name": "Behringer", "host_api": "ASIO"}}
+        ok("a card that is not plugged in is not chosen",
+           saved_device(cfg, "device", True, "win32") is None)
+
+        ok("on Windows an index with no name is not trusted",
+           saved_device({"device_index": 2}, "device", True, "win32") is None)
+        ok("elsewhere it is used as before",
+           saved_device({"device_index": 2}, "device", True, "darwin") == 2)
+        ok("nothing saved is nothing chosen",
+           saved_device({}, "device", True, "win32") is None)
+        ok("the output is read from its own keys",
+           saved_device({"output_device_index": 5,
+                         "output_device": {"name": "X32", "host_api": "ASIO"}},
+                        "output_device", False, "win32") == 1)
+    finally:
+        _sd.query_devices, _sd.query_hostapis = real_q, real_h
+
+    print("\n[4e] Settings save what the device is and read it back")
+    apimod, a = fresh_api(tmp / "devices")
+    a.set_recording_format(0, 48000, 24)
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("the recording interface is saved by name and system",
+       saved.get("device") == {"name": "Interface", "host_api": "CoreAudio"})
+    a.set_output_device(2)
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("so is the playback output",
+       saved.get("output_device") == {"name": "Fussy DAC", "host_api": "CoreAudio"})
+    a.set_output_device(None)
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("the system output leaves no name behind",
+       saved.get("output_device") is None
+       and saved.get("output_device_index") is None)
+
+    a.save_default_tracks({"device_index": 1, "tracks": [{"name": "V", "channel": 1}]})
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("the setup screen's template saves it the same way",
+       saved.get("device") == {"name": "Podcast mic", "host_api": "CoreAudio"})
+
+    # The card moved: identity says index 0 now, the stored index says 1.
+    a._config["device_index"] = 1
+    a._config["device"] = {"name": "Interface", "host_api": "CoreAudio"}
+    ok("settings report where the card is now",
+       a.get_settings()["device_index"] == 0)
+    ok("and so does the template the setup screen loads",
+       a.load_default_tracks()["device_index"] == 0)
+    ok("every device says which system it came through, even alone",
+       all(d["host_api"] == "CoreAudio" for d in a.list_input_devices()))
+
+    # Settings sends the *resolved* device_index, which is None when the
+    # saved card is unplugged. Recording has no "system input", so that None
+    # must not be read as "forget the card" — only as "nothing to change".
+    a.set_recording_format(0, 48000, 24)
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    a.set_recording_format(None, 44100, 16)
+    saved2 = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("an unplugged card does not wipe the saved identity",
+       saved2.get("device") == saved.get("device") == {"name": "Interface", "host_api": "CoreAudio"})
+    ok("but the rate and depth still change",
+       saved2.get("samplerate") == 44100 and saved2.get("bit_depth") == 16)
+
+    print("\n[4f] Playback through a chosen pair of outputs")
+    p4 = TakePlayer(tracks)
+    complaint = p4.open_output(3, (3, 4))
+    ok("the stream is opened wide enough to reach 3–4",
+       p4._stream.kw["channels"] == 4 and complaint is None)
+    p4.play()
+    settle(p4)
+    block = np.zeros((512, 4), dtype=np.int16)
+    p4._callback(block, 512, None, None)
+    ok("the mix comes out of 3 and 4",
+       abs(int(block[:, 2].mean()) - 3000) < 30
+       and abs(int(block[:, 3].mean()) - 3000) < 30)
+    ok("and 1 and 2 stay silent", not block[:, :2].any())
+
+    complaint = p4.open_output(3, (5,))
+    ok("one output on its own opens as far as that output",
+       p4._stream.kw["channels"] == 5 and complaint is None)
+    block = np.full((512, 5), 7, dtype=np.int16)
+    p4._callback(block, 512, None, None)
+    ok("the mix comes out of that one alone, at the same level",
+       abs(int(block[:, 4].mean()) - 3000) < 30 and not block[:, :4].any())
+
+    complaint = p4.open_output(0, (3, 4))
+    ok("a card without those outputs plays through 1–2",
+       p4._stream.kw["channels"] == 2)
+    ok("and says so", complaint and "3–4" in complaint and "1–2" in complaint)
+
+    complaint = p4.open_output(None, (3, 4))
+    ok("the system output is always 1–2, without a word",
+       p4._stream.kw["channels"] == 2 and complaint is None)
+    p4.close()
+
+    a.set_output_device(3)
+    ok("a new card starts on 1–2", a.get_settings()["output_channels"] == [1, 2])
+    res = a.set_output_channels([3, 4])
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("a pair is saved", res["ok"] and saved.get("output_channels") == [3, 4])
+    ok("and reported back", a.get_settings()["output_channels"] == [3, 4])
+    ok("so is a single output", a.set_output_channels([5])["ok"]
+       and a.get_settings()["output_channels"] == [5])
+    ok("two outputs that are not a pair are refused",
+       not a.set_output_channels([2, 3])["ok"])
+    ok("and so is output 0", not a.set_output_channels([0])["ok"])
+    ok("and nothing refused was saved", a.get_settings()["output_channels"] == [5])
+
+    a.set_output_channels([3, 4])
+    opened = a.player_open(tracks)
+    ok("a take opens on the saved pair",
+       opened["ok"] and a._player._stream.kw["channels"] == 4)
+    a.set_output_channels([1, 2])
+    ok("changing the pair mid-take reopens the output",
+       a._player._stream.kw["channels"] == 2)
+    a.set_output_channels([3, 4])
+    a.set_output_device(0)
+    ok("choosing another card starts it again from 1–2",
+       a.get_settings()["output_channels"] == [1, 2]
+       and a._player._stream.kw["channels"] == 2)
+    a.player_close()
+
     print("\n[5] Tracks of different length do not break the mix")
     write_wav(tmp / "short.wav", 500, seconds=0.5)
     p2 = TakePlayer([
@@ -509,6 +670,61 @@ def main():
     ok("and they are the samples we sent",
        (tmp / "levels" / "Gtr.raw").read_bytes()[:2] == struct.pack("<h", -32000))
 
+    print("\n[7d] A take can be saved and dropped while it is still playing")
+    # The review screen plays the take it is asking about, so its files are
+    # memory-mapped when Save or Discard arrives. Windows will not move or
+    # remove a mapped file; on a Mac this passed, on Windows Save did nothing.
+    _, busy = fresh_api(tmp / "busy")
+    busy.start_rehearsal("Busy", 0, SR, [{"name": "Gtr", "channel": 1}])
+    busy_folder = Path(busy._session["folder"])
+    for number in (1, 2):
+        d = busy_folder / "_drafts" / f"take {number}"
+        write_wav(d / "Gtr.wav", 100, seconds=1.0)
+    first = busy_folder / "_drafts" / "take 1"
+    busy.player_open([{"name": "Gtr", "file": str(first / "Gtr.wav")}])
+    kept = busy.keep_take(1, str(first), "Open one", 1.0,
+                          [{"name": "Gtr", "file": str(first / "Gtr.wav")}])
+    ok("saving a take that is open in the player works",
+       kept.get("ok") and Path(kept["take"]["tracks"][0]["file"]).exists())
+    ok("and nothing is left behind in the drafts", not first.exists())
+
+    second = busy_folder / "_drafts" / "take 2"
+    busy.player_open([{"name": "Gtr", "file": str(second / "Gtr.wav")}])
+    dropped = busy.discard_take(str(second))
+    ok("dropping one that is open works too",
+       dropped.get("ok") and not second.exists())
+
+    # The same trap after saving: the rehearsal screen plays the take that is
+    # selected, and deleting it is done from the same screen.
+    busy.player_open(kept["take"]["tracks"])
+    gone = busy.delete_take(str(busy_folder), 1)
+    ok("deleting a take that is playing works",
+       gone.get("ok") and not Path(kept["take"]["tracks"][0]["file"]).exists())
+
+    busy.start_rehearsal("Other", 0, SR, [{"name": "Gtr", "channel": 1}])
+    d = Path(busy._session["folder"]) / "_drafts" / "take 1"
+    write_wav(d / "Gtr.wav", 100, seconds=1.0)
+    old = busy.keep_take(1, str(d), "Old", 1.0,
+                         [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
+    old_folder = Path(busy._session["folder"])
+    busy._session = None  # a past rehearsal, as seen from History
+    busy.player_open(old["take"]["tracks"])
+    ok("so does deleting a whole rehearsal with a take playing",
+       busy.delete_rehearsal(str(old_folder)).get("ok")
+       and not old_folder.exists())
+
+    # And only the take being moved is let go of.
+    busy.start_rehearsal("Third", 0, SR, [{"name": "Gtr", "channel": 1}])
+    third = Path(busy._session["folder"])
+    for number in (1, 2):
+        d = third / "_drafts" / f"take {number}"
+        write_wav(d / "Gtr.wav", 100, seconds=1.0)
+    listening = [{"name": "Gtr", "file": str(third / "_drafts" / "take 2" / "Gtr.wav")}]
+    busy.player_open(listening)
+    busy.discard_take(str(third / "_drafts" / "take 1"))
+    ok("a player on another take keeps playing", busy._player is not None)
+    busy.player_close()
+
     print("\n[8] Take naming carries over")
     a.start_rehearsal("Jam", 0, SR, [{"name": "Gtr", "channel": 1}])
     folder = Path(a._session["folder"])
@@ -559,6 +775,55 @@ def main():
     keep(10, "Plain")
     ok("a take saved without marks has none",
        a.get_rehearsal(str(folder))["takes"][-1]["markers"] == [])
+
+    print("\n[8c] Names in any script, and renaming what is playing")
+    # session.json and config.json were written in the system's code page.
+    # On Windows that is cp1252, which has no Cyrillic: renaming a take
+    # "Полынь" raised UnicodeEncodeError and nothing was renamed.
+    _, ru = fresh_api(tmp / "names")
+    ru.start_rehearsal("Names", 0, SR, [{"name": "Gtr", "channel": 1}])
+    ru_folder = Path(ru._session["folder"])
+    d = ru_folder / "_drafts" / "take 1"
+    write_wav(d / "Gtr.wav", 100, seconds=1.0)
+    first = ru.keep_take(1, str(d), "Take 1", 1.0,
+                         [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
+    renamed = ru.rename_take(str(ru_folder), 1, "Полынь")
+    ok("a take can be named in Cyrillic", renamed.get("ok"))
+    ok("and the name is on disk, readable back",
+       ru._read_meta(ru_folder)["takes"][0]["name"] == "Полынь")
+    ok("in UTF-8, whatever the system's code page",
+       "Полынь" in (ru_folder / "session.json").read_bytes().decode("utf-8"))
+
+    # The rehearsal screen plays the take it offers to rename, and Windows
+    # will not rename a folder holding a mapped file — the folder stayed
+    # "01 - Take 1" without a word.
+    ru.player_open(renamed["take"]["tracks"])
+    again = ru.rename_take(str(ru_folder), 1, "Весна")
+    ok("renaming the take that is playing renames its folder too",
+       again.get("ok")
+       and Path(again["take"]["tracks"][0]["file"]).parent.name == "01 - Весна"
+       and Path(again["take"]["tracks"][0]["file"]).exists())
+
+    ru.player_open(again["take"]["tracks"])
+    whole = ru.rename_rehearsal(str(ru_folder), "Репетиция")
+    ok("and so does renaming the rehearsal it is in",
+       whole.get("ok") and Path(whole["folder"]).exists()
+       and ru._read_meta(Path(whole["folder"]))["name"] == "Репетиция")
+    ru.player_close()
+
+    names_cfg = ru.save_default_tracks({"tracks": [{"name": "Гитара", "channel": 1}]})
+    ok("the config takes Cyrillic track names",
+       names_cfg.get("ok")
+       and "Гитара" in (tmp / "names" / "config.json").read_bytes().decode("utf-8"))
+
+    # A file an older version wrote on Windows is in cp1252. Reading it as
+    # UTF-8 alone would make the rehearsal vanish from History.
+    legacy = tmp / "legacy"
+    legacy.mkdir()
+    (legacy / "session.json").write_bytes(
+        json.dumps({"name": "Café", "takes": []}, ensure_ascii=False).encode("cp1252"))
+    ok("a session.json an older version wrote is still read",
+       (ru._read_meta(legacy) or {}).get("name") == "Café")
 
     print("\n[9] Renaming")
     r = a.rename_take(str(folder), 1, "Polyn (best)")
@@ -940,6 +1205,48 @@ def main():
     }))
     removed = b.cleanup_empty_rehearsals()["removed"]
     ok("the empty one is gone", removed == 1 and not stale.exists())
+
+    print("\n[11e2] Each take can go to the cloud or not, whatever the setting")
+    # The review screen says whether this take will be sent and lets that be
+    # turned the other way for this one take: a false start kept anyway need
+    # not go up, and the one good take of an evening can, with sending off.
+    _, c = fresh_api(tmp / "choice")
+    c.set_cloud_dir(str(tmp / "choice" / "Drive"))
+    c.set_cloud_format("wav")
+    c.start_rehearsal("Choice", None, SR, [{"name": "A", "channel": 1}], 16)
+    choice_folder = Path(c._session["folder"])
+
+    def keep_one(number, send):
+        d = choice_folder / "_drafts" / f"take {number}"
+        write_wav(d / "one.wav", 900)
+        c._session["take_counter"] = number
+        return c.keep_take(number, str(d), f"Take {number}", 2.0,
+                           [{"name": "A", "file": str(d / "one.wav")}], [], send)
+
+    c.set_auto_publish(True, "mix")
+    keep_one(1, False)
+    ok("with sending on, a take kept with 'not this one' is not queued",
+       c.session_state()["cloud_queue"] == {})
+    c.set_cloud_format("flac")  # a change that re-sends the whole rehearsal
+    ok("and a later re-send of the rehearsal leaves it out too",
+       1 not in c.session_state()["cloud_queue"])
+    while c._cloud_queue.run_next():
+        pass
+    ok("so it never reaches the cloud folder",
+       "cloud" not in c.get_rehearsal(str(choice_folder))["takes"][0])
+
+    c.set_auto_publish(False)
+    keep_one(2, True)
+    ok("with sending off, a take kept with 'send this one' is queued",
+       c.session_state()["cloud_queue"] == {2: "queued"})
+    while c._cloud_queue.run_next():
+        pass
+    sent = c.get_rehearsal(str(choice_folder))["takes"][1]
+    ok("and it is sent", Path(sent.get("cloud", {}).get("mix", "")).exists())
+
+    keep_one(3, None)
+    ok("left to the setting, it follows the setting",
+       3 not in c.session_state()["cloud_queue"])
 
     print("\n[11f] A saved take goes on its own")
     solo = tmp / "Solo"
@@ -1397,6 +1704,27 @@ def main():
        == [("Polyn", 2)])
     ok("without dropping the unnamed one from the count",
        by_name["Half"]["take_count"] == 3)
+
+    # The rehearsal's own overview groups its takes the same way, so it is
+    # told which takes each song is rather than working the rule out again.
+    opened = d.get_rehearsal(str(tmp4 / "Rec" / "Half - 2026-09-08 19-00"))
+    ok("an opened rehearsal says which takes each song is",
+       [(s["name"], s["take_numbers"]) for s in opened["songs"]]
+       == [("Polyn", [2, 3])])
+
+    d.start_rehearsal("Live", 0, SR, [{"name": "Gtr", "channel": 1}])
+    live_folder = Path(d._session["folder"])
+    for number, name in ((1, "Vesna"), (2, "Take 2"), (3, "Vesna 2")):
+        draft = live_folder / "_drafts" / f"take {number}"
+        write_wav(draft / "Gtr.wav", 100, seconds=0.5)
+        d._session["take_counter"] = number
+        d.keep_take(number, str(draft), name, 0.5,
+                    [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    ok("so does the one being recorded",
+       [(s["name"], s["take_numbers"]) for s in d.session_state()["songs"]]
+       == [("Vesna", [1, 3])])
+    ok("and the history list keeps its count",
+       all("takes" in s for s in by_name["Songs"]["songs"]))
 
     print("\n[16b] And how much of the disk it is using")
     # Walked rather than estimated from the durations: a take encoded

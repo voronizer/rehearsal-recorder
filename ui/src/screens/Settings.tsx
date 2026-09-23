@@ -12,13 +12,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { DevicePicker } from "@/components/DevicePicker"
+import { OutputChannels } from "@/components/OutputChannels"
 import { Shell } from "@/components/Shell"
 import { useEscape } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
@@ -217,7 +212,7 @@ export function Settings({
   const current = TABS.find((t) => t.id === tab) ?? TABS[0]
 
   return (
-    <Shell title="Settings" onBack={onBack}>
+    <Shell title="Settings" onBack={onBack} backKey>
       <div className="mx-auto flex w-full max-w-4xl gap-8">
         {/* The section list. Four groups is few enough to show at once, so
             nothing is hidden behind a menu. */}
@@ -333,48 +328,29 @@ export function Settings({
             </p>
           </div>
 
-          <Select
-            value={
-              settings?.device_index === null ||
-              settings?.device_index === undefined
-                ? ""
-                : String(settings.device_index)
-            }
-            onValueChange={(v) =>
+          <DevicePicker
+            id="input-device"
+            devices={inputs}
+            value={settings?.device_index ?? null}
+            placeholder="Pick an interface"
+            detail={(d) => ` · up to ${d.max_input_channels} ch`}
+            onChange={(index) =>
               void applyRecording(
-                Number(v),
+                index,
                 settings?.samplerate ?? 44100,
                 settings?.bit_depth ?? 24
               )
             }
-          >
-            <SelectTrigger id="input-device" className="w-full">
-              <SelectValue placeholder="Pick an interface" />
-            </SelectTrigger>
-            <SelectContent>
-              {inputs.map((d) => (
-                <SelectItem key={d.index} value={String(d.index)}>
-                  {d.name}
-                  {/* On Windows one card appears once per audio system, with
-                      the same name each time — without this they are five
-                      identical rows. */}
-                  {d.host_api ? ` (${d.host_api})` : ""} · up to{" "}
-                  {d.max_input_channels} ch
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
 
-          {/* Only where it can actually happen: one card listed once per
-              audio system. Somebody who knows their desk has sixteen inputs
-              and sees eight has no way to guess that the other rows with the
-              same name are the same desk seen another way. */}
-          {new Set(inputs.map((d) => d.name)).size < inputs.length && (
+          {/* Only where there is a choice to make. Somebody who knows their
+              desk has sixteen inputs and is offered eight has no way to guess
+              that another driver sees the same desk whole. */}
+          {new Set(inputs.map((d) => d.host_api)).size > 1 && (
             <p className="text-xs text-muted-foreground">
-              One interface can appear more than once here, once per audio
-              system this machine has, and they do not all offer the same
-              number of inputs. If yours shows fewer channels than it has, try
-              its other entries.
+              Each driver can offer a different number of inputs. If your
+              interface shows fewer than it has, try another driver — ASIO,
+              where there is one, usually offers all of them.
             </p>
           )}
 
@@ -449,15 +425,13 @@ export function Settings({
               itself, for instance, rather than the laptop speakers.
             </p>
           </div>
-          <Select
-            value={
-              settings?.output_device_index === null ||
-              settings?.output_device_index === undefined
-                ? "default"
-                : String(settings.output_device_index)
-            }
-            onValueChange={async (v) => {
-              const idx = v === "default" ? null : Number(v)
+          <DevicePicker
+            id="output-device"
+            devices={outputs}
+            value={settings?.output_device_index ?? null}
+            placeholder="System output"
+            systemDefault
+            onChange={async (idx) => {
               const res = await api().set_output_device(idx)
               if (!res.ok) {
                 setError(res.error ?? "Could not switch the output")
@@ -465,20 +439,30 @@ export function Settings({
               }
               setSettings(await api().get_settings())
             }}
-          >
-            <SelectTrigger id="output-device" className="w-full">
-              <SelectValue placeholder="System output" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="default">System output</SelectItem>
-              {outputs.map((d) => (
-                <SelectItem key={d.index} value={String(d.index)}>
-                  {d.name}
-                  {d.host_api ? ` (${d.host_api})` : ""}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
+
+          {/* Only for a card with more than a pair: on a stereo output there
+              is nothing to choose, and the system output is the system's. */}
+          {(() => {
+            const card = outputs.find(
+              (d) => d.index === settings?.output_device_index
+            )
+            if (!card || card.max_output_channels <= 2) return null
+            return (
+              <OutputChannels
+                count={card.max_output_channels}
+                value={settings?.output_channels ?? [1, 2]}
+                onChange={async (channels) => {
+                  const res = await api().set_output_channels(channels)
+                  if (!res.ok) {
+                    setError(res.error ?? "Could not switch the outputs")
+                    return
+                  }
+                  setSettings(await api().get_settings())
+                }}
+              />
+            )
+          })()}
         </section>
         </>)}
 

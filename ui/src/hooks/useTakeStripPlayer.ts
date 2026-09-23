@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import type { Take } from "@/lib/api"
 
@@ -27,5 +27,30 @@ export function useTakeStripPlayer() {
   // the live `takes` array instead — see `liveTake` in TakeStrip.tsx.
   const reselect = select
 
-  return { selected, select, reselect, player }
+  // Opening a take at a spot — a note in the rehearsal overview. The seek has
+  // to wait for the take to be open: sent before, Python has no player to
+  // seek and drops it. "Open" is loading having gone on and then off again,
+  // because on the render that asks, loading is still false from before.
+  const [pendingAt, setPendingAt] = useState<number | null>(null)
+  const sawLoading = useRef(false)
+  const { loading, loadError, seek } = player
+  useEffect(() => {
+    if (pendingAt === null) return
+    if (loading) {
+      sawLoading.current = true
+      return
+    }
+    if (!sawLoading.current) return
+    sawLoading.current = false
+    if (!loadError) seek(pendingAt)
+    setPendingAt(null)
+  }, [pendingAt, loading, loadError, seek])
+
+  const openAt = (take: Take, at: number) => {
+    sawLoading.current = false
+    setPendingAt(at)
+    setSelected(take)
+  }
+
+  return { selected, select, reselect, openAt, player }
 }

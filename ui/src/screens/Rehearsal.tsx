@@ -2,8 +2,9 @@ import { useEffect, useState } from "react"
 import { Circle, FolderOpen, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Shell, SpaceHint } from "@/components/Shell"
+import { Kbd, Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
@@ -35,7 +36,7 @@ export function Rehearsal({
   onFinished: (folder: string, takeCount: number) => void
   onChanged: () => void
 }) {
-  const { selected, select, reselect, player } = useTakeStripPlayer()
+  const { selected, select, reselect, openAt, player } = useTakeStripPlayer()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toDelete, setToDelete] = useState<Take | null>(null)
@@ -209,8 +210,15 @@ export function Rehearsal({
       headerAction={
         <div className="flex items-center gap-3">
           <Badge variant="outline">{takesLabel(session.takes.length)}</Badge>
-          <Button variant="ghost" onClick={finish}>
+          {/* Escape finishes only with no take open; with one, it closes
+              the take — see useEscape above. */}
+          <Button
+            variant="ghost"
+            onClick={finish}
+            aria-keyshortcuts={selected ? undefined : "Escape"}
+          >
             Finish
+            {!selected && <Kbd>Esc</Kbd>}
           </Button>
         </div>
       }
@@ -222,13 +230,18 @@ export function Rehearsal({
             variant="destructive"
             onClick={startTake}
             disabled={busy}
+            aria-keyshortcuts={selected ? undefined : "Space"}
           >
             <Circle className="fill-current" />
             Record take {session.next_take_number}
+            {/* With a take open Space plays it, and the key is on Play. */}
+            {!selected && <Kbd>Space</Kbd>}
           </Button>
-          <SpaceHint>
-            {selected ? "play / pause" : `records “${session.next_take_name}”`}
-          </SpaceHint>
+          {/* The name it will get can differ from the number — "Polyn 3" —
+              and this is the one place that says so before recording. */}
+          <p className="text-xs text-muted-foreground">
+            records “{session.next_take_name}”
+          </p>
         </div>
       }
     >
@@ -238,6 +251,10 @@ export function Rehearsal({
           <span className="truncate font-mono">{session.folder}</span>
         </div>
 
+        {/* While no take is open the overview below is the way in, and the
+            pills beside it would only repeat it. With none recorded yet the
+            strip stays, for its "hit Record" hint. */}
+        {(selected || session.takes.length === 0) && (
         <TakeStrip
           takes={session.takes}
           selected={selected}
@@ -248,6 +265,7 @@ export function Rehearsal({
           cloudStates={session.cloud_queue}
           emptyHint="Hit Record or press Space — takes show up here and can be played straight away."
         />
+        )}
 
         {selected ? (
           <TakePlayer
@@ -258,12 +276,17 @@ export function Rehearsal({
             onRemoveMarker={(sec) => removeMarker(selected, sec)}
             onCrop={(from, to) => void cropTake(selected, from, to)}
             canCrop={!busy}
+            spaceKey
           />
         ) : (
           session.takes.length > 0 && (
-            <p className="text-sm text-muted-foreground">
-              Pick a take to listen back to it.
-            </p>
+            <RehearsalOverview
+              takes={session.takes}
+              songs={session.songs ?? []}
+              onOpen={select}
+              onOpenAt={openAt}
+              cloudStates={session.cloud_queue}
+            />
           )
         )}
 

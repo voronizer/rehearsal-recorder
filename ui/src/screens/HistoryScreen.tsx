@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Shell, EmptyState } from "@/components/Shell"
 import { RehearsalRow } from "@/components/RehearsalRow"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
@@ -71,7 +72,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   const [rehearsalToRename, setRehearsalToRename] =
     useState<RehearsalSummary | null>(null)
   const [renamingOpened, setRenamingOpened] = useState(false)
-  const { selected, select, reselect, player } = useTakeStripPlayer()
+  const { selected, select, reselect, openAt, player } = useTakeStripPlayer()
 
   const refresh = async () => setRehearsals(await api().list_rehearsals())
 
@@ -233,6 +234,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
         subtitle={formatDateHuman(opened.created_at)}
         title={opened.name}
         onBack={back}
+        backKey={selected === null}
         headerAction={
           <Button
             variant="ghost"
@@ -251,6 +253,9 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
             <span className="truncate font-mono">{opened.folder}</span>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {/* See the rehearsal screen: the overview stands in for the strip
+              until a take is open. */}
+          {(selected || opened.takes.length === 0) && (
           <TakeStrip
             takes={opened.takes}
             selected={selected}
@@ -260,6 +265,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
             onDelete={setTakeToDelete}
             emptyHint="Nothing was kept from this rehearsal, or every take since got deleted."
           />
+          )}
 
           {selected ? (
             <TakePlayer
@@ -269,13 +275,17 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
               onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
               onRemoveMarker={(sec) => removeMarker(selected, sec)}
               onCrop={(from, to) => void cropTake(selected, from, to)}
+              spaceKey
               canCrop={!busy}
             />
           ) : (
             opened.takes.length > 0 && (
-              <p className="text-sm text-muted-foreground">
-                Pick a take to listen back to it.
-              </p>
+              <RehearsalOverview
+                takes={opened.takes}
+                songs={opened.songs ?? []}
+                onOpen={select}
+                onOpenAt={openAt}
+              />
             )
           )}
         </div>
@@ -334,7 +344,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <Shell title="Rehearsal history" onBack={back}>
+    <Shell title="Rehearsal history" onBack={back} backKey>
       <div className="mx-auto flex max-w-3xl flex-col gap-2">
         {error && <p className="text-sm text-destructive">{error}</p>}
 

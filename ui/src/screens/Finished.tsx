@@ -1,6 +1,6 @@
 import { CheckCircle2, History, Radio } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Shell, SpaceHint } from "@/components/Shell"
+import { Kbd, Shell } from "@/components/Shell"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import { takesLabel } from "@/lib/format"
 
@@ -26,12 +26,16 @@ export function Finished({
               <History />
               History
             </Button>
-            <Button size="lg" onClick={onNewRehearsal}>
+            <Button
+              size="lg"
+              onClick={onNewRehearsal}
+              aria-keyshortcuts="Space"
+            >
               <Radio />
               New rehearsal
+              <Kbd>Space</Kbd>
             </Button>
           </div>
-          <SpaceHint>starts a new rehearsal</SpaceHint>
         </div>
       }
     >

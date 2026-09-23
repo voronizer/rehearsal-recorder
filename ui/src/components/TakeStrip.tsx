@@ -26,6 +26,30 @@ export function liveTake(takes: Take[], selected: Take | null): Take | null {
  * rehearsal with thirty takes would otherwise push the player off the screen,
  * and the player is the thing you came for.
  */
+/**
+ * A pending upload or an error, in words — something to notice at a glance,
+ * not something you have to open the take to find out. Shared by the pills
+ * and the rehearsal overview's chips, which stand in for the pills while no
+ * take is open.
+ */
+export function takeCloudStatus(
+  take: Take,
+  cloudState?: "queued" | "working"
+): string | null {
+  if (cloudState) {
+    return cloudState === "working" ? "Copying to the cloud" : "Waiting for the cloud"
+  }
+  return take.cloud_error ? "Not in the cloud" : null
+}
+
+/** "Take 2 Polyn 2", then the status if there is one. The status has to come
+ *  after the "Take N name" the tests and screen readers both key off, not
+ *  replace it. */
+export function takeButtonLabel(take: Take, status: string | null): string {
+  const base = `Take ${take.take_number} ${take.name}`
+  return status ? `${base} — ${status}` : base
+}
+
 export function TakeStrip({
   takes,
   selected,
@@ -70,7 +94,7 @@ export function TakeStrip({
   const isShared = Boolean(live?.cloud?.mix || live?.cloud?.tracks)
 
   return (
-    <div className="flex items-center gap-2">
+    <div role="group" aria-label="Take strip" className="flex items-center gap-2">
       <span className="shrink-0 text-xs tracking-wide text-muted-foreground uppercase">
         Takes
       </span>
@@ -79,29 +103,15 @@ export function TakeStrip({
         {takes.map((take) => {
           const open = selected?.take_number === take.take_number
           const cloudState = cloudStates?.[take.take_number]
-          // A pending upload or an error is something to notice at a
-          // glance, not something you have to open the take to find out —
-          // the old rows showed it unconditionally, and a pill collapsing
-          // that away would be a silent regression, not a simplification.
-          const statusText = cloudState
-            ? cloudState === "working"
-              ? "Copying to the cloud"
-              : "Waiting for the cloud"
-            : take.cloud_error
-              ? "Not in the cloud"
-              : null
+          // The old rows showed this unconditionally, and a pill collapsing
+          // it away would be a silent regression, not a simplification.
+          const statusText = takeCloudStatus(take, cloudState)
           return (
             <button
               key={take.take_number}
               ref={open ? openPillRef : undefined}
               type="button"
-              aria-label={
-                // The status has to come after the "Take N name" the tests
-                // and screen readers both key off, not replace it.
-                statusText
-                  ? `Take ${take.take_number} ${take.name} — ${statusText}`
-                  : `Take ${take.take_number} ${take.name}`
-              }
+              aria-label={takeButtonLabel(take, statusText)}
               aria-current={open ? "true" : undefined}
               onClick={(e) => {
                 onSelect(take)

@@ -5,6 +5,71 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- On Windows, ASIO is offered. A 16-channel mixer was listed with 2 or 8
+  inputs because the PortAudio loaded by default has no ASIO; the one with
+  ASIO ships in the same package and is now loaded instead. Starting the app
+  can briefly interrupt other sound playing through a device in exclusive
+  mode — once, at launch.
+- The recording interface and the playback output are chosen through their
+  driver first when there is more than one, instead of one list with the
+  same card in it four or five times. On a Mac nothing changes.
+- Device choices are remembered by name and driver, not only by position in
+  the list, so plugging something in no longer moves them. On Windows a
+  choice saved by an older version has to be made once more.
+- The self-test fails a Windows build that lacks ASIO.
+- Playback can come out of any stereo pair of a card with more than two
+  outputs — 3–4 into the headphone amp, say — or out of one output on its
+  own. It used to be 1–2, always. Choosing another card starts it again from
+  1–2, since a pair means something different on every card.
+- On Windows, **Save take** did nothing: the button dimmed and stayed that
+  way. The review screen plays the take it is asking about, and Windows will
+  not move a file that is open for playing. Deleting a take or a rehearsal
+  while it played failed the same way. The player now lets go of those files
+  first. On a Mac the move had always worked, which is why this was not seen.
+- On Windows a take or rehearsal could not be renamed to anything in
+  Cyrillic — or in any script outside Western European — and nothing said
+  so. The rehearsal's file and the settings were written in the system's
+  code page, cp1252 there; they are UTF-8 now, and files an older version
+  wrote are still read. Renaming the take that was playing also left its
+  folder under the old name without a word; the player now lets go of it
+  first. And a folder is never left renamed under a record that could not
+  be written.
+- Saving a take says whether it goes to the cloud folder — "Send to the
+  cloud — the mix, MP3" — and the box can be turned the other way for that
+  one take: a false start kept anyway need not go up, and the one good take
+  of an evening can, with sending off. A take kept out stays out of later
+  re-sends of the rehearsal too. With no cloud folder it says the take stays
+  on this computer.
+- When something fails inside the app, it says so. A red bar gives the
+  error's own words and where the full traceback is kept
+  (`~/.rehearsal-recorder/crash.log`, which a windowed build now actually
+  writes it to), and the screen that asked gets an answer — a button no
+  longer dims and stays dimmed. Saving a take and renaming one both failed
+  on Windows with nothing on screen at all, which is what this is for.
+- The keys are on the buttons they press: Space on the main button of each
+  screen, Esc on Back, on Discard and on Finish. The line under the main
+  button that said the same thing for Space alone is gone. A key is shown
+  only while it really does that — with a take open Escape closes the take,
+  so Finish loses its Esc until then.
+- The player's keys are listed behind **?** (or the keyboard button at the
+  end of the transport) rather than drawn on its small buttons, which kept
+  the row as plain as it was. Three of them are new: Home goes to the start,
+  M marks, R turns Repeat on and off. None of them fire while typing a name.
+- An open rehearsal with no take picked shows the evening instead of one
+  line asking you to pick a take: how long it ran, each song with its goes
+  and their lengths, the takes nobody named, and every note left while
+  listening. A take opens from there, and a note opens its take at the spot
+  it was left. The strip of take pills is hidden meanwhile, since it only
+  repeated the overview; it comes back once a take is open, to switch
+  between them.
+- In that overview, a take already copied to the cloud folder has a small
+  cloud on its chip, so what still needs sending is visible without opening
+  each take.
+- A tick just before the end of a take no longer puts a sideways scrollbar
+  under the last track on Windows.
+
 ## 0.6.1
 
 - At the closest zoom the window read-out was cut off mid-word — `0:04 – 0:06

@@ -1,9 +1,9 @@
-import { useState } from "react"
-import { Check, Trash2 } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Check, Cloud, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Shell, SpaceHint } from "@/components/Shell"
+import { Kbd, Shell } from "@/components/Shell"
 import { TakePlayer } from "@/components/TakePlayer"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
@@ -15,6 +15,7 @@ import {
   type Marker,
   type MarkerKind,
   type PendingTake,
+  type ShareWhat,
 } from "@/lib/api"
 import { formatMMSS } from "@/lib/format"
 
@@ -22,6 +23,13 @@ import { formatMMSS } from "@/lib/format"
  * Right after stopping: listen and decide the take's fate. Until it is saved
  * the files stay in the rehearsal's drafts folder.
  */
+/** How the review screen names what the cloud copy of a take will be. */
+const WHAT_GOES: Record<ShareWhat, string> = {
+  mix: "the mix",
+  tracks: "the original tracks",
+  both: "the mix and the tracks",
+}
+
 export function Review({
   take,
   rehearsalName,
@@ -48,6 +56,39 @@ export function Review({
   // folder yet, so there is nowhere on disk to put them. They travel with
   // keep_take, and go away with the take if it is discarded.
   const [markers, setMarkers] = useState<Marker[]>([])
+
+  // Whether this take goes to the cloud folder, said before it is saved and
+  // turnable for this one take: a false start kept anyway need not go up,
+  // and the one good take can, with sending off. It starts from the setting
+  // every time — a choice made for one take is not a new setting.
+  const [cloud, setCloud] = useState<{
+    dir: string | null
+    auto: boolean
+    what: ShareWhat
+    format: string
+  } | null>(null)
+  const [send, setSend] = useState(false)
+  useEffect(() => {
+    let alive = true
+    void api()
+      .get_settings()
+      .then((s) => {
+        if (!alive) return
+        setCloud({
+          dir: s.cloud_dir,
+          auto: s.auto_publish,
+          what: s.auto_publish_what,
+          format: s.cloud_format,
+        })
+        setSend(Boolean(s.cloud_dir) && s.auto_publish)
+      })
+      .catch(() => {
+        /* the bar has said so; the take still saves by the setting */
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
   const [editing, setEditing] = useState<Marker | null>(null)
 
   // This screen is a fork — save or give up — so Escape, which everywhere else
@@ -92,7 +133,10 @@ export function Review({
       name,
       take.duration_sec,
       take.tracks,
-      markers
+      markers,
+      // Only an answer that differs from the setting is sent: one that
+      // agrees leaves the take following the setting, even if it changes.
+      cloud?.dir && send !== cloud.auto ? send : null
     )
     setBusy(false)
     if (!res.ok) {
@@ -155,17 +199,59 @@ export function Review({
       footer={
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {cloud &&
+            (cloud.dir ? (
+              <label
+                htmlFor="send-to-cloud"
+                className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground"
+              >
+                <input
+                  id="send-to-cloud"
+                  type="checkbox"
+                  checked={send}
+                  onChange={(e) => {
+                    setSend(e.target.checked)
+                    // Focus left on the box would give it the next Space,
+                    // which on this screen means Save take.
+                    e.currentTarget.blur()
+                  }}
+                  disabled={busy}
+                  className="size-4 accent-primary"
+                />
+                <Cloud className="size-4" />
+                Send to the cloud — {WHAT_GOES[cloud.what]},{" "}
+                {cloud.format.toUpperCase()}
+              </label>
+            ) : (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Cloud className="size-4" />
+                Stays on this computer — no cloud folder is set
+              </p>
+            ))}
           <div className="flex items-center gap-3">
-            <Button variant="ghost" onClick={discard} disabled={busy}>
+            {/* Escape asks before discarding; the button itself does not.
+                It is still the button Escape leads to. */}
+            <Button
+              variant="ghost"
+              onClick={discard}
+              disabled={busy}
+              aria-keyshortcuts="Escape"
+            >
               <Trash2 />
               Discard
+              <Kbd>Esc</Kbd>
             </Button>
-            <Button size="lg" onClick={keep} disabled={busy}>
+            <Button
+              size="lg"
+              onClick={keep}
+              disabled={busy}
+              aria-keyshortcuts="Space"
+            >
               <Check />
               Save take
+              <Kbd>Space</Kbd>
             </Button>
           </div>
-          <SpaceHint>save take</SpaceHint>
         </div>
       }
     >

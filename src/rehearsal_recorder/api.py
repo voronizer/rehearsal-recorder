@@ -42,7 +42,11 @@ from rehearsal_recorder.audio.format import (
 )
 from rehearsal_recorder.audio.crop import crop_wav
 from rehearsal_recorder.audio.mixdown import mixdown
-from rehearsal_recorder.audio.devices import recording_formats
+from rehearsal_recorder.audio.devices import (
+    device_identity,
+    recording_formats,
+    saved_device,
+)
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
@@ -126,8 +130,10 @@ _ATTEMPT_NUMBER = re.compile(r"^(.*?)[\s]+(\d+)$")
 
 def _songs_of(takes):
     """
-    What was played, as [{"name", "takes"}] in the order things were first
-    played. Nobody types this in: a take inherits the previous one's name with
+    What was played, as [{"name", "takes", "take_numbers"}] in the order
+    things were first played. `take_numbers` is which takes they were, for the
+    rehearsal's own overview — so the interface is handed the grouping rather
+    than keeping a second copy of the rule below that could drift from it. Nobody types this in: a take inherits the previous one's name with
     the attempt number bumped (see suggest_take_name), so "Polyn", "Polyn 2"
     and "Polyn 3" are three goes at one song, and dropping that trailing
     number is enough to group them.
@@ -150,8 +156,10 @@ def _songs_of(takes):
         key = base.casefold()
         if key in by_key:
             by_key[key]["takes"] += 1
+            by_key[key]["take_numbers"].append(take.get("take_number"))
         else:
-            song = {"name": base, "takes": 1}
+            song = {"name": base, "takes": 1,
+                    "take_numbers": [take.get("take_number")]}
             by_key[key] = song
             songs.append(song)
     return songs
@@ -187,6 +195,27 @@ def _folder_bytes(folder):
     return total
 
 
+def _read_text(path):
+    """
+    A JSON file of ours, as text. Written as UTF-8 now; an older version wrote
+    whatever the system's code page was, which on Windows is cp1252 — so a
+    file that is not UTF-8 is read that way rather than taken for damaged.
+    Read as damaged, a rehearsal with a "Café" in it would simply vanish from
+    History.
+    """
+    raw = Path(path).read_bytes()
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace")
+
+
+def _write_text(path, text):
+    """Always UTF-8. Left to the default, Windows writes cp1252, which has no
+    Cyrillic: a take named "Полынь" failed to save with UnicodeEncodeError."""
+    Path(path).write_text(text, encoding="utf-8")
+
+
 def _is_empty_rehearsal(folder):
     """
     A rehearsal that produced nothing: no saved takes and no audio on disk.
@@ -201,7 +230,7 @@ def _is_empty_rehearsal(folder):
     if not meta_path.exists():
         return False
     try:
-        meta = json.loads(meta_path.read_text())
+        meta = json.loads(_read_text(meta_path))
     except Exception:
         return False
     if meta.get("takes"):
@@ -215,6 +244,21 @@ def _is_inside(path, root):
         return True
     except ValueError:
         return False
+
+
+def _is_output_choice(channels):
+    """A pair of outputs the way cards label them — 1–2, 3–4, 5–6 — or one
+    output on its own. 2–3 is refused: no card wires its stereo outs that
+    way, and offering it would only double the list."""
+    if not isinstance(channels, (list, tuple)):
+        return False
+    if not all(isinstance(c, int) and not isinstance(c, bool) and c >= 1
+               for c in channels):
+        return False
+    if len(channels) == 1:
+        return True
+    return (len(channels) == 2 and channels[0] % 2 == 1
+            and channels[1] == channels[0] + 1)
 
 
 class Api:
@@ -286,20 +330,26 @@ class Api:
         if not CONFIG_PATH.exists():
             return {}
         try:
-            data = json.loads(CONFIG_PATH.read_text())
+            data = json.loads(_read_text(CONFIG_PATH))
             return data if isinstance(data, dict) else {}
         except Exception:
             return {}
 
     def _write_config(self):
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CONFIG_PATH.write_text(json.dumps(self._config, ensure_ascii=False, indent=2))
+        _write_text(CONFIG_PATH, json.dumps(self._config, ensure_ascii=False, indent=2))
+
+    def _remember_device(self, key, index):
+        """Saves a device choice as its index and what it is. `key` is
+        "device" or "output_device"; see audio.devices.saved_device."""
+        self._config[f"{key}_index"] = index
+        self._config[key] = device_identity(index)
 
     def get_settings(self):
         return {
             "recordings_dir": str(self._recordings_dir),
             "default_recordings_dir": str(RECORDINGS_ROOT),
-            "device_index": self._config.get("device_index"),
+            "device_index": saved_device(self._config, "device", True),
             "samplerate": int(
                 self._config.get("samplerate") or DEFAULT_SAMPLERATE
             ),
@@ -309,7 +359,10 @@ class Api:
             "volumes": self._config.get("volumes", {}),
             "theme": self._config.get("theme", "dark"),
             "ui_scale": self._config.get("ui_scale", 1),
-            "output_device_index": self._config.get("output_device_index"),
+            "output_device_index": saved_device(
+                self._config, "output_device", False
+            ),
+            "output_channels": list(self._output_channels()),
             "cloud_dir": self._config.get("cloud_dir"),
             "cloud_format": normalize_format(self._config.get("cloud_format")),
             "cloud_formats": CLOUD_FORMATS_INFO,
@@ -445,9 +498,9 @@ class Api:
 
         This matters on Windows, where one interface shows up once per system
         — MME, DirectSound, WASAPI, WDM-KS, ASIO if the card has a driver —
-        and the names alone are identical. Without saying which is which, the
-        list reads as five copies of the same card. macOS has only CoreAudio,
-        so the label is left off there.
+        and the names alone are identical. The interface groups devices by
+        it, so it is reported everywhere; on a Mac there is only one and the
+        interface does not show it.
         """
         try:
             return [h["name"] for h in sd.query_hostapis()]
@@ -456,7 +509,6 @@ class Api:
 
     def _describe_devices(self, want_input):
         apis = self._host_api_names()
-        many = len(apis) > 1
         key = "max_input_channels" if want_input else "max_output_channels"
 
         found = []
@@ -467,7 +519,7 @@ class Api:
             found.append({
                 "index": idx,
                 "name": d["name"],
-                "host_api": api if many else "",
+                "host_api": api,
                 "max_input_channels": d.get("max_input_channels", 0),
                 "max_output_channels": d.get("max_output_channels", 0),
                 "default_samplerate": int(d["default_samplerate"]),
@@ -484,7 +536,12 @@ class Api:
         the card, not argued about at the start of every rehearsal.
         """
         depth = normalize_depth(bit_depth)
-        self._config["device_index"] = device_index
+        # Settings sends the *resolved* device_index, which is None when the
+        # saved card is not plugged in. Recording has no "system input", so
+        # None here never means a choice — leave the saved identity alone and
+        # only change the rate and depth.
+        if device_index is not None:
+            self._remember_device("device", device_index)
         self._config["samplerate"] = int(samplerate)
         self._config["bit_depth"] = depth
         self._write_config()
@@ -512,14 +569,16 @@ class Api:
         if not self._config.get("tracks"):
             return None
         return {
-            "device_index": self._config.get("device_index"),
+            "device_index": saved_device(self._config, "device", True),
             "samplerate": self._config.get("samplerate"),
             "bit_depth": normalize_depth(self._config.get("bit_depth")),
             "tracks": self._config.get("tracks", []),
         }
 
     def save_default_tracks(self, config):
-        for key in ("device_index", "samplerate", "bit_depth", "tracks"):
+        if "device_index" in config:
+            self._remember_device("device", config["device_index"])
+        for key in ("samplerate", "bit_depth", "tracks"):
             if key in config:
                 self._config[key] = config[key]
         self._write_config()
@@ -660,7 +719,7 @@ class Api:
         # half a document. os.replace is atomic on every system we ship on.
         folder = Path(folder)
         tmp = folder / "session.json.writing"
-        tmp.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+        _write_text(tmp, json.dumps(meta, ensure_ascii=False, indent=2))
         os.replace(tmp, folder / "session.json")
 
     @staticmethod
@@ -669,7 +728,7 @@ class Api:
         if not path.exists():
             return None
         try:
-            return json.loads(path.read_text())
+            return json.loads(_read_text(path))
         except Exception:
             return None
 
@@ -683,6 +742,7 @@ class Api:
             "folder": str(s["folder"]),
             "tracks": s["tracks"],
             "takes": s["takes"],
+            "songs": _songs_of(s["takes"]),
             "next_take_number": s["take_counter"] + 1,
             "next_take_name": self.suggest_take_name(),
             "recording": self._recorder is not None,
@@ -814,7 +874,14 @@ class Api:
         }
 
     def keep_take(
-        self, take_number, temp_dir, custom_name, duration_sec, tracks, markers=None
+        self,
+        take_number,
+        temp_dir,
+        custom_name,
+        duration_sec,
+        tracks,
+        markers=None,
+        send_to_cloud=None,
     ):
         """
         tracks: [{"name":.., "file": <path in the drafts folder>}, ...] as
@@ -824,6 +891,13 @@ class Api:
         markers: anything marked while listening on the review screen. They
         are passed in rather than saved as they are placed, because until the
         take is kept there is nothing on disk to attach them to.
+
+        send_to_cloud: this take's own answer to "does it go to the cloud
+        folder", from the review screen. None follows the setting. False keeps
+        it out even with sending on — and out of every later re-send of the
+        rehearsal too, or a moved fader would send the false start after all.
+        True sends it even with sending off. Kept with the take as
+        cloud_skip / cloud_send; sending by hand ignores both.
         """
         if self._session is None:
             return {"ok": False, "error": "No rehearsal in progress"}
@@ -834,6 +908,9 @@ class Api:
             s["folder"] / f"{take_number:02d} - {_safe_name(display_name)}"
         )
         take_dir.mkdir(parents=True, exist_ok=True)
+
+        # The review screen is still playing these very files.
+        self._release_player_in(temp_dir)
 
         moved = []
         for t in tracks:
@@ -853,6 +930,10 @@ class Api:
             "tracks": moved,
             "markers": [self._as_marker(m) for m in (markers or [])],
         }
+        if send_to_cloud is False:
+            take_info["cloud_skip"] = True
+        elif send_to_cloud is True:
+            take_info["cloud_send"] = True
         # Appending and saving must be one step: a publish landing between them
         # would rebind self._session["takes"] to a copy read before this take
         # existed, and _save_session_meta would then write that take away.
@@ -860,7 +941,7 @@ class Api:
         with self._meta_lock:
             s["takes"].append(take_info)
             self._save_session_meta()
-        self._enqueue_publish(s["folder"], take_number)
+        self._enqueue_publish(s["folder"], take_number, take=take_info)
         self._retry_failed_publishes()
         return {"ok": True, "take": take_info}
 
@@ -874,6 +955,21 @@ class Api:
         was recorded seconds earlier and cannot be played again.
         """
         return self.discard_draft(temp_dir)
+
+    def _release_player_in(self, folder):
+        """
+        Closes the player if what it has open lives in `folder`.
+
+        Tracks are played through a memmap, and Windows will not let a mapped
+        file be moved or removed — the same trap crop_take steps around. Here
+        it made Save take do nothing at all on Windows: the review screen is
+        playing the take it asks about, so its files were always mapped when
+        the move came. A player on some other take is left playing.
+        """
+        with self._player_lock:
+            open_tracks = self._open_tracks or []
+            if any(_is_inside(t["file"], folder) for t in open_tracks):
+                self.player_close()
 
     @staticmethod
     def _cleanup_drafts_dir(temp_dir):
@@ -980,6 +1076,7 @@ class Api:
         draft_dir = Path(draft_dir)
         if not self._inside_recordings(draft_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
+        self._release_player_in(draft_dir)
         result = move_to_trash(draft_dir, self._recordings_dir)
         self._cleanup_drafts_dir(draft_dir)
         return result
@@ -1029,6 +1126,7 @@ class Api:
             "name": meta.get("name", ""),
             "created_at": meta.get("created_at", ""),
             "takes": takes,
+            "songs": _songs_of(takes),
         }
 
     # ---------- renaming ----------
@@ -1060,20 +1158,34 @@ class Api:
             old_dirs = {
                 Path(t["file"]).parent for t in take.get("tracks", []) if t.get("file")
             }
+            moved = None
             if len(old_dirs) == 1:
                 old_dir = old_dirs.pop()
                 new_dir = _unique_path(
                     folder / f"{take_number:02d} - {_safe_name(display_name)}"
                 )
                 if old_dir.exists() and old_dir != new_dir:
+                    # Windows will not rename a folder holding a file the
+                    # player has mapped, and the rehearsal screen is usually
+                    # playing the very take it offers to rename. The interface
+                    # reopens the take from its new path afterwards.
+                    self._release_player_in(old_dir)
                     try:
                         old_dir.rename(new_dir)
+                        moved = (old_dir, new_dir)
                         for t in take.get("tracks", []):
                             t["file"] = str(new_dir / Path(t["file"]).name)
                     except OSError as e:
                         print(f"[rename] take folder: {e}")
 
-            self._write_meta(folder, meta)
+            try:
+                self._write_meta(folder, meta)
+            except Exception:
+                # The folder must not stay renamed under a session.json that
+                # still points at the old one: the take would stop opening.
+                if moved:
+                    moved[1].rename(moved[0])
+                raise
             if self._session is not None and Path(self._session["folder"]) == folder:
                 self._session["takes"] = takes
 
@@ -1104,6 +1216,8 @@ class Api:
             )
 
             if new_folder != original:
+                # See rename_take: a take playing from in here holds its files.
+                self._release_player_in(original)
                 try:
                     original.rename(new_folder)
                 except OSError as e:
@@ -1119,7 +1233,14 @@ class Api:
                             pass
                 folder = new_folder
 
-            self._write_meta(folder, meta)
+            try:
+                self._write_meta(folder, meta)
+            except Exception:
+                # As in rename_take: never leave the folder renamed under a
+                # session.json whose paths still point at the old one.
+                if folder != original:
+                    folder.rename(original)
+                raise
 
             # Only the rehearsal actually being renamed touches the live session —
             # renaming an old one from history must leave it alone.
@@ -1468,7 +1589,8 @@ class Api:
             try:
                 player = TakePlayer(tracks)
                 warning = player.open_output(
-                    self._config.get("output_device_index")
+                    saved_device(self._config, "output_device", False),
+                    self._output_channels(),
                 )
             except Exception as e:
                 return {"ok": False, "error": str(e)}
@@ -1544,11 +1666,31 @@ class Api:
         self._player.set_solo(name)
         return {"ok": True, **self._player.state()}
 
-    def set_output_device(self, device_index):
-        """Switching the output applies immediately, even mid-take."""
-        self._config["output_device_index"] = device_index
-        self._write_config()
+    def _output_channels(self):
+        """The outputs saved for playback, (1, 2) when nothing usable is."""
+        saved = self._config.get("output_channels")
+        return tuple(saved) if _is_output_choice(saved) else (1, 2)
 
+    def set_output_device(self, device_index):
+        """Switching the output applies immediately, even mid-take.
+
+        The outputs go back to 1–2: which pair is which belongs to one card,
+        and 7–8 on the desk means nothing — or something else — on another."""
+        self._remember_device("output_device", device_index)
+        self._config["output_channels"] = [1, 2]
+        self._write_config()
+        return self._reopen_output()
+
+    def set_output_channels(self, channels):
+        """Which outputs of the playback card the mix comes out of: a pair
+        such as [3, 4], or one output on its own, [5]. Counted from 1."""
+        if not _is_output_choice(channels):
+            return {"ok": False, "error": f"Not a pair of outputs: {channels}"}
+        self._config["output_channels"] = list(channels)
+        self._write_config()
+        return self._reopen_output()
+
+    def _reopen_output(self):
         with self._player_lock:
             if self._player is None:
                 return {"ok": True}
@@ -1558,7 +1700,10 @@ class Api:
             # but silence after a device change.
             state = self._player.state()
             try:
-                warning = self._player.open_output(device_index)
+                warning = self._player.open_output(
+                    saved_device(self._config, "output_device", False),
+                    self._output_channels(),
+                )
             except Exception as e:
                 return {"ok": False, "error": str(e)}
             self._player.seek(state["position"])
@@ -1600,6 +1745,7 @@ class Api:
             result = {"ok": True, "trashed": False, "location": None}
             for d in take_dirs:
                 if Path(d).exists() and self._inside_recordings(d):
+                    self._release_player_in(d)
                     result = move_to_trash(d, self._recordings_dir)
 
             meta["takes"] = [t for t in takes if t.get("take_number") != take_number]
@@ -1618,6 +1764,7 @@ class Api:
             return {"ok": False, "error": "Rehearsal folder not found"}
         if self._session is not None and Path(self._session["folder"]) == folder:
             return {"ok": False, "error": "Cannot delete the rehearsal in progress"}
+        self._release_player_in(folder)
         return move_to_trash(folder, self._recordings_dir)
 
 
@@ -1709,11 +1856,28 @@ class Api:
         self._write_config()
         return {"ok": True}
 
-    def _enqueue_publish(self, folder, take_number):
-        """Ask for a take to be copied, if copying is switched on at all."""
-        if not self._config.get("auto_publish"):
+    def _enqueue_publish(self, folder, take_number, take=None):
+        """
+        Ask for a take to be copied, if it is to go at all: sending is on and
+        the take was not kept with "not this one", or sending is off and it
+        was kept with "send this one" (see keep_take).
+        """
+        if take is None:
+            take = self._take_in(folder, take_number) or {}
+        if take.get("cloud_skip"):
+            return
+        if not self._config.get("auto_publish") and not take.get("cloud_send"):
             return
         self._cloud_queue.enqueue(str(folder), take_number)
+
+    def _take_in(self, folder, take_number):
+        """A take's record: from the rehearsal in progress when it is that
+        one, which is in memory, otherwise read off its folder."""
+        if self._session is not None and Path(self._session["folder"]) == Path(folder):
+            takes = self._session.get("takes", [])
+        else:
+            takes = (self._read_meta(Path(folder)) or {}).get("takes", [])
+        return next((t for t in takes if t.get("take_number") == take_number), None)
 
     def _enqueue_session_takes(self):
         """
@@ -1749,8 +1913,6 @@ class Api:
         the cloud folder in the shape the settings ask for, so a burst of
         requests costs one mixdown, not several.
         """
-        if not self._config.get("auto_publish"):
-            return
         what = self._config.get("auto_publish_what") or "mix"
         meta = self._read_meta(Path(folder))
         if meta is None:
@@ -1760,6 +1922,12 @@ class Api:
             None,
         )
         if take is None:
+            return
+        # Asked again here, not only when queued: the setting or the take's
+        # own answer can have changed while it waited.
+        if take.get("cloud_skip"):
+            return
+        if not self._config.get("auto_publish") and not take.get("cloud_send"):
             return
         fmt = normalize_format(self._config.get("cloud_format"))
         target = self._cloud_target(folder)

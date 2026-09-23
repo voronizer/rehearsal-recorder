@@ -8,6 +8,7 @@ modules nor the audio files.
 """
 
 import faulthandler
+import logging
 import signal
 import sys
 from datetime import datetime
@@ -38,12 +39,27 @@ def _arm_crash_log():
     """
     try:
         CRASH_LOG.parent.mkdir(parents=True, exist_ok=True)
-        log = open(CRASH_LOG, "a", buffering=1)
+        log = open(CRASH_LOG, "a", buffering=1, encoding="utf-8")
         log.write(
             f"\n===== started {datetime.now().isoformat(timespec='seconds')} "
             f"on {sys.platform} =====\n"
         )
         faulthandler.enable(file=log, all_threads=True)
+
+        # An exception in a call from the interface is logged by pywebview —
+        # to stderr, which a windowed build does not have, so it went
+        # nowhere: Save take and renaming both failed on Windows without a
+        # trace kept. It is written here too, and the interface points to
+        # this file when it says a call failed. One handler, however many
+        # times this runs.
+        bridge_log = logging.getLogger("pywebview")
+        for old in [h for h in bridge_log.handlers if getattr(h, "_ours", False)]:
+            bridge_log.removeHandler(old)
+        handler = logging.StreamHandler(log)
+        handler.setLevel(logging.ERROR)
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        handler._ours = True
+        bridge_log.addHandler(handler)
 
         register = getattr(faulthandler, "register", None)  # Unix only
         if register is not None:
@@ -102,6 +118,17 @@ def selftest():
         ins = [d for d in devices if d["max_input_channels"] > 0]
         return f"PortAudio up, {len(devices)} devices, {len(ins)} with inputs"
 
+    def asio():
+        import sounddevice as sd
+
+        names = [h["name"] for h in sd.query_hostapis()]
+        if "ASIO" not in names:
+            raise RuntimeError(
+                "PortAudio without ASIO — multichannel interfaces will be "
+                f"offered with too few inputs (found: {', '.join(names)})"
+            )
+        return "present"
+
     def encoder():
         from rehearsal_recorder.audio.encode import available
 
@@ -129,6 +156,10 @@ def selftest():
         return f"pywebview {getattr(webview, '__version__', '?')}"
 
     check("audio engine", audio)
+    # Checks the ASIO DLL reached the bundle. It needs no ASIO driver on the
+    # machine: the host API is listed, with no devices, even without one.
+    if sys.platform == "win32":
+        check("ASIO", asio)
     check("sample formats", encoder)
     check("numpy", numpy_works)
     check("window toolkit", window_toolkit)

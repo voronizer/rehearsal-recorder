@@ -16,6 +16,9 @@ const GUTTER_PX = 200
 const LANE_MIN_PX = 92
 const LANE_MAX_PX = 160
 const RULER_PX = 44
+/** What a tick label needs to the right of its line: "10:00" at 11 px and
+ *  its padding, with a little to spare. */
+const TICK_LABEL_PX = 44
 const ROW_GAP_PX = 8
 /** How fast the wheel zooms. One notch of a mouse wheel is about 100 units,
  *  so this makes a notch a fifth of the window. */
@@ -301,8 +304,18 @@ export function Timeline({
                 className="absolute top-4 bottom-0 w-px bg-border"
                 style={{ left: `${pct(t)}%` }}
               />
+              {/* A tick just short of the end has no room for its label on
+                  the right, so it goes on the left of the line instead.
+                  Left hanging past the edge, it widened the lanes' scroll
+                  container — overflow-y: auto makes overflow-x auto too — and
+                  a sideways scrollbar appeared under the last track. */}
               <span
-                className="tnum absolute top-0 pl-1.5 text-[11px] text-muted-foreground"
+                className={cn(
+                  "tnum absolute top-0 text-[11px] text-muted-foreground",
+                  ((to - t) / (to - from)) * width < TICK_LABEL_PX
+                    ? "-translate-x-full pr-1.5"
+                    : "pl-1.5"
+                )}
                 style={{ left: `${pct(t)}%` }}
               >
                 {formatMMSS(t)}

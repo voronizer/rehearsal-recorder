@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Shell, SpaceHint } from "@/components/Shell"
+import { Kbd, Shell } from "@/components/Shell"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 import { formatDuration } from "@/lib/format"
@@ -68,8 +68,21 @@ export function Setup({
       const savedDeviceExists =
         cfg.device_index != null &&
         devs.some((d) => d.index === cfg.device_index)
+      // A Windows choice saved before driver identities existed is dropped
+      // on purpose (see audio/devices.py) — it can no longer be told apart
+      // from a card that is simply unplugged. Guessing devs[0] here would
+      // undo that: with several drivers it is usually an MME entry nobody
+      // chose. With one driver (every Mac) there is nothing to guess
+      // between, so the first-run behaviour is unchanged.
+      const oneDriver = devs.every((d) => d.host_api === devs[0]?.host_api)
 
-      setDeviceIndex(savedDeviceExists ? cfg.device_index : (devs[0]?.index ?? null))
+      setDeviceIndex(
+        savedDeviceExists
+          ? cfg.device_index
+          : oneDriver
+            ? (devs[0]?.index ?? null)
+            : null
+      )
       setSamplerate(cfg.samplerate ?? 44100)
       setBitDepth(cfg.bit_depth ?? 24)
 
@@ -235,11 +248,16 @@ export function Setup({
       footer={
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button size="xl" onClick={start} disabled={!canStart}>
+          <Button
+            size="xl"
+            onClick={start}
+            disabled={!canStart}
+            aria-keyshortcuts="Space"
+          >
             <Radio />
             Start rehearsal
+            <Kbd>Space</Kbd>
           </Button>
-          <SpaceHint>starts the rehearsal</SpaceHint>
         </div>
       }
     >

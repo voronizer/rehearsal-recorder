@@ -13,9 +13,12 @@ The check: device indices are not stable. Unplug the interface, reboot, add a
 pair of AirPods, and the index saved in the config points somewhere else. Used
 blindly it produces `PaMacCore (AUHAL) Error ... err='-50'`, which tells the
 person nothing. So the saved device is checked first, and if it cannot do the
-job we fall back to the system output and say why in plain words.
+job we fall back to the system output and say why in plain words. To survive
+changes to the device list, a saved choice is kept as the device's name and
+audio system beside its index, and found again by those.
 """
 
+import sys
 import threading
 
 import sounddevice as sd
@@ -99,3 +102,57 @@ def usable_output(device_index, samplerate, channels=2):
             )
 
     return device_index, None
+
+
+def _host_api_name(device):
+    try:
+        return sd.query_hostapis()[device["hostapi"]]["name"]
+    except Exception:
+        return ""
+
+
+def device_identity(index):
+    """What a device is, rather than where it happens to be in the list:
+    {"name": ..., "host_api": ...}, or None for no device or an unknown one."""
+    if index is None:
+        return None
+    try:
+        info = sd.query_devices(index)
+    except Exception:
+        return None
+    return {"name": info["name"], "host_api": _host_api_name(info)}
+
+
+def saved_device(config, key, want_input, platform=sys.platform):
+    """
+    The index a saved choice means now, or None when nothing usable is saved.
+
+    `key` names the choice: "device" for recording, "output_device" for
+    playback, each stored as `<key>_index` plus `<key>` = its identity.
+
+    An index with no identity is from before identities were saved. Off
+    Windows it is still right. On Windows it is not trusted: turning ASIO on
+    inserted a host API mid-list and moved every later index, and recording
+    from the wrong card without a word is worse than asking again.
+    """
+    index = config.get(f"{key}_index")
+    identity = config.get(key)
+
+    if not identity:
+        return None if platform == "win32" else index
+
+    direction = "max_input_channels" if want_input else "max_output_channels"
+    try:
+        devices = list(sd.query_devices())
+    except Exception:
+        return None
+
+    matches = [
+        i for i, d in enumerate(devices)
+        if d.get(direction, 0) > 0
+        and d["name"] == identity.get("name")
+        and _host_api_name(d) == identity.get("host_api")
+    ]
+    if index in matches:
+        return index
+    return matches[0] if matches else None

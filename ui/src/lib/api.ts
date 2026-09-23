@@ -6,11 +6,13 @@
  * types, so screens never have to guess what a take object contains.
  */
 
+import { reportBridgeError } from "@/lib/bridgeErrors"
+
 export type Device = {
   index: number
   name: string
-  /** Which audio system it came through — only set when there is more than
-   *  one, which in practice means Windows. */
+  /** Which audio system (driver) it came through. Settings groups by it and
+   *  only shows it when there is more than one. */
   host_api: string
   max_input_channels: number
   max_output_channels: number
@@ -100,6 +102,8 @@ export type SessionState =
       folder: string
       tracks: Track[]
       takes: Take[]
+      /** The takes grouped into songs, by Python's rule. */
+      songs: Song[]
       next_take_number: number
       next_take_name: string
       recording: boolean
@@ -114,6 +118,9 @@ export type SessionState =
 export type Song = {
   name: string
   takes: number
+  /** Which takes they were. Sent with an open rehearsal, for its overview;
+   *  the history list has only the count. */
+  take_numbers?: number[]
 }
 
 export type RehearsalSummary = {
@@ -135,6 +142,7 @@ export type RehearsalDetail = {
   name: string
   created_at: string
   takes: Take[]
+  songs: Song[]
 }
 
 export type TrackTemplate = {
@@ -213,6 +221,8 @@ export type Settings = {
   theme: "dark" | "light" | "system"
   ui_scale: number
   output_device_index: number | null
+  /** Outputs of that card the mix comes out of, from 1: [3, 4] or [5]. */
+  output_channels: number[]
   cloud_dir: string | null
   cloud_format: CloudFormat
   cloud_formats: { id: CloudFormat; label: string; hint: string }[]
@@ -277,7 +287,10 @@ type PyApi = {
     customName: string,
     durationSec: number,
     tracks: TrackFile[],
-    markers?: Marker[]
+    markers?: Marker[],
+    /** This take's own answer: null follows the setting, false keeps it
+     *  out of the cloud folder, true sends it with sending off. */
+    sendToCloud?: boolean | null
   ): Promise<Ok<{ take?: Take }>>
   discard_take(tempDir: string): Promise<Ok>
   /**
@@ -385,6 +398,7 @@ type PyApi = {
   save_mix(volumes: Record<string, number>): Promise<Ok>
   save_appearance(theme: string, uiScale: number): Promise<Ok>
   set_output_device(deviceIndex: number | null): Promise<Ok>
+  set_output_channels(channels: number[]): Promise<Ok>
 
   start_monitor(
     deviceIndex: number,
@@ -477,11 +491,70 @@ export function waitForApi(timeoutMs = 15000): Promise<PyApi> {
   })
 }
 
+/**
+ * The calls that answer with a value rather than `{ok, error}` — a list, the
+ * settings, the session. A failure has no honest stand-in for those, so they
+ * still reject (after the bar has said so); every other call, on failure,
+ * answers `{ok: false, error}`, which is the shape each screen already
+ * handles: it shows the error and lets go of its busy state.
+ */
+const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
+  "ping",
+  "list_input_devices",
+  "list_output_devices",
+  "load_default_tracks",
+  "media_url",
+  "take_media",
+  "session_state",
+  "get_levels",
+  "monitor_levels",
+  "recording_health",
+  "list_rehearsals",
+  "list_drafts",
+  "get_settings",
+])
+
+let guarded: { raw: PyApi; proxy: PyApi } | null = null
+
+/**
+ * The bridge, with every call guarded: a Python exception reaches the
+ * person as a bar with its message (see `bridgeErrors`), never as a button
+ * that dims and stays dimmed.
+ */
 export function api(): PyApi {
-  if (!window.pywebview?.api) {
+  const raw = window.pywebview?.api
+  if (!raw) {
     throw new Error("The bridge to Python is not ready yet")
   }
-  return window.pywebview.api
+  if (guarded?.raw !== raw) {
+    const wrapped = new Map<PropertyKey, unknown>()
+    const proxy = new Proxy(raw, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver)
+        if (typeof value !== "function") return value
+        const cached = wrapped.get(prop)
+        if (cached) return cached
+        const method = String(prop)
+        const call = async (...args: unknown[]) => {
+          // Looked up per call, not captured: a method replaced on the bridge
+          // after the first call must still be the one that runs.
+          const fn = Reflect.get(target, prop) as (...a: unknown[]) => Promise<unknown>
+          try {
+            return await fn.apply(target, args)
+          } catch (e) {
+            reportBridgeError(method, e)
+            if (ANSWERS_WITH_A_VALUE.has(method as keyof PyApi)) throw e
+            const err = e instanceof Error ? e : new Error(String(e))
+            return { ok: false, error: `${err.name}: ${err.message}` }
+          }
+        }
+        wrapped.set(prop, call)
+        return call
+      },
+    })
+    guarded = { raw, proxy }
+  }
+  return guarded.proxy
 }
 
 /** The read-only calls the interface asks for over and over. */

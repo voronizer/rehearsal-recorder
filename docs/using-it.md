@@ -13,7 +13,10 @@ What each screen is for, and the decisions behind how they behave.
 - **Settings** (the gear in the header) — four groups rather than one long
   column, because six sections stacked in a row was a wall nobody could scan:
   **Audio** (the recording interface, rate and depth; the card used for
-  playback), **Folders** (where rehearsals go, where cloud copies go, whether
+  playback and, on a card with more than two outputs, which pair — or which
+  single output — the takes come out of; on Windows each card through its
+  driver first, since one card offers a different number of inputs through
+  each), **Folders** (where rehearsals go, where cloud copies go, whether
   saved takes go there on their own and what they are written as),
   **Appearance** (theme and scale) and **Under the hood** (paths and the
   local server). The track layout is deliberately not
@@ -24,14 +27,19 @@ What each screen is for, and the decisions behind how they behave.
 - **Rehearsal** — the hub: the takes recorded so far and a big "Record take"
   button. Takes are a strip along the top; click one to listen to it in the
   player below. Nothing is selected until you pick one, so opening a rehearsal
-  does not start reading audio files nobody asked for. Clicking a take again
+  does not start reading audio files nobody asked for; until then the space
+  where the player goes shows the evening — the songs with their goes and
+  lengths, and every note left while listening, each of which opens its take
+  at that spot. History shows the same overview for a past rehearsal. Clicking a take again
   keeps it open — selecting is sticky.
 - **Recording** — a large timer, a level meter per track, and a status line
   that is always visible: interface connected, how much recording time the
   disk has left, and any warning. The meter shows the state as well as the
   level: fine / silent / clipping.
 - **Review** — straight after stopping: the player (below), a name field, and
-  "Save take" or "Discard". Markers work here too, which takes explaining: the
+  "Save take" or "Discard". Above the buttons it says whether the take will
+  go to the cloud folder, with a box to decide otherwise for this take alone;
+  the setting in Settings is not changed by it. Markers work here too, which takes explaining: the
   take has no folder yet, so there is nowhere on disk to write them. They are
   held in the screen and travel with the take when it is saved — and go away
   with it if it is discarded. It is the same player component throughout;
@@ -295,8 +303,12 @@ both depths is checked by the test suite, not assumed.
 On every screen the spacebar does the main thing, so nobody has to reach for
 the mouse mid-rehearsal: start the rehearsal, start the take, stop recording,
 play/pause while listening. On screens with a player the left and right arrows
-seek ±10 seconds. The `Space` hint is shown next to the button. Shortcuts do
-not fire while the cursor is in a text field.
+seek ±10 seconds, Home goes back to the start, M drops a marker and R turns
+Repeat on and off; **?** lists them. The main button of each screen shows
+its key, and only while the key presses it: with a take open Space plays the
+take instead of recording, and Escape is not on Finish because it closes the
+take first.
+Shortcuts do not fire while the cursor is in a text field.
 
 Escape means one level up, and it takes one rung per press. A dialog closes
 first, because while one is open it is the topmost thing on screen. Then the
