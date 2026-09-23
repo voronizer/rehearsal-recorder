@@ -220,6 +220,34 @@ def _is_inside(path, root):
         return False
 
 
+def _same_folder(a, b):
+    """Whether two paths are one folder on disk.
+
+    Comparing them as text is right only where the filesystem reads them
+    that way. A Mac's does not, and neither does Windows: a folder renamed
+    "Other" to "other" in Finder is the same folder, while the record still
+    spells it the old way. `WindowsPath` happens to ignore case, so text
+    comparison holds there by accident; `PosixPath` does not, and on a Mac
+    the two names look like two folders. Where both are really on disk the
+    filesystem itself is asked, which needs no guess about the platform;
+    where one is missing there is nothing to ask, and the text is all there
+    is.
+    """
+    if a == b:
+        return True
+    try:
+        return a.samefile(b)
+    except OSError:
+        return False
+
+
+def _folder_within(inner, outer):
+    """Whether `outer` holds `inner`, at any depth — asking the filesystem
+    the way `_same_folder` does, so a folder above that differs only in case
+    still counts."""
+    return any(_same_folder(p, outer) for p in inner.parents)
+
+
 def _is_output_choice(channels):
     """A pair of outputs the way cards label them — 1–2, 3–4, 5–6 — or one
     output on its own. 2–3 is refused: no card wires its stereo outs that
@@ -1857,7 +1885,7 @@ class Api:
         # would carry the rehearsal's own files away with it.
         target = new_folder.resolve()
         trash = (self._recordings_dir / FALLBACK_TRASH).resolve()
-        if target == trash or trash in target.parents:
+        if _same_folder(target, trash) or _folder_within(target, trash):
             return {"ok": False, "error": "That folder is where deleted things go"}
 
         rehearsals = self._lib.rehearsals()
@@ -1868,18 +1896,21 @@ class Api:
             return {"ok": False, "error": "That rehearsal's folder is not missing"}
 
         part = {"ok": False, "error": "That folder is part of another rehearsal"}
-        if live is not None and target == live.resolve():
+        if live is not None and _same_folder(target, live.resolve()):
             return part
         if self._lib.has(new_folder):
             return {"ok": False, "error": "That folder is already another rehearsal"}
         others = [Path(r["folder"]).resolve() for r in rehearsals if r is not me]
         if live is not None:
             others.append(live.resolve())
-        # A folder can be renamed to a different case alone (WindowsPath
-        # equality ignores it, so this also covers a resolve() that finds
-        # the same folder a different way): "in target.parents" alone never
-        # matches the folder itself, only something above or below it.
-        if any(o == target or o in target.parents or target in o.parents for o in others):
+        # The folder itself, anything above it, and anything under it: a
+        # rehearsal sharing files with another would have each of them
+        # delete the other's takes. Compared through the filesystem rather
+        # than by name, so a folder renamed to a different case alone —
+        # "Other" to "other", which a Mac and Windows both treat as the same
+        # folder — is still recognised as the one the database has.
+        if any(_same_folder(o, target) or _folder_within(target, o)
+               or _folder_within(o, target) for o in others):
             return part
 
         if not self._lib.move_rehearsal(folder, new_folder):
