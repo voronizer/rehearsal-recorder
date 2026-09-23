@@ -42,7 +42,11 @@ from rehearsal_recorder.audio.format import (
 )
 from rehearsal_recorder.audio.crop import crop_wav
 from rehearsal_recorder.audio.mixdown import mixdown
-from rehearsal_recorder.audio.devices import recording_formats
+from rehearsal_recorder.audio.devices import (
+    device_identity,
+    recording_formats,
+    saved_device,
+)
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
@@ -295,11 +299,17 @@ class Api:
         CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_PATH.write_text(json.dumps(self._config, ensure_ascii=False, indent=2))
 
+    def _remember_device(self, key, index):
+        """Saves a device choice as its index and what it is. `key` is
+        "device" or "output_device"; see audio.devices.saved_device."""
+        self._config[f"{key}_index"] = index
+        self._config[key] = device_identity(index)
+
     def get_settings(self):
         return {
             "recordings_dir": str(self._recordings_dir),
             "default_recordings_dir": str(RECORDINGS_ROOT),
-            "device_index": self._config.get("device_index"),
+            "device_index": saved_device(self._config, "device", True),
             "samplerate": int(
                 self._config.get("samplerate") or DEFAULT_SAMPLERATE
             ),
@@ -309,7 +319,9 @@ class Api:
             "volumes": self._config.get("volumes", {}),
             "theme": self._config.get("theme", "dark"),
             "ui_scale": self._config.get("ui_scale", 1),
-            "output_device_index": self._config.get("output_device_index"),
+            "output_device_index": saved_device(
+                self._config, "output_device", False
+            ),
             "cloud_dir": self._config.get("cloud_dir"),
             "cloud_format": normalize_format(self._config.get("cloud_format")),
             "cloud_formats": CLOUD_FORMATS_INFO,
@@ -445,9 +457,9 @@ class Api:
 
         This matters on Windows, where one interface shows up once per system
         — MME, DirectSound, WASAPI, WDM-KS, ASIO if the card has a driver —
-        and the names alone are identical. Without saying which is which, the
-        list reads as five copies of the same card. macOS has only CoreAudio,
-        so the label is left off there.
+        and the names alone are identical. The interface groups devices by
+        it, so it is reported everywhere; on a Mac there is only one and the
+        interface does not show it.
         """
         try:
             return [h["name"] for h in sd.query_hostapis()]
@@ -456,7 +468,6 @@ class Api:
 
     def _describe_devices(self, want_input):
         apis = self._host_api_names()
-        many = len(apis) > 1
         key = "max_input_channels" if want_input else "max_output_channels"
 
         found = []
@@ -467,7 +478,7 @@ class Api:
             found.append({
                 "index": idx,
                 "name": d["name"],
-                "host_api": api if many else "",
+                "host_api": api,
                 "max_input_channels": d.get("max_input_channels", 0),
                 "max_output_channels": d.get("max_output_channels", 0),
                 "default_samplerate": int(d["default_samplerate"]),
@@ -484,7 +495,7 @@ class Api:
         the card, not argued about at the start of every rehearsal.
         """
         depth = normalize_depth(bit_depth)
-        self._config["device_index"] = device_index
+        self._remember_device("device", device_index)
         self._config["samplerate"] = int(samplerate)
         self._config["bit_depth"] = depth
         self._write_config()
@@ -512,14 +523,16 @@ class Api:
         if not self._config.get("tracks"):
             return None
         return {
-            "device_index": self._config.get("device_index"),
+            "device_index": saved_device(self._config, "device", True),
             "samplerate": self._config.get("samplerate"),
             "bit_depth": normalize_depth(self._config.get("bit_depth")),
             "tracks": self._config.get("tracks", []),
         }
 
     def save_default_tracks(self, config):
-        for key in ("device_index", "samplerate", "bit_depth", "tracks"):
+        if "device_index" in config:
+            self._remember_device("device", config["device_index"])
+        for key in ("samplerate", "bit_depth", "tracks"):
             if key in config:
                 self._config[key] = config[key]
         self._write_config()
@@ -1468,7 +1481,7 @@ class Api:
             try:
                 player = TakePlayer(tracks)
                 warning = player.open_output(
-                    self._config.get("output_device_index")
+                    saved_device(self._config, "output_device", False)
                 )
             except Exception as e:
                 return {"ok": False, "error": str(e)}
@@ -1546,7 +1559,7 @@ class Api:
 
     def set_output_device(self, device_index):
         """Switching the output applies immediately, even mid-take."""
-        self._config["output_device_index"] = device_index
+        self._remember_device("output_device", device_index)
         self._write_config()
 
         with self._player_lock:

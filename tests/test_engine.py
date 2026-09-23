@@ -341,6 +341,37 @@ def main():
     finally:
         _sd.query_devices, _sd.query_hostapis = real_q, real_h
 
+    print("\n[4e] Settings save what the device is and read it back")
+    apimod, a = fresh_api(tmp / "devices")
+    a.set_recording_format(0, 48000, 24)
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("the recording interface is saved by name and system",
+       saved.get("device") == {"name": "Interface", "host_api": "CoreAudio"})
+    a.set_output_device(2)
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("so is the playback output",
+       saved.get("output_device") == {"name": "Fussy DAC", "host_api": "CoreAudio"})
+    a.set_output_device(None)
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("the system output leaves no name behind",
+       saved.get("output_device") is None
+       and saved.get("output_device_index") is None)
+
+    a.save_default_tracks({"device_index": 1, "tracks": [{"name": "V", "channel": 1}]})
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("the setup screen's template saves it the same way",
+       saved.get("device") == {"name": "Podcast mic", "host_api": "CoreAudio"})
+
+    # The card moved: identity says index 0 now, the stored index says 1.
+    a._config["device_index"] = 1
+    a._config["device"] = {"name": "Interface", "host_api": "CoreAudio"}
+    ok("settings report where the card is now",
+       a.get_settings()["device_index"] == 0)
+    ok("and so does the template the setup screen loads",
+       a.load_default_tracks()["device_index"] == 0)
+    ok("every device says which system it came through, even alone",
+       all(d["host_api"] == "CoreAudio" for d in a.list_input_devices()))
+
     print("\n[5] Tracks of different length do not break the mix")
     write_wav(tmp / "short.wav", 500, seconds=0.5)
     p2 = TakePlayer([
