@@ -348,23 +348,37 @@ padding, the buttons and the waveform grow with it, not just the text.
 ## Where the files are
 
 ```
-~/RehearsalRecordings/Tuesday jam - 2026-09-18 19-00/
-  session.json              ← the take list; History is built from it
-  _drafts/
-    take 3/                 ← being written right now, while recording
-      Guitar 1.wav
-      Vocals.wav
-  01 - Verse riff/          ← saved take 1
-  02 - Verse riff 2/        ← saved take 2
+~/RehearsalRecordings/
+  library.sqlite                  ← the history — every rehearsal, take,
+                                     marker and cloud copy; History is built
+                                     from it
+  Tuesday jam - 2026-09-18 19-00/
+    _drafts/
+      take 3/                     ← being written right now, while recording
+        Guitar 1.wav
+        Vocals.wav
+    01 - Verse riff/               ← saved take 1
+    02 - Verse riff 2/             ← saved take 2
 ```
 
-Until a take is saved it is written to `_drafts` inside the rehearsal folder,
-next to `session.json`, rather than a system temp folder — the path is
-predictable and visible in Finder. "Save take" moves the files into the take's
-own folder, "Discard" moves them to the Trash — the same place everything else
-deleted in this app goes, and for the same reason: a take recorded two minutes
-ago is the one recording in the whole app that cannot be made again. An empty
-`_drafts` folder cleans itself up either way.
+Until a take is saved it is written to `_drafts` inside the rehearsal folder
+rather than a system temp folder — the path is predictable and visible in
+Finder. "Save take" moves the files into the take's own folder, "Discard"
+moves them to the Trash — the same place everything else deleted in this app
+goes, and for the same reason: a take recorded two minutes ago is the one
+recording in the whole app that cannot be made again. An empty `_drafts`
+folder cleans itself up either way.
+
+Older rehearsals used to keep their own `session.json` in each folder; those
+are moved into `library.sqlite` the first time this version opens the
+recordings folder, and the `session.json` is then removed — nothing to do by
+hand. If a rehearsal's folder is later moved, renamed by hand from outside the
+app, or is simply not there — a drive not plugged in, say — it still shows up
+in History, marked "Not found on disk", with "Locate folder…" to point it at
+where the folder is now and "Remove from history" to drop it without touching
+whatever is on disk. And a recordings folder a newer version of the app has
+already opened cannot be opened by an older one — the older app would not know
+what to make of a database shaped for changes it has never heard of.
 
 ## What protects a recording
 

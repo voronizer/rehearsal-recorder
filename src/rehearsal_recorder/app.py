@@ -153,6 +153,26 @@ def selftest():
 
         return f"numpy {np.__version__}"
 
+    def database():
+        import tempfile
+
+        from alembic.script import ScriptDirectory
+
+        from rehearsal_recorder.store import db
+        from rehearsal_recorder.store.library import Library
+
+        with tempfile.TemporaryDirectory() as tmp:
+            library = Library(tmp)
+            head = ScriptDirectory.from_config(db.alembic_config()).get_current_head()
+            current = db.current_revision(library._engine)
+            library.close()
+            if current != head:
+                raise RuntimeError(
+                    f"migrated to {current!r}, not head {head!r} — "
+                    "the bundle is missing a migration"
+                )
+            return f"migrations up to {head}"
+
     def window_toolkit():
         import webview
 
@@ -165,6 +185,7 @@ def selftest():
         check("ASIO", asio)
     check("sample formats", encoder)
     check("numpy", numpy_works)
+    check("history database", database)
     check("window toolkit", window_toolkit)
     check("built interface", interface)
     check("deleting", lambda: f"goes to the {trash_kind()}")
