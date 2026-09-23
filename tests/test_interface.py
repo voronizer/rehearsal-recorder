@@ -60,6 +60,11 @@ let outputDevice = {index: null};
 // take happens to reuse that dummy path.
 let fileDurations = {};
 let cloudQueue = {};
+// A rehearsal whose folder is gone — set to null once it is relocated or
+// removed from history, the way the real database would stop listing it.
+let missingRehearsal = {folder:'/rec/gone', name:'Missing jam',
+  created_at:'2026-08-20T19:00:00', take_count:5, total_duration_sec:1200,
+  disk_bytes:0, songs:[], missing:true};
 
 // The Python config lives in a file and survives a reload, so keep it in its
 // own storage key rather than in page memory.
@@ -129,6 +134,8 @@ function songsOf(takes) {
 
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
+  startup_problems: track('startup_problems', async () =>
+    (window.__STARTUP_PROBLEM__ ? [window.__STARTUP_PROBLEM__] : [])),
   // With a host API named, this is the Windows shape once ASIO is loaded:
   // one mixer through three systems with three different input counts.
   list_input_devices: async () => (window.__HOST_API__ ? [
@@ -353,7 +360,17 @@ window.__MAKE_API__ = () => ({
      songs:[{name:'Polyn', takes:3}, {name:'Vesna', takes:2}, {name:'Ogon', takes:1},
             {name:'Sonce', takes:1}, {name:'Dym', takes:1}, {name:'Ptaha', takes:1}]},
     {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
-     take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[]}]),
+     take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[]},
+    ...(missingRehearsal ? [missingRehearsal] : [])]),
+  forget_rehearsal: track('forget_rehearsal', async (folder) => {
+    if (missingRehearsal && folder === missingRehearsal.folder) missingRehearsal = null;
+    return {ok:true};
+  }),
+  choose_rehearsal_folder: track('choose_rehearsal_folder', async (folder) => {
+    if (window.__CANCEL_LOCATE__) return {ok:false, cancelled:true};
+    if (missingRehearsal && folder === missingRehearsal.folder) missingRehearsal = null;
+    return {ok:true, folder:'/rec/relocated'};
+  }),
   get_rehearsal: async (folder) => {
     // Its own path, distinct from the live session's /rec/g.wav — two takes
     // sharing a dummy path would let one's mocked length leak onto the other.
@@ -1758,6 +1775,100 @@ def main():
         sky.wait_for_timeout(400)
         ok("and left alone it simply follows the setting", sent_as() is None)
         sky.close()
+
+        print("\n[12i] A rehearsal whose folder is gone")
+        gone = browser.new_page(viewport={"width": 1180, "height": 820})
+        gone.add_init_script(MOCK)
+        gone.goto(server.base_url, wait_until="networkidle")
+        gone.wait_for_selector("text=Start rehearsal")
+
+        def gone_calls(name):
+            return gone.evaluate(
+                f"() => window.__CALLS__.filter(c => c.name === '{name}')"
+            )
+
+        gone.click("text=History")
+        gone.wait_for_selector("text=Missing jam")
+        row = gone.locator(".rounded-xl", has_text="Missing jam").first
+        ok("the missing rehearsal carries the badge",
+           row.locator("text=Not found on disk").count() == 1)
+        ok("and no other row does",
+           gone.locator("text=Not found on disk").count() == 1)
+
+        info = row.locator("[aria-disabled='true']")
+        ok("its info area is marked not interactive",
+           info.get_attribute("aria-disabled") == "true")
+        info.click()
+        gone.wait_for_timeout(300)
+        ok("clicking it does not try to open it",
+           len(gone_calls("get_rehearsal")) == 0)
+
+        row.get_by_role("button", name="Locate folder…").click()
+        gone.wait_for_timeout(300)
+        located = gone_calls("choose_rehearsal_folder")
+        ok("Locate folder asks Python, with that rehearsal's folder",
+           len(located) == 1 and located[0]["args"][0] == "/rec/gone")
+        ok("found, it drops off the missing list",
+           gone.locator("text=Not found on disk").count() == 0)
+
+        print("\n[12i cont.] Cancelling the folder dialog does nothing")
+        cancel = browser.new_page(viewport={"width": 1180, "height": 820})
+        cancel.add_init_script("window.__CANCEL_LOCATE__ = true;" + MOCK)
+        cancel.goto(server.base_url, wait_until="networkidle")
+        cancel.wait_for_selector("text=Start rehearsal")
+
+        def cancel_calls(name):
+            return cancel.evaluate(
+                f"() => window.__CALLS__.filter(c => c.name === '{name}')"
+            )
+
+        cancel.click("text=History")
+        cancel.wait_for_selector("text=Missing jam")
+        cancel.locator(".rounded-xl", has_text="Missing jam").first.get_by_role(
+            "button", name="Locate folder…"
+        ).click()
+        cancel.wait_for_timeout(300)
+        ok("a cancelled dialog leaves the entry as it was",
+           cancel.locator("text=Not found on disk").count() == 1)
+
+        cancel_row = cancel.locator(".rounded-xl", has_text="Missing jam").first
+        cancel_row.get_by_role("button", name="Remove from history").click()
+        cancel.wait_for_selector("text=Only the entry goes")
+        ok("it asks before removing anything",
+           len(cancel_calls("forget_rehearsal")) == 0)
+        cancel.get_by_role("button", name="Remove", exact=True).click()
+        cancel.wait_for_timeout(300)
+        forgotten = cancel_calls("forget_rehearsal")
+        ok("confirming removes just the entry, with that folder",
+           len(forgotten) == 1 and forgotten[0]["args"][0] == "/rec/gone")
+        ok("and it is gone from the list",
+           cancel.locator("text=Missing jam").count() == 0)
+        cancel.close()
+        gone.close()
+
+        print("\n[12j] A problem while starting is shown, once")
+        startup = browser.new_page(viewport={"width": 1180, "height": 820})
+        startup.add_init_script(
+            "window.__STARTUP_PROBLEM__ = "
+            "{name: 'OperationalError', "
+            "message: 'Could not read the history of Tuesday jam.'};"
+            + MOCK
+        )
+        startup.goto(server.base_url, wait_until="networkidle")
+        startup.wait_for_selector(
+            "[role='alert'][aria-label='Something went wrong']", timeout=8000
+        )
+        bar = startup.locator(
+            "[role='alert'][aria-label='Something went wrong']"
+        ).inner_text()
+        ok("a problem from startup reaches the same bar",
+           "Could not read the history" in bar and "Tuesday jam" in bar)
+        ok("with the kind of problem it was", "OperationalError" in bar)
+        ok("asked only once",
+           len(startup.evaluate(
+               "() => window.__CALLS__.filter(c => c.name === 'startup_problems')"
+           )) == 1)
+        startup.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})

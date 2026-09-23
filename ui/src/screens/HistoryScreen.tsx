@@ -71,6 +71,8 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     useState<RehearsalSummary | null>(null)
   const [rehearsalToRename, setRehearsalToRename] =
     useState<RehearsalSummary | null>(null)
+  const [rehearsalToForget, setRehearsalToForget] =
+    useState<RehearsalSummary | null>(null)
   const [renamingOpened, setRenamingOpened] = useState(false)
   const { selected, select, reselect, openAt, player } = useTakeStripPlayer()
 
@@ -196,6 +198,28 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     const res = await api().delete_rehearsal(r.folder)
     if (!res.ok) {
       setError(res.error ?? "Could not delete the rehearsal")
+      return
+    }
+    await refresh()
+  }
+
+  // For a rehearsal whose folder went missing: point it at where the folder
+  // is now, or, if it was really deleted, drop it from history and leave
+  // whatever is on disk — there is nothing here to delete.
+  const locateRehearsal = async (r: RehearsalSummary) => {
+    const res = await api().choose_rehearsal_folder(r.folder)
+    if (res.cancelled) return
+    if (!res.ok) {
+      setError(res.error ?? "Could not locate the rehearsal's folder")
+      return
+    }
+    await refresh()
+  }
+
+  const forgetRehearsal = async (r: RehearsalSummary) => {
+    const res = await api().forget_rehearsal(r.folder)
+    if (!res.ok) {
+      setError(res.error ?? "Could not remove the rehearsal from history")
       return
     }
     await refresh()
@@ -367,9 +391,12 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
             subtitle={subtitleOf(r)}
             songsText={songsLabel(r.songs)}
             takesText={takesLabel(r.take_count)}
+            missing={r.missing}
             onClick={() => open(r)}
             onRename={() => setRehearsalToRename(r)}
             onDelete={() => setRehearsalToDelete(r)}
+            onLocate={() => void locateRehearsal(r)}
+            onForget={() => setRehearsalToForget(r)}
           />
         ))}
       </div>
@@ -384,6 +411,18 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
         onConfirm={() => {
           if (rehearsalToDelete) void deleteRehearsal(rehearsalToDelete)
           setRehearsalToDelete(null)
+        }}
+      />
+
+      <ConfirmDialog
+        open={rehearsalToForget !== null}
+        onOpenChange={(open) => !open && setRehearsalToForget(null)}
+        title={`Remove “${rehearsalToForget?.name ?? ""}” from history?`}
+        description="Only the entry goes — there is nothing on disk to delete. If the folder turns up again, it will not come back by itself."
+        confirmLabel="Remove"
+        onConfirm={() => {
+          if (rehearsalToForget) void forgetRehearsal(rehearsalToForget)
+          setRehearsalToForget(null)
         }}
       />
 
