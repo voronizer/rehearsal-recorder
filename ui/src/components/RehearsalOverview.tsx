@@ -1,3 +1,4 @@
+import { CloudCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { MARKER_KINDS, markerStyle } from "@/lib/markers"
@@ -124,11 +125,15 @@ function TakeChip({
   const kinds = MARKER_KINDS.filter((k) =>
     take.markers?.some((m) => m.kind === k.kind)
   )
+  // Already copied to the cloud folder. The strip only ever said this for
+  // the open take, with its cloud button; here every take can say it, which
+  // is the question when deciding what still needs sending.
+  const inCloud = Boolean(take.cloud?.mix || take.cloud?.tracks)
   return (
     <button
       type="button"
       aria-label={takeButtonLabel(take, status)}
-      title={take.name}
+      title={inCloud ? `${take.name} — in the cloud folder` : take.name}
       onClick={() => onOpen(take)}
       className="flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:bg-accent/50"
     >
@@ -139,6 +144,13 @@ function TakeChip({
       {kinds.map((k) => (
         <span key={k.kind} className={cn("size-1.5 rounded-full", k.dot)} />
       ))}
+      {inCloud && (
+        <CloudCheck
+          data-in-cloud
+          aria-hidden
+          className="size-3 text-signal"
+        />
+      )}
       {status && (
         <span
           className={cn(

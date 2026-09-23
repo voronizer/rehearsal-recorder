@@ -366,6 +366,7 @@ window.__MAKE_API__ = () => ({
        tracks:[{name:'Guitar', file:'/rec/old/p1.wav'}]},
       {take_number:2, name:'Polyn 2', duration_sec:178,
        markers:[{at:72, note:'this one is the take', kind:'good'}],
+       cloud:{mix:'/cloud/Tuesday jam/02 - Polyn 2.mp3', mix_format:'mp3'},
        tracks:[{name:'Guitar', file:'/rec/old/p2.wav'}]},
       {take_number:3, name:'Take 3', duration_sec:90,
        markers:[{at:5, note:'', kind:'note'}],
@@ -1646,6 +1647,10 @@ def main():
         ok("a plain mark with nothing written is not a note",
            eve.locator("[aria-label='Rehearsal overview'] [data-note]").count() == 2)
         ok("no lonely 'pick a take' line", eve.locator("text=Pick a take").count() == 0)
+        ok("a take already in the cloud folder says so on its chip",
+           eve.locator("button[aria-label='Take 2 Polyn 2'] [data-in-cloud]").count() == 1)
+        ok("and the others do not",
+           eve.locator("[aria-label='Rehearsal overview'] [data-in-cloud]").count() == 1)
         ok("and no strip of pills repeating it",
            eve.get_by_role("group", name="Take strip").count() == 0)
         eve.screenshot(path=str(SHOTS / "60-overview.png"))

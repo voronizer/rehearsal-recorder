@@ -44,6 +44,9 @@ opening.
   it was left. The strip of take pills is hidden meanwhile, since it only
   repeated the overview; it comes back once a take is open, to switch
   between them.
+- In that overview, a take already copied to the cloud folder has a small
+  cloud on its chip, so what still needs sending is visible without opening
+  each take.
 - A tick just before the end of a take no longer puts a sideways scrollbar
   under the last track on Windows.
 
