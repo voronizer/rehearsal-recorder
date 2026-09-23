@@ -69,7 +69,7 @@ changes only for the "missing" state.
 | `rehearsal` | `id` PK, `folder` TEXT UNIQUE NOT NULL (relative to the recordings folder), `name`, `created_at` TEXT (ISO, as today), `samplerate` INT, `bit_depth` INT |
 | `track` | `id` PK, `rehearsal_id` → rehearsal ON DELETE CASCADE, `position` INT, `name`, `channel` INT — the rehearsal's track setup |
 | `take` | `id` PK, `rehearsal_id` → rehearsal CASCADE, `take_number` INT, `name`, `duration_sec` REAL, `cloud_skip` BOOL default false, `cloud_send` BOOL default false, `cloud_error` TEXT NULL; UNIQUE(`rehearsal_id`, `take_number`) |
-| `take_file` | `id` PK, `take_id` → take CASCADE, `position` INT, `name`, `file` TEXT (relative to the recordings folder) |
+| `take_file` | `id` PK, `take_id` → take CASCADE, `position` INT, `name`, `file` TEXT (relative to the **rehearsal** folder, e.g. `01 - Verse riff/Guitar 1.wav`) |
 | `marker` | `id` PK, `take_id` → take CASCADE, `at` REAL (rounded to 0.01 as `_as_marker` does), `kind`, `note` |
 | `cloud_copy` | `take_id` PK → take CASCADE, `mix` TEXT NULL, `mix_format` TEXT NULL, `gain` REAL NULL, `tracks` TEXT NULL, `tracks_format` TEXT NULL, `source` JSON — today's `take["cloud"]`; no row = not in the cloud |
 
@@ -88,9 +88,10 @@ records the rehearsal's subfolder inside the cloud folder
   not there, and a record is only believed while its file exists
   (`copies_exist`), so the takes count as not sent and go by the usual rules —
   as today.
-- **Cost:** after the cloud folder changes, "Remove from the cloud" on a take
+- **After the cloud folder changes**, "Remove from the cloud" on a take
   copied to the old one looks in the new one and removes nothing; the old
-  files stay where they were. Today the absolute path let it delete them there.
+  files stay where they were. That is no loss: `_remove_shared` already
+  refuses anything outside the *current* cloud folder today.
 - **No cloud folder set**: a take's copy is unknown — no cloud status is
   shown and "Remove from the cloud" is unavailable until one is set again.
 
@@ -99,8 +100,10 @@ target, and `copies_exist` takes the cloud folder to resolve against (and
 returns False without one).
 
 Renaming a rehearsal becomes one `UPDATE rehearsal SET folder`, plus the
-folder move; renaming a take updates its `take_file.file` rows. Neither
-rewrites paths across the whole rehearsal any more.
+folder move — take files are relative to the rehearsal folder, so none of
+them change. Renaming a take updates only its own `take_file.file` rows.
+The API still hands the interface absolute paths: `library` joins them on
+the way out.
 
 ## Opening a database
 
@@ -132,8 +135,8 @@ a `session.json`:
 - **Folder not in the database**: insert the rehearsal, its tracks, takes,
   take files, markers and cloud fields in one transaction; after commit,
   delete `session.json` (and any `session.json.writing`). Absolute file paths
-  are made relative to the recordings folder; a path outside it (the folder
-  was moved) is re-rooted as `<folder>/<take folder>/<file name>`. A take's
+  are made relative to the rehearsal folder; a path outside it (the folder
+  was moved or renamed by hand) is re-rooted as `<take folder>/<file name>`. A take's
   `cloud` record has its `mix` / `tracks` made relative to the current
   `cloud_dir` and `source["dir"]` replaced by the subfolder; if a path lies
   outside `cloud_dir`, or no cloud folder is set, no `cloud_copy` row is
