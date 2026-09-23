@@ -47,23 +47,26 @@ export function DevicePicker({
   const current = devices.find((d) => d.index === value)
   const [driver, setDriver] = useState<string | null>(null)
 
-  // Follow the saved device until the person picks a driver themselves.
+  // Follow the saved device until the person picks a driver themselves, and
+  // reset the same way if the driver they were on stops being offered — the
+  // lists are read once, so today nothing in the interface can trigger this,
+  // but a driver that is gone is no more choosable than one never set.
   useEffect(() => {
-    if (driver === null && drivers.length) {
+    if (drivers.length && (driver === null || !drivers.includes(driver))) {
       setDriver(current?.host_api ?? drivers[0])
     }
   }, [driver, drivers, current])
 
   const several = drivers.length > 1
   const shown = several ? devices.filter((d) => d.host_api === driver) : devices
-  const selected =
-    value === null
-      ? systemDefault
-        ? SYSTEM
-        : ""
-      : shown.some((d) => d.index === value)
-        ? String(value)
-        : ""
+  const inShown = value !== null && shown.some((d) => d.index === value)
+  const selected = value === null ? (systemDefault ? SYSTEM : "") : inShown ? String(value) : ""
+  // A device chosen on another driver than the one shown is not "nothing
+  // chosen" — "System output" must only appear when it is actually
+  // selected (value null). With no device to show, the ordinary placeholder
+  // still applies.
+  const devicePlaceholder =
+    value !== null && !inShown && systemDefault ? "Pick an output" : placeholder
 
   return (
     <div className="flex flex-col gap-2">
@@ -90,7 +93,7 @@ export function DevicePicker({
         onValueChange={(v) => onChange(v === SYSTEM ? null : Number(v))}
       >
         <SelectTrigger id={id} className="w-full">
-          <SelectValue placeholder={placeholder} />
+          <SelectValue placeholder={devicePlaceholder} />
         </SelectTrigger>
         <SelectContent>
           {systemDefault && <SelectItem value={SYSTEM}>System output</SelectItem>}

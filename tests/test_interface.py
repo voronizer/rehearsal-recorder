@@ -52,6 +52,7 @@ let cloudDir = null;
 let cloudFormat = 'wav';
 let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
 let recording = {device_index: window.__NO_DEVICE__ ? null : 0, samplerate: 44100, bit_depth: 24};
+let outputDevice = {index: null};
 // Real playback reads each file's own length off disk; the mock has no
 // disk, so a track's duration is looked up here by its own file path,
 // falling back to the live session's TAKE-second default. Every path used
@@ -132,7 +133,10 @@ window.__MAKE_API__ = () => ({
      max_output_channels:2, default_samplerate:48000},
     {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
      max_output_channels:2, default_samplerate:48000}]),
-  set_output_device: track('set_output_device', async () => ({ok:true})),
+  set_output_device: track('set_output_device', async (idx) => {
+    outputDevice = {index: idx};
+    return {ok:true};
+  }),
   load_default_tracks: async () => ({
     tracks:[{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]}),
   set_recording_format: track('set_recording_format', async (dev, rate, depth) => {
@@ -369,7 +373,7 @@ window.__MAKE_API__ = () => ({
     default_recordings_dir:'/Users/alex/RehearsalRecordings',
     device_index: recording.device_index, samplerate: recording.samplerate,
     bit_depth: recording.bit_depth, supported_bit_depths:[16, 24],
-    tracks:[], volumes:{}, output_device_index:null,
+    tracks:[], volumes:{}, output_device_index: outputDevice.index,
     cloud_format: cloudFormat,
     auto_publish: autoPublish.on, auto_publish_what: autoPublish.what,
     cloud_formats:[
@@ -1441,6 +1445,16 @@ def main():
         win.wait_for_timeout(300)
         ok("and picking a card switches to it",
            win_calls("set_output_device")[-1]["args"][0] == 3)
+
+        # The chosen card is on ASIO; switching to a driver that does not
+        # carry it must not read as "System output" — nothing was unchosen.
+        win.click("#output-device-driver")
+        win.get_by_role("option", name="MME").click()
+        win.wait_for_timeout(150)
+        ok("a card on another driver does not masquerade as system output",
+           "System output" not in win.inner_text("#output-device"))
+        ok("a neutral placeholder is shown instead",
+           "Pick an output" in win.inner_text("#output-device"))
 
         win.get_by_role("button", name="Folders", exact=True).first.click()
         win.wait_for_selector("#recordings-dir")
