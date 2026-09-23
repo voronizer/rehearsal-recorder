@@ -5,6 +5,20 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.7.1
+
+- Escape on a rehearsal with takes in it flickered and stayed put: the
+  question about finishing opened and closed on the same press, so the only
+  way out of that screen was the button. New in 0.7.0, and the reason for
+  this release.
+- A dialog's answers can be reached from the keyboard. The left and right
+  arrows, and Tab, move between them, and the question about finishing a
+  rehearsal opens on **Keep going** — so Escape, an arrow, Enter ends a
+  rehearsal without the mouse. This is the app's own doing now rather than
+  the window toolkit's: on a Mac, Tab moved focus out of the page entirely
+  unless macOS **keyboard navigation** had been switched on, which it is not
+  unless you went looking for it.
+
 ## 0.7.0
 
 - The rehearsal history moved from a `session.json` in every rehearsal folder
