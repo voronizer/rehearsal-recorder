@@ -12,8 +12,10 @@ deletes them.
 What is known about the rehearsals and their takes lives in the recordings
 folder's database (store/, library.sqlite); the audio stays in the folders.
 
-The recordings folder is configurable (Settings). Point it at a cloud
-client's folder and the recordings sync themselves.
+The recordings folder is configurable (Settings). It belongs to this
+computer: the database in it is written while the app runs, and a sync
+client or a network share cannot be trusted with that. Sharing takes is what
+the separate cloud folder is for — only the takes worth keeping go there.
 """
 
 import json

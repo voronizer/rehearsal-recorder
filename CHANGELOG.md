@@ -11,6 +11,14 @@ opening.
   into one database, `library.sqlite`, at the top of the recordings folder.
   Old rehearsals move themselves in the first time this version opens the
   folder — nothing to do by hand, and the recordings on disk do not change.
+  An older version opened on the folder afterwards shows an empty History,
+  since the `session.json` files are gone; nothing is lost — the recordings
+  are untouched, and anything that old version records is moved in the next
+  time this version opens the folder.
+- Keep the recordings folder on this computer's own disk — not in a synced
+  folder or on a network share — open it from one computer at a time, and
+  move or copy it with the app closed: the history database in it is written
+  while the app runs.
 - A rehearsal whose folder cannot be found — moved, renamed outside the app,
   or on a drive that is not plugged in — stays in History instead of
   vanishing, marked "Not found on disk", with "Locate folder…" and "Remove

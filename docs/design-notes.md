@@ -165,9 +165,19 @@ models, the migrations and the code that reads and writes it.
 
 **It sits in the recordings folder, not in `~/.rehearsal-recorder`.** The
 recordings folder is the thing that actually gets moved — onto another drive,
-a NAS, a new computer — and the history has to go with it or it stops meaning
-anything. Putting it next to the audio it describes means moving the folder is
-still just moving the folder.
+a new computer, or copied to a NAS as a backup — and the history has to go
+with it or it stops meaning anything. Putting it next to the audio it
+describes means moving the folder is still just moving the folder, with the
+app closed.
+
+What that costs: the recordings folder now belongs to one computer at a time
+and has to be on a local disk. The database is written while the app runs,
+in WAL mode, and WAL needs shared memory that a network filesystem does not
+provide; a sync client can upload `library.sqlite` without its `-wal` file,
+or make conflicting copies of it; and two machines on one synced folder each
+keep a history the other never sees. The recordings folder was never the
+thing to sync — the cloud folder is — so `using-it.md` says to keep it on the
+computer's own disk and to move it with the app closed.
 
 **One file, not one per rehearsal.** Before this, every rehearsal wrote its
 own `session.json`, and building History meant opening every one of them.
