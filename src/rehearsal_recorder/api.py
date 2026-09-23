@@ -874,7 +874,14 @@ class Api:
         }
 
     def keep_take(
-        self, take_number, temp_dir, custom_name, duration_sec, tracks, markers=None
+        self,
+        take_number,
+        temp_dir,
+        custom_name,
+        duration_sec,
+        tracks,
+        markers=None,
+        send_to_cloud=None,
     ):
         """
         tracks: [{"name":.., "file": <path in the drafts folder>}, ...] as
@@ -884,6 +891,13 @@ class Api:
         markers: anything marked while listening on the review screen. They
         are passed in rather than saved as they are placed, because until the
         take is kept there is nothing on disk to attach them to.
+
+        send_to_cloud: this take's own answer to "does it go to the cloud
+        folder", from the review screen. None follows the setting. False keeps
+        it out even with sending on — and out of every later re-send of the
+        rehearsal too, or a moved fader would send the false start after all.
+        True sends it even with sending off. Kept with the take as
+        cloud_skip / cloud_send; sending by hand ignores both.
         """
         if self._session is None:
             return {"ok": False, "error": "No rehearsal in progress"}
@@ -916,6 +930,10 @@ class Api:
             "tracks": moved,
             "markers": [self._as_marker(m) for m in (markers or [])],
         }
+        if send_to_cloud is False:
+            take_info["cloud_skip"] = True
+        elif send_to_cloud is True:
+            take_info["cloud_send"] = True
         # Appending and saving must be one step: a publish landing between them
         # would rebind self._session["takes"] to a copy read before this take
         # existed, and _save_session_meta would then write that take away.
@@ -923,7 +941,7 @@ class Api:
         with self._meta_lock:
             s["takes"].append(take_info)
             self._save_session_meta()
-        self._enqueue_publish(s["folder"], take_number)
+        self._enqueue_publish(s["folder"], take_number, take=take_info)
         self._retry_failed_publishes()
         return {"ok": True, "take": take_info}
 
@@ -1838,11 +1856,28 @@ class Api:
         self._write_config()
         return {"ok": True}
 
-    def _enqueue_publish(self, folder, take_number):
-        """Ask for a take to be copied, if copying is switched on at all."""
-        if not self._config.get("auto_publish"):
+    def _enqueue_publish(self, folder, take_number, take=None):
+        """
+        Ask for a take to be copied, if it is to go at all: sending is on and
+        the take was not kept with "not this one", or sending is off and it
+        was kept with "send this one" (see keep_take).
+        """
+        if take is None:
+            take = self._take_in(folder, take_number) or {}
+        if take.get("cloud_skip"):
+            return
+        if not self._config.get("auto_publish") and not take.get("cloud_send"):
             return
         self._cloud_queue.enqueue(str(folder), take_number)
+
+    def _take_in(self, folder, take_number):
+        """A take's record: from the rehearsal in progress when it is that
+        one, which is in memory, otherwise read off its folder."""
+        if self._session is not None and Path(self._session["folder"]) == Path(folder):
+            takes = self._session.get("takes", [])
+        else:
+            takes = (self._read_meta(Path(folder)) or {}).get("takes", [])
+        return next((t for t in takes if t.get("take_number") == take_number), None)
 
     def _enqueue_session_takes(self):
         """
@@ -1878,8 +1913,6 @@ class Api:
         the cloud folder in the shape the settings ask for, so a burst of
         requests costs one mixdown, not several.
         """
-        if not self._config.get("auto_publish"):
-            return
         what = self._config.get("auto_publish_what") or "mix"
         meta = self._read_meta(Path(folder))
         if meta is None:
@@ -1889,6 +1922,12 @@ class Api:
             None,
         )
         if take is None:
+            return
+        # Asked again here, not only when queued: the setting or the take's
+        # own answer can have changed while it waited.
+        if take.get("cloud_skip"):
+            return
+        if not self._config.get("auto_publish") and not take.get("cloud_send"):
             return
         fmt = normalize_format(self._config.get("cloud_format"))
         target = self._cloud_target(folder)

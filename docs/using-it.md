@@ -37,7 +37,9 @@ What each screen is for, and the decisions behind how they behave.
   disk has left, and any warning. The meter shows the state as well as the
   level: fine / silent / clipping.
 - **Review** — straight after stopping: the player (below), a name field, and
-  "Save take" or "Discard". Markers work here too, which takes explaining: the
+  "Save take" or "Discard". Above the buttons it says whether the take will
+  go to the cloud folder, with a box to decide otherwise for this take alone;
+  the setting in Settings is not changed by it. Markers work here too, which takes explaining: the
   take has no folder yet, so there is nowhere on disk to write them. They are
   held in the screen and travel with the take when it is saved — and go away
   with it if it is discarded. It is the same player component throughout;

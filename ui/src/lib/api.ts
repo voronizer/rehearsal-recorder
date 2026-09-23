@@ -287,7 +287,10 @@ type PyApi = {
     customName: string,
     durationSec: number,
     tracks: TrackFile[],
-    markers?: Marker[]
+    markers?: Marker[],
+    /** This take's own answer: null follows the setting, false keeps it
+     *  out of the cloud folder, true sends it with sending off. */
+    sendToCloud?: boolean | null
   ): Promise<Ok<{ take?: Take }>>
   discard_take(tempDir: string): Promise<Ok>
   /**

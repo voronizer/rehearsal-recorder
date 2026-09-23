@@ -1206,6 +1206,48 @@ def main():
     removed = b.cleanup_empty_rehearsals()["removed"]
     ok("the empty one is gone", removed == 1 and not stale.exists())
 
+    print("\n[11e2] Each take can go to the cloud or not, whatever the setting")
+    # The review screen says whether this take will be sent and lets that be
+    # turned the other way for this one take: a false start kept anyway need
+    # not go up, and the one good take of an evening can, with sending off.
+    _, c = fresh_api(tmp / "choice")
+    c.set_cloud_dir(str(tmp / "choice" / "Drive"))
+    c.set_cloud_format("wav")
+    c.start_rehearsal("Choice", None, SR, [{"name": "A", "channel": 1}], 16)
+    choice_folder = Path(c._session["folder"])
+
+    def keep_one(number, send):
+        d = choice_folder / "_drafts" / f"take {number}"
+        write_wav(d / "one.wav", 900)
+        c._session["take_counter"] = number
+        return c.keep_take(number, str(d), f"Take {number}", 2.0,
+                           [{"name": "A", "file": str(d / "one.wav")}], [], send)
+
+    c.set_auto_publish(True, "mix")
+    keep_one(1, False)
+    ok("with sending on, a take kept with 'not this one' is not queued",
+       c.session_state()["cloud_queue"] == {})
+    c.set_cloud_format("flac")  # a change that re-sends the whole rehearsal
+    ok("and a later re-send of the rehearsal leaves it out too",
+       1 not in c.session_state()["cloud_queue"])
+    while c._cloud_queue.run_next():
+        pass
+    ok("so it never reaches the cloud folder",
+       "cloud" not in c.get_rehearsal(str(choice_folder))["takes"][0])
+
+    c.set_auto_publish(False)
+    keep_one(2, True)
+    ok("with sending off, a take kept with 'send this one' is queued",
+       c.session_state()["cloud_queue"] == {2: "queued"})
+    while c._cloud_queue.run_next():
+        pass
+    sent = c.get_rehearsal(str(choice_folder))["takes"][1]
+    ok("and it is sent", Path(sent.get("cloud", {}).get("mix", "")).exists())
+
+    keep_one(3, None)
+    ok("left to the setting, it follows the setting",
+       3 not in c.session_state()["cloud_queue"])
+
     print("\n[11f] A saved take goes on its own")
     solo = tmp / "Solo"
     write_wav(solo / "one.wav", 1200)

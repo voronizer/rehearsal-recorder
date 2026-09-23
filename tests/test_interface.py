@@ -48,7 +48,7 @@ let P = null;                 // player state, mirroring audio/player.py
 let session = null;
 let takeCounter = 0;
 let drafts = window.__DRAFTS__ || [];
-let cloudDir = null;
+let cloudDir = window.__CLOUD_DIR__ || null;
 let cloudFormat = 'wav';
 let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
 let recording = {device_index: window.__NO_DEVICE__ ? null : 0, samplerate: 44100, bit_depth: 24};
@@ -630,6 +630,9 @@ def main():
            key_on(page, "button:has-text('Discard')") == "Esc")
         ok("the line under the buttons is gone",
            page.get_by_text("save take", exact=True).count() == 0)
+        ok("with no cloud folder it says the take stays on this computer",
+           page.locator("text=Stays on this computer").count() == 1
+           and page.locator("#send-to-cloud").count() == 0)
 
         # Space no longer plays here, so the button is the way to listen.
         page.wait_for_selector("button[aria-label='Play']", timeout=8000)
@@ -1713,6 +1716,48 @@ def main():
         ok("the bar can be put away",
            bad.locator("[role='alert'][aria-label='Something went wrong']").count() == 0)
         bad.close()
+
+        print("\n[12h] Saving a take says whether it goes to the cloud")
+        sky = browser.new_page(viewport={"width": 1180, "height": 820})
+        sky.add_init_script(
+            "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';"
+            "window.__AUTO_PUBLISH__ = {on:true, what:'mix'};" + MOCK)
+        sky.goto(server.base_url, wait_until="networkidle")
+        sky.wait_for_selector("text=Start rehearsal")
+        sky.click("text=Start rehearsal")
+
+        def record_and_review(n):
+            sky.wait_for_selector(f"text=Record take {n}")
+            sky.click(f"text=Record take {n}")
+            sky.wait_for_selector("text=Stop")
+            sky.click("text=Stop")
+            sky.wait_for_selector("#send-to-cloud")
+
+        def sent_as():
+            kept = sky.evaluate(
+                "() => window.__CALLS__.filter(c => c.name === 'keep_take')")
+            args = kept[-1]["args"]
+            return args[6] if len(args) > 6 else None
+
+        record_and_review(1)
+        ok("with sending on, the take is set to go",
+           sky.is_checked("#send-to-cloud"))
+        ok("and it says what goes",
+           "the mix" in sky.inner_text("label[for='send-to-cloud']")
+           and "WAV" in sky.inner_text("label[for='send-to-cloud']"))
+        sky.uncheck("#send-to-cloud")
+        # Space right after clicking the box must still save, not re-tick it.
+        sky.keyboard.press("Space")
+        sky.wait_for_timeout(400)
+        ok("unticked, this take is kept out", sent_as() is False)
+
+        record_and_review(2)
+        ok("the next take starts from the setting again, not from the last one",
+           sky.is_checked("#send-to-cloud"))
+        sky.click("button:has-text('Save take')")
+        sky.wait_for_timeout(400)
+        ok("and left alone it simply follows the setting", sent_as() is None)
+        sky.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})

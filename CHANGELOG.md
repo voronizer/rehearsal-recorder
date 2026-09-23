@@ -36,6 +36,12 @@ opening.
   folder under the old name without a word; the player now lets go of it
   first. And a folder is never left renamed under a record that could not
   be written.
+- Saving a take says whether it goes to the cloud folder — "Send to the
+  cloud — the mix, MP3" — and the box can be turned the other way for that
+  one take: a false start kept anyway need not go up, and the one good take
+  of an evening can, with sending off. A take kept out stays out of later
+  re-sends of the rehearsal too. With no cloud folder it says the take stays
+  on this computer.
 - When something fails inside the app, it says so. A red bar gives the
   error's own words and where the full traceback is kept
   (`~/.rehearsal-recorder/crash.log`, which a windowed build now actually
