@@ -372,6 +372,18 @@ def main():
     ok("every device says which system it came through, even alone",
        all(d["host_api"] == "CoreAudio" for d in a.list_input_devices()))
 
+    # Settings sends the *resolved* device_index, which is None when the
+    # saved card is unplugged. Recording has no "system input", so that None
+    # must not be read as "forget the card" — only as "nothing to change".
+    a.set_recording_format(0, 48000, 24)
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    a.set_recording_format(None, 44100, 16)
+    saved2 = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("an unplugged card does not wipe the saved identity",
+       saved2.get("device") == saved.get("device") == {"name": "Interface", "host_api": "CoreAudio"})
+    ok("but the rate and depth still change",
+       saved2.get("samplerate") == 44100 and saved2.get("bit_depth") == 16)
+
     print("\n[5] Tracks of different length do not break the mix")
     write_wav(tmp / "short.wav", 500, seconds=0.5)
     p2 = TakePlayer([

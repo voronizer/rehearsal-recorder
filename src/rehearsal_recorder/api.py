@@ -495,7 +495,12 @@ class Api:
         the card, not argued about at the start of every rehearsal.
         """
         depth = normalize_depth(bit_depth)
-        self._remember_device("device", device_index)
+        # Settings sends the *resolved* device_index, which is None when the
+        # saved card is not plugged in. Recording has no "system input", so
+        # None here never means a choice — leave the saved identity alone and
+        # only change the rate and depth.
+        if device_index is not None:
+            self._remember_device("device", device_index)
         self._config["samplerate"] = int(samplerate)
         self._config["bit_depth"] = depth
         self._write_config()
