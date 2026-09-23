@@ -5,6 +5,24 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.7.2
+
+- The cloud settings fit on the screen. What a copy is written as, and what
+  gets sent automatically, were six full-width cards with a heading and a
+  sentence each, for two questions answered once; they are rows of small
+  buttons now, the way the theme and the scale already are, with the sentence
+  kept for the choice in force. How a copy is written comes first, under the
+  folder, because it holds whether or not sending is automatic — the takes
+  sent by hand are written the same way.
+- The cloud folder decides what that part of the screen shows. Without one
+  there are no copies, so nothing about a copy is offered at all; the folder
+  says the whole of it. It used to leave everything on screen, greyed, with
+  three sentences explaining copies that could not happen — and, before that,
+  live: a format could be chosen for files nothing was going to write.
+- With a cloud folder set and automatic sending off, what would be sent is
+  still shown, greyed, saying so. It used to vanish, which moved everything
+  under it out from beneath the pointer.
+
 ## 0.7.1
 
 - Escape on a rehearsal with takes in it flickered and stayed put: the
