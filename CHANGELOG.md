@@ -23,6 +23,11 @@ opening.
   outputs — 3–4 into the headphone amp, say — or out of one output on its
   own. It used to be 1–2, always. Choosing another card starts it again from
   1–2, since a pair means something different on every card.
+- On Windows, **Save take** did nothing: the button dimmed and stayed that
+  way. The review screen plays the take it is asking about, and Windows will
+  not move a file that is open for playing. Deleting a take or a rehearsal
+  while it played failed the same way. The player now lets go of those files
+  first. On a Mac the move had always worked, which is why this was not seen.
 
 ## 0.6.1
 

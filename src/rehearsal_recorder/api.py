@@ -869,6 +869,9 @@ class Api:
         )
         take_dir.mkdir(parents=True, exist_ok=True)
 
+        # The review screen is still playing these very files.
+        self._release_player_in(temp_dir)
+
         moved = []
         for t in tracks:
             src = Path(t["file"])
@@ -908,6 +911,21 @@ class Api:
         was recorded seconds earlier and cannot be played again.
         """
         return self.discard_draft(temp_dir)
+
+    def _release_player_in(self, folder):
+        """
+        Closes the player if what it has open lives in `folder`.
+
+        Tracks are played through a memmap, and Windows will not let a mapped
+        file be moved or removed — the same trap crop_take steps around. Here
+        it made Save take do nothing at all on Windows: the review screen is
+        playing the take it asks about, so its files were always mapped when
+        the move came. A player on some other take is left playing.
+        """
+        with self._player_lock:
+            open_tracks = self._open_tracks or []
+            if any(_is_inside(t["file"], folder) for t in open_tracks):
+                self.player_close()
 
     @staticmethod
     def _cleanup_drafts_dir(temp_dir):
@@ -1014,6 +1032,7 @@ class Api:
         draft_dir = Path(draft_dir)
         if not self._inside_recordings(draft_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
+        self._release_player_in(draft_dir)
         result = move_to_trash(draft_dir, self._recordings_dir)
         self._cleanup_drafts_dir(draft_dir)
         return result
@@ -1658,6 +1677,7 @@ class Api:
             result = {"ok": True, "trashed": False, "location": None}
             for d in take_dirs:
                 if Path(d).exists() and self._inside_recordings(d):
+                    self._release_player_in(d)
                     result = move_to_trash(d, self._recordings_dir)
 
             meta["takes"] = [t for t in takes if t.get("take_number") != take_number]
@@ -1676,6 +1696,7 @@ class Api:
             return {"ok": False, "error": "Rehearsal folder not found"}
         if self._session is not None and Path(self._session["folder"]) == folder:
             return {"ok": False, "error": "Cannot delete the rehearsal in progress"}
+        self._release_player_in(folder)
         return move_to_trash(folder, self._recordings_dir)
 
 

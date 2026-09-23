@@ -670,6 +670,61 @@ def main():
     ok("and they are the samples we sent",
        (tmp / "levels" / "Gtr.raw").read_bytes()[:2] == struct.pack("<h", -32000))
 
+    print("\n[7d] A take can be saved and dropped while it is still playing")
+    # The review screen plays the take it is asking about, so its files are
+    # memory-mapped when Save or Discard arrives. Windows will not move or
+    # remove a mapped file; on a Mac this passed, on Windows Save did nothing.
+    _, busy = fresh_api(tmp / "busy")
+    busy.start_rehearsal("Busy", 0, SR, [{"name": "Gtr", "channel": 1}])
+    busy_folder = Path(busy._session["folder"])
+    for number in (1, 2):
+        d = busy_folder / "_drafts" / f"take {number}"
+        write_wav(d / "Gtr.wav", 100, seconds=1.0)
+    first = busy_folder / "_drafts" / "take 1"
+    busy.player_open([{"name": "Gtr", "file": str(first / "Gtr.wav")}])
+    kept = busy.keep_take(1, str(first), "Open one", 1.0,
+                          [{"name": "Gtr", "file": str(first / "Gtr.wav")}])
+    ok("saving a take that is open in the player works",
+       kept.get("ok") and Path(kept["take"]["tracks"][0]["file"]).exists())
+    ok("and nothing is left behind in the drafts", not first.exists())
+
+    second = busy_folder / "_drafts" / "take 2"
+    busy.player_open([{"name": "Gtr", "file": str(second / "Gtr.wav")}])
+    dropped = busy.discard_take(str(second))
+    ok("dropping one that is open works too",
+       dropped.get("ok") and not second.exists())
+
+    # The same trap after saving: the rehearsal screen plays the take that is
+    # selected, and deleting it is done from the same screen.
+    busy.player_open(kept["take"]["tracks"])
+    gone = busy.delete_take(str(busy_folder), 1)
+    ok("deleting a take that is playing works",
+       gone.get("ok") and not Path(kept["take"]["tracks"][0]["file"]).exists())
+
+    busy.start_rehearsal("Other", 0, SR, [{"name": "Gtr", "channel": 1}])
+    d = Path(busy._session["folder"]) / "_drafts" / "take 1"
+    write_wav(d / "Gtr.wav", 100, seconds=1.0)
+    old = busy.keep_take(1, str(d), "Old", 1.0,
+                         [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
+    old_folder = Path(busy._session["folder"])
+    busy._session = None  # a past rehearsal, as seen from History
+    busy.player_open(old["take"]["tracks"])
+    ok("so does deleting a whole rehearsal with a take playing",
+       busy.delete_rehearsal(str(old_folder)).get("ok")
+       and not old_folder.exists())
+
+    # And only the take being moved is let go of.
+    busy.start_rehearsal("Third", 0, SR, [{"name": "Gtr", "channel": 1}])
+    third = Path(busy._session["folder"])
+    for number in (1, 2):
+        d = third / "_drafts" / f"take {number}"
+        write_wav(d / "Gtr.wav", 100, seconds=1.0)
+    listening = [{"name": "Gtr", "file": str(third / "_drafts" / "take 2" / "Gtr.wav")}]
+    busy.player_open(listening)
+    busy.discard_take(str(third / "_drafts" / "take 1"))
+    ok("a player on another take keeps playing", busy._player is not None)
+    busy.player_close()
+
     print("\n[8] Take naming carries over")
     a.start_rehearsal("Jam", 0, SR, [{"name": "Gtr", "channel": 1}])
     folder = Path(a._session["folder"])
