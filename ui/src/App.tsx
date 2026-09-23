@@ -16,6 +16,7 @@ import {
   type PendingTake,
   type SessionState,
 } from "@/lib/api"
+import { useDialogFocusKeys } from "@/hooks/useSpacebar"
 import { reportBridgeError } from "@/lib/bridgeErrors"
 import { loadDeletionKind } from "@/lib/deletion"
 import {
@@ -36,6 +37,11 @@ type Screen =
   | { name: "finished"; folder: string; takeCount: number }
 
 export function App() {
+  // Every dialog in the app, once: moving between a dialog's controls with
+  // the keyboard is this app's job, not the browser's — the window it runs
+  // in on a Mac will not do it. See useDialogFocusKeys.
+  useDialogFocusKeys()
+
   const [screen, setScreen] = useState<Screen>({ name: "loading" })
   const [session, setSession] = useState<SessionState>({ active: false })
   const [startupError, setStartupError] = useState<string | null>(null)

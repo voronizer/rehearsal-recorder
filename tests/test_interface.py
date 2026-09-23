@@ -1349,6 +1349,48 @@ def main():
            page.locator("text=Finish this rehearsal?").count() == 1
            and len(calls("finish_rehearsal")) == finishes)
 
+        # Answering it without the mouse. The question opens on the answer
+        # that changes nothing, so getting to the other one is the whole of
+        # what this checks — and it is the app's own doing, not the browser's.
+        # This browser moves focus between buttons on Tab; the window the app
+        # runs in on a Mac does so only if macOS "keyboard navigation" is
+        # switched on, which by default it is not, and there Tab took focus
+        # out of the page entirely. A check on Tab alone would therefore pass
+        # here whatever the app did, which is why the arrows — which no
+        # browser does on its own — carry the weight.
+        def focused_on(page):
+            return page.evaluate(
+                "() => (document.activeElement?.innerText || '').trim()")
+
+        ok("the question opens on the answer that changes nothing",
+           focused_on(page) == "Keep going")
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(80)
+        ok("an arrow key moves to the other answer", focused_on(page) == "Finish")
+        page.keyboard.press("ArrowLeft")
+        page.wait_for_timeout(80)
+        ok("and back again", focused_on(page) == "Keep going")
+
+        # Tab is taken over rather than left to whatever the browser does with
+        # it, which is the half this browser cannot show by behaving well.
+        # Watched from the capture phase, and on window, because that is
+        # where the app takes the key: it stops the event there so that
+        # nothing downstream moves focus a second time, which leaves a
+        # listener anywhere further along with nothing to see. Listeners on
+        # one target still run in turn, so this one sees the event after the
+        # app has had it.
+        page.evaluate(
+            "() => { window.__TAB_TAKEN__ = null;"
+            " window.addEventListener('keydown', (e) => {"
+            "   if (e.key === 'Tab') window.__TAB_TAKEN__ = e.defaultPrevented;"
+            " }, true); }"
+        )
+        page.keyboard.press("Tab")
+        page.wait_for_timeout(80)
+        ok("Tab is the app's to answer with, not the browser's",
+           page.evaluate("() => window.__TAB_TAKEN__") is True
+           and focused_on(page) == "Finish")
+
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
         ok("a second escape closes the question instead of answering it",

@@ -1,5 +1,13 @@
 import { useEffect, useRef } from "react"
 
+/** Somebody is writing, so the keyboard is theirs letter by letter. */
+function isTyping(el: Element | null): boolean {
+  if (!el) return false
+  const tag = el.tagName
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true
+  return (el as HTMLElement).isContentEditable
+}
+
 /**
  * True when the focused element has already claimed the keyboard for its own
  * purpose, so none of the shortcuts below should fire. Typing is the obvious
@@ -12,11 +20,8 @@ import { useEffect, useRef } from "react"
  */
 function keyIsClaimed(el: Element | null): boolean {
   if (!el) return false
-  const tag = el.tagName
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true
-  if ((el as HTMLElement).isContentEditable) return true
-  if (el.closest('[role="dialog"]')) return true
-  return false
+  if (isTyping(el)) return true
+  return el.closest('[role="dialog"]') !== null
 }
 
 /**
@@ -157,3 +162,69 @@ export function usePlayerKeys(skip: (delta: number) => void, enabled = true) {
   }, [enabled])
 }
 
+/** What a person can land on with the keyboard. */
+const FOCUSABLE =
+  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Moving between a dialog's controls with the keyboard — done here rather
+ * than left to the browser, because the browser the app actually runs in
+ * does not do it.
+ *
+ * Chromium moves focus to the next button on Tab whatever the system says.
+ * WebKit follows macOS "keyboard navigation", which is off unless somebody
+ * turned it on, and the app's window on a Mac is WebKit: there Tab took
+ * focus out of the page altogether, so a confirmation opened with Escape
+ * could be read but not answered without reaching for the mouse. The keydown
+ * does arrive in the page — only the browser's own response to it is
+ * missing — so this supplies the response.
+ *
+ * The arrows do the same thing between the controls, which suits a question
+ * with two answers better than Tab does, and they are also the half of this
+ * a well-behaved browser cannot hide: a test in Chromium sees Tab work
+ * whether or not this hook exists, and sees the arrows only if it does.
+ */
+export function useDialogFocusKeys() {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const arrow = e.key === "ArrowLeft" || e.key === "ArrowRight"
+      if (e.key !== "Tab" && !arrow) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+
+      // The topmost dialog, which is the last one opened: a confirmation
+      // raised from inside another dialog owns the keyboard while it stands.
+      const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]')
+      const dialog = dialogs[dialogs.length - 1]
+      if (!dialog) return
+
+      const el = document.activeElement
+      // In a name field the arrows are how you move along what you typed.
+      // Tab never is — it is how you leave the field.
+      if (arrow && isTyping(el)) return
+
+      const stops = Array.from(
+        dialog.querySelectorAll<HTMLElement>(FOCUSABLE)
+      ).filter(
+        (n) =>
+          !n.hasAttribute("disabled") &&
+          n.tabIndex !== -1 &&
+          n.getClientRects().length > 0
+      )
+      if (stops.length === 0) return
+
+      e.preventDefault()
+      // Radix moves focus itself at the ends of its list. With every Tab
+      // taken here, letting it act too would move focus twice.
+      e.stopPropagation()
+
+      const back = e.key === "ArrowLeft" || (e.key === "Tab" && e.shiftKey)
+      const at = el instanceof HTMLElement ? stops.indexOf(el) : -1
+      const next =
+        at === -1 ? 0 : (at + (back ? -1 : 1) + stops.length) % stops.length
+      stops[next].focus()
+    }
+
+    window.addEventListener("keydown", onKeyDown, true)
+    return () => window.removeEventListener("keydown", onKeyDown, true)
+  }, [])
+}
