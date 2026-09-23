@@ -9,8 +9,8 @@
 export type Device = {
   index: number
   name: string
-  /** Which audio system it came through — only set when there is more than
-   *  one, which in practice means Windows. */
+  /** Which audio system (driver) it came through. Settings groups by it and
+   *  only shows it when there is more than one. */
   host_api: string
   max_input_channels: number
   max_output_channels: number

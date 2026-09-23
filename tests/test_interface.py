@@ -112,19 +112,25 @@ function suggestName(n) {
 
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
-  // With a host API named, this is the Windows shape: one card listed once
-  // per audio system, same name every time, and not the same channel count.
+  // With a host API named, this is the Windows shape once ASIO is loaded:
+  // one mixer through three systems with three different input counts.
   list_input_devices: async () => (window.__HOST_API__ ? [
-    {index:0, name:'Universal Audio Thunderbolt', host_api: window.__HOST_API__,
-     max_input_channels:8, max_output_channels:0, default_samplerate:48000},
-    {index:1, name:'Universal Audio Thunderbolt', host_api:'MME',
-     max_input_channels:2, max_output_channels:0, default_samplerate:48000}] : [
-    {index:0, name:'Universal Audio Thunderbolt', host_api:'',
+    {index:0, name:'X32 USB', host_api:'MME',
+     max_input_channels:2, max_output_channels:0, default_samplerate:48000},
+    {index:3, name:'X32 USB', host_api:'ASIO',
+     max_input_channels:16, max_output_channels:16, default_samplerate:48000},
+    {index:5, name:'X32 USB', host_api:window.__HOST_API__,
+     max_input_channels:8, max_output_channels:0, default_samplerate:48000}] : [
+    {index:0, name:'Universal Audio Thunderbolt', host_api:'Core Audio',
      max_input_channels:18, max_output_channels:0, default_samplerate:48000}]),
-  list_output_devices: async () => ([
-    {index:0, name:'UA Monitors', host_api:'', max_input_channels:0,
+  list_output_devices: async () => (window.__HOST_API__ ? [
+    {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
      max_output_channels:2, default_samplerate:48000},
-    {index:1, name:'MacBook Speakers', host_api:'', max_input_channels:0,
+    {index:3, name:'X32 USB', host_api:'ASIO', max_input_channels:16,
+     max_output_channels:16, default_samplerate:48000}] : [
+    {index:0, name:'UA Monitors', host_api:'Core Audio', max_input_channels:0,
+     max_output_channels:2, default_samplerate:48000},
+    {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
      max_output_channels:2, default_samplerate:48000}]),
   set_output_device: track('set_output_device', async () => ({ok:true})),
   load_default_tracks: async () => ({
@@ -1278,12 +1284,12 @@ def main():
         page.wait_for_selector("#input-device")
         ok("the interface is chosen here",
            page.locator("#input-device").count() == 1)
-        # One card, one entry: the note about duplicates would be noise here,
-        # and a note that is always on is a note nobody reads.
-        ok("and nothing is said about duplicates when there are none",
-           page.locator(
-               "text=they do not all offer the same number of inputs"
-           ).count() == 0)
+        # One audio system: choosing it would be a question with one answer.
+        ok("there is no driver to choose on a Mac",
+           page.locator("#input-device-driver").count() == 0
+           and page.locator("#output-device-driver").count() == 0)
+        ok("and nothing is said about drivers",
+           page.locator("text=Each driver can offer").count() == 0)
         ok("the rates the card can do are offered",
            page.locator("button[aria-label='44.1 kHz']").count() == 1
            and page.locator("button[aria-label='96 kHz']").count() == 1)
@@ -1353,6 +1359,14 @@ def main():
         )
         win.goto(server.base_url, wait_until="networkidle")
         win.wait_for_selector("text=Start rehearsal")
+
+        # `page` is closed by now, so `calls` (bound to it) cannot be reused
+        # here — this page has its own window.__CALLS__.
+        def win_calls(name):
+            return win.evaluate(
+                f"() => window.__CALLS__.filter(c => c.name === '{name}')"
+            )
+
         win.click("text=History")
         win.wait_for_selector("text=Tuesday jam")
         win.click("button[aria-label='Delete rehearsal Tuesday jam']")
@@ -1368,15 +1382,45 @@ def main():
         win.wait_for_selector("text=Start rehearsal")
         win.click("button[aria-label='Settings']")
         win.wait_for_selector("#input-device")
-        ok("the audio system is shown next to the card",
-           win.locator("text=Windows WASAPI").count() > 0)
-        # Somebody who knows their desk has sixteen inputs and is offered
-        # eight has no way to guess that the other rows with the same name
-        # are the same desk seen through another system.
-        ok("and a card listed twice says why one entry may look smaller",
-           win.locator(
-               "text=they do not all offer the same number of inputs"
-           ).count() == 1)
+        ok("the driver is chosen first",
+           win.locator("#input-device-driver").count() == 1)
+        ok("starting from the one the saved card is on",
+           "MME" in win.inner_text("#input-device-driver"))
+        ok("and the card itself no longer repeats it",
+           "(MME)" not in win.inner_text("#input-device"))
+        ok("with a line on why the driver matters",
+           win.locator("text=Each driver can offer").count() == 1)
+
+        win.click("#input-device-driver")
+        drivers = win.get_by_role("option").all_inner_texts()
+        ok("every driver with an input is offered, once each",
+           sorted(drivers) == ["ASIO", "MME", "Windows WASAPI"])
+        win.get_by_role("option", name="ASIO").click()
+        win.wait_for_timeout(200)
+        ok("changing the driver saves nothing on its own",
+           not any(c["args"][0] == 3 for c in win_calls("set_recording_format")))
+        win.click("#input-device")
+        ok("its devices are what is offered",
+           win.get_by_role("option").all_inner_texts() == ["X32 USB · up to 16 ch"])
+        win.get_by_role("option").first.click()
+        win.wait_for_timeout(300)
+        ok("and picking one saves it",
+           win_calls("set_recording_format")[-1]["args"][0] == 3)
+
+        ok("playback is chosen the same way",
+           win.locator("#output-device-driver").count() == 1)
+        win.click("#output-device-driver")
+        ok("offering only drivers with an output",
+           sorted(win.get_by_role("option").all_inner_texts()) == ["ASIO", "MME"])
+        win.get_by_role("option", name="ASIO").click()
+        win.click("#output-device")
+        ok("the system output is still there under any driver",
+           win.get_by_role("option").all_inner_texts()
+           == ["System output", "X32 USB"])
+        win.get_by_role("option", name="X32 USB").click()
+        win.wait_for_timeout(300)
+        ok("and picking a card switches to it",
+           win_calls("set_output_device")[-1]["args"][0] == 3)
 
         win.get_by_role("button", name="Folders", exact=True).first.click()
         win.wait_for_selector("#recordings-dir")
