@@ -340,10 +340,12 @@ window.__MAKE_API__ = () => ({
   get_rehearsal: async (folder) => {
     // Its own path, distinct from the live session's /rec/g.wav — two takes
     // sharing a dummy path would let one's mocked length leak onto the other.
-    fileDurations['/rec/old/g.wav'] = 600;
+    // A page can ask for another length, to put a tick where it wants one.
+    const oldLength = window.__OLD_LENGTH_SEC__ || 600;
+    fileDurations['/rec/old/g.wav'] = oldLength;
     return JSON.parse(JSON.stringify({ok:true, folder, name:'Tuesday jam',
       created_at:'2026-09-10T19:00:00',
-      takes:[{take_number:1, name:'Polyn', duration_sec:600, markers:[],
+      takes:[{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
               tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}]}));
   },
   delete_take: track('delete_take', async () => ({ok:true, trashed:true, takes_left:0})),
@@ -1500,6 +1502,38 @@ def main():
            win.locator("text=soundfile package is missing").count() == 1)
         win.screenshot(path=str(SHOTS / "57-windows-shaped.png"))
         win.close()
+
+        print("\n[12e] A tick at the very end does not push the lanes sideways")
+        # 10:06 puts the 10:00 tick at 99% of the ruler. Its label used to hang
+        # past the edge, and the lanes' scroll container — overflow-y: auto
+        # makes overflow-x auto as well — grew a horizontal scrollbar under
+        # the last track. Chromium headless hides scrollbars, so the overflow
+        # itself is measured rather than looked at.
+        edge = browser.new_page(viewport={"width": 1180, "height": 820})
+        edge.add_init_script("window.__OLD_LENGTH_SEC__ = 606;" + MOCK)
+        edge.goto(server.base_url, wait_until="networkidle")
+        edge.wait_for_selector("text=Start rehearsal")
+        edge.click("text=History")
+        edge.wait_for_selector("text=Tuesday jam")
+        edge.click("text=Tuesday jam")
+        edge.locator("button:has-text('Polyn')").first.click()
+        edge.wait_for_selector("[aria-label='Timeline clock'] >> text=10:00")
+        sideways = edge.evaluate("""() => {
+          const ruler = document.querySelector("[aria-label='Timeline clock']");
+          let el = ruler.parentElement;
+          while (el && getComputedStyle(el).overflowY !== 'auto') el = el.parentElement;
+          return el.scrollWidth - el.clientWidth;
+        }""")
+        ok("the lanes do not scroll sideways", sideways <= 0)
+        inside = edge.evaluate("""() => {
+          const ruler = document.querySelector("[aria-label='Timeline clock']");
+          const edge = ruler.getBoundingClientRect().right;
+          return [...ruler.querySelectorAll('span')]
+            .filter(s => s.textContent === '10:00')
+            .every(s => s.getBoundingClientRect().right <= edge + 0.5);
+        }""")
+        ok("and the last label is still there, inside the ruler", inside)
+        edge.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})
