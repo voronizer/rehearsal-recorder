@@ -73,8 +73,30 @@ changes only for the "missing" state.
 | `marker` | `id` PK, `take_id` → take CASCADE, `at` REAL (rounded to 0.01 as `_as_marker` does), `kind`, `note` |
 | `cloud_copy` | `take_id` PK → take CASCADE, `mix` TEXT NULL, `mix_format` TEXT NULL, `gain` REAL NULL, `tracks` TEXT NULL, `tracks_format` TEXT NULL, `source` JSON — today's `take["cloud"]`; no row = not in the cloud |
 
-`mix` and `tracks` in `cloud_copy` stay absolute: they point into the cloud
-folder, outside the recordings folder.
+`mix` and `tracks` in `cloud_copy` are relative to the **cloud folder**
+(`cloud_dir` in the settings), e.g.
+`Tuesday jam - 2026-09-18 19-00/01 - Verse riff.flac`, and resolved against
+the current `cloud_dir` when read. `source["dir"]` changes the same way: it
+records the rehearsal's subfolder inside the cloud folder
+(`_cloud_subfolder`), not the absolute target. So:
+
+- **The cloud folder was moved and the setting pointed at its new place**
+  (the sync client moved to another drive, another machine): the copies are
+  found where they are and nothing is sent again. Today every take would look
+  stale and be re-sent.
+- **The setting was pointed at a different, empty folder**: the copies are
+  not there, and a record is only believed while its file exists
+  (`copies_exist`), so the takes count as not sent and go by the usual rules —
+  as today.
+- **Cost:** after the cloud folder changes, "Remove from the cloud" on a take
+  copied to the old one looks in the new one and removes nothing; the old
+  files stay where they were. Today the absolute path let it delete them there.
+- **No cloud folder set**: a take's copy is unknown — no cloud status is
+  shown and "Remove from the cloud" is unavailable until one is set again.
+
+`cloud.py` changes with it: `source_of` takes the subfolder instead of the
+target, and `copies_exist` takes the cloud folder to resolve against (and
+returns False without one).
 
 Renaming a rehearsal becomes one `UPDATE rehearsal SET folder`, plus the
 folder move; renaming a take updates its `take_file.file` rows. Neither
@@ -111,7 +133,12 @@ a `session.json`:
   take files, markers and cloud fields in one transaction; after commit,
   delete `session.json` (and any `session.json.writing`). Absolute file paths
   are made relative to the recordings folder; a path outside it (the folder
-  was moved) is re-rooted as `<folder>/<take folder>/<file name>`. Text is
+  was moved) is re-rooted as `<folder>/<take folder>/<file name>`. A take's
+  `cloud` record has its `mix` / `tracks` made relative to the current
+  `cloud_dir` and `source["dir"]` replaced by the subfolder; if a path lies
+  outside `cloud_dir`, or no cloud folder is set, no `cloud_copy` row is
+  written — the take counts as not sent and is sent again if the settings say
+  so. Text is
   read as UTF-8 with the cp1252 fallback `_read_text` has today.
 - **Folder already in the database**: the app died between the commit and
   the delete — just delete the file.
@@ -177,7 +204,11 @@ In the project's style (plain scripts under `tests/`, run by `run_all.py`).
   names and a cp1252 file → rows, file deleted; an unreadable one left in
   place; a second open duplicates nothing; a folder already in the database
   with its `session.json` still there → file deleted, rows untouched; a
-  moved folder's paths re-rooted.
+  moved folder's paths re-rooted; a `cloud` record inside `cloud_dir` →
+  relative `cloud_copy`, one outside it or with no cloud folder set → no row.
+- **Cloud paths:** a copy stays current after `cloud_dir` is pointed at the
+  same content in a new place (no re-send); pointed at an empty folder → not
+  current; no cloud folder → not current and "Remove from the cloud" refused.
 - **Disagreement:** folder deleted → `missing: true`; `forget_rehearsal`;
   `locate_rehearsal` (inside the recordings folder only, not another
   rehearsal's folder).
