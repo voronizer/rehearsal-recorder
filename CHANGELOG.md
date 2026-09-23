@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.0
 
 - The rehearsal history moved from a `session.json` in every rehearsal folder
   into one database, `library.sqlite`, at the top of the recordings folder.
