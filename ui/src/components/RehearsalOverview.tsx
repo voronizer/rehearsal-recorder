@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { MARKER_KINDS, markerStyle } from "@/lib/markers"
 import type { Marker, Song, Take } from "@/lib/api"
+import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 /**
  * What an open rehearsal shows before a take is picked.
@@ -14,15 +15,21 @@ import type { Marker, Song, Take } from "@/lib/api"
  * are usually why the rehearsal was opened again at all: "this one is the
  * take", "guitar drifts here". Each take opens from here, and each note opens
  * its take at the spot it was left.
+ *
+ * It also stands in for the take strip while nothing is open — the strip's
+ * pills beside it said the same thing twice — so its chips carry what the
+ * pills did: the same label, and a take still waiting for the cloud.
  */
 export function RehearsalOverview({
   takes,
   songs,
   onOpen,
   onOpenAt,
+  cloudStates,
 }: {
   takes: Take[]
   songs: Song[]
+  cloudStates?: Record<number, "queued" | "working">
   onOpen: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
 }) {
@@ -74,7 +81,12 @@ export function RehearsalOverview({
             </span>
             <div className="flex flex-wrap gap-1.5">
               {row.takes.map((t) => (
-                <TakeChip key={t.take_number} take={t} onOpen={onOpen} />
+                <TakeChip
+                  key={t.take_number}
+                  take={t}
+                  status={takeCloudStatus(t, cloudStates?.[t.take_number])}
+                  onOpen={onOpen}
+                />
               ))}
             </div>
           </div>
@@ -100,14 +112,22 @@ export function RehearsalOverview({
   )
 }
 
-function TakeChip({ take, onOpen }: { take: Take; onOpen: (take: Take) => void }) {
+function TakeChip({
+  take,
+  status,
+  onOpen,
+}: {
+  take: Take
+  status: string | null
+  onOpen: (take: Take) => void
+}) {
   const kinds = MARKER_KINDS.filter((k) =>
     take.markers?.some((m) => m.kind === k.kind)
   )
   return (
     <button
       type="button"
-      aria-label={`Open ${take.name}`}
+      aria-label={takeButtonLabel(take, status)}
       title={take.name}
       onClick={() => onOpen(take)}
       className="flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:bg-accent/50"
@@ -119,6 +139,16 @@ function TakeChip({ take, onOpen }: { take: Take; onOpen: (take: Take) => void }
       {kinds.map((k) => (
         <span key={k.kind} className={cn("size-1.5 rounded-full", k.dot)} />
       ))}
+      {status && (
+        <span
+          className={cn(
+            "text-[11px]",
+            take.cloud_error ? "text-destructive" : "text-muted-foreground"
+          )}
+        >
+          {status}
+        </span>
+      )}
     </button>
   )
 }

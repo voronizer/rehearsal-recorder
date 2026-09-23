@@ -1605,7 +1605,7 @@ def main():
         edge.click("text=History")
         edge.wait_for_selector("text=Tuesday jam")
         edge.click("text=Tuesday jam")
-        edge.locator("button:has-text('Polyn')").first.click()
+        edge.locator("button[aria-label='Take 1 Polyn']").click()
         edge.wait_for_selector("[aria-label='Timeline clock'] >> text=10:00")
         sideways = edge.evaluate("""() => {
           const ruler = document.querySelector("[aria-label='Timeline clock']");
@@ -1646,6 +1646,8 @@ def main():
         ok("a plain mark with nothing written is not a note",
            eve.locator("[aria-label='Rehearsal overview'] [data-note]").count() == 2)
         ok("no lonely 'pick a take' line", eve.locator("text=Pick a take").count() == 0)
+        ok("and no strip of pills repeating it",
+           eve.get_by_role("group", name="Take strip").count() == 0)
         eve.screenshot(path=str(SHOTS / "60-overview.png"))
 
         eve.click("[aria-label='Rehearsal overview'] >> text=guitar drifts here")
@@ -1657,10 +1659,12 @@ def main():
         ok("at the spot it was left", bool(seeks) and abs(seeks[-1]["args"][0] - 40) < 0.5)
         ok("and the overview makes way for the player",
            eve.locator("[aria-label='Rehearsal overview']").count() == 0)
+        ok("and the strip is back, to switch takes without going back",
+           eve.get_by_role("group", name="Take strip").count() == 1)
 
         eve.keyboard.press("Escape")
         eve.wait_for_selector("[aria-label='Rehearsal overview']")
-        eve.click("[aria-label='Rehearsal overview'] button[aria-label='Open Polyn 2']")
+        eve.click("[aria-label='Rehearsal overview'] button[aria-label='Take 2 Polyn 2']")
         eve.wait_for_selector("[aria-label='Take timeline']")
         ok("a take in the overview opens it",
            "Polyn 2" in eve.locator("button[aria-current='true']").inner_text())

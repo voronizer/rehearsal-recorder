@@ -251,6 +251,10 @@ export function Rehearsal({
           <span className="truncate font-mono">{session.folder}</span>
         </div>
 
+        {/* While no take is open the overview below is the way in, and the
+            pills beside it would only repeat it. With none recorded yet the
+            strip stays, for its "hit Record" hint. */}
+        {(selected || session.takes.length === 0) && (
         <TakeStrip
           takes={session.takes}
           selected={selected}
@@ -261,6 +265,7 @@ export function Rehearsal({
           cloudStates={session.cloud_queue}
           emptyHint="Hit Record or press Space — takes show up here and can be played straight away."
         />
+        )}
 
         {selected ? (
           <TakePlayer
@@ -280,6 +285,7 @@ export function Rehearsal({
               songs={session.songs ?? []}
               onOpen={select}
               onOpenAt={openAt}
+              cloudStates={session.cloud_queue}
             />
           )
         )}

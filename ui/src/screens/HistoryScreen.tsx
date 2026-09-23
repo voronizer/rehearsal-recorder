@@ -253,6 +253,9 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
             <span className="truncate font-mono">{opened.folder}</span>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {/* See the rehearsal screen: the overview stands in for the strip
+              until a take is open. */}
+          {(selected || opened.takes.length === 0) && (
           <TakeStrip
             takes={opened.takes}
             selected={selected}
@@ -262,6 +265,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
             onDelete={setTakeToDelete}
             emptyHint="Nothing was kept from this rehearsal, or every take since got deleted."
           />
+          )}
 
           {selected ? (
             <TakePlayer

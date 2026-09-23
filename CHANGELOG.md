@@ -41,7 +41,9 @@ opening.
   line asking you to pick a take: how long it ran, each song with its goes
   and their lengths, the takes nobody named, and every note left while
   listening. A take opens from there, and a note opens its take at the spot
-  it was left.
+  it was left. The strip of take pills is hidden meanwhile, since it only
+  repeated the overview; it comes back once a take is open, to switch
+  between them.
 - A tick just before the end of a take no longer puts a sideways scrollbar
   under the last track on Windows.
 
