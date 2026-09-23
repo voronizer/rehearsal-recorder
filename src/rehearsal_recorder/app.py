@@ -166,6 +166,10 @@ def selftest():
             head = ScriptDirectory.from_config(db.alembic_config()).get_current_head()
             current = db.current_revision(library._engine)
             library.close()
+            # No head at all is the bundle without a single migration in it:
+            # the database would then be "at head" by being empty.
+            if head is None:
+                raise RuntimeError("no migrations found — the bundle is missing them")
             if current != head:
                 raise RuntimeError(
                     f"migrated to {current!r}, not head {head!r} — "
