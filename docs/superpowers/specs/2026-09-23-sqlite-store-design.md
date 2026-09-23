@@ -95,9 +95,11 @@ records the rehearsal's subfolder inside the cloud folder
 - **No cloud folder set**: a take's copy is unknown — no cloud status is
   shown and "Remove from the cloud" is unavailable until one is set again.
 
-`cloud.py` changes with it: `source_of` takes the subfolder instead of the
-target, and `copies_exist` takes the cloud folder to resolve against (and
-returns False without one).
+`cloud.py` itself barely changes: `library` hands it a take whose `cloud`
+paths are already absolute, joined onto the current cloud folder — or an
+empty `cloud` when none is set, which `is_current` already reads as "not
+sent". Callers pass `source_of` the subfolder name instead of the absolute
+target.
 
 Renaming a rehearsal becomes one `UPDATE rehearsal SET folder`, plus the
 folder move — take files are relative to the rehearsal folder, so none of
