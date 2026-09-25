@@ -5,6 +5,37 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.7.3
+
+- A card that refuses to open can be asked why. `--audio-probe` opens the
+  saved card several times over, changing exactly one thing each time — two
+  channels instead of eight, the rate the driver is already at, the block
+  size left to the driver, the outputs opened alongside the inputs — and
+  reads the diagnosis off which attempts got in, then says what to do about
+  it. Needed because a refused ASIO stream reports `-9999`,
+  paUnanticipatedHostError, which means only "the driver said no and
+  PortAudio has nothing to add": nothing in the app could tell a card held by
+  a DAW from tracks assigned past the card's inputs.
+- Playback says why a card was not used, instead of blaming the rate. Every
+  refusal was reported as the card not taking the take's sample rate, and
+  pointed at Audio MIDI Setup — a program only macOS has, offered to Windows
+  too. The commonest refusal is not about the rate: PortAudio answers
+  `paDeviceUnavailable` when the card is already open, and on ASIO that is
+  routinely this app's own recording, since a card reached through ASIO plays
+  through one program at a time. So you pressed play while recording through
+  your interface, heard it come out of the laptop speakers, and were sent to
+  check a sample rate that was never the problem.
+- ASIO drivers are loaded far less. Asking a card what rates it takes cost
+  six full load-and-unload cycles of the driver — PortAudio answers each such
+  question by loading it, initialising it, asking and unloading it again, and
+  answers without ever consulting the sample depth. It is three now, one per
+  rate, and the answer stands for both depths. Asking a playback card in
+  advance cost another cycle on every take, immediately before an opening
+  that loads the driver once more; ASIO cards are not asked at all now, the
+  opening decides, and a refusal there falls back to the system output the
+  way the check used to. ASIO drivers are known to be touchy about being
+  cycled, and none of that churn was buying an answer.
+
 ## 0.7.2
 
 - The cloud settings fit on the screen. What a copy is written as, and what
