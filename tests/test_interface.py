@@ -1601,6 +1601,20 @@ def main():
         ok("and that the card is the reason", "Little USB box" in told
            and "2" in told)
         ok("without blaming the one that still fits", "Guitar" not in told)
+        ok("and asks for the one thing that would work",
+           "Pick again" in told)
+
+        # More tracks than the card has inputs is the other shape of not
+        # fitting, and the only one where renumbering cannot help: told to
+        # pick again, there is nothing to pick.
+        for _ in range(3):
+            moved.click("text=Add track")
+        moved.wait_for_timeout(200)
+        crowded = moved.get_by_role("status").filter(has_text="not enough")
+        ok("five tracks on a two-input card say they will not fit",
+           crowded.count() == 1)
+        ok("and do not ask for an arrangement that does not exist",
+           "Pick again" not in crowded.first.inner_text())
         moved.close()
 
         print("\n[12c] What cloud copies are written as")

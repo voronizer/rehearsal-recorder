@@ -2735,21 +2735,35 @@ def main():
     # for a mistake about a template.
     from rehearsal_recorder.audio.devices import channels_available
 
+    def on(*channels):
+        return [{"name": f"T{c}", "channel": c} for c in channels]
+
     ok("a card with enough inputs is nothing to say",
-       channels_available(0, 8) is None)          # Interface: 8 in
-    short = channels_available(1, 4)               # Podcast mic: 1 in
-    ok("a card with fewer says how many it has and how far the tracks go",
-       short and "1 input" in short and "4" in short)
-    ok("and says why that happens, since it is the template's doing",
-       short and "another interface" in short)
+       channels_available(0, on(1, 8)) is None)   # Interface: 8 in
+
+    # Two tracks, one input: no arrangement of them works, so telling anyone
+    # to pick again is telling them to do the impossible.
+    wont_fit = channels_available(1, on(1, 2))     # Podcast mic: 1 in
+    ok("a card with fewer inputs than tracks says they will not fit",
+       wont_fit and "2 tracks" in wont_fit and "1 input" in wont_fit)
+    ok("and offers something that can actually be done",
+       wont_fit and "fewer" in wont_fit and "Pick again" not in wont_fit)
+
+    # Two tracks, eight inputs, but numbered for an eighteen-input desk —
+    # here picking again is exactly the answer.
+    misnumbered = channels_available(0, on(1, 12))
+    ok("a card with room but wrong numbers says to pick again",
+       misnumbered and "up to 12" in misnumbered
+       and "another interface" in misnumbered)
+
     ok("a device nobody can describe is left to PortAudio",
-       channels_available(99, 2) is None)
+       channels_available(99, on(2)) is None)
 
     _, a31 = fresh_api(Path(tempfile.mkdtemp()))
-    refused = a31.start_monitor(1, SR, [{"name": "A", "channel": 4}])
+    refused = a31.start_monitor(1, SR, on(4))
     ok("the signal check says so rather than opening the card",
        refused["ok"] is False and "input" in refused["error"])
-    fine = a31.start_monitor(0, SR, [{"name": "A", "channel": 4}])
+    fine = a31.start_monitor(0, SR, on(4))
     ok("and a card that has the inputs still opens", fine["ok"] is True)
     a31.stop_monitor()
 

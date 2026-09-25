@@ -668,9 +668,7 @@ class Api:
             return {"ok": False, "error": "Recording in progress"}
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
-        stray = channels_available(
-            device_index, max(t["channel"] for t in tracks)
-        )
+        stray = channels_available(device_index, tracks)
         if stray:
             return {"ok": False, "error": stray}
 
@@ -748,9 +746,7 @@ class Api:
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
         # Caught before a folder is made for a rehearsal that cannot record.
-        stray = channels_available(
-            device_index, max(t["channel"] for t in tracks)
-        )
+        stray = channels_available(device_index, tracks)
         if stray:
             return {"ok": False, "error": stray}
         bit_depth = normalize_depth(bit_depth)

@@ -95,10 +95,9 @@ def recording_formats(device_index, channels):
     )
 
 
-def channels_available(device_index, wanted):
+def channels_available(device_index, tracks):
     """
-    None when this input has `wanted` channels, and a sentence when it does
-    not.
+    None when this input can take these tracks, and a sentence when it cannot.
 
     Tracks are saved as a template, input numbers and all, and changing the
     interface in Settings does not touch them: a band set up on an eighteen-
@@ -107,13 +106,18 @@ def channels_available(device_index, wanted):
     for a mistake about a template — so it is caught here, where the tracks
     are still in view and the fix is obvious.
 
+    There are two ways to not fit, and only one of them can be fixed by
+    renumbering. Five tracks on a two-input card do not fit in any
+    arrangement, so saying "pick again" would be asking for the impossible;
+    that case has to say what can actually be done instead.
+
     A device nobody can describe is left alone: PortAudio will have its own
     opinion about it, and a guess here would only get in the way. So is no
     device at all — query_devices(None) answers with the whole list rather
     than with a device, and "no interface chosen" is a different complaint,
     made elsewhere.
     """
-    if device_index is None:
+    if device_index is None or not tracks:
         return None
 
     try:
@@ -122,14 +126,24 @@ def channels_available(device_index, wanted):
         return None
 
     have = (info or {}).get("max_input_channels", 0)
-    if not have or wanted <= have:
+    if not have:
+        return None
+
+    wanted = max(t["channel"] for t in tracks)
+    if wanted <= have:
         return None
 
     name = (info or {}).get("name", "This interface")
+    inputs = f"{have} input{'' if have == 1 else 's'}"
+
+    if len(tracks) > have:
+        return (
+            f"“{name}” has {inputs} — not enough for {len(tracks)} tracks. "
+            "Record fewer at once, or use an interface with more inputs."
+        )
     return (
-        f"“{name}” has {have} input{'' if have == 1 else 's'}, but the tracks "
-        f"go up to {wanted}. They were set up for another interface — give "
-        "them inputs this one has."
+        f"“{name}” has {inputs}, but the tracks go up to {wanted}. They were "
+        "set up for another interface — give them inputs this one has."
     )
 
 

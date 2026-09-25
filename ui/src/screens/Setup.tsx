@@ -135,6 +135,10 @@ export function Setup({
   // not in the list any more, so the selector below goes blank — which said
   // nothing at all until the check failed with a number from PortAudio.
   const strays = device ? tracks.filter((t) => t.channel > maxChannels) : []
+  // Two ways to not fit, and only one of them is fixable by renumbering.
+  // Five tracks on a two-input card do not fit in any arrangement, so
+  // "pick again" would be asking for the impossible.
+  const tooManyTracks = strays.length > 0 && tracks.length > maxChannels
   const canStart =
     tracks.length > 0 &&
     tracks.every((t) => t.name.trim()) &&
@@ -339,12 +343,22 @@ export function Setup({
               role="status"
               className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
             >
-              {strays.map((t) => t.name || "An unnamed track").join(", ")}
-              {strays.length === 1 ? " is" : " are"} on{" "}
-              {strays.length === 1 ? "an input" : "inputs"} this interface does
-              not have. These tracks were set up for another one, and changing
-              the interface leaves their input numbers alone — “{device?.name}”
-              has {maxChannels}. Pick again below.
+              {tooManyTracks ? (
+                <>
+                  “{device?.name}” has {maxChannels}{" "}
+                  {maxChannels === 1 ? "input" : "inputs"} — not enough for{" "}
+                  {tracks.length} tracks. Record fewer at once, or use an
+                  interface with more inputs.
+                </>
+              ) : (
+                <>
+                  {strays.map((t) => t.name || "An unnamed track").join(", ")}
+                  {strays.length === 1 ? " is" : " are"} on{" "}
+                  {strays.length === 1 ? "an input" : "inputs"} “{device?.name}”
+                  does not have — it has {maxChannels}. Their numbers came from
+                  another interface. Pick again below.
+                </>
+              )}
             </p>
           )}
 

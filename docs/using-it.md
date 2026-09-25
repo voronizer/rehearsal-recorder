@@ -236,6 +236,13 @@ it and let PortAudio answer, which came back as
 `Invalid number of channels [PaErrorCode -9998]` — a number about a card, for
 a mistake about a template.
 
+There are two ways not to fit, and they get different answers because only
+one of them can be solved by renumbering. Two tracks numbered 1 and 12 on an
+eight-input card fit perfectly well once they are renumbered, so the screen
+says to pick again. Five tracks on a two-input card fit in no arrangement at
+all, so it says that instead: record fewer at once, or use an interface with
+more inputs.
+
 ## When the card will not open
 
 Checking the signal, or starting a take, can fail with a message ending in
