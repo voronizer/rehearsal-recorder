@@ -260,9 +260,9 @@ When the interface chosen in Settings is not there, the setup screen says so
 — "“X18/XR18” is not connected" — rather than recording from something else,
 and offers **Look again**. Press it once the desk is on. When it turns up,
 the tracks take the inputs that desk remembers, and any names changed in the
-meantime are kept. Settings has the same button beside Recording, for picking
-an interface that was not there a moment ago; it looks for playback devices
-at the same time.
+meantime are kept. Settings has the same button beside the list of
+interfaces, for picking one that was not there a moment ago; it looks for
+playback devices at the same time.
 
 Looking again is never done while recording, and never on its own. On
 Windows it starts every ASIO driver on the machine in turn, the same as when

@@ -365,50 +365,54 @@ export function Settings({
         {tab === "audio" && (<>
 
         <section className="flex flex-col gap-3">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <Label htmlFor="input-device">Recording</Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Set once for the room and the card. The setup screen shows what
-                is in force but does not change it.
-              </p>
+          <div>
+            <Label htmlFor="input-device">Recording</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Set once for the room and the card. The setup screen shows what
+              is in force but does not change it.
+            </p>
+          </div>
+
+          {/* Beside the device, level with it rather than with the driver
+              above it on Windows. Fixed width, so the list does not shift
+              while the label reads "Looking…". */}
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <DevicePicker
+                id="input-device"
+                devices={inputs}
+                value={settings?.device_index ?? null}
+                disabled={rescanning}
+                placeholder={
+                  settings?.missing_device
+                    ? notConnected(
+                        settings.missing_device,
+                        new Set(inputs.map((d) => d.host_api)).size > 1
+                      )
+                    : "Pick an interface"
+                }
+                detail={(d) => ` · up to ${d.max_input_channels} ch`}
+                onChange={(index) =>
+                  void applyRecording(
+                    index,
+                    settings?.samplerate ?? 44100,
+                    settings?.bit_depth ?? 24
+                  )
+                }
+              />
             </div>
             {/* Recording and playback both: it is one list underneath. */}
             <Button
               variant="outline"
-              size="sm"
               onClick={() => void lookAgain()}
               disabled={rescanning}
               title="Find an interface plugged in since the app started"
-              className="shrink-0"
+              className="w-32 shrink-0"
             >
               <RefreshCw className={cn(rescanning && "animate-spin")} />
               {rescanning ? "Looking…" : "Look again"}
             </Button>
           </div>
-
-          <DevicePicker
-            id="input-device"
-            devices={inputs}
-            value={settings?.device_index ?? null}
-            disabled={rescanning}
-            placeholder={
-              settings?.missing_device
-                ? notConnected(
-                    settings.missing_device,
-                    new Set(inputs.map((d) => d.host_api)).size > 1
-                  )
-                : "Pick an interface"
-            }
-            detail={(d) => ` · up to ${d.max_input_channels} ch`}
-            onChange={(index) =>
-              void applyRecording(
-                index,
-                settings?.samplerate ?? 44100,
-                settings?.bit_depth ?? 24
-              )
-            }
-          />
 
           {settings?.missing_device && (
             <p className="text-xs text-muted-foreground">

@@ -65,8 +65,8 @@ not in the list before, `gone` for names that are no longer in it.
 
 ## Part 3 — The screens
 
-**Settings → Audio.** A **Look again** button in the Recording section
-rebuilds the list for both recording and playback. Afterwards the lists and
+**Settings → Audio.** A **Look again** button beside the recording
+interface's picker rebuilds the list for both recording and playback. Afterwards the lists and
 settings are read again and the card is asked for its rates again, since the
 rates on a desk are set on the desk. The status line says what happened:
 `Found “X18/XR18”`, `“X18/XR18” is gone`, or `No new interfaces`. While

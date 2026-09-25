@@ -10,8 +10,8 @@ opening.
 - An interface switched on after the app started can be found without
   restarting. The list of interfaces was made once, at start, so a desk
   plugged in later was never offered — and at a rehearsal the desk is usually
-  switched on after the laptop. **Look again**, in Settings beside Recording,
-  makes the list again for recording and playback both. It is never done
+  switched on after the laptop. **Look again**, in Settings beside the list
+  of interfaces, makes the list again for recording and playback both. It is never done
   while recording, and never on its own: on Windows it starts every ASIO
   driver on the machine in turn.
 - A chosen interface that is not plugged in is said to be not connected. The
