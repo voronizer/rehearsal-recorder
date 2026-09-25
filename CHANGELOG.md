@@ -5,6 +5,35 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.7.4
+
+- The band survives a change of interface. A saved track carried two facts
+  welded into one record — the name, which belongs to the band and is the
+  same wherever they play, and the input number, which belongs to the card.
+  Input 3 on an eighteen-input desk is somebody's guitar; on a two-input box
+  it does not exist. They are stored apart now: the band is one list of
+  names, and each interface remembers which input each of those names uses
+  on it. Rehearse on the desk, record at home on a small box, come back next
+  week — each card brings its own numbers back, and the band is the same on
+  both. Starting a rehearsal saves that layout, so nobody has to remember a
+  button.
+- A track with nowhere to plug in says so instead of going blank. Where the
+  band outnumbers the card's inputs, everybody still appears and the ones
+  who do not fit arrive with no input, marked, and the rehearsal will not
+  start until they have one — which musicians sit out is the band's answer,
+  not the app's. The input selector used to show an empty box for a track
+  numbered past the card, and the first real word came from PortAudio when
+  the signal check opened the card: `Invalid number of channels [PaErrorCode
+  -9998]`, a number about a card for a mistake about a template.
+- The setup screen says how many inputs the interface has, beside the rate
+  and the depth. That count governs every row of the track list underneath
+  it and was the one thing not on screen.
+- A card that will not say which rates it takes says so, instead of being
+  shown as a card that takes all of them. The list used to fall back to
+  44.1, 48 and 96 in silence, so a card that answered nothing looked exactly
+  like one that said yes to everything. An XR18 has no 96 kHz at all and
+  takes only the rate its own mixer is set to.
+
 ## 0.7.3
 
 - A card that refuses to open can be asked why. `--audio-probe` opens the
