@@ -129,12 +129,24 @@ def channels_available(device_index, tracks):
     if not have:
         return None
 
+    name = (info or {}).get("name", "This interface")
+    inputs = f"{have} input{'' if have == 1 else 's'}"
+
+    # A track with no input at all is what a layout leaves behind when the
+    # names outnumber the card — see rehearsal_recorder/layouts.py. Named
+    # here, because the person has to decide who plays and who sits out.
+    homeless = [t["name"] for t in tracks if t.get("channel") is None]
+    if homeless:
+        listed = ", ".join(homeless)
+        return (
+            f"{listed} {'has' if len(homeless) == 1 else 'have'} no input yet. "
+            f"“{name}” has {inputs} — give them one, or take them out of this "
+            "rehearsal."
+        )
+
     wanted = max(t["channel"] for t in tracks)
     if wanted <= have:
         return None
-
-    name = (info or {}).get("name", "This interface")
-    inputs = f"{have} input{'' if have == 1 else 's'}"
 
     if len(tracks) > have:
         return (

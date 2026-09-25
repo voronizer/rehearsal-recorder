@@ -23,6 +23,19 @@ export type OutputDevice = Device
 
 export type Track = {
   name: string
+  /** The interface input this track comes from, counted from 1. null when
+   *  the layout came from a card with more inputs than this one has and
+   *  nobody has yet said who plays and who sits out. */
+  channel: number | null
+}
+
+/**
+ * A track of a rehearsal that is running. Its input is settled: a rehearsal
+ * cannot start while any track is still waiting for one, so nothing past the
+ * setup screen has to ask.
+ */
+export type PlacedTrack = {
+  name: string
   channel: number
 }
 
@@ -100,7 +113,7 @@ export type SessionState =
       active: true
       name: string
       folder: string
-      tracks: Track[]
+      tracks: PlacedTrack[]
       takes: Take[]
       /** The takes grouped into songs, by Python's rule. */
       songs: Song[]
@@ -222,7 +235,6 @@ export type Settings = {
   samplerate: number | null
   bit_depth: number
   supported_bit_depths: number[]
-  tracks: Track[]
   volumes: Record<string, number>
   theme: "dark" | "light" | "system"
   ui_scale: number

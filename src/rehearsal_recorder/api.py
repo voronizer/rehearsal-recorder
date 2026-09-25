@@ -59,6 +59,7 @@ from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
 from rehearsal_recorder import cloud as cloudmod
+from rehearsal_recorder import layouts
 from rehearsal_recorder.mediaserver import AppServer
 from rehearsal_recorder.store import library as librarymod
 from rehearsal_recorder.store.db import LibraryUnavailable
@@ -384,13 +385,17 @@ class Api:
     # ---------- settings ----------
 
     def _read_config(self):
+        # Every read is migrated, so the rest of the app only ever sees
+        # `layouts` — see rehearsal_recorder/layouts.py. Migration is
+        # idempotent, so a config written by this version passes through it
+        # unchanged.
         if not CONFIG_PATH.exists():
-            return {}
+            return layouts.migrate({})
         try:
             data = json.loads(read_text(CONFIG_PATH))
-            return data if isinstance(data, dict) else {}
+            return layouts.migrate(data if isinstance(data, dict) else {})
         except Exception:
-            return {}
+            return layouts.migrate({})
 
     def _write_config(self):
         # Written beside the real file and moved onto it, so an app killed
@@ -417,7 +422,6 @@ class Api:
             ),
             "bit_depth": normalize_depth(self._config.get("bit_depth")),
             "supported_bit_depths": list(SUPPORTED_DEPTHS),
-            "tracks": self._config.get("tracks", []),
             "volumes": self._config.get("volumes", {}),
             "theme": self._config.get("theme", "dark"),
             "ui_scale": self._config.get("ui_scale", 1),
@@ -639,20 +643,54 @@ class Api:
     def list_output_devices(self):
         return self._describe_devices(want_input=False)
 
+    def _input_count(self, device_index):
+        if device_index is None:
+            return 0
+        try:
+            return sd.query_devices(device_index).get("max_input_channels", 0)
+        except Exception:
+            return 0
+
+    def _remember_layout(self, device_index, tracks):
+        """Keeps the band, and where each of them is plugged in on this card.
+
+        The band is one list whatever is plugged in; the inputs belong to the
+        card. See rehearsal_recorder/layouts.py."""
+        self._config["tracks"] = [t["name"] for t in tracks]
+        self._config["layouts"] = layouts.remember(
+            self._config.get("layouts", []),
+            device_identity(device_index),
+            tracks,
+        )
+
     def load_default_tracks(self):
-        if not self._config.get("tracks"):
-            return None
+        """
+        The tracks to start the setup screen with, for the card in force.
+
+        Always an answer, never nothing: which of the four cases applies —
+        this card's own layout, another card's names, names with no input
+        left over, or the first-run pair — belongs in one place, and that
+        place is layouts.for_device().
+        """
+        index = saved_device(self._config, "device", True)
         return {
-            "device_index": saved_device(self._config, "device", True),
+            "device_index": index,
             "samplerate": self._config.get("samplerate"),
             "bit_depth": normalize_depth(self._config.get("bit_depth")),
-            "tracks": self._config.get("tracks", []),
+            "tracks": layouts.for_device(
+                self._config.get("tracks", []),
+                self._config.get("layouts", []),
+                device_identity(index),
+                self._input_count(index),
+            ),
         }
 
     def save_default_tracks(self, config):
-        if "device_index" in config:
-            self._remember_device("device", config["device_index"])
-        for key in ("samplerate", "bit_depth", "tracks"):
+        # device_index says which card this layout belongs to. It does not
+        # change the saved recording device: that choice lives in Settings.
+        if "tracks" in config:
+            self._remember_layout(config.get("device_index"), config["tracks"])
+        for key in ("samplerate", "bit_depth"):
             if key in config:
                 self._config[key] = config[key]
         self._write_config()
@@ -750,6 +788,9 @@ class Api:
         if stray:
             return {"ok": False, "error": stray}
         bit_depth = normalize_depth(bit_depth)
+        # The band set this up against this card; a week from now the same
+        # card should bring it back without anyone remembering a button.
+        self._remember_layout(device_index, tracks)
         # Asked first: with no database there is nowhere to keep the takes,
         # and nothing should be created on disk for them.
         library = self._lib

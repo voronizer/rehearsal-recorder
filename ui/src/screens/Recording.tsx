@@ -9,7 +9,7 @@ import {
   poll as pollPython,
   type PendingTake,
   type RecordingHealth,
-  type Track,
+  type PlacedTrack,
 } from "@/lib/api"
 import { formatDuration, formatHMS } from "@/lib/format"
 import { cn } from "@/lib/utils"
@@ -29,7 +29,7 @@ export function Recording({
 }: {
   takeNumber: number
   takeName: string
-  tracks: Track[]
+  tracks: PlacedTrack[]
   onStopped: (take: PendingTake) => void
 }) {
   const [elapsed, setElapsed] = useState(0)

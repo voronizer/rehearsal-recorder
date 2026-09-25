@@ -359,10 +359,19 @@ def main():
        saved.get("output_device") is None
        and saved.get("output_device_index") is None)
 
+    # device_index here says which card the layout belongs to. It does not
+    # change the recording device: that choice is made in Settings, and a
+    # template saved on the setup screen must not quietly move it.
+    before = a._config.get("device")
     a.save_default_tracks({"device_index": 1, "tracks": [{"name": "V", "channel": 1}]})
     saved = json.loads(apimod.CONFIG_PATH.read_text())
-    ok("the setup screen's template saves it the same way",
-       saved.get("device") == {"name": "Podcast mic", "host_api": "CoreAudio"})
+    ok("the setup screen's template is saved as that card's input map",
+       saved.get("layouts", [{}])[0]
+       == {"device": {"name": "Podcast mic", "host_api": "CoreAudio"},
+           "inputs": {"V": 1}}
+       and saved.get("tracks") == ["V"])
+    ok("and leaves the chosen recording device alone",
+       a._config.get("device") == before)
 
     # The card moved: identity says index 0 now, the stored index says 1.
     a._config["device_index"] = 1
@@ -2766,6 +2775,128 @@ def main():
     fine = a31.start_monitor(0, SR, on(4))
     ok("and a card that has the inputs still opens", fine["ok"] is True)
     a31.stop_monitor()
+
+    print("\n[32] The band is one list; the inputs belong to the card")
+    from rehearsal_recorder import layouts as L
+
+    xr18 = {"name": "X AIR XR18", "host_api": "ASIO"}
+    little = {"name": "Scarlett 2i2", "host_api": "Windows WASAPI"}
+
+    print("  migration")
+    flat = L.migrate({"tracks": [{"name": "Guitar", "channel": 3},
+                                 {"name": "Vocals", "channel": 7}],
+                      "device": xr18})
+    ok("a flat list becomes the band, by name and in order",
+       flat["tracks"] == ["Guitar", "Vocals"])
+    ok("and its numbers become that card's input map",
+       flat["layouts"] == [{"device": xr18,
+                            "inputs": {"Guitar": 3, "Vocals": 7}}])
+    ok("migrating twice changes nothing", L.migrate(L.migrate(flat)) == flat)
+    ok("nothing saved migrates to nothing",
+       L.migrate({}) == {"tracks": [], "layouts": []})
+
+    # The shape where each card carried its own band: nobody may be lost by
+    # reading it, so the band is everyone who appeared on any card.
+    per_card = L.migrate({"layouts": [
+        {"device": little, "tracks": [{"name": "Guitar", "channel": 1}]},
+        {"device": xr18, "tracks": [{"name": "Guitar", "channel": 3},
+                                    {"name": "Drums", "channel": 9}]}]})
+    ok("a per-card band becomes one band, losing nobody",
+       per_card["tracks"] == ["Guitar", "Drums"])
+    ok("and each card keeps the inputs it knew",
+       L.inputs_for(per_card["layouts"], xr18) == {"Guitar": 3, "Drums": 9}
+       and L.inputs_for(per_card["layouts"], little) == {"Guitar": 1})
+
+    print("  switching cards")
+    band = ["Guitar", "Vocals"]
+    saved = L.remember([], xr18, [{"name": "Guitar", "channel": 3},
+                                  {"name": "Vocals", "channel": 7}])
+    ok("a card remembers where each name is plugged in",
+       L.inputs_for(saved, xr18) == {"Guitar": 3, "Vocals": 7})
+    ok("and gives those numbers back",
+       L.for_device(band, saved, xr18, 18)
+       == [{"name": "Guitar", "channel": 3}, {"name": "Vocals", "channel": 7}])
+
+    # The whole point: a card nobody has used yet keeps the band entire.
+    ok("an unused card keeps everyone, counted from the first free input",
+       L.for_device(band, saved, little, 2)
+       == [{"name": "Guitar", "channel": 1}, {"name": "Vocals", "channel": 2}])
+
+    both = L.remember(saved, little, [{"name": "Guitar", "channel": 1},
+                                      {"name": "Vocals", "channel": 2}])
+    ok("going back to the first card brings its own numbers back",
+       L.for_device(band, both, xr18, 18)
+       == [{"name": "Guitar", "channel": 3}, {"name": "Vocals", "channel": 7}])
+    ok("and the other card keeps its own",
+       L.for_device(band, both, little, 2)
+       == [{"name": "Guitar", "channel": 1}, {"name": "Vocals", "channel": 2}])
+
+    print("  the band changes")
+    # Somebody joins on one card. Every other card must show them too — that
+    # is the whole reason the band is one list.
+    grew = ["Guitar", "Vocals", "Drums"]
+    ok("a new member appears on a card that never saw them",
+       L.for_device(grew, both, xr18, 18)
+       == [{"name": "Guitar", "channel": 3}, {"name": "Vocals", "channel": 7},
+           {"name": "Drums", "channel": 1}])
+    ok("on the lowest input nobody else is on",
+       L.for_device(grew, both, little, 2)[2] == {"name": "Drums",
+                                                  "channel": None})
+
+    ok("and when the inputs run out, the rest simply have none",
+       [t["channel"] for t in L.for_device(
+           ["A", "B", "C", "D"], [], xr18, 2)] == [1, 2, None, None])
+    ok("but nobody is dropped — who sits out is not the app's to decide",
+       [t["name"] for t in L.for_device(
+           ["A", "B", "C", "D"], [], xr18, 2)] == ["A", "B", "C", "D"])
+
+    dropped = L.remember(both, xr18, [{"name": "Guitar", "channel": 3}])
+    ok("a name left out of a save keeps its socket for when it returns",
+       L.inputs_for(dropped, xr18)["Vocals"] == 7)
+
+    ok("with no band at all, the usual two",
+       [t["name"] for t in L.for_device([], [], xr18, 8)]
+       == ["Guitar 1", "Vocals"])
+
+    print("  through the app")
+    big = {"name": "Interface", "host_api": "CoreAudio"}
+    apimod32, a32 = fresh_api(Path(tempfile.mkdtemp()))
+
+    a32._remember_device("device", 0)
+    a32.save_default_tracks({"device_index": 0, "tracks": [
+        {"name": "Guitar", "channel": 5}, {"name": "Vocals", "channel": 6}]})
+    ok("the template saves the band once",
+       a32._config["tracks"] == ["Guitar", "Vocals"])
+    ok("and the numbers under the card they were set on",
+       L.inputs_for(a32._config["layouts"], big) == {"Guitar": 5, "Vocals": 6})
+    ok("the card gets its own numbers back",
+       a32.load_default_tracks()["tracks"]
+       == [{"name": "Guitar", "channel": 5}, {"name": "Vocals", "channel": 6}])
+
+    # Device 1 is the one-input "Podcast mic": the band survives the move.
+    a32._remember_device("device", 1)
+    moved_tracks = a32.load_default_tracks()["tracks"]
+    ok("switching to a one-input card keeps the whole band",
+       [t["name"] for t in moved_tracks] == ["Guitar", "Vocals"])
+    ok("with the one who does not fit left waiting for an input",
+       [t["channel"] for t in moved_tracks] == [1, None])
+
+    a32._remember_device("device", 0)
+    started = a32.start_rehearsal("Layouts", 0, SR, [
+        {"name": "Guitar", "channel": 2}, {"name": "Vocals", "channel": 6}], 16)
+    ok("starting a rehearsal remembers the layout without being asked",
+       started["ok"]
+       and L.inputs_for(a32._config["layouts"], big) == {"Guitar": 2,
+                                                         "Vocals": 6})
+    a32.finish_rehearsal()
+
+    print("  a track with no input at all")
+    unplaced = [{"name": "Guitar", "channel": 1}, {"name": "Keys", "channel": None}]
+    said = channels_available(0, unplaced)
+    ok("is refused by name rather than by a number from PortAudio",
+       said and "Keys" in said and "no input" in said)
+    ok("and the signal check will not open the card",
+       a32.start_monitor(0, SR, unplaced)["ok"] is False)
 
     print("\n" + "=" * 60)
     if problems:

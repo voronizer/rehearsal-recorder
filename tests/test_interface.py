@@ -1594,15 +1594,19 @@ def main():
             "window.__TRACKS_FROM_A_BIGGER_CARD__ = true;" + MOCK)
         moved.goto(server.base_url, wait_until="networkidle")
         moved.wait_for_selector("input[aria-label='Track 1 name']")
-        stray = moved.get_by_role("status").filter(has_text="does not have")
+        stray = moved.get_by_role("status").filter(has_text="no input")
         ok("the screen names the track left behind", stray.count() == 1)
         told = stray.first.inner_text()
         ok("and says which one it is", "Vocals" in told)
         ok("and that the card is the reason", "Little USB box" in told
            and "2" in told)
         ok("without blaming the one that still fits", "Guitar" not in told)
-        ok("and asks for the one thing that would work",
-           "Pick again" in told)
+        ok("and asks for the one thing that would work", "Pick one" in told)
+        ok("its own input box says it is waiting for one, not nothing",
+           moved.locator("[aria-label='Track 2 input']").inner_text()
+           == "No input")
+        ok("and the rehearsal cannot start while it waits",
+           moved.locator("button:has-text('Start rehearsal')").is_disabled())
 
         # More tracks than the card has inputs is the other shape of not
         # fitting, and the only one where renumbering cannot help: told to
@@ -1614,7 +1618,7 @@ def main():
         ok("five tracks on a two-input card say they will not fit",
            crowded.count() == 1)
         ok("and do not ask for an arrangement that does not exist",
-           "Pick again" not in crowded.first.inner_text())
+           "Pick one" not in crowded.first.inner_text())
         moved.close()
 
         print("\n[12c] What cloud copies are written as")

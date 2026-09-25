@@ -86,15 +86,11 @@ export function Setup({
       setSamplerate(cfg.samplerate ?? 44100)
       setBitDepth(cfg.bit_depth ?? 24)
 
+      // Which tracks these are — this card's own layout, another card's
+      // names, or the first-run pair — is decided in one place, Python's
+      // layouts.for_device(). The screen does not second-guess it.
       const tpl = await api().load_default_tracks()
-      setTracks(
-        tpl?.tracks?.length
-          ? tpl.tracks
-          : [
-              { name: "Guitar 1", channel: 1 },
-              { name: "Vocals", channel: 2 },
-            ]
-      )
+      setTracks(tpl?.tracks ?? [])
 
       const today = new Date()
       setName(
@@ -130,18 +126,20 @@ export function Setup({
 
   const device = devices.find((d) => d.index === deviceIndex)
   const maxChannels = device?.max_input_channels ?? 16
-  // Tracks are saved as a template with their input numbers, and changing the
-  // interface does not touch them. On a narrower card their input simply is
-  // not in the list any more, so the selector below goes blank — which said
-  // nothing at all until the check failed with a number from PortAudio.
-  const strays = device ? tracks.filter((t) => t.channel > maxChannels) : []
-  // Two ways to not fit, and only one of them is fixable by renumbering.
-  // Five tracks on a two-input card do not fit in any arrangement, so
-  // "pick again" would be asking for the impossible.
-  const tooManyTracks = strays.length > 0 && tracks.length > maxChannels
+  // A track waiting for an input: either the layout had more names than this
+  // card has inputs, or a saved number is past what the driver now reports.
+  // Both are the same thing to the person — nowhere to plug this musician in.
+  const waiting = (t: Track) =>
+    !!device && (t.channel === null || t.channel > maxChannels)
+  const needInput = tracks.filter(waiting)
+  // Two ways to not fit, and only one is fixable by renumbering. Five tracks
+  // on a two-input card fit in no arrangement, so "pick one below" would be
+  // asking for the impossible.
+  const tooManyTracks = needInput.length > 0 && tracks.length > maxChannels
   const canStart =
     tracks.length > 0 &&
     tracks.every((t) => t.name.trim()) &&
+    needInput.length === 0 &&
     deviceIndex !== null &&
     !starting
 
@@ -230,7 +228,9 @@ export function Setup({
   useSpacebar(start, canStart)
 
   const saveTemplate = async () => {
-    await api().save_default_tracks({ tracks })
+    // device_index says which card this layout is for. It does not change the
+    // chosen recording device — that lives in Settings.
+    await api().save_default_tracks({ tracks, device_index: deviceIndex ?? undefined })
     setSaved(true)
     window.setTimeout(() => setSaved(false), 2500)
   }
@@ -295,6 +295,11 @@ export function Setup({
                 {device ? device.name : "No interface chosen"}
               </span>
               <span className="tnum shrink-0 text-xs text-muted-foreground">
+                {device
+                  ? `${device.max_input_channels} ${
+                      device.max_input_channels === 1 ? "input" : "inputs"
+                    } · `
+                  : ""}
                 {samplerate / 1000} kHz · {bitDepth} bit
               </span>
             </button>
@@ -338,7 +343,7 @@ export function Setup({
             </p>
           )}
 
-          {strays.length > 0 && (
+          {needInput.length > 0 && (
             <p
               role="status"
               className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
@@ -352,11 +357,10 @@ export function Setup({
                 </>
               ) : (
                 <>
-                  {strays.map((t) => t.name || "An unnamed track").join(", ")}
-                  {strays.length === 1 ? " is" : " are"} on{" "}
-                  {strays.length === 1 ? "an input" : "inputs"} “{device?.name}”
-                  does not have — it has {maxChannels}. Their numbers came from
-                  another interface. Pick again below.
+                  {needInput.map((t) => t.name || "An unnamed track").join(", ")}
+                  {needInput.length === 1 ? " has" : " have"} no input on “
+                  {device?.name}” — it has {maxChannels}{" "}
+                  {maxChannels === 1 ? "input" : "inputs"}. Pick one below.
                 </>
               )}
             </p>
@@ -382,7 +386,7 @@ export function Setup({
                   className="flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
                 />
                 <Select
-                  value={track.channel.toString()}
+                  value={waiting(track) ? "" : String(track.channel ?? "")}
                   onValueChange={(v) =>
                     setTracks((prev) =>
                       prev.map((t, j) =>
@@ -391,8 +395,17 @@ export function Setup({
                     )
                   }
                 >
-                  <SelectTrigger size="sm" className="w-32">
-                    <SelectValue />
+                  <SelectTrigger
+                    size="sm"
+                    aria-label={`Track ${i + 1} input`}
+                    className={
+                      "w-32" +
+                      (waiting(track)
+                        ? " border-amber-500/60 text-muted-foreground"
+                        : "")
+                    }
+                  >
+                    <SelectValue placeholder="No input" />
                   </SelectTrigger>
                   <SelectContent>
                     {Array.from({ length: maxChannels }, (_, c) => c + 1).map(

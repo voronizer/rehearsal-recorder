@@ -5,9 +5,11 @@ What each screen is for, and the decisions behind how they behave.
 
 - **Setup** — rehearsal name and the list of tracks (name + input number),
   with a line showing which interface and quality it will record with; that
-  line is a button to Settings, where those are chosen. The track layout is
-  saved as a template (`~/.rehearsal-recorder/config.json`) and filled in next
-  time. "Check signal" opens the inputs without recording: everyone plays in
+  line is a button to Settings, where those are chosen, and it states how
+  many inputs the card has, since that governs the list below it. The band —
+  the track names, in order — and each interface's input numbers are saved
+  separately (`~/.rehearsal-recorder/config.json`) and filled in next time;
+  see "Changing the interface" below. "Check signal" opens the inputs without recording: everyone plays in
   turn and watches the bar move next to their own name. Free disk space is on
   screen the whole time, next to "Add track".
 - **Settings** (the gear in the header) — four groups rather than one long
@@ -221,27 +223,30 @@ mixdown all read both depths, and a take can even hold tracks of each. The
 mixdown itself is written 16-bit on purpose: it is what gets sent to people,
 and every phone plays it.
 
-## After changing the interface
+## Changing the interface
 
-Tracks are saved as a template, input numbers and all, and changing the
-interface in Settings deliberately leaves them alone — the band's layout is
-not something to throw away because a cable moved. But the numbers only mean
-anything on the card they were set on. Set up on an eighteen-input desk and
-then moved to a two-input box, somebody is still on input 8, which no longer
-exists.
+The band is one list. Who is in it — the track names, in order — is the same
+whatever is plugged in. Where each of them is plugged in belongs to the card:
+input 3 on an eighteen-input desk is somebody's guitar, and on a two-input
+box it does not exist.
 
-The setup screen says which tracks that happened to, and the signal check
-refuses with the same sentence rather than opening the card. It used to open
-it and let PortAudio answer, which came back as
-`Invalid number of channels [PaErrorCode -9998]` — a number about a card, for
-a mistake about a template.
+So each interface remembers where people are plugged in on it, and nothing
+else. Rehearse on the desk, record at home on a small box, come back next
+week: each card brings its own input numbers back, and the band is the same
+on both. Nobody is lost by changing the interface.
 
-There are two ways not to fit, and they get different answers because only
-one of them can be solved by renumbering. Two tracks numbered 1 and 12 on an
-eight-input card fit perfectly well once they are renumbered, so the screen
-says to pick again. Five tracks on a two-input card fit in no arrangement at
-all, so it says that instead: record fewer at once, or use an interface with
-more inputs.
+Someone the card has never seen — a new member, or the first time that card
+is used at all — goes on the lowest input nobody else is on. Worth a glance:
+the app knows the input is free, not that anything is plugged into it.
+
+Where the band outnumbers the card's inputs, everybody still appears, and the
+ones who do not fit arrive with no input at all, marked. The rehearsal will
+not start until they have one. Which musicians sit out is not a decision the
+app makes: five people do not fit on a two-input box in any arrangement, and
+which three to leave out is the band's answer.
+
+Removing a track removes that person everywhere, because the band is one
+list. Interfaces remember sockets, not membership.
 
 ## When the card will not open
 
