@@ -7,8 +7,9 @@ opening.
 
 ## Unreleased
 
-- Messages about something that just happened appear in the bottom
-  right-hand corner, over the screen, and move nothing. "Folder saved" and
+- Messages about something that just happened appear at the bottom right,
+  over the screen — above a screen's footer, never on Start, Stop or Save
+  take — and move nothing. "Folder saved" and
   "Found “X18/XR18”" used to appear above the settings they were about, push
   the whole panel down a line and, a few seconds later, let it jump back up.
   A success goes by itself; a warning or a failure stays until it is closed.

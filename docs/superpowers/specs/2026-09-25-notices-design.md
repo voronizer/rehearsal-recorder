@@ -26,10 +26,11 @@ History's and Drafts' content, and every success message do.
 **Something that happened is a notice. Something that is true stays where
 it is.**
 
-A notice appears in the bottom right-hand corner, over the screen, and moves
-nothing. Footers centre their buttons, so on a screen with a footer the
-corner is empty; Settings has none, and its panel stops short of the right
-edge.
+A notice appears on the right, over the screen, and moves nothing: in the
+bottom corner of a screen with no footer, and just above the footer of a
+screen with one. Footers centre their buttons, but at 115% and larger, or in
+a window near the smallest the app allows, the button reaches the corner —
+and a notice that stays must never sit on Start, Stop or Save take.
 
 - **done** — an action succeeded. Goes after 4 s; the time stops while the
   pointer is over it.

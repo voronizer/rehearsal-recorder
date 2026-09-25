@@ -198,8 +198,9 @@ window.__MAKE_API__ = () => ({
   set_output_device: track('set_output_device', async (idx) => {
     outputDevice = {index: idx, channels: [1, 2]};
     // What Python says when a take is open and the card refused it.
+    const name = ['UA Monitors', 'MacBook Speakers'][idx] || 'That output';
     return window.__OUTPUT_FALLBACK__
-      ? {ok:true, warning:'“UA Monitors” will not take 44100 Hz right now — ' +
+      ? {ok:true, warning:'“' + name + '” will not take 44100 Hz right now — ' +
           'using the system output.'}
       : {ok:true};
   }),
@@ -1865,6 +1866,33 @@ def main():
         ok("with a notice showing, Escape still leaves Settings in one press",
            tell.locator("#recordings-dir").count() == 0)
         ok("and the notice is still there", notices("error").count() == 1)
+
+        def settles(js, timeout=2000):
+            try:
+                tell.wait_for_function(js, timeout=timeout)
+                return True
+            except Exception:
+                return False
+
+        # The corner is clear of a footer's buttons only in a wide window at
+        # 100%. A notice that stays must never sit on Start, Stop or Save
+        # take, so it goes above the footer.
+        tell.set_viewport_size({"width": 960, "height": 680})
+        ok("a notice that stays leaves a footer's main button clickable, "
+           "in the smallest window",
+           settles("""() => {
+               const b = [...document.querySelectorAll('footer button')]
+                 .find(x => x.textContent.includes('Start rehearsal'));
+               const r = b.getBoundingClientRect();
+               return b.contains(document.elementFromPoint(r.right - 4, r.top + r.height / 2));
+           }"""))
+        ok("because it sits above the footer",
+           settles("""() => {
+               const n = document.querySelector("section[aria-label='Notifications'] [data-notice]");
+               const f = document.querySelector('footer');
+               return n.getBoundingClientRect().bottom <= f.getBoundingClientRect().top;
+           }"""))
+        tell.set_viewport_size({"width": 1180, "height": 820})
         tell.get_by_role("button", name="Close notice").click()
         ok("its button closes it", notices().count() == 0)
         tell.close()
@@ -1884,6 +1912,13 @@ def main():
            "using the system output" in warned.inner_text())
         ok("as a warning, not an error",
            fell.locator("[data-notice='error']").count() == 0)
+        # A second change that also falls back says so in the same place,
+        # not in a second notice on top of the first.
+        fell.click("#output-device")
+        fell.get_by_role("option", name="MacBook Speakers").click()
+        fell.wait_for_selector("[data-notice='warning']:has-text('MacBook Speakers')")
+        ok("a second fallback takes the first one's place",
+           fell.locator("[data-notice]").count() == 1)
         fell.close()
 
         print("\n[12l] History and Drafts say what failed in the corner")

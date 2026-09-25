@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -29,6 +29,29 @@ export function Shell({
   children: ReactNode
   className?: string
 }) {
+  // Notices stack above the footer, never on it: the footer holds Start, Stop
+  // and Save take, and at a larger scale or in a narrow window its button
+  // reaches the corner. So its height is published for components/Notices,
+  // and taken back to nothing when this screen goes.
+  const footerRef = useRef<HTMLElement>(null)
+  const hasFooter = !!footer
+  useEffect(() => {
+    const root = document.documentElement
+    const el = footerRef.current
+    if (!hasFooter || !el) {
+      root.style.setProperty("--footer-h", "0px")
+      return
+    }
+    const publish = () => root.style.setProperty("--footer-h", `${el.offsetHeight}px`)
+    publish()
+    const watch = new ResizeObserver(publish)
+    watch.observe(el)
+    return () => {
+      watch.disconnect()
+      root.style.setProperty("--footer-h", "0px")
+    }
+  }, [hasFooter])
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {(title || onBack || headerAction) && (
@@ -66,7 +89,7 @@ export function Shell({
       </main>
 
       {footer && (
-        <footer className="shrink-0 border-t bg-card/40 px-6 py-5">
+        <footer ref={footerRef} className="shrink-0 border-t bg-card/40 px-6 py-5">
           {footer}
         </footer>
       )}

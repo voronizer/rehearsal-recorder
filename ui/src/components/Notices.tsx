@@ -37,6 +37,10 @@ const LOOK: Record<Notice["kind"], { box: string; icon: React.ReactNode }> = {
  *
  * The region itself takes no clicks, only the notices in it, so the empty
  * part of the corner never swallows a click meant for what is underneath.
+ *
+ * It stands on the footer rather than in the corner: Shell publishes the
+ * footer's height as --footer-h, and a notice that stays must never sit on
+ * Start, Stop or Save take.
  */
 export function Notices() {
   const notices = useNotices()
@@ -50,7 +54,8 @@ export function Notices() {
       aria-live="polite"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
-      className="pointer-events-none fixed right-4 bottom-4 z-40 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
+      style={{ bottom: "calc(var(--footer-h, 0px) + 1rem)" }}
+      className="pointer-events-none fixed right-4 z-40 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
     >
       {notices.map((n) => (
         <NoticeItem key={n.id} notice={n} paused={paused} />
