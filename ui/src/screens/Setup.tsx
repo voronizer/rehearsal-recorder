@@ -6,6 +6,7 @@ import {
   History,
   Plus,
   Radio,
+  RefreshCw,
   Mic,
   Settings as SettingsIcon,
   Trash2,
@@ -23,8 +24,15 @@ import {
 import { Kbd, Shell } from "@/components/Shell"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
-import { formatDuration } from "@/lib/format"
-import { api, type Device, type DiskEstimate, type Track, poll as pollPython } from "@/lib/api"
+import { formatDuration, notConnected } from "@/lib/format"
+import {
+  api,
+  type Device,
+  type DiskEstimate,
+  type Settings as SettingsData,
+  type Track,
+  poll as pollPython,
+} from "@/lib/api"
 
 /** How often levels are polled during the signal check. */
 const MONITOR_POLL_MS = 80
@@ -59,38 +67,59 @@ export function Setup({
 
   const [disk, setDisk] = useState<DiskEstimate | null>(null)
 
+  // The interface that was chosen and is not plugged in. Not the same as
+  // none chosen: the desk is often switched on after the laptop.
+  const [missing, setMissing] = useState<SettingsData["missing_device"]>(null)
+  const [rescanning, setRescanning] = useState(false)
+  const [stillMissing, setStillMissing] = useState(false)
+
+  /**
+   * The interface in force and the tracks placed on it. `band` is what is on
+   * screen, when there is something: a card found by looking again takes
+   * the names as they have been edited, not as they were saved.
+   *
+   * Returns whether the chosen interface is still missing.
+   */
+  const loadInterface = async (band?: Pick<Track, "name" | "stereo">[]) => {
+    const devs = await api().list_input_devices()
+    setDevices(devs)
+
+    const cfg = await api().get_settings()
+    setMissing(cfg.missing_device)
+    const savedDeviceExists =
+      cfg.device_index != null &&
+      devs.some((d) => d.index === cfg.device_index)
+    // A Windows choice saved before driver identities existed is dropped
+    // on purpose (see audio/devices.py) — it can no longer be told apart
+    // from a card that is simply unplugged. Guessing devs[0] here would
+    // undo that: with several drivers it is usually an MME entry nobody
+    // chose. With one driver (every Mac) there is nothing to guess
+    // between, so the first-run behaviour is unchanged — but only on a
+    // first run. A card that was chosen and is not plugged in is not
+    // swapped for the laptop's own microphone without a word.
+    const oneDriver = devs.every((d) => d.host_api === devs[0]?.host_api)
+
+    setDeviceIndex(
+      savedDeviceExists
+        ? cfg.device_index
+        : oneDriver && !cfg.missing_device
+          ? (devs[0]?.index ?? null)
+          : null
+    )
+    setSamplerate(cfg.samplerate ?? 44100)
+    setBitDepth(cfg.bit_depth ?? 24)
+
+    // Which tracks these are — this card's own layout, another card's
+    // names, or the first-run pair — is decided in one place, Python's
+    // layouts.for_device(). The screen does not second-guess it.
+    const tpl = await api().load_default_tracks(band)
+    setTracks(tpl?.tracks ?? [])
+    return cfg.missing_device !== null
+  }
+
   useEffect(() => {
     ;(async () => {
-      const devs = await api().list_input_devices()
-      setDevices(devs)
-
-      const cfg = await api().get_settings()
-      const savedDeviceExists =
-        cfg.device_index != null &&
-        devs.some((d) => d.index === cfg.device_index)
-      // A Windows choice saved before driver identities existed is dropped
-      // on purpose (see audio/devices.py) — it can no longer be told apart
-      // from a card that is simply unplugged. Guessing devs[0] here would
-      // undo that: with several drivers it is usually an MME entry nobody
-      // chose. With one driver (every Mac) there is nothing to guess
-      // between, so the first-run behaviour is unchanged.
-      const oneDriver = devs.every((d) => d.host_api === devs[0]?.host_api)
-
-      setDeviceIndex(
-        savedDeviceExists
-          ? cfg.device_index
-          : oneDriver
-            ? (devs[0]?.index ?? null)
-            : null
-      )
-      setSamplerate(cfg.samplerate ?? 44100)
-      setBitDepth(cfg.bit_depth ?? 24)
-
-      // Which tracks these are — this card's own layout, another card's
-      // names, or the first-run pair — is decided in one place, Python's
-      // layouts.for_device(). The screen does not second-guess it.
-      const tpl = await api().load_default_tracks()
-      setTracks(tpl?.tracks ?? [])
+      await loadInterface()
 
       const today = new Date()
       setName(
@@ -144,6 +173,27 @@ export function Setup({
     needInput.length === 0 &&
     deviceIndex !== null &&
     !starting
+
+  // PortAudio lists the interfaces once, when the app starts, so a desk
+  // switched on afterwards is found only by looking again.
+  const lookAgain = async () => {
+    setError(null)
+    setStillMissing(false)
+    if (checking) await stopCheck()
+    setRescanning(true)
+    try {
+      const res = await api().rescan_devices()
+      if (!res.ok) {
+        setError(res.error ?? "Could not look for interfaces")
+        return
+      }
+      setStillMissing(
+        await loadInterface(tracks.map((t) => ({ name: t.name, stereo: t.stereo })))
+      )
+    } finally {
+      setRescanning(false)
+    }
+  }
 
   // Stopping the check is incidental: if it fails, that is no reason to block
   // someone from starting the rehearsal.
@@ -298,7 +348,14 @@ export function Setup({
             >
               <Mic className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate">
-                {device ? device.name : "No interface chosen"}
+                {device
+                  ? device.name
+                  : missing
+                    ? notConnected(
+                        missing,
+                        new Set(devices.map((d) => d.host_api)).size > 1
+                      )
+                    : "No interface chosen"}
               </span>
               <span className="tnum shrink-0 text-xs text-muted-foreground">
                 {device
@@ -309,10 +366,39 @@ export function Setup({
                 {samplerate / 1000} kHz · {bitDepth} bit
               </span>
             </button>
-            <p className="text-xs text-muted-foreground">
-              Changed in Settings — it belongs to the room, not to one
-              rehearsal.
-            </p>
+            {!device && missing ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    Plug it in and switch it on, then look again.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void lookAgain()}
+                    disabled={rescanning}
+                    className="shrink-0"
+                  >
+                    <RefreshCw className={cn(rescanning && "animate-spin")} />
+                    {rescanning ? "Looking…" : "Look again"}
+                  </Button>
+                </div>
+                {stillMissing && !rescanning && (
+                  <p
+                    role="status"
+                    className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
+                  >
+                    Still not there. Check that it is switched on and its cable
+                    is in this computer — some desks take a minute to start.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Changed in Settings — it belongs to the room, not to one
+                rehearsal.
+              </p>
+            )}
           </div>
         </div>
 

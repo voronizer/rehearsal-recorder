@@ -3110,6 +3110,186 @@ def main():
        and abs(int(out[:, 1].mean()) - 500) < 30)
     sp.close()
 
+    print("\n[34] Looking for interfaces again")
+    # PortAudio lists devices once, when it starts, so a card plugged in
+    # later is not offered until it is torn down and started again. The fake
+    # PortAudio here counts its starts the way the real one does, swaps in
+    # the next list of devices when it is started, and complains if it is
+    # torn down while a stream of the app's is still open.
+    import threading
+    from rehearsal_recorder.audio import devices as devmod
+
+    before_list = list(_DEVICES)
+    xr18 = {"name": "X18/XR18", "max_output_channels": 18,
+            "max_input_channels": 18, "hostapi": 0, "default_samplerate": 48000}
+    pa = {"count": 1, "terminated": 0, "initialised": 0, "next": None,
+          "fail": 0, "open_at_terminate": []}
+    player_ref = {"p": None}
+
+    def fake_terminate():
+        pa["terminated"] += 1
+        p = player_ref["p"]
+        if p is not None and p._stream is not None:
+            pa["open_at_terminate"].append("player")
+        pa["count"] -= 1
+        _sd._initialized -= 1
+
+    def fake_initialize():
+        if pa["fail"]:
+            pa["fail"] -= 1
+            raise RuntimeError("Error initializing PortAudio")
+        pa["initialised"] += 1
+        pa["count"] += 1
+        _sd._initialized += 1
+        if pa["next"] is not None:
+            _DEVICES[:] = pa["next"]
+
+    _sd._initialized = 1
+    _sd._terminate = fake_terminate
+    _sd._initialize = fake_initialize
+
+    apimod34, a34 = fresh_api(Path(tempfile.mkdtemp()))
+    a34._remember_device("device", 0)
+    try:
+        pa["next"] = before_list + [xr18]
+        res = a34.rescan_devices()
+        ok("a rescan succeeds", res.get("ok") is True)
+        ok("and the card plugged in after start is offered",
+           any(d["name"] == "X18/XR18" for d in a34.list_input_devices()))
+        ok("and named as found", res.get("found") == ["X18/XR18"])
+        ok("with nothing gone", res.get("gone") == [])
+        ok("PortAudio was torn down and started once each",
+           pa["terminated"] == 1 and pa["initialised"] == 1)
+
+        pa["next"] = before_list
+        res = a34.rescan_devices()
+        ok("a card unplugged is named as gone",
+           res.get("gone") == ["X18/XR18"] and res.get("found") == [])
+
+        # Two starts are undone as two: one terminate after two initialises
+        # rebuilds nothing, since PortAudio only tears down at zero.
+        pa.update(terminated=0, initialised=0)
+        _sd._initialized = 2
+        pa["count"] = 2
+        a34.rescan_devices()
+        ok("two starts are undone as two and put back as two",
+           pa["terminated"] == 2 and pa["initialised"] == 2
+           and _sd._initialized == 2)
+        _sd._initialized = 1
+        pa["count"] = 1
+
+        # A recording is never risked for a device list.
+        pa.update(terminated=0, initialised=0)
+        a34._recorder = types.SimpleNamespace(error=None, is_active=lambda: True)
+        res = a34.rescan_devices()
+        a34._recorder = None
+        ok("a rescan during a recording is refused",
+           res.get("ok") is False and "recording" in res.get("error", "").lower())
+        ok("and PortAudio is not touched", pa["terminated"] == 0)
+
+        # The signal check is only a check: it is stopped.
+        stopped = []
+        a34._monitor = types.SimpleNamespace(stop=lambda: stopped.append(1))
+        a34.rescan_devices()
+        ok("the signal check is stopped first",
+           stopped == [1] and a34._monitor is None)
+
+        # The player keeps its take; only its output is let go and put back.
+        rescan_dir = Path(tempfile.mkdtemp())
+        write_wav(rescan_dir / "A.wav", 1000, seconds=4.0)
+        a34.player_open([{"name": "A", "file": str(rescan_dir / "A.wav")}])
+        player_ref["p"] = a34._player
+        a34._player.seek(1.5)
+        a34._player.play()
+        pa["open_at_terminate"].clear()
+        res = a34.rescan_devices()
+        ok("the player's output is closed before PortAudio is torn down",
+           res.get("ok") is True and pa["open_at_terminate"] == [])
+        state = a34._player.state()
+        ok("and reopened after, where it was and still playing",
+           a34._player._stream is not None
+           and abs(state["position"] - 1.5) < 0.2 and state["playing"])
+        a34.player_close()
+        player_ref["p"] = None
+
+        # PortAudio that will not start again is tried once more.
+        pa.update(fail=1, terminated=0, initialised=0)
+        res = a34.rescan_devices()
+        ok("a failed start is tried again",
+           res.get("ok") is True and pa["initialised"] == 1)
+        pa.update(fail=2)
+        res = a34.rescan_devices()
+        ok("and two failures say the app has to be restarted",
+           res.get("ok") is False and "restart" in res.get("error", "").lower())
+        pa["fail"] = 0
+        _sd._initialized = 1
+
+        # Without sounddevice's private calls nothing is touched.
+        saved_terminate = _sd._terminate
+        del _sd._terminate
+        pa.update(terminated=0, initialised=0)
+        try:
+            res = a34.rescan_devices()
+        finally:
+            _sd._terminate = saved_terminate
+        ok("without sounddevice's own calls nothing is touched",
+           pa["initialised"] == 0 and res.get("ok") is False
+           and "restart" in res.get("error", "").lower())
+
+        # Asking a card its rates can take seconds on ASIO; a rescan arriving
+        # meanwhile has to wait for the answer.
+        held = []
+        real_check = _sd.check_input_settings
+
+        def watching_check(**kw):
+            got = []
+            t = threading.Thread(
+                target=lambda: got.append(devmod.STREAM_LOCK.acquire(blocking=False)))
+            t.start()
+            t.join()
+            if got[0]:
+                devmod.STREAM_LOCK.release()
+            held.append(not got[0])
+            return real_check(**kw)
+
+        _sd.check_input_settings = watching_check
+        try:
+            devmod.recording_formats(0, 2)
+        finally:
+            _sd.check_input_settings = real_check
+        ok("asking a card its rates holds the stream lock",
+           bool(held) and all(held))
+
+        # A saved card that is not plugged in is reported by name.
+        _DEVICES[:] = before_list + [xr18]
+        a34._remember_device("device", len(before_list))
+        ok("a saved card that is present is not reported missing",
+           a34.get_settings()["missing_device"] is None)
+        _DEVICES[:] = before_list
+        missing = a34.get_settings()["missing_device"]
+        ok("a saved card that is absent is reported by name",
+           missing == {"name": "X18/XR18", "host_api": "CoreAudio"})
+        ok("and does not count as a device in force",
+           a34.get_settings()["device_index"] is None)
+
+        # The band on screen is placed, not the saved one.
+        a34._remember_device("device", 0)
+        placed = a34.load_default_tracks(
+            [{"name": "Bass"}, {"name": "Keys", "stereo": True}])["tracks"]
+        ok("the band passed in is the band placed",
+           [t["name"] for t in placed] == ["Bass", "Keys"]
+           and placed[1]["stereo"] is True
+           and placed[0]["channel"] == 1 and placed[1]["channel"] == 2)
+        ok("and without one the saved band is used",
+           [t["name"] for t in a34.load_default_tracks()["tracks"]]
+           == [t["name"] for t in a34._config.get("tracks")
+               or [{"name": "Guitar 1"}, {"name": "Vocals"}]])
+    finally:
+        _DEVICES[:] = before_list
+        for attr in ("_initialized", "_terminate", "_initialize"):
+            if hasattr(_sd, attr):
+                delattr(_sd, attr)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

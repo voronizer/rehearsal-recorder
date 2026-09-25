@@ -7,6 +7,20 @@ opening.
 
 ## Unreleased
 
+- An interface switched on after the app started can be found without
+  restarting. The list of interfaces was made once, at start, so a desk
+  plugged in later was never offered — and at a rehearsal the desk is usually
+  switched on after the laptop. **Look again**, in Settings beside Recording,
+  makes the list again for recording and playback both. It is never done
+  while recording, and never on its own: on Windows it starts every ASIO
+  driver on the machine in turn.
+- A chosen interface that is not plugged in is said to be not connected. The
+  setup screen used to say "No interface chosen", which was wrong — it had
+  been chosen; and on a Mac it did not say even that, but quietly took the
+  first input in the list, usually the laptop's own microphone. It now says
+  "“X18/XR18” is not connected" and offers **Look again**; once the desk
+  turns up, the tracks take the inputs it remembers, with any names changed
+  meanwhile kept.
 - The free-space estimate counts a stereo track as the two channels it
   writes. 0.7.5 said it did, but only the Python side had learned to count
   channels: the setup screen and the recording screen both still asked it

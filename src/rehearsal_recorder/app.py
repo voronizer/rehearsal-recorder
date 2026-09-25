@@ -121,6 +121,22 @@ def selftest():
         ins = [d for d in devices if d["max_input_channels"] > 0]
         return f"PortAudio up, {len(devices)} devices, {len(ins)} with inputs"
 
+    def rescan_works():
+        # A real rescan, with nothing open: it proves the private sounddevice
+        # calls it rests on are still there in the version that was bundled.
+        import sounddevice as sd
+
+        from rehearsal_recorder.audio.devices import rescan
+
+        before = len(sd.query_devices())
+        trouble = rescan()
+        if trouble:
+            raise RuntimeError(trouble)
+        after = len(sd.query_devices())
+        if after != before:
+            raise RuntimeError(f"{before} devices before, {after} after")
+        return f"{after} devices found again"
+
     def asio():
         import sounddevice as sd
 
@@ -183,6 +199,7 @@ def selftest():
         return f"pywebview {getattr(webview, '__version__', '?')}"
 
     check("audio engine", audio)
+    check("looking for interfaces again", rescan_works)
     # Checks the ASIO DLL reached the bundle. It needs no ASIO driver on the
     # machine: the host API is listed, with no devices, even without one.
     if sys.platform == "win32":

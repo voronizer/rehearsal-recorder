@@ -50,9 +50,11 @@ from rehearsal_recorder.audio.format import (
 from rehearsal_recorder.audio.crop import crop_wav
 from rehearsal_recorder.audio.mixdown import mixdown
 from rehearsal_recorder.audio.devices import (
+    STREAM_LOCK,
     channels_available,
     device_identity,
     recording_formats,
+    rescan,
     saved_device,
 )
 from rehearsal_recorder.audio.monitor import LevelMonitor
@@ -422,6 +424,7 @@ class Api:
             "recordings_dir": str(self._recordings_dir),
             "default_recordings_dir": str(RECORDINGS_ROOT),
             "device_index": saved_device(self._config, "device", True),
+            "missing_device": self._missing_device(),
             "samplerate": int(
                 self._config.get("samplerate") or DEFAULT_SAMPLERATE
             ),
@@ -592,8 +595,13 @@ class Api:
         apis = self._host_api_names()
         key = "max_input_channels" if want_input else "max_output_channels"
 
+        # Under the lock, so the list is never read while a rescan is
+        # replacing it.
+        with STREAM_LOCK:
+            listed = list(sd.query_devices())
+
         found = []
-        for idx, d in enumerate(sd.query_devices()):
+        for idx, d in enumerate(listed):
             if d.get(key, 0) <= 0:
                 continue
             api = apis[d["hostapi"]] if d.get("hostapi", -1) < len(apis) else ""
@@ -652,6 +660,77 @@ class Api:
     def list_output_devices(self):
         return self._describe_devices(want_input=False)
 
+    def _missing_device(self):
+        """The saved recording interface when it is not plugged in, as
+        {name, host_api}; None when it is, or when nothing was ever chosen.
+
+        Not the same as no choice at all. "No interface chosen" is wrong for
+        a desk that was chosen and is simply not switched on yet, and the
+        screen can offer to look for it again only if it knows it is
+        missing."""
+        identity = self._config.get("device")
+        if not identity:
+            return None
+        if saved_device(self._config, "device", True) is not None:
+            return None
+        return {"name": identity.get("name"), "host_api": identity.get("host_api")}
+
+    @staticmethod
+    def _device_names():
+        """Every device's name, once each, in the order PortAudio lists them.
+        One card is listed once per audio system on Windows; for saying what
+        turned up, it is one card."""
+        try:
+            with STREAM_LOCK:
+                return list(dict.fromkeys(d["name"] for d in sd.query_devices()))
+        except Exception:
+            return []
+
+    def rescan_devices(self):
+        """
+        Looks for interfaces again: PortAudio lists them once, at start, and a
+        card plugged in afterwards is not offered until it is started again.
+
+        Every stream has to be let go first — see audio.devices.rescan. A
+        recording refuses the rescan outright; the signal check is stopped;
+        the player keeps its take and only has its output closed, then
+        reopened where it was.
+
+        Returns which names turned up and which went, for the screen to say.
+        """
+        # The player's lock before the stream lock, the order player_open
+        # takes them in. The other way round, a player opening while this
+        # runs would leave each waiting for the other.
+        with self._player_lock, STREAM_LOCK:
+            if self._recorder is not None:
+                return {
+                    "ok": False,
+                    "error": "Not while recording — stop the take first, then "
+                             "look again.",
+                }
+            self.stop_monitor()
+
+            before = self._device_names()
+            if self._player is not None:
+                self._player.close_output()
+            trouble = rescan()
+            if trouble is not None:
+                return {"ok": False, "error": trouble}
+            after = self._device_names()
+
+            reopened = self._reopen_output()
+
+        result = {
+            "ok": True,
+            "found": [n for n in after if n not in before],
+            "gone": [n for n in before if n not in after],
+        }
+        if not reopened.get("ok", True):
+            result["warning"] = reopened.get("error")
+        elif reopened.get("warning"):
+            result["warning"] = reopened["warning"]
+        return result
+
     def _input_count(self, device_index):
         if device_index is None:
             return 0
@@ -675,7 +754,7 @@ class Api:
             tracks,
         )
 
-    def load_default_tracks(self):
+    def load_default_tracks(self, band=None):
         """
         The tracks to start the setup screen with, for the card in force.
 
@@ -683,14 +762,25 @@ class Api:
         this card's own layout, another card's names, names with no input
         left over, or the first-run pair — belongs in one place, and that
         place is layouts.for_device().
+
+        `band` is the names and stereo switches to place, when the screen
+        already has some: a card that turns up after a rescan takes the band
+        as it is on screen, edits and all, rather than the saved one.
         """
         index = saved_device(self._config, "device", True)
+        if band is None:
+            members = self._config.get("tracks", [])
+        else:
+            members = [
+                {"name": t["name"], **({"stereo": True} if t.get("stereo") else {})}
+                for t in band
+            ]
         return {
             "device_index": index,
             "samplerate": self._config.get("samplerate"),
             "bit_depth": normalize_depth(self._config.get("bit_depth")),
             "tracks": layouts.for_device(
-                self._config.get("tracks", []),
+                members,
                 self._config.get("layouts", []),
                 device_identity(index),
                 self._input_count(index),

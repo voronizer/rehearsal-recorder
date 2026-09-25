@@ -30,6 +30,7 @@ export function DevicePicker({
   placeholder,
   systemDefault = false,
   detail,
+  disabled = false,
 }: {
   id: string
   devices: Device[]
@@ -39,6 +40,9 @@ export function DevicePicker({
   /** Offer "System output" first, under any driver. */
   systemDefault?: boolean
   detail?: (d: Device) => string
+  /** While the list is being rebuilt: an index picked now may mean another
+   *  device a moment later. */
+  disabled?: boolean
 }) {
   const drivers = useMemo(
     () => [...new Set(devices.map((d) => d.host_api))],
@@ -48,9 +52,9 @@ export function DevicePicker({
   const [driver, setDriver] = useState<string | null>(null)
 
   // Follow the saved device until the person picks a driver themselves, and
-  // reset the same way if the driver they were on stops being offered — the
-  // lists are read once, so today nothing in the interface can trigger this,
-  // but a driver that is gone is no more choosable than one never set.
+  // reset the same way if the driver they were on stops being offered — which
+  // looking for interfaces again can do: a driver that is gone is no more
+  // choosable than one never set.
   useEffect(() => {
     if (drivers.length && (driver === null || !drivers.includes(driver))) {
       setDriver(current?.host_api ?? drivers[0])
@@ -71,7 +75,7 @@ export function DevicePicker({
   return (
     <div className="flex flex-col gap-2">
       {several && (
-        <Select value={driver ?? ""} onValueChange={setDriver}>
+        <Select value={driver ?? ""} onValueChange={setDriver} disabled={disabled}>
           <SelectTrigger
             id={`${id}-driver`}
             aria-label="Driver"
@@ -91,6 +95,7 @@ export function DevicePicker({
       <Select
         value={selected}
         onValueChange={(v) => onChange(v === SYSTEM ? null : Number(v))}
+        disabled={disabled}
       >
         <SelectTrigger id={id} className="w-full">
           <SelectValue placeholder={devicePlaceholder} />

@@ -248,6 +248,27 @@ which three to leave out is the band's answer.
 Removing a track removes that person everywhere, because the band is one
 list. Interfaces remember sockets, not membership.
 
+### An interface switched on after the app
+
+The list of interfaces is made once, when the app starts — that is how
+PortAudio, the audio library underneath, works. A desk switched on or plugged
+in afterwards is not in it, and at a rehearsal that is the usual order of
+things: the laptop is opened first, and an XR18 takes longer to start than a
+laptop does to wake.
+
+When the interface chosen in Settings is not there, the setup screen says so
+— "“X18/XR18” is not connected" — rather than recording from something else,
+and offers **Look again**. Press it once the desk is on. When it turns up,
+the tracks take the inputs that desk remembers, and any names changed in the
+meantime are kept. Settings has the same button beside Recording, for picking
+an interface that was not there a moment ago; it looks for playback devices
+at the same time.
+
+Looking again is never done while recording, and never on its own. On
+Windows it starts every ASIO driver on the machine in turn, the same as when
+the app opens, which is not something to do in the middle of a song. A take
+that is open in the player keeps its place and carries on.
+
 ## Recording an instrument in stereo
 
 A keyboard has two outputs. So does a pair of microphones over a drum kit, or

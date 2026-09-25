@@ -16,6 +16,10 @@ person nothing. So the saved device is checked first, and if it cannot do the
 job we fall back to the system output and say why in plain words. To survive
 changes to the device list, a saved choice is kept as the device's name and
 audio system beside its index, and found again by those.
+
+The rescan: PortAudio lists the devices once, when it starts, so a card
+plugged in afterwards is not there until PortAudio is stopped and started
+again — see rescan().
 """
 
 import sys
@@ -71,27 +75,30 @@ def recording_formats(device_index, channels):
     # depths — half as much wear for exactly the same information.
     asio = _is_asio(device_index)
 
-    for rate in OFFERED_RATES:
-        if check is None:
-            result[str(rate)] = list(SUPPORTED_DEPTHS)  # cannot ask; assume
-            continue
+    # Held for the whole round of questions. On ASIO it can take seconds, and
+    # a rescan arriving meanwhile would stop PortAudio in the middle of one.
+    with STREAM_LOCK:
+        for rate in OFFERED_RATES:
+            if check is None:
+                result[str(rate)] = list(SUPPORTED_DEPTHS)  # cannot ask; assume
+                continue
 
-        depths = []
-        for depth in (SUPPORTED_DEPTHS[:1] if asio else SUPPORTED_DEPTHS):
-            try:
-                check(
-                    device=device_index,
-                    channels=channels,
-                    samplerate=rate,
-                    dtype=capture_dtype(depth),
-                )
-                depths.append(depth)
-            except Exception as e:
-                refusal = e
-        if asio and depths:
-            depths = list(SUPPORTED_DEPTHS)
-        if depths:
-            result[str(rate)] = depths
+            depths = []
+            for depth in (SUPPORTED_DEPTHS[:1] if asio else SUPPORTED_DEPTHS):
+                try:
+                    check(
+                        device=device_index,
+                        channels=channels,
+                        samplerate=rate,
+                        dtype=capture_dtype(depth),
+                    )
+                    depths.append(depth)
+                except Exception as e:
+                    refusal = e
+            if asio and depths:
+                depths = list(SUPPORTED_DEPTHS)
+            if depths:
+                result[str(rate)] = depths
 
     # One rate working proves the card was listening, so the others really
     # were refusals. Nothing working at all is the card saying nothing.
@@ -101,6 +108,68 @@ def recording_formats(device_index, channels):
     # tell the person is the screen's business, and the screen is where the
     # audio system they are on is known.
     return result, str(refusal)
+
+
+RESCAN_UNAVAILABLE = (
+    "This build cannot look for interfaces again. Restart the app to see one "
+    "plugged in since it started."
+)
+
+
+def rescan():
+    """
+    Rebuilds PortAudio's list of devices. Returns None, or a sentence when it
+    could not.
+
+    PortAudio lists the devices once, in Pa_Initialize, and every later
+    question is answered from that list — so a card plugged in after the app
+    started is not offered at all. Only stopping PortAudio and starting it
+    again makes a new list.
+
+    Stopping is counted: Pa_Terminate tears down only when as many calls
+    have come in as Pa_Initialize had, so it is called as many times as
+    sounddevice started it, and PortAudio is started again as many times.
+
+    **Every stream must be closed first.** Pa_Terminate closes open streams
+    itself and leaves the Python objects pointing at memory it has freed, so
+    the next call on one is a crash rather than an error. Api.rescan_devices
+    settles them before calling this.
+
+    The calls used are sounddevice's own and private — they are what its exit
+    handler uses — so they are looked for before anything is touched.
+    """
+    terminate = getattr(sd, "_terminate", None)
+    initialize = getattr(sd, "_initialize", None)
+    count = getattr(sd, "_initialized", None)
+    if terminate is None or initialize is None or not isinstance(count, int):
+        return RESCAN_UNAVAILABLE
+
+    with STREAM_LOCK:
+        try:
+            for _ in range(count):
+                terminate()
+        except Exception as e:
+            # Whatever did not stop, starting it again is what matters now.
+            print(f"[devices] stopping PortAudio: {e}")
+
+        for _ in range(max(count, 1)):
+            # An ASIO driver that was just let go can be slow to answer
+            # again, so a start that fails is tried once more.
+            failure = None
+            for _attempt in range(2):
+                try:
+                    initialize()
+                    failure = None
+                    break
+                except Exception as e:
+                    failure = e
+            if failure is not None:
+                return (
+                    "The audio system did not start again, so nothing can be "
+                    "recorded or played until the app is restarted. The "
+                    f"driver said: {failure}"
+                )
+    return None
 
 
 def _input_count(device_index):

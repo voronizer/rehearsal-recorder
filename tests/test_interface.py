@@ -72,6 +72,10 @@ let cloudFormat = window.__CLOUD_FORMAT__ || 'wav';
 let autoPublish = window.__AUTO_PUBLISH__ || {on:false, what:'mix'};
 let recording = {device_index: window.__NO_DEVICE__ ? null : 0, samplerate: 44100, bit_depth: 24};
 let outputDevice = {index: null};
+// An XR18 switched on after the app started: absent from the list until the
+// second look, since a desk takes a while to boot.
+let pluggedIn = false;
+let rescans = 0;
 // Real playback reads each file's own length off disk; the mock has no
 // disk, so a track's duration is looked up here by its own file path,
 // falling back to the live session's TAKE-second default. Every path used
@@ -157,7 +161,12 @@ window.__MAKE_API__ = () => ({
     (window.__STARTUP_PROBLEM__ ? [window.__STARTUP_PROBLEM__] : [])),
   // With a host API named, this is the Windows shape once ASIO is loaded:
   // one mixer through three systems with three different input counts.
-  list_input_devices: async () => (window.__TRACKS_FROM_A_BIGGER_CARD__ ? [
+  list_input_devices: track('list_input_devices', async () => (window.__PLUGGED_IN_LATE__ ? [
+    {index:0, name:'MacBook Pro Microphone', host_api:'Core Audio',
+     max_input_channels:1, max_output_channels:0, default_samplerate:48000},
+    ...(pluggedIn ? [{index:1, name:'X18/XR18', host_api:'Core Audio',
+     max_input_channels:18, max_output_channels:18, default_samplerate:48000}] : [])] :
+    window.__TRACKS_FROM_A_BIGGER_CARD__ ? [
     {index:0, name:'Little USB box', host_api:'Core Audio',
      max_input_channels:2, max_output_channels:0, default_samplerate:48000}] :
     window.__HOST_API__ ? [
@@ -168,7 +177,15 @@ window.__MAKE_API__ = () => ({
     {index:5, name:'X32 USB', host_api:window.__HOST_API__,
      max_input_channels:8, max_output_channels:0, default_samplerate:48000}] : [
     {index:0, name:'Universal Audio Thunderbolt', host_api:'Core Audio',
-     max_input_channels:18, max_output_channels:0, default_samplerate:48000}]),
+     max_input_channels:18, max_output_channels:0, default_samplerate:48000}])),
+  rescan_devices: track('rescan_devices', async () => {
+    rescans += 1;
+    if (window.__PLUGGED_IN_LATE__ && !pluggedIn && rescans >= 2) {
+      pluggedIn = true;
+      return {ok:true, found:['X18/XR18'], gone:[]};
+    }
+    return {ok:true, found:[], gone:[]};
+  }),
   list_output_devices: async () => (window.__HOST_API__ ? [
     {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
      max_output_channels:2, default_samplerate:48000},
@@ -186,10 +203,15 @@ window.__MAKE_API__ = () => ({
     outputDevice = {...outputDevice, channels};
     return {ok:true};
   }),
-  load_default_tracks: async () => ({
+  load_default_tracks: track('load_default_tracks', async (band) => window.__PLUGGED_IN_LATE__ ? ({
+    // Like layouts.for_device: with no card there is one input to go round;
+    // with the desk, every name gets its own.
+    tracks: (band || [{name:'Guitar'}, {name:'Vocals'}]).map((t, i) => ({
+      name: t.name, stereo: !!t.stereo,
+      channel: pluggedIn ? i + 1 : (i === 0 ? 1 : null)}))}) : ({
     tracks: window.__TRACKS_FROM_A_BIGGER_CARD__
       ? [{name:'Guitar', channel:1}, {name:'Vocals', channel:12}]
-      : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]}),
+      : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]})),
   set_recording_format: track('set_recording_format', async (dev, rate, depth) => {
     recording = {device_index: dev, samplerate: rate, bit_depth: depth};
     return {ok:true, ...recording};
@@ -462,7 +484,11 @@ window.__MAKE_API__ = () => ({
 
   get_settings: async () => ({recordings_dir:'/Users/alex/RehearsalRecordings',
     default_recordings_dir:'/Users/alex/RehearsalRecordings',
-    device_index: recording.device_index, samplerate: recording.samplerate,
+    device_index: window.__PLUGGED_IN_LATE__ ? (pluggedIn ? 1 : null)
+      : recording.device_index,
+    missing_device: window.__PLUGGED_IN_LATE__ && !pluggedIn
+      ? {name:'X18/XR18', host_api:'Core Audio'} : null,
+    samplerate: recording.samplerate,
     bit_depth: recording.bit_depth, supported_bit_depths:[16, 24],
     tracks:[], volumes:{}, output_device_index: outputDevice.index,
     output_channels: outputDevice.channels || [1, 2],
@@ -1657,6 +1683,82 @@ def main():
         ok("the free space is worked out for three channels, not two tracks",
            bool(estimates) and estimates[-1]["args"][0] == 3)
         pair.close()
+
+        print("\n[4c] An interface switched on after the app")
+        # PortAudio lists the devices once, when the app starts. The desk
+        # switched on afterwards is not there until somebody looks again —
+        # and until then the screen says so, instead of "No interface chosen"
+        # or, on a Mac, quietly taking the laptop's own microphone.
+        late = browser.new_page(viewport={"width": 1180, "height": 900})
+        late.add_init_script("window.__PLUGGED_IN_LATE__ = true;" + MOCK)
+        late.goto(server.base_url, wait_until="networkidle")
+        late.wait_for_selector("input[aria-label='Track 1 name']")
+
+        def late_calls(name):
+            return late.evaluate(
+                f"() => window.__CALLS__.filter(c => c.name === '{name}')")
+
+        box = late.locator("button[aria-label='Change the interface and quality']")
+        ok("a chosen interface that is absent is said to be not connected",
+           "“X18/XR18” is not connected" in box.inner_text())
+        ok("and is not swapped for the laptop's microphone",
+           "MacBook" not in box.inner_text())
+        ok("so the rehearsal cannot start on it",
+           late.locator("button:has-text('Start rehearsal')").is_disabled())
+
+        # Edited while the desk boots, which is when people do it.
+        late.fill("input[aria-label='Track 2 name']", "Bass")
+        late.get_by_role("button", name="Look again").click()
+        late.wait_for_selector("text=Still not there")
+        ok("looking again reaches Python", len(late_calls("rescan_devices")) == 1)
+        ok("and a desk still booting is said to be still missing",
+           "not connected" in box.inner_text())
+
+        late.get_by_role("button", name="Look again").click()
+        late.wait_for_selector("text=18 inputs")
+        ok("once it is on, the screen records with it",
+           box.inner_text().startswith("X18/XR18"))
+        ok("and stops offering to look for it",
+           late.get_by_role("button", name="Look again").count() == 0
+           and late.locator("text=Still not there").count() == 0)
+        ok("a name edited meanwhile is kept",
+           late.input_value("input[aria-label='Track 2 name']") == "Bass")
+        placed = late_calls("load_default_tracks")
+        ok("because the band on screen is what gets placed",
+           bool(placed) and [t["name"] for t in placed[-1]["args"][0]]
+           == ["Guitar", "Bass"])
+        ok("and the tracks take the desk's inputs",
+           late.locator("[aria-label='Track 2 input']").inner_text() == "Input 2")
+        ok("so the rehearsal can start",
+           not late.locator("button:has-text('Start rehearsal')").is_disabled())
+        late.screenshot(path=str(SHOTS / "61-found-late.png"))
+        late.close()
+
+        # The same in Settings, where the desk would otherwise be picked.
+        late = browser.new_page(viewport={"width": 1180, "height": 900})
+        late.add_init_script("window.__PLUGGED_IN_LATE__ = true;" + MOCK)
+        late.goto(server.base_url, wait_until="networkidle")
+        late.click("button[aria-label='Settings']")
+        late.wait_for_selector("#input-device")
+        ok("Settings says the chosen interface is not connected",
+           "“X18/XR18” is not connected" in late.locator("#input-device").inner_text())
+        asked = len(late_calls("recording_formats"))
+        listed = len(late_calls("list_input_devices"))
+        late.get_by_role("button", name="Look again").click()
+        late.wait_for_timeout(300)
+        late.get_by_role("button", name="Look again").click()
+        late.wait_for_selector("text=Found “X18/XR18”")
+        ok("looking again reads the lists again",
+           len(late_calls("list_input_devices")) >= listed + 2)
+        ok("and the desk found is the one in force",
+           late.locator("#input-device").inner_text().startswith("X18/XR18"))
+        ok("and is asked which rates it takes",
+           len(late_calls("recording_formats")) > asked)
+        late.get_by_role("button", name="Look again").click()
+        late.wait_for_selector("text=No new interfaces")
+        ok("a look that finds nothing new says so, and nothing else",
+           late.locator("text=Found “X18/XR18”").count() == 0)
+        late.close()
 
         print("\n[12c] What cloud copies are written as")
         page.get_by_role("button", name="Folders", exact=True).first.click()

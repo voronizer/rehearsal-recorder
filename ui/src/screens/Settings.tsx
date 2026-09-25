@@ -6,6 +6,7 @@ import {
   Mic,
   Info,
   Palette,
+  RefreshCw,
   RotateCcw,
   Sliders,
 } from "lucide-react"
@@ -18,6 +19,7 @@ import { Shell } from "@/components/Shell"
 import { useEscape } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 import { SCALE_OPTIONS, THEME_LABELS, type Theme } from "@/lib/appearance"
+import { describeRescan, notConnected } from "@/lib/format"
 import {
   api,
   type CloudFormat,
@@ -107,6 +109,16 @@ export function Settings({
   // Six sections in one column was a wall. They are grouped by what a person
   // came here to change, not by the order they happened to be written in.
   const [tab, setTab] = useState<TabId>("audio")
+  // Looking for interfaces again. `rescans` counts the times it has been
+  // done, so the card is asked for its rates again even when it is the same
+  // card at the same place in the list.
+  const [rescanning, setRescanning] = useState(false)
+  const [rescans, setRescans] = useState(0)
+
+  const readDevices = async () => {
+    setOutputs(await api().list_output_devices())
+    setInputs(await api().list_input_devices())
+  }
 
   useEffect(() => {
     ;(async () => {
@@ -114,13 +126,36 @@ export function Settings({
       setSettings(s)
       setDir(s.recordings_dir)
       setCloudDir(s.cloud_dir ?? "")
-      setOutputs(await api().list_output_devices())
-      setInputs(await api().list_input_devices())
+      await readDevices()
     })()
   }, [])
 
+  // PortAudio lists the interfaces once, when the app starts. One plugged in
+  // later is found only by asking it to look again — see rescan_devices.
+  const lookAgain = async () => {
+    setError(null)
+    setRescanning(true)
+    try {
+      const res = await api().rescan_devices()
+      if (!res.ok) {
+        setError(res.error ?? "Could not look for interfaces")
+        return
+      }
+      await readDevices()
+      setSettings(await api().get_settings())
+      setRescans((n) => n + 1)
+      setStatus(describeRescan(res.found, res.gone))
+      window.setTimeout(() => setStatus(null), 4000)
+      // The take that was open plays on, but perhaps somewhere else.
+      if (res.warning) setError(res.warning)
+    } finally {
+      setRescanning(false)
+    }
+  }
+
   // The card is asked what it can do before anything is offered, and again
-  // whenever the interface changes.
+  // whenever the interface changes — or has been looked for again, since the
+  // rates of a desk are set on the desk.
   useEffect(() => {
     if (!settings || settings.device_index === null) return
     let cancelled = false
@@ -139,7 +174,7 @@ export function Settings({
     return () => {
       cancelled = true
     }
-  }, [settings?.device_index])
+  }, [settings?.device_index, rescans])
 
   const applyRecording = async (
     deviceIndex: number | null,
@@ -330,19 +365,41 @@ export function Settings({
         {tab === "audio" && (<>
 
         <section className="flex flex-col gap-3">
-          <div>
-            <Label htmlFor="input-device">Recording</Label>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Set once for the room and the card. The setup screen shows what
-              is in force but does not change it.
-            </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <Label htmlFor="input-device">Recording</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Set once for the room and the card. The setup screen shows what
+                is in force but does not change it.
+              </p>
+            </div>
+            {/* Recording and playback both: it is one list underneath. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void lookAgain()}
+              disabled={rescanning}
+              title="Find an interface plugged in since the app started"
+              className="shrink-0"
+            >
+              <RefreshCw className={cn(rescanning && "animate-spin")} />
+              {rescanning ? "Looking…" : "Look again"}
+            </Button>
           </div>
 
           <DevicePicker
             id="input-device"
             devices={inputs}
             value={settings?.device_index ?? null}
-            placeholder="Pick an interface"
+            disabled={rescanning}
+            placeholder={
+              settings?.missing_device
+                ? notConnected(
+                    settings.missing_device,
+                    new Set(inputs.map((d) => d.host_api)).size > 1
+                  )
+                : "Pick an interface"
+            }
             detail={(d) => ` · up to ${d.max_input_channels} ch`}
             onChange={(index) =>
               void applyRecording(
@@ -352,6 +409,13 @@ export function Settings({
               )
             }
           />
+
+          {settings?.missing_device && (
+            <p className="text-xs text-muted-foreground">
+              Plug it in and switch it on, then look again — or pick another
+              interface to record with.
+            </p>
+          )}
 
           {/* Only where there is a choice to make. Somebody who knows their
               desk has sixteen inputs and is offered eight has no way to guess
@@ -451,6 +515,7 @@ export function Settings({
             id="output-device"
             devices={outputs}
             value={settings?.output_device_index ?? null}
+            disabled={rescanning}
             placeholder="System output"
             systemDefault
             onChange={async (idx) => {

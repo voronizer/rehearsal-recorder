@@ -240,6 +240,8 @@ export type Settings = {
   recordings_dir: string
   default_recordings_dir: string
   device_index: number | null
+  /** The saved recording interface when it is not plugged in. */
+  missing_device: { name: string; host_api: string } | null
   samplerate: number | null
   bit_depth: number
   supported_bit_depths: number[]
@@ -275,7 +277,17 @@ type PyApi = {
   ping(): Promise<{ ok: boolean; message: string }>
   list_input_devices(): Promise<Device[]>
   list_output_devices(): Promise<OutputDevice[]>
-  load_default_tracks(): Promise<TrackTemplate | null>
+  /** The band placed on the interface in force. Without `band`, the saved
+   *  one; with it, those names and stereo switches — what is on screen. */
+  load_default_tracks(
+    band?: Pick<Track, "name" | "stereo">[]
+  ): Promise<TrackTemplate | null>
+  /** Looks for interfaces again — one plugged in after the app started is
+   *  not listed until it does. Refused while recording. `found` and `gone`
+   *  are device names. */
+  rescan_devices(): Promise<
+    Ok<{ found?: string[]; gone?: string[]; warning?: string }>
+  >
   save_default_tracks(config: TrackTemplate): Promise<Ok>
   media_url(absPath: string): Promise<string | null>
   /** A track's address, length and waveform. A range narrows the waveform to

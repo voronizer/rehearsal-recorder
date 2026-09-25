@@ -78,3 +78,27 @@ export function peakToDb(peak: number): string {
   if (peak <= 0) return "−∞"
   return (20 * Math.log10(peak)).toFixed(1)
 }
+
+/**
+ * "“X18/XR18” is not connected". The audio system is named only where there
+ * is more than one: on Windows the desk can be listed under MME and missing
+ * under ASIO, and "not connected" with its name right there in the list
+ * would read as nonsense.
+ */
+export function notConnected(
+  missing: { name: string; host_api: string },
+  severalDrivers: boolean
+): string {
+  const driver = severalDrivers && missing.host_api ? ` (${missing.host_api})` : ""
+  return `“${missing.name}”${driver} is not connected`
+}
+
+/** What looking for interfaces again turned up, in one line. */
+export function describeRescan(found: string[] = [], gone: string[] = []): string {
+  const quoted = (names: string[]) => names.map((n) => `“${n}”`).join(", ")
+  const goneText = `${quoted(gone)} ${gone.length === 1 ? "is" : "are"} gone`
+  if (found.length && gone.length) return `Found ${quoted(found)}; ${goneText}`
+  if (found.length) return `Found ${quoted(found)}`
+  if (gone.length) return goneText
+  return "No new interfaces"
+}
