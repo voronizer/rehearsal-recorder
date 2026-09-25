@@ -2668,6 +2668,24 @@ def main():
         ok("a card that would not answer says so",
            none_at_all == {} and bool(trouble))
         ok("and keeps what the driver said", "-9999" in trouble)
+
+        # The settings screen asks about two channels whatever the card is.
+        # A one-input card answers paInvalidChannelCount to every rate, so
+        # the whole list came back empty and blamed the card — when the
+        # question was the thing that was wrong.
+        seen_ch = []
+
+        def channel_fussy(device=None, channels=1, samplerate=None, dtype=None):
+            seen_ch.append(channels)
+            if channels > asio_devices[device]["max_input_channels"]:
+                raise Exception("Invalid number of channels", -9998)
+
+        _sd.check_input_settings = channel_fussy
+        narrow, no_trouble = _formats(0, 8)  # the MME entry has 2 inputs
+        ok("a card is never asked about more channels than it has",
+           set(seen_ch) == {2})
+        ok("so it answers, instead of refusing every rate",
+           bool(narrow) and no_trouble is None)
     finally:
         _sd.query_devices, _sd.query_hostapis = real_q, real_h
         _sd.check_input_settings = real_check

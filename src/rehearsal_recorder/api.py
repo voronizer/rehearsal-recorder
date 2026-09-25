@@ -632,6 +632,10 @@ class Api:
         """Which rate/depth combinations this input can actually do."""
         try:
             formats, trouble = recording_formats(device_index, int(channel_count))
+            if trouble:
+                # Into the crash log, where a bug report can reach it. The
+                # screen shows a sentence, not this.
+                print(f"[devices] {device_index} would not list its rates: {trouble}")
             return {
                 "ok": True,
                 "formats": formats,

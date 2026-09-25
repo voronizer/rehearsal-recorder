@@ -52,6 +52,14 @@ def recording_formats(device_index, channels):
     result = {}
     refusal = None
 
+    # Asking a card about more channels than it has is never a question
+    # about rates: PortAudio answers paInvalidChannelCount to every one of
+    # them, and a one-input card came back with no rates at all and the
+    # blame laid on the card. The caller asks for the channels it cares
+    # about; how many the card has is the card's business, and is settled
+    # here rather than at each call site.
+    channels = max(1, min(int(channels), _input_count(device_index)))
+
     # Asking an ASIO card is not free the way it is elsewhere: PortAudio
     # answers each question by loading the driver, initialising it, asking,
     # and unloading it again — a full cycle per call, and ASIO drivers are
@@ -89,10 +97,19 @@ def recording_formats(device_index, channels):
     # were refusals. Nothing working at all is the card saying nothing.
     if result or refusal is None:
         return result, None
-    return result, (
-        f"This interface would not say which rates it takes. The driver said: "
-        f"{refusal}"
-    )
+    # The driver's own words, not a sentence for anybody to read: what to
+    # tell the person is the screen's business, and the screen is where the
+    # audio system they are on is known.
+    return result, str(refusal)
+
+
+def _input_count(device_index):
+    """How many inputs this device has, or 1 when nobody can say — a guess of
+    one is the only one that cannot ask for channels that do not exist."""
+    try:
+        return sd.query_devices(device_index).get("max_input_channels", 0) or 1
+    except Exception:
+        return 1
 
 
 def channels_available(device_index, tracks):

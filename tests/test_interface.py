@@ -1573,12 +1573,13 @@ def main():
         mute.click("button[aria-label='Settings']")
         mute.get_by_role("button", name="Audio", exact=True).first.click()
         mute.wait_for_selector("#input-device")
-        note = mute.get_by_role("status").filter(has_text="would not say")
+        note = mute.get_by_role("status").filter(has_text="did not say")
         ok("the screen says the card would not answer", note.count() == 1)
         said = note.first.inner_text()
-        ok("and keeps what the driver said", "-9999" in said)
+        ok("without making the person read the driver's error code",
+           "-9999" not in said and "PaErrorCode" not in said)
         ok("and does not pass the three off as the card's own answer",
-           "not this card" in said)
+           "rather than its own" in said)
         ok("the rates are still there to choose from",
            mute.locator("button[aria-label='44.1 kHz']").count() == 1)
         mute.close()
