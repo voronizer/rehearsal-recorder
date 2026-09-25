@@ -2649,6 +2649,70 @@ def main():
         _sd.query_devices, _sd.query_hostapis = real_q, real_h
         _sd.check_input_settings = real_check
 
+    print("\n[30] A playback device that refuses says what actually refused")
+    from rehearsal_recorder.audio.devices import output_complaint
+
+    busy = Exception("Device unavailable", -9985)
+    wrong_rate = Exception("Invalid sample rate", -9997)
+    strange = Exception("Unanticipated host error", -9999)
+
+    ok("a card already in use is not reported as refusing the rate",
+       "48000 Hz" not in output_complaint("X32", busy, 48000)
+       and "in use" in output_complaint("X32", busy, 48000))
+    ok("a card that will not take the rate still says so",
+       "48000 Hz" in output_complaint("X32", wrong_rate, 48000))
+    ok("anything else keeps the driver's own words",
+       "Unanticipated host error" in output_complaint("X32", strange, 48000))
+    ok("and the place to go and look is one this system has",
+       "Audio MIDI Setup" in output_complaint("X32", wrong_rate, 48000, "darwin")
+       and "Audio MIDI Setup"
+       not in output_complaint("X32", wrong_rate, 48000, "win32"))
+
+    asked_out = []
+
+    def counting_output_check(device=None, channels=2, samplerate=None,
+                              dtype=None):
+        asked_out.append(device)
+
+    write_wav(tmp / "p30" / "A.wav", 1000)
+    solo = [{"name": "A", "file": str(tmp / "p30" / "A.wav")}]
+
+    real_q, real_h = _sd.query_devices, _sd.query_hostapis
+    real_out_check, real_out = _sd.check_output_settings, _sd.OutputStream
+
+    def refusing_output(**kw):
+        """A card that is listed and looks fine, but will not open — the shape
+        an ASIO card takes while another program holds it."""
+        if kw.get("device") == 1:
+            raise Exception("Device unavailable", -9985)
+        return real_out(**kw)
+
+    _sd.query_hostapis = lambda: asio_apis
+    _sd.query_devices = (
+        lambda index=None, kind=None:
+        asio_devices if index is None else asio_devices[index]
+    )
+    _sd.check_output_settings = counting_output_check
+    try:
+        usable_output(1, 48000)
+        ok("an ASIO card is not made to load its driver just to be asked",
+           asked_out == [])
+        usable_output(0, 48000)
+        ok("every other audio system is still asked before anything opens",
+           asked_out == [0])
+
+        _sd.OutputStream = refusing_output
+        p30 = TakePlayer(solo)
+        complaint = p30.open_output(1, (1, 2))
+        ok("a card that refuses as it opens falls back instead of failing "
+           "the take", p30._stream is not None)
+        ok("and says it is in use, not that the rate is wrong",
+           complaint and "in use" in complaint and "48000 Hz" not in complaint)
+        p30.close()
+    finally:
+        _sd.query_devices, _sd.query_hostapis = real_q, real_h
+        _sd.check_output_settings, _sd.OutputStream = real_out_check, real_out
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

@@ -23,7 +23,11 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
-from rehearsal_recorder.audio.devices import STREAM_LOCK, usable_output
+from rehearsal_recorder.audio.devices import (
+    STREAM_LOCK,
+    output_complaint,
+    usable_output,
+)
 from rehearsal_recorder.audio.format import unpack24
 
 BLOCK_FRAMES = 1024
@@ -171,18 +175,34 @@ class TakePlayer:
 
         with STREAM_LOCK:
             self.close_output()
-            self._route = tuple(c - 1 for c in channels)
-            self._stream_channels = max(channels)
-            self._stream = sd.OutputStream(
-                device=index,
-                channels=self._stream_channels,
-                samplerate=self.samplerate,
-                dtype="int16",
-                blocksize=BLOCK_FRAMES,
-                callback=self._callback,
-            )
-            self._stream.start()
+            try:
+                self._start_output(index, channels)
+            except Exception as e:
+                # The chosen card refused at the moment of opening. An ASIO
+                # card is never asked beforehand — the asking costs a full
+                # load of the driver and cannot answer better than this — so
+                # this is where its refusal arrives, and the take is worth
+                # more than the card it comes out of.
+                if index is None:
+                    raise
+                name = sd.query_devices(index).get("name", "The chosen device")
+                complaint = output_complaint(name, e, self.samplerate)
+                self._start_output(None, (1, 2))
         return complaint
+
+    def _start_output(self, index, channels):
+        """The stream itself, once the device and the outputs are settled."""
+        self._route = tuple(c - 1 for c in channels)
+        self._stream_channels = max(channels)
+        self._stream = sd.OutputStream(
+            device=index,
+            channels=self._stream_channels,
+            samplerate=self.samplerate,
+            dtype="int16",
+            blocksize=BLOCK_FRAMES,
+            callback=self._callback,
+        )
+        self._stream.start()
 
     # ---------- audio ----------
 

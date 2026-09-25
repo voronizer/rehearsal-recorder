@@ -108,8 +108,14 @@ def usable_output(device_index, samplerate, channels=2):
     if (info or {}).get("max_output_channels", 0) < channels:
         return None, f"“{name}” has no stereo output — using the system output."
 
+    # An ASIO card is not asked in advance. The question costs a full load,
+    # initialise and unload of the driver — on every take, since this runs
+    # each time a player opens — and it cannot answer better than the opening
+    # itself: while our own recording holds the driver, the question comes
+    # back "unavailable" whatever the rate. So the opening is left to decide,
+    # and player.py falls back to the system output if it refuses.
     check = getattr(sd, "check_output_settings", None)
-    if check is not None:
+    if check is not None and not _is_asio(device_index):
         try:
             check(
                 device=device_index,
@@ -117,14 +123,75 @@ def usable_output(device_index, samplerate, channels=2):
                 samplerate=samplerate,
                 dtype="int16",
             )
-        except Exception:
-            return None, (
-                f"“{name}” will not take {int(samplerate)} Hz right now — using "
-                "the system output. Another app may be holding it at a "
-                "different rate; Audio MIDI Setup shows which."
-            )
+        except Exception as e:
+            # This asked one question — will you take this format — so an
+            # answer with no code of its own is an answer about the format.
+            return None, output_complaint(name, e, samplerate, fallback="rate")
 
     return device_index, None
+
+
+# From portaudio.h, where the codes count down from paNotInitialized =
+# -10000. These are the two this app can say something better about than
+# PortAudio's own wording.
+PA_INVALID_SAMPLE_RATE = -9997
+PA_DEVICE_UNAVAILABLE = -9985
+
+
+def _pa_code(error):
+    """The PaErrorCode inside a sounddevice PortAudioError. Anything else —
+    a plain OSError, a ValueError — has none, and gets the general answer."""
+    args = getattr(error, "args", ())
+    if len(args) > 1 and isinstance(args[1], int):
+        return args[1]
+    return None
+
+
+def _rate_holder(platform):
+    """Where this system shows what is holding a card at which rate."""
+    if platform == "darwin":
+        return "Audio MIDI Setup shows which"
+    if platform == "win32":
+        return "the card's own control panel shows which"
+    return "the system's sound settings show which"
+
+
+def output_complaint(name, error, samplerate, platform=sys.platform,
+                     fallback="open"):
+    """
+    Why a playback device could not be used, in words that fit the reason.
+
+    Every refusal used to be reported as the card not taking the rate, and
+    pointed at Audio MIDI Setup — a program only macOS has. The commonest
+    refusal is not about the rate at all: a card reached through ASIO plays
+    through one program at a time, so while this app records through it, it
+    answers "unavailable" to everything.
+
+    `fallback` is what to say when the error carries no code to go on, and
+    depends on what was being done. "rate" belongs to asking a card whether
+    it takes a format, where a refusal can only be about the format; "open"
+    belongs to opening the stream, where it could be anything, so the
+    driver's own words are worth more than a guess.
+    """
+    code = _pa_code(error)
+
+    if code == PA_DEVICE_UNAVAILABLE:
+        return (
+            f"“{name}” is already in use — using the system output. Something "
+            "else has it: this app's own recording through the same card, or "
+            "another program. A card reached through ASIO allows only one at "
+            "a time."
+        )
+    if code == PA_INVALID_SAMPLE_RATE or (code is None and fallback == "rate"):
+        return (
+            f"“{name}” will not take {int(samplerate)} Hz right now — using "
+            "the system output. Another app may be holding it at a different "
+            f"rate; {_rate_holder(platform)}."
+        )
+    return (
+        f"“{name}” would not open — using the system output. The driver said: "
+        f"{error}"
+    )
 
 
 def _host_api_name(device):

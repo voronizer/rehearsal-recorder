@@ -104,9 +104,24 @@ and no sound, which tells nobody anything.
 So the saved output is checked before it is opened — does it exist, does it
 have a stereo output, will it take the take's sample rate. If any of that
 fails, playback falls back to the system output and the player says so in one
-line: which device, and why. A device already held by another app at a
-different rate is the usual reason; Audio MIDI Setup shows what it is running
-at.
+line: which device, and why.
+
+The line used to say the same thing whatever went wrong — that the card would
+not take the rate, and that Audio MIDI Setup would show what was holding it,
+which is a program only macOS has. The reason is read off PortAudio's error
+code now. `paDeviceUnavailable` is not about the rate at all: it means
+something already has the card, and on ASIO that is routinely this app's own
+recording, since a card reached through ASIO plays through one program at a
+time. `paInvalidSampleRate` keeps the old sentence, pointed at whatever this
+system actually has. Anything else quotes the driver rather than guessing.
+
+An ASIO card is not asked in advance at all. PortAudio answers that question
+by loading the driver, initialising it and unloading it again — a full cycle,
+on every take, in front of an opening that is about to load it once more — and
+the answer is no better than the opening's: while our own recording holds the
+driver, the question comes back "unavailable" whatever the rate. So the
+opening decides, and a refusal there falls back to the system output the same
+way the check used to.
 
 ## If it crashes
 
