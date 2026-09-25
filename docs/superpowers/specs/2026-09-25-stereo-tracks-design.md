@@ -80,13 +80,14 @@ discarding the second.
 Volume, mute and solo apply to a stereo track as they do to a mono one.
 There is no balance control: a rehearsal is not panned.
 
-The level a stereo track reports is the louder of its two channels. The
-signal check answers "is the keyboard on the keyboard track", not "which of
-these two microphones is quieter", and one bar per track keeps the check
-readable at a glance.
+A stereo track reports a level for each of its channels. The signal check
+exists to catch a source that is not arriving, and a dead overhead is
+exactly the thing it has to catch; a single figure taken from the louder
+channel would hide one.
 
-The waveform of a stereo track is drawn from the louder of the two channels
-at each point, for the same reason.
+The waveform of a stereo track is computed for each channel separately, for
+the same reason. A track whose right side stopped halfway through a take is
+a thing to see, not a thing to average away.
 
 ## Part 5 — The mix
 
@@ -113,7 +114,21 @@ A track carries a stereo switch. Turning it on for a track whose next input
 is taken, or past the end of the card, leaves the track without an input,
 which the setup screen already names and refuses to start on.
 
-The level meter shows one bar per track, stereo or not.
+A stereo track's level meter is one bar of the usual height, divided along
+its length: the left channel above, the right below. A meter per channel
+would make a stereo track twice the height of a mono one and push the list
+off the screen; one undivided bar would hide a channel that stopped
+arriving. This holds on the signal check and while recording, which use the
+same meter.
+
+The player draws a stereo track in one lane, its left channel above the
+centre line and its right below, in the height a mono track's waveform
+occupies. That a track is stereo is therefore read from its shape rather
+than from a label, and a side that fell silent is visible at the point it
+happened.
+
+Where a track list is written out in words — the rehearsal overview, the
+setup screen — a stereo track carries its pair of inputs, `9–10`.
 
 ## What this does not do
 
@@ -142,7 +157,10 @@ A stereo track has no balance or width control, in the player or in the mix.
 - the player renders a stereo track's left channel to the left output and
   its right to the right
 - a mono track still reaches both outputs
-- the level of a stereo track is the louder of its channels
+- a stereo track reports a level per channel, and a silent right channel
+  reads as silent while the left one plays
+- the waveform of a stereo track is computed per channel, and a take whose
+  right side stops halfway shows it
 - the mix keeps a stereo track's sides apart, and still doubles a mono one
 - the disk estimate counts channels, not tracks
 - a config of bare-string members converts to objects, and converting twice
@@ -153,4 +171,6 @@ A stereo track has no balance or width control, in the player or in the mix.
 - a stereo track's input control reads `Inputs 9–10`
 - turning stereo on for a track whose pair does not fit leaves it with no
   input, and the rehearsal will not start
-- the level meter shows one bar for a stereo track
+- a stereo track's meter is one bar of the usual height, and a dead right
+  channel shows in it while the left one moves
+- a stereo track's waveform is drawn as two halves of one lane
