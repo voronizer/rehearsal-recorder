@@ -42,8 +42,10 @@ RAW_SUFFIX = ".raw"
 class AudioRecorder:
     def __init__(self, device_index, samplerate, tracks, out_dir, bit_depth=16):
         """
-        tracks: list of {"name": str, "channel": int}; channel is 1-based,
-                the way it is shown in the interface (channel 1 = first input).
+        tracks: list of {"name": str, "channel": int, "stereo": bool};
+                channel is 1-based, the way it is shown in the interface
+                (channel 1 = first input). A stereo track takes that input
+                and the next one, and is written as one two-channel file.
         out_dir: where this take's files are written.
         bit_depth: 16 or 24 — see audio/format.py for what that costs and buys.
         """
@@ -63,23 +65,39 @@ class AudioRecorder:
         self._stream = None
         self._raw_files = {}
         self._frames_written = 0
-        self._max_channel = max(t["channel"] for t in tracks)
+        # A stereo track reaches one input further than its own number, so
+        # the stream has to be opened that much wider.
+        self._width = {t["name"]: 2 if t.get("stereo") else 1 for t in tracks}
+        self._max_channel = max(
+            t["channel"] + self._width[t["name"]] - 1 for t in tracks
+        )
 
         self._stop_flush = threading.Event()
         self._flush_thread = None
 
-        self._levels = {t["name"]: 0.0 for t in tracks}
+        # One figure per channel: a stereo pair whose right microphone died
+        # looks exactly like a working one if the two are reduced to their
+        # louder half, and the signal check exists to catch precisely that.
+        self._levels = {t["name"]: [0.0] * self._width[t["name"]] for t in tracks}
         self._levels_lock = threading.Lock()
 
         # One contiguous scratch buffer per track, allocated once. The
         # callback runs on the audio thread; asking the allocator for memory
         # there every 21 ms is the kind of thing that only ever hurts.
         self._scratch = {
-            t["name"]: np.zeros(BLOCK_FRAMES, dtype=self._dtype) for t in tracks
+            t["name"]: np.zeros(
+                (BLOCK_FRAMES, self._width[t["name"]]), dtype=self._dtype
+            )
+            for t in tracks
         }
         # Only 24-bit needs a second buffer: the packed bytes on their way out.
         self._packed = (
-            {t["name"]: np.zeros((BLOCK_FRAMES, 3), dtype=np.uint8) for t in tracks}
+            {
+                t["name"]: np.zeros(
+                    (BLOCK_FRAMES * self._width[t["name"]], 3), dtype=np.uint8
+                )
+                for t in tracks
+            }
             if self.bit_depth == 24
             else {}
         )
@@ -123,50 +141,59 @@ class AudioRecorder:
         peaks = {}
         for track in self.tracks:
             name = track["name"]
-            column = indata[: frames, track["channel"] - 1]
+            first = track["channel"] - 1
+            width = self._width[name]
+            column = indata[: frames, first : first + width]
 
-            # A column of an interleaved block is strided, so it is copied
+            # Columns of an interleaved block are strided, so they are copied
             # into a contiguous buffer to be written — the buffer is reused,
-            # unlike tobytes(), which would allocate on every block.
+            # unlike tobytes(), which would allocate on every block. Copied as
+            # (frames, width), the bytes come out interleaved left then right,
+            # which is the order a wav wants them in.
             buf = self._scratch.get(name)
             if buf is None or buf.shape[0] < frames:
-                buf = np.zeros(frames, dtype=self._dtype)
+                buf = np.zeros((frames, width), dtype=self._dtype)
                 self._scratch[name] = buf
             chunk = buf[:frames]
             np.copyto(chunk, column)
 
             if self.bit_depth == 24:
                 packed = self._packed.get(name)
-                if packed is None or packed.shape[0] < frames:
-                    packed = np.zeros((frames, 3), dtype=np.uint8)
+                if packed is None or packed.shape[0] < frames * width:
+                    packed = np.zeros((frames * width, 3), dtype=np.uint8)
                     self._packed[name] = packed
-                out = packed[:frames]
-                pack24(chunk, out)
+                out = packed[: frames * width]
+                pack24(chunk.reshape(-1), out)
                 self._raw_files[name].write(memoryview(out))
             else:
                 self._raw_files[name].write(memoryview(chunk))
 
-            # Normalised to 0..1 for the UI. max()/min() return scalars, so
-            # nothing is allocated.
-            loudest = max(abs(int(chunk.max())), abs(int(chunk.min())))
-            peaks[name] = loudest / self._full_scale
+            # Normalised to 0..1 for the UI, one figure per channel. max()
+            # and min() over a column return scalars, so nothing is allocated.
+            peaks[name] = [
+                max(abs(int(chunk[:, c].max())), abs(int(chunk[:, c].min())))
+                / self._full_scale
+                for c in range(width)
+            ]
 
         # Blocks are shorter than the UI polling interval, so accumulate the
         # maximum between polls — otherwise a short spike could slip through
         # unnoticed.
         with self._levels_lock:
-            for name, peak in peaks.items():
-                if peak > self._levels.get(name, 0.0):
-                    self._levels[name] = peak
+            for name, channels in peaks.items():
+                held = self._levels.setdefault(name, [0.0] * len(channels))
+                for c, peak in enumerate(channels):
+                    if peak > held[c]:
+                        held[c] = peak
         self._frames_written += frames
 
     def get_levels(self):
         """Peak (0..1) per track since the last poll. Reading resets the
         accumulator, so the next call reports only what arrived after it."""
         with self._levels_lock:
-            snapshot = dict(self._levels)
-            for name in self._levels:
-                self._levels[name] = 0.0
+            snapshot = {name: list(v) for name, v in self._levels.items()}
+            for name, held in self._levels.items():
+                self._levels[name] = [0.0] * len(held)
         return snapshot
 
     def _flush_loop(self):
@@ -236,29 +263,36 @@ class AudioRecorder:
         for track in self.tracks:
             raw_path = self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}"
             wav_path = self.out_dir / f"{self.safe_name(track['name'])}.wav"
-            raw_to_wav(raw_path, wav_path, self.samplerate, self.bit_depth)
+            raw_to_wav(raw_path, wav_path, self.samplerate, self.bit_depth,
+                       channels=self._width[track["name"]])
             raw_path.unlink(missing_ok=True)
-            finalized.append({"name": track["name"], "file": str(wav_path)})
+            finalized.append({
+                "name": track["name"],
+                "file": str(wav_path),
+                **({"stereo": True} if self._width[track["name"]] == 2 else {}),
+            })
 
         self._result = {"duration_sec": duration, "tracks": finalized}
         return self._result
 
 
-def raw_to_wav(raw_path, wav_path, samplerate, bit_depth=16):
+def raw_to_wav(raw_path, wav_path, samplerate, bit_depth=16, channels=1):
     """
-    Wrap a raw mono PCM file into a .wav with a proper header.
+    Wrap a raw PCM file into a .wav with a proper header.
 
-    The raw file already holds the final bytes, so this only adds the header —
-    which is why a take interrupted by a crash can still be rescued.
+    The raw file already holds the final bytes, in their final order, so this
+    only adds the header — which is why a take interrupted by a crash can
+    still be rescued, stereo or not.
     """
-    width = bytes_per_sample(bit_depth)
+    width = bytes_per_sample(bit_depth) * channels
     with open(raw_path, "rb") as rf:
         data = rf.read()
-    # A take cut off mid-sample would otherwise produce a wav whose length
-    # does not divide evenly, which some players refuse outright.
+    # A take cut off mid-frame would otherwise produce a wav whose length does
+    # not divide evenly, which some players refuse outright. A stereo file cut
+    # between its two channels is the same problem, one sample further in.
     usable = len(data) - (len(data) % width)
     with wave.open(str(wav_path), "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(width)
+        wf.setnchannels(channels)
+        wf.setsampwidth(bytes_per_sample(bit_depth))
         wf.setframerate(samplerate)
         wf.writeframes(data[:usable])

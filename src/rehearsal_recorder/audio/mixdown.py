@@ -41,7 +41,7 @@ def mixdown(tracks, out_path, volumes=None):
     samplerate = None
     for t in tracks:
         try:
-            data, frames, rate, sample_bytes = _open_track(t["file"])
+            data, frames, rate, sample_bytes, width = _open_track(t["file"])
         except Exception as e:
             return {"ok": False, "error": f"{Path(t['file']).name}: {e}"}
         if samplerate is None:
@@ -51,9 +51,11 @@ def mixdown(tracks, out_path, volumes=None):
         # plays it. A 24-bit source is scaled down to that range on the way
         # in, so tracks of different depths sum correctly.
         scale = (1.0 / 256.0) if sample_bytes == 3 else 1.0
-        opened.append((data, frames, max(0.0, min(1.0, gain)) * scale, sample_bytes))
+        opened.append(
+            (data, frames, max(0.0, min(1.0, gain)) * scale, sample_bytes, width)
+        )
 
-    total = max(frames for _, frames, _, _ in opened)
+    total = max(frames for _, frames, _, _, _ in opened)
     if total == 0:
         return {"ok": False, "error": "The take is empty"}
 
@@ -76,8 +78,8 @@ def mixdown(tracks, out_path, volumes=None):
         w.setframerate(samplerate)
         for start in range(0, total, CHUNK):
             acc = _sum_chunk(opened, start, min(CHUNK, total - start)) * gain
-            mono = np.clip(np.rint(acc), -32768, 32767).astype("<i2")
-            w.writeframes(np.repeat(mono, 2).tobytes())
+            out = np.clip(np.rint(acc), -32768, 32767).astype("<i2")
+            w.writeframes(out.tobytes())
 
     return {
         "ok": True,
@@ -88,15 +90,21 @@ def mixdown(tracks, out_path, volumes=None):
 
 
 def _sum_chunk(opened, start, length):
-    acc = np.zeros(length, dtype=np.float32)
-    for data, frames, gain, sample_bytes in opened:
+    """One block of the mix, as (length, 2).
+
+    A stereo track keeps its sides — left into left, right into right. A mono
+    track goes to both, which is what a stereo file of a mono take means."""
+    acc = np.zeros((length, 2), dtype=np.float32)
+    for data, frames, gain, sample_bytes, width in opened:
         if start >= frames or gain == 0.0:
             continue  # this track has already ended, or is turned all the way down
         end = min(start + length, frames)
         piece = data[start:end]
         if sample_bytes == 3:
-            whole = np.zeros(end - start, dtype=np.int32)
-            unpack24(np.ascontiguousarray(piece), whole)
-            piece = whole
-        acc[: len(piece)] += piece.astype(np.float32) * gain
+            whole = np.zeros((end - start) * width, dtype=np.int32)
+            unpack24(np.ascontiguousarray(piece).reshape(-1, 3), whole)
+            piece = whole.reshape(end - start, width)
+        piece = piece.astype(np.float32) * gain
+        acc[: len(piece), 0] += piece[:, 0]
+        acc[: len(piece), 1] += piece[:, width - 1]
     return acc

@@ -167,25 +167,25 @@ def main():
     # could only change about twice a second.
     levels = p.state()["levels"]
     ok("each track says how loud it came out",
-       abs(levels["A"] - 1000 / 32768) < 0.005
-       and abs(levels["B"] - 2000 / 32768) < 0.005)
+       abs(levels["A"][0] - 1000 / 32768) < 0.005
+       and abs(levels["B"][0] - 2000 / 32768) < 0.005)
 
     p.set_volume("B", 0.5)
     settle(p)
     ok("and says it after the fader, not before",
-       abs(p.state()["levels"]["B"] - 1000 / 32768) < 0.005)
+       abs(p.state()["levels"]["B"][0] - 1000 / 32768) < 0.005)
     p.set_volume("B", 1.0)
 
     p.set_muted("A", True)
     settle(p)
-    ok("a muted track reads nothing at all", p.state()["levels"]["A"] == 0.0)
+    ok("a muted track reads nothing at all", p.state()["levels"]["A"][0] == 0.0)
     p.set_muted("A", False)
     settle(p)
 
     p.pause()
     p._render(256)
     ok("and nothing reads anything once playback stops",
-       all(v == 0.0 for v in p.state()["levels"].values()))
+       all(c == 0.0 for v in p.state()["levels"].values() for c in v))
 
     # Back to the start: the checks below carry on with this same player, and
     # the settling above has already spent most of a two-second take.
@@ -594,7 +594,7 @@ def main():
     raw_size = (tmp / "rec24" / "Gtr.raw").stat().st_size
     ok("three bytes per sample on disk", raw_size == 256 * 3)
     ok("the meter reads the level right",
-       abs(rec24.get_levels()["Gtr"] - (1000 * 256 * 256) / 2 ** 31) < 0.001)
+       abs(rec24.get_levels()["Gtr"][0] - (1000 * 256 * 256) / 2 ** 31) < 0.001)
 
     raw_to_wav(tmp / "rec24" / "Gtr.raw", tmp / "rec24" / "Gtr.wav", SR, 24)
     with wave.open(str(tmp / "rec24" / "Gtr.wav")) as w:
@@ -672,8 +672,8 @@ def main():
     block[:, 1] = 100
     rec4._callback(block, 256, None, None)
     levels = rec4.get_levels()
-    ok("a negative peak counts", abs(levels["Gtr"] - 32000 / 32768) < 0.001)
-    ok("a quiet track reads quiet", levels["Voc"] < 0.01)
+    ok("a negative peak counts", abs(levels["Gtr"][0] - 32000 / 32768) < 0.001)
+    ok("a quiet track reads quiet", levels["Voc"][0] < 0.01)
     for f in rec4._raw_files.values():
         f.close()
     ok("and they are the samples we sent",
@@ -2915,6 +2915,95 @@ def main():
        said and "Keys" in said and "no input" in said)
     ok("and the signal check will not open the card",
        a32.start_monitor(0, SR, unplaced)["ok"] is False)
+
+    print("\n[33] A track can be stereo")
+    # A keyboard has two outputs, and one mono file throws away half of what
+    # arrived. A stereo track takes two adjacent inputs and writes them
+    # interleaved into the one file, which is what makes it one track.
+    from rehearsal_recorder.audio.capture import AudioRecorder as _Rec
+    from rehearsal_recorder.audio.capture import raw_to_wav as _r2w
+
+    st = tmp / "stereo"
+    rec = _Rec(0, SR, [{"name": "Keys", "channel": 3, "stereo": True},
+                       {"name": "Gtr", "channel": 1}], st, bit_depth=16)
+    ok("the stream is opened wide enough to reach the pair",
+       rec._max_channel == 4)
+    rec._raw_files = {"Keys": open(st / "Keys.raw", "wb"),
+                      "Gtr": open(st / "Gtr.raw", "wb")}
+    block = np.zeros((128, 4), dtype=np.int16)
+    block[:, 0] = 100   # Gtr, input 1
+    block[:, 2] = 200   # Keys left, input 3
+    block[:, 3] = 300   # Keys right, input 4
+    rec._callback(block, 128, None, None)
+    for f in rec._raw_files.values():
+        f.close()
+
+    ok("a stereo track writes two samples per frame",
+       (st / "Keys.raw").stat().st_size == 128 * 2 * 2)
+    ok("and a mono one still writes one",
+       (st / "Gtr.raw").stat().st_size == 128 * 2)
+    written = np.fromfile(st / "Keys.raw", dtype="<i2")
+    ok("left and right interleaved, in that order",
+       (written[0::2] == 200).all() and (written[1::2] == 300).all())
+
+    lv = rec.get_levels()
+    ok("a stereo track reports a level for each channel",
+       len(lv["Keys"]) == 2 and abs(lv["Keys"][1] - 300 / 32768) < 1e-4)
+    ok("and a mono one reports the one it has", len(lv["Gtr"]) == 1)
+
+    _r2w(st / "Keys.raw", st / "Keys.wav", SR, 16, channels=2)
+    with wave.open(str(st / "Keys.wav")) as w:
+        ok("its wav says two channels, and the frames divide out",
+           w.getnchannels() == 2 and w.getnframes() == 128)
+
+    # 24-bit packs three bytes a sample, both channels alike.
+    st24 = tmp / "stereo24"
+    rec24 = _Rec(0, SR, [{"name": "Keys", "channel": 1, "stereo": True}],
+                 st24, bit_depth=24)
+    rec24._raw_files = {"Keys": open(st24 / "Keys.raw", "wb")}
+    block32 = np.zeros((64, 2), dtype=np.int32)
+    block32[:, 0] = 1000 * 256 * 256
+    block32[:, 1] = -2000 * 256 * 256
+    rec24._callback(block32, 64, None, None)
+    rec24._raw_files["Keys"].close()
+    ok("at 24 bits a stereo frame is six bytes",
+       (st24 / "Keys.raw").stat().st_size == 64 * 2 * 3)
+
+    print("  playing one back")
+    # Left and right deliberately different, and the right one silent later,
+    # so that keeping both sides apart can be told from averaging them.
+    sides = tmp / "sides"
+    sides.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(sides / "Keys.wav"), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        frame = struct.pack("<hh", 1000, -3000)
+        w.writeframes(frame * SR)
+    write_wav(sides / "Gtr.wav", 500, seconds=1.0)
+
+    sp = TakePlayer([{"name": "Keys", "file": str(sides / "Keys.wav")},
+                     {"name": "Gtr", "file": str(sides / "Gtr.wav")}])
+    sp.play()
+    out = settle(sp)
+    ok("a stereo track's left channel reaches the left output only",
+       abs(int(out[:, 0].mean()) - (1000 + 500)) < 30)
+    ok("and its right channel the right output",
+       abs(int(out[:, 1].mean()) - (-3000 + 500)) < 30)
+
+    lv = sp.state()["levels"]
+    ok("its level is reported per channel, not reduced to the louder",
+       len(lv["Keys"]) == 2
+       and abs(lv["Keys"][0] - 1000 / 32768) < 0.01
+       and abs(lv["Keys"][1] - 3000 / 32768) < 0.01)
+    ok("and a mono track reports the one channel it has", len(lv["Gtr"]) == 1)
+
+    sp.set_volume("Keys", 0.0)
+    out = settle(sp)
+    ok("volume still applies to both sides of a stereo track",
+       abs(int(out[:, 0].mean()) - 500) < 30
+       and abs(int(out[:, 1].mean()) - 500) < 30)
+    sp.close()
 
     print("\n" + "=" * 60)
     if problems:

@@ -44,7 +44,9 @@ GAIN_SMOOTHING = 0.25
 
 def _open_track(path):
     """
-    Returns (memmap, frames, samplerate, sample_bytes) for a 16- or 24-bit wav.
+    Returns (memmap, frames, samplerate, sample_bytes, channels) for a 16- or
+    24-bit wav. The memmap is shaped (frames, channels) at 16 bits and
+    (frames, channels, 3) at 24.
 
     Neither is decoded here. 16-bit audio is mapped as int16 and read
     directly; 24-bit is mapped as raw bytes, shaped (frames, 3), and turned
@@ -71,12 +73,16 @@ def _open_track(path):
     if offset < 0:
         raise ValueError(f"{path.name}: file is shorter than its header claims")
 
+    # Both channels of a stereo track are kept. Keeping only the first meant
+    # a stereo file played as its left channel with nothing said about the
+    # other, which is a silent way to lose half a keyboard. Anything wider
+    # than a pair is not something this app records, so the first two are
+    # taken and the rest left alone.
+    kept = min(channels, 2)
     if sampwidth == 2:
         data = np.memmap(
             path, dtype="<i2", mode="r", offset=offset, shape=(frames * channels,)
-        )
-        if channels > 1:
-            data = data.reshape(-1, channels)[:, 0]  # first channel only
+        ).reshape(frames, channels)[:, :kept]
     else:
         data = np.memmap(
             path,
@@ -84,25 +90,32 @@ def _open_track(path):
             mode="r",
             offset=offset,
             shape=(frames, channels, 3),
-        )[:, 0, :]  # first channel only, still (frames, 3)
+        )[:, :kept, :]
 
-    return data, frames, samplerate, sampwidth
+    return data, frames, samplerate, sampwidth, kept
 
 
 class Track:
     def __init__(self, name, path):
         self.name = name
-        self.data, self.frames, self.samplerate, self.sample_bytes = _open_track(
-            path
-        )
+        (
+            self.data,
+            self.frames,
+            self.samplerate,
+            self.sample_bytes,
+            self.width,
+        ) = _open_track(path)
         self.volume = 1.0
         self.muted = False
         # Current smoothed coefficient, so mute/solo does not click.
         self.current_gain = 1.0
-        # Loudest sample this track contributed to the last block, after its
-        # gain — so it is what came out, not what is on disk. Written by the
-        # audio thread, read by whoever asks for state(), both under the lock.
-        self.level = 0.0
+        # Loudest sample each of this track's channels contributed to the
+        # last block, after its gain — so it is what came out, not what is on
+        # disk. One figure per channel, because a stereo pair whose right side
+        # died looks like a working one once the two are reduced to the louder
+        # of them. Written by the audio thread, read by whoever asks for
+        # state(), both under the lock.
+        self.levels = [0.0] * self.width
         # Everything is mixed at 16-bit scale, because that is what goes out
         # to the card. A 24-bit sample is 256 times larger for the same
         # loudness, so it is scaled down as it is read — one multiply that
@@ -217,9 +230,11 @@ class TakePlayer:
         if self._mix is not None and self._mix.shape[0] >= frames:
             return
         self._mix = np.zeros((frames, self._out_channels), dtype=np.float32)
-        self._scratch = np.zeros(frames, dtype=np.float32)
+        # Two columns wide, so a stereo track's sides can be kept apart on
+        # the way through. A mono track uses the first.
+        self._scratch = np.zeros((frames, 2), dtype=np.float32)
         self._out16 = np.zeros((frames, self._out_channels), dtype=np.int16)
-        self._i32 = np.zeros(frames, dtype=np.int32)
+        self._i32 = np.zeros(frames * 2, dtype=np.int32)
 
     def _render(self, frames):
         """
@@ -237,14 +252,14 @@ class TakePlayer:
         if not self._playing:
             result.fill(0)
             for track in self.tracks:
-                track.level = 0.0
+                track.levels = [0.0] * track.width
             return result
 
         # Cleared once per block rather than per segment: one block can cross
         # a loop point and come back, and the meter wants the loudest of the
         # whole block, not of whichever piece happened to be written last.
         for track in self.tracks:
-            track.level = 0.0
+            track.levels = [0.0] * track.width
 
         written = 0
         while written < frames:
@@ -279,22 +294,29 @@ class TakePlayer:
                 if end <= self._pos:
                     continue
                 length = end - self._pos
-                seg = self._scratch[:length]
+                width = track.width
+                seg = self._scratch[:length, :width]
                 if track.sample_bytes == 3:
-                    whole = self._i32[:length]
-                    unpack24(track.data[self._pos:end], whole)
-                    np.copyto(seg, whole, casting="unsafe")
+                    whole = self._i32[:length * width]
+                    unpack24(
+                        track.data[self._pos:end].reshape(-1, 3),
+                        whole,
+                    )
+                    np.copyto(seg, whole.reshape(length, width), casting="unsafe")
                 else:
                     np.copyto(seg, track.data[self._pos:end], casting="unsafe")
                 seg *= gain * track.scale
-                # Two reductions and a compare. np.abs(seg).max() would say
-                # the same thing and allocate an array to say it, on the one
-                # thread in this app that has a deadline.
-                loudest = max(float(seg.max()), -float(seg.min()))
-                if loudest > track.level:
-                    track.level = loudest
-                out[written:written + length, 0] += seg
-                out[written:written + length, 1] += seg
+                # Two reductions and a compare per channel. np.abs(seg).max()
+                # would say the same thing and allocate an array to say it, on
+                # the one thread in this app that has a deadline.
+                for c in range(width):
+                    col = seg[:, c]
+                    loudest = max(float(col.max()), -float(col.min()))
+                    if loudest > track.levels[c]:
+                        track.levels[c] = loudest
+                # A stereo track keeps its sides; a mono one reaches both.
+                out[written:written + length, 0] += seg[:, 0]
+                out[written:written + length, 1] += seg[:, width - 1]
 
             self._pos += n
             written += n
@@ -395,11 +417,12 @@ class TakePlayer:
                 "position": self._pos / self.samplerate,
                 "duration": self.total_frames / self.samplerate,
                 "finished": self._finished,
-                # 0..1 per track, as it came out of the mix a moment ago. The
-                # interface polls this several times a second, which is what
-                # the meters beside the faders are made of.
+                # 0..1 per channel of each track, as it came out of the mix a
+                # moment ago. The interface polls this several times a second,
+                # which is what the meters beside the faders are made of. A
+                # list even for a mono track, so one shape serves both.
                 "levels": {
-                    t.name: round(min(1.0, t.level / 32768.0), 3)
+                    t.name: [round(min(1.0, v / 32768.0), 3) for v in t.levels]
                     for t in self.tracks
                 },
                 "loop": (

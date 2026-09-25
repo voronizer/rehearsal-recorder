@@ -24,10 +24,17 @@ class LevelMonitor:
         self.device_index = device_index
         self.samplerate = samplerate
         self.tracks = tracks
-        self._max_channel = max(t["channel"] for t in tracks)
+        # A stereo track reaches one input past its own number.
+        self._width = {t["name"]: 2 if t.get("stereo") else 1 for t in tracks}
+        self._max_channel = max(
+            t["channel"] + self._width[t["name"]] - 1 for t in tracks
+        )
 
         self._stream = None
-        self._levels = {t["name"]: 0.0 for t in tracks}
+        # One figure per channel: a dead half of a stereo pair is the very
+        # thing this screen exists to catch, and reducing the two to their
+        # louder half would hide it.
+        self._levels = {t["name"]: [0.0] * self._width[t["name"]] for t in tracks}
         self._lock = threading.Lock()
         self.last_status = None
 
@@ -40,11 +47,15 @@ class LevelMonitor:
             return
         with self._lock:
             for track in self.tracks:
-                column = indata[: frames, track["channel"] - 1]
-                loudest = max(abs(int(column.max())), abs(int(column.min())))
-                peak = loudest / 32768.0
-                if peak > self._levels.get(track["name"], 0.0):
-                    self._levels[track["name"]] = peak
+                name = track["name"]
+                first = track["channel"] - 1
+                held = self._levels.setdefault(name, [0.0] * self._width[name])
+                for c in range(self._width[name]):
+                    column = indata[: frames, first + c]
+                    loudest = max(abs(int(column.max())), abs(int(column.min())))
+                    peak = loudest / 32768.0
+                    if peak > held[c]:
+                        held[c] = peak
 
     def start(self):
         with STREAM_LOCK:
@@ -61,9 +72,9 @@ class LevelMonitor:
     def get_levels(self):
         """Peak since the last poll; reading resets the accumulator."""
         with self._lock:
-            snapshot = dict(self._levels)
-            for name in self._levels:
-                self._levels[name] = 0.0
+            snapshot = {name: list(v) for name, v in self._levels.items()}
+            for name, held in self._levels.items():
+                self._levels[name] = [0.0] * len(held)
         return snapshot
 
     def stop(self):
