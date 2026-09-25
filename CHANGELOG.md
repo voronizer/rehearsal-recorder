@@ -5,6 +5,41 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.7.5
+
+- A track can be recorded in stereo. A keyboard has two outputs, and so does
+  a pair of microphones over a drum kit; recorded into one mono file, half of
+  what arrived was thrown away, and recorded as two tracks they were two
+  tracks — two lanes, two faders, nothing saying they belong together. The
+  **Stereo** button on a track takes the input after its own as well and
+  writes the pair as one two-channel file. Being stereo belongs to the
+  instrument rather than to the card, so it survives a change of interface,
+  and each card remembers which pair the instrument sits on.
+- Both inputs of a pair have to be free. Turning stereo on where the next
+  input is already somebody else's leaves that track waiting for an input,
+  and says so, rather than quietly recording one signal into two tracks. A
+  pair cannot start on the last input of a card, and those inputs are not
+  offered.
+- Levels and waveforms are kept per channel, which is the reason to bother. A
+  meter is one bar of the usual height split along its length — left above,
+  right below — and the player draws a stereo lane with its left channel
+  above the centre and its right below. An overhead that stopped arriving is
+  visible at the moment it stopped instead of being covered by the microphone
+  that still works, and the signal check waits for both sides before calling
+  a track checked.
+- Playback stopped silently discarding channels. A file with more than one
+  channel was played as its first channel with nothing said about the rest,
+  which had been true of every stereo file the app could open.
+- The disk estimate counts channels rather than tracks, so half a band in
+  stereo no longer promises half again as much room as there is.
+- A crashed take with a stereo track in it recovers as stereo. A `.raw` file
+  carries no header, so the recorder writes a small record of each track's
+  width beside them and removes it once the wav headers exist.
+- A one-input card is asked whether it takes one channel. It was asked about
+  two, whatever it was, so it answered "invalid number of channels" to every
+  rate and the whole list came back empty — true of every one-input card
+  since rates were first offered.
+
 ## 0.7.4
 
 - The band survives a change of interface. A saved track carried two facts
