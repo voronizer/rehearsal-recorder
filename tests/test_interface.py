@@ -400,6 +400,8 @@ window.__MAKE_API__ = () => ({
 
   list_drafts: async () => drafts,
   recover_draft: track('recover_draft', async (dir) => {
+    if (window.__RECOVER_FAILS__)
+      return {ok:false, error:'Could not recover the take: its folder is read-only'};
     drafts = drafts.filter(d => d.dir !== dir);
     return {ok:true, take:{take_number:1, name:'Recovered', duration_sec:5, tracks:[], markers:[]}};
   }),
@@ -426,6 +428,8 @@ window.__MAKE_API__ = () => ({
     return {ok:true, folder:'/rec/relocated'};
   }),
   get_rehearsal: async (folder) => {
+    if (window.__REHEARSAL_UNREADABLE__)
+      return {ok:false, error:'Could not read the rehearsal: session.json is damaged'};
     // Its own path, distinct from the live session's /rec/g.wav — two takes
     // sharing a dummy path would let one's mocked length leak onto the other.
     // A page can ask for another length, to put a tick where it wants one.
@@ -1873,6 +1877,53 @@ def main():
         ok("as a warning, not an error",
            fell.locator("[data-notice='error']").count() == 0)
         fell.close()
+
+        print("\n[12l] History and Drafts say what failed in the corner")
+        hist = browser.new_page(viewport={"width": 1180, "height": 820})
+        hist.add_init_script("window.__REHEARSAL_UNREADABLE__ = true;" + MOCK)
+        hist.goto(server.base_url, wait_until="networkidle")
+        hist.click("text=History")
+        hist.wait_for_selector("text=Tuesday jam")
+        row = hist.locator("text=Tuesday jam").first
+        row_top = row.bounding_box()["y"]
+        row.click()
+        failed = hist.locator("section[aria-label='Notifications'] [data-notice='error']")
+        failed.wait_for()
+        ok("a rehearsal that will not open says so as a notice",
+           "session.json is damaged" in failed.inner_text()
+           and failed.get_attribute("role") == "alert")
+        ok("without moving the list", row.bounding_box()["y"] == row_top)
+
+        # A dialog opened while a notice is showing keeps its own Escape.
+        hist.click("button[aria-label='Rename rehearsal Tuesday jam']")
+        hist.wait_for_selector("[role='dialog']")
+        hist.keyboard.press("Escape")
+        hist.wait_for_selector("[role='dialog']", state="detached")
+        ok("Escape closes the dialog and stays in History",
+           hist.locator("text=Tuesday jam").count() > 0
+           and hist.locator("text=Start rehearsal").count() == 0)
+        ok("and leaves the notice alone", failed.count() == 1)
+        hist.close()
+
+        lost = browser.new_page(viewport={"width": 1180, "height": 820})
+        lost.add_init_script(
+            """window.__RECOVER_FAILS__ = true;
+               window.__DRAFTS__ = [{dir:'/rec/old/_drafts/take 1', name:'take 1',
+                 tracks:['Guitar','Vocals'], duration_sec:95,
+                 rehearsal_folder:'/rec/old', rehearsal_name:'Tuesday jam',
+                 created_at:'2026-09-10T19:00:00'}];"""
+            + MOCK
+        )
+        lost.goto(server.base_url, wait_until="networkidle")
+        lost.wait_for_selector("text=Unsaved takes found", timeout=8000)
+        lost.get_by_role("button", name="Recover").click()
+        refused = lost.locator("section[aria-label='Notifications'] [data-notice='error']")
+        refused.wait_for()
+        ok("a take that will not recover says so as a notice",
+           "read-only" in refused.inner_text())
+        ok("and the take is still offered",
+           lost.locator("text=Unsaved takes found").count() == 1)
+        lost.close()
 
         print("\n[12c] What cloud copies are written as")
         page.get_by_role("button", name="Folders", exact=True).first.click()

@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { api, type Draft } from "@/lib/api"
 import { formatDateHuman, formatMMSS } from "@/lib/format"
 import { canBePutBack, goesTo } from "@/lib/deletion"
+import { dismiss, notify } from "@/lib/notices"
 
 /**
  * Takes that were recorded but never saved — the app was closed or died
@@ -15,6 +16,9 @@ import { canBePutBack, goesTo } from "@/lib/deletion"
  * Shown on startup, before anything else, because ignoring it silently is how
  * a rehearsal gets lost.
  */
+// What an action here said — one slot, so each says over the last.
+const SAID = "drafts"
+
 export function DraftsScreen({
   drafts,
   onDone,
@@ -24,7 +28,6 @@ export function DraftsScreen({
 }) {
   const [remaining, setRemaining] = useState(drafts)
   const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [toDiscard, setToDiscard] = useState<Draft | null>(null)
 
   const finish = (rest: Draft[]) => {
@@ -34,11 +37,11 @@ export function DraftsScreen({
 
   const recover = async (draft: Draft) => {
     setBusy(draft.dir)
-    setError(null)
+    dismiss(SAID)
     const res = await api().recover_draft(draft.dir)
     setBusy(null)
     if (!res.ok) {
-      setError(res.error ?? "Could not recover the take")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not recover the take" })
       return
     }
     finish(remaining.filter((d) => d.dir !== draft.dir))
@@ -46,10 +49,11 @@ export function DraftsScreen({
 
   const discard = async (draft: Draft) => {
     setBusy(draft.dir)
+    dismiss(SAID)
     const res = await api().discard_draft(draft.dir)
     setBusy(null)
     if (!res.ok) {
-      setError(res.error ?? "Could not discard the take")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not discard the take" })
       return
     }
     finish(remaining.filter((d) => d.dir !== draft.dir))
@@ -79,7 +83,6 @@ export function DraftsScreen({
           </p>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div className="flex flex-col gap-2">
           {remaining.map((draft) => (

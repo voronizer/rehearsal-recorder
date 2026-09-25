@@ -27,6 +27,7 @@ import {
   takesLabel,
 } from "@/lib/format"
 import { canBePutBack, goPlural, goesTo } from "@/lib/deletion"
+import { dismiss, notify } from "@/lib/notices"
 
 /**
  * When it was, how long it ran and what it weighs:
@@ -53,10 +54,12 @@ function takesAndSize(r: RehearsalSummary | null): string {
  * History: past rehearsals and their takes. Read from disk, so it survives a
  * restart of the app.
  */
+// What an action here said — one slot, so each says over the last.
+const SAID = "history"
+
 export function HistoryScreen({ onBack }: { onBack: () => void }) {
   const [rehearsals, setRehearsals] = useState<RehearsalSummary[] | null>(null)
   const [opened, setOpened] = useState<RehearsalDetail | null>(null)
-  const [error, setError] = useState<string | null>(null)
   // Something slow enough to click twice by mistake is running. So far that
   // is only a crop, which rewrites every track of the take.
   const [busy, setBusy] = useState(false)
@@ -90,9 +93,10 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   useEscape(() => (selected ? select(null) : back()))
 
   const open = async (summary: RehearsalSummary) => {
+    dismiss(SAID)
     const res = await api().get_rehearsal(summary.folder)
     if (!res.ok) {
-      setError(res.error ?? "Could not open the rehearsal")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the rehearsal" })
       return
     }
     select(null)
@@ -117,10 +121,11 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
 
   const deleteTake = async (take: Take) => {
     if (!opened) return
+    dismiss(SAID)
     player.pause()
     const res = await api().delete_take(opened.folder, take.take_number)
     if (!res.ok) {
-      setError(res.error ?? "Could not delete the take")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not delete the take" })
       return
     }
     if (selected?.take_number === take.take_number) reselect(null)
@@ -129,9 +134,10 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
 
   const renameTake = async (take: Take, name: string) => {
     if (!opened) return
+    dismiss(SAID)
     const res = await api().rename_take(opened.folder, take.take_number, name)
     if (!res.ok) {
-      setError(res.error ?? "Could not rename the take")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not rename the take" })
       return
     }
     // The take folder moved with the name, so point the player at the fresh
@@ -149,12 +155,12 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   const cropTake = async (take: Take, from: number, to: number) => {
     if (!opened || busy) return
     setBusy(true)
-    setError(null)
+    dismiss(SAID)
     player.pause()
     const res = await api().crop_take(opened.folder, take.take_number, from, to)
     setBusy(false)
     if (!res.ok) {
-      setError(res.error ?? "Could not crop the take")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not crop the take" })
       return
     }
     if (res.take) reselect(res.take)
@@ -162,18 +168,21 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     // The crop itself went through — only the sweep of the original is what
     // failed — so this adds to the success path rather than standing in for it.
     if (res.error) {
-      setError(
-        `The take was cropped, but the original could not be moved out of the way (${res.error})${
+      notify({
+        key: SAID,
+        kind: "error",
+        text: `The take was cropped, but the original could not be moved out of the way (${res.error})${
           res.location ? `, and is still at ${res.location}` : ""
-        }.`
-      )
+        }.`,
+      })
     }
   }
 
   const renameRehearsal = async (folder: string, name: string) => {
+    dismiss(SAID)
     const res = await api().rename_rehearsal(folder, name)
     if (!res.ok) {
-      setError(res.error ?? "Could not rename the rehearsal")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not rename the rehearsal" })
       return
     }
     if (selected && res.takes) {
@@ -194,10 +203,11 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   }
 
   const deleteRehearsal = async (r: RehearsalSummary) => {
+    dismiss(SAID)
     player.pause()
     const res = await api().delete_rehearsal(r.folder)
     if (!res.ok) {
-      setError(res.error ?? "Could not delete the rehearsal")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not delete the rehearsal" })
       return
     }
     await refresh()
@@ -207,19 +217,21 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   // is now, or, if it was really deleted, drop it from history and leave
   // whatever is on disk — there is nothing here to delete.
   const locateRehearsal = async (r: RehearsalSummary) => {
+    dismiss(SAID)
     const res = await api().choose_rehearsal_folder(r.folder)
     if (res.cancelled) return
     if (!res.ok) {
-      setError(res.error ?? "Could not locate the rehearsal's folder")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not locate the rehearsal's folder" })
       return
     }
     await refresh()
   }
 
   const forgetRehearsal = async (r: RehearsalSummary) => {
+    dismiss(SAID)
     const res = await api().forget_rehearsal(r.folder)
     if (!res.ok) {
-      setError(res.error ?? "Could not remove the rehearsal from history")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not remove the rehearsal from history" })
       return
     }
     await refresh()
@@ -276,7 +288,6 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
             <FolderOpen className="size-3.5 shrink-0" />
             <span className="truncate font-mono">{opened.folder}</span>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
           {/* See the rehearsal screen: the overview stands in for the strip
               until a take is open. */}
           {(selected || opened.takes.length === 0) && (
@@ -370,7 +381,6 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   return (
     <Shell title="Rehearsal history" onBack={back} backKey>
       <div className="mx-auto flex max-w-3xl flex-col gap-2">
-        {error && <p className="text-sm text-destructive">{error}</p>}
 
         {rehearsals === null && (
           <p className="text-sm text-muted-foreground">Reading the folder…</p>

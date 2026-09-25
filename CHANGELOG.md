@@ -12,6 +12,7 @@ opening.
   "Found “X18/XR18”" used to appear above the settings they were about, push
   the whole panel down a line and, a few seconds later, let it jump back up.
   A success goes by itself; a warning or a failure stays until it is closed.
+  History and the unsaved-takes screen say what failed the same way.
   What is true rather than what happened — a track waiting for an input, an
   interface that is not connected — stays where it is.
 - Changing the playback output while a take is open says so when the take
