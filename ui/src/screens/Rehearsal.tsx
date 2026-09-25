@@ -292,7 +292,10 @@ export function Rehearsal({
 
         <p className="text-xs text-muted-foreground">
           Same tracks as at the start of the rehearsal:{" "}
-          {session.tracks.map((t) => t.name).join(", ")}.
+          {session.tracks
+            .map((t) => (t.stereo ? `${t.name} (stereo)` : t.name))
+            .join(", ")}
+          .
         </p>
       </div>
 

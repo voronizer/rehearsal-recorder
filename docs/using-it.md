@@ -248,6 +248,37 @@ which three to leave out is the band's answer.
 Removing a track removes that person everywhere, because the band is one
 list. Interfaces remember sockets, not membership.
 
+## Recording an instrument in stereo
+
+A keyboard has two outputs. So does a pair of microphones over a drum kit, or
+a stereo room mic. Recorded into one mono file, half of what arrived is
+thrown away; recorded as two tracks, they are two tracks — two lanes, two
+faders, and nothing saying they belong together.
+
+The **Stereo** button on a track takes the input after its own as well, and
+writes the pair as one two-channel file. The input control then reads a pair,
+`Inputs 9–10`, and offers only the inputs a pair can start on — the last
+input of a card is not one of them.
+
+Both inputs have to be free. Turning stereo on where the next input is
+already somebody else's leaves the track waiting for an input rather than
+quietly recording the same signal into two tracks, and the screen says which
+track is waiting.
+
+Being stereo belongs to the instrument, not to the card: the keyboard has two
+outputs wherever it is plugged in, so it stays stereo when you change
+interfaces, and each card remembers which pair it sits on.
+
+Levels and waveforms are kept per channel, and this is the reason to bother.
+A meter is one bar split along its length — left above, right below — and the
+player draws a stereo lane with its left channel above the centre and its
+right below. An overhead that stopped arriving is visible at the moment it
+stopped, instead of being covered by the microphone that still works. The
+signal check waits for both sides before it calls a track checked.
+
+A stereo track costs twice the disk of a mono one, which the estimate on the
+setup screen counts. It has no balance control: a rehearsal is not panned.
+
 ## When the card will not open
 
 Checking the signal, or starting a take, can fail with a message ending in
