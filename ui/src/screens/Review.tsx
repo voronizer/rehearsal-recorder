@@ -17,7 +17,8 @@ import {
   type PendingTake,
   type ShareWhat,
 } from "@/lib/api"
-import { formatMMSS } from "@/lib/format"
+import { croppedButNotSwept, formatMMSS } from "@/lib/format"
+import { dismiss, notify } from "@/lib/notices"
 
 /**
  * Right after stopping: listen and decide the take's fate. Until it is saved
@@ -164,6 +165,7 @@ export function Review({
     if (busy) return
     setBusy(true)
     setError(null)
+    dismiss("review")
     player.pause()
     const res = await api().crop_draft(take.temp_dir, take.tracks, from, to)
     setBusy(false)
@@ -184,11 +186,11 @@ export function Review({
     // The crop itself went through — only the sweep of the original is what
     // failed — so this adds to the success path rather than standing in for it.
     if (res.error) {
-      setError(
-        `The take was cropped, but the original could not be moved out of the way (${res.error})${
-          res.location ? `, and is still at ${res.location}` : ""
-        }.`
-      )
+      notify({
+        key: "review",
+        kind: "warning",
+        text: croppedButNotSwept(res.error, res.location),
+      })
     }
   }
 

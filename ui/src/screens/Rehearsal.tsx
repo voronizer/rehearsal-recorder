@@ -18,7 +18,8 @@ import {
   type SessionState,
   type Take,
 } from "@/lib/api"
-import { takesLabel } from "@/lib/format"
+import { croppedButNotSwept, takesLabel } from "@/lib/format"
+import { dismiss, notify } from "@/lib/notices"
 import { canBePutBack, goPlural } from "@/lib/deletion"
 
 /**
@@ -130,6 +131,7 @@ export function Rehearsal({
     if (busy) return
     setBusy(true)
     setError(null)
+    dismiss("rehearsal")
     player.pause()
     const res = await api().crop_take(session.folder, take.take_number, from, to)
     setBusy(false)
@@ -142,11 +144,11 @@ export function Rehearsal({
     // The crop itself went through — only the sweep of the original is what
     // failed — so this adds to the success path rather than standing in for it.
     if (res.error) {
-      setError(
-        `The take was cropped, but the original could not be moved out of the way (${res.error})${
-          res.location ? `, and is still at ${res.location}` : ""
-        }.`
-      )
+      notify({
+        key: "rehearsal",
+        kind: "warning",
+        text: croppedButNotSwept(res.error, res.location),
+      })
     }
   }
 

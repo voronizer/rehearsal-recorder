@@ -102,3 +102,13 @@ export function describeRescan(found: string[] = [], gone: string[] = []): strin
   if (gone.length) return goneText
   return "No new interfaces"
 }
+
+/**
+ * A crop that went through, whose original could not be swept away. A
+ * warning, not an error: the take the person asked for exists.
+ */
+export function croppedButNotSwept(error: string, location?: string | null): string {
+  return `The take was cropped, but the original could not be moved out of the way (${error})${
+    location ? `, and is still at ${location}` : ""
+  }.`
+}

@@ -18,6 +18,9 @@ opening.
 - Changing the playback output while a take is open says so when the take
   lands somewhere else. Python always said so; Settings read only whether the
   change went through.
+- A crop that went through but could not move the original out of the way
+  says so as a warning. It was shown in red where failures go, on a take that
+  had in fact been cropped.
 - An interface switched on after the app started can be found without
   restarting. The list of interfaces was made once, at start, so a desk
   plugged in later was never offered — and at a rehearsal the desk is usually

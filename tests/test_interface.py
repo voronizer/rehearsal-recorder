@@ -1354,6 +1354,14 @@ def main():
            page.get_by_text("/rec/Tuesday jam/_deleted/take 2 (original)").count() > 0)
         ok("but the crop itself still went through",
            page.locator("button[aria-label='Crop to the region']").count() == 0)
+        swept = page.locator(
+            "section[aria-label='Notifications'] [data-notice='warning']",
+            has_text="could not be moved out of the way")
+        ok("and it is a warning, since the crop went through",
+           swept.count() == 1
+           and page.locator(".text-destructive",
+                            has_text="could not be moved out of the way").count() == 0)
+        swept.get_by_role("button", name="Close notice").click()
         page.evaluate(
             "() => { window.pywebview.api.crop_take = window.__REAL_CROP_TAKE__; }"
         )

@@ -20,6 +20,7 @@ import {
   type Take,
 } from "@/lib/api"
 import {
+  croppedButNotSwept,
   formatBytes,
   formatDateHuman,
   formatDuration,
@@ -170,10 +171,8 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     if (res.error) {
       notify({
         key: SAID,
-        kind: "error",
-        text: `The take was cropped, but the original could not be moved out of the way (${res.error})${
-          res.location ? `, and is still at ${res.location}` : ""
-        }.`,
+        kind: "warning",
+        text: croppedButNotSwept(res.error, res.location),
       })
     }
   }
