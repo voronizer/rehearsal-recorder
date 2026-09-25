@@ -46,6 +46,12 @@ slot, as it has now: a retry that works replaces the failure it retried, and
 a success replaces the previous failure. Notices outlive the screen that
 raised them; a warning about playback is still true after leaving Settings.
 
+Playback has a key of its own, `playback`, for a warning that the open take
+now plays somewhere else. It is raised in Settings alongside what the action
+said — a rescan can find a card *and* move the take to the system output —
+and neither may replace the other. A later output change that lands where it
+was asked clears it.
+
 At most three are shown. A fourth pushes out the oldest.
 
 ## What moves and what stays

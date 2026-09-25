@@ -7,13 +7,23 @@ opening.
 
 ## Unreleased
 
+- Messages about something that just happened appear in the bottom
+  right-hand corner, over the screen, and move nothing. "Folder saved" and
+  "Found “X18/XR18”" used to appear above the settings they were about, push
+  the whole panel down a line and, a few seconds later, let it jump back up.
+  A success goes by itself; a warning or a failure stays until it is closed.
+  What is true rather than what happened — a track waiting for an input, an
+  interface that is not connected — stays where it is.
+- Changing the playback output while a take is open says so when the take
+  lands somewhere else. Python always said so; Settings read only whether the
+  change went through.
 - An interface switched on after the app started can be found without
   restarting. The list of interfaces was made once, at start, so a desk
   plugged in later was never offered — and at a rehearsal the desk is usually
   switched on after the laptop. **Look again**, in Settings beside the list
-  of interfaces, makes the list again for recording and playback both. It is never done
-  while recording, and never on its own: on Windows it starts every ASIO
-  driver on the machine in turn.
+  of interfaces, makes the list again for recording and playback both. It is
+  never done while recording, and never on its own: on Windows it starts
+  every ASIO driver on the machine in turn.
 - A chosen interface that is not plugged in is said to be not connected. The
   setup screen used to say "No interface chosen", which was wrong — it had
   been chosen; and on a Mac it did not say even that, but quietly took the

@@ -444,8 +444,9 @@ type PyApi = {
   >
   save_mix(volumes: Record<string, number>): Promise<Ok>
   save_appearance(theme: string, uiScale: number): Promise<Ok>
-  set_output_device(deviceIndex: number | null): Promise<Ok>
-  set_output_channels(channels: number[]): Promise<Ok>
+  /** `warning` when a take is open and it now plays somewhere else. */
+  set_output_device(deviceIndex: number | null): Promise<Ok<{ warning?: string }>>
+  set_output_channels(channels: number[]): Promise<Ok<{ warning?: string }>>
 
   start_monitor(
     deviceIndex: number,

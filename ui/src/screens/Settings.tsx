@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react"
 import {
-  Check,
   CloudUpload,
   FolderOpen,
   Mic,
@@ -20,6 +19,7 @@ import { useEscape } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 import { SCALE_OPTIONS, THEME_LABELS, type Theme } from "@/lib/appearance"
 import { describeRescan, notConnected } from "@/lib/format"
+import { dismiss, notify } from "@/lib/notices"
 import {
   api,
   type CloudFormat,
@@ -28,6 +28,12 @@ import {
   type Settings as SettingsData,
   type ShareWhat,
 } from "@/lib/api"
+
+// What an action in Settings said — one slot, so each says over the last.
+const SAID = "settings"
+// That the open take now plays somewhere else. Its own slot: it stays true
+// after "Found …" has gone, and after leaving Settings.
+const PLAYBACK = "playback"
 
 type TabId = "audio" | "folders" | "appearance" | "about"
 
@@ -104,8 +110,6 @@ export function Settings({
   const [formatTrouble, setFormatTrouble] = useState(false)
   const [dir, setDir] = useState("")
   const [cloudDir, setCloudDir] = useState("")
-  const [status, setStatus] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
   // Six sections in one column was a wall. They are grouped by what a person
   // came here to change, not by the order they happened to be written in.
   const [tab, setTab] = useState<TabId>("audio")
@@ -133,21 +137,25 @@ export function Settings({
   // PortAudio lists the interfaces once, when the app starts. One plugged in
   // later is found only by asking it to look again — see rescan_devices.
   const lookAgain = async () => {
-    setError(null)
+    dismiss(SAID)
     setRescanning(true)
     try {
       const res = await api().rescan_devices()
       if (!res.ok) {
-        setError(res.error ?? "Could not look for interfaces")
+        notify({
+          key: SAID,
+          kind: "error",
+          text: res.error ?? "Could not look for interfaces",
+        })
         return
       }
       await readDevices()
       setSettings(await api().get_settings())
       setRescans((n) => n + 1)
-      setStatus(describeRescan(res.found, res.gone))
-      window.setTimeout(() => setStatus(null), 4000)
+      notify({ key: SAID, kind: "done", text: describeRescan(res.found, res.gone) })
       // The take that was open plays on, but perhaps somewhere else.
-      if (res.warning) setError(res.warning)
+      if (res.warning) notify({ key: PLAYBACK, kind: "warning", text: res.warning })
+      else dismiss(PLAYBACK)
     } finally {
       setRescanning(false)
     }
@@ -181,69 +189,77 @@ export function Settings({
     samplerate: number,
     bitDepth: number
   ) => {
-    setError(null)
+    dismiss(SAID)
     const res = await api().set_recording_format(
       deviceIndex,
       samplerate,
       bitDepth
     )
     if (!res.ok) {
-      setError(res.error ?? "Could not save the recording settings")
+      notify({
+        key: SAID,
+        kind: "error",
+        text: res.error ?? "Could not save the recording settings",
+      })
       return
     }
     setSettings(await api().get_settings())
   }
 
   const applyDir = async (path: string) => {
-    setError(null)
+    dismiss(SAID)
     const res = await api().set_recordings_dir(path)
     if (!res.ok) {
-      setError(res.error ?? "Could not use that folder")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not use that folder" })
       return
     }
     setDir(res.recordings_dir ?? path)
-    setStatus("Folder saved")
-    window.setTimeout(() => setStatus(null), 2500)
+    notify({ key: SAID, kind: "done", text: "Folder saved" })
   }
 
   const applyCloudDir = async (path: string) => {
-    setError(null)
+    dismiss(SAID)
     const res = await api().set_cloud_dir(path)
     if (!res.ok) {
-      setError(res.error ?? "Could not use that folder")
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not use that folder" })
       return
     }
     setCloudDir(res.cloud_dir ?? path)
     setSettings(await api().get_settings())
-    setStatus("Cloud folder saved")
-    window.setTimeout(() => setStatus(null), 2500)
+    notify({ key: SAID, kind: "done", text: "Cloud folder saved" })
   }
 
   const browseCloud = async () => {
-    setError(null)
+    dismiss(SAID)
     const res = await api().choose_cloud_dir()
     if (res.cancelled) return
     if (!res.ok) {
-      setError(res.error ?? "Could not open the folder picker")
+      notify({
+        key: SAID,
+        kind: "error",
+        text: res.error ?? "Could not open the folder picker",
+      })
       return
     }
     setCloudDir(res.cloud_dir ?? cloudDir)
     setSettings(await api().get_settings())
-    setStatus("Cloud folder saved")
-    window.setTimeout(() => setStatus(null), 2500)
+    notify({ key: SAID, kind: "done", text: "Cloud folder saved" })
   }
 
   const browse = async () => {
-    setError(null)
+    dismiss(SAID)
     const res = await api().choose_recordings_dir()
     if (res.cancelled) return
     if (!res.ok) {
-      setError(res.error ?? "Could not open the folder picker")
+      notify({
+        key: SAID,
+        kind: "error",
+        text: res.error ?? "Could not open the folder picker",
+      })
       return
     }
     setDir(res.recordings_dir ?? dir)
-    setStatus("Folder saved")
-    window.setTimeout(() => setStatus(null), 2500)
+    notify({ key: SAID, kind: "done", text: "Folder saved" })
   }
 
   // Whatever the card said, or the usual three while the answer is pending —
@@ -310,15 +326,6 @@ export function Settings({
             </p>
           </div>
 
-          {/* Saved / failed messages belong where they can be seen from any
-              section, not buried inside the one that raised them. */}
-          {status && (
-            <p className="flex items-center gap-1.5 text-xs text-signal">
-              <Check className="size-3.5" />
-              {status}
-            </p>
-          )}
-          {error && <p className="text-sm text-destructive">{error}</p>}
 
         {tab === "appearance" && (
         <section className="flex flex-col gap-3">
@@ -523,11 +530,18 @@ export function Settings({
             placeholder="System output"
             systemDefault
             onChange={async (idx) => {
+              dismiss(SAID)
               const res = await api().set_output_device(idx)
               if (!res.ok) {
-                setError(res.error ?? "Could not switch the output")
+                notify({
+                  key: SAID,
+                  kind: "error",
+                  text: res.error ?? "Could not switch the output",
+                })
                 return
               }
+              if (res.warning) notify({ key: PLAYBACK, kind: "warning", text: res.warning })
+              else dismiss(PLAYBACK)
               setSettings(await api().get_settings())
             }}
           />
@@ -544,11 +558,19 @@ export function Settings({
                 count={card.max_output_channels}
                 value={settings?.output_channels ?? [1, 2]}
                 onChange={async (channels) => {
+                  dismiss(SAID)
                   const res = await api().set_output_channels(channels)
                   if (!res.ok) {
-                    setError(res.error ?? "Could not switch the outputs")
+                    notify({
+                      key: SAID,
+                      kind: "error",
+                      text: res.error ?? "Could not switch the outputs",
+                    })
                     return
                   }
+                  if (res.warning) {
+                    notify({ key: PLAYBACK, kind: "warning", text: res.warning })
+                  } else dismiss(PLAYBACK)
                   setSettings(await api().get_settings())
                 }}
               />
@@ -705,9 +727,10 @@ export function Settings({
                   // there are none, and this was a live choice about files
                   // nothing was going to write.
                   onClick={async () => {
+                    dismiss(SAID)
                     const res = await api().set_cloud_format(f.id as CloudFormat)
                     if (!res.ok) {
-                      setError(res.error ?? "Could not save that")
+                      notify({ key: SAID, kind: "error", text: res.error ?? "Could not save that" })
                       return
                     }
                     setSettings(await api().get_settings())
@@ -791,9 +814,10 @@ export function Settings({
                     // choice about something that is not happening.
                     disabled={!settings?.auto_publish}
                     onClick={async () => {
+                      dismiss(SAID)
                       const res = await api().set_auto_publish(true, o.id)
                       if (!res.ok) {
-                        setError(res.error ?? "Could not save that")
+                        notify({ key: SAID, kind: "error", text: res.error ?? "Could not save that" })
                         return
                       }
                       setSettings(await api().get_settings())

@@ -197,7 +197,11 @@ window.__MAKE_API__ = () => ({
      max_output_channels:2, default_samplerate:48000}]),
   set_output_device: track('set_output_device', async (idx) => {
     outputDevice = {index: idx, channels: [1, 2]};
-    return {ok:true};
+    // What Python says when a take is open and the card refused it.
+    return window.__OUTPUT_FALLBACK__
+      ? {ok:true, warning:'“UA Monitors” will not take 44100 Hz right now — ' +
+          'using the system output.'}
+      : {ok:true};
   }),
   set_output_channels: track('set_output_channels', async (channels) => {
     outputDevice = {...outputDevice, channels};
@@ -509,7 +513,11 @@ window.__MAKE_API__ = () => ({
     cloud_dir: cloudDir,
     server_url:'http://127.0.0.1:1234/', config_path:'/Users/alex/.rehearsal-recorder/config.json',
     version:'0.2.0'}),
-  set_recordings_dir: async (p) => ({ok:true, recordings_dir:p}),
+  // A folder under /nope cannot be written to. Its message carries the
+  // whole path, so a long one shows what a long message does to a notice.
+  set_recordings_dir: async (p) => (p.startsWith('/nope')
+    ? {ok:false, error:'Cannot write to ' + p}
+    : {ok:true, recordings_dir:p}),
   choose_recordings_dir: track('choose_recordings_dir', async () => ({ok:true, recordings_dir:'/Users/alex/Dropbox/Band'})),
   save_mix: track('save_mix', async () => ({ok:true})),
   save_appearance: track('save_appearance', async (theme, scale) => {
@@ -1759,6 +1767,112 @@ def main():
         ok("a look that finds nothing new says so, and nothing else",
            late.locator("text=Found “X18/XR18”").count() == 0)
         late.close()
+
+        print("\n[12k] Notices: what happened goes in the corner")
+        # A message that appeared in the middle of Settings pushed the whole
+        # panel down a line, and a few seconds later let it jump back up.
+        tell = browser.new_page(viewport={"width": 1180, "height": 820})
+        tell.add_init_script(MOCK)
+        tell.goto(server.base_url, wait_until="networkidle")
+        tell.click("button[aria-label='Settings']")
+        tell.wait_for_selector("#input-device")
+
+        def notices(kind=None):
+            sel = "section[aria-label='Notifications'] [data-notice]"
+            if kind:
+                sel = f"section[aria-label='Notifications'] [data-notice='{kind}']"
+            return tell.locator(sel)
+
+        def top_of(selector):
+            return tell.locator(selector).bounding_box()["y"]
+
+        before = top_of("#input-device")
+        tell.get_by_role("button", name="Look again").click()
+        tell.wait_for_selector("[data-notice='done']:has-text('No new interfaces')")
+        during = top_of("#input-device")
+        ok("a notice does not move the form it is about", during == before)
+        tell.wait_for_selector("[data-notice='done']", state="detached", timeout=7000)
+        ok("a done notice goes by itself", notices().count() == 0)
+        ok("and the form stays where it was when it has gone",
+           top_of("#input-device") == before)
+        ok("the corner the notices sit in takes no clicks of its own",
+           tell.locator("section[aria-label='Notifications']").evaluate(
+               "e => getComputedStyle(e).pointerEvents") == "none")
+
+        tell.get_by_role("button", name="Folders", exact=True).first.click()
+        tell.wait_for_selector("#recordings-dir")
+        field = top_of("#recordings-dir")
+        tell.fill("#recordings-dir", "/Users/alex/Band")
+        tell.keyboard.press("Tab")
+        saved = tell.locator("[data-notice='done']:has-text('Folder saved')")
+        saved.wait_for()
+        ok("saving a folder says so without moving the field",
+           top_of("#recordings-dir") == field)
+        saved.hover()
+        tell.wait_for_timeout(5000)
+        ok("a done notice under the pointer waits to be read", saved.count() == 1)
+        tell.mouse.move(20, 20)
+        saved.wait_for(state="detached", timeout=7000)
+        ok("and goes once the pointer leaves it", saved.count() == 0)
+
+        long_path = "/nope/" + "x" * 200
+        tell.fill("#recordings-dir", long_path)
+        tell.keyboard.press("Tab")
+        failed = tell.locator("[data-notice='error']")
+        failed.wait_for()
+        ok("a failure is a notice that says so to a screen reader",
+           failed.get_attribute("role") == "alert")
+        ok("a long unbroken message wraps inside its notice",
+           failed.evaluate("e => e.scrollWidth <= e.clientWidth")
+           and failed.bounding_box()["x"] + failed.bounding_box()["width"] <= 1180)
+        tell.fill("#recordings-dir", "/nope/again")
+        tell.keyboard.press("Tab")
+        tell.wait_for_selector("[data-notice='error']:has-text('/nope/again')")
+        ok("the same failure again is one notice, not two", notices().count() == 1)
+        tell.wait_for_timeout(5000)
+        ok("a failure stays until it is closed", failed.count() == 1)
+
+        tell.fill("#recordings-dir", "/Users/alex/Band 2")
+        tell.keyboard.press("Tab")
+        tell.wait_for_selector("[data-notice='done']:has-text('Folder saved')")
+        ok("a retry that works leaves only its success",
+           notices().count() == 1 and notices("error").count() == 0)
+
+        # The success's four seconds must not end the failure that took its
+        # place a moment later.
+        tell.fill("#recordings-dir", "/nope/third")
+        tell.keyboard.press("Tab")
+        tell.wait_for_selector("[data-notice='error']:has-text('/nope/third')")
+        tell.wait_for_timeout(4500)
+        ok("a failure that replaced a success outlives the success's time",
+           notices("error").count() == 1)
+
+        # Focus is on Browse after the Tab, so Escape is not typing.
+        tell.keyboard.press("Escape")
+        tell.wait_for_selector("text=Start rehearsal")
+        ok("with a notice showing, Escape still leaves Settings in one press",
+           tell.locator("#recordings-dir").count() == 0)
+        ok("and the notice is still there", notices("error").count() == 1)
+        tell.get_by_role("button", name="Close notice").click()
+        ok("its button closes it", notices().count() == 0)
+        tell.close()
+
+        # Changing the output while a take is open can land somewhere else.
+        # Python has always said so; the screen used to read only `ok`.
+        fell = browser.new_page(viewport={"width": 1180, "height": 820})
+        fell.add_init_script("window.__OUTPUT_FALLBACK__ = true;" + MOCK)
+        fell.goto(server.base_url, wait_until="networkidle")
+        fell.click("button[aria-label='Settings']")
+        fell.wait_for_selector("#output-device")
+        fell.click("#output-device")
+        fell.get_by_role("option", name="UA Monitors").click()
+        warned = fell.locator("[data-notice='warning']")
+        warned.wait_for()
+        ok("a playback fallback after changing the output reaches the screen",
+           "using the system output" in warned.inner_text())
+        ok("as a warning, not an error",
+           fell.locator("[data-notice='error']").count() == 0)
+        fell.close()
 
         print("\n[12c] What cloud copies are written as")
         page.get_by_role("button", name="Folders", exact=True).first.click()
