@@ -567,7 +567,8 @@ def main():
 
     from rehearsal_recorder.audio.waveform import wav_peaks
 
-    peaks24, frames24, rate24 = wav_peaks(deep / "B.wav", buckets=8)
+    peaks24_rows, frames24, rate24 = wav_peaks(deep / "B.wav", buckets=8)
+    peaks24 = peaks24_rows[0]
     ok("the waveform reads 24-bit", frames24 == SR and rate24 == SR)
     ok("and scales it the same as 16-bit",
        abs(peaks24[0] - 2000 / 32768) < 0.002)
@@ -2016,16 +2017,19 @@ def main():
         w.writeframes(struct.pack("<h", 0) * SR)       # a second of silence
         w.writeframes(struct.pack("<h", 8000) * SR)    # then a second of tone
 
-    whole, frames_whole, _ = wav_peaks(tmp8 / "half.wav", buckets=8)
+    whole_rows, frames_whole, _ = wav_peaks(tmp8 / "half.wav", buckets=8)
+    whole = whole_rows[0]
     ok("the whole file is half silence and half tone",
        whole[0] == 0 and whole[7] > 0.2)
 
-    loud, frames_loud, _ = wav_peaks(tmp8 / "half.wav", buckets=8,
+    loud_rows, frames_loud, _ = wav_peaks(tmp8 / "half.wav", buckets=8,
                                      start_sec=1.0, end_sec=2.0)
+    loud = loud_rows[0]
     ok("asked for the second half, every bar is the tone",
        all(p > 0.2 for p in loud))
-    quiet, _, _ = wav_peaks(tmp8 / "half.wav", buckets=8,
+    quiet_rows, _, _ = wav_peaks(tmp8 / "half.wav", buckets=8,
                             start_sec=0.0, end_sec=1.0)
+    quiet = quiet_rows[0]
     ok("and asked for the first, none of them is", all(p == 0 for p in quiet))
     # take_media turns this into the player's duration, which must not change
     # when the view does.
@@ -2044,8 +2048,9 @@ def main():
         w.writeframes(struct.pack("<h", 0) * int(0.01 * SR))  # 10ms silence
         w.writeframes(struct.pack("<h", 8000) * SR)           # then a second of tone
 
-    short_silent, _, _ = wav_peaks(tmp9 / "short_window.wav", buckets=900,
+    short_silent_rows, _, _ = wav_peaks(tmp9 / "short_window.wav", buckets=900,
                                    start_sec=0.0, end_sec=0.01)
+    short_silent = short_silent_rows[0]
     ok("a window shorter than the bar count does not leak past its end",
        all(p == 0 for p in short_silent))
 
@@ -2998,6 +3003,25 @@ def main():
            w.getnchannels() == 1 and w.getnframes() == 100)
     ok("the take is as long as it was recorded, not twice that",
        abs(rescued["duration_sec"] - 100 / SR) < 1e-6)
+
+    print("  its waveform")
+    # Averaging the two channels, or reading only the first, hides a side
+    # that stopped arriving — which is the one thing a waveform is looked at
+    # for after a take that felt wrong.
+    from rehearsal_recorder.audio.waveform import wav_peaks as _peaks
+    lopsided = tmp / "lopsided.wav"
+    with wave.open(str(lopsided), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(struct.pack("<hh", 30000, 0) * SR)
+    pk, _, _ = _peaks(lopsided, 16)
+    ok("a stereo track's waveform is computed per channel", len(pk) == 2)
+    ok("so a silent right side reads as silent",
+       min(pk[0]) > 0.8 and max(pk[1]) == 0.0)
+    write_wav(tmp / "plain.wav", 8000, seconds=1.0)
+    mono_pk, _, _ = _peaks(tmp / "plain.wav", 16)
+    ok("and a mono track has the one row it has", len(mono_pk) == 1)
 
     print("  a stereo member of the band")
     ok("a band of bare names becomes objects",
