@@ -250,6 +250,11 @@ def _folder_within(inner, outer):
     return any(_same_folder(p, outer) for p in inner.parents)
 
 
+def _channels_of(tracks):
+    """How many channels these tracks write: a stereo track is two."""
+    return sum(2 if t.get("stereo") else 1 for t in tracks)
+
+
 def _is_output_choice(channels):
     """A pair of outputs the way cards label them — 1–2, 3–4, 5–6 — or one
     output on its own. 2–3 is refused: no card wires its stereo outs that
@@ -772,10 +777,10 @@ class Api:
             return {"recording": False}
 
         s = self._session
-        track_count = len(s["tracks"]) if s else 1
+        channel_count = _channels_of(s["tracks"]) if s else 1
         samplerate = s["samplerate"] if s else 48000
         estimate = self.disk_estimate(
-            track_count, samplerate, s.get("bit_depth", LEGACY_DEPTH) if s else LEGACY_DEPTH
+            channel_count, samplerate, s.get("bit_depth", LEGACY_DEPTH) if s else LEGACY_DEPTH
         )
 
         return {

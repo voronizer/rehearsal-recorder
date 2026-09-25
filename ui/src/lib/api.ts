@@ -458,8 +458,9 @@ type PyApi = {
   player_set_muted(name: string, muted: boolean): Promise<PlayerState>
   player_set_solo(name: string | null): Promise<PlayerState>
 
+  /** Counted in channels, not tracks: a stereo track writes two. */
   disk_estimate(
-    trackCount: number,
+    channelCount: number,
     samplerate: number,
     bitDepth?: number
   ): Promise<DiskEstimate>

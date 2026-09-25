@@ -5,6 +5,14 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- The free-space estimate counts a stereo track as the two channels it
+  writes. 0.7.5 said it did, but only the Python side had learned to count
+  channels: the setup screen and the recording screen both still asked it
+  about tracks, so half a band in stereo was still promised half again as
+  much room as there is.
+
 ## 0.7.5
 
 - A track can be recorded in stereo. A keyboard has two outputs, and so does

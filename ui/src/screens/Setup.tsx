@@ -103,14 +103,16 @@ export function Setup({
   }, [])
 
   // How much more fits on disk with these settings — worked out up front so
-  // the space does not run out mid-rehearsal.
+  // the space does not run out mid-rehearsal. Counted in channels: a stereo
+  // track writes two.
+  const channelCount = tracks.reduce((n, t) => n + (t.stereo ? 2 : 1), 0)
   useEffect(() => {
-    if (!tracks.length) return
+    if (!channelCount) return
     let cancelled = false
     ;(async () => {
       try {
         const est = await api().disk_estimate(
-          tracks.length,
+          channelCount,
           samplerate,
           bitDepth
         )
@@ -122,7 +124,7 @@ export function Setup({
     return () => {
       cancelled = true
     }
-  }, [tracks.length, samplerate, bitDepth])
+  }, [channelCount, samplerate, bitDepth])
 
   const device = devices.find((d) => d.index === deviceIndex)
   const maxChannels = device?.max_input_channels ?? 16

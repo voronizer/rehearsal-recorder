@@ -3055,12 +3055,24 @@ def main():
        channels_available(0, [{"name": "Keys", "channel": 3, "stereo": True},
                               {"name": "Gtr", "channel": 4}]))
 
-    _, a33 = fresh_api(Path(tempfile.mkdtemp()))
-    mono4 = a33.disk_estimate(4, SR, 16)
-    stereo2 = a33.disk_estimate(4, SR, 16)
-    ok("the estimate is counted in channels, so a stereo pair costs two",
-       mono4["bytes_per_sec"] == stereo2["bytes_per_sec"]
-       and mono4["bytes_per_sec"] == 4 * SR * 2)
+    # The estimate is asked for with a number of channels; what matters is
+    # that whoever asks counts a stereo track as the two it writes. While
+    # recording, that is recording_health, from the session's own tracks.
+    apimod33, a33 = fresh_api(Path(tempfile.mkdtemp()))
+    real_usage = apimod33.shutil.disk_usage
+    apimod33.shutil.disk_usage = lambda path: types.SimpleNamespace(
+        free=3 * SR * 2 * 60 * 100)  # a hundred minutes of three channels
+    a33._recorder = types.SimpleNamespace(error=None, is_active=lambda: True)
+    a33._session = {"samplerate": SR, "bit_depth": 16, "tracks": [
+        {"name": "Keys", "channel": 3, "stereo": True},
+        {"name": "Gtr", "channel": 1}]}
+    try:
+        health = a33.recording_health()
+    finally:
+        a33._recorder = None
+        apimod33.shutil.disk_usage = real_usage
+    ok("while recording, a stereo track is counted as the two channels it "
+       "writes", abs(health["minutes_left"] - 100) < 0.01)
 
     print("  playing one back")
     # Left and right deliberately different, and the right one silent later,

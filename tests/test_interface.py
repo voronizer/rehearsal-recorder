@@ -1652,6 +1652,10 @@ def main():
            == "Inputs 3–4")
         ok("and the rehearsal can start again",
            not pair.locator("button:has-text('Start rehearsal')").is_disabled())
+        estimates = pair.evaluate(
+            "() => window.__CALLS__.filter(c => c.name === 'disk_estimate')")
+        ok("the free space is worked out for three channels, not two tracks",
+           bool(estimates) and estimates[-1]["args"][0] == 3)
         pair.close()
 
         print("\n[12c] What cloud copies are written as")
