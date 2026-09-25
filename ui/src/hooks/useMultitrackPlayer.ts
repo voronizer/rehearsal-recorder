@@ -40,7 +40,7 @@ export function useMultitrackPlayer(
   // How loud each track came out of the mix, 0..1, measured in Python while
   // it played. Empty whenever nothing is playing, which is what a meter at
   // rest should read.
-  const [levels, setLevels] = useState<Record<string, number>>({})
+  const [levels, setLevels] = useState<Record<string, number[]>>({})
   const [region, setRegionState] = useState<{ a: number | null; b: number | null }>(
     { a: null, b: null }
   )
@@ -67,7 +67,7 @@ export function useMultitrackPlayer(
       muted?: string[]
       soloed?: string | null
       volumes?: Record<string, number>
-      levels?: Record<string, number>
+      levels?: Record<string, number[]>
       loop?: { a: number; b: number } | null
     }) => {
       if (typeof s.playing === "boolean") setPlaying(s.playing)
@@ -314,7 +314,9 @@ export function useMultitrackPlayer(
       void call(() => api().player_set_solo(soloed === name ? null : name)),
     getVolume: (name: string) => volumes[name] ?? 1,
     /** 0..1 as it last came out of the mix; 0 while nothing plays. */
-    getLevel: (name: string) => levels[name] ?? 0,
+    // The loudest of a track's channels: the fader's little meter is one
+    // bar, and a stereo track's two sides are told apart on the waveform.
+    getLevel: (name: string) => Math.max(0, ...(levels[name] ?? [0])),
     setVolume: (name: string, v: number) => {
       setVolumes((prev) => ({ ...prev, [name]: v }))
       void api().player_set_volume(name, v)

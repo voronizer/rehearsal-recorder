@@ -53,7 +53,7 @@ export function Setup({
   // Signal check: listen to the inputs without recording, so everyone can
   // confirm they land on their own track.
   const [checking, setChecking] = useState(false)
-  const [levels, setLevels] = useState<Record<string, number>>({})
+  const [levels, setLevels] = useState<Record<string, number[]>>({})
   const [seen, setSeen] = useState<Record<string, boolean>>({})
   const checkingRef = useRef(false)
 
@@ -182,8 +182,12 @@ export function Setup({
         setLevels(next)
         setSeen((prev) => {
           const merged = { ...prev }
-          for (const [trackName, peak] of Object.entries(next)) {
-            if (peak > 0.02) merged[trackName] = true
+          for (const [trackName, sides] of Object.entries(next)) {
+            // Every side has to arrive before a track counts as checked: half
+            // a stereo pair is exactly what this screen is here to catch.
+            if (sides.length && sides.every((p) => p > 0.02)) {
+              merged[trackName] = true
+            }
           }
           return merged
         })
@@ -408,25 +412,71 @@ export function Setup({
                     <SelectValue placeholder="No input" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Array.from({ length: maxChannels }, (_, c) => c + 1).map(
-                      (c) => (
+                    {Array.from({ length: maxChannels }, (_, c) => c + 1)
+                      // A stereo track takes the input after its own, so the
+                      // last input is not somewhere it can start.
+                      .filter((c) => !track.stereo || c < maxChannels)
+                      .map((c) => (
                         <SelectItem key={c} value={c.toString()}>
-                          Input {c}
+                          {track.stereo ? `Inputs ${c}–${c + 1}` : `Input ${c}`}
                         </SelectItem>
-                      )
-                    )}
+                      ))}
                   </SelectContent>
                 </Select>
 
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={track.stereo ? "default" : "outline"}
+                  aria-pressed={!!track.stereo}
+                  aria-label={`Track ${i + 1} in stereo`}
+                  title="Two adjacent inputs, written as one stereo file"
+                  onClick={() =>
+                    setTracks((prev) =>
+                      prev.map((t, j) => {
+                        if (j !== i) return t
+                        const stereo = !t.stereo
+                        // Turning stereo on claims the input after this one.
+                        // Where that input is somebody else's, or past the
+                        // end of the card, the track is left waiting for one
+                        // rather than quietly recording the same signal twice.
+                        const clash =
+                          stereo &&
+                          t.channel !== null &&
+                          (t.channel + 1 > maxChannels ||
+                            prev.some(
+                              (o, k) =>
+                                k !== i &&
+                                o.channel !== null &&
+                                (o.channel === t.channel! + 1 ||
+                                  (!!o.stereo && o.channel + 1 === t.channel! + 1))
+                            ))
+                        return { ...t, stereo, channel: clash ? null : t.channel }
+                      })
+                    )
+                  }
+                >
+                  Stereo
+                </Button>
+
                 {checking && (
                   <div className="flex w-40 shrink-0 items-center gap-2">
+                    {/* One bar of the usual height, split along its length for
+                        a stereo track: left above, right below. A dead half
+                        of a pair has to be visible here or the check has not
+                        done its job. */}
                     <div className="relative h-2 flex-1 overflow-hidden rounded-full border bg-background">
-                      <div
-                        className="absolute inset-y-0 left-0 bg-signal transition-[width] duration-75"
-                        style={{
-                          width: `${Math.min(100, (levels[track.name] ?? 0) * 100)}%`,
-                        }}
-                      />
+                      {(levels[track.name] ?? [0]).map((side, i, all) => (
+                        <div
+                          key={i}
+                          className="absolute left-0 bg-signal transition-[width] duration-75"
+                          style={{
+                            width: `${Math.min(100, side * 100)}%`,
+                            top: all.length > 1 && i === 1 ? "50%" : 0,
+                            bottom: all.length > 1 && i === 0 ? "50%" : 0,
+                          }}
+                        />
+                      ))}
                     </div>
                     {seen[track.name] ? (
                       <span

@@ -115,7 +115,7 @@ function levels() {
   return Object.fromEntries(Object.keys(P.volumes).map(n => {
     const silent = P.muted.includes(n) || (P.soloed && P.soloed !== n);
     const raw = Math.abs(Math.sin(t * 2.7)) * 0.9;
-    return [n, silent ? 0 : Math.round(raw * P.volumes[n] * 1000) / 1000];
+    return [n, [silent ? 0 : Math.round(raw * P.volumes[n] * 1000) / 1000]];
   }));
 }
 function playerState() {
@@ -221,7 +221,7 @@ window.__MAKE_API__ = () => ({
     minutes_left: window.__LOW_SPACE__ ? 5 : 640, low_space: !!window.__LOW_SPACE__}),
 
   start_monitor: track('start_monitor', async () => ({ok:true})),
-  monitor_levels: track('monitor_levels', async () => ({'Guitar':0.62, 'Vocals':0.004})),
+  monitor_levels: track('monitor_levels', async () => ({'Guitar':[0.62], 'Vocals':[0.004]})),
   stop_monitor: track('stop_monitor', async () => ({ok:true})),
 
   start_rehearsal: track('start_rehearsal', async (name, dev, rate, tr, depth) => {
@@ -252,7 +252,7 @@ window.__MAKE_API__ = () => ({
   }),
 
   start_take: track('start_take', async () => { takeCounter += 1; return {ok:true, take_number:takeCounter}; }),
-  get_levels: async () => ({'Guitar':0.99, 'Vocals':0.005}),
+  get_levels: async () => ({'Guitar':[0.99], 'Vocals':[0.005]}),
   stop_take: async () => ({ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
     duration_sec:TAKE, suggested_name:suggestName(takeCounter),
     tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]}),
@@ -293,7 +293,7 @@ window.__MAKE_API__ = () => ({
   take_media: track('take_media', async (tracks, buckets, from, to) => tracks.map(t => {
     const dur = fileDurations[t.file] ?? TAKE;
     return {name:t.name, url:'about:blank', frames:48000*dur, samplerate:48000, duration_sec:dur,
-      peaks: Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9)};
+      peaks: [Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9)]};
   })),
 
   player_open: track('player_open', async (tracks) => {
@@ -1621,6 +1621,38 @@ def main():
         ok("and do not ask for an arrangement that does not exist",
            "Pick one" not in crowded.first.inner_text())
         moved.close()
+
+        print("\n[4b] A track in stereo takes the input after its own")
+        # A keyboard has two outputs. Turning stereo on claims the next input,
+        # and where that one is already somebody's the track has to be left
+        # waiting rather than quietly recording the same signal twice.
+        pair = browser.new_page(viewport={"width": 1180, "height": 900})
+        pair.add_init_script(MOCK)
+        pair.goto(server.base_url, wait_until="networkidle")
+        pair.wait_for_selector("input[aria-label='Track 1 name']")
+        ok("a track starts in mono",
+           pair.locator("[aria-label='Track 1 input']").inner_text() == "Input 1")
+
+        pair.click("button[aria-label='Track 1 in stereo']")
+        pair.wait_for_timeout(200)
+        ok("turning stereo on where the next input is taken leaves it waiting",
+           pair.locator("[aria-label='Track 1 input']").inner_text() == "No input")
+        note = pair.get_by_role("status").filter(has_text="no input")
+        ok("and the screen says whose input it is waiting for",
+           note.count() == 1 and "Guitar" in note.first.inner_text())
+        ok("the rehearsal will not start meanwhile",
+           pair.locator("button:has-text('Start rehearsal')").is_disabled())
+
+        # Input 3 is free: the pair 3–4 fits, and the control says so.
+        pair.click("[aria-label='Track 1 input']")
+        pair.get_by_role("option", name="Inputs 3–4").click()
+        pair.wait_for_timeout(200)
+        ok("a pair that fits reads as a pair",
+           pair.locator("[aria-label='Track 1 input']").inner_text()
+           == "Inputs 3–4")
+        ok("and the rehearsal can start again",
+           not pair.locator("button:has-text('Start rehearsal')").is_disabled())
+        pair.close()
 
         print("\n[12c] What cloud copies are written as")
         page.get_by_role("button", name="Folders", exact=True).first.click()

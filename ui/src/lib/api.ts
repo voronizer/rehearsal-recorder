@@ -23,6 +23,10 @@ export type OutputDevice = Device
 
 export type Track = {
   name: string
+  /** Two adjacent inputs — `channel` and the one after it — written as one
+   *  two-channel file. A property of the instrument, so it travels with the
+   *  band between interfaces. */
+  stereo?: boolean
   /** The interface input this track comes from, counted from 1. null when
    *  the layout came from a card with more inputs than this one has and
    *  nobody has yet said who plays and who sits out. */
@@ -37,6 +41,8 @@ export type Track = {
 export type PlacedTrack = {
   name: string
   channel: number
+  /** Two adjacent inputs, written as one two-channel file. */
+  stereo?: boolean
 }
 
 export type TrackFile = {
@@ -179,7 +185,8 @@ export type TrackMedia = {
   frames: number
   samplerate: number
   duration_sec: number
-  peaks: number[]
+  /** One row per channel: a stereo track has two. */
+  peaks: number[][]
 }
 
 /** Player state on the Python side. */
@@ -195,8 +202,9 @@ export type PlayerState = {
   soloed?: string | null
   muted?: string[]
   volumes?: Record<string, number>
-  /** 0..1 per track, as it came out of the mix a moment ago. */
-  levels?: Record<string, number>
+  /** 0..1 per channel of each track, as it came out of the mix a moment
+   *  ago. A list even for a mono track, so one shape serves both. */
+  levels?: Record<string, number[]>
   /** The chosen output could not be used and the system one was taken. */
   warning?: string
 }
@@ -591,8 +599,9 @@ export function api(): PyApi {
 /** The read-only calls the interface asks for over and over. */
 type Pollable = {
   player_state: PlayerState
-  get_levels: Record<string, number>
-  monitor_levels: Record<string, number>
+  /** One figure per channel of each track: a stereo track has two. */
+  get_levels: Record<string, number[]>
+  monitor_levels: Record<string, number[]>
   recording_health: RecordingHealth
   session_state: SessionState
 }

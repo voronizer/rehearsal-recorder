@@ -25,7 +25,11 @@ export function Waveform({
   dimmed,
   className,
 }: {
-  peaks: number[]
+  /** One row of peaks per channel. A stereo track draws its left channel
+   *  above the centre line and its right below, in the height a mono one
+   *  takes, so a side that fell silent is visible at the point it happened
+   *  rather than covered by the other. */
+  peaks: number[][]
   /** The stretch of the take `peaks` covers. */
   peaksFrom: number
   peaksTo: number
@@ -64,7 +68,8 @@ export function Waveform({
       const restColor = styles.getPropertyValue("--wf-rest").trim()
 
       const mid = height / 2
-      const n = peaks.length
+      const rows = peaks.length ? peaks : [[]]
+      const n = rows[0].length
       const peakSpan = peaksTo - peaksFrom
       const viewSpan = viewTo - viewFrom
       if (n === 0 || peakSpan <= 0 || viewSpan <= 0) return
@@ -79,12 +84,23 @@ export function Waveform({
       const barWidth = width / shown
       const playedX = ((position - viewFrom) / viewSpan) * width
 
+      const stereo = rows.length > 1
+      const room = stereo ? mid - 2 : height - 4
       for (let i = first; i < last; i++) {
         const x = (i - first) * barWidth
-        // A minimum height so silence reads as a line rather than a gap
-        const h = Math.max(1, peaks[i] * (height - 4))
+        const w = Math.max(0.5, barWidth - 0.5)
         ctx.fillStyle = x + barWidth <= playedX ? playedColor : restColor
-        ctx.fillRect(x, mid - h / 2, Math.max(0.5, barWidth - 0.5), h)
+        if (stereo) {
+          // A minimum height so a silent side reads as a line rather than a
+          // gap — the point being that it can be told from a loud one.
+          const up = Math.max(1, (rows[0][i] ?? 0) * room)
+          const down = Math.max(1, (rows[1][i] ?? 0) * room)
+          ctx.fillRect(x, mid - up, w, up)
+          ctx.fillRect(x, mid, w, down)
+        } else {
+          const h = Math.max(1, (rows[0][i] ?? 0) * room)
+          ctx.fillRect(x, mid - h / 2, w, h)
+        }
       }
     }
 

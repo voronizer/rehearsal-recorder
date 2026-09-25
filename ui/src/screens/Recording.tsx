@@ -33,7 +33,7 @@ export function Recording({
   onStopped: (take: PendingTake) => void
 }) {
   const [elapsed, setElapsed] = useState(0)
-  const [levels, setLevels] = useState<Record<string, number>>({})
+  const [levels, setLevels] = useState<Record<string, number[]>>({})
   const [stopping, setStopping] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [health, setHealth] = useState<RecordingHealth | null>(null)
@@ -191,7 +191,8 @@ export function Recording({
               key={t.name}
               name={t.name}
               channel={t.channel}
-              peak={levels[t.name] ?? 0}
+              stereo={t.stereo}
+              peaks={levels[t.name] ?? [0]}
             />
           ))}
         </div>
