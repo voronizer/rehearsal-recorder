@@ -2727,6 +2727,32 @@ def main():
         _sd.query_devices, _sd.query_hostapis = real_q, real_h
         _sd.check_output_settings, _sd.OutputStream = real_out_check, real_out
 
+    print("\n[31] Tracks left pointing at another card's inputs")
+    # Tracks are saved as a template with their input numbers, and changing
+    # the interface does not touch them. Set up on an 18-input desk and then
+    # moved to a two-input box, they still ask for input 8, and what came
+    # back was PortAudio's paInvalidChannelCount — a number about a card,
+    # for a mistake about a template.
+    from rehearsal_recorder.audio.devices import channels_available
+
+    ok("a card with enough inputs is nothing to say",
+       channels_available(0, 8) is None)          # Interface: 8 in
+    short = channels_available(1, 4)               # Podcast mic: 1 in
+    ok("a card with fewer says how many it has and how far the tracks go",
+       short and "1 input" in short and "4" in short)
+    ok("and says why that happens, since it is the template's doing",
+       short and "another interface" in short)
+    ok("a device nobody can describe is left to PortAudio",
+       channels_available(99, 2) is None)
+
+    _, a31 = fresh_api(Path(tempfile.mkdtemp()))
+    refused = a31.start_monitor(1, SR, [{"name": "A", "channel": 4}])
+    ok("the signal check says so rather than opening the card",
+       refused["ok"] is False and "input" in refused["error"])
+    fine = a31.start_monitor(0, SR, [{"name": "A", "channel": 4}])
+    ok("and a card that has the inputs still opens", fine["ok"] is True)
+    a31.stop_monitor()
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

@@ -50,6 +50,7 @@ from rehearsal_recorder.audio.format import (
 from rehearsal_recorder.audio.crop import crop_wav
 from rehearsal_recorder.audio.mixdown import mixdown
 from rehearsal_recorder.audio.devices import (
+    channels_available,
     device_identity,
     recording_formats,
     saved_device,
@@ -667,6 +668,11 @@ class Api:
             return {"ok": False, "error": "Recording in progress"}
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
+        stray = channels_available(
+            device_index, max(t["channel"] for t in tracks)
+        )
+        if stray:
+            return {"ok": False, "error": stray}
 
         monitor = LevelMonitor(device_index, samplerate, tracks)
         try:
@@ -741,6 +747,12 @@ class Api:
     ):
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
+        # Caught before a folder is made for a rehearsal that cannot record.
+        stray = channels_available(
+            device_index, max(t["channel"] for t in tracks)
+        )
+        if stray:
+            return {"ok": False, "error": stray}
         bit_depth = normalize_depth(bit_depth)
         # Asked first: with no database there is nowhere to keep the takes,
         # and nothing should be created on disk for them.

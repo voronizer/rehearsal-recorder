@@ -157,7 +157,10 @@ window.__MAKE_API__ = () => ({
     (window.__STARTUP_PROBLEM__ ? [window.__STARTUP_PROBLEM__] : [])),
   // With a host API named, this is the Windows shape once ASIO is loaded:
   // one mixer through three systems with three different input counts.
-  list_input_devices: async () => (window.__HOST_API__ ? [
+  list_input_devices: async () => (window.__TRACKS_FROM_A_BIGGER_CARD__ ? [
+    {index:0, name:'Little USB box', host_api:'Core Audio',
+     max_input_channels:2, max_output_channels:0, default_samplerate:48000}] :
+    window.__HOST_API__ ? [
     {index:0, name:'X32 USB', host_api:'MME',
      max_input_channels:2, max_output_channels:0, default_samplerate:48000},
     {index:3, name:'X32 USB', host_api:'ASIO',
@@ -184,7 +187,9 @@ window.__MAKE_API__ = () => ({
     return {ok:true};
   }),
   load_default_tracks: async () => ({
-    tracks:[{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]}),
+    tracks: window.__TRACKS_FROM_A_BIGGER_CARD__
+      ? [{name:'Guitar', channel:1}, {name:'Vocals', channel:12}]
+      : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]}),
   set_recording_format: track('set_recording_format', async (dev, rate, depth) => {
     recording = {device_index: dev, samplerate: rate, bit_depth: depth};
     return {ok:true, ...recording};
@@ -1577,6 +1582,26 @@ def main():
         ok("the rates are still there to choose from",
            mute.locator("button[aria-label='44.1 kHz']").count() == 1)
         mute.close()
+
+        print("\n[12b cont. 2] Tracks left on another card's inputs")
+        # The template keeps its input numbers, and changing the interface in
+        # Settings does not touch them. On a narrower card the selector simply
+        # went blank: nothing said anything until the signal check came back
+        # with paInvalidChannelCount, a number about a card for a mistake
+        # about a template.
+        moved = browser.new_page(viewport={"width": 1180, "height": 820})
+        moved.add_init_script(
+            "window.__TRACKS_FROM_A_BIGGER_CARD__ = true;" + MOCK)
+        moved.goto(server.base_url, wait_until="networkidle")
+        moved.wait_for_selector("input[aria-label='Track 1 name']")
+        stray = moved.get_by_role("status").filter(has_text="does not have")
+        ok("the screen names the track left behind", stray.count() == 1)
+        told = stray.first.inner_text()
+        ok("and says which one it is", "Vocals" in told)
+        ok("and that the card is the reason", "Little USB box" in told
+           and "2" in told)
+        ok("without blaming the one that still fits", "Guitar" not in told)
+        moved.close()
 
         print("\n[12c] What cloud copies are written as")
         page.get_by_role("button", name="Folders", exact=True).first.click()

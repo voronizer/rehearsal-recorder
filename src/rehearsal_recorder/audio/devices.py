@@ -95,6 +95,44 @@ def recording_formats(device_index, channels):
     )
 
 
+def channels_available(device_index, wanted):
+    """
+    None when this input has `wanted` channels, and a sentence when it does
+    not.
+
+    Tracks are saved as a template, input numbers and all, and changing the
+    interface in Settings does not touch them: a band set up on an eighteen-
+    input desk and then moved to a two-input box still has someone on input 8.
+    PortAudio answers that with paInvalidChannelCount — a number about a card,
+    for a mistake about a template — so it is caught here, where the tracks
+    are still in view and the fix is obvious.
+
+    A device nobody can describe is left alone: PortAudio will have its own
+    opinion about it, and a guess here would only get in the way. So is no
+    device at all — query_devices(None) answers with the whole list rather
+    than with a device, and "no interface chosen" is a different complaint,
+    made elsewhere.
+    """
+    if device_index is None:
+        return None
+
+    try:
+        info = sd.query_devices(device_index)
+    except Exception:
+        return None
+
+    have = (info or {}).get("max_input_channels", 0)
+    if not have or wanted <= have:
+        return None
+
+    name = (info or {}).get("name", "This interface")
+    return (
+        f"“{name}” has {have} input{'' if have == 1 else 's'}, but the tracks "
+        f"go up to {wanted}. They were set up for another interface — give "
+        "them inputs this one has."
+    )
+
+
 def _is_asio(device_index):
     """Whether this device is reached through ASIO — which changes what
     asking it anything costs. Unknown devices are treated as not."""

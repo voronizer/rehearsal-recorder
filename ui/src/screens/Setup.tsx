@@ -130,6 +130,11 @@ export function Setup({
 
   const device = devices.find((d) => d.index === deviceIndex)
   const maxChannels = device?.max_input_channels ?? 16
+  // Tracks are saved as a template with their input numbers, and changing the
+  // interface does not touch them. On a narrower card their input simply is
+  // not in the list any more, so the selector below goes blank — which said
+  // nothing at all until the check failed with a number from PortAudio.
+  const strays = device ? tracks.filter((t) => t.channel > maxChannels) : []
   const canStart =
     tracks.length > 0 &&
     tracks.every((t) => t.name.trim()) &&
@@ -326,6 +331,20 @@ export function Setup({
             <p className="text-xs text-muted-foreground">
               Have everyone play in turn — the bar should move next to their own
               track. If the wrong one moves, change the input number.
+            </p>
+          )}
+
+          {strays.length > 0 && (
+            <p
+              role="status"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
+            >
+              {strays.map((t) => t.name || "An unnamed track").join(", ")}
+              {strays.length === 1 ? " is" : " are"} on{" "}
+              {strays.length === 1 ? "an input" : "inputs"} this interface does
+              not have. These tracks were set up for another one, and changing
+              the interface leaves their input numbers alone — “{device?.name}”
+              has {maxChannels}. Pick again below.
             </p>
           )}
 

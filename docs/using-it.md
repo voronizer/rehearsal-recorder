@@ -221,6 +221,21 @@ mixdown all read both depths, and a take can even hold tracks of each. The
 mixdown itself is written 16-bit on purpose: it is what gets sent to people,
 and every phone plays it.
 
+## After changing the interface
+
+Tracks are saved as a template, input numbers and all, and changing the
+interface in Settings deliberately leaves them alone — the band's layout is
+not something to throw away because a cable moved. But the numbers only mean
+anything on the card they were set on. Set up on an eighteen-input desk and
+then moved to a two-input box, somebody is still on input 8, which no longer
+exists.
+
+The setup screen says which tracks that happened to, and the signal check
+refuses with the same sentence rather than opening the card. It used to open
+it and let PortAudio answer, which came back as
+`Invalid number of channels [PaErrorCode -9998]` — a number about a card, for
+a mistake about a template.
+
 ## When the card will not open
 
 Checking the signal, or starting a take, can fail with a message ending in
