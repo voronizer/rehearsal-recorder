@@ -1399,11 +1399,9 @@ def main():
            page.evaluate("() => window.__TAB_TAKEN__") is True
            and focused_on(page) == "Finish")
 
-        page.keyboard.press("Escape")
-        page.wait_for_timeout(300)
-        ok("a second escape closes the question instead of answering it",
-           page.locator("text=Finish this rehearsal?").count() == 0
-           and len(calls("finish_rehearsal")) == finishes)
+        escape_closes(page, "Finish this rehearsal?")
+        ok("escape closes the question without finishing anything",
+           len(calls("finish_rehearsal")) == finishes)
 
         page.click("text=Finish")
         page.wait_for_selector("text=Rehearsal finished")
