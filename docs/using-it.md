@@ -200,6 +200,10 @@ and there is no reason to fight them.
 Only combinations the interface actually accepts are shown — the card is asked
 before the choice is offered, not after it fails. A card that will not do 96
 kHz does not have it on screen; a rate it only does at 24 bits greys out 16.
+An ASIO card is the exception: ASIO answers about the rate and says nothing
+about the depth, so a rate it takes is offered at both — and it is asked once
+per rate rather than once per combination, because each question loads and
+unloads the driver in full and ASIO drivers do not enjoy being cycled.
 If a saved choice stops being possible (a different interface, a different
 setup) the app moves to one that works rather than failing at the moment
 everyone is ready to play. The setup screen's disk estimate follows whatever
@@ -209,6 +213,36 @@ Old rehearsals keep working untouched. Playback, waveforms and the cloud
 mixdown all read both depths, and a take can even hold tracks of each. The
 mixdown itself is written 16-bit on purpose: it is what gets sent to people,
 and every phone plays it.
+
+## When the card will not open
+
+Checking the signal, or starting a take, can fail with a message ending in
+`[PaErrorCode -9999]`. That number carries no meaning of its own: it is
+PortAudio saying "the driver refused and told me nothing useful". It comes up
+almost only on Windows with ASIO.
+
+The app can ask the card why. From a terminal, in the folder the app was
+unpacked into:
+
+```
+RehearsalRecorder.exe --audio-probe
+```
+
+It opens the saved card several times over, changing exactly one thing each
+time — two channels instead of eight, the rate the driver is already at, the
+block size left to the driver, the outputs opened alongside the inputs — and
+reads the answer off which attempts got in. Then it says what to do about it.
+Add an index from the list it prints to ask about a different card.
+
+The common answer is the dull one: an ASIO card belongs to one program at a
+time, and something else has it — a DAW, the card's own mixer or control
+panel, or a second copy of this app. Close those and the check works. If
+nothing at all opens and nothing else is running, the card is unplugged or its
+driver wants reinstalling.
+
+If the probe says the driver will only hand over its inputs together with its
+outputs, record through WASAPI instead for now: the same card is listed there
+too, with fewer inputs but no such condition.
 
 ## Sending takes to the cloud
 

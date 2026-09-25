@@ -2562,6 +2562,93 @@ def main():
        {k for k, _ in seen} == {"cloud", "disk"}
        and all(held == 0 for _, held in seen))
 
+    print("\n[28] Telling apart why a card refuses to open")
+    from rehearsal_recorder.audio.probe import AS_CONFIGURED, attempts, verdict
+
+    plan = attempts(samplerate=48000, channels=4, bit_depth=24,
+                    driver_samplerate=44100)
+    labels = [a["label"] for a in plan]
+    ok("the settings in force are tried first", labels[0] == AS_CONFIGURED)
+    ok("and each remaining attempt changes exactly one thing",
+       len(labels) >= 6 and len(set(labels)) == len(labels))
+
+    def only(*opens):
+        """A result per attempt, with only the named ones opening."""
+        return [
+            {
+                "label": a["label"],
+                "opened": a["label"] in opens,
+                "error": None if a["label"] in opens else
+                "Unanticipated host error [PaErrorCode -9999]",
+            }
+            for a in plan
+        ]
+
+    by_cause = {a["cause"]: a["label"] for a in plan if a["cause"]}
+
+    ok("nothing opens — the driver is held elsewhere or the card is absent",
+       verdict(only())["cause"] == "driver")
+    ok("only the duplex attempt opens — the driver will not open inputs alone",
+       verdict(only(by_cause["input_only"]))["cause"] == "input_only")
+    ok("fewer channels open — too many were asked for",
+       verdict(only(by_cause["channels"], by_cause["input_only"]))["cause"]
+       == "channels")
+    ok("the driver's own rate opens — the rate was the problem",
+       verdict(only(by_cause["samplerate"]))["cause"] == "samplerate")
+    ok("16-bit opens — the depth was the problem",
+       verdict(only(by_cause["bit_depth"]))["cause"] == "bit_depth")
+    ok("the driver's own block size opens — the block size was the problem",
+       verdict(only(by_cause["blocksize"]))["cause"] == "blocksize")
+    ok("everything opens — the settings are not what refused",
+       verdict(only(*labels))["cause"] == "none")
+    ok("every verdict says something a person can act on",
+       all(verdict(only(*w))["advice"].strip()
+           for w in ([], [by_cause["input_only"]], [by_cause["channels"]], labels)))
+
+    print("\n[29] Asking an ASIO card what it can do, without wearing it out")
+    from rehearsal_recorder.audio.devices import recording_formats as _formats
+
+    asked = []
+
+    def counting_check(device=None, channels=1, samplerate=None, dtype=None):
+        asked.append((device, samplerate, dtype))
+        if samplerate == 96000:
+            raise ValueError("unsupported samplerate")
+
+    asio_apis = [{"name": "MME"}, {"name": "ASIO"}]
+    asio_devices = [
+        {"name": "Scarlett", "hostapi": 0, "max_input_channels": 2,
+         "max_output_channels": 2, "default_samplerate": 48000},
+        {"name": "Scarlett", "hostapi": 1, "max_input_channels": 8,
+         "max_output_channels": 8, "default_samplerate": 48000},
+    ]
+    real_q, real_h = _sd.query_devices, _sd.query_hostapis
+    real_check = _sd.check_input_settings
+    _sd.query_hostapis = lambda: asio_apis
+    _sd.query_devices = (
+        lambda index=None, kind=None:
+        asio_devices if index is None else asio_devices[index]
+    )
+    _sd.check_input_settings = counting_check
+    try:
+        got = _formats(1, 2)
+        ok("the rates the card takes are still offered at both depths",
+           got.get("48000") == [16, 24] and got.get("44100") == [16, 24])
+        ok("and a rate it refuses is still left out", "96000" not in got)
+        # Every ask loads and unloads the ASIO driver in full, and PortAudio's
+        # ASIO backend never looks at the sample format — so asking once per
+        # depth is wear on the driver for an answer already known.
+        ok("an ASIO driver is loaded once per rate, not once per combination",
+           len(asked) == 3)
+
+        asked.clear()
+        _formats(0, 2)
+        ok("every other audio system is still asked about each combination",
+           len(asked) == 6)
+    finally:
+        _sd.query_devices, _sd.query_hostapis = real_q, real_h
+        _sd.check_input_settings = real_check
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

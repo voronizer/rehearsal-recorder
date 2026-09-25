@@ -212,6 +212,17 @@ def main():
     if "--selftest" in sys.argv:
         return selftest()
 
+    # --audio-probe asks the saved card, several times over, why it refuses to
+    # open, and reads the diagnosis off which attempts got in. Needed because
+    # a refused ASIO stream reports -9999 and nothing else. An index after the
+    # flag asks about that device instead of the saved one.
+    if "--audio-probe" in sys.argv:
+        from rehearsal_recorder.audio.probe import run as audio_probe
+
+        rest = sys.argv[sys.argv.index("--audio-probe") + 1:]
+        chosen = int(rest[0]) if rest and rest[0].isdigit() else None
+        return audio_probe(chosen)
+
     # --dev opens Vite's dev server instead of the built bundle, so changes
     # to the interface appear without rebuilding. Python still does all the
     # audio; Vite forwards the calls back to it. See docs/development.md.

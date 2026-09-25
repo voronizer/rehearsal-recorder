@@ -45,12 +45,24 @@ def recording_formats(device_index, channels):
     check = getattr(sd, "check_input_settings", None)
     result = {}
 
+    # Asking an ASIO card is not free the way it is elsewhere: PortAudio
+    # answers each question by loading the driver, initialising it, asking,
+    # and unloading it again — a full cycle per call, and ASIO drivers are
+    # famously touchy about being cycled. It is also a question it answers
+    # without ever looking at the sample format: the ASIO backend checks the
+    # channel count and asks ASIOCanSampleRate, then hands the conversion to
+    # PortAudio's own buffer adapter, which does every standard format. So on
+    # ASIO each rate is asked about once, and the answer stands for both
+    # depths — half as much wear for exactly the same information.
+    asio = _is_asio(device_index)
+
     for rate in OFFERED_RATES:
+        if check is None:
+            result[str(rate)] = list(SUPPORTED_DEPTHS)  # cannot ask; assume
+            continue
+
         depths = []
-        for depth in SUPPORTED_DEPTHS:
-            if check is None:
-                depths.append(depth)  # cannot ask; assume and let it fail loudly
-                continue
+        for depth in (SUPPORTED_DEPTHS[:1] if asio else SUPPORTED_DEPTHS):
             try:
                 check(
                     device=device_index,
@@ -61,10 +73,21 @@ def recording_formats(device_index, channels):
                 depths.append(depth)
             except Exception:
                 pass
+        if asio and depths:
+            depths = list(SUPPORTED_DEPTHS)
         if depths:
             result[str(rate)] = depths
 
     return result
+
+
+def _is_asio(device_index):
+    """Whether this device is reached through ASIO — which changes what
+    asking it anything costs. Unknown devices are treated as not."""
+    try:
+        return _host_api_name(sd.query_devices(device_index)) == "ASIO"
+    except Exception:
+        return False
 
 
 def usable_output(device_index, samplerate, channels=2):
