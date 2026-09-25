@@ -161,9 +161,35 @@ def channels_available(device_index, tracks):
             "rehearsal."
         )
 
-    wanted = max(t["channel"] for t in tracks)
+    # A stereo track reaches one input past its own number, and claims both.
+    def span(t):
+        first = t["channel"]
+        return range(first, first + (2 if t.get("stereo") else 1))
+
+    claimed = {}
+    for t in tracks:
+        for c in span(t):
+            if c in claimed:
+                return (
+                    f"“{claimed[c]}” and “{t['name']}” are both on input {c}. "
+                    "Two tracks cannot share one — a stereo track takes the "
+                    "input after its own as well."
+                )
+            claimed[c] = t["name"]
+
+    wanted = max(max(span(t)) for t in tracks)
     if wanted <= have:
         return None
+
+    stereo_edge = [t["name"] for t in tracks
+                   if t.get("stereo") and t["channel"] == have]
+    if stereo_edge:
+        listed = ", ".join(stereo_edge)
+        return (
+            f"{listed} {'is' if len(stereo_edge) == 1 else 'are'} in stereo on "
+            f"the last input of “{name}”, so there is nowhere for the right "
+            f"side. Move to input {have - 1} or lower, or record in mono."
+        )
 
     if len(tracks) > have:
         return (

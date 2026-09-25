@@ -8,8 +8,10 @@ eighteen-input desk is somebody's guitar, and on a two-input box it does not
 exist. Kept as one record, changing the interface left the band pointing at
 inputs belonging to a different card.
 
-So the two are stored apart. `tracks` is the band: names, in order, the same
-whatever is plugged in. `layouts` holds one entry per interface, and each
+So the two are stored apart. `tracks` is the band: one entry per member, in order, the same whatever is
+plugged in. An entry is a name and whether that instrument is stereo — a
+keyboard has two outputs wherever it is plugged in, so being stereo belongs
+to the band and not to any card. `layouts` holds one entry per interface, and each
 entry maps a name to the input that person uses on that card. Switching
 cards keeps everyone and swaps the numbers.
 
@@ -21,7 +23,7 @@ touched, which is what makes the cases in for_device() testable without one.
 """
 
 # What a fresh install starts with, when there is no band yet.
-DEFAULT_BAND = ("Guitar 1", "Vocals")
+DEFAULT_BAND = ({"name": "Guitar 1"}, {"name": "Vocals"})
 
 
 def _identity(entry):
@@ -48,11 +50,19 @@ def migrate(config):
     config.setdefault("layouts", [])
     old_tracks = config.get("tracks") or []
 
-    # A list of records is the shape before the band and the inputs were
-    # stored apart: one flat list, whose numbers belonged to whichever card
-    # was chosen at the time.
-    if old_tracks and isinstance(old_tracks[0], dict):
-        config["tracks"] = [t["name"] for t in old_tracks]
+    # A band of bare names is the shape before a member could be stereo.
+    if old_tracks and isinstance(old_tracks[0], str):
+        config["tracks"] = [{"name": n} for n in old_tracks]
+        old_tracks = []
+
+    # A list of records carrying a channel is the shape before the band and
+    # the inputs were stored apart: one flat list, whose numbers belonged to
+    # whichever card was chosen at the time. A band member is a record too,
+    # so the channel is what tells the two apart — without it, converting a
+    # second time would read the band as a flat list and invent an entry for
+    # a card that was never there.
+    if old_tracks and isinstance(old_tracks[0], dict) and "channel" in old_tracks[0]:
+        config["tracks"] = [{"name": t["name"]} for t in old_tracks]
         config["layouts"] = [
             {
                 "device": config.get("device"),
@@ -67,6 +77,7 @@ def migrate(config):
     # that reading such a config loses nobody.
     if any("tracks" in e for e in config["layouts"]):
         band = list(config.get("tracks") or [])
+        seen = {m["name"] for m in band}
         converted = []
         for entry in config["layouts"]:
             records = entry.pop("tracks", None)
@@ -76,8 +87,9 @@ def migrate(config):
                     if t.get("channel") is not None
                 }
                 for t in records:
-                    if t["name"] not in band:
-                        band.append(t["name"])
+                    if t["name"] not in seen:
+                        band.append({"name": t["name"]})
+                        seen.add(t["name"])
             converted.append(entry)
         config["layouts"] = converted
         config["tracks"] = band
@@ -143,22 +155,40 @@ def for_device(band, layouts, identity, max_inputs):
     app's.
     """
     max_inputs = max(int(max_inputs or 0), 1)
-    names = list(band) or list(DEFAULT_BAND)
+    members = list(band) or list(DEFAULT_BAND)
     known = inputs_for(layouts, identity)
+
+    def wants(member):
+        return 2 if member.get("stereo") else 1
+
+    def fits(channel, width, taken):
+        if channel is None or channel < 1 or channel + width - 1 > max_inputs:
+            return False
+        return all(c not in taken for c in range(channel, channel + width))
 
     placed = {}
     taken = set()
-    for name in names:
-        channel = known.get(name)
-        if channel is not None and 1 <= channel <= max_inputs and channel not in taken:
-            placed[name] = channel
-            taken.add(channel)
+    for member in members:
+        width = wants(member)
+        channel = known.get(member["name"])
+        if fits(channel, width, taken):
+            placed[member["name"]] = channel
+            taken.update(range(channel, channel + width))
 
-    free = (c for c in range(1, max_inputs + 1) if c not in taken)
     out = []
-    for name in names:
-        channel = placed.get(name)
+    for member in members:
+        width = wants(member)
+        channel = placed.get(member["name"])
         if channel is None:
-            channel = next(free, None)
-        out.append({"name": name, "channel": channel})
+            channel = next(
+                (c for c in range(1, max_inputs + 1) if fits(c, width, taken)),
+                None,
+            )
+            if channel is not None:
+                taken.update(range(channel, channel + width))
+        out.append({
+            "name": member["name"],
+            "channel": channel,
+            "stereo": bool(member.get("stereo")),
+        })
     return out

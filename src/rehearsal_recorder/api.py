@@ -660,7 +660,10 @@ class Api:
 
         The band is one list whatever is plugged in; the inputs belong to the
         card. See rehearsal_recorder/layouts.py."""
-        self._config["tracks"] = [t["name"] for t in tracks]
+        self._config["tracks"] = [
+            {"name": t["name"], **({"stereo": True} if t.get("stereo") else {})}
+            for t in tracks
+        ]
         self._config["layouts"] = layouts.remember(
             self._config.get("layouts", []),
             device_identity(device_index),
@@ -738,8 +741,12 @@ class Api:
 
     # ---------- disk space and recording health ----------
 
-    def disk_estimate(self, track_count, samplerate, bit_depth=LEGACY_DEPTH):
-        """How much recording time fits in the free space."""
+    def disk_estimate(self, channel_count, samplerate, bit_depth=LEGACY_DEPTH):
+        """How much recording time fits in the free space.
+
+        Counted in channels, not tracks: a stereo track writes two of them,
+        and an estimate that counted it as one would promise half again as
+        much room as there is."""
         try:
             free = shutil.disk_usage(self._recordings_dir).free
         except OSError as e:
@@ -747,7 +754,7 @@ class Api:
 
         per_sec = max(
             1,
-            int(track_count) * int(samplerate) * bytes_per_sample(bit_depth),
+            int(channel_count) * int(samplerate) * bytes_per_sample(bit_depth),
         )
         minutes = free / per_sec / 60
         return {

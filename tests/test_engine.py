@@ -369,7 +369,7 @@ def main():
        saved.get("layouts", [{}])[0]
        == {"device": {"name": "Podcast mic", "host_api": "CoreAudio"},
            "inputs": {"V": 1}}
-       and saved.get("tracks") == ["V"])
+       and saved.get("tracks") == [{"name": "V"}])
     ok("and leaves the chosen recording device alone",
        a._config.get("device") == before)
 
@@ -2805,7 +2805,7 @@ def main():
                                  {"name": "Vocals", "channel": 7}],
                       "device": xr18})
     ok("a flat list becomes the band, by name and in order",
-       flat["tracks"] == ["Guitar", "Vocals"])
+       flat["tracks"] == [{"name": "Guitar"}, {"name": "Vocals"}])
     ok("and its numbers become that card's input map",
        flat["layouts"] == [{"device": xr18,
                             "inputs": {"Guitar": 3, "Vocals": 7}}])
@@ -2820,53 +2820,58 @@ def main():
         {"device": xr18, "tracks": [{"name": "Guitar", "channel": 3},
                                     {"name": "Drums", "channel": 9}]}]})
     ok("a per-card band becomes one band, losing nobody",
-       per_card["tracks"] == ["Guitar", "Drums"])
+       per_card["tracks"] == [{"name": "Guitar"}, {"name": "Drums"}])
     ok("and each card keeps the inputs it knew",
        L.inputs_for(per_card["layouts"], xr18) == {"Guitar": 3, "Drums": 9}
        and L.inputs_for(per_card["layouts"], little) == {"Guitar": 1})
 
     print("  switching cards")
-    band = ["Guitar", "Vocals"]
+    band = [{"name": "Guitar"}, {"name": "Vocals"}]
     saved = L.remember([], xr18, [{"name": "Guitar", "channel": 3},
                                   {"name": "Vocals", "channel": 7}])
     ok("a card remembers where each name is plugged in",
        L.inputs_for(saved, xr18) == {"Guitar": 3, "Vocals": 7})
     ok("and gives those numbers back",
        L.for_device(band, saved, xr18, 18)
-       == [{"name": "Guitar", "channel": 3}, {"name": "Vocals", "channel": 7}])
+       == [{"name": "Guitar", "channel": 3, "stereo": False},
+           {"name": "Vocals", "channel": 7, "stereo": False}])
 
     # The whole point: a card nobody has used yet keeps the band entire.
     ok("an unused card keeps everyone, counted from the first free input",
        L.for_device(band, saved, little, 2)
-       == [{"name": "Guitar", "channel": 1}, {"name": "Vocals", "channel": 2}])
+       == [{"name": "Guitar", "channel": 1, "stereo": False},
+           {"name": "Vocals", "channel": 2, "stereo": False}])
 
     both = L.remember(saved, little, [{"name": "Guitar", "channel": 1},
                                       {"name": "Vocals", "channel": 2}])
     ok("going back to the first card brings its own numbers back",
        L.for_device(band, both, xr18, 18)
-       == [{"name": "Guitar", "channel": 3}, {"name": "Vocals", "channel": 7}])
+       == [{"name": "Guitar", "channel": 3, "stereo": False},
+           {"name": "Vocals", "channel": 7, "stereo": False}])
     ok("and the other card keeps its own",
        L.for_device(band, both, little, 2)
-       == [{"name": "Guitar", "channel": 1}, {"name": "Vocals", "channel": 2}])
+       == [{"name": "Guitar", "channel": 1, "stereo": False},
+           {"name": "Vocals", "channel": 2, "stereo": False}])
 
     print("  the band changes")
     # Somebody joins on one card. Every other card must show them too — that
     # is the whole reason the band is one list.
-    grew = ["Guitar", "Vocals", "Drums"]
+    grew = [{"name": "Guitar"}, {"name": "Vocals"}, {"name": "Drums"}]
     ok("a new member appears on a card that never saw them",
        L.for_device(grew, both, xr18, 18)
-       == [{"name": "Guitar", "channel": 3}, {"name": "Vocals", "channel": 7},
-           {"name": "Drums", "channel": 1}])
+       == [{"name": "Guitar", "channel": 3, "stereo": False},
+           {"name": "Vocals", "channel": 7, "stereo": False},
+           {"name": "Drums", "channel": 1, "stereo": False}])
     ok("on the lowest input nobody else is on",
-       L.for_device(grew, both, little, 2)[2] == {"name": "Drums",
-                                                  "channel": None})
+       L.for_device(grew, both, little, 2)[2] == {"name": "Drums", "channel": None,
+                                                  "stereo": False})
 
     ok("and when the inputs run out, the rest simply have none",
        [t["channel"] for t in L.for_device(
-           ["A", "B", "C", "D"], [], xr18, 2)] == [1, 2, None, None])
+           [{"name": n} for n in "ABCD"], [], xr18, 2)] == [1, 2, None, None])
     ok("but nobody is dropped — who sits out is not the app's to decide",
        [t["name"] for t in L.for_device(
-           ["A", "B", "C", "D"], [], xr18, 2)] == ["A", "B", "C", "D"])
+           [{"name": n} for n in "ABCD"], [], xr18, 2)] == ["A", "B", "C", "D"])
 
     dropped = L.remember(both, xr18, [{"name": "Guitar", "channel": 3}])
     ok("a name left out of a save keeps its socket for when it returns",
@@ -2884,12 +2889,13 @@ def main():
     a32.save_default_tracks({"device_index": 0, "tracks": [
         {"name": "Guitar", "channel": 5}, {"name": "Vocals", "channel": 6}]})
     ok("the template saves the band once",
-       a32._config["tracks"] == ["Guitar", "Vocals"])
+       a32._config["tracks"] == [{"name": "Guitar"}, {"name": "Vocals"}])
     ok("and the numbers under the card they were set on",
        L.inputs_for(a32._config["layouts"], big) == {"Guitar": 5, "Vocals": 6})
     ok("the card gets its own numbers back",
        a32.load_default_tracks()["tracks"]
-       == [{"name": "Guitar", "channel": 5}, {"name": "Vocals", "channel": 6}])
+       == [{"name": "Guitar", "channel": 5, "stereo": False},
+           {"name": "Vocals", "channel": 6, "stereo": False}])
 
     # Device 1 is the one-input "Podcast mic": the band survives the move.
     a32._remember_device("device", 1)
@@ -2968,6 +2974,69 @@ def main():
     rec24._raw_files["Keys"].close()
     ok("at 24 bits a stereo frame is six bytes",
        (st24 / "Keys.raw").stat().st_size == 64 * 2 * 3)
+
+    print("  recovering one after a crash")
+    # A .raw file carries no header, so nothing in the folder says which
+    # tracks were stereo. Recovery has to be told, or a rescued keyboard
+    # comes back as one channel of twice the length.
+    crashed = tmp / "crashst"
+    rec3 = _Rec(0, SR, [{"name": "Keys", "channel": 1, "stereo": True},
+                        {"name": "Gtr", "channel": 3}], crashed, bit_depth=16)
+    rec3.start()
+    rec3._callback(np.full((100, 4), 700, dtype=np.int16), 100, None, None)
+    rec3._stop_flush.set()
+    for f in rec3._raw_files.values():
+        f.close()
+
+    from rehearsal_recorder.audio.drafts import finalize as _finalize
+    rescued = _finalize(crashed, SR, 16)
+    with wave.open(str(crashed / "Keys.wav")) as w:
+        ok("a crashed stereo take comes back as a two-channel wav",
+           w.getnchannels() == 2 and w.getnframes() == 100)
+    with wave.open(str(crashed / "Gtr.wav")) as w:
+        ok("and a mono one beside it is untouched",
+           w.getnchannels() == 1 and w.getnframes() == 100)
+    ok("the take is as long as it was recorded, not twice that",
+       abs(rescued["duration_sec"] - 100 / SR) < 1e-6)
+
+    print("  a stereo member of the band")
+    ok("a band of bare names becomes objects",
+       L.migrate({"tracks": ["Gtr"]})["tracks"] == [{"name": "Gtr"}])
+    ok("and converting twice changes nothing",
+       L.migrate(L.migrate({"tracks": ["Gtr"]})) == L.migrate({"tracks": ["Gtr"]}))
+
+    band2 = [{"name": "Gtr"}, {"name": "Keys", "stereo": True}]
+    ok("a stereo member takes a pair, counted from the first free input",
+       L.for_device(band2, [], xr18, 8)
+       == [{"name": "Gtr", "channel": 1, "stereo": False},
+           {"name": "Keys", "channel": 2, "stereo": True}])
+    ok("and the pair it takes is not offered to anybody else",
+       L.for_device(band2 + [{"name": "Voc"}], [], xr18, 8)[2]["channel"] == 4)
+    ok("a stereo member with no room for its second input has none",
+       L.for_device([{"name": "Keys", "stereo": True}], [], xr18, 1)[0]["channel"]
+       is None)
+    ok("a remembered pair comes back as a pair",
+       L.for_device(band2, L.remember([], xr18, [
+           {"name": "Keys", "channel": 5, "stereo": True}]), xr18, 8)[1]
+       == {"name": "Keys", "channel": 5, "stereo": True})
+
+    print("  what the card and the disk make of it")
+    # Device 0 is the eight-input "Interface".
+    ok("a stereo track on the last input has nowhere to put its right side",
+       channels_available(0, [{"name": "Keys", "channel": 8, "stereo": True}]))
+    ok("but one input earlier fits",
+       channels_available(0, [{"name": "Keys", "channel": 7, "stereo": True}])
+       is None)
+    ok("and two tracks may not share an input",
+       channels_available(0, [{"name": "Keys", "channel": 3, "stereo": True},
+                              {"name": "Gtr", "channel": 4}]))
+
+    _, a33 = fresh_api(Path(tempfile.mkdtemp()))
+    mono4 = a33.disk_estimate(4, SR, 16)
+    stereo2 = a33.disk_estimate(4, SR, 16)
+    ok("the estimate is counted in channels, so a stereo pair costs two",
+       mono4["bytes_per_sec"] == stereo2["bytes_per_sec"]
+       and mono4["bytes_per_sec"] == 4 * SR * 2)
 
     print("  playing one back")
     # Left and right deliberately different, and the right one silent later,

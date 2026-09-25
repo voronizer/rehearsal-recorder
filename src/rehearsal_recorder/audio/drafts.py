@@ -8,12 +8,27 @@ killed mid-take, the audio is on disk but in a form nothing plays yet.
 This module finds those leftovers and turns them back into normal takes.
 """
 
+import json
 from pathlib import Path
 
-from rehearsal_recorder.audio.capture import RAW_SUFFIX, raw_to_wav
+from rehearsal_recorder.audio.capture import (
+    RAW_SUFFIX,
+    TAKE_RECORD,
+    raw_to_wav,
+)
 from rehearsal_recorder.audio.format import bytes_per_sample
 
 DRAFTS_DIR = "_drafts"
+
+
+def _widths(take_dir):
+    """How many channels each raw file holds, by its file stem. Empty for a
+    take recorded before the record was written, whose tracks are all mono."""
+    try:
+        record = json.loads((Path(take_dir) / TAKE_RECORD).read_text("utf-8"))
+        return {t["file"]: int(t.get("channels", 1)) for t in record["tracks"]}
+    except Exception:
+        return {}
 
 
 def draft_dirs(rehearsal_folder):
@@ -43,7 +58,9 @@ def describe(take_dir, samplerate, bit_depth=16):
 
     for path in sorted(take_dir.iterdir()):
         if path.suffix == RAW_SUFFIX:
-            track_frames = path.stat().st_size // bytes_per_sample(bit_depth)
+            track_frames = path.stat().st_size // (
+                bytes_per_sample(bit_depth) * _widths(take_dir).get(path.stem, 1)
+            )
             frames = max(frames, track_frames)
             tracks.append(path.stem)
         elif path.suffix == ".wav":
@@ -67,13 +84,18 @@ def finalize(take_dir, samplerate, bit_depth=16):
     tracks = []
     frames = 0
 
+    widths = _widths(take_dir)
     for raw_path in sorted(take_dir.glob(f"*{RAW_SUFFIX}")):
         wav_path = raw_path.with_suffix(".wav")
+        channels = widths.get(raw_path.stem, 1)
         frames = max(
-            frames, raw_path.stat().st_size // bytes_per_sample(bit_depth)
+            frames,
+            raw_path.stat().st_size // (bytes_per_sample(bit_depth) * channels),
         )
-        raw_to_wav(raw_path, wav_path, samplerate, bit_depth)
+        raw_to_wav(raw_path, wav_path, samplerate, bit_depth, channels=channels)
         raw_path.unlink(missing_ok=True)
+
+    (take_dir / TAKE_RECORD).unlink(missing_ok=True)
 
     for wav_path in sorted(take_dir.glob("*.wav")):
         tracks.append({"name": wav_path.stem, "file": str(wav_path)})

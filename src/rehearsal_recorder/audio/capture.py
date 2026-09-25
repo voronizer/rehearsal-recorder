@@ -11,6 +11,7 @@ take interrupted by a crash leaves .raw files behind — see audio/drafts.py,
 which turns them back into playable takes.
 """
 
+import json
 import os
 import threading
 import wave
@@ -37,6 +38,12 @@ FLUSH_INTERVAL_SEC = 30
 BLOCK_FRAMES = 1024
 
 RAW_SUFFIX = ".raw"
+
+# Written beside the raw files as recording starts. A .raw file carries no
+# header, so without this nothing in a crashed take's folder says how wide
+# each track was, and a rescued stereo keyboard would come back as one
+# channel of twice the length.
+TAKE_RECORD = "take.json"
 
 
 class AudioRecorder:
@@ -201,6 +208,7 @@ class AudioRecorder:
             self.flush()
 
     def start(self):
+        self._write_record()
         for track in self.tracks:
             path = self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}"
             self._raw_files[track["name"]] = open(path, "wb")
@@ -220,6 +228,26 @@ class AudioRecorder:
         self._stop_flush.clear()
         self._flush_thread = threading.Thread(target=self._flush_loop, daemon=True)
         self._flush_thread.start()
+
+    def _write_record(self):
+        """What the folder needs to describe itself if the app dies: the
+        format, and how wide each track is. Best effort — a take that cannot
+        write this is still worth recording."""
+        try:
+            (self.out_dir / TAKE_RECORD).write_text(
+                json.dumps({
+                    "samplerate": self.samplerate,
+                    "bit_depth": self.bit_depth,
+                    "tracks": [
+                        {"file": self.safe_name(t["name"]),
+                         "channels": self._width[t["name"]]}
+                        for t in self.tracks
+                    ],
+                }),
+                encoding="utf-8",
+            )
+        except OSError as e:
+            print(f"[audio] take record not written: {e}")
 
     def flush(self):
         """Force everything to disk. Runs every 30 seconds on its own, but can
@@ -271,6 +299,10 @@ class AudioRecorder:
                 "file": str(wav_path),
                 **({"stereo": True} if self._width[track["name"]] == 2 else {}),
             })
+
+        # The record has done its job: every wav now carries its own header.
+        # Left behind it would ride along into the saved take.
+        (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
 
         self._result = {"duration_sec": duration, "tracks": finalized}
         return self._result
