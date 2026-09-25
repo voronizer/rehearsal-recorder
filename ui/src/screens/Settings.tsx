@@ -96,6 +96,10 @@ export function Settings({
   const [inputs, setInputs] = useState<Device[]>([])
   // What the chosen interface will actually accept: {"44100": [16, 24], ...}
   const [formats, setFormats] = useState<Record<string, number[]>>({})
+  // Set when the card would not say what it takes — as against saying it
+  // takes none of them. Without this the three below are a guess wearing the
+  // card's clothes.
+  const [formatTrouble, setFormatTrouble] = useState<string | null>(null)
   const [dir, setDir] = useState("")
   const [cloudDir, setCloudDir] = useState("")
   const [status, setStatus] = useState<string | null>(null)
@@ -123,7 +127,9 @@ export function Settings({
     ;(async () => {
       try {
         const res = await api().recording_formats(settings.device_index!, 2)
-        if (!cancelled && res.ok && res.formats) setFormats(res.formats)
+        if (cancelled || !res.ok) return
+        if (res.formats) setFormats(res.formats)
+        setFormatTrouble(res.trouble ?? null)
       } catch {
         /* the choice just stays as it is */
       }
@@ -203,7 +209,9 @@ export function Settings({
     window.setTimeout(() => setStatus(null), 2500)
   }
 
-  // Whatever the card said, or the usual three while the answer is pending.
+  // Whatever the card said, or the usual three while the answer is pending —
+  // or while the card refuses to give one, in which case the note below says
+  // so rather than letting the list pass for the card's own answer.
   const rateOptions = (Object.keys(formats).length
     ? Object.keys(formats).map(Number)
     : [44100, 48000, 96000]
@@ -351,6 +359,18 @@ export function Settings({
               Each driver can offer a different number of inputs. If your
               interface shows fewer than it has, try another driver — ASIO,
               where there is one, usually offers all of them.
+            </p>
+          )}
+
+          {formatTrouble && (
+            <p
+              role="status"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
+            >
+              {formatTrouble} So the rates below are the usual three, not this
+              card's own answer — one of them may not work. Interfaces reached
+              through ASIO often take only the rate the hardware itself is set
+              to, and refuse to be asked while another program has them.
             </p>
           )}
 

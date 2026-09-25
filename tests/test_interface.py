@@ -197,8 +197,12 @@ window.__MAKE_API__ = () => ({
     autoPublish = {on, what: what || autoPublish.what};
     return {ok:true, auto_publish:autoPublish.on, auto_publish_what:autoPublish.what};
   }),
-  recording_formats: track('recording_formats', async () => ({
-    ok:true, formats:{'44100':[16,24], '48000':[16,24], '96000':[24]}})),
+  recording_formats: track('recording_formats', async () => (
+    window.__FORMATS_REFUSED__
+      ? {ok:true, formats:{}, trouble:'This interface would not say which ' +
+          'rates it takes. The driver said: Unanticipated host error ' +
+          '[PaErrorCode -9999]'}
+      : {ok:true, formats:{'44100':[16,24], '48000':[16,24], '96000':[24]}})),
   save_default_tracks: track('save_default_tracks', async () => ({ok:true})),
 
   disk_estimate: track('disk_estimate', async (count, rate, depth) => {
@@ -1550,6 +1554,29 @@ def main():
            page.locator("button[aria-label='16 bit']").is_disabled())
         page.click("button[aria-label='44.1 kHz']")
         page.wait_for_timeout(300)
+
+        print("\n[12b cont.] A card that will not say what it takes says so")
+        # The list fell back to the usual three in silence, so a card that
+        # answered nothing looked exactly like one that answered "all of
+        # them" — which is how an XR18, with no 96 kHz at all and only the
+        # rate its own mixer is set to, came to have every one of them on
+        # screen as though it had said so itself.
+        mute = browser.new_page(viewport={"width": 1180, "height": 820})
+        mute.add_init_script("window.__FORMATS_REFUSED__ = true;" + MOCK)
+        mute.goto(server.base_url, wait_until="networkidle")
+        mute.wait_for_selector("text=Start rehearsal")
+        mute.click("button[aria-label='Settings']")
+        mute.get_by_role("button", name="Audio", exact=True).first.click()
+        mute.wait_for_selector("#input-device")
+        note = mute.get_by_role("status").filter(has_text="would not say")
+        ok("the screen says the card would not answer", note.count() == 1)
+        said = note.first.inner_text()
+        ok("and keeps what the driver said", "-9999" in said)
+        ok("and does not pass the three off as the card's own answer",
+           "not this card" in said)
+        ok("the rates are still there to choose from",
+           mute.locator("button[aria-label='44.1 kHz']").count() == 1)
+        mute.close()
 
         print("\n[12c] What cloud copies are written as")
         page.get_by_role("button", name="Folders", exact=True).first.click()

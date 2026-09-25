@@ -2631,10 +2631,11 @@ def main():
     )
     _sd.check_input_settings = counting_check
     try:
-        got = _formats(1, 2)
+        got, trouble = _formats(1, 2)
         ok("the rates the card takes are still offered at both depths",
            got.get("48000") == [16, 24] and got.get("44100") == [16, 24])
         ok("and a rate it refuses is still left out", "96000" not in got)
+        ok("a card that answered is not reported as trouble", trouble is None)
         # Every ask loads and unloads the ASIO driver in full, and PortAudio's
         # ASIO backend never looks at the sample format — so asking once per
         # depth is wear on the driver for an answer already known.
@@ -2645,6 +2646,19 @@ def main():
         _formats(0, 2)
         ok("every other audio system is still asked about each combination",
            len(asked) == 6)
+
+        # A card that will not answer at all is not a card that answered "none
+        # of those". Told apart, or the interface offers rates nothing ever
+        # confirmed — which is how a card with no 96 kHz came to have it on
+        # screen.
+        def refuses(device=None, channels=1, samplerate=None, dtype=None):
+            raise Exception("Unanticipated host error", -9999)
+
+        _sd.check_input_settings = refuses
+        none_at_all, trouble = _formats(1, 2)
+        ok("a card that would not answer says so",
+           none_at_all == {} and bool(trouble))
+        ok("and keeps what the driver said", "-9999" in trouble)
     finally:
         _sd.query_devices, _sd.query_hostapis = real_q, real_h
         _sd.check_input_settings = real_check

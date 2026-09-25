@@ -626,9 +626,11 @@ class Api:
     def recording_formats(self, device_index, channel_count):
         """Which rate/depth combinations this input can actually do."""
         try:
+            formats, trouble = recording_formats(device_index, int(channel_count))
             return {
                 "ok": True,
-                "formats": recording_formats(device_index, int(channel_count)),
+                "formats": formats,
+                **({"trouble": trouble} if trouble else {}),
             }
         except Exception as e:
             return {"ok": False, "error": str(e)}

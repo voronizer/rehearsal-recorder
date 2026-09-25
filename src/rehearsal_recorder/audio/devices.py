@@ -39,11 +39,18 @@ def recording_formats(device_index, channels):
     Asked before the choice is offered, rather than after it fails: a card
     that cannot do 96 kHz should not have 96 kHz on screen at all.
 
-    Returns {"44100": [16, 24], ...} — rates with no working depth are left
-    out entirely.
+    Returns ({"44100": [16, 24], ...}, trouble). Rates with no working depth
+    are left out entirely.
+
+    `trouble` tells a card that answered "none of those" from a card that
+    would not answer at all. They used to be the same empty answer, and the
+    screen filled the silence by offering all three rates — so an XR18, which
+    has no 96 kHz and takes only the rate its own mixer is set to, was offered
+    every one of them as though it had said so itself.
     """
     check = getattr(sd, "check_input_settings", None)
     result = {}
+    refusal = None
 
     # Asking an ASIO card is not free the way it is elsewhere: PortAudio
     # answers each question by loading the driver, initialising it, asking,
@@ -71,14 +78,21 @@ def recording_formats(device_index, channels):
                     dtype=capture_dtype(depth),
                 )
                 depths.append(depth)
-            except Exception:
-                pass
+            except Exception as e:
+                refusal = e
         if asio and depths:
             depths = list(SUPPORTED_DEPTHS)
         if depths:
             result[str(rate)] = depths
 
-    return result
+    # One rate working proves the card was listening, so the others really
+    # were refusals. Nothing working at all is the card saying nothing.
+    if result or refusal is None:
+        return result, None
+    return result, (
+        f"This interface would not say which rates it takes. The driver said: "
+        f"{refusal}"
+    )
 
 
 def _is_asio(device_index):

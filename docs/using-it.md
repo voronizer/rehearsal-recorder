@@ -204,6 +204,13 @@ An ASIO card is the exception: ASIO answers about the rate and says nothing
 about the depth, so a rate it takes is offered at both — and it is asked once
 per rate rather than once per combination, because each question loads and
 unloads the driver in full and ASIO drivers do not enjoy being cycled.
+
+A card can also refuse to answer at all, which is not the same as answering
+"none of those" — and the screen now says which happened. It used to fall
+back to the usual three rates in silence, so a card that said nothing looked
+exactly like one that said yes to everything. An XR18 has no 96 kHz at all
+and takes only the rate its own mixer is set to, yet all three were offered
+as though it had confirmed them.
 If a saved choice stops being possible (a different interface, a different
 setup) the app moves to one that works rather than failing at the moment
 everyone is ready to play. The setup screen's disk estimate follows whatever

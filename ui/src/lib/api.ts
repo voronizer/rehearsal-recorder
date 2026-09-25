@@ -278,7 +278,9 @@ type PyApi = {
   recording_formats(
     deviceIndex: number,
     channelCount: number
-  ): Promise<Ok<{ formats?: Record<string, number[]> }>>
+  ): Promise<
+    Ok<{ formats?: Record<string, number[]>; trouble?: string }>
+  >
   session_state(): Promise<SessionState>
   finish_rehearsal(): Promise<
     Ok<{ folder?: string; take_count?: number; folder_removed?: boolean }>
