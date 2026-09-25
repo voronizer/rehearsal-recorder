@@ -5,23 +5,8 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.6
 
-- Messages about something that just happened appear at the bottom right,
-  over the screen — above a screen's footer, never on Start, Stop or Save
-  take — and move nothing. "Folder saved" and
-  "Found “X18/XR18”" used to appear above the settings they were about, push
-  the whole panel down a line and, a few seconds later, let it jump back up.
-  A success goes by itself; a warning or a failure stays until it is closed.
-  History and the unsaved-takes screen say what failed the same way.
-  What is true rather than what happened — a track waiting for an input, an
-  interface that is not connected — stays where it is.
-- Changing the playback output while a take is open says so when the take
-  lands somewhere else. Python always said so; Settings read only whether the
-  change went through.
-- A crop that went through but could not move the original out of the way
-  says so as a warning. It was shown in red where failures go, on a take that
-  had in fact been cropped.
 - An interface switched on after the app started can be found without
   restarting. The list of interfaces was made once, at start, so a desk
   plugged in later was never offered — and at a rehearsal the desk is usually
@@ -36,6 +21,21 @@ opening.
   "“X18/XR18” is not connected" and offers **Look again**; once the desk
   turns up, the tracks take the inputs it remembers, with any names changed
   meanwhile kept.
+- Messages about something that just happened appear at the bottom right,
+  over the screen — above a screen's footer, never on Start, Stop or Save
+  take — and move nothing. "Folder saved" and "Found “X18/XR18”" used to
+  appear above the settings they were about, push the whole panel down a
+  line and, a few seconds later, let it jump back up. A success goes by
+  itself; a warning or a failure stays until it is closed. History and the
+  unsaved-takes screen say what failed the same way. What is true rather
+  than what happened — a track waiting for an input, an interface that is
+  not connected — stays where it is.
+- Changing the playback output while a take is open says so when the take
+  lands somewhere else. Python always said so; Settings read only whether the
+  change went through.
+- A crop that went through but could not move the original out of the way
+  says so as a warning. It was shown in red where failures go, on a take that
+  had in fact been cropped.
 - The free-space estimate counts a stereo track as the two channels it
   writes. 0.7.5 said it did, but only the Python side had learned to count
   channels: the setup screen and the recording screen both still asked it
