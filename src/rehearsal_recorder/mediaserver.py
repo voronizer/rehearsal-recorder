@@ -41,6 +41,7 @@ POLLABLE = (
     "monitor_health",
     "recording_health",
     "session_state",
+    "activity",
 )
 
 

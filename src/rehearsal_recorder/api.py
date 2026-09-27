@@ -60,6 +60,7 @@ from rehearsal_recorder.audio.devices import (
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
+from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder import cloud as cloudmod
 from rehearsal_recorder import layouts
 from rehearsal_recorder.mediaserver import AppServer
@@ -287,6 +288,9 @@ class Api:
         # the files can put back exactly the take that was playing.
         self._open_tracks = None
         self._player_lock = threading.RLock()
+        # Long work — cloud copies, crops, a take being saved or recovered —
+        # and how far along it is, for the header of every screen.
+        self._journal = activitymod.Journal()
         self._window = None
 
         self._config = self._read_config()
@@ -968,6 +972,28 @@ class Api:
             return []
         r = self._lib.rehearsal(self._session["folder"])
         return r["takes"] if r else []
+
+    # ---------- long work ----------
+
+    def activity(self):
+        """What long work is running and how it ended — polled over http by
+        the header of every screen. While a take records, the cloud copies
+        waiting behind it say so."""
+        recording = self._recorder is not None
+        entries = self._journal.snapshot()
+        if recording:
+            for e in entries:
+                if e["kind"] == "cloud" and e["state"] == "waiting":
+                    e["step"] = "After the take"
+        return {"entries": entries, "recording": recording}
+
+    def activity_seen(self):
+        self._journal.mark_seen()
+        return {"ok": True}
+
+    def clear_activity(self):
+        self._journal.clear()
+        return {"ok": True}
 
     def session_state(self):
         if self._session is None:

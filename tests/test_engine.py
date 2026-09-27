@@ -3970,6 +3970,81 @@ def main():
        first_press.get("reopened") is True and first_press["playing"] is True)
     a39.player_close()
 
+    print("\n[40] The journal of long work")
+    from rehearsal_recorder import activity as actmod
+
+    j = actmod.Journal()
+    e = j.begin("cloud", "“Polyn” → cloud", "/rec/One", 2, waiting=True)
+    snap = j.snapshot()
+    ok("a queued job is listed as waiting",
+       snap[0]["state"] == "waiting" and snap[0]["take_number"] == 2
+       and snap[0]["fraction"] == 0.0)
+    e.start("Mixing")
+    e.progress(0.25)
+    e.progress(0.1)  # never backwards
+    ok("a running job says how far along it is",
+       j.snapshot()[0]["state"] == "running"
+       and j.snapshot()[0]["fraction"] == 0.25
+       and j.snapshot()[0]["step"] == "Mixing")
+    e.done("MP3 of the mix")
+    got = j.snapshot()[0]
+    ok("a finished one says what it came to, unseen",
+       got["state"] == "done" and got["fraction"] == 1.0
+       and got["detail"] == "MP3 of the mix" and got["seen"] is False)
+    bad = j.begin("cloud", "“Take 3” → cloud", "/rec/One", 3)
+    bad.start()
+    bad.fail("The cloud folder is gone", retry="both")
+    ok("a failure keeps why and what to retry",
+       j.find(bad.id).snapshot()["error"] == "The cloud folder is gone"
+       and j.find(bad.id).snapshot()["retry"] == "both")
+    running = j.begin("crop", "Cropping “Polyn”", "/rec/One", 1)
+    running.start()
+    order = [x["id"] for x in j.snapshot()]
+    ok("what is running comes first, then the finished, newest first",
+       order == [running.id, bad.id, e.id])
+    j.mark_seen()
+    ok("looking marks the finished ones seen, not the running",
+       all(x["seen"] for x in j.snapshot() if x["state"] in ("done", "failed")))
+    gone = j.begin("cloud", "nothing to do", "/rec/One", 4, waiting=True)
+    gone.discard()
+    ok("a job with nothing to do leaves no trace",
+       all(x["id"] != gone.id for x in j.snapshot()))
+    for i in range(30):
+        f = j.begin("cloud", f"t{i}", "/rec/Two", i)
+        f.done()
+    ok("only the last twenty finished are kept",
+       sum(1 for x in j.snapshot() if x["state"] != "running") == 20
+       and j.snapshot()[1]["title"] == "t29")
+    j.clear()
+    ok("clearing drops the finished and keeps the running",
+       [x["id"] for x in j.snapshot()] == [running.id])
+
+    seen_parts = []
+    stages = actmod.Stages([("Mixing", 2), ("Encoding the mix", 1),
+                            ("Encoding the tracks", 0)],
+                           lambda f, s: seen_parts.append((round(f, 3), s)))
+    stages.part(0)(0.5)
+    stages.part(0)(1.0)
+    stages.part(1)(0.5)
+    stages.part(2)(1.0)
+    ok("stages add up by weight",
+       seen_parts == [(0.333, "Mixing"), (0.667, "Mixing"),
+                      (0.833, "Encoding the mix"), (1.0, "Encoding the tracks")])
+
+    _, a40 = fresh_api(Path(tempfile.mkdtemp()))
+    first = a40._journal.begin("crop", "Cropping", "/rec/X", 1)
+    first.start()
+    ok("the interface can ask for it",
+       a40.activity()["entries"][0]["kind"] == "crop"
+       and a40.activity()["recording"] is False)
+    first.done()
+    a40.activity_seen()
+    ok("and mark it seen", a40.activity()["entries"][0]["seen"] is True)
+    a40.clear_activity()
+    ok("and clear it", a40.activity()["entries"] == [])
+    from rehearsal_recorder import mediaserver
+    ok("it is polled over http", "activity" in mediaserver.POLLABLE)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
