@@ -28,6 +28,7 @@ import {
   takesLabel,
 } from "@/lib/format"
 import { canBePutBack, goPlural, goesTo } from "@/lib/deletion"
+import { useCloudSettled } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 
 /**
@@ -108,6 +109,12 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     const fresh = await api().get_rehearsal(folder)
     if (fresh.ok) setOpened(fresh)
   }
+
+  // A copy to the cloud started here runs in the background now; when one of
+  // this rehearsal's finishes, its take says so without anyone reopening it.
+  useCloudSettled((e) => {
+    if (opened && e.folder === opened.folder) void reopen(opened.folder)
+  })
 
   const back = () => {
     player.pause()

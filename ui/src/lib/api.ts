@@ -233,6 +233,30 @@ export type DiskEstimate = {
   low?: boolean
 }
 
+/** One piece of long work — see activity.py. */
+export type ActivityEntry = {
+  id: number
+  kind: "cloud" | "crop" | "stop" | "recover"
+  title: string
+  folder: string | null
+  take_number: number | null
+  state: "waiting" | "running" | "done" | "failed"
+  fraction: number
+  step: string | null
+  error: string | null
+  detail: string | null
+  /** What to copy again, on a failed cloud copy. */
+  retry: string | null
+  seen: boolean
+}
+
+export type Activity = {
+  /** Running and waiting first, then the last twenty finished, newest first. */
+  entries: ActivityEntry[]
+  /** A take is being recorded: cloud copies wait until it stops. */
+  recording: boolean
+}
+
 /** Whether the card is still sending while the signal is checked. */
 export type MonitorHealth = {
   checking: boolean
@@ -467,6 +491,10 @@ type PyApi = {
   ): Promise<Ok>
   monitor_levels(): Promise<Record<string, number>>
   monitor_health(): Promise<MonitorHealth>
+  activity(): Promise<Activity>
+  activity_seen(): Promise<Ok>
+  clear_activity(): Promise<Ok>
+  retry_cloud(entryId: number): Promise<Ok<{ queued?: boolean }>>
   stop_monitor(): Promise<Ok>
 
   player_open(tracks: TrackFile[]): Promise<PlayerState>
@@ -574,6 +602,7 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "get_levels",
   "monitor_levels",
   "monitor_health",
+  "activity",
   "recording_health",
   "list_rehearsals",
   "list_drafts",
@@ -631,6 +660,7 @@ type Pollable = {
   get_levels: Record<string, number[]>
   monitor_levels: Record<string, number[]>
   monitor_health: MonitorHealth
+  activity: Activity
   recording_health: RecordingHealth
   session_state: SessionState
 }
@@ -661,6 +691,9 @@ export async function poll<K extends keyof Pollable>(
         httpPolling = true
         return (await res.json()) as Pollable[K]
       }
+      // Let go of the answer's body: left unread, the request stays open as
+      // far as the browser is concerned — for as long as the page lives.
+      void res.body?.cancel()
       if (httpPolling === null) httpPolling = false
     } catch {
       if (httpPolling === null) httpPolling = false

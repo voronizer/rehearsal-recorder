@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react"
 import { ChevronLeft } from "lucide-react"
+import { ActivityButton } from "@/components/ActivityButton"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -80,6 +81,7 @@ export function Shell({
               </h1>
             )}
           </div>
+          <ActivityButton />
           {headerAction}
         </header>
       )}

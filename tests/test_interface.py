@@ -7,6 +7,7 @@ nothing throws. The audio itself is checked by verify_engine.py, where every
 sample is visible.
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -250,6 +251,21 @@ window.__MAKE_API__ = () => ({
   start_monitor: track('start_monitor', async () => ({ok:true})),
   monitor_levels: track('monitor_levels', async () => ({'Guitar':[0.62], 'Vocals':[0.004]})),
   monitor_health: async () => ({checking:true, problem: window.__CHECK_QUIET__ || null}),
+
+  // Long work, scripted by the test through window.__ACTIVITY__.
+  activity: async () => ({entries: JSON.parse(JSON.stringify(window.__ACTIVITY__ || [])),
+                          recording: false}),
+  activity_seen: track('activity_seen', async () => {
+    for (const e of (window.__ACTIVITY__ || []))
+      if (e.state === 'done' || e.state === 'failed') e.seen = true;
+    return {ok:true};
+  }),
+  clear_activity: track('clear_activity', async () => {
+    window.__ACTIVITY__ = (window.__ACTIVITY__ || [])
+      .filter(e => e.state === 'running' || e.state === 'waiting');
+    return {ok:true};
+  }),
+  retry_cloud: track('retry_cloud', async (id) => ({ok:true, queued:true})),
   stop_monitor: track('stop_monitor', async () => ({ok:true})),
 
   start_rehearsal: track('start_rehearsal', async (name, dev, rate, tr, depth) => {
@@ -2521,6 +2537,85 @@ def main():
         ok("play tries the card again, and the line goes once it plays",
            quiet.locator("text=Playback stopped").count() == 0)
         quiet.close()
+
+        print("\n[12o] Background work, from any screen")
+        bg = browser.new_page(viewport={"width": 1180, "height": 820})
+        bg.add_init_script("window.__ACTIVITY__ = [];" + MOCK)
+        bg.goto(server.base_url, wait_until="networkidle")
+        bg.wait_for_selector("text=Start rehearsal")
+
+        def bg_calls(name):
+            return bg.evaluate(
+                f"() => window.__CALLS__.filter(c => c.name === '{name}')")
+
+        def entry(**kw):
+            base = {"id": 1, "kind": "cloud", "title": "\u201cPolyn\u201d \u2192 cloud",
+                    "folder": "/rec/X", "take_number": 1, "state": "running",
+                    "fraction": 0.64, "step": "Encoding the mix", "error": None,
+                    "detail": None, "retry": None, "seen": False}
+            base.update(kw)
+            return base
+
+        def set_activity(entries):
+            bg.evaluate(f"() => {{ window.__ACTIVITY__ = {json.dumps(entries)}; }}")
+
+        button = "button[aria-label^='Background work']"
+        bg.wait_for_timeout(2500)
+        ok("with nothing running or finished there is no button",
+           bg.locator(button).count() == 0)
+
+        set_activity([entry()])
+        bg.wait_for_selector(button, timeout=4000)
+        ok("something running brings it, saying how many",
+           "1 running" in bg.locator(button).get_attribute("aria-label"))
+        bg.click(button)
+        bg.wait_for_selector("text=Encoding the mix", timeout=2000)
+        ok("its list says what is running and how far along",
+           bg.locator("text=64%").count() >= 1)
+        ok("opening the list marks what is in it seen",
+           len(bg_calls("activity_seen")) >= 1)
+        bg.screenshot(path=str(SHOTS / "62-activity.png"))
+
+        set_activity([entry(state="done", fraction=1.0, step=None,
+                            detail="MP3 of the mix")])
+        bg.wait_for_selector("[data-notice='done']:has-text('is in the cloud folder')",
+                             timeout=4000)
+        ok("a copy that finished says so in the corner", True)
+        ok("and moves to Done in the list",
+           bg.locator("text=MP3 of the mix").count() >= 1)
+
+        set_activity([entry(state="done", fraction=1.0, step=None,
+                            detail="MP3 of the mix"),
+                      entry(id=2, title="\u201cTake 3\u201d \u2192 cloud",
+                            take_number=3, state="running")])
+        bg.wait_for_timeout(1000)
+        set_activity([entry(state="done", fraction=1.0, step=None,
+                            detail="MP3 of the mix"),
+                      entry(id=2, title="\u201cTake 3\u201d \u2192 cloud",
+                            take_number=3, state="failed", fraction=0.2,
+                            step=None, error="The cloud folder is gone",
+                            retry="mix")])
+        bg.wait_for_selector("[data-notice='error']:has-text('Could not copy')",
+                             timeout=4000)
+        ok("a copy that failed says so in the corner, and stays",
+           "The cloud folder is gone" in bg.locator("[data-notice='error']").inner_text())
+        bg.screenshot(path=str(SHOTS / "63-activity-done.png"))
+        bg.wait_for_timeout(600)
+        ok("what finishes while the list is open counts as seen",
+           bg.evaluate("() => window.__ACTIVITY__.every(e => e.seen)"))
+        bg.get_by_role("button", name="Retry").click()
+        bg.wait_for_timeout(300)
+        ok("Retry asks Python for that copy again",
+           [c["args"] for c in bg_calls("retry_cloud")] == [[2]])
+
+        bg.get_by_role("button", name="Clear").click()
+        bg.wait_for_timeout(2600)
+        ok("clearing the finished ones leaves nothing, and no button",
+           len(bg_calls("clear_activity")) == 1 and bg.locator(button).count() == 0)
+        set_activity([entry(id=3, take_number=4)])
+        bg.wait_for_selector(button, timeout=4000)
+        ok("a later copy brings it back", bg.locator(button).count() == 1)
+        bg.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})
