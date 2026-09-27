@@ -918,7 +918,7 @@ def main():
 
     detail = a.get_rehearsal(str(new_folder))
     first = detail["takes"][0]
-    shared = a.share_take(str(new_folder), first["take_number"], "both")
+    shared = a._copy_to_cloud(str(new_folder), first["take_number"], "both")
     ok("shared", shared["ok"])
     mix = Path(shared["cloud"]["mix"])
     ok("the mix is in the cloud folder", mix.exists() and _is_inside(mix, cloud))
@@ -932,7 +932,7 @@ def main():
        a.get_rehearsal(str(new_folder))["takes"][0]["cloud"].get("mix") == str(mix))
 
     # Sharing again must replace, not pile up copies.
-    again = a.share_take(str(new_folder), first["take_number"], "mix")
+    again = a._copy_to_cloud(str(new_folder), first["take_number"], "mix")
     ok("re-sharing replaces", again["ok"] and not originals.exists())
     ok("one mix, not two", len(list(mix.parent.glob("*.wav"))) == 1)
 
@@ -956,7 +956,7 @@ def main():
        a.set_cloud_format("mp3-please")["cloud_format"] == "wav")
 
     a.set_cloud_format("flac")
-    packed = a.share_take(str(new_folder), first["take_number"], "both")
+    packed = a._copy_to_cloud(str(new_folder), first["take_number"], "both")
     ok("shared", packed["ok"])
     mix_path = Path(packed["cloud"]["mix"])
 
@@ -997,7 +997,7 @@ def main():
             "tracks": [{"name": "Gtr", "file": str(deep_take / "Gtr.wav")}],
             "markers": [],
         })
-        deep_shared = a.share_take(str(new_folder), 24, "tracks")
+        deep_shared = a._copy_to_cloud(str(new_folder), 24, "tracks")
         deep_files = list(Path(deep_shared["cloud"]["tracks"]).iterdir())
         ok("a 24-bit take compresses too",
            deep_files and deep_files[0].suffix == ".flac")
@@ -1023,7 +1023,7 @@ def main():
     a.set_cloud_format("wav")
     detail = a.get_rehearsal(str(new_folder))
     take = detail["takes"][0]
-    a.share_take(str(new_folder), take["take_number"], "mix")
+    a._copy_to_cloud(str(new_folder), take["take_number"], "mix")
     take = a.get_rehearsal(str(new_folder))["takes"][0]
     volumes = a.get_settings()["volumes"]
     where = a._cloud_target(new_folder)
@@ -1058,7 +1058,7 @@ def main():
     print("\n[11d] The publishing queue")
     done, recording = [], {"now": False}
     q = cloudmod.PublishQueue(
-        step=lambda folder, n: done.append((folder, n)),
+        step=lambda folder, n, what=None: done.append((folder, n)),
         paused=lambda: recording["now"],
     )
     q.enqueue("/rec/One", 1)
@@ -1085,7 +1085,7 @@ def main():
     # rebinding it here would quietly change what that one is paused by.
     reruns, recording2 = [], {"now": False}
     q2 = cloudmod.PublishQueue(
-        step=lambda folder, n: (
+        step=lambda folder, n, what=None: (
             reruns.append((folder, n)),
             q2.enqueue(folder, n) if len(reruns) == 1 else None
         ),
@@ -1311,18 +1311,18 @@ def main():
     # retryable failure — not a silently stalled take.
     solo2 = tmp / "Solo2"
     write_wav(solo2 / "two.wav", 1300)
-    real_share_take = a.share_take
+    real_copy = a._copy_to_cloud
 
     def boom(*args, **kwargs):
         raise OSError("sync folder went away")
 
-    a.share_take = boom
+    a._copy_to_cloud = boom
     try:
         a.keep_take(2, str(solo2), "Boom", 2.0,
                     [{"name": "A", "file": str(solo2 / "two.wav")}], [])
         a._cloud_queue.run_next()
     finally:
-        a.share_take = real_share_take
+        a._copy_to_cloud = real_copy
     broken = a.get_rehearsal(str(folder))["takes"][1]
     ok("an exception from the publish is recorded",
        "sync folder went away" in (broken.get("cloud_error") or ""))
@@ -1372,7 +1372,7 @@ def main():
 
     apimod.mixdown = rename_midway
     try:
-        a.share_take(str(folder9), 9, "mix")
+        a._copy_to_cloud(str(folder9), 9, "mix")
     finally:
         apimod.mixdown = real_mixdown
         # The later [11g]/[11h] sections assume auto-publish is on, same as
@@ -1404,7 +1404,7 @@ def main():
 
     apimod.mixdown = fade_midway
     try:
-        a.share_take(str(folder9), 9, "mix")
+        a._copy_to_cloud(str(folder9), 9, "mix")
     finally:
         apimod.mixdown = real_mixdown
 
@@ -1567,13 +1567,13 @@ def main():
     plain_mixdown = apimod.mixdown
     asked = []
 
-    def watch_mixdown(tracks, out_path, volumes=None):
+    def watch_mixdown(tracks, out_path, volumes=None, progress=None):
         asked.append(Path(out_path))
-        return plain_mixdown(tracks, out_path, volumes)
+        return plain_mixdown(tracks, out_path, volumes, progress=progress)
 
     apimod.mixdown = watch_mixdown
     try:
-        res = a.share_take(str(folder), 1, "both")
+        res = a._copy_to_cloud(str(folder), 1, "both")
     finally:
         apimod.mixdown = plain_mixdown
 
@@ -1589,7 +1589,7 @@ def main():
     ok("with nothing half-written left behind",
        not list(target.rglob(apimod.WRITING_PREFIX + "*")))
 
-    def die_midway(tracks, out_path, volumes=None):
+    def die_midway(tracks, out_path, volumes=None, progress=None):
         # What being killed mid-mixdown leaves on disk: a real file, opened
         # and part written.
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
@@ -1598,7 +1598,7 @@ def main():
 
     apimod.mixdown = die_midway
     try:
-        a.share_take(str(folder), 1, "mix")
+        a._copy_to_cloud(str(folder), 1, "mix")
     except OSError:
         pass
     finally:
@@ -1625,7 +1625,8 @@ def main():
 
     # The worker is a daemon thread: unless it is told, it is killed at
     # interpreter exit wherever it happens to be.
-    idle = cloudmod.PublishQueue(step=lambda f, n: None, paused=lambda: False)
+    idle = cloudmod.PublishQueue(step=lambda f, n, what=None: None,
+                                 paused=lambda: False)
     idle.start()
     real_queue, a._cloud_queue = a._cloud_queue, idle
     try:
@@ -1901,7 +1902,7 @@ def main():
     # never the length. A cropped take would go on matching it, and the
     # uncropped copy would stay in the cloud folder as the copy of record.
     c.set_cloud_dir(str(tmp7 / "Cloud"))
-    c.share_take(folder, 1, "mix")
+    c._copy_to_cloud(folder, 1, "mix")
     ok("a shared take knows where its copy is",
        bool((c.session_state()["takes"][0].get("cloud") or {}).get("mix")))
     c.crop_take(folder, 1, 0.25, 1.75)
@@ -2097,7 +2098,7 @@ def main():
     h.add_take_marker(str(hf), 1, 0.5, "the riff", "good")
     h.crop_take(str(hf), 1, 0.0, 1.5)
     h.set_cloud_dir(str(tmp10 / "Cloud"))
-    h.share_take(str(hf), 1, "mix")
+    h._copy_to_cloud(str(hf), 1, "mix")
     stored = h._lib.take(hf, 1)
     ok("renames, markers, a crop and a copy all reach the database",
        stored["name"] == "Polyn best"
@@ -4150,6 +4151,120 @@ def main():
     ok("a crop that is refused before it starts leaves no entry",
        not bad["ok"] and sum(1 for e in a42.activity()["entries"]
                              if e["kind"] == "crop") == 1)
+
+    print("\n[43] Cloud copies run in the background")
+    root43 = Path(tempfile.mkdtemp())
+    _, a43 = fresh_api(root43)
+    a43.set_cloud_dir(str(root43 / "Cloud"))
+    a43.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+    a43.start_take()
+    a43._recorder._callback(np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
+    s43 = a43.stop_take()
+    a43.keep_take(s43["take_number"], s43["temp_dir"], "Polyn",
+                  s43["duration_sec"], s43["tracks"])
+    folder43 = a43._session["folder"]
+    n43 = s43["take_number"]
+    while a43._cloud_queue.run_next():
+        pass
+    a43.clear_activity()
+
+    queued = a43.share_take(str(folder43), n43, "both")
+    ok("sharing by hand answers at once, queued",
+       queued["ok"] and queued.get("queued") is True
+       and a43._cloud_queue.states(str(folder43)) == {n43: "queued"})
+    entry43 = a43.activity()["entries"][0]
+    ok("and is in the journal, waiting",
+       entry43["kind"] == "cloud" and entry43["state"] == "waiting"
+       and "Polyn" in entry43["title"])
+    fractions = []
+    real_step = a43._copy_to_cloud
+
+    def watching(*args, **kwargs):
+        inner = kwargs.get("progress")
+        kwargs["progress"] = lambda f, s=None: (fractions.append(f), inner(f, s))
+        return real_step(*args, **kwargs)
+
+    a43._copy_to_cloud = watching
+    a43._cloud_queue.run_next()
+    a43._copy_to_cloud = real_step
+    finished = a43.activity()["entries"][0]
+    ok("it runs, rising to the end",
+       fractions and fractions[-1] == 1.0 and fractions == sorted(fractions))
+    ok("and says what it came to",
+       finished["state"] == "done" and finished["detail"])
+    ok("the take has its copies", a43._lib.take(folder43, n43)["cloud"].get("mix"))
+
+    # Queued automatically, then by hand, before either ran: one job, doing
+    # what the hand asked for.
+    a43._cloud_queue.enqueue(str(folder43), n43)
+    a43.share_take(str(folder43), n43, "tracks")
+    ok("a manual request replaces a waiting automatic one",
+       a43._cloud_queue._jobs == [[str(folder43), n43, "tracks"]]
+       and sum(1 for e in a43.activity()["entries"]
+               if e["state"] == "waiting") == 1)
+    while a43._cloud_queue.run_next():
+        pass
+
+    # A failure: the cloud folder cannot be written. Journal and take both
+    # say so; retry queues it again as a manual job.
+    a43.clear_activity()
+    real_copy = a43._copy_to_cloud
+    a43._copy_to_cloud = lambda *a, **k: {"ok": False, "error": "The cloud folder is gone"}
+    a43.share_take(str(folder43), n43, "mix")
+    a43._cloud_queue.run_next()
+    failed = a43.activity()["entries"][0]
+    ok("a copy that fails is in the journal with why, and can be retried",
+       failed["state"] == "failed" and failed["error"] == "The cloud folder is gone"
+       and failed["retry"] == "mix")
+    ok("and the take says so too",
+       a43._lib.take(folder43, n43).get("cloud_error") == "The cloud folder is gone")
+    a43._copy_to_cloud = real_copy
+    again = a43.retry_cloud(failed["id"])
+    ok("retry queues it again", again["ok"] and
+       a43._cloud_queue._jobs == [[str(folder43), n43, "mix"]])
+    a43._cloud_queue.run_next()
+    ok("and a retry that works clears the failure",
+       a43.activity()["entries"][0]["state"] == "done"
+       and not a43._lib.take(folder43, n43).get("cloud_error"))
+    ok("retrying something that is not a failed copy is refused",
+       a43.retry_cloud(10_000)["ok"] is False)
+
+    # An automatic job with nothing to do leaves no trace.
+    a43.clear_activity()
+    a43.set_auto_publish(True, "mix")
+    a43._enqueue_publish(folder43, n43)
+    a43._cloud_queue.run_next()
+    ok("an automatic copy that was already current leaves no entry",
+       a43.activity()["entries"] == [])
+
+    # A take deleted while its copy waits: failed, not a dead worker.
+    a43.share_take(str(folder43), n43, "mix")
+    real_take = a43._lib.take
+    a43._lib.take = lambda *a, **k: None
+    a43._cloud_queue.run_next()
+    a43._lib.take = real_take
+    ok("a take gone while it waited fails with its own reason",
+       a43.activity()["entries"][0]["state"] == "failed"
+       and "not found" in a43.activity()["entries"][0]["error"].lower())
+
+    # Re-queued while running: the rerun waits and the running one finishes.
+    rerun_seen = []
+
+    def requeue_mid_copy(*args, **kwargs):
+        a43.share_take(str(folder43), n43, "mix")
+        rerun_seen.append([e["state"] for e in a43.activity()["entries"]])
+        return real_copy(*args, **kwargs)
+
+    a43.clear_activity()
+    a43._copy_to_cloud = requeue_mid_copy
+    a43.share_take(str(folder43), n43, "mix")
+    a43._cloud_queue.run_next()
+    a43._copy_to_cloud = real_copy
+    ok("a take re-queued mid-copy waits while the first copy finishes",
+       rerun_seen and rerun_seen[0] == ["running", "waiting"]
+       and [e["state"] for e in a43.activity()["entries"]] == ["waiting", "done"])
+    while a43._cloud_queue.run_next():
+        pass
 
     print("\n" + "=" * 60)
     if problems:

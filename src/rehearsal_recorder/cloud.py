@@ -89,31 +89,48 @@ class PublishQueue:
     def __init__(self, step, paused):
         self._step = step
         self._paused = paused
+        # [folder, take_number, what]: what is None for an automatic job,
+        # "mix"/"tracks"/"both" for one asked for by hand.
         self._jobs = []
         self._active = None
         self._rerun_active = False
+        self._rerun_what = None
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._thread = None
         self._stopping = False
 
-    def enqueue(self, folder, take_number):
-        job = (str(folder), int(take_number))
+    def enqueue(self, folder, take_number, what=None):
+        """
+        One take, once however often it is asked for. `what` is None for an
+        automatic job, or what to copy for one asked for by hand — which
+        replaces what a waiting automatic job would have done, being the
+        more specific of the two.
+        """
+        folder, take_number = str(folder), int(take_number)
         with self._lock:
-            if job not in self._jobs:
-                if job == self._active:
-                    # A request to re-publish the job currently in flight: arm it
-                    # to run again after this one finishes.
+            for job in self._jobs:
+                if job[0] == folder and job[1] == take_number:
+                    if what is not None:
+                        job[2] = what
+                    break
+            else:
+                if (self._active is not None
+                        and self._active[:2] == [folder, take_number]):
+                    # A request to re-publish the job currently in flight: arm
+                    # it to run again after this one finishes.
                     self._rerun_active = True
+                    if what is not None:
+                        self._rerun_what = what
                 else:
-                    self._jobs.append(job)
+                    self._jobs.append([folder, take_number, what])
         self._wake.set()
 
     def states(self, folder):
         """What this rehearsal's takes are doing, by take number."""
         folder = str(folder)
         with self._lock:
-            out = {n: "queued" for f, n in self._jobs if f == folder}
+            out = {n: "queued" for f, n, _ in self._jobs if f == folder}
             if self._active is not None and self._active[0] == folder:
                 out[self._active[1]] = "working"
         return out
@@ -131,8 +148,12 @@ class PublishQueue:
         finally:
             with self._lock:
                 if self._rerun_active:
-                    self._jobs.append(self._active)
+                    folder, take_number, what = self._active
+                    if self._rerun_what is not None:
+                        what = self._rerun_what
+                    self._jobs.append([folder, take_number, what])
                     self._rerun_active = False
+                    self._rerun_what = None
                 self._active = None
         return True
 

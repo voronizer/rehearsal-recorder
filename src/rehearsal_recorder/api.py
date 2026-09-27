@@ -260,6 +260,16 @@ def _folder_within(inner, outer):
     return any(_same_folder(p, outer) for p in inner.parents)
 
 
+def _copy_detail(what, res):
+    """What a finished cloud copy came to, in words: "MP3 of the mix"."""
+    shared = res.get("cloud") or {}
+    fmt = (shared.get("mix_format") or shared.get("tracks_format") or "wav").upper()
+    which = {"mix": "the mix", "tracks": "every track",
+             "both": "the mix and every track"}.get(what, what)
+    note = f" — {res['note']}" if res.get("note") else ""
+    return f"{fmt} of {which}{note}"
+
+
 def _channels_of(tracks):
     """How many channels these tracks write: a stereo track is two."""
     return sum(2 if t.get("stereo") else 1 for t in tracks)
@@ -298,6 +308,10 @@ class Api:
         # Long work — cloud copies, crops, a take being saved or recovered —
         # and how far along it is, for the header of every screen.
         self._journal = activitymod.Journal()
+        # The journal entry of each take waiting to be copied, by (folder,
+        # take number): one however many times it is asked for.
+        self._cloud_entries = {}
+        self._cloud_lock = threading.Lock()
         self._window = None
 
         self._config = self._read_config()
@@ -2328,7 +2342,20 @@ class Api:
             return
         if not self._config.get("auto_publish") and not take.get("cloud_send"):
             return
-        self._cloud_queue.enqueue(str(folder), take_number)
+        self._queue_copy(folder, take_number, None, take)
+
+    def _queue_copy(self, folder, take_number, what, take=None):
+        """The queue and the journal together: one waiting entry per take,
+        however many times it is asked for. `what` None is automatic."""
+        key = (str(folder), int(take_number))
+        with self._cloud_lock:
+            if key not in self._cloud_entries:
+                take = take or self._take_in(folder, take_number) or {}
+                name = take.get("name") or f"Take {take_number}"
+                self._cloud_entries[key] = self._journal.begin(
+                    "cloud", f"“{name}” → cloud", str(folder), int(take_number),
+                    waiting=True)
+        self._cloud_queue.enqueue(str(folder), take_number, what)
 
     def _take_in(self, folder, take_number):
         """A take's record, or None."""
@@ -2362,38 +2389,53 @@ class Api:
             if t.get("cloud_error"):
                 self._enqueue_publish(self._session["folder"], t["take_number"], take=t)
 
-    def _publish_step(self, folder, take_number):
+    def _publish_step(self, folder, take_number, what=None):
         """
-        One take, on the publishing thread. Skips a take that is already in
-        the cloud folder in the shape the settings ask for, so a burst of
-        requests costs one mixdown, not several.
+        One take, on the publishing thread. `what` None is an automatic job:
+        it skips a take that is already in the cloud folder in the shape the
+        settings ask for, so a burst of requests costs one mixdown, not
+        several, and leaves nothing in the journal for it. A job asked for by
+        hand copies what it was asked for.
         """
-        what = self._config.get("auto_publish_what") or "mix"
+        key = (str(folder), int(take_number))
+        with self._cloud_lock:
+            entry = self._cloud_entries.pop(key, None)
         take = self._lib.take(folder, take_number)
-        if take is None:
-            return
-        # Asked again here, not only when queued: the setting or the take's
-        # own answer can have changed while it waited.
-        if take.get("cloud_skip"):
-            return
-        if not self._config.get("auto_publish") and not take.get("cloud_send"):
-            return
-        fmt = normalize_format(self._config.get("cloud_format"))
-        target = self._cloud_target(folder)
-        if cloudmod.is_current(take, what, self._config.get("volumes", {}), fmt, target):
-            return
+        if entry is None:
+            name = (take or {}).get("name") or f"Take {take_number}"
+            entry = self._journal.begin(
+                "cloud", f"“{name}” → cloud", str(folder), int(take_number))
+        if what is None:
+            # Asked again here, not only when queued: the setting or the
+            # take's own answer can have changed while it waited.
+            if take is None or take.get("cloud_skip") or (
+                not self._config.get("auto_publish") and not take.get("cloud_send")
+            ):
+                entry.discard()
+                return
+            what = self._config.get("auto_publish_what") or "mix"
+            fmt = normalize_format(self._config.get("cloud_format"))
+            target = self._cloud_target(folder)
+            if cloudmod.is_current(take, what, self._config.get("volumes", {}),
+                                   fmt, target):
+                entry.discard()
+                return
+        entry.start("Starting")
         try:
-            res = self.share_take(str(folder), take_number, what)
+            res = self._copy_to_cloud(str(folder), take_number, what,
+                                      progress=entry.progress)
         except Exception as e:
             # A sync folder that vanishes mid-write raises instead of
             # returning {"ok": False} — that must still land as a recorded,
             # retryable failure, not a silently stalled take.
-            self._record_cloud_error(folder, take_number, str(e))
+            res = {"ok": False, "error": str(e)}
+        if res.get("ok"):
+            entry.done(_copy_detail(what, res))
             return
-        if not res.get("ok"):
-            self._record_cloud_error(
-                folder, take_number, res.get("error") or "Could not copy the take"
-            )
+        error = res.get("error") or "Could not copy the take"
+        if take is not None:
+            self._record_cloud_error(folder, take_number, error)
+        entry.fail(error, retry=what)
 
     def _record_cloud_error(self, folder, take_number, message):
         """Why a take is not in the cloud folder, kept with the take."""
@@ -2401,8 +2443,43 @@ class Api:
 
     def share_take(self, folder, take_number, what="mix"):
         """
+        Puts one take on the queue to be copied into the cloud folder, and
+        answers at once. what: "mix" (one stereo file), "tracks" (the
+        originals) or "both". The copying is _copy_to_cloud, on the
+        publishing thread, and reported in the journal — see activity.py.
+        What can be refused now is refused now.
+        """
+        if what not in ("mix", "tracks", "both"):
+            return {"ok": False, "error": "Unknown share type"}
+        if self._cloud_dir is None:
+            return {"ok": False, "error": "No cloud folder chosen", "needs_dir": True}
+        folder = Path(folder)
+        if not self._inside_recordings(folder):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+        take = self._lib.take(folder, take_number)
+        if take is None:
+            if not self._lib.has(folder):
+                return {"ok": False, "error": "Rehearsal not found"}
+            return {"ok": False, "error": "Take not found"}
+        if not any(Path(t.get("file", "")).exists() for t in take["tracks"]):
+            return {"ok": False, "error": "The take has no files left on disk"}
+        self._queue_copy(folder, take_number, what, take)
+        return {"ok": True, "queued": True, "take": take}
+
+    def retry_cloud(self, entry_id):
+        """A failed copy, queued again as the one it was."""
+        entry = self._journal.find(int(entry_id))
+        data = entry.snapshot() if entry else None
+        if not data or data["kind"] != "cloud" or data["state"] != "failed":
+            return {"ok": False, "error": "Nothing to retry"}
+        return self.share_take(data["folder"], data["take_number"],
+                               data["retry"] or "mix")
+
+    def _copy_to_cloud(self, folder, take_number, what="mix", progress=None):
+        """
         Copies one take into the cloud folder. what: "mix" (one stereo file),
-        "tracks" (the originals) or "both".
+        "tracks" (the originals) or "both". `progress(fraction, step)`, when
+        given, hears how far along it is, weighed in frames of audio.
 
         Anything shared earlier for this take is replaced, so re-sharing after
         a rename or a new balance leaves one copy, not three.
@@ -2448,15 +2525,30 @@ class Api:
         volumes = dict(self._config.get("volumes", {}))
         notes = []
 
+        # How far along it is, in frames of audio: the mixdown reads the
+        # longest track twice, its encode once more; each track's copy is its
+        # own length. A WAV "encode" is a rename and weighs nothing.
+        lengths = [wav_frames(t["file"]) for t in tracks]
+        longest = max(lengths, default=0)
+        parts = []
+        if what in ("mix", "both"):
+            parts += [("Mixing", 2 * longest),
+                      ("Encoding the mix", 0 if fmt == "wav" else longest)]
+        first_track = len(parts)
+        if what in ("tracks", "both"):
+            parts += [(f"Track {i + 1} of {len(tracks)}", n)
+                      for i, n in enumerate(lengths)]
+        stages = activitymod.Stages(parts, progress or (lambda fraction, step: None))
+
         # Every copy is written beside its real name and moved onto it when it
         # is whole, the same way config.json is — see WRITING_PREFIX.
         if what in ("mix", "both"):
             writing = _writing_path(target / f"{base}.wav")
-            res = mixdown(tracks, writing, volumes)
+            res = mixdown(tracks, writing, volumes, progress=stages.part(0))
             if not res["ok"]:
                 writing.unlink(missing_ok=True)
                 return res
-            packed = encode(res["file"], fmt)
+            packed = encode(res["file"], fmt, progress=stages.part(1))
             if packed.get("note"):
                 notes.append(packed["note"])
             mix = target / f"{base}{extension(packed['format'])}"
@@ -2470,11 +2562,12 @@ class Api:
             writing = None
             try:
                 dest.mkdir(parents=True, exist_ok=True)
-                for t in tracks:
+                for k, t in enumerate(tracks):
                     source = Path(t["file"])
                     writing = _writing_path(dest / source.name)
                     shutil.copy2(source, writing)
-                    packed = encode(writing, fmt)
+                    packed = encode(writing, fmt,
+                                    progress=stages.part(first_track + k))
                     writing = Path(packed["file"])
                     os.replace(
                         writing,
