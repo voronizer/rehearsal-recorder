@@ -31,7 +31,14 @@ import sounddevice as sd
 
 from rehearsal_recorder import __version__
 from rehearsal_recorder.audio.capture import AudioRecorder
-from rehearsal_recorder.audio.drafts import DRAFTS_DIR, describe, draft_dirs, finalize, has_audio
+from rehearsal_recorder.audio.drafts import (
+    DRAFTS_DIR,
+    describe,
+    draft_dirs,
+    finalize,
+    has_audio,
+    wav_frames,
+)
 from rehearsal_recorder.audio.encode import (
     CLOUD_FORMATS_INFO,
     available as encoder_available,
@@ -987,6 +994,26 @@ class Api:
                     e["step"] = "After the take"
         return {"entries": entries, "recording": recording}
 
+    def _journaled(self, kind, title, folder, take_number, work):
+        """
+        work(progress) as a journal entry, for the operations that run where
+        they were started: done when it answers, failed with its own error
+        when it answers {"ok": False}, and failed on the way out if it
+        raises. Opened only once the operation's own checks have passed, so
+        a request refused at the door leaves nothing behind.
+        """
+        entry = self._journal.begin(kind, title, folder, take_number)
+        try:
+            result = work(entry.progress)
+        except Exception as e:
+            entry.fail(str(e))
+            raise
+        if isinstance(result, dict) and result.get("ok") is False:
+            entry.fail(result.get("error") or "It did not work")
+        else:
+            entry.done()
+        return result
+
     def activity_seen(self):
         self._journal.mark_seen()
         return {"ok": True}
@@ -1183,7 +1210,11 @@ class Api:
         self._recorder_take_number = None
         self._recorder_temp_dir = None
 
-        result = recorder.stop()
+        name = self.suggest_take_name(take_number)
+        result = self._journaled(
+            "stop", f"Saving “{name}”", temp_dir, take_number,
+            lambda progress: recorder.stop(progress=progress),
+        )
         return {
             "ok": True,
             "take_number": take_number,
@@ -1372,9 +1403,17 @@ class Api:
         if r is None:
             return {"ok": False, "error": "Rehearsal not found"}
 
-        result = finalize(draft_dir, r["samplerate"], r["bit_depth"])
-        if not result["tracks"]:
-            return {"ok": False, "error": "Draft has no audio"}
+        def work(progress):
+            done = finalize(draft_dir, r["samplerate"], r["bit_depth"],
+                            progress=progress)
+            if not done["tracks"]:
+                return {"ok": False, "error": "Draft has no audio"}
+            return done
+
+        result = self._journaled(
+            "recover", f"Recovering “{draft_dir.name}”", draft_dir, None, work)
+        if result.get("ok") is False:
+            return result
 
         take_number = max((t["take_number"] for t in r["takes"]), default=0) + 1
         display_name = (name or "").strip() or f"Recovered take {take_number}"
@@ -1660,7 +1699,7 @@ class Api:
                     f"A take has to keep at least {MIN_CROP_SEC:g} second"}
         return {"start": start, "end": end}
 
-    def _crop_tracks(self, tracks, start_sec, end_sec):
+    def _crop_tracks(self, tracks, start_sec, end_sec, progress=None):
         """
         Rewrites every track shorter and puts the originals in the Trash as
         one folder named after the take — what turns up there is then a
@@ -1685,10 +1724,17 @@ class Api:
         # for a draft, and a legacy take with no stored duration is not clamped
         # at all.
         kept_sec = 0.0
-        for t in tracks:
+        # How far along it is, the tracks weighed by their length.
+        stages = activitymod.Stages(
+            [(f"Track {i + 1} of {len(tracks)}", wav_frames(t["file"]))
+             for i, t in enumerate(tracks)],
+            progress or (lambda fraction, step: None),
+        )
+        for i, t in enumerate(tracks):
             source = Path(t["file"])
             target = _writing_path(source)
-            res = crop_wav(source, target, start_sec, end_sec)
+            res = crop_wav(source, target, start_sec, end_sec,
+                           progress=stages.part(i))
             if not res["ok"]:
                 target.unlink(missing_ok=True)
                 for w in written:
@@ -1781,7 +1827,12 @@ class Api:
         playing = self._open_tracks
         self.player_close()
 
-        done = self._crop_tracks(tracks, span["start"], span["end"])
+        done = self._journaled(
+            "crop", f"Cropping “{take.get('name') or f'Take {take_number}'}”",
+            folder, take_number,
+            lambda progress: self._crop_tracks(
+                tracks, span["start"], span["end"], progress=progress),
+        )
         if not done["ok"]:
             # Nothing else will put the player back: the take's tracks are
             # what the interface reopens on, and a failed crop leaves them
@@ -1857,7 +1908,11 @@ class Api:
 
         playing = self._open_tracks
         self.player_close()
-        done = self._crop_tracks(live, span["start"], span["end"])
+        done = self._journaled(
+            "crop", "Cropping the take", temp_dir, None,
+            lambda progress: self._crop_tracks(
+                live, span["start"], span["end"], progress=progress),
+        )
         if not done["ok"]:
             # See crop_take: the files the interface would reopen on have not
             # changed, so nothing over there will reopen them.

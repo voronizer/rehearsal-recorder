@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
+from rehearsal_recorder.activity import Stages
 from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
@@ -332,7 +333,10 @@ class AudioRecorder:
             f.flush()
             os.fsync(f.fileno())
 
-    def stop(self):
+    def stop(self, progress=None):
+        # `progress(fraction, step)`, when given, hears how far along turning
+        # the raw files into .wav is — the tracks weighed by their size.
+        #
         # Stopping can be asked for twice — the interface vanishes and the
         # health check stops the take at the same moment somebody presses
         # Stop. The second call must not fsync closed files or try to rebuild
@@ -344,12 +348,21 @@ class AudioRecorder:
 
         duration = self._frames_written / self.samplerate
 
+        raws = [self.out_dir / f"{self.safe_name(t['name'])}{RAW_SUFFIX}"
+                for t in self.tracks]
+        stages = Stages(
+            [(f"Track {i + 1} of {len(raws)}",
+              p.stat().st_size if p.exists() else 0)
+             for i, p in enumerate(raws)],
+            progress or (lambda fraction, step: None),
+        )
         finalized = []
-        for track in self.tracks:
-            raw_path = self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}"
+        for i, track in enumerate(self.tracks):
+            raw_path = raws[i]
             wav_path = self.out_dir / f"{self.safe_name(track['name'])}.wav"
             raw_to_wav(raw_path, wav_path, self.samplerate, self.bit_depth,
-                       channels=self._width[track["name"]])
+                       channels=self._width[track["name"]],
+                       progress=stages.part(i))
             raw_path.unlink(missing_ok=True)
             finalized.append({
                 "name": track["name"],

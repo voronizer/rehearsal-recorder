@@ -4095,6 +4095,62 @@ def main():
     cw(loops / "A.wav", loops / "A-cut.wav", 0.5, 2.5, progress=steps.append)
     ok("and a crop", steps and steps[-1] == 1.0 and steps == sorted(steps))
 
+    print("\n[42] Crop, stop and recover say how far along they are")
+    _, a42 = fresh_api(Path(tempfile.mkdtemp()))
+    seen42 = []
+    real_begin = a42._journal.begin
+
+    def spying_begin(kind, title, *args, **kwargs):
+        entry = real_begin(kind, title, *args, **kwargs)
+        real_progress = entry.progress
+
+        def spy(fraction, step=None):
+            seen42.append((kind, fraction))
+            real_progress(fraction, step)
+
+        entry.progress = spy
+        return entry
+
+    a42._journal.begin = spying_begin
+    a42.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1},
+                                          {"name": "Bass", "channel": 2}], 16)
+    a42.start_take()
+    # Three seconds: a crop has to leave at least one.
+    a42._recorder._callback(np.full((3 * SR, 2), 900, dtype=np.int16), 3 * SR,
+                            None, None)
+    stopped = a42.stop_take()
+    kinds = {e["kind"]: e for e in a42.activity()["entries"]}
+    ok("stopping a take is in the journal, finished",
+       kinds.get("stop", {}).get("state") == "done"
+       and "Saving" in kinds["stop"]["title"])
+    ok("and said how far along it was",
+       [f for k, f in seen42 if k == "stop"][-1:] == [1.0])
+
+    seen42.clear()
+    cut = a42.crop_draft(stopped["temp_dir"], stopped["tracks"], 0.5, 2.0)
+    ok("cropping a take under review is in the journal",
+       cut["ok"] and any(e["kind"] == "crop" and e["state"] == "done"
+                         for e in a42.activity()["entries"])
+       and [f for k, f in seen42 if k == "crop"][-1:] == [1.0])
+
+    # A draft left behind by a crash, recovered.
+    folder42 = Path(a42._session["folder"])
+    draft = folder42 / "_drafts" / "take 9"
+    draft.mkdir(parents=True)
+    (draft / "Gtr.raw").write_bytes(struct.pack("<h", 700) * 4800)
+    seen42.clear()
+    a42.recover_draft(str(draft))
+    ok("recovering a draft is in the journal",
+       any(e["kind"] == "recover" and e["state"] == "done"
+           for e in a42.activity()["entries"])
+       and [f for k, f in seen42 if k == "recover"][-1:] == [1.0])
+
+    # A crop that fails is in the journal as failed, with the reason.
+    bad = a42.crop_take(str(folder42), 99, 0.0, 1.0)
+    ok("a crop that is refused before it starts leaves no entry",
+       not bad["ok"] and sum(1 for e in a42.activity()["entries"]
+                             if e["kind"] == "crop") == 1)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
