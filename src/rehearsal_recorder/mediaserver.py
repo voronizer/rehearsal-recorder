@@ -38,6 +38,7 @@ POLLABLE = (
     "player_state",
     "get_levels",
     "monitor_levels",
+    "monitor_health",
     "recording_health",
     "session_state",
 )

@@ -207,6 +207,12 @@ export type PlayerState = {
   levels?: Record<string, number[]>
   /** The chosen output could not be used and the system one was taken. */
   warning?: string
+  /** Why playback stopped by itself: the output went quiet under it. Stays
+   *  until an output is opened again, which the next play does. */
+  problem?: string | null
+  /** This play had to open the output again first; `warning` says where it
+   *  went if not to the chosen card. */
+  reopened?: boolean
 }
 
 export type DeleteResult = {
@@ -225,6 +231,12 @@ export type DiskEstimate = {
   bytes_per_sec?: number
   minutes?: number
   low?: boolean
+}
+
+/** Whether the card is still sending while the signal is checked. */
+export type MonitorHealth = {
+  checking: boolean
+  problem: string | null
 }
 
 export type RecordingHealth = {
@@ -454,6 +466,7 @@ type PyApi = {
     tracks: Track[]
   ): Promise<Ok>
   monitor_levels(): Promise<Record<string, number>>
+  monitor_health(): Promise<MonitorHealth>
   stop_monitor(): Promise<Ok>
 
   player_open(tracks: TrackFile[]): Promise<PlayerState>
@@ -560,6 +573,7 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "session_state",
   "get_levels",
   "monitor_levels",
+  "monitor_health",
   "recording_health",
   "list_rehearsals",
   "list_drafts",
@@ -616,6 +630,7 @@ type Pollable = {
   /** One figure per channel of each track: a stereo track has two. */
   get_levels: Record<string, number[]>
   monitor_levels: Record<string, number[]>
+  monitor_health: MonitorHealth
   recording_health: RecordingHealth
   session_state: SessionState
 }

@@ -72,11 +72,14 @@ again**, which waits however long stopping and starting PortAudio takes —
 given up on half-way, PortAudio would be left half torn down with the device
 list read from under it.
 
-An unplugged ASIO card has to be noticed by the take itself. The driver sends
+An unplugged ASIO card has to be noticed by the app itself. The driver sends
 a reset request, PortAudio ignores it, and the stream is never called again
 while still reporting itself active, so `finished_callback` never fires. The
-recorder notes when each block arrives, and three seconds without one is a
-stopped take (`STALL_SEC` in `audio/capture.py`).
+callback of every stream notes each call (`audio/heartbeat.py`), and three
+seconds without one, outside a call, is a card that has gone: the take stops
+and is kept, the signal check stops and says so, and the player pauses and
+tries the card again on the next play. A call that takes long — a block a
+slow disk is slow to take — is the app being busy, not the card gone.
 
 Turning ASIO on moved every later device index, so a choice is saved as the
 device's name and audio system beside its index and found again by those. An

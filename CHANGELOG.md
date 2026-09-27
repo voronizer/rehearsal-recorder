@@ -22,6 +22,10 @@ opening.
   Three seconds with no sound from the card now stops the take, saves what
   was captured, and says why in a notice that stays on the review screen —
   which is where the reason used to vanish even when the card did say so.
+- The signal check and playback notice a card that goes quiet too. The
+  check stops and says so beside it; playback pauses and says so, and the
+  next play tries the card again before falling back to the system output.
+  Both used to sit there with the bars at rest or the cursor frozen.
 - A driver that stops answering no longer freezes the app. Stopping a take
   gives up on it after fifteen seconds and finishes the take all the same;
   until the driver answers again, checking the signal, recording, playing

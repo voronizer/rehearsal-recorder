@@ -249,6 +249,7 @@ window.__MAKE_API__ = () => ({
 
   start_monitor: track('start_monitor', async () => ({ok:true})),
   monitor_levels: track('monitor_levels', async () => ({'Guitar':[0.62], 'Vocals':[0.004]})),
+  monitor_health: async () => ({checking:true, problem: window.__CHECK_QUIET__ || null}),
   stop_monitor: track('stop_monitor', async () => ({ok:true})),
 
   start_rehearsal: track('start_rehearsal', async (name, dev, rate, tr, depth) => {
@@ -332,12 +333,23 @@ window.__MAKE_API__ = () => ({
     return out;
   }),
   player_close: track('player_close', async () => { P = null; return {ok:true}; }),
-  player_state: async () => playerState(),
+  // An output gone quiet pauses the take and says so, the way Python does;
+  // the next play opens it again.
+  player_state: async () => {
+    if (P && P.playing && window.__OUTPUT_QUIET__) {
+      moveTo(position()); P.playing = false; P.problem = window.__OUTPUT_QUIET__;
+    }
+    return {...playerState(), ...(P && P.problem ? {problem:P.problem} : {})};
+  },
   player_toggle: track('player_toggle', async () => {
     if (!P) return {ok:false};
+    let reopened = false;
     if (P.playing) { moveTo(position()); P.playing = false; }
-    else { if (P.position >= P.duration) moveTo(0); P.playing = true; P.t0 = clock(); }
-    return {ok:true, ...playerState()};
+    else {
+      if (P.problem) { P.problem = null; reopened = true; }
+      if (P.position >= P.duration) moveTo(0); P.playing = true; P.t0 = clock();
+    }
+    return {ok:true, ...playerState(), ...(reopened ? {reopened:true} : {})};
   }),
   player_play: async () => { if (P) { P.playing = true; P.t0 = clock(); } return {ok:true, ...playerState()}; },
   player_pause: async () => { if (P) { moveTo(position()); P.playing = false; } return {ok:true, ...playerState()}; },
@@ -2460,6 +2472,55 @@ def main():
         gone.wait_for_selector("text=Stop")
         ok("the next take does not carry the last one's reason", said.count() == 0)
         gone.close()
+
+        print("\n[12n] A card gone quiet during the check or playback says so")
+        quiet = browser.new_page(viewport={"width": 1180, "height": 820})
+        quiet.add_init_script(MOCK)
+        quiet.goto(server.base_url, wait_until="networkidle")
+        quiet.wait_for_selector("text=Check signal")
+        quiet.click("text=Check signal")
+        quiet.wait_for_selector("text=Stop checking")
+        quiet.evaluate(
+            "() => { window.__CHECK_QUIET__ = 'No sound from \u201cInterface\u201d "
+            "for 3 seconds \u2014 it was unplugged, switched off or stopped "
+            "answering. Plug it back in and press Check signal.'; }")
+        quiet.wait_for_selector("text=No sound from", timeout=6000)
+        ok("a card gone quiet stops the check",
+           quiet.locator("button:has-text('Check signal')").count() == 1
+           and len(quiet.evaluate(
+               "() => window.__CALLS__.filter(c => c.name === 'stop_monitor')")) >= 1)
+        ok("and says so in place, not in the corner",
+           quiet.get_by_role("status").filter(has_text="No sound from").count() == 1
+           and quiet.locator(
+               "section[aria-label='Notifications'] [data-notice]").count() == 0)
+        quiet.evaluate("() => { window.__CHECK_QUIET__ = null; }")
+        quiet.click("text=Check signal")
+        quiet.wait_for_selector("text=Stop checking")
+        ok("checking again clears it", quiet.locator("text=No sound from").count() == 0)
+        quiet.click("text=Stop checking")
+
+        quiet.click("text=Start rehearsal")
+        quiet.wait_for_selector("text=Record take 1")
+        quiet.click("text=Record take 1")
+        quiet.wait_for_selector("button:has-text('Stop')")
+        quiet.click("button:has-text('Stop')")
+        quiet.wait_for_selector("text=Save take")
+        quiet.get_by_role("button", name="Play", exact=True).click()
+        quiet.wait_for_selector("button[aria-label='Pause']")
+        quiet.evaluate(
+            "() => { window.__OUTPUT_QUIET__ = 'Playback stopped: nothing has gone "
+            "out through \u201cInterface\u201d for 3 seconds \u2014 it was "
+            "unplugged, switched off or stopped answering. Press play to try it "
+            "again.'; }")
+        quiet.wait_for_selector("text=Playback stopped", timeout=4000)
+        ok("a playback card gone quiet pauses the take and says so",
+           quiet.locator("button[aria-label='Play']").count() == 1)
+        quiet.evaluate("() => { window.__OUTPUT_QUIET__ = null; }")
+        quiet.get_by_role("button", name="Play", exact=True).click()
+        quiet.wait_for_selector("button[aria-label='Pause']")
+        ok("play tries the card again, and the line goes once it plays",
+           quiet.locator("text=Playback stopped").count() == 0)
+        quiet.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})

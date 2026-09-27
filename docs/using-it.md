@@ -338,6 +338,10 @@ until then is kept and waits on the review screen like any other take, with a
 note saying why it ended. Plug the card back in and record the next take; if
 the card is not offered, **Look again** in Settings finds it.
 
+The same goes for the signal check, which stops and says the card went quiet,
+and for playback, which pauses. Press play once the card is back: it tries the
+card first, and plays through the system output if it is still gone.
+
 Now and then a driver does not come back from a card that vanished under it.
 The take is still finished — after fifteen seconds rather than at once — and
 until the driver answers again, anything that needs the card says "The audio

@@ -3435,14 +3435,14 @@ def main():
     # still reports itself active. The take has to notice on its own.
     import time as _time
 
-    from rehearsal_recorder.audio import capture as capmod
+    from rehearsal_recorder.audio import heartbeat as hbmod
 
     quiet_dir = Path(tempfile.mkdtemp())
     quiet = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}], quiet_dir / "q")
     quiet.start()
     ok("a take that has only just started is not called stalled",
        quiet.problem() is None)
-    quiet._last_block -= capmod.STALL_SEC + 1
+    quiet._heartbeat._last -= hbmod.SILENCE_SEC + 1
     said = quiet.problem() or ""
     ok("no sound for longer than that stops the take, and says why",
        "stopped" in said.lower() and "interface" in said.lower())
@@ -3455,12 +3455,12 @@ def main():
 
     flowing = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}], quiet_dir / "f")
     flowing.start()
-    flowing._last_block -= capmod.STALL_SEC + 1
+    flowing._heartbeat._last -= hbmod.SILENCE_SEC + 1
     flowing._callback(np.zeros((256, 1), dtype=np.int16), 256, None, None)
     ok("a block arriving means the card is still there",
        flowing.problem() is None)
     flowing.stop()
-    flowing._last_block -= capmod.STALL_SEC + 1
+    flowing._heartbeat._last -= hbmod.SILENCE_SEC + 1
     ok("and a take that has been stopped is not called stalled afterwards",
        flowing.problem() is None)
 
@@ -3710,8 +3710,8 @@ def main():
 
     # A block that takes long to write — a slow disk — is not a card gone
     # quiet: the card delivered it, the app is busy with it.
-    stall = capmod.STALL_SEC
-    capmod.STALL_SEC = 0.2
+    stall = hbmod.SILENCE_SEC
+    hbmod.SILENCE_SEC = 0.2
     try:
         slow_dir = Path(tempfile.mkdtemp())
         slow = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}], slow_dir)
@@ -3738,7 +3738,7 @@ def main():
         ok("but silence after it still is", slow.problem() is not None)
         slow.stop()
     finally:
-        capmod.STALL_SEC = stall
+        hbmod.SILENCE_SEC = stall
 
     # A take that will not start leaves nothing that looks like one.
     import gc
@@ -3869,6 +3869,106 @@ def main():
     except Exception:
         left_alone = False
     ok("and a build without those calls is left alone", left_alone)
+
+    print("\n[39] The signal check and the player notice a card gone quiet")
+    # The take's own watch, shared: a stream nobody has called for a few
+    # seconds, and that is not in the middle of a call, has lost its card.
+    beat = hbmod.Heartbeat()
+    ok("a stream not yet running is not silent", not beat.silent())
+    beat.start()
+    ok("one that has just started is not either", not beat.silent())
+    beat._last -= hbmod.SILENCE_SEC + 1
+    ok("one not called for longer than that is", beat.silent())
+    beat.enter()
+    beat._last -= hbmod.SILENCE_SEC + 1
+    ok("unless it is in the middle of a call", not beat.silent())
+    beat.leave()
+    ok("and just after one it is not", not beat.silent())
+    beat.stop()
+    beat._last = None
+    ok("a stopped stream is never silent", not beat.silent())
+
+    _, a39 = fresh_api(Path(tempfile.mkdtemp()))
+    one = [{"name": "A", "channel": 1}]
+    ok("no check, nothing to report",
+       a39.monitor_health() == {"checking": False, "problem": None})
+    a39.start_monitor(0, 48000, one)
+    ok("a check that has just started is healthy",
+       a39.monitor_health() == {"checking": True, "problem": None})
+    a39._monitor._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    said = a39.monitor_health()
+    ok("a card gone quiet during the check says so, by name",
+       said["checking"] is True and "“Interface”" in (said["problem"] or "")
+       and "Check signal" in (said["problem"] or ""))
+    ok("the health poll only reports it; stopping is the screen's call",
+       a39._monitor is not None)
+    a39.stop_monitor()
+    ok("and once stopped there is nothing to report",
+       a39.monitor_health() == {"checking": False, "problem": None})
+
+    a39.start_monitor(0, 48000, one)
+    a39._monitor._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    a39._monitor._callback(np.zeros((256, 1), dtype=np.int16), 256, None, None)
+    ok("a block arriving means the card is still there",
+       a39.monitor_health()["problem"] is None)
+    a39.stop_monitor()
+
+    # The player: a playback card gone quiet pauses the take and says so.
+    # Play again tries the chosen card before anything else.
+    play_dir = Path(tempfile.mkdtemp())
+    write_wav(play_dir / "A.wav", 1000, seconds=4.0)
+    a39._remember_device("output_device", 0)
+    opened = a39.player_open([{"name": "A", "file": str(play_dir / "A.wav")}])
+    ok("a healthy player has nothing to report",
+       opened.get("ok") and opened.get("problem") is None)
+    a39.player_play()
+    a39._player._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    lost = a39.player_state()
+    ok("a playback card gone quiet stops playback",
+       lost["playing"] is False)
+    ok("and says which card, and what to do",
+       "“Interface”" in (lost.get("problem") or "")
+       and "play" in (lost.get("problem") or "").lower())
+    stream_before = a39._player._stream
+    back = a39.player_play()
+    ok("play gives it its card back and plays",
+       back.get("ok") and back.get("reopened") is True and back["playing"] is True
+       and a39._player._stream is not stream_before
+       and a39._player._stream.kw.get("device") == 0)
+    ok("with nothing left to report", back.get("problem") is None
+       and "warning" not in back)
+    a39._player._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    a39.player_state()
+
+    # Still gone when play is pressed. PortAudio's list does not change when
+    # a card is unplugged; the card just refuses to open. Then the system
+    # output, and the usual warning about it.
+    real_output = _sd.OutputStream
+
+    def unplugged(**kw):
+        if kw.get("device") == 0:
+            raise RuntimeError("Error opening OutputStream: device unavailable")
+        return real_output(**kw)
+
+    _sd.OutputStream = unplugged
+    try:
+        again = a39.player_toggle()
+    finally:
+        _sd.OutputStream = real_output
+    ok("a card still gone is played around, through the system output",
+       again.get("ok") and again.get("reopened") is True
+       and a39._player._stream.kw.get("device") is None
+       and "system output" in (again.get("warning") or ""))
+    ok("pausing a player that is fine does not reopen anything",
+       "reopened" not in a39.player_toggle())
+
+    # Gone quiet while paused, with nobody polling: the first press of play
+    # still notices, rather than playing into a dead stream first.
+    a39._player._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    first_press = a39.player_play()
+    ok("a card lost while paused is given back on the first play",
+       first_press.get("reopened") is True and first_press["playing"] is True)
+    a39.player_close()
 
     print("\n" + "=" * 60)
     if problems:

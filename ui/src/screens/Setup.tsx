@@ -36,6 +36,8 @@ import {
 
 /** How often levels are polled during the signal check. */
 const MONITOR_POLL_MS = 80
+// Whether the card is still sending — every couple of seconds, not a hot path.
+const MONITOR_HEALTH_MS = 2000
 
 export function Setup({
   onStarted,
@@ -61,6 +63,9 @@ export function Setup({
   // Signal check: listen to the inputs without recording, so everyone can
   // confirm they land on their own track.
   const [checking, setChecking] = useState(false)
+  // Why the check stopped by itself: the card went quiet. True until the
+  // next check, so it is said in place rather than as a notice.
+  const [checkProblem, setCheckProblem] = useState<string | null>(null)
   const [levels, setLevels] = useState<Record<string, number[]>>({})
   const [seen, setSeen] = useState<Record<string, boolean>>({})
   const checkingRef = useRef(false)
@@ -215,6 +220,7 @@ export function Setup({
   const startCheck = async () => {
     if (deviceIndex === null || !tracks.length) return
     setError(null)
+    setCheckProblem(null)
     const res = await api().start_monitor(deviceIndex, samplerate, tracks)
     if (!res.ok) {
       setError(res.error ?? "Could not open the input for checking")
@@ -249,6 +255,25 @@ export function Setup({
       if (checkingRef.current) window.setTimeout(poll, MONITOR_POLL_MS)
     }
     poll()
+
+    // Unplugged mid-check, a card leaves every bar at rest and says nothing;
+    // Python notices, and the check stops and says so.
+    const watch = async () => {
+      if (!checkingRef.current) return
+      try {
+        const h = await pollPython("monitor_health")
+        if (!checkingRef.current) return
+        if (h.problem) {
+          setCheckProblem(h.problem)
+          await stopCheck()
+          return
+        }
+      } catch {
+        /* the bridge blinked — ask again next time */
+      }
+      if (checkingRef.current) window.setTimeout(watch, MONITOR_HEALTH_MS)
+    }
+    window.setTimeout(watch, MONITOR_HEALTH_MS)
   }
 
   // Turn the check off when leaving the screen
@@ -432,6 +457,15 @@ export function Setup({
             <p className="text-xs text-muted-foreground">
               Have everyone play in turn — the bar should move next to their own
               track. If the wrong one moves, change the input number.
+            </p>
+          )}
+
+          {checkProblem && (
+            <p
+              role="status"
+              className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
+            >
+              {checkProblem}
             </p>
           )}
 

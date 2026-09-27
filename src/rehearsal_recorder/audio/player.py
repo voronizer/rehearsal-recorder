@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
+from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
     close_stream,
@@ -153,6 +154,13 @@ class TakePlayer:
         self._stream_channels = 2
         self._route = (0, 1)
         self._stream = None
+        # Whether the output is still asking for sound, and what to call it
+        # if it stops: see problem.
+        self._heartbeat = heartbeat.Heartbeat()
+        self._output_name = None
+        # Why playback stopped by itself — the output went quiet under it —
+        # or None. Cleared only by opening an output again.
+        self.problem = None
 
         # Buffers are allocated once and reused. Allocating inside an audio
         # callback means calling malloc on the realtime thread every 21 ms —
@@ -218,6 +226,42 @@ class TakePlayer:
             blocksize=BLOCK_FRAMES,
             callback=self._callback,
         )
+        self._heartbeat.start()
+        try:
+            self._output_name = (
+                sd.query_devices(index)["name"] if index is not None else None
+            )
+        except Exception:
+            self._output_name = None
+        self.problem = None
+
+    def output_problem(self):
+        """problem, with the output asked afresh — for a play that must not
+        start into a dead stream just because nobody polled while paused."""
+        with self._lock:
+            self._check_output()
+            return self.problem
+
+    def _check_output(self):
+        """
+        Pauses the take when its output has gone quiet, and says why. An
+        output card unplugged mid-take takes the stream with it — ASIO
+        without a word — and playback would otherwise sit there, "playing",
+        with the cursor frozen. The dead stream is left for the next play to
+        replace: this is asked from the state poll, which opens and closes
+        nothing.
+        """
+        if self.problem is None and self._heartbeat.silent():
+            where = (
+                f"“{self._output_name}”" if self._output_name
+                else "the system output"
+            )
+            self.problem = (
+                f"Playback stopped: nothing has gone out through {where} for "
+                f"{heartbeat.SILENCE_SEC:.0f} seconds — it was unplugged, "
+                "switched off or stopped answering. Press play to try it again."
+            )
+            self._playing = False
 
     # ---------- audio ----------
 
@@ -331,6 +375,13 @@ class TakePlayer:
         # Deliberately no print() here: this runs on the audio thread, where
         # anything that takes a lock or allocates can cost a dropout. The last
         # status is kept for whoever asks.
+        self._heartbeat.enter()
+        try:
+            self._fill(outdata, frames, status)
+        finally:
+            self._heartbeat.leave()
+
+    def _fill(self, outdata, frames, status):
         if status:
             self.last_status = str(status)
         with self._lock:
@@ -414,7 +465,9 @@ class TakePlayer:
 
     def state(self):
         with self._lock:
+            self._check_output()
             return {
+                "problem": self.problem,
                 "playing": self._playing,
                 "position": self._pos / self.samplerate,
                 "duration": self.total_frames / self.samplerate,
@@ -451,6 +504,7 @@ class TakePlayer:
         then find the stream gone, which is where
         "'NoneType' object has no attribute 'close'" came from.
         """
+        self._heartbeat.stop()
         with STREAM_LOCK:
             stream, self._stream = self._stream, None
             if stream is None:

@@ -842,6 +842,18 @@ class Api:
             return {}
         return self._monitor.get_levels()
 
+    def monitor_health(self):
+        """
+        Polled every couple of seconds while the signal is checked: is the
+        card still sending. Only reported — stopping the check is the
+        screen's to do, over the bridge, since this is asked over http and
+        acts on nothing.
+        """
+        monitor = self._monitor
+        if monitor is None:
+            return {"checking": False, "problem": None}
+        return {"checking": True, "problem": monitor.problem()}
+
     def stop_monitor(self):
         if self._monitor is not None:
             try:
@@ -1878,14 +1890,37 @@ class Api:
     def player_toggle(self):
         if self._player is None:
             return {"ok": False, "error": "No take open"}
-        self._player.toggle()
-        return {"ok": True, **self._player.state()}
+        if self._player.state()["playing"]:
+            self._player.toggle()
+            return {"ok": True, **self._player.state()}
+        return self.player_play()
 
     def player_play(self):
         if self._player is None:
             return {"ok": False, "error": "No take open"}
+        revived = self._revive_output()
+        if revived.get("ok") is False:
+            return revived
         self._player.play()
-        return {"ok": True, **self._player.state()}
+        return {"ok": True, **self._player.state(), **revived}
+
+    def _revive_output(self):
+        """
+        A player whose output went quiet under it gets one before it plays
+        again: the chosen card first, the system output if it is still gone,
+        with the usual warning. {} when there was nothing to revive,
+        {"reopened": True, "warning"?: ...} when it was done, or the failure.
+        """
+        with self._player_lock:
+            if self._player is None or self._player.output_problem() is None:
+                return {}
+            reopened = self._reopen_output()
+        if not reopened.get("ok", True):
+            return reopened
+        return {
+            "reopened": True,
+            **({"warning": reopened["warning"]} if reopened.get("warning") else {}),
+        }
 
     def player_pause(self):
         if self._player is None:

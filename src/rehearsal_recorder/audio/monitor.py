@@ -11,6 +11,7 @@ import threading
 
 import sounddevice as sd
 
+from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
     close_stream,
@@ -35,6 +36,14 @@ class LevelMonitor:
         )
 
         self._stream = None
+        # Whether the card is still sending: unplugged mid-check, an ASIO
+        # card leaves every bar at rest and says nothing.
+        self._heartbeat = heartbeat.Heartbeat()
+        self.error = None
+        try:
+            self._name = sd.query_devices(device_index)["name"]
+        except Exception:
+            self._name = None
         # One figure per channel: a dead half of a stereo pair is the very
         # thing this screen exists to catch, and reducing the two to their
         # louder half would hide it.
@@ -45,10 +54,16 @@ class LevelMonitor:
     def _callback(self, indata, frames, time_info, status):
         # The audio thread: no printing, no allocating. max()/min() hand back
         # scalars, so measuring a peak costs nothing.
-        if status:
-            self.last_status = str(status)
-        if frames == 0:
-            return
+        self._heartbeat.enter()
+        try:
+            if status:
+                self.last_status = str(status)
+            if frames:
+                self._measure(indata, frames)
+        finally:
+            self._heartbeat.leave()
+
+    def _measure(self, indata, frames):
         with self._lock:
             for track in self.tracks:
                 name = track["name"]
@@ -72,6 +87,21 @@ class LevelMonitor:
                 blocksize=BLOCK_FRAMES,
                 callback=self._callback,
             )
+        self._heartbeat.start()
+
+    def problem(self):
+        """
+        Why the check has stopped hearing the card, or None. Once said, it
+        stays said: the stream it is about does not come back by itself.
+        """
+        if self.error is None and self._heartbeat.silent():
+            card = f"“{self._name}”" if self._name else "the audio interface"
+            self.error = (
+                f"No sound from {card} for {heartbeat.SILENCE_SEC:.0f} seconds "
+                "— it was unplugged, switched off or stopped answering. Plug "
+                "it back in and press Check signal."
+            )
+        return self.error
 
     def get_levels(self):
         """Peak since the last poll; reading resets the accumulator."""
@@ -82,6 +112,7 @@ class LevelMonitor:
         return snapshot
 
     def stop(self):
+        self._heartbeat.stop()
         with STREAM_LOCK:
             stream, self._stream = self._stream, None
             if stream is not None:

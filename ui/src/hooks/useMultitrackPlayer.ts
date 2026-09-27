@@ -69,7 +69,15 @@ export function useMultitrackPlayer(
       volumes?: Record<string, number>
       levels?: Record<string, number[]>
       loop?: { a: number; b: number } | null
+      problem?: string | null
+      reopened?: boolean
+      warning?: string
     }) => {
+      // The output went quiet under the take, and Python paused it. Said
+      // where the other word about the output is said: the next play tries
+      // the card again, and replaces this with how that went.
+      if (typeof s.problem === "string") setOutputWarning(s.problem)
+      if (s.reopened) setOutputWarning(s.warning ?? null)
       if (typeof s.playing === "boolean") setPlaying(s.playing)
       if (typeof s.position === "number") {
         setPosition(s.position)
