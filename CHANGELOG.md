@@ -5,6 +5,17 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- An interface reached through ASIO opens. Checking the signal, recording and
+  playing through one all failed on Windows with "Failed to load ASIO driver"
+  (`PaErrorCode -9999`), whatever the card. An ASIO driver can be loaded
+  only from a thread that has joined a COM apartment, and each call from the
+  interface arrived on a new thread that had joined none. Every stream is now
+  opened, started, stopped and closed on one audio thread that joins one
+  first. A stream that opens but will not start is closed again, rather than
+  left holding the card so that every later attempt says it is in use.
+
 ## 0.7.6
 
 - An interface switched on after the app started can be found without

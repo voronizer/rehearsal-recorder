@@ -212,3 +212,50 @@ def open_in_file_manager(path):
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# CoInitializeEx's mode for a single-threaded apartment, from objbase.h.
+COINIT_APARTMENTTHREADED = 0x2
+
+
+def enter_com_apartment(platform=sys.platform, ole32=None):
+    """
+    Joins the calling thread to a COM single-threaded apartment, on Windows.
+    Returns None, or a sentence when it could not. Never raises: the thread
+    that calls it is the one every card is opened from, and a thread that
+    died here would leave every later opening waiting for it.
+
+    An ASIO driver is a COM object, and PortAudio loads it on whichever
+    thread asks for a stream — but a thread that has not joined an apartment
+    cannot load one, and all PortAudio says then is "Failed to load ASIO
+    driver". It joins one itself only for the thread that starts it, and
+    leaves the rest to the caller. pywebview answers every interface call on
+    a fresh thread that has joined nothing, so no ASIO stream opened from the
+    app at all. `--audio-probe` cannot show this: it runs on the main thread,
+    which PortAudio joined when it started.
+
+    Single-threaded, not multithreaded, on purpose: ASIO drivers register as
+    apartment-threaded, and one created from a multithreaded apartment is put
+    in another thread and handed back through a proxy that ASIO's interface
+    has no way to make. It is the apartment PortAudio itself picks.
+
+    Already being in one (S_FALSE) is as good as joining. There is no
+    matching CoUninitialize: the thread lives as long as the app, and leaving
+    the apartment would unload the driver of any stream still open.
+    """
+    if platform != "win32":
+        return None
+    try:
+        if ole32 is None:
+            import ctypes
+
+            ole32 = ctypes.windll.ole32
+        result = ole32.CoInitializeEx(None, COINIT_APARTMENTTHREADED)
+    except Exception as e:
+        return f"COM could not be reached, so ASIO cards will not open: {e}"
+    if result < 0:
+        return (
+            "This thread could not join a COM apartment "
+            f"(0x{result & 0xFFFFFFFF:08X}), so ASIO cards will not open."
+        )
+    return None

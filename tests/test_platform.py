@@ -211,6 +211,38 @@ def main():
             kept_open.close()
         appmod.CRASH_LOG = original_log
 
+    print("\n[10] The thread that opens cards joins a COM apartment on Windows")
+    # An ASIO driver is a COM object: a thread that has not joined an
+    # apartment cannot load one, and PortAudio says only "Failed to load
+    # ASIO driver".
+    joins = []
+
+    class Ole32:
+        def __init__(self, answer):
+            self.answer = answer
+
+        def CoInitializeEx(self, reserved, mode):
+            joins.append((reserved, mode))
+            return self.answer
+
+    ok("on Windows it joins a single-threaded apartment",
+       ps.enter_com_apartment("win32", Ole32(0)) is None
+       and joins == [(None, 2)])
+
+    joins.clear()
+    ok("elsewhere there is nothing to join",
+       ps.enter_com_apartment("darwin", Ole32(0)) is None and joins == [])
+
+    ok("a thread that had already joined is fine as it is",
+       ps.enter_com_apartment("win32", Ole32(1)) is None)  # S_FALSE
+
+    refused = ps.enter_com_apartment("win32", Ole32(-2147417850))
+    ok("a refusal is said, with its code, rather than raised",
+       isinstance(refused, str) and "0x80010106" in refused)
+
+    ok("and so is a Windows where COM cannot be reached at all",
+       isinstance(ps.enter_com_apartment("win32", object()), str))
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

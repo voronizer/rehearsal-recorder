@@ -48,6 +48,16 @@ with ASIO. It is on unconditionally: as a setting it would need a restart, and
 as one entry in the driver list it needs nothing. For multitrack, ASIO if the
 interface has a driver, otherwise WASAPI; MME is the default and the worst.
 
+An ASIO driver is a COM object, and PortAudio loads it on the thread that
+asks for the stream — which must have joined a COM apartment first. PortAudio
+joins one for the thread that starts it and leaves every other thread to the
+caller, and the interface's calls each arrive on a fresh thread that has
+joined nothing. So every stream is opened, started, stopped and closed, and
+every card asked what it can do, on one long-lived audio thread that joins a
+single-threaded apartment before its first job (`AudioThread` in
+`audio/devices.py`). `--audio-probe` runs on the main thread and would never
+have seen the difference.
+
 Turning ASIO on moved every later device index, so a choice is saved as the
 device's name and audio system beside its index and found again by those. An
 index saved before that is not trusted on Windows: the person is asked to

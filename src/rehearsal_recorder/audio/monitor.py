@@ -11,7 +11,11 @@ import threading
 
 import sounddevice as sd
 
-from rehearsal_recorder.audio.devices import STREAM_LOCK
+from rehearsal_recorder.audio.devices import (
+    STREAM_LOCK,
+    close_stream,
+    open_stream,
+)
 
 BLOCK_FRAMES = 1024
 
@@ -59,7 +63,8 @@ class LevelMonitor:
 
     def start(self):
         with STREAM_LOCK:
-            self._stream = sd.InputStream(
+            self._stream = open_stream(
+                sd.InputStream,
                 device=self.device_index,
                 channels=self._max_channel,
                 samplerate=self.samplerate,
@@ -67,7 +72,6 @@ class LevelMonitor:
                 blocksize=BLOCK_FRAMES,
                 callback=self._callback,
             )
-            self._stream.start()
 
     def get_levels(self):
         """Peak since the last poll; reading resets the accumulator."""
@@ -81,5 +85,4 @@ class LevelMonitor:
         with STREAM_LOCK:
             stream, self._stream = self._stream, None
             if stream is not None:
-                stream.stop()
-                stream.close()
+                close_stream(stream)

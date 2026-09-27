@@ -3290,6 +3290,144 @@ def main():
             if hasattr(_sd, attr):
                 delattr(_sd, attr)
 
+    print("\n[35] Every card is opened from one thread that is ready for it")
+    # On Windows an ASIO driver is a COM object, loaded by whichever thread
+    # asks PortAudio for it — and only a thread that has joined a COM
+    # apartment can load one. PortAudio joins one for the thread that starts
+    # it and leaves every other thread to its caller. pywebview answers each
+    # interface call on a fresh thread that has joined nothing, so every ASIO
+    # stream the app opened came back "Failed to load ASIO driver". Opening,
+    # starting, stopping, closing and asking all go to one long-lived thread
+    # now, which joins at birth.
+    from rehearsal_recorder.audio.capture import AudioRecorder
+
+    seen = []
+
+    def saw(what):
+        seen.append((what, threading.current_thread()))
+
+    # Standalone rather than built on _FakeStream: [3] has one of its own by
+    # that name, which is the one in scope here.
+    class _WatchedStream:
+        def __init__(self, **kw):
+            saw("open")
+            self.kw = kw
+            self.active = False
+
+        def start(self):
+            saw("start")
+            self.active = True
+
+        def stop(self):
+            saw("stop")
+            self.active = False
+
+        def close(self):
+            saw("close")
+
+    real = {name: getattr(_sd, name) for name in (
+        "InputStream", "OutputStream",
+        "check_input_settings", "check_output_settings")}
+
+    def watched(name):
+        def call(**kw):
+            saw(name)
+            return real[name](**kw)
+        return call
+
+    _sd.InputStream = _sd.OutputStream = _WatchedStream
+    _sd.check_input_settings = watched("check_input_settings")
+    _sd.check_output_settings = watched("check_output_settings")
+    _sd._initialized = 1
+    _sd._terminate = lambda: (saw("terminate"), setattr(
+        _sd, "_initialized", _sd._initialized - 1))
+    _sd._initialize = lambda: (saw("initialize"), setattr(
+        _sd, "_initialized", _sd._initialized + 1))
+
+    _, a35 = fresh_api(Path(tempfile.mkdtemp()))
+    take35 = Path(tempfile.mkdtemp())
+    write_wav(take35 / "A.wav", 1000)
+    one_track = [{"name": "A", "channel": 1}]
+    answers = {}
+
+    def as_the_interface_calls():
+        answers["monitor"] = a35.start_monitor(0, 48000, one_track)
+        a35.stop_monitor()
+        recorder = AudioRecorder(0, 48000, one_track, take35 / "take", 16)
+        recorder.start()
+        recorder.stop()
+        player = TakePlayer([{"name": "A", "file": str(take35 / "A.wav")}])
+        player.open_output(0)
+        player.close()
+        devmod.recording_formats(0, 2)
+
+    def looking_again():
+        answers["rescan"] = devmod.rescan()
+
+    try:
+        callers = [threading.Thread(target=as_the_interface_calls),
+                   threading.Thread(target=looking_again)]
+        for caller in callers:
+            caller.start()
+            caller.join()
+
+        ok("the calls went through", answers["monitor"].get("ok") is True
+           and answers["rescan"] is None)
+        ok("every kind of call was seen",
+           {what for what, _ in seen} >= {
+               "open", "start", "stop", "close", "check_input_settings",
+               "check_output_settings", "terminate", "initialize"})
+        threads = {t for _, t in seen}
+        ok("all of them on one thread, whoever asked", len(threads) == 1)
+        audio_thread = threads.pop() if len(threads) == 1 else None
+        ok("which is none of the callers",
+           audio_thread is not None
+           and audio_thread not in callers
+           and audio_thread is not threading.main_thread())
+        ok("and outlives them, so what it loaded stays loaded",
+           audio_thread is not None and audio_thread.is_alive())
+
+        # What refuses on that thread still comes back to whoever asked.
+        class _Refusing:
+            def __init__(self, **kw):
+                raise RuntimeError("Failed to load ASIO driver")
+
+        _sd.InputStream = _Refusing
+        refused = a35.start_monitor(0, 48000, one_track)
+        ok("a refusal on the audio thread reaches the caller",
+           refused.get("ok") is False
+           and "Failed to load ASIO driver" in refused.get("error", ""))
+
+        # A stream that opens but will not start is closed again: left open,
+        # an ASIO card stays taken, and every later attempt says "in use".
+        class _WontStart(_WatchedStream):
+            def start(self):
+                raise RuntimeError("ASIOStart failed")
+
+        _sd.InputStream = _WontStart
+        seen.clear()
+        a35.start_monitor(0, 48000, one_track)
+        ok("a stream that will not start is closed, not left holding the card",
+           [what for what, _ in seen] == ["open", "close"])
+    finally:
+        for name, fn in real.items():
+            setattr(_sd, name, fn)
+        for attr in ("_initialized", "_terminate", "_initialize"):
+            if hasattr(_sd, attr):
+                delattr(_sd, attr)
+
+    # The thread itself: it joins once, before anything runs on it, and a
+    # job that asks for the thread it is already on is simply run.
+    joined = []
+    worker = devmod.AudioThread(
+        prepare=lambda: joined.append(threading.current_thread()))
+    first = worker.run(threading.current_thread)
+    second = worker.run(threading.current_thread)
+    ok("the thread joins once, on itself, before its first job",
+       joined == [first] and first is second)
+    ok("a job that asks from the thread itself does not wait for itself",
+       worker.run(lambda: worker.run(lambda: "inline")) == "inline")
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

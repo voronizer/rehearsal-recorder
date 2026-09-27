@@ -1,7 +1,10 @@
 """
 Opening and closing audio streams, safely and with useful errors.
 
-Two things live here.
+The thread: every stream is opened, started, stopped and closed — and every
+card asked what it can do — on one long-lived thread, see AudioThread. On
+Windows an ASIO driver can only be loaded from a thread that has joined a COM
+apartment, and the threads the interface's calls arrive on have joined none.
 
 The lock: PortAudio is happy to run several streams at once, but creating and
 destroying them from two threads at the same time is not safe. In this app
@@ -22,14 +25,110 @@ plugged in afterwards is not there until PortAudio is stopped and started
 again — see rescan().
 """
 
+import queue
 import sys
 import threading
+from concurrent.futures import Future
+from functools import partial
 
 import sounddevice as sd
 
 from rehearsal_recorder.audio.format import SUPPORTED_DEPTHS, capture_dtype
+from rehearsal_recorder.platform_support import enter_com_apartment
 
 STREAM_LOCK = threading.RLock()
+
+
+class AudioThread:
+    """
+    One thread, started on first use and kept for the life of the app, that
+    runs whatever is handed to it and hands back the answer or the error.
+
+    It exists for ASIO. A driver is a COM object that PortAudio loads on the
+    thread asking for the stream, and only a thread that has joined a COM
+    apartment can load one — see enter_com_apartment(). The interface's calls
+    each arrive on a fresh thread that has joined nothing and is gone a
+    moment later; this one joins before its first job, and outlives every
+    stream it opens, so the apartment a driver was loaded into is still there
+    when the stream is closed.
+
+    Only PortAudio's own calls are handed over, never a whole method: a job
+    that waited for STREAM_LOCK while the caller held it would wait forever.
+    A job handed over from this thread itself is simply run.
+
+    It does not pump window messages while it waits. Neither does the main
+    thread of an ordinary sounddevice script, which is where ASIO is used
+    from far more often than anywhere else.
+    """
+
+    def __init__(self, prepare):
+        self._prepare = prepare
+        self._jobs = queue.SimpleQueue()
+        self._thread = None
+        self._starting = threading.Lock()
+
+    def run(self, job):
+        """job() on this thread: its return value, or its exception raised."""
+        if threading.current_thread() is self._thread:
+            return job()
+        with self._starting:
+            if self._thread is None:
+                self._thread = threading.Thread(
+                    target=self._serve, name="audio", daemon=True
+                )
+                self._thread.start()
+        answer = Future()
+        self._jobs.put((job, answer))
+        return answer.result()
+
+    def _serve(self):
+        trouble = self._prepare()
+        if trouble:
+            print(f"[devices] {trouble}")
+        while True:
+            job, answer = self._jobs.get()
+            try:
+                answer.set_result(job())
+            except BaseException as e:  # noqa: BLE001 — the caller's to judge
+                answer.set_exception(e)
+
+
+AUDIO_THREAD = AudioThread(prepare=enter_com_apartment)
+
+
+def open_stream(kind, **settings):
+    """
+    A stream of `kind` — sd.InputStream, sd.OutputStream — opened and
+    started on the audio thread.
+
+    One that opens but will not start is closed again before the error goes
+    back. Left open, an ASIO card stays taken by it: PortAudio allows one
+    ASIO stream at a time, and every later attempt would say "in use".
+    """
+    def job():
+        stream = kind(**settings)
+        try:
+            stream.start()
+        except Exception:
+            try:
+                stream.close()
+            except Exception:
+                pass  # the start's error is the one worth reporting
+            raise
+        return stream
+
+    return AUDIO_THREAD.run(job)
+
+
+def close_stream(stream):
+    """Stops and closes a stream on the audio thread — the one it was opened
+    on, whose apartment still holds its driver."""
+    def job():
+        stream.stop()
+        stream.close()
+
+    AUDIO_THREAD.run(job)
+
 
 # What the interface offers. 88.2 is left out on purpose: nobody records a
 # rehearsal at it, and a shorter list is a better list.
@@ -86,12 +185,13 @@ def recording_formats(device_index, channels):
             depths = []
             for depth in (SUPPORTED_DEPTHS[:1] if asio else SUPPORTED_DEPTHS):
                 try:
-                    check(
+                    AUDIO_THREAD.run(partial(
+                        check,
                         device=device_index,
                         channels=channels,
                         samplerate=rate,
                         dtype=capture_dtype(depth),
-                    )
+                    ))
                     depths.append(depth)
                 except Exception as e:
                     refusal = e
@@ -147,7 +247,7 @@ def rescan():
     with STREAM_LOCK:
         try:
             for _ in range(count):
-                terminate()
+                AUDIO_THREAD.run(terminate)
         except Exception as e:
             # Whatever did not stop, starting it again is what matters now.
             print(f"[devices] stopping PortAudio: {e}")
@@ -158,7 +258,7 @@ def rescan():
             failure = None
             for _attempt in range(2):
                 try:
-                    initialize()
+                    AUDIO_THREAD.run(initialize)
                     failure = None
                     break
                 except Exception as e:
@@ -307,12 +407,13 @@ def usable_output(device_index, samplerate, channels=2):
     check = getattr(sd, "check_output_settings", None)
     if check is not None and not _is_asio(device_index):
         try:
-            check(
+            AUDIO_THREAD.run(partial(
+                check,
                 device=device_index,
                 channels=channels,
                 samplerate=samplerate,
                 dtype="int16",
-            )
+            ))
         except Exception as e:
             # This asked one question — will you take this format — so an
             # answer with no code of its own is an answer about the format.

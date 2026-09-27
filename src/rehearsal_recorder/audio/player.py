@@ -25,6 +25,8 @@ import sounddevice as sd
 
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
+    close_stream,
+    open_stream,
     output_complaint,
     usable_output,
 )
@@ -207,7 +209,8 @@ class TakePlayer:
         """The stream itself, once the device and the outputs are settled."""
         self._route = tuple(c - 1 for c in channels)
         self._stream_channels = max(channels)
-        self._stream = sd.OutputStream(
+        self._stream = open_stream(
+            sd.OutputStream,
             device=index,
             channels=self._stream_channels,
             samplerate=self.samplerate,
@@ -215,7 +218,6 @@ class TakePlayer:
             blocksize=BLOCK_FRAMES,
             callback=self._callback,
         )
-        self._stream.start()
 
     # ---------- audio ----------
 
@@ -454,8 +456,7 @@ class TakePlayer:
             if stream is None:
                 return
             try:
-                stream.stop()
-                stream.close()
+                close_stream(stream)
             except Exception as e:
                 print(f"[player] close: {e}")
 

@@ -20,7 +20,11 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
-from rehearsal_recorder.audio.devices import STREAM_LOCK
+from rehearsal_recorder.audio.devices import (
+    STREAM_LOCK,
+    close_stream,
+    open_stream,
+)
 from rehearsal_recorder.audio.format import (
     bytes_per_sample,
     capture_dtype,
@@ -214,7 +218,8 @@ class AudioRecorder:
             self._raw_files[track["name"]] = open(path, "wb")
 
         with STREAM_LOCK:
-            self._stream = sd.InputStream(
+            self._stream = open_stream(
+                sd.InputStream,
                 device=self.device_index,
                 channels=self._max_channel,
                 samplerate=self.samplerate,
@@ -223,7 +228,6 @@ class AudioRecorder:
                 callback=self._callback,
                 finished_callback=self._finished,
             )
-            self._stream.start()
 
         self._stop_flush.clear()
         self._flush_thread = threading.Thread(target=self._flush_loop, daemon=True)
@@ -276,8 +280,7 @@ class AudioRecorder:
             stream, self._stream = self._stream, None
             try:
                 if stream is not None:
-                    stream.stop()
-                    stream.close()
+                    close_stream(stream)
             except Exception as e:
                 print(f"[audio] stop: {e}")
 
