@@ -58,6 +58,20 @@ single-threaded apartment before its first job (`AudioThread` in
 `audio/devices.py`). `--audio-probe` runs on the main thread and would never
 have seen the difference.
 
+Nothing waits on that thread for ever. A call that takes longer than fifteen
+seconds is given up on, and until it comes back every other call is refused
+at once rather than run: PortAudio is not safe to enter from two threads, and
+the stuck call is still inside it, so a fresh thread in its place would be
+worse than none. A stream that opens after its caller gave up is closed. The
+case this is for is stopping a take on a card that was just unplugged: the
+take is finished whether or not the driver comes back.
+
+An unplugged ASIO card has to be noticed by the take itself. The driver sends
+a reset request, PortAudio ignores it, and the stream is never called again
+while still reporting itself active, so `finished_callback` never fires. The
+recorder notes when each block arrives, and three seconds without one is a
+stopped take (`STALL_SEC` in `audio/capture.py`).
+
 Turning ASIO on moved every later device index, so a choice is saved as the
 device's name and audio system beside its index and found again by those. An
 index saved before that is not trusted on Windows: the person is asked to

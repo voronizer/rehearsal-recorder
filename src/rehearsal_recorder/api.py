@@ -324,8 +324,23 @@ class Api:
         self._cloud_queue.start()
 
     def shutdown(self):
-        """The window has closed: stand the publishing worker down instead of
-        leaving it to be killed wherever it happens to be."""
+        """
+        The window has closed.
+
+        A take still recording is stopped, which finishes it as .wav in its
+        drafts folder: it is offered as an unsaved take next time, rather than
+        left recording while Python shuts down around it. The signal check and
+        the player let go of their cards — on the audio thread, while it is
+        still there to do it. Then the publishing worker is stood down instead
+        of being killed wherever it happens to be.
+        """
+        if self._recorder is not None:
+            try:
+                self.stop_take()
+            except Exception as e:
+                print(f"[shutdown] stopping the take: {e}")
+        self.stop_monitor()
+        self.player_close()
         self._cloud_queue.stop()
         if self._library is not None:
             self._library.close()
@@ -875,7 +890,7 @@ class Api:
 
         return {
             "recording": True,
-            "error": self._recorder.error,
+            "error": self._recorder.problem(),
             "active": self._recorder.is_active(),
             "free_bytes": estimate.get("free_bytes"),
             "minutes_left": estimate.get("minutes"),

@@ -330,6 +330,23 @@ If the probe says the driver will only hand over its inputs together with its
 outputs, record through WASAPI instead for now: the same card is listed there
 too, with fewer inputs but no such condition.
 
+## When the card goes away
+
+Unplugged, switched off or out of power mid-take, the card stops sending
+sound, and three seconds later the take stops by itself. Everything recorded
+until then is kept and waits on the review screen like any other take, with a
+note saying why it ended. Plug the card back in and record the next take; if
+the card is not offered, **Look again** in Settings finds it.
+
+Now and then a driver does not come back from a card that vanished under it.
+The take is still finished — after fifteen seconds rather than at once — and
+until the driver answers again, anything that needs the card says "The audio
+driver has stopped answering". Unplug the card and plug it back in; if that
+does not bring it back, restart the app.
+
+Closing the window mid-take stops the take: next time it is offered under
+unsaved takes, to keep or throw away.
+
 ## Sending takes to the cloud
 
 Syncing the whole recordings folder means syncing every failed attempt, and

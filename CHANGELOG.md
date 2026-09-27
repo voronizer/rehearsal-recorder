@@ -15,6 +15,20 @@ opening.
   opened, started, stopped and closed on one audio thread that joins one
   first. A stream that opens but will not start is closed again, rather than
   left holding the card so that every later attempt says it is in use.
+- A take whose interface goes quiet stops by itself and is kept. An ASIO
+  card that is unplugged mid-take never says so: PortAudio ignores the
+  driver's reset request and goes on reporting the stream as running, so the
+  screen said "Interface connected" over a take that had stopped recording.
+  Three seconds with no sound from the card now stops the take, saves what
+  was captured, and says why in a notice that stays on the review screen —
+  which is where the reason used to vanish even when the card did say so.
+- A driver that stops answering no longer freezes the app. Stopping a take
+  gives up on it after fifteen seconds and finishes the take all the same;
+  until the driver answers again, checking the signal, recording, playing
+  and **Look again** say so at once instead of waiting behind it.
+- Closing the window mid-take finishes the take, and it is offered as an
+  unsaved take next time. It used to go on recording while the app shut down
+  around it, leaving raw files for the recovery to find.
 
 ## 0.7.6
 

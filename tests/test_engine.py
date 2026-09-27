@@ -3062,7 +3062,8 @@ def main():
     real_usage = apimod33.shutil.disk_usage
     apimod33.shutil.disk_usage = lambda path: types.SimpleNamespace(
         free=3 * SR * 2 * 60 * 100)  # a hundred minutes of three channels
-    a33._recorder = types.SimpleNamespace(error=None, is_active=lambda: True)
+    a33._recorder = types.SimpleNamespace(
+        error=None, problem=lambda: None, is_active=lambda: True)
     a33._session = {"samplerate": SR, "bit_depth": 16, "tracks": [
         {"name": "Keys", "channel": 3, "stereo": True},
         {"name": "Gtr", "channel": 1}]}
@@ -3427,6 +3428,230 @@ def main():
        joined == [first] and first is second)
     ok("a job that asks from the thread itself does not wait for itself",
        worker.run(lambda: worker.run(lambda: "inline")) == "inline")
+
+    print("\n[36] A card that goes quiet, or a driver that stops answering")
+    # PortAudio's ASIO backend ignores the driver's reset request, which is
+    # what an unplugged card sends: the stream simply stops being called and
+    # still reports itself active. The take has to notice on its own.
+    import time as _time
+
+    from rehearsal_recorder.audio import capture as capmod
+
+    quiet_dir = Path(tempfile.mkdtemp())
+    quiet = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}], quiet_dir / "q")
+    quiet.start()
+    ok("a take that has only just started is not called stalled",
+       quiet.problem() is None)
+    quiet._last_block -= capmod.STALL_SEC + 1
+    said = quiet.problem() or ""
+    ok("no sound for longer than that stops the take, and says why",
+       "stopped" in said.lower() and "interface" in said.lower())
+    _, a36 = fresh_api(Path(tempfile.mkdtemp()))
+    a36._recorder = quiet
+    ok("the health check reports it, so the screen stops and saves the take",
+       a36.recording_health()["error"] == said)
+    a36._recorder = None
+    quiet.stop()
+
+    flowing = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}], quiet_dir / "f")
+    flowing.start()
+    flowing._last_block -= capmod.STALL_SEC + 1
+    flowing._callback(np.zeros((256, 1), dtype=np.int16), 256, None, None)
+    ok("a block arriving means the card is still there",
+       flowing.problem() is None)
+    flowing.stop()
+    flowing._last_block -= capmod.STALL_SEC + 1
+    ok("and a take that has been stopped is not called stalled afterwards",
+       flowing.problem() is None)
+
+    # A driver that never comes back from stopping must not take the
+    # recording with it: the take is finished all the same, and until the
+    # driver answers again, anything else asked of it says so at once
+    # instead of waiting behind it.
+    patience = devmod.DRIVER_PATIENCE_SEC
+    devmod.DRIVER_PATIENCE_SEC = 0.3
+    hold = threading.Event()
+    opened_before = []
+
+    class _HangsOnStop:
+        def __init__(self, **kw):
+            opened_before.append(1)
+            self.active = False
+
+        def start(self):
+            self.active = True
+
+        def stop(self):
+            hold.wait(10)
+
+        def close(self):
+            pass
+
+    try:
+        _sd.InputStream = _HangsOnStop
+        stuck = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}],
+                              quiet_dir / "stuck")
+        stuck.start()
+        stuck._callback(np.full((256, 1), 900, dtype=np.int16), 256, None, None)
+        began = _time.monotonic()
+        result = stuck.stop()
+        ok("stopping gives up on a driver that does not answer",
+           _time.monotonic() - began < 3)
+        ok("and the take is finished all the same",
+           result["tracks"] and Path(result["tracks"][0]["file"]).exists()
+           and abs(result["duration_sec"] - 256 / SR) < 0.001)
+
+        opened_before.clear()
+        began = _time.monotonic()
+        refused = a36.start_monitor(0, 48000, [{"name": "A", "channel": 1}])
+        ok("while it is stuck, opening says so at once rather than waiting",
+           refused.get("ok") is False
+           and "stopped answering" in refused.get("error", "")
+           and _time.monotonic() - began < 0.2 and opened_before == [])
+
+        _sd._initialized = 1
+        _sd._terminate = _sd._initialize = lambda: None
+        try:
+            rescanned = devmod.rescan()
+        finally:
+            for attr in ("_initialized", "_terminate", "_initialize"):
+                delattr(_sd, attr)
+        ok("and looking for interfaces again says so too, not 'restart'",
+           rescanned == devmod.NOT_ANSWERING)
+
+        hold.set()
+        answered = False
+        for _ in range(40):
+            _time.sleep(0.05)
+            if a36.start_monitor(0, 48000, [{"name": "A", "channel": 1}]).get("ok"):
+                answered = True
+                break
+        a36.stop_monitor()
+        ok("once the driver answers, the card can be opened again", answered)
+
+        # A card that opens only after the app has stopped waiting for it is
+        # closed again, not left holding the card with nobody to close it.
+        late_hold = threading.Event()
+        late_streams = []
+
+        class _SlowToOpen(_HangsOnStop):
+            def __init__(self, **kw):
+                late_hold.wait(10)
+                super().__init__(**kw)
+                self.closed = False
+                late_streams.append(self)
+
+            def stop(self):
+                pass
+
+            def close(self):
+                self.closed = True
+
+        _sd.InputStream = _SlowToOpen
+        late = a36.start_monitor(0, 48000, [{"name": "A", "channel": 1}])
+        ok("an opening that takes too long is given up on",
+           late.get("ok") is False and "stopped answering" in late.get("error", ""))
+        late_hold.set()
+        for _ in range(40):
+            _time.sleep(0.05)
+            if late_streams and late_streams[0].closed:
+                break
+        ok("and the stream it opened late is closed, not left open",
+           len(late_streams) == 1 and late_streams[0].closed)
+    finally:
+        hold.set()
+        _sd.InputStream = real["InputStream"]
+        devmod.DRIVER_PATIENCE_SEC = patience
+
+    # Calls queued behind one that never came back are dropped once their
+    # callers have given up, rather than run at some random moment later.
+    lone = devmod.AudioThread(prepare=lambda: None)
+    blocked = threading.Event()
+    behind = []
+    first_caller = threading.Thread(
+        target=lambda: _try(lambda: lone.run(lambda: blocked.wait(10), timeout=0.3)))
+
+    def _try(fn):
+        try:
+            fn()
+        except devmod.DriverNotAnswering:
+            pass
+
+    first_caller.start()
+    _time.sleep(0.05)
+    _try(lambda: lone.run(lambda: behind.append(1), timeout=0.3))
+    first_caller.join()
+    blocked.set()
+    _time.sleep(0.2)
+    ok("a call whose caller gave up is not run afterwards", behind == [])
+    ok("and the thread takes new calls once the stuck one is back",
+       lone.run(lambda: "again") == "again")
+
+    # A call that was only slow, not stuck — a sluggish driver loading while
+    # a quicker question waited behind it and gave up — must not leave the
+    # thread refusing everything once the slow one has finished.
+    slow_done = threading.Event()
+    slow_caller = threading.Thread(target=lambda: lone.run(
+        lambda: (_time.sleep(0.5), slow_done.set()), timeout=5))
+    slow_caller.start()
+    _time.sleep(0.05)
+    _try(lambda: lone.run(lambda: "impatient", timeout=0.2))
+    slow_caller.join()
+    ok("a slow call that finishes clears the way for the next one",
+       slow_done.is_set() and lone.run(lambda: "after") == "after")
+
+    print("\n[37] Closing the app with a card open")
+    # Closing the window mid-take used to leave the take recording until the
+    # interpreter went down around it. It is stopped, finished as .wav, and
+    # waits as an unsaved take; the player lets go of its card first.
+    from rehearsal_recorder.audio.drafts import draft_dirs
+
+    _, a37 = fresh_api(Path(tempfile.mkdtemp()))
+    a37.start_rehearsal("Late night", 0, SR, [{"name": "Gtr", "channel": 1}])
+    a37.start_take()
+    a37._recorder._callback(np.full((256, 1), 900, dtype=np.int16), 256, None, None)
+    folder37 = Path(a37._session["folder"])
+    player_dir = Path(tempfile.mkdtemp())
+    write_wav(player_dir / "A.wav", 1000)
+    a37.player_open([{"name": "A", "file": str(player_dir / "A.wav")}])
+    a37.shutdown()
+    kept = draft_dirs(folder37)
+    ok("closing the window mid-take finishes the take",
+       a37._recorder is None and len(kept) == 1
+       and (kept[0] / "Gtr.wav").exists()
+       and not (kept[0] / "Gtr.raw").exists())
+    ok("and the player lets go of its card", a37._player is None)
+    shut_cleanly = True
+    try:
+        a37.shutdown()
+    except Exception:
+        shut_cleanly = False
+    ok("closing twice is harmless", shut_cleanly)
+
+    # sounddevice stops PortAudio at exit from the main thread, closing any
+    # stream still open there. On ASIO that is a driver loaded on the audio
+    # thread being let go from another, so the app stops PortAudio first, on
+    # the audio thread.
+    ends = []
+    _sd._initialized = 2
+    _sd._terminate = lambda: (ends.append(threading.current_thread()),
+                              setattr(_sd, "_initialized", _sd._initialized - 1))
+    try:
+        devmod.release_at_exit()
+        ok("PortAudio is stopped as many times as it was started",
+           len(ends) == 2 and _sd._initialized == 0)
+        ok("on the audio thread",
+           all(t is devmod.AUDIO_THREAD._thread for t in ends))
+    finally:
+        for attr in ("_initialized", "_terminate"):
+            if hasattr(_sd, attr):
+                delattr(_sd, attr)
+    try:
+        devmod.release_at_exit()
+        left_alone = True
+    except Exception:
+        left_alone = False
+    ok("and a build without those calls is left alone", left_alone)
 
     print("\n" + "=" * 60)
     if problems:

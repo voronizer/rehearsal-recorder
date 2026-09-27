@@ -280,9 +280,9 @@ window.__MAKE_API__ = () => ({
 
   start_take: track('start_take', async () => { takeCounter += 1; return {ok:true, take_number:takeCounter}; }),
   get_levels: async () => ({'Guitar':[0.99], 'Vocals':[0.005]}),
-  stop_take: async () => ({ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
+  stop_take: track('stop_take', async () => ({ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
     duration_sec:TAKE, suggested_name:suggestName(takeCounter),
-    tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]}),
+    tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]})),
   keep_take: track('keep_take', async (n, _t, name, dur, tracks, markers) => {
     const take = {take_number:n, name:name || ('Take ' + n), duration_sec:dur,
                   tracks, markers: markers || []};
@@ -2429,6 +2429,29 @@ def main():
                "() => window.__CALLS__.filter(c => c.name === 'startup_problems')"
            )) == 1)
         startup.close()
+
+        print("\n[12m] A card that goes away mid-take stops it, and says why")
+        gone = browser.new_page(viewport={"width": 1180, "height": 820})
+        gone.add_init_script(MOCK)
+        gone.goto(server.base_url, wait_until="networkidle")
+        gone.wait_for_selector("text=Start rehearsal")
+        gone.click("text=Start rehearsal")
+        gone.wait_for_selector("text=Record take 1")
+        gone.click("text=Record take 1")
+        gone.wait_for_selector("text=Stop")
+        reason = ("Recording stopped: no sound has come from the audio "
+                  "interface for 3 seconds.")
+        gone.evaluate(f"() => {{ window.__IFACE_GONE__ = {reason!r}; }}")
+        gone.wait_for_selector("text=Save take", timeout=8000)
+        ok("the take is stopped without anyone pressing Stop",
+           len(gone.evaluate(
+               "() => window.__CALLS__.filter(c => c.name === 'stop_take')"
+           )) == 1)
+        said = gone.locator(
+            "section[aria-label='Notifications'] [data-notice='warning']")
+        ok("and the reason stays on screen once the take is up for review",
+           said.count() == 1 and "no sound has come" in said.inner_text())
+        gone.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})

@@ -12,6 +12,7 @@ import {
   type PlacedTrack,
 } from "@/lib/api"
 import { formatDuration, formatHMS } from "@/lib/format"
+import { notify } from "@/lib/notices"
 import { cn } from "@/lib/utils"
 
 // The capture block is ~21 ms, so the meters can update often; Python returns
@@ -97,9 +98,12 @@ export function Recording({
         if (!alive) return
         setHealth(h)
         // The interface went away — do not wait for a human, stop right now
-        // so that everything recorded until this moment is saved.
+        // so that everything recorded until this moment is saved. Said as a
+        // notice, because the line above is about to leave with this screen
+        // and a take that ended early with no reason given looks like a bug.
         if (h.recording && h.error) {
           alive = false
+          notify({ key: "recording", kind: "warning", text: h.error })
           await stopRef.current()
           return
         }

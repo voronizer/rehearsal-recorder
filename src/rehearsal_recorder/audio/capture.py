@@ -14,6 +14,7 @@ which turns them back into playable takes.
 import json
 import os
 import threading
+import time
 import wave
 from pathlib import Path
 
@@ -34,6 +35,20 @@ from rehearsal_recorder.audio.format import (
 )
 
 FLUSH_INTERVAL_SEC = 30
+
+# How long a take may go without a single block from the card before it is
+# called stopped. A block is ~21 ms, so this is well over a hundred of them
+# missing: not a hiccup, a card that is gone. It is needed because an ASIO
+# card that is unplugged does not say so — PortAudio ignores the driver's
+# reset request, the stream is simply never called again, and it goes on
+# reporting itself active.
+STALL_SEC = 3.0
+
+STALLED = (
+    "Recording stopped: no sound has come from the audio interface for "
+    f"{STALL_SEC:.0f} seconds — it was unplugged, switched off or stopped "
+    "answering. Everything captured up to that point has been saved."
+)
 
 # Capture block size. This used to be half a second, which made the level
 # meters visibly lag: a peak arrived only twice per second and was averaged
@@ -76,6 +91,9 @@ class AudioRecorder:
         self._stream = None
         self._raw_files = {}
         self._frames_written = 0
+        # When the card last delivered a block, by time.monotonic(). None
+        # until the stream is running.
+        self._last_block = None
         # A stereo track reaches one input further than its own number, so
         # the stream has to be opened that much wider.
         self._width = {t["name"]: 2 if t.get("stereo") else 1 for t in tracks}
@@ -138,6 +156,23 @@ class AudioRecorder:
                 "Everything captured up to that point has been saved."
             )
 
+    def problem(self):
+        """
+        Why this take is not recording, or None. What the health check asks.
+
+        As well as a stream that ended on its own (see _finished), a card
+        that has sent nothing for STALL_SEC is called stopped, since an
+        unplugged ASIO card never ends its stream. Once said, it stays said.
+        """
+        if (
+            self.error is None
+            and not self._stopping
+            and self._last_block is not None
+            and time.monotonic() - self._last_block > STALL_SEC
+        ):
+            self.error = STALLED
+        return self.error
+
     def is_active(self):
         return bool(self._stream is not None and self._stream.active)
 
@@ -146,7 +181,10 @@ class AudioRecorder:
         # knowing about, not worth stalling the stream over.
         if status:
             self.last_status = str(status)
-        if frames == 0:
+        self._last_block = time.monotonic()
+        # Once a stop is under way the files may be closing, whether or not
+        # the driver has let go of the stream yet.
+        if frames == 0 or self._stopping:
             return
 
         peaks = {}
@@ -228,6 +266,7 @@ class AudioRecorder:
                 callback=self._callback,
                 finished_callback=self._finished,
             )
+        self._last_block = time.monotonic()
 
         self._stop_flush.clear()
         self._flush_thread = threading.Thread(target=self._flush_loop, daemon=True)
