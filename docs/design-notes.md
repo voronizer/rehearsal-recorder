@@ -58,13 +58,19 @@ single-threaded apartment before its first job (`AudioThread` in
 `audio/devices.py`). `--audio-probe` runs on the main thread and would never
 have seen the difference.
 
-Nothing waits on that thread for ever. A call that takes longer than fifteen
-seconds is given up on, and until it comes back every other call is refused
-at once rather than run: PortAudio is not safe to enter from two threads, and
-the stuck call is still inside it, so a fresh thread in its place would be
-worse than none. A stream that opens after its caller gave up is closed. The
-case this is for is stopping a take on a card that was just unplugged: the
-take is finished whether or not the driver comes back.
+Nothing waits on that thread for ever, with one exception. A call that takes
+longer than fifteen seconds is given up on, and until the thread is free
+again every other call is refused at once rather than run: PortAudio is not
+safe to enter from two threads, and the stuck call is still inside it, so a
+fresh thread in its place would be worse than none. A stream that opens after
+its caller gave up is closed. A close is never refused or dropped, only
+queued: whoever asked has already let go of the stream, and one left running
+would go on calling into a player or a take nobody holds. The case all this
+is for is stopping a take on a card that was just unplugged: the take is
+finished whether or not the driver comes back. The exception is **Look
+again**, which waits however long stopping and starting PortAudio takes —
+given up on half-way, PortAudio would be left half torn down with the device
+list read from under it.
 
 An unplugged ASIO card has to be noticed by the take itself. The driver sends
 a reset request, PortAudio ignores it, and the stream is never called again

@@ -45,8 +45,8 @@ STREAM_LOCK = threading.RLock()
 # never comes back from stopping a card that was just unplugged.
 DRIVER_PATIENCE_SEC = 15
 
-# Starting PortAudio again starts every ASIO driver on the machine in turn.
-RESTART_PATIENCE_SEC = 60
+# run()'s default: DRIVER_PATIENCE_SEC as it stands when the call is made.
+_PATIENCE = object()
 
 NOT_ANSWERING = (
     "The audio driver has stopped answering, so nothing can be opened or "
@@ -63,9 +63,10 @@ class DriverNotAnswering(RuntimeError):
 class _Call:
     """One job on its way through the audio thread, and what came of it."""
 
-    def __init__(self, job, late):
+    def __init__(self, job, late, keep):
         self.job = job
         self.late = late
+        self.keep = keep
         self.done = threading.Event()
         self.value = None
         self.error = None
@@ -91,13 +92,15 @@ class AudioThread:
     that waited for STREAM_LOCK while the caller held it would wait forever.
     A job handed over from this thread itself is simply run.
 
-    Nobody waits on it for ever. A call that overruns its patience raises
-    DriverNotAnswering, and from then until that call comes back every other
-    call raises it at once without running. Not a second thread in its place:
-    PortAudio is not safe to enter from two threads at a time, and the stuck
-    call is still inside it. A call whose caller gave up before it started is
-    dropped; one that finishes after its caller gave up hands what it made to
-    its `late`, so a stream opened too late is closed rather than kept.
+    Nobody waits on it for ever, unless they ask to. A call that overruns its
+    patience raises DriverNotAnswering, and from then until the thread is
+    free again every other call raises it at once. Not a second thread in its
+    place: PortAudio is not safe to enter from two threads at a time, and the
+    stuck call is still inside it. A call whose caller gave up before it
+    started is dropped, unless it is to `keep` — a close, which nobody may
+    drop, since whoever asked has already let go of the stream. One that
+    finishes after its caller gave up hands what it made to its `late`, so a
+    stream opened too late is closed rather than kept.
 
     It does not pump window messages while it waits. Neither does the main
     thread of an ordinary sounddevice script, which is where ASIO is used
@@ -115,36 +118,51 @@ class AudioThread:
     def started(self):
         return self._thread is not None
 
-    def run(self, job, timeout=None, late=None):
+    def run(self, job, timeout=_PATIENCE, late=None, keep=False):
         """
         job() on this thread: its return value, or its exception raised.
 
-        `timeout` is in seconds, DRIVER_PATIENCE_SEC when not given. `late`
-        is called on this thread with what job() returned, when it returns
-        after its caller has given up.
+        `timeout` is in seconds, DRIVER_PATIENCE_SEC when not given, and None
+        waits for as long as it takes. `late` is called on this thread with
+        what job() returned, when it returns after its caller has given up.
+        A call to `keep` is queued even while the thread is stuck, and runs
+        whenever it gets there, whether or not anyone is still waiting.
         """
         if threading.current_thread() is self._thread:
             return job()
-        call = _Call(job, late)
+        call = _Call(job, late, keep)
         with self._lock:
-            if self._stuck:
+            stuck = self._stuck
+            if stuck and not keep:
                 raise DriverNotAnswering(NOT_ANSWERING)
             if self._thread is None:
                 self._thread = threading.Thread(
                     target=self._serve, name="audio", daemon=True
                 )
                 self._thread.start()
+            if stuck:
+                call.abandoned = True
         self._calls.put(call)
-        patience = DRIVER_PATIENCE_SEC if timeout is None else timeout
+        if stuck:
+            raise DriverNotAnswering(NOT_ANSWERING)
+        patience = DRIVER_PATIENCE_SEC if timeout is _PATIENCE else timeout
         if not call.done.wait(patience):
             with self._lock:
                 if not call.done.is_set():
                     call.abandoned = True
                     self._stuck = True
                     raise DriverNotAnswering(NOT_ANSWERING)
-        if call.error is not None:
-            raise call.error
-        return call.value
+        value, error = call.value, call.error
+        # Nothing here may outlive the call: a failed job's error holds its
+        # frames, and through them whatever the job was opening — a take's
+        # open raw files among them.
+        call = None
+        if error is not None:
+            try:
+                raise error
+            finally:
+                error = None
+        return value
 
     def _serve(self):
         trouble = self._prepare()
@@ -153,17 +171,24 @@ class AudioThread:
         while True:
             call = self._calls.get()
             with self._lock:
-                if call.abandoned:
-                    continue
-            value = error = None
-            try:
-                value = call.job()
-            except BaseException as e:  # noqa: BLE001 — the caller's to judge
-                error = e
+                skip = call.abandoned and not call.keep
+            if not skip:
+                self._answer(call)
+            # Back, whatever it was doing — stuck, only slow while a quicker
+            # call behind it gave up, or tidying up after a late answer.
+            # Either way it answers now.
             with self._lock:
-                # Back, whatever it was doing — stuck, or only slow while a
-                # quicker call behind it gave up. Either way it answers now.
                 self._stuck = False
+            call = None
+
+    def _answer(self, call):
+        value = error = None
+        try:
+            value = call.job()
+        except BaseException as e:  # noqa: BLE001 — the caller's to judge
+            error = e
+        try:
+            with self._lock:
                 late = call.abandoned
                 if not late:
                     call.value, call.error = value, error
@@ -173,6 +198,11 @@ class AudioThread:
                     call.late(value)
                 except Exception as e:
                     print(f"[devices] after a late answer: {e}")
+        finally:
+            # An error's frames include this one. Held here, it would keep
+            # itself — and everything the job had open, a take's raw files
+            # among them — alive in a cycle until the collector came round.
+            call = value = error = None
 
 
 AUDIO_THREAD = AudioThread(prepare=enter_com_apartment)
@@ -217,9 +247,12 @@ def close_stream(stream):
 
     Raises DriverNotAnswering when the driver does not come back from it,
     which is how a card unplugged mid-take can behave; the callers carry on
-    without it, so a take is finished whatever the driver does.
+    without it, so a take is finished whatever the driver does. The close
+    itself is never dropped: every caller has already let go of the stream,
+    and one left running would go on calling into a player or a take that
+    nobody holds any more.
     """
-    AUDIO_THREAD.run(partial(_close_quietly, stream))
+    AUDIO_THREAD.run(partial(_close_quietly, stream), keep=True)
 
 
 def release_at_exit():
@@ -321,6 +354,10 @@ def recording_formats(device_index, channels):
                         dtype=capture_dtype(depth),
                     ))
                     depths.append(depth)
+                except DriverNotAnswering as e:
+                    # The app stopped waiting; the card refused nothing.
+                    # What did answer is no list of its rates either.
+                    return {}, str(e)
                 except Exception as e:
                     refusal = e
             if asio and depths:
@@ -374,8 +411,14 @@ def rescan():
 
     with STREAM_LOCK:
         try:
+            # However long it takes — the one place the app waits for
+            # ever. Given up on half-way, PortAudio would go on stopping or
+            # starting after the lock is let go, with the device list read
+            # from under it; a restart was always the answer to a PortAudio
+            # that will not start again. Only a thread already stuck is not
+            # waited for: nothing has been touched yet.
             for _ in range(count):
-                AUDIO_THREAD.run(terminate, timeout=RESTART_PATIENCE_SEC)
+                AUDIO_THREAD.run(terminate, timeout=None)
         except DriverNotAnswering as e:
             # Nothing can be started while a driver is still inside
             # PortAudio, and restarting the app is not the only way out.
@@ -390,7 +433,7 @@ def rescan():
             failure = None
             for _attempt in range(2):
                 try:
-                    AUDIO_THREAD.run(initialize, timeout=RESTART_PATIENCE_SEC)
+                    AUDIO_THREAD.run(initialize, timeout=None)
                     failure = None
                     break
                 except Exception as e:
@@ -546,6 +589,10 @@ def usable_output(device_index, samplerate, channels=2):
                 samplerate=samplerate,
                 dtype="int16",
             ))
+        except DriverNotAnswering:
+            return None, (
+                f"“{name}” did not answer in time — using the system output."
+            )
         except Exception as e:
             # This asked one question — will you take this format — so an
             # answer with no code of its own is an answer about the format.

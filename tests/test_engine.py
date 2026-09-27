@@ -3600,6 +3600,182 @@ def main():
     ok("a slow call that finishes clears the way for the next one",
        slow_done.is_set() and lone.run(lambda: "after") == "after")
 
+    # A late answer's clean-up is still the thread being busy: until it is
+    # done, the next caller is told so at once rather than left to wait.
+    tidy = threading.Event()
+    _try(lambda: lone.run(lambda: _time.sleep(0.3), timeout=0.1,
+                          late=lambda _: tidy.wait(10)))
+    _time.sleep(0.4)
+    began = _time.monotonic()
+    _try(lambda: lone.run(lambda: None, timeout=5))
+    ok("while a late answer is being tidied up, callers are told at once",
+       _time.monotonic() - began < 0.1)
+    tidy.set()
+    _time.sleep(0.1)
+    ok("and served again once it is", lone.run(lambda: "tidy") == "tidy")
+
+    print("\n[38] What a stuck driver must not be mistaken for")
+    patience = devmod.DRIVER_PATIENCE_SEC
+    devmod.DRIVER_PATIENCE_SEC = 0.2
+
+    def settle_audio_thread():
+        for _ in range(60):
+            try:
+                devmod.AUDIO_THREAD.run(lambda: None)
+                return
+            except devmod.DriverNotAnswering:
+                _time.sleep(0.05)
+
+    try:
+        # Asking the rates: a card that stops answering half-way has not
+        # refused the rates it was not asked about.
+        wake = threading.Event()
+        real_check = _sd.check_input_settings
+
+        def answers_then_hangs(**kw):
+            if kw["samplerate"] == 48000:
+                wake.wait(10)
+            return real_check(**kw)
+
+        _sd.check_input_settings = answers_then_hangs
+        formats, trouble = devmod.recording_formats(0, 2)
+        _sd.check_input_settings = real_check
+        wake.set()
+        settle_audio_thread()
+        ok("a driver that stops answering mid-list is not a list of refusals",
+           formats == {} and trouble == devmod.NOT_ANSWERING)
+
+        # Playback: not answering is not "will not take 48000 Hz".
+        real_run = devmod.AUDIO_THREAD.run
+
+        def refuse(job, **kw):
+            raise devmod.DriverNotAnswering(devmod.NOT_ANSWERING)
+
+        devmod.AUDIO_THREAD.run = refuse
+        try:
+            where, why = devmod.usable_output(0, 48000)
+        finally:
+            devmod.AUDIO_THREAD.run = real_run
+        ok("a playback card that did not answer is not blamed on the rate",
+           where is None and "Hz" not in (why or "")
+           and "answer" in (why or ""))
+
+        # Closing while stuck: the stream is not dropped on the floor. The
+        # caller has already let go of it, so if this close were thrown away
+        # it would run on, calling into an object nobody holds.
+        held = threading.Event()
+        _try(lambda: devmod.AUDIO_THREAD.run(lambda: held.wait(10)))
+
+        class _Closable:
+            closed = False
+
+            def stop(self):
+                pass
+
+            def close(self):
+                self.closed = True
+
+        orphan = _Closable()
+        began = _time.monotonic()
+        refused_close = False
+        try:
+            devmod.close_stream(orphan)
+        except devmod.DriverNotAnswering:
+            refused_close = True
+        ok("closing while the driver is stuck says so at once",
+           refused_close and _time.monotonic() - began < 0.1)
+        held.set()
+        settle_audio_thread()
+        ok("and the stream is closed as soon as the driver is back",
+           orphan.closed)
+
+        # Looking again waits for PortAudio to stop and start however long
+        # it takes: given up on half-way, PortAudio would be left half torn
+        # down with the device list read from under it.
+        steps = []
+        _sd._initialized = 1
+        _sd._terminate = lambda: (_time.sleep(0.5), steps.append("stop"),
+                                  setattr(_sd, "_initialized", 0))
+        _sd._initialize = lambda: (steps.append("start"),
+                                   setattr(_sd, "_initialized", 1))
+        try:
+            restarted = devmod.rescan()
+        finally:
+            for attr in ("_initialized", "_terminate", "_initialize"):
+                delattr(_sd, attr)
+        ok("looking again waits for a slow PortAudio rather than giving up",
+           restarted is None and steps == ["stop", "start"])
+    finally:
+        devmod.DRIVER_PATIENCE_SEC = patience
+
+    # A block that takes long to write — a slow disk — is not a card gone
+    # quiet: the card delivered it, the app is busy with it.
+    stall = capmod.STALL_SEC
+    capmod.STALL_SEC = 0.2
+    try:
+        slow_dir = Path(tempfile.mkdtemp())
+        slow = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}], slow_dir)
+        slow.start()
+        disk = threading.Event()
+
+        class _SlowDisk:
+            def write(self, data):
+                disk.wait(10)
+
+        real_file = slow._raw_files["Gtr"]
+        slow._raw_files["Gtr"] = _SlowDisk()
+        writer = threading.Thread(target=lambda: slow._callback(
+            np.zeros((256, 1), dtype=np.int16), 256, None, None))
+        writer.start()
+        _time.sleep(0.4)
+        ok("a block still being written is not a stalled card",
+           slow.problem() is None)
+        disk.set()
+        writer.join()
+        slow._raw_files["Gtr"] = real_file
+        ok("nor is the moment after it", slow.problem() is None)
+        _time.sleep(0.3)
+        ok("but silence after it still is", slow.problem() is not None)
+        slow.stop()
+    finally:
+        capmod.STALL_SEC = stall
+
+    # A take that will not start leaves nothing that looks like one.
+    import gc
+    import weakref
+
+    class _Refuses:
+        def __init__(self, **kw):
+            raise RuntimeError("Failed to load ASIO driver")
+
+    _sd.InputStream = _Refuses
+    try:
+        refused_dir = Path(tempfile.mkdtemp()) / "_drafts" / "take 1"
+        doomed = AudioRecorder(0, SR, [{"name": "Gtr", "channel": 1}], refused_dir)
+        files = []
+        try:
+            doomed.start()
+            began_ok = True
+        except RuntimeError:
+            began_ok = False
+        files = list(doomed._raw_files.values())
+        ok("the refusal reaches whoever started the take", not began_ok)
+        ok("no empty raw files or record are left to pass for an unsaved take",
+           not refused_dir.exists() or not any(refused_dir.iterdir()))
+        ok("and no file is left open", files and all(f.closed for f in files))
+        gone = weakref.ref(doomed)
+        del doomed, files
+        gc_was = gc.isenabled()
+        gc.disable()
+        try:
+            ok("and the failed take is let go of at once, not kept by the "
+               "audio thread", gone() is None)
+        finally:
+            if gc_was:
+                gc.enable()
+    finally:
+        _sd.InputStream = real["InputStream"]
+
     print("\n[37] Closing the app with a card open")
     # Closing the window mid-take used to leave the take recording until the
     # interpreter went down around it. It is stopped, finished as .wav, and
@@ -3621,6 +3797,14 @@ def main():
        and (kept[0] / "Gtr.wav").exists()
        and not (kept[0] / "Gtr.raw").exists())
     ok("and the player lets go of its card", a37._player is None)
+    # A draft that is already .wav has its length in its header, not in the
+    # size of a raw file: it used to be listed, and recovered, as 0:00.
+    from rehearsal_recorder.audio.drafts import describe, finalize
+
+    ok("the unsaved take says how long it is",
+       abs(describe(kept[0], SR, 16)["duration_sec"] - 256 / SR) < 1e-6)
+    ok("and is recovered at that length",
+       abs(finalize(kept[0], SR, 16)["duration_sec"] - 256 / SR) < 1e-6)
     shut_cleanly = True
     try:
         a37.shutdown()

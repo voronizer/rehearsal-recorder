@@ -94,6 +94,9 @@ class AudioRecorder:
         # When the card last delivered a block, by time.monotonic(). None
         # until the stream is running.
         self._last_block = None
+        # A block is being written: the card has delivered, the disk is
+        # taking its time.
+        self._in_block = False
         # A stereo track reaches one input further than its own number, so
         # the stream has to be opened that much wider.
         self._width = {t["name"]: 2 if t.get("stereo") else 1 for t in tracks}
@@ -167,6 +170,7 @@ class AudioRecorder:
         if (
             self.error is None
             and not self._stopping
+            and not self._in_block
             and self._last_block is not None
             and time.monotonic() - self._last_block > STALL_SEC
         ):
@@ -186,7 +190,17 @@ class AudioRecorder:
         # the driver has let go of the stream yet.
         if frames == 0 or self._stopping:
             return
+        # Marked while in, and noted again on the way out: a block a slow
+        # disk takes seconds to swallow is the app being busy, not the card
+        # gone quiet, and must not stop the take (see problem()).
+        self._in_block = True
+        try:
+            self._take_block(indata, frames)
+        finally:
+            self._in_block = False
+            self._last_block = time.monotonic()
 
+    def _take_block(self, indata, frames):
         peaks = {}
         for track in self.tracks:
             name = track["name"]
@@ -255,22 +269,51 @@ class AudioRecorder:
             path = self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}"
             self._raw_files[track["name"]] = open(path, "wb")
 
-        with STREAM_LOCK:
-            self._stream = open_stream(
-                sd.InputStream,
-                device=self.device_index,
-                channels=self._max_channel,
-                samplerate=self.samplerate,
-                dtype=self._dtype,
-                blocksize=BLOCK_FRAMES,
-                callback=self._callback,
-                finished_callback=self._finished,
-            )
+        try:
+            with STREAM_LOCK:
+                self._stream = open_stream(
+                    sd.InputStream,
+                    device=self.device_index,
+                    channels=self._max_channel,
+                    samplerate=self.samplerate,
+                    dtype=self._dtype,
+                    blocksize=BLOCK_FRAMES,
+                    callback=self._callback,
+                    finished_callback=self._finished,
+                )
+        except BaseException:
+            self._discard_files()
+            raise
         self._last_block = time.monotonic()
 
         self._stop_flush.clear()
         self._flush_thread = threading.Thread(target=self._flush_loop, daemon=True)
         self._flush_thread.start()
+
+    def _discard_files(self):
+        """
+        What start() made, taken back when the card would not open.
+
+        Left behind, the empty raw files are audio as far as the drafts are
+        concerned — a 0:00 unsaved take, and a rehearsal folder that is never
+        cleaned away — and, still open, Windows will not let that folder be
+        moved or deleted. Only what start() made is removed, and the folder
+        only if that leaves it empty.
+        """
+        # A stream that opens after the app stopped waiting is closed again
+        # on the audio thread, but may be called once or twice before then.
+        self._stopping = True
+        for track in self.tracks:
+            f = self._raw_files.get(track["name"])
+            if f is not None:
+                f.close()
+            (self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}").unlink(
+                missing_ok=True)
+        (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
+        try:
+            self.out_dir.rmdir()
+        except OSError:
+            pass  # something else is in it, or it is already gone
 
     def _write_record(self):
         """What the folder needs to describe itself if the app dies: the

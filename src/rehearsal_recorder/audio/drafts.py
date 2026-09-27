@@ -9,6 +9,7 @@ This module finds those leftovers and turns them back into normal takes.
 """
 
 import json
+import wave
 from pathlib import Path
 
 from rehearsal_recorder.audio.capture import (
@@ -50,6 +51,17 @@ def has_audio(folder):
     return any(folder.rglob("*.wav")) or any(folder.rglob(f"*{RAW_SUFFIX}"))
 
 
+def _wav_frames(path):
+    """How long a .wav is, in frames, from its own header. A take that was
+    stopped but never saved is already .wav — its length is not in the size
+    of a raw file any more."""
+    try:
+        with wave.open(str(path), "rb") as w:
+            return w.getnframes()
+    except (OSError, EOFError, wave.Error):
+        return 0
+
+
 def describe(take_dir, samplerate, bit_depth=16):
     """What the interface shows about a recoverable draft."""
     take_dir = Path(take_dir)
@@ -64,6 +76,7 @@ def describe(take_dir, samplerate, bit_depth=16):
             frames = max(frames, track_frames)
             tracks.append(path.stem)
         elif path.suffix == ".wav":
+            frames = max(frames, _wav_frames(path))
             tracks.append(path.stem)
 
     return {
@@ -98,6 +111,7 @@ def finalize(take_dir, samplerate, bit_depth=16):
     (take_dir / TAKE_RECORD).unlink(missing_ok=True)
 
     for wav_path in sorted(take_dir.glob("*.wav")):
+        frames = max(frames, _wav_frames(wav_path))
         tracks.append({"name": wav_path.stem, "file": str(wav_path)})
 
     return {

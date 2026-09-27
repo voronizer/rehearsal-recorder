@@ -29,6 +29,12 @@ opening.
 - Closing the window mid-take finishes the take, and it is offered as an
   unsaved take next time. It used to go on recording while the app shut down
   around it, leaving raw files for the recovery to find.
+- An unsaved take that was already stopped says how long it is. One stopped
+  and then left unsaved when the window closed was listed as 0:00, and
+  recovered as a take of no length, since only raw files were measured.
+- A take that will not start leaves nothing behind. Its empty files stayed
+  in the drafts folder, open, and came back as a 0:00 unsaved take — and kept
+  the rehearsal folder from ever being cleaned away.
 
 ## 0.7.6
 
