@@ -26,15 +26,16 @@ opening.
   gives up on it after fifteen seconds and finishes the take all the same;
   until the driver answers again, checking the signal, recording, playing
   and **Look again** say so at once instead of waiting behind it.
-- Closing the window mid-take finishes the take, and it is offered as an
-  unsaved take next time. It used to go on recording while the app shut down
-  around it, leaving raw files for the recovery to find.
+- Closing the window mid-take lets go of the card and closes the take's
+  files at once, and the take is offered as an unsaved take next time. It
+  used to go on recording while the app shut down around it.
 - An unsaved take that was already stopped says how long it is. One stopped
   and then left unsaved when the window closed was listed as 0:00, and
   recovered as a take of no length, since only raw files were measured.
-- A take that will not start leaves nothing behind. Its empty files stayed
-  in the drafts folder, open, and came back as a 0:00 unsaved take — and kept
-  the rehearsal folder from ever being cleaned away.
+- A take that will not start leaves nothing behind, whether the card or the
+  disk refused. Its empty files stayed in the drafts folder, open, and came
+  back as a 0:00 unsaved take — and kept the rehearsal folder from ever being
+  cleaned away.
 
 ## 0.7.6
 

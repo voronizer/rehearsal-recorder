@@ -265,11 +265,11 @@ class AudioRecorder:
 
     def start(self):
         self._write_record()
-        for track in self.tracks:
-            path = self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}"
-            self._raw_files[track["name"]] = open(path, "wb")
-
         try:
+            for track in self.tracks:
+                path = self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}"
+                self._raw_files[track["name"]] = open(path, "wb")
+
             with STREAM_LOCK:
                 self._stream = open_stream(
                     sd.InputStream,
@@ -292,24 +292,30 @@ class AudioRecorder:
 
     def _discard_files(self):
         """
-        What start() made, taken back when the card would not open.
+        What start() made, taken back when the card would not open, or the
+        disk would not take one of the files.
 
         Left behind, the empty raw files are audio as far as the drafts are
         concerned — a 0:00 unsaved take, and a rehearsal folder that is never
         cleaned away — and, still open, Windows will not let that folder be
         moved or deleted. Only what start() made is removed, and the folder
-        only if that leaves it empty.
+        only if that leaves it empty. Nothing here raises: the error that
+        stopped the start is the one worth reporting.
         """
         # A stream that opens after the app stopped waiting is closed again
         # on the audio thread, but may be called once or twice before then.
         self._stopping = True
-        for track in self.tracks:
-            f = self._raw_files.get(track["name"])
-            if f is not None:
-                f.close()
-            (self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}").unlink(
-                missing_ok=True)
-        (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
+        made = [
+            self.out_dir / f"{self.safe_name(name)}{RAW_SUFFIX}"
+            for name in self._raw_files
+        ]
+        for f in self._raw_files.values():
+            f.close()
+        for path in [*made, self.out_dir / TAKE_RECORD]:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
         try:
             self.out_dir.rmdir()
         except OSError:
@@ -350,25 +356,7 @@ class AudioRecorder:
         if self._stopped:
             return self._result
         self._stopped = True
-
-        self._stop_flush.set()
-        if self._flush_thread is not None:
-            self._flush_thread.join(timeout=2)
-
-        # Mark the stop as ours, otherwise finished_callback would report it
-        # as a vanished interface.
-        self._stopping = True
-        with STREAM_LOCK:
-            stream, self._stream = self._stream, None
-            try:
-                if stream is not None:
-                    close_stream(stream)
-            except Exception as e:
-                print(f"[audio] stop: {e}")
-
-        self.flush()
-        for f in self._raw_files.values():
-            f.close()
+        self._let_go()
 
         duration = self._frames_written / self.samplerate
 
@@ -391,6 +379,44 @@ class AudioRecorder:
 
         self._result = {"duration_sec": duration, "tracks": finalized}
         return self._result
+
+    def abandon(self):
+        """
+        Lets go of the card and of the files, without finishing the take.
+
+        What closing the window does to a take still recording. The raw files
+        and their record stay exactly as a crash would leave them, flushed and
+        closed, and the drafts recover them next time. Finishing them here
+        would rewrite every track, each read whole into memory, after the
+        window had already gone — a process lingering unseen for as long as
+        that takes, and killed half-way if Windows is shutting down.
+        """
+        if self._stopped:
+            return
+        self._stopped = True
+        self._let_go()
+
+    def _let_go(self):
+        """The stream closed and every byte on disk — what stopping and
+        abandoning have in common."""
+        self._stop_flush.set()
+        if self._flush_thread is not None:
+            self._flush_thread.join(timeout=2)
+
+        # Mark the stop as ours, otherwise finished_callback would report it
+        # as a vanished interface.
+        self._stopping = True
+        with STREAM_LOCK:
+            stream, self._stream = self._stream, None
+            try:
+                if stream is not None:
+                    close_stream(stream)
+            except Exception as e:
+                print(f"[audio] stop: {e}")
+
+        self.flush()
+        for f in self._raw_files.values():
+            f.close()
 
 
 def raw_to_wav(raw_path, wav_path, samplerate, bit_depth=16, channels=1):

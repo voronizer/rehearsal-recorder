@@ -12,7 +12,7 @@ import {
   type PlacedTrack,
 } from "@/lib/api"
 import { formatDuration, formatHMS } from "@/lib/format"
-import { notify } from "@/lib/notices"
+import { dismiss, notify } from "@/lib/notices"
 import { cn } from "@/lib/utils"
 
 // The capture block is ~21 ms, so the meters can update often; Python returns
@@ -21,6 +21,8 @@ const LEVELS_POLL_MS = 70
 const TIMER_TICK_MS = 200
 // Disk space and stream health — every couple of seconds, not a hot path.
 const HEALTH_POLL_MS = 2000
+// The slot this screen's notice takes: why a take stopped by itself.
+const SAID = "recording"
 
 export function Recording({
   takeNumber,
@@ -40,6 +42,10 @@ export function Recording({
   const [health, setHealth] = useState<RecordingHealth | null>(null)
   const startedAt = useRef(Date.now())
   const stopRef = useRef<() => Promise<void>>(async () => {})
+
+  // A new take is recording: why the last one stopped by itself no longer
+  // stands, and "Recording stopped" over a take that is recording is wrong.
+  useEffect(() => dismiss(SAID), [])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -103,7 +109,7 @@ export function Recording({
         // and a take that ended early with no reason given looks like a bug.
         if (h.recording && h.error) {
           alive = false
-          notify({ key: "recording", kind: "warning", text: h.error })
+          notify({ key: SAID, kind: "warning", text: h.error })
           await stopRef.current()
           return
         }

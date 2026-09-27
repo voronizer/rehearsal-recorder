@@ -327,18 +327,20 @@ class Api:
         """
         The window has closed.
 
-        A take still recording is stopped, which finishes it as .wav in its
-        drafts folder: it is offered as an unsaved take next time, rather than
-        left recording while Python shuts down around it. The signal check and
-        the player let go of their cards — on the audio thread, while it is
-        still there to do it. Then the publishing worker is stood down instead
-        of being killed wherever it happens to be.
+        A take still recording lets go of its card and its files at once,
+        rather than recording on while Python shuts down around it; it is left
+        as raw files, offered as an unsaved take next time (see
+        AudioRecorder.abandon for why it is not finished here). The signal
+        check and the player let go of their cards too — on the audio thread,
+        while it is still there to do it. Then the publishing worker is stood
+        down instead of being killed wherever it happens to be.
         """
-        if self._recorder is not None:
+        recorder, self._recorder = self._recorder, None
+        if recorder is not None:
             try:
-                self.stop_take()
+                recorder.abandon()
             except Exception as e:
-                print(f"[shutdown] stopping the take: {e}")
+                print(f"[shutdown] letting go of the take: {e}")
         self.stop_monitor()
         self.player_close()
         self._cloud_queue.stop()

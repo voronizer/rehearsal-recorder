@@ -2451,6 +2451,14 @@ def main():
             "section[aria-label='Notifications'] [data-notice='warning']")
         ok("and the reason stays on screen once the take is up for review",
            said.count() == 1 and "no sound has come" in said.inner_text())
+        # Plugged back in, the next take starts clean: "Recording stopped"
+        # in the corner over a take that is recording would be a lie.
+        gone.evaluate("() => { window.__IFACE_GONE__ = null; }")
+        gone.click("text=Save take")
+        gone.wait_for_selector("text=Record take 2")
+        gone.click("text=Record take 2")
+        gone.wait_for_selector("text=Stop")
+        ok("the next take does not carry the last one's reason", said.count() == 0)
         gone.close()
 
         print("\n[13] Appearance is applied before Python answers")

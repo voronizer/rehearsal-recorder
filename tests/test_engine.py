@@ -3776,35 +3776,68 @@ def main():
     finally:
         _sd.InputStream = real["InputStream"]
 
+    # The same when it is the disk that refuses, part-way through making the
+    # files: what was made is taken back, and the disk's own error is the
+    # one that comes back — not one from the tidying up.
+    blocked_dir = Path(tempfile.mkdtemp()) / "_drafts" / "take 1"
+    two = [{"name": "Gtr", "channel": 1}, {"name": "Bass", "channel": 2}]
+    halfway = AudioRecorder(0, SR, two, blocked_dir)
+    (blocked_dir / "Bass.raw").mkdir()  # a file cannot be made where a folder is
+    try:
+        halfway.start()
+        refusal = None
+    except OSError as e:
+        refusal = e
+    ok("a take whose files cannot all be made does not start",
+       refusal is not None and "Bass.raw" in str(refusal))
+    ok("and takes back the ones it did make",
+       not (blocked_dir / "Gtr.raw").exists()
+       and not (blocked_dir / "take.json").exists()
+       and all(f.closed for f in halfway._raw_files.values()))
+    ok("leaving alone what it did not",
+       (blocked_dir / "Bass.raw").is_dir())
+
     print("\n[37] Closing the app with a card open")
     # Closing the window mid-take used to leave the take recording until the
-    # interpreter went down around it. It is stopped, finished as .wav, and
-    # waits as an unsaved take; the player lets go of its card first.
+    # interpreter went down around it. It lets go of the card and its files
+    # at once, and waits as raw files for the drafts to recover — not
+    # finished there and then, which would rewrite every track after the
+    # window had gone. The player lets go of its card too.
     from rehearsal_recorder.audio.drafts import draft_dirs
 
     _, a37 = fresh_api(Path(tempfile.mkdtemp()))
-    a37.start_rehearsal("Late night", 0, SR, [{"name": "Gtr", "channel": 1}])
+    a37.start_rehearsal("Late night", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
     a37.start_take()
     a37._recorder._callback(np.full((256, 1), 900, dtype=np.int16), 256, None, None)
+    a37_files = list(a37._recorder._raw_files.values())
     folder37 = Path(a37._session["folder"])
     player_dir = Path(tempfile.mkdtemp())
     write_wav(player_dir / "A.wav", 1000)
     a37.player_open([{"name": "A", "file": str(player_dir / "A.wav")}])
     a37.shutdown()
     kept = draft_dirs(folder37)
-    ok("closing the window mid-take finishes the take",
+    ok("closing the window mid-take lets go of the take at once",
        a37._recorder is None and len(kept) == 1
-       and (kept[0] / "Gtr.wav").exists()
-       and not (kept[0] / "Gtr.raw").exists())
+       and (kept[0] / "Gtr.raw").exists()
+       and (kept[0] / "take.json").exists()
+       and not (kept[0] / "Gtr.wav").exists())
+    ok("with every byte written and the files closed",
+       (kept[0] / "Gtr.raw").stat().st_size == 256 * 2
+       and all(f.closed for f in a37_files))
     ok("and the player lets go of its card", a37._player is None)
-    # A draft that is already .wav has its length in its header, not in the
-    # size of a raw file: it used to be listed, and recovered, as 0:00.
     from rehearsal_recorder.audio.drafts import describe, finalize
 
     ok("the unsaved take says how long it is",
        abs(describe(kept[0], SR, 16)["duration_sec"] - 256 / SR) < 1e-6)
+    recovered = finalize(kept[0], SR, 16)
     ok("and is recovered at that length",
-       abs(finalize(kept[0], SR, 16)["duration_sec"] - 256 / SR) < 1e-6)
+       abs(recovered["duration_sec"] - 256 / SR) < 1e-6)
+    # A draft that is already .wav — stopped, then left unsaved when the
+    # window closed — has its length in its header, not in the size of a raw
+    # file: it used to be listed, and recovered, as 0:00.
+    ok("a draft that is already .wav says how long it is too",
+       abs(describe(kept[0], SR, 16)["duration_sec"] - 256 / SR) < 1e-6
+       and abs(finalize(kept[0], SR, 16)["duration_sec"] - 256 / SR) < 1e-6)
     shut_cleanly = True
     try:
         a37.shutdown()
