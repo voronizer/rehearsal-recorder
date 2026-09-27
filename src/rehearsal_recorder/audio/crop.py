@@ -51,7 +51,8 @@ def _faded(raw, ramp, sampwidth, channels):
     return out.tobytes()
 
 
-def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC):
+def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC,
+             progress=None):
     """
     Writes frames [start, end) of src into dst, keeping the sample rate, bit
     depth and channel count it found.
@@ -61,6 +62,7 @@ def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC):
     end keeps the original decay.
 
     Returns {"ok", "frames", "samplerate"}, or {"ok": False, "error"}.
+    `progress(fraction)`, when given, hears how much of the region is written.
     """
     src = Path(src)
     dst = Path(dst)
@@ -98,12 +100,17 @@ def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC):
                 fout.setsampwidth(sampwidth)
                 fout.setframerate(rate)
 
+                def written(frames):
+                    if progress is not None:
+                        progress(min(1.0, frames / total))
+
                 if head:
                     ramp = np.linspace(0.0, 1.0, head, endpoint=False,
                                        dtype=np.float32)
                     fout.writeframes(
                         _faded(fin.readframes(head), ramp, sampwidth, channels)
                     )
+                    written(head)
 
                 left = middle
                 while left > 0:
@@ -113,6 +120,7 @@ def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC):
                         break
                     fout.writeframes(block)
                     left -= want
+                    written(head + middle - left)
 
                 if tail:
                     ramp = np.linspace(1.0, 0.0, tail, endpoint=False,
@@ -124,4 +132,6 @@ def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC):
         dst.unlink(missing_ok=True)
         return {"ok": False, "error": f"{src.name}: {e}"}
 
+    if progress is not None:
+        progress(1.0)
     return {"ok": True, "frames": total, "samplerate": rate}

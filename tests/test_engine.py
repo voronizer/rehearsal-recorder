@@ -4045,6 +4045,56 @@ def main():
     from rehearsal_recorder import mediaserver
     ok("it is polled over http", "activity" in mediaserver.POLLABLE)
 
+    print("\n[41] Long loops say how far along they are")
+    from rehearsal_recorder.audio.capture import raw_to_wav as r2w
+    from rehearsal_recorder.audio.crop import crop_wav as cw
+    from rehearsal_recorder.audio.encode import encode as enc
+    from rehearsal_recorder.audio.mixdown import mixdown as md
+
+    def reference_wav(raw, wav, rate, depth, channels):
+        # The old raw_to_wav, kept here to compare against byte for byte.
+        width = (2 if depth == 16 else 3) * channels
+        data = Path(raw).read_bytes()
+        usable = len(data) - (len(data) % width)
+        with wave.open(str(wav), "wb") as w:
+            w.setnchannels(channels)
+            w.setsampwidth(2 if depth == 16 else 3)
+            w.setframerate(rate)
+            w.writeframes(data[:usable])
+
+    loops = Path(tempfile.mkdtemp())
+    rng = np.random.default_rng(7)
+    for depth, channels, size in ((16, 1, 10_000_003), (24, 2, 12_345_677),
+                                  (16, 2, 0), (24, 1, 5)):
+        raw = loops / f"r{depth}{channels}{size}.raw"
+        raw.write_bytes(rng.integers(0, 256, size, dtype=np.uint8).tobytes())
+        mine, theirs = loops / "mine.wav", loops / "theirs.wav"
+        steps = []
+        r2w(raw, mine, SR, depth, channels=channels, progress=steps.append)
+        reference_wav(raw, theirs, SR, depth, channels)
+        ok(f"a {depth}-bit, {channels}-channel raw of {size} bytes is wrapped "
+           "exactly as before", mine.read_bytes() == theirs.read_bytes())
+        ok("and says how far along it is, up to the end",
+           steps and steps[-1] == 1.0 and steps == sorted(steps))
+
+    write_wav(loops / "A.wav", 1000, seconds=3.0)
+    write_wav(loops / "B.wav", 2000, seconds=2.0)
+    steps = []
+    md([{"name": "A", "file": str(loops / "A.wav")},
+        {"name": "B", "file": str(loops / "B.wav")}],
+       loops / "mix.wav", progress=steps.append)
+    ok("a mixdown says how far along it is",
+       len(steps) > 2 and steps[-1] == 1.0 and steps == sorted(steps)
+       and any(0.4 < s < 0.6 for s in steps))
+
+    steps = []
+    enc(loops / "mix.wav", "flac", progress=steps.append)
+    ok("so does an encode", steps and steps[-1] == 1.0 and steps == sorted(steps))
+
+    steps = []
+    cw(loops / "A.wav", loops / "A-cut.wav", 0.5, 2.5, progress=steps.append)
+    ok("and a crop", steps and steps[-1] == 1.0 and steps == sorted(steps))
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

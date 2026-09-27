@@ -25,13 +25,16 @@ CHUNK = 1 << 16
 TARGET_PEAK = 0.97
 
 
-def mixdown(tracks, out_path, volumes=None):
+def mixdown(tracks, out_path, volumes=None, progress=None):
     """
     tracks:  [{"name":.., "file":..}] — the tracks of one take
     volumes: {name: 0..1}, the balance from the player; missing names get 1.0
 
     Returns {"ok", "file", "duration_sec", "gain"}. gain is what had to be
     applied to keep the mix from clipping: 1.0 means nothing was touched.
+
+    `progress(fraction)`, when given, hears how far along it is: the pass
+    that finds the peak is the first half, the pass that writes the second.
     """
     if not tracks:
         return {"ok": False, "error": "No tracks"}
@@ -66,6 +69,8 @@ def mixdown(tracks, out_path, volumes=None):
     for start in range(0, total, CHUNK):
         acc = _sum_chunk(opened, start, min(CHUNK, total - start))
         peak = max(peak, float(np.abs(acc).max()))
+        if progress is not None:
+            progress(0.5 * min(start + CHUNK, total) / total)
 
     limit = 32767.0
     gain = 1.0 if peak <= limit * TARGET_PEAK else (limit * TARGET_PEAK) / peak
@@ -80,6 +85,8 @@ def mixdown(tracks, out_path, volumes=None):
             acc = _sum_chunk(opened, start, min(CHUNK, total - start)) * gain
             out = np.clip(np.rint(acc), -32768, 32767).astype("<i2")
             w.writeframes(out.tobytes())
+            if progress is not None:
+                progress(0.5 + 0.5 * min(start + CHUNK, total) / total)
 
     return {
         "ok": True,

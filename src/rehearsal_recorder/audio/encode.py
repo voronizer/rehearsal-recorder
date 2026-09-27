@@ -110,7 +110,7 @@ def _flac_subtype(source_subtype):
     return "PCM_16" if source_subtype == "PCM_16" else "PCM_24"
 
 
-def encode(src, fmt, dst=None):
+def encode(src, fmt, dst=None, progress=None):
     """
     Converts src into fmt, next to it unless dst says otherwise, and removes
     the wav it came from — this is the cloud copy, the recording itself is
@@ -120,16 +120,25 @@ def encode(src, fmt, dst=None):
     the library is missing, or the conversion goes wrong, the original file
     stays where it is and `note` says what happened, because a copy in the
     wrong format beats no copy at all.
+
+    `progress(fraction)`, when given, hears how far along it is, by frames
+    read, and 1.0 however it ends — it never fails the caller either.
     """
+    def finished(answer):
+        if progress is not None:
+            progress(1.0)
+        return answer
+
     src = Path(src)
     fmt = normalize_format(fmt)
     if fmt == "wav":
-        return {"ok": True, "file": str(src), "format": "wav", "note": None}
+        return finished(
+            {"ok": True, "file": str(src), "format": "wav", "note": None})
 
     sf = _soundfile()
     if sf is None:
-        return {"ok": True, "file": str(src), "format": "wav",
-                "note": missing_encoder_hint()}
+        return finished({"ok": True, "file": str(src), "format": "wav",
+                         "note": missing_encoder_hint()})
 
     dst = Path(dst) if dst else src.with_suffix(extension(fmt))
     try:
@@ -148,19 +157,24 @@ def encode(src, fmt, dst=None):
                 # int32 whatever the source depth: libsndfile left-justifies,
                 # so 16- and 24-bit both come through without losing a bit,
                 # and one code path covers them.
+                total = max(1, fin.frames)
+                read = 0
                 for block in fin.blocks(
                     blocksize=BLOCK_FRAMES, dtype="int32", always_2d=True
                 ):
                     fout.write(block)
+                    read += len(block)
+                    if progress is not None:
+                        progress(min(1.0, read / total))
     except Exception as e:
         Path(dst).unlink(missing_ok=True)
-        return {"ok": True, "file": str(src), "format": "wav",
-                "note": f"Could not compress ({e}); the copy stayed a WAV."}
+        return finished({"ok": True, "file": str(src), "format": "wav",
+                         "note": f"Could not compress ({e}); the copy stayed a WAV."})
 
     if not dst.exists() or dst.stat().st_size == 0:
         dst.unlink(missing_ok=True)
-        return {"ok": True, "file": str(src), "format": "wav",
-                "note": "The encoder produced nothing; the copy stayed a WAV."}
+        return finished({"ok": True, "file": str(src), "format": "wav",
+                         "note": "The encoder produced nothing; the copy stayed a WAV."})
 
     src.unlink(missing_ok=True)  # the cloud copy only
-    return {"ok": True, "file": str(dst), "format": fmt, "note": None}
+    return finished({"ok": True, "file": str(dst), "format": fmt, "note": None})

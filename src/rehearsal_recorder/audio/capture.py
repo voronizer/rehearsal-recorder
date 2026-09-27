@@ -36,6 +36,11 @@ from rehearsal_recorder.audio.format import (
 
 FLUSH_INTERVAL_SEC = 30
 
+# How much of a raw file is copied at a time: small enough that an hour of
+# 24-bit audio is not read into memory whole, large enough that the copy is
+# not slowed down by the number of pieces.
+COPY_BYTES = 4 * 1024 * 1024
+
 # A take whose card has gone quiet — see audio/heartbeat.py for how that is
 # told, and why it has to be.
 STALLED = (
@@ -398,23 +403,36 @@ class AudioRecorder:
             f.close()
 
 
-def raw_to_wav(raw_path, wav_path, samplerate, bit_depth=16, channels=1):
+def raw_to_wav(raw_path, wav_path, samplerate, bit_depth=16, channels=1,
+               progress=None):
     """
     Wrap a raw PCM file into a .wav with a proper header.
 
     The raw file already holds the final bytes, in their final order, so this
     only adds the header — which is why a take interrupted by a crash can
-    still be rescued, stereo or not.
+    still be rescued, stereo or not. Copied a piece at a time: it used to be
+    read whole, some 500 MB for an hour of one 24-bit track.
     """
     width = bytes_per_sample(bit_depth) * channels
-    with open(raw_path, "rb") as rf:
-        data = rf.read()
+    size = os.path.getsize(raw_path)
     # A take cut off mid-frame would otherwise produce a wav whose length does
     # not divide evenly, which some players refuse outright. A stereo file cut
     # between its two channels is the same problem, one sample further in.
-    usable = len(data) - (len(data) % width)
-    with wave.open(str(wav_path), "wb") as wf:
+    usable = size - (size % width)
+    with open(raw_path, "rb") as rf, wave.open(str(wav_path), "wb") as wf:
         wf.setnchannels(channels)
         wf.setsampwidth(bytes_per_sample(bit_depth))
         wf.setframerate(samplerate)
-        wf.writeframes(data[:usable])
+        left = usable
+        while left > 0:
+            # Whole frames only: wave counts frames from what it is given.
+            want = min(left, COPY_BYTES - (COPY_BYTES % width))
+            piece = rf.read(want)
+            if not piece:
+                break
+            wf.writeframes(piece)
+            left -= len(piece)
+            if progress is not None:
+                progress((usable - left) / usable)
+    if progress is not None:
+        progress(1.0)
