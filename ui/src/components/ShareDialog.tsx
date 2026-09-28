@@ -4,6 +4,7 @@ import { CloudUpload, FolderOpen, Loader2, Layers, Music4 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { api, type ShareWhat, type Take } from "@/lib/api"
+import { pollSoon } from "@/lib/activity"
 
 const overlayClass =
   "fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
@@ -66,6 +67,9 @@ export function ShareDialog({
       setError(res.error ?? "Could not copy the take")
       return
     }
+    // The copy runs in the background now and can be over in a fraction of
+    // a second; ask at once so its result is not missed.
+    pollSoon()
     onDone()
     onOpenChange(false)
   }

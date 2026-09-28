@@ -2624,10 +2624,40 @@ def main():
         bg.wait_for_timeout(2600)
         ok("clearing the finished ones leaves nothing, and no button",
            len(bg_calls("clear_activity")) == 1 and bg.locator(button).count() == 0)
+        seen_before = len(bg_calls("activity_seen"))
         set_activity([entry(id=3, take_number=4)])
         bg.wait_for_selector(button, timeout=4000)
         ok("a later copy brings it back", bg.locator(button).count() == 1)
+
+        # A copy that fails between two polls — a cloud folder on a drive
+        # that is not plugged in fails in milliseconds — was never seen
+        # running, and must still be said.
+        set_activity([entry(id=4, title="\u201cTake 5\u201d \u2192 cloud",
+                            take_number=5, state="failed", fraction=0.0,
+                            step=None, error="Could not open the cloud folder",
+                            retry="mix")])
+        bg.wait_for_selector("[data-notice='error']:has-text('Take 5')", timeout=4000)
+        ok("a copy that failed before it was ever seen running still says so", True)
+        bg.wait_for_timeout(600)
+        ok("and after Clear the list is closed: a new failure stays unseen, the dot red",
+           "not yet seen" in (bg.locator(button).get_attribute("aria-label") or "")
+           and len(bg_calls("activity_seen")) == seen_before)
         bg.close()
+
+        # Finished has no header of its own, and it is where a copy started
+        # by the last take is still running when people decide to quit.
+        fin = browser.new_page(viewport={"width": 1180, "height": 820})
+        fin.add_init_script("window.__ACTIVITY__ = [];" + MOCK)
+        fin.goto(server.base_url, wait_until="networkidle")
+        fin.wait_for_selector("text=Start rehearsal")
+        fin.click("text=Start rehearsal")
+        fin.wait_for_selector("text=Record take 1")
+        fin.click("button:has-text('Finish')")
+        fin.wait_for_selector("text=Rehearsal finished", timeout=4000)
+        fin.evaluate("() => { window.__ACTIVITY__ = [" + json.dumps(entry()) + "]; }")
+        fin.wait_for_selector(button, timeout=4000)
+        ok("the Finished screen shows what is still being copied", True)
+        fin.close()
 
         print("\n[12p] Long work shows its progress where it runs")
         here = browser.new_page(viewport={"width": 1180, "height": 820})

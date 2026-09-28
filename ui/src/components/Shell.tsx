@@ -19,6 +19,7 @@ export function Shell({
   footer,
   children,
   className,
+  activity = true,
 }: {
   title?: ReactNode
   subtitle?: ReactNode
@@ -29,6 +30,10 @@ export function Shell({
   footer?: ReactNode
   children: ReactNode
   className?: string
+  /** Show long work (components/ActivityButton) on a screen with no header,
+   *  in its top corner. Off on Recording: copies wait while a take records,
+   *  and the take's own saving is said under its Stop button. */
+  activity?: boolean
 }) {
   // Notices stack above the footer, never on it: the footer holds Start, Stop
   // and Save take, and at a larger scale or in a narrow window its button
@@ -54,7 +59,14 @@ export function Shell({
   }, [hasFooter])
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="relative flex h-full flex-col overflow-hidden">
+      {!(title || onBack || headerAction) && activity && (
+        // Finished has no header, and it is where a copy started by the last
+        // take is often still running when people decide to quit.
+        <div className="absolute top-3 right-4 z-10">
+          <ActivityButton />
+        </div>
+      )}
       {(title || onBack || headerAction) && (
         <header className="flex shrink-0 items-center gap-3 border-b px-6 py-4">
           {onBack && (

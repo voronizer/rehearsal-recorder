@@ -105,6 +105,10 @@ class Journal:
 
     def _finish(self, entry, state, detail=None, error=None, retry=None):
         with self._lock:
+            # Once: a failure reported on the way out of an exception must
+            # not list an entry that had already finished a second time.
+            if entry._data["state"] in ("done", "failed"):
+                return
             entry._data.update(state=state, detail=detail, error=error,
                                retry=retry, step=None)
             if state == "done":

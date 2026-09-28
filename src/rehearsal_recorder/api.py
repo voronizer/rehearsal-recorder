@@ -1224,7 +1224,12 @@ class Api:
         self._recorder_take_number = None
         self._recorder_temp_dir = None
 
-        name = self.suggest_take_name(take_number)
+        try:
+            name = self.suggest_take_name(take_number)
+        except Exception:
+            # The name comes from the library. A take is not left recording,
+            # holding the card, because the library could not answer.
+            name = f"Take {take_number}"
         result = self._journaled(
             "stop", f"Saving “{name}”", temp_dir, take_number,
             lambda progress: recorder.stop(progress=progress),
@@ -1235,7 +1240,7 @@ class Api:
             "temp_dir": str(temp_dir),
             "duration_sec": result["duration_sec"],
             "tracks": result["tracks"],
-            "suggested_name": self.suggest_take_name(take_number),
+            "suggested_name": name,
         }
 
     def keep_take(
@@ -2400,6 +2405,17 @@ class Api:
         key = (str(folder), int(take_number))
         with self._cloud_lock:
             entry = self._cloud_entries.pop(key, None)
+        try:
+            self._publish(folder, take_number, what, entry)
+        except Exception as e:
+            # Whatever went wrong — the library, writing a failure down — the
+            # entry must not be left waiting or running with nothing behind it.
+            if entry is not None:
+                entry.fail(str(e),
+                           retry=what or self._config.get("auto_publish_what") or "mix")
+            raise
+
+    def _publish(self, folder, take_number, what, entry):
         take = self._lib.take(folder, take_number)
         if entry is None:
             name = (take or {}).get("name") or f"Take {take_number}"
@@ -2433,9 +2449,9 @@ class Api:
             entry.done(_copy_detail(what, res))
             return
         error = res.get("error") or "Could not copy the take"
+        entry.fail(error, retry=what)
         if take is not None:
             self._record_cloud_error(folder, take_number, error)
-        entry.fail(error, retry=what)
 
     def _record_cloud_error(self, folder, take_number, message):
         """Why a take is not in the cloud folder, kept with the take."""

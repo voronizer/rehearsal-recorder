@@ -134,6 +134,7 @@ export function Recording({
 
   return (
     <Shell
+      activity={false}
       footer={
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}

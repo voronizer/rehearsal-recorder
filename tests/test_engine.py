@@ -4266,6 +4266,69 @@ def main():
     while a43._cloud_queue.run_next():
         pass
 
+    print("\n[44] Nothing is left spinning, and a stop always stops")
+    root44 = Path(tempfile.mkdtemp())
+    _, a44 = fresh_api(root44)
+    a44.set_cloud_dir(str(root44 / "Cloud"))
+    a44.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+    a44.start_take()
+    a44._recorder._callback(np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
+    s44 = a44.stop_take()
+    a44.keep_take(s44["take_number"], s44["temp_dir"], "Polyn",
+                  s44["duration_sec"], s44["tracks"])
+    folder44, n44 = a44._session["folder"], s44["take_number"]
+    while a44._cloud_queue.run_next():
+        pass
+    a44.clear_activity()
+
+    def locked(*args, **kwargs):
+        raise RuntimeError("database is locked")
+
+    # The library fails on the publishing thread before the copy starts.
+    a44.share_take(str(folder44), n44, "mix")
+    real_take = a44._lib.take
+    a44._lib.take = locked
+    try:
+        a44._cloud_queue.run_next()
+    except Exception:
+        pass
+    finally:
+        a44._lib.take = real_take
+    ok("a library error on the worker fails the copy instead of leaving it waiting",
+       [e["state"] for e in a44.activity()["entries"]] == ["failed"])
+
+    # The copy fails, and so does writing the failure down.
+    a44.clear_activity()
+    a44.share_take(str(folder44), n44, "mix")
+    real_copy, real_record = a44._copy_to_cloud, a44._record_cloud_error
+    a44._copy_to_cloud = lambda *a, **k: {"ok": False, "error": "The cloud folder is gone"}
+    a44._record_cloud_error = locked
+    try:
+        a44._cloud_queue.run_next()
+    except Exception:
+        pass
+    finally:
+        a44._copy_to_cloud, a44._record_cloud_error = real_copy, real_record
+    ok("a failed copy still says so when its failure cannot be written down",
+       [e["state"] for e in a44.activity()["entries"]] == ["failed"])
+
+    # Stop: the name of the take is looked up in the library; a lookup that
+    # fails must not keep the take recording.
+    a44.start_take()
+    a44._recorder._callback(np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
+    real_suggest = a44.suggest_take_name
+    a44.suggest_take_name = locked
+    try:
+        stopped44 = a44.stop_take()
+    except Exception as e:
+        stopped44 = {"ok": False, "error": str(e)}
+    finally:
+        a44.suggest_take_name = real_suggest
+    ok("a stop whose name cannot be looked up still stops and keeps the take",
+       stopped44.get("ok") is True and a44._recorder is None
+       and (Path(stopped44["temp_dir"]) / "Gtr.wav").exists()
+       and stopped44["suggested_name"] == f"Take {stopped44['take_number']}")
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

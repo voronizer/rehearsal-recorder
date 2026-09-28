@@ -1,9 +1,10 @@
+import { useEffect, useState } from "react"
 import { Popover } from "radix-ui"
 import { Check, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { api, type ActivityEntry } from "@/lib/api"
-import { setListOpen, useActivity } from "@/lib/activity"
+import { pollSoon, setListOpen, useActivity } from "@/lib/activity"
 import { cn } from "@/lib/utils"
 
 const RING_R = 7
@@ -26,7 +27,15 @@ function isActive(e: ActivityEntry) {
  */
 export function ActivityButton() {
   const { entries, recording } = useActivity()
+  const [open, setOpen] = useState(false)
+  // A screen that goes takes its open list with it.
+  useEffect(() => () => setListOpen(false), [])
   if (entries.length === 0) return null
+
+  const show = (next: boolean) => {
+    setOpen(next)
+    setListOpen(next)
+  }
 
   const active = entries.filter(isActive)
   const finished = entries.filter((e) => !isActive(e))
@@ -42,7 +51,7 @@ export function ActivityButton() {
     (unseen.length ? `, ${unseen.length} not yet seen` : "")
 
   return (
-    <Popover.Root onOpenChange={setListOpen}>
+    <Popover.Root open={open} onOpenChange={show}>
       <Popover.Trigger asChild>
         <Button variant="ghost" size="sm" aria-label={label} className="gap-1.5">
           {active.length > 0 ? (
@@ -101,7 +110,13 @@ export function ActivityButton() {
                 variant="ghost"
                 size="sm"
                 className="self-end"
-                onClick={() => void api().clear_activity()}
+                onClick={async () => {
+                  await api().clear_activity()
+                  // Nothing left to list: the button goes, and its list is
+                  // closed rather than left counted as open — that kept the
+                  // poll fast and marked later failures seen unseen.
+                  if (active.length === 0) show(false)
+                }}
               >
                 Clear
               </Button>
@@ -157,7 +172,14 @@ function Finished({ entry }: { entry: ActivityEntry }) {
         )}
       </div>
       {failed && entry.kind === "cloud" && (
-        <Button variant="outline" size="sm" onClick={() => void api().retry_cloud(entry.id)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            await api().retry_cloud(entry.id)
+            pollSoon()
+          }}
+        >
           Retry
         </Button>
       )}

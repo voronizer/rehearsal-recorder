@@ -16,6 +16,11 @@ export const IDLE_MS = 2000
 let current: Activity = { entries: [], recording: false }
 let listOpen = false
 let started = false
+// Whether the first answer is in. What had finished before the interface
+// first asked is old news; after that, a copy that went from nothing to done
+// between two polls — a short take, a cloud folder that is not there — is
+// news all the same.
+let primed = false
 let timer = 0
 let inFlight = false
 let soon = false
@@ -37,7 +42,8 @@ function announce(next: ActivityEntry[]) {
   for (const e of next) {
     const before = known.get(e.id)
     known.set(e.id, e.state)
-    if (e.kind !== "cloud" || before === undefined || before === e.state) continue
+    if (e.kind !== "cloud" || before === e.state) continue
+    if (before === undefined && !primed) continue
     if (e.state === "done" || e.state === "failed") {
       for (const l of settledListeners) l(e)
     }
@@ -56,6 +62,7 @@ async function tick() {
   try {
     const next = await poll("activity")
     announce(next.entries)
+    primed = true
     current = next
     emit()
     // Whatever finishes while the list is open has been seen by being there.
