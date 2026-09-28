@@ -775,6 +775,13 @@ def main():
         page.click("text=Record take 1")
         page.wait_for_selector("text=Recording")
         page.wait_for_timeout(2500)
+        # Silent is said once an input has been quiet for a moment; wait for
+        # that rather than trust the wait above on a runner that runs slow.
+        try:
+            page.wait_for_selector(
+                "main [role=group][aria-label='Vocals'][data-silent]", timeout=6000)
+        except Exception:
+            pass
         ok("the status line is shown",
            page.locator("text=Interface connected").count() > 0)
         ok("and an estimate under two days keeps its about",
@@ -2900,7 +2907,6 @@ def main():
         far.wait_for_selector("text=Record take 2")
         far.click("text=Record take 2")
         far.wait_for_selector("button:has-text('Stop')")
-        far.wait_for_timeout(600)
 
         def levels(guitar, vocals):
             far.evaluate(f"() => {{ window.__LEVELS__ = "
@@ -2908,6 +2914,39 @@ def main():
 
         def said():
             return (text_of(far.get_by_role("status", name="Take status")) or "")
+
+        def until(js, timeout=6000):
+            """Waits for the page to get somewhere, not for a length of time:
+            the macOS runner stretches short timers, and a poll that comes
+            late must not turn three clips into two. False if it never does,
+            so that the check after it fails rather than the run stopping."""
+            try:
+                far.wait_for_function(js, timeout=timeout)
+                return True
+            except Exception:
+                print(f"       (waited {timeout // 1000} s and it never happened: {js})")
+                return False
+
+        def vocals_at(level):
+            """Until the Vocals tile shows this level: the page has polled."""
+            return until("() => document.querySelector(\"main [role=group]"
+                         f"[aria-label='Vocals'] [data-side]\")?.dataset.level === '{level}'")
+
+        def saying(text):
+            return until("() => document.querySelector(\"[role=status]"
+                         f"[aria-label='Take status']\")?.innerText.trim() === {json.dumps(text)}")
+
+        def vocals_silent(yes):
+            return until("() => (document.querySelector(\"main [role=group]"
+                         "[aria-label='Vocals']\")?.dataset.silent !== undefined) === "
+                         + ("true" if yes else "false"))
+
+        def timer_like(pattern):
+            return until("() => /" + pattern + "/.test(document.querySelector("
+                         "\"[role=timer]\")?.innerText.trim() ?? '')")
+
+        vocals_at(50)
+        saying("All 2 tracks recording")
 
         ok("a second go at a song is measured against the first",
            far.get_by_text("Vesna took 0:06 last time", exact=True).count() == 1)
@@ -2919,9 +2958,9 @@ def main():
 
         for _ in range(3):
             levels(0.5, 0.99)
-            far.wait_for_timeout(250)
+            vocals_at(99)
             levels(0.5, 0.5)
-            far.wait_for_timeout(250)
+            vocals_at(50)
         vocals = far.get_by_role("group", name="Vocals")
         guitar = far.get_by_role("group", name="Guitar")
         ok("three clips are counted as three", said() == "Vocals clipped 3 times in the last minute")
@@ -2933,7 +2972,8 @@ def main():
         far.screenshot(path=str(SHOTS / "53-recording-clipped.png"))
 
         far.clock.fast_forward(61_000)
-        far.wait_for_timeout(500)
+        saying("All 2 tracks recording")
+        timer_like(r"^1:0\d$")
         ok("a minute without clipping and the line is back to all fine",
            said() == "All 2 tracks recording")
         ok("and so is the tile", attr_of(vocals, "data-clipped") is None)
@@ -2942,25 +2982,26 @@ def main():
            is not None)
 
         levels(0.5, 0.004)
-        far.wait_for_timeout(2200)
+        vocals_silent(True)
         ok("a track gone quiet dims, with no alarm: a singer between verses is quiet",
            attr_of(vocals, "data-silent") is not None
            and said() == "All 2 tracks recording")
         levels(0.5, 0.5)
-        far.wait_for_timeout(400)
+        vocals_silent(False)
         ok("and lights up again the moment it plays",
            attr_of(vocals, "data-silent") is None)
 
-        far.evaluate("() => { window.__LOW_SPACE__ = true; }")
-        far.wait_for_timeout(2400)
         levels(0.5, 0.99)
-        far.wait_for_timeout(300)
+        vocals_at(99)
+        far.evaluate("() => { window.__LOW_SPACE__ = true; }")
+        saying("Running out of space")
         ok("running out of disk outranks a clip: it is what ends the take",
-           said() == "Running out of space")
+           said() == "Running out of space"
+           and attr_of(vocals, "data-clipped") is not None)
         far.evaluate("() => { window.__LOW_SPACE__ = false; }")
 
         far.clock.fast_forward(3_600_000)
-        far.wait_for_timeout(500)
+        timer_like(r"^1:0\d:\d\d$")
         ok("and past an hour it says the hours",
            re.fullmatch(r"1:0\d:\d\d", (text_of(far.get_by_role("timer")) or ""))
            is not None)
