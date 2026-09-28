@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.7
 
 - An interface reached through ASIO opens. Checking the signal, recording and
   playing through one all failed on Windows with "Failed to load ASIO driver"
