@@ -216,40 +216,35 @@ export function Rehearsal({
         </span>
       }
       headerAction={
-        <div className="flex items-center gap-3">
-          <Badge variant="outline">{takesLabel(session.takes.length)}</Badge>
-          {/* Escape finishes only with no take open; with one, it closes
-              the take — see useEscape above. */}
-          <Button
-            variant="ghost"
-            onClick={finish}
-            aria-keyshortcuts={selected ? undefined : "Escape"}
-          >
-            Finish
-            {!selected && <Kbd>Esc</Kbd>}
-          </Button>
-        </div>
+        <Badge variant="outline">{takesLabel(session.takes.length)}</Badge>
       }
       footer={
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button
-            size="xl"
-            variant="destructive"
-            onClick={startTake}
-            disabled={busy}
-            aria-keyshortcuts={selected ? undefined : "Space"}
-          >
-            <Circle className="fill-current" />
-            Record take {session.next_take_number}
-            {/* With a take open Space plays it, and the key is on Play. */}
-            {!selected && <Kbd>Space</Kbd>}
-          </Button>
-          {/* The name it will get can differ from the number — "Polyn 3" —
-              and this is the one place that says so before recording. */}
-          <p className="text-xs text-muted-foreground">
-            records “{session.next_take_name}”
-          </p>
+          <div className="flex items-center gap-3">
+            {/* Escape finishes only with no take open; with one, it closes
+                the take — see useEscape above. */}
+            <Button
+              variant="ghost"
+              onClick={finish}
+              aria-keyshortcuts={selected ? undefined : "Escape"}
+            >
+              Finish
+              {!selected && <Kbd>Esc</Kbd>}
+            </Button>
+            <Button
+              size="xl"
+              variant="destructive"
+              onClick={startTake}
+              disabled={busy}
+              aria-keyshortcuts={selected ? undefined : "Space"}
+            >
+              <Circle className="fill-current" />
+              Record take {session.next_take_number}
+              {/* With a take open Space plays it, and the key is on Play. */}
+              {!selected && <Kbd>Space</Kbd>}
+            </Button>
+          </div>
         </div>
       }
     >

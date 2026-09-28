@@ -5,6 +5,15 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Record take** stands on its own. The line under it, "records “Take 1”",
+  mostly repeated the button; the name a take inherits — "Polyn 2" after
+  "Polyn" — shows beside its number once it is recording.
+- **Finish** sits beside **Record take**, the way Discard sits beside Save
+  take. It was up in the header, away from the only other thing to do on
+  that screen.
+
 ## 0.7.7
 
 - An interface reached through ASIO opens. Checking the signal, recording and
