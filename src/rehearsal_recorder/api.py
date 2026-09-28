@@ -261,13 +261,21 @@ def _folder_within(inner, outer):
 
 
 def _copy_detail(what, res):
-    """What a finished cloud copy came to, in words: "MP3 of the mix"."""
+    """What a finished cloud copy came to, in words: "MP3 of the mix", or
+    "MP3 of the mix, WAV of every track" when they came out differently."""
     shared = res.get("cloud") or {}
-    fmt = (shared.get("mix_format") or shared.get("tracks_format") or "wav").upper()
-    which = {"mix": "the mix", "tracks": "every track",
-             "both": "the mix and every track"}.get(what, what)
+    mix = (shared.get("mix_format") or "wav").upper()
+    tracks = (shared.get("tracks_format") or "wav").upper()
+    if what == "mix":
+        said = f"{mix} of the mix"
+    elif what == "tracks":
+        said = f"{tracks} of every track"
+    elif mix == tracks:
+        said = f"{mix} of the mix and every track"
+    else:
+        said = f"{mix} of the mix, {tracks} of every track"
     note = f" — {res['note']}" if res.get("note") else ""
-    return f"{fmt} of {which}{note}"
+    return f"{said}{note}"
 
 
 def _channels_of(tracks):
@@ -2576,6 +2584,9 @@ class Api:
         if what in ("tracks", "both"):
             dest = target / base
             writing = None
+            # What the tracks really came out as: an encode that could not
+            # compress leaves the copy a WAV, whatever the setting says.
+            came_out = set()
             try:
                 dest.mkdir(parents=True, exist_ok=True)
                 for k, t in enumerate(tracks):
@@ -2584,6 +2595,7 @@ class Api:
                     shutil.copy2(source, writing)
                     packed = encode(writing, fmt,
                                     progress=stages.part(first_track + k))
+                    came_out.add(packed["format"])
                     writing = Path(packed["file"])
                     os.replace(
                         writing,
@@ -2597,7 +2609,7 @@ class Api:
                     writing.unlink(missing_ok=True)
                 return {"ok": False, "error": f"Could not copy the tracks: {e}"}
             shared["tracks"] = str(dest)
-            shared["tracks_format"] = fmt
+            shared["tracks_format"] = fmt if came_out <= {fmt} else "wav"
 
         shared["source"] = cloudmod.source_of(
             take, what, volumes, fmt, _safe_name(folder.name)
@@ -2629,6 +2641,12 @@ class Api:
             if not self._lib.has(folder):
                 return {"ok": False, "error": "Rehearsal not found"}
             return {"ok": False, "error": "Take not found"}
+        # A copy on its way would put back what is removed now the moment it
+        # finished — the file in the band's folder, and its record.
+        if self._cloud_queue.states(str(folder)).get(int(take_number)):
+            return {"ok": False, "error":
+                    "This take is still being copied to the cloud — remove it "
+                    "once the copy has finished."}
 
         result = self._remove_shared(take)
         self._lib.set_cloud_copy(folder, take_number, None, None)

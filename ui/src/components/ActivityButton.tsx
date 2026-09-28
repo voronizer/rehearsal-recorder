@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { api, type ActivityEntry } from "@/lib/api"
 import { pollSoon, setListOpen, useActivity } from "@/lib/activity"
+import { notify } from "@/lib/notices"
 import { cn } from "@/lib/utils"
 
 const RING_R = 7
@@ -46,8 +47,10 @@ export function ActivityButton() {
       active.length
     : 1
 
+  const waiting = active.filter((e) => e.state === "waiting").length
   const label =
-    `Background work: ${active.length} running, ${finished.length} finished` +
+    `Background work: ${active.length - waiting} running, ${waiting} waiting, ` +
+    `${finished.length} finished` +
     (unseen.length ? `, ${unseen.length} not yet seen` : "")
 
   return (
@@ -176,7 +179,19 @@ function Finished({ entry }: { entry: ActivityEntry }) {
           variant="outline"
           size="sm"
           onClick={async () => {
-            await api().retry_cloud(entry.id)
+            const res = await api().retry_cloud(entry.id)
+            if (!res.ok) {
+              // Refused — the rehearsal was renamed or the take deleted since
+              // it failed. Said in the same slot as the failure it retried.
+              notify({
+                key: `cloud:${entry.folder}:${entry.take_number}`,
+                kind: "error",
+                text: `Could not copy ${entry.title.replace(/ → cloud$/, "")} again: ${
+                  res.error ?? "it was refused"
+                }`,
+              })
+              return
+            }
             pollSoon()
           }}
         >

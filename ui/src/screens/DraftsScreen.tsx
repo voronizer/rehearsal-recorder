@@ -7,7 +7,7 @@ import { RunningLine } from "@/components/RunningLine"
 import { api, type Draft } from "@/lib/api"
 import { formatDateHuman, formatMMSS } from "@/lib/format"
 import { canBePutBack, goesTo } from "@/lib/deletion"
-import { pollSoon, useActivity } from "@/lib/activity"
+import { useActivity, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 
 /**
@@ -42,8 +42,7 @@ export function DraftsScreen({
   const recover = async (draft: Draft) => {
     setBusy(draft.dir)
     dismiss(SAID)
-    pollSoon()
-    const res = await api().recover_draft(draft.dir)
+    const res = await watching(api().recover_draft(draft.dir))
     setBusy(null)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not recover the take" })

@@ -13,7 +13,7 @@ import {
   type PlacedTrack,
 } from "@/lib/api"
 import { formatDuration, formatHMS } from "@/lib/format"
-import { pollSoon, useRunning } from "@/lib/activity"
+import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 import { cn } from "@/lib/utils"
 
@@ -84,8 +84,7 @@ export function Recording({
   const stop = async () => {
     if (stopping) return
     setStopping(true)
-    pollSoon()
-    const res = await api().stop_take()
+    const res = await watching(api().stop_take())
     if (!res.ok) {
       setStopping(false)
       setError(("error" in res && res.error) || "Could not stop the recording")

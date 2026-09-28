@@ -4329,6 +4329,68 @@ def main():
        and (Path(stopped44["temp_dir"]) / "Gtr.wav").exists()
        and stopped44["suggested_name"] == f"Take {stopped44['take_number']}")
 
+    print("\n[45] Removing a copy that is on its way, and saying what a copy is")
+    root45 = Path(tempfile.mkdtemp())
+    _, a45 = fresh_api(root45)
+    a45.set_cloud_dir(str(root45 / "Cloud"))
+    a45.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+    a45.start_take()
+    a45._recorder._callback(np.full((4800, 1), 900, dtype=np.int16), 4800, None, None)
+    s45 = a45.stop_take()
+    a45.keep_take(s45["take_number"], s45["temp_dir"], "Polyn",
+                  s45["duration_sec"], s45["tracks"])
+    folder45, n45 = a45._session["folder"], s45["take_number"]
+    while a45._cloud_queue.run_next():
+        pass
+
+    # Queued: removing now would be undone the moment the copy runs.
+    a45.share_take(str(folder45), n45, "mix")
+    waiting_remove = a45.unshare_take(str(folder45), n45)
+    ok("a copy still waiting cannot be removed yet, and says why",
+       waiting_remove["ok"] is False
+       and "copy" in waiting_remove["error"].lower())
+    # Running: the same, asked in the middle of the copy.
+    during = []
+    real_copy45 = a45._copy_to_cloud
+
+    def remove_mid_copy(*args, **kwargs):
+        during.append(a45.unshare_take(str(folder45), n45))
+        return real_copy45(*args, **kwargs)
+
+    a45._copy_to_cloud = remove_mid_copy
+    a45._cloud_queue.run_next()
+    a45._copy_to_cloud = real_copy45
+    ok("nor one being copied",
+       during and during[0]["ok"] is False)
+    ok("and once it is done it can be",
+       a45.unshare_take(str(folder45), n45)["ok"] is True
+       and not a45._lib.take(folder45, n45).get("cloud"))
+
+    # A copy of the tracks that could not be compressed is WAV, and is
+    # described as WAV — not as the format it was asked for.
+    from rehearsal_recorder.audio import encode as encmod
+
+    a45.set_cloud_format("mp3")
+    real_sf = encmod._soundfile
+    encmod._soundfile = lambda: None
+    try:
+        plain = a45._copy_to_cloud(str(folder45), n45, "tracks")
+    finally:
+        encmod._soundfile = real_sf
+    ok("tracks that stayed WAV are recorded as WAV",
+       plain["ok"] and plain["cloud"]["tracks_format"] == "wav")
+    import rehearsal_recorder.api as apimod45
+    said45 = apimod45._copy_detail("tracks", plain)
+    ok("and said to be WAV", said45.startswith("WAV of every track"))
+    ok("a mix and tracks that came out differently say so",
+       apimod45._copy_detail("both", {"cloud": {"mix_format": "mp3",
+                                                "tracks_format": "wav"}})
+       == "MP3 of the mix, WAV of every track")
+    ok("and the same format is said once",
+       apimod45._copy_detail("both", {"cloud": {"mix_format": "mp3",
+                                                "tracks_format": "mp3"}})
+       == "MP3 of the mix and every track")
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

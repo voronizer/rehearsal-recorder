@@ -29,7 +29,7 @@ import {
   takesLabel,
 } from "@/lib/format"
 import { canBePutBack, goPlural, goesTo } from "@/lib/deletion"
-import { pollSoon, useCloudSettled, useRunning } from "@/lib/activity"
+import { useCloudSettled, useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 
 /**
@@ -170,8 +170,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     setBusy(true)
     dismiss(SAID)
     player.pause()
-    pollSoon()
-    const res = await api().crop_take(opened.folder, take.take_number, from, to)
+    const res = await watching(api().crop_take(opened.folder, take.take_number, from, to))
     setBusy(false)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not crop the take" })

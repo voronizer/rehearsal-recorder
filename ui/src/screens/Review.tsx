@@ -20,7 +20,7 @@ import {
 } from "@/lib/api"
 import { croppedButNotSwept, formatMMSS } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
-import { pollSoon, useRunning } from "@/lib/activity"
+import { useRunning, watching } from "@/lib/activity"
 
 /**
  * Right after stopping: listen and decide the take's fate. Until it is saved
@@ -170,8 +170,7 @@ export function Review({
     setError(null)
     dismiss("review")
     player.pause()
-    pollSoon()
-    const res = await api().crop_draft(take.temp_dir, take.tracks, from, to)
+    const res = await watching(api().crop_draft(take.temp_dir, take.tracks, from, to))
     setBusy(false)
     if (!res.ok) {
       setError(res.error ?? "Could not crop the take")

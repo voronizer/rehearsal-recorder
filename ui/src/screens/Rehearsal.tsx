@@ -20,7 +20,7 @@ import {
   type Take,
 } from "@/lib/api"
 import { croppedButNotSwept, takesLabel } from "@/lib/format"
-import { pollSoon, useRunning } from "@/lib/activity"
+import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 import { canBePutBack, goPlural } from "@/lib/deletion"
 
@@ -139,8 +139,7 @@ export function Rehearsal({
     setError(null)
     dismiss("rehearsal")
     player.pause()
-    pollSoon()
-    const res = await api().crop_take(session.folder, take.take_number, from, to)
+    const res = await watching(api().crop_take(session.folder, take.take_number, from, to))
     setBusy(false)
     if (!res.ok) {
       setError(res.error ?? "Could not crop the take")

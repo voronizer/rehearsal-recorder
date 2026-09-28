@@ -272,7 +272,8 @@ window.__MAKE_API__ = () => ({
       .filter(e => e.state === 'running' || e.state === 'waiting');
     return {ok:true};
   }),
-  retry_cloud: track('retry_cloud', async (id) => ({ok:true, queued:true})),
+  retry_cloud: track('retry_cloud', async (id) => (window.__RETRY_REFUSED__
+    ? {ok:false, error: window.__RETRY_REFUSED__} : {ok:true, queued:true})),
   stop_monitor: track('stop_monitor', async () => ({ok:true})),
 
   start_rehearsal: track('start_rehearsal', async (name, dev, rate, tr, depth) => {
@@ -2580,6 +2581,12 @@ def main():
         bg.wait_for_selector(button, timeout=4000)
         ok("something running brings it, saying how many",
            "1 running" in bg.locator(button).get_attribute("aria-label"))
+        set_activity([entry(), entry(id=9, take_number=9, state="waiting",
+                                     fraction=0.0, step=None)])
+        bg.wait_for_timeout(900)
+        ok("and a copy that waits is said to wait, not to run",
+           "1 running, 1 waiting" in bg.locator(button).get_attribute("aria-label"))
+        set_activity([entry()])
         bg.click(button)
         bg.wait_for_selector("text=Encoding the mix", timeout=2000)
         ok("its list says what is running and how far along",
@@ -2619,6 +2626,14 @@ def main():
         bg.wait_for_timeout(300)
         ok("Retry asks Python for that copy again",
            [c["args"] for c in bg_calls("retry_cloud")] == [[2]])
+        # Refused — the rehearsal was renamed or the take deleted since:
+        # the button must not simply do nothing.
+        bg.evaluate("() => { window.__RETRY_REFUSED__ = 'Rehearsal not found'; }")
+        bg.get_by_role("button", name="Retry").click()
+        bg.wait_for_selector("[data-notice='error']:has-text('Rehearsal not found')",
+                             timeout=2000)
+        ok("a retry that is refused says why", True)
+        bg.evaluate("() => { window.__RETRY_REFUSED__ = null; }")
 
         bg.get_by_role("button", name="Clear").click()
         bg.wait_for_timeout(2600)
@@ -2687,10 +2702,14 @@ def main():
         here.click("text=Record take 1")
         here.wait_for_selector("button:has-text('Stop')")
         hold("stop_take")
-        running("stop", 0.45, folder="/tmp/draft", take_number=1)
         here.click("button:has-text('Stop')")
-        here.wait_for_selector("text=Saving the take… 45%", timeout=4000)
-        ok("a take being saved says how far along it is, under Stop", True)
+        # Python registers the entry part-way into the call, after the poll
+        # the screen asked for has already come back empty.
+        here.wait_for_timeout(700)
+        running("stop", 0.45, folder="/tmp/draft", take_number=1)
+        here.wait_for_selector("text=Saving the take… 45%", timeout=1200)
+        ok("a take being saved says how far along it is, under Stop — "
+           "even when its entry arrives after the first look", True)
         release("stop_take")
         here.wait_for_selector("text=Save take")
 

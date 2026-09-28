@@ -16,6 +16,9 @@ export const IDLE_MS = 2000
 let current: Activity = { entries: [], recording: false }
 let listOpen = false
 let started = false
+// Calls a screen is waiting on — crop, stop, recover. Python registers their
+// entry part-way in, so the store keeps asking often until they answer.
+let watched = 0
 // Whether the first answer is in. What had finished before the interface
 // first asked is old news; after that, a copy that went from nothing to done
 // between two polls — a short take, a cloud folder that is not there — is
@@ -33,7 +36,11 @@ function emit() {
 }
 
 function busy() {
-  return listOpen || current.entries.some((e) => e.state === "running" || e.state === "waiting")
+  return (
+    listOpen ||
+    watched > 0 ||
+    current.entries.some((e) => e.state === "running" || e.state === "waiting")
+  )
 }
 
 /** A cloud copy that finished says so in the corner; the operations that run
@@ -63,8 +70,13 @@ async function tick() {
     const next = await poll("activity")
     announce(next.entries)
     primed = true
-    current = next
-    emit()
+    // Most answers are the one before: waking every screen that reads the
+    // store — each a whole screen, waveforms and all — for nothing, several
+    // times a second while a copy runs, is what this saves.
+    if (JSON.stringify(next) !== JSON.stringify(current)) {
+      current = next
+      emit()
+    }
     // Whatever finishes while the list is open has been seen by being there.
     if (listOpen && next.entries.some((e) => !e.seen && (e.state === "done" || e.state === "failed"))) {
       void api().activity_seen()
@@ -75,6 +87,19 @@ async function tick() {
   inFlight = false
   timer = window.setTimeout(tick, soon ? 0 : busy() ? BUSY_MS : IDLE_MS)
   soon = false
+}
+
+/** A screen's own long call — crop, stop, recover — awaited here rather than
+ *  bare, so its progress is asked for at once and often until it answers,
+ *  however late in the call Python registers it. */
+export async function watching<T>(call: Promise<T>): Promise<T> {
+  watched += 1
+  pollSoon()
+  try {
+    return await call
+  } finally {
+    watched -= 1
+  }
 }
 
 /** Ask at once rather than at the next tick — for a screen that has just
