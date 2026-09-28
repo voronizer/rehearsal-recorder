@@ -72,13 +72,27 @@ rehearsal.
 
 ### While recording
 
-![Recording, with a level meter for each track](screenshots/recording.png)
+![Recording: a big clock, how long the last go at this song took, and a tile for each track](screenshots/recording.png)
 
-The recording screen shows a timer, a level meter for each track and a
-status line. A meter turns red when its track clips, and says **silent** when
-nothing arrives on it. The status line tells you that the interface is
-connected and how much recording time the disk has left. It warns you before
-the space runs out.
+The recording screen is made to be read from where you play, not from the
+laptop.
+
+- **The clock** shows how long the take has been running.
+- **The bar under it** shows up when this is another go at a song you have
+  already played in this rehearsal: "Vesna took 2:21 last time". It fills as
+  you play, so you can see how far into the song you are.
+- **The line in the middle** says whether all is well. It is green while
+  every track is recording. It turns red when a track clips — "Vocals clipped
+  3 times in the last minute" — and stays red for a minute after the last
+  clip, so you still see it if you were playing when it happened. It turns
+  yellow when the disk is about to run out.
+- **Each track has a tile** that fills from the bottom with its level. A
+  stereo track is split down the middle, left and right. A tile that clipped
+  gets a red edge. A tile with nothing coming in goes dim, which is normal
+  while someone is not playing.
+
+The top corner says that the interface is connected and how much recording
+time the disk has left.
 
 Every track is written to disk while you play, so there is nothing to save
 during a take. Press **Stop**, or Space, when the song is over.
@@ -302,10 +316,10 @@ stereo file. The input then shows a pair, for example "Inputs 9–10".
 Both inputs have to be free. If the next input already belongs to another
 track, the stereo track waits for an input and the screen says so.
 
-A stereo track stays stereo when you change interfaces. Its level meter and
-waveform show both channels, left above right, so you notice straight away if
-one microphone stops working. A stereo track takes twice the disk space of a
-mono one.
+A stereo track stays stereo when you change interfaces. Its tile on the
+recording screen is split into left and right, and its waveform shows left
+above right, so you notice straight away if one microphone stops working. A
+stereo track takes twice the disk space of a mono one.
 
 ## Keyboard
 

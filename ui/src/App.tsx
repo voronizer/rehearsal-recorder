@@ -235,6 +235,7 @@ export function App() {
         takeNumber={screen.takeNumber}
         takeName={screen.takeName}
         tracks={session.tracks}
+        lastAttempt={session.last_attempt}
         onStopped={(take) => setScreen({ name: "review", take })}
       />
     )

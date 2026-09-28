@@ -9,6 +9,7 @@ sample is visible.
 
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -163,6 +164,22 @@ function songsOf(takes) {
   return songs;
 }
 
+// And api._last_attempt: how long the latest go at the song the next take
+// is named for ran, under the name songsOf gives that song.
+function lastAttempt(takes, nextName) {
+  const songOf = (n) => {
+    n = (n || '').trim();
+    if (!n || /^Take \\d+$/.test(n)) return null;
+    return n.replace(/\\s+\\d+$/, '') || null;
+  };
+  const song = songOf(nextName);
+  if (!song) return null;
+  const goes = takes.filter(t => (songOf(t.name) || '').toLowerCase() === song.toLowerCase());
+  return goes.length
+    ? {song: songOf(goes[0].name), duration_sec: goes[goes.length - 1].duration_sec}
+    : null;
+}
+
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
   startup_problems: track('startup_problems', async () =>
@@ -277,7 +294,8 @@ window.__MAKE_API__ = () => ({
   stop_monitor: track('stop_monitor', async () => ({ok:true})),
 
   start_rehearsal: track('start_rehearsal', async (name, dev, rate, tr, depth) => {
-    session = {name, folder:'/rec/' + name, tracks:[{name:'Guitar',channel:1},{name:'Vocals',channel:2}], takes:[]};
+    session = {name, folder:'/rec/' + name, takes:[],
+               tracks: window.__SESSION_TRACKS__ || [{name:'Guitar',channel:1},{name:'Vocals',channel:2}]};
     takeCounter = 0;
     return {ok:true, folder:session.folder};
   }),
@@ -295,7 +313,8 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({active:true, name:session.name, folder:session.folder,
        tracks:session.tracks, takes:session.takes, songs:songsOf(session.takes),
        next_take_number:takeCounter + 1,
-       next_take_name:suggestName(), recording:false, cloud_queue:cq}));
+       next_take_name:suggestName(), last_attempt:lastAttempt(session.takes, suggestName()),
+       recording:false, cloud_queue:cq}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
@@ -304,7 +323,8 @@ window.__MAKE_API__ = () => ({
   }),
 
   start_take: track('start_take', async () => { takeCounter += 1; return {ok:true, take_number:takeCounter}; }),
-  get_levels: async () => ({'Guitar':[0.99], 'Vocals':[0.005]}),
+  // One input pinned at the top and one silent, unless a test plays its own.
+  get_levels: async () => window.__LEVELS__ || ({'Guitar':[0.99], 'Vocals':[0.005]}),
   stop_take: track('stop_take', async () => (await held('stop_take'), {ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
     duration_sec:TAKE, suggested_name:suggestName(takeCounter),
     tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]})),
@@ -613,6 +633,15 @@ def main():
         found = page.locator(f"{selector} :is(kbd, [data-key])")
         return found.first.inner_text().strip() if found.count() else None
 
+    def text_of(found):
+        """What an element says, or None when it is not on the page — so a
+        check fails rather than waiting half a minute and ending the run."""
+        return found.first.inner_text().strip() if found.count() else None
+
+    def attr_of(found, name):
+        """The same for one of its attributes."""
+        return found.first.get_attribute(name) if found.count() else None
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
 
@@ -751,8 +780,21 @@ def main():
         ok("and an estimate under two days keeps its about",
            page.get_by_text("Interface connected · room for about 10 h 40 min more",
                             exact=True).count() == 1)
-        ok("clipping is called out", page.locator("text=clipping").count() > 0)
-        ok("a silent input is called out", page.locator("text=silent").count() > 0)
+        # The mock holds Guitar at the top the whole time: that is one clip
+        # that has not ended, not one for every poll.
+        ok("clipping is called out in one line, big enough to read from the kit",
+           (text_of(page.get_by_role("status", name="Take status")) or "")
+           == "Guitar clipped in the last minute")
+        ok("and on the track that did it",
+           attr_of(page.get_by_role("group", name="Guitar"), "data-clipped")
+           is not None)
+        ok("a silent input is called out",
+           "silent" in (text_of(page.get_by_role("group", name="Vocals")) or ""))
+        ok("the clock counts minutes, not hours nobody has played yet",
+           re.fullmatch(r"0:0\d", (text_of(page.get_by_role("timer")) or ""))
+           is not None)
+        ok("a first take has nothing to be measured against",
+           page.locator("text=last time").count() == 0)
         page.screenshot(path=str(SHOTS / "52-recording.png"))
         ok("Stop carries its key", key_on(page, "button:has-text('Stop')") == "Space")
         ok("and the autosave note stays, without it",
@@ -2808,6 +2850,196 @@ def main():
         ok("a take being recovered says how far along it is, in its row", True)
         release("recover_draft")
         dr.close()
+
+        print("\n[12q] The recording screen reads from across the room")
+        # Nobody stands at the laptop while they play, so the screen is read
+        # from behind the kit: one line that says what is wrong, and a tile per
+        # track that lights up. A clip is remembered for a minute, because
+        # nobody was looking at the moment it happened. The page's clock is
+        # a fake one so that the minute can pass without waiting for it.
+        def names_on(pg):
+            """How each tile writes its track's name: up the tile, in one
+            piece, from its bottom left corner — "Overheads" broken into
+            "Overhea / ds" across a narrow tile is what this replaced."""
+            return pg.evaluate("""() =>
+              [...document.querySelectorAll('main [role=group]')].map(tile => {
+                const el = tile.querySelector('[data-name]');
+                if (!el) return {name: tile.getAttribute('aria-label'), found: false};
+                const t = tile.getBoundingClientRect(), r = el.getBoundingClientRect();
+                const cs = getComputedStyle(el), size = parseFloat(cs.fontSize);
+                return {
+                  name: tile.getAttribute('aria-label'), found: true,
+                  upward: cs.writingMode === 'vertical-rl' && cs.transform !== 'none',
+                  oneLine: r.width < size * 1.6,
+                  whole: el.scrollHeight <= el.clientHeight + 1,
+                  corner: r.left - t.left < 24 && t.bottom - r.bottom < 24,
+                };
+              })""")
+
+        def names_ok(pg):
+            names = names_on(pg)
+            return bool(names) and all(
+                n["found"] and n["upward"] and n["oneLine"] and n["whole"]
+                and n["corner"] for n in names), names
+
+        far = browser.new_page(viewport={"width": 1180, "height": 820})
+        far.on("pageerror", lambda e: problems.append(f"pageerror: {e}"))
+        far.clock.install()
+        far.add_init_script(
+            "window.__LEVELS__ = {'Guitar':[0.5], 'Vocals':[0.5]};" + MOCK)
+        far.goto(server.base_url, wait_until="networkidle")
+        far.wait_for_selector("text=Start rehearsal")
+        far.click("text=Start rehearsal")
+        far.wait_for_selector("text=Record take 1")
+        far.click("text=Record take 1")
+        far.wait_for_selector("button:has-text('Stop')")
+        far.click("button:has-text('Stop')")
+        far.wait_for_selector("#take-name")
+        far.fill("#take-name", "Vesna")
+        far.click("text=Save take")
+        far.wait_for_selector("text=Record take 2")
+        far.click("text=Record take 2")
+        far.wait_for_selector("button:has-text('Stop')")
+        far.wait_for_timeout(600)
+
+        def levels(guitar, vocals):
+            far.evaluate(f"() => {{ window.__LEVELS__ = "
+                         f"{{'Guitar':[{guitar}], 'Vocals':[{vocals}]}}; }}")
+
+        def said():
+            return (text_of(far.get_by_role("status", name="Take status")) or "")
+
+        ok("a second go at a song is measured against the first",
+           far.get_by_text("Vesna took 0:06 last time", exact=True).count() == 1)
+        against = far.get_by_role("progressbar", name="Against the last go")
+        ok("on a bar that fills as the band gets further into it",
+           against.count() == 1 and attr_of(against, "aria-valuemax") == "6")
+        ok("all fine is said too, so that no news reads as good news",
+           said() == "All 2 tracks recording")
+
+        for _ in range(3):
+            levels(0.5, 0.99)
+            far.wait_for_timeout(250)
+            levels(0.5, 0.5)
+            far.wait_for_timeout(250)
+        vocals = far.get_by_role("group", name="Vocals")
+        guitar = far.get_by_role("group", name="Guitar")
+        ok("three clips are counted as three", said() == "Vocals clipped 3 times in the last minute")
+        ok("the tile that clipped says so",
+           attr_of(vocals, "data-clipped") is not None
+           and "clipped 3×" in (text_of(vocals) or ""))
+        ok("and the one that did not stays quiet about it",
+           attr_of(guitar, "data-clipped") is None)
+        far.screenshot(path=str(SHOTS / "53-recording-clipped.png"))
+
+        far.clock.fast_forward(61_000)
+        far.wait_for_timeout(500)
+        ok("a minute without clipping and the line is back to all fine",
+           said() == "All 2 tracks recording")
+        ok("and so is the tile", attr_of(vocals, "data-clipped") is None)
+        ok("the clock goes on in minutes past the first",
+           re.fullmatch(r"1:0\d", (text_of(far.get_by_role("timer")) or ""))
+           is not None)
+
+        levels(0.5, 0.004)
+        far.wait_for_timeout(2200)
+        ok("a track gone quiet dims, with no alarm: a singer between verses is quiet",
+           attr_of(vocals, "data-silent") is not None
+           and said() == "All 2 tracks recording")
+        levels(0.5, 0.5)
+        far.wait_for_timeout(400)
+        ok("and lights up again the moment it plays",
+           attr_of(vocals, "data-silent") is None)
+
+        far.evaluate("() => { window.__LOW_SPACE__ = true; }")
+        far.wait_for_timeout(2400)
+        levels(0.5, 0.99)
+        far.wait_for_timeout(300)
+        ok("running out of disk outranks a clip: it is what ends the take",
+           said() == "Running out of space")
+        far.evaluate("() => { window.__LOW_SPACE__ = false; }")
+
+        far.clock.fast_forward(3_600_000)
+        far.wait_for_timeout(500)
+        ok("and past an hour it says the hours",
+           re.fullmatch(r"1:0\d:\d\d", (text_of(far.get_by_role("timer")) or ""))
+           is not None)
+        # Two tracks give wide tiles, and the name is written the same way
+        # there: one way to read a tile, whatever the band.
+        fine, names = names_ok(far)
+        ok("on a wide tile too the name runs up it from the bottom left", fine)
+        if not fine:
+            print("       ", names)
+        far.close()
+
+        print("\n[12q cont.] Sixteen tracks still fit in one row")
+        # The XR18 has sixteen inputs and a stereo pair besides. However many
+        # of them are recorded, every track is one tile of one width in one
+        # row, a stereo one split down the middle — never a second row, never
+        # a scrollbar.
+        wide_tracks, channel = [], 1
+        for name in ("Kick", "Snare", "Hi-hat", "Tom 1", "Tom 2", "Floor tom",
+                     "Overheads", "Bass", "Guitar 1", "Guitar 2", "Keys",
+                     "Acoustic", "Vocals", "Backing 1", "Backing 2", "Sax"):
+            stereo = name in ("Overheads", "Keys")
+            wide_tracks.append({"name": name, "channel": channel, "stereo": stereo})
+            channel += 2 if stereo else 1
+        wide_levels = {t["name"]: ([0.4, 0.0] if t["name"] == "Keys" else
+                                   [0.4, 0.4] if t["stereo"] else [0.4])
+                       for t in wide_tracks}
+        wide = browser.new_page(viewport={"width": 1180, "height": 820})
+        wide.on("pageerror", lambda e: problems.append(f"pageerror: {e}"))
+        wide.add_init_script(
+            f"window.__SESSION_TRACKS__ = {json.dumps(wide_tracks)};"
+            f"window.__LEVELS__ = {json.dumps(wide_levels)};" + MOCK)
+        wide.goto(server.base_url, wait_until="networkidle")
+        wide.wait_for_selector("text=Start rehearsal")
+        wide.click("text=Start rehearsal")
+        wide.wait_for_selector("text=Record take 1")
+        wide.click("text=Record take 1")
+        wide.wait_for_selector("button:has-text('Stop')")
+        wide.wait_for_timeout(600)
+
+        def row():
+            return wide.evaluate("""() => {
+              const tiles = [...document.querySelectorAll('main [role=group]')]
+                .map(el => el.getBoundingClientRect());
+              const main = document.querySelector('main');
+              return {
+                count: tiles.length,
+                tops: [...new Set(tiles.map(r => Math.round(r.top)))],
+                widths: tiles.map(r => r.width),
+                right: Math.max(...tiles.map(r => r.right)),
+                window: window.innerWidth,
+                sideways: document.documentElement.scrollWidth > window.innerWidth,
+                scrolls: main.scrollHeight > main.clientHeight + 1,
+              };
+            }""")
+
+        for width, height in ((1180, 820), (1024, 640)):
+            wide.set_viewport_size({"width": width, "height": height})
+            wide.wait_for_timeout(300)
+            r = row()
+            ok(f"at {width}×{height} all sixteen tracks are in one row",
+               r["count"] == 16 and len(r["tops"]) == 1)
+            ok(f"at {width}×{height} a stereo tile is as wide as a mono one",
+               bool(r["widths"]) and max(r["widths"]) - min(r["widths"]) < 1)
+            ok(f"at {width}×{height} nothing scrolls, either way",
+               r["right"] <= r["window"] and not r["sideways"] and not r["scrolls"])
+            fine, names = names_ok(wide)
+            ok(f"at {width}×{height} every name runs up its tile from the bottom "
+               "left, whole and on one line", fine)
+            if not fine:
+                print("       ", [n for n in names if not all(n.values())])
+            if width == 1180:
+                wide.screenshot(path=str(SHOTS / "54-recording-sixteen.png"))
+        keys = wide.get_by_role("group", name="Keys")
+        ok("a stereo tile shows both sides, each on its own",
+           attr_of(keys, "data-channels") == "2"
+           and keys.locator("[data-side]").count() == 2)
+        ok("so a side that has gone dead shows as dead",
+           attr_of(keys.locator("[data-side='2']"), "data-level") == "0")
+        wide.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})

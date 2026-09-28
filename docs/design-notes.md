@@ -383,6 +383,18 @@ setup screen. The interface and the quality are the opposite case: they
 belong to the room and the card, so they are set once in Settings and the
 setup screen only shows them.
 
+**The recording screen is read from across the room.** Nobody stands at the
+laptop while they play, so it is a big clock, one line and a tile per track
+rather than a column of meters with figures on them. A clip is kept on that
+line for a minute, because the person who would act on it was playing, not
+watching, when it happened. Silence only dims a tile: a singer between
+verses is silent, and an alarm for that would soon be ignored along with the
+real ones. Every tile is one width, a stereo one split down the middle, so
+the sixteen inputs of an XR18 still fit in one row. Two other layouts were
+drawn and dropped: a waveform per track growing as it records, which cannot
+be read from behind the kit, and markers dropped with a key during the take,
+which nobody would press while playing.
+
 **History measures a rehearsal's size by walking its folder**, not from the
 durations, so it is the number the file manager gives.
 

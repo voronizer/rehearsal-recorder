@@ -72,8 +72,7 @@ LISTEN_FIRST_SEC = 3.0
 FLOWING_SHARE = 0.5
 
 # Where the meters draw the line between signal and silence (QUIET_THRESHOLD
-# in ui/src/components/LevelMeter.tsx), so "silent" here means what it does
-# on screen.
+# in ui/src/lib/levels.ts), so "silent" here means what it does on screen.
 SIGNAL_PEAK = 0.02
 
 

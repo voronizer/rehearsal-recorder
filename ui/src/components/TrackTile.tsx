@@ -1,0 +1,142 @@
+import { cn } from "@/lib/utils"
+import { peakToDb } from "@/lib/format"
+import { CLIP_THRESHOLD, QUIET_THRESHOLD } from "@/lib/levels"
+
+const percent = (peak: number) => Math.min(100, Math.max(0, peak * 100))
+
+/**
+ * One track while it records, as a tile that fills from the bottom with its
+ * level — read from behind the kit, not from the laptop.
+ *
+ * Every tile is one width whatever it carries, so sixteen tracks still fit in
+ * one row. A stereo track is split down the middle, left and right each
+ * filling on its own: one fill for the louder side would hide an overhead
+ * that stopped arriving, which is the thing this exists to catch.
+ *
+ * The writing on it shrinks with the tile rather than with the track count,
+ * and what does not fit at that size — the input, the words — goes, leaving
+ * the colour to say it: a red edge for a clip in the last minute, dimmed for
+ * silence. The level in dB sits at the top, out of the name's way.
+ */
+export function TrackTile({
+  name,
+  channel,
+  stereo,
+  peaks,
+  held,
+  clips,
+  silent,
+}: {
+  name: string
+  channel: number | null
+  stereo?: boolean
+  /** One figure per side, 0..1. */
+  peaks: number[]
+  /** The highest each side reached lately, 0..1. */
+  held: number[]
+  /** Clips in the last minute. */
+  clips: number
+  silent: boolean
+}) {
+  const sides = peaks.length ? peaks : [0]
+  const peak = Math.max(...sides)
+
+  return (
+    <div
+      role="group"
+      aria-label={name}
+      data-clipped={clips > 0 || undefined}
+      data-silent={silent || undefined}
+      data-channels={sides.length}
+      className={cn(
+        "@container relative min-h-24 min-w-0 overflow-hidden rounded-xl border bg-card transition-opacity duration-300",
+        clips > 0 && "border-destructive/70",
+        silent && "opacity-45"
+      )}
+    >
+      <div className="absolute inset-0 flex gap-0.5">
+        {sides.map((side, i) => (
+          <div
+            key={i}
+            data-side={i + 1}
+            data-level={Math.round(percent(side))}
+            className="relative flex-1"
+          >
+            {/* Nothing at all for silence: a lit line along the bottom of a
+                dead input would read as a little signal. */}
+            {side >= QUIET_THRESHOLD && (
+              <div
+                className={cn(
+                  "absolute inset-x-0 bottom-0 border-t-2 transition-[height] duration-75",
+                  side > CLIP_THRESHOLD
+                    ? "border-destructive bg-destructive/25"
+                    : "border-signal bg-signal/15"
+                )}
+                style={{ height: `${percent(side)}%` }}
+              />
+            )}
+            {(held[i] ?? 0) > QUIET_THRESHOLD && (
+              <div
+                className="absolute inset-x-0 h-0.5 bg-foreground/35"
+                style={{ bottom: `${percent(held[i])}%` }}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="relative grid h-full grid-rows-[auto_minmax(0,1fr)] gap-2 p-[clamp(0.375rem,7cqi,1.25rem)]">
+        <div className="flex flex-col items-end gap-1 text-right">
+          <span
+            className={cn(
+              "tnum",
+              peak > CLIP_THRESHOLD ? "text-destructive" : "text-muted-foreground"
+            )}
+            style={{ fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }}
+          >
+            {peakToDb(peak)}
+            <span className="@max-[7rem]:hidden"> dB</span>
+          </span>
+          {clips > 0 && (
+            <span className="text-xs font-semibold text-destructive @max-[7rem]:hidden">
+              {clips > 1 ? `clipped ${clips}×` : "clipped"}
+            </span>
+          )}
+          {silent && clips === 0 && (
+            <span className="text-xs text-muted-foreground @max-[7rem]:hidden">
+              silent
+            </span>
+          )}
+        </div>
+
+        {/* The name runs up the tile from its bottom left corner, as on the
+            spine of a book: a tile is tall and, sixteen to a row, narrow, and
+            "Overheads" across one came out as "Overhea / ds". Written the
+            same way on a wide tile, so there is one way to read them. */}
+        <div className="flex min-h-0 items-end gap-1.5">
+          <div
+            data-name
+            className="max-h-full overflow-hidden leading-none font-semibold text-ellipsis whitespace-nowrap"
+            style={{
+              writingMode: "vertical-rl",
+              transform: "rotate(180deg)",
+              fontSize: "clamp(0.875rem, 18cqi, 2.25rem)",
+            }}
+          >
+            {name}
+          </div>
+          <div
+            className="tnum max-h-full overflow-hidden text-xs leading-none text-ellipsis whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
+            style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+          >
+            {channel === null
+              ? "No input"
+              : stereo
+                ? `Inputs ${channel}–${channel + 1}`
+                : `Input ${channel}`}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

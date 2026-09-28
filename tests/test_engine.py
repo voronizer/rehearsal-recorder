@@ -1738,6 +1738,32 @@ def main():
     ok("and the history list keeps its count",
        all("takes" in s for s in by_name["Songs"]["songs"]))
 
+    print("\n[16a] The next take knows how long the last go at its song ran")
+    # The recording screen puts "Vesna took 2:21 last time" under its clock,
+    # so the band can see how far into the song they are. The song is the
+    # next take's name less its attempt number — the same rule as above, so
+    # the interface is handed the answer rather than a second copy of it.
+    ok("the next take is another go at Vesna",
+       d.session_state()["next_take_name"] == "Vesna 3")
+    ok("so it is told how long the last go at Vesna ran",
+       d.session_state().get("last_attempt") == {"song": "Vesna", "duration_sec": 0.5})
+    draft = live_folder / "_drafts" / "take 4"
+    write_wav(draft / "Gtr.wav", 100, seconds=0.25)
+    d._session["take_counter"] = 4
+    d.keep_take(4, str(draft), "vesna 3", 0.25,
+                [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    ok("the latest go, not the first, and spelled another way it is still that song",
+       d.session_state().get("last_attempt") == {"song": "Vesna", "duration_sec": 0.25})
+    draft = live_folder / "_drafts" / "take 5"
+    write_wav(draft / "Gtr.wav", 100, seconds=0.25)
+    d._session["take_counter"] = 5
+    d.keep_take(5, str(draft), "Take 5", 0.25,
+                [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    ok("a take nobody named is no song, so there is nothing to compare with",
+       d.session_state()["next_take_name"] == "Take 6"
+       and "last_attempt" in d.session_state()
+       and d.session_state()["last_attempt"] is None)
+
     print("\n[16b] And how much of the disk it is using")
     # Walked rather than estimated from the durations: a take encoded
     # differently, or one that never finished, makes any guess wrong.

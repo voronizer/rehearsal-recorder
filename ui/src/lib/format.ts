@@ -13,6 +13,43 @@ export function formatHMS(totalSec: number): string {
   return `${h}:${m}:${s}`
 }
 
+/**
+ * A take's clock: "1:48", and "1:02:15" once it passes the hour. Two digits
+ * of hours nobody has played yet only make it smaller to read from the kit.
+ */
+export function formatClock(totalSec: number): string {
+  if (!isFinite(totalSec) || totalSec < 0) totalSec = 0
+  if (totalSec < 3600) return formatMMSS(totalSec)
+  const h = Math.floor(totalSec / 3600)
+  const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0")
+  const s = String(Math.floor(totalSec % 60)).padStart(2, "0")
+  return `${h}:${m}:${s}`
+}
+
+/**
+ * The one line on the recording screen about clipping: "Vocals clipped
+ * 3 times in the last minute", "Vocals and Bass clipped…", "4 tracks
+ * clipped…". Names past two stop being readable from across the room.
+ */
+export function clippedLine(tracks: { name: string; clips: number }[]): string {
+  const when = "in the last minute"
+  if (tracks.length === 1) {
+    const [{ name, clips }] = tracks
+    return clips > 1
+      ? `${name} clipped ${clips} times ${when}`
+      : `${name} clipped ${when}`
+  }
+  if (tracks.length === 2) {
+    return `${tracks[0].name} and ${tracks[1].name} clipped ${when}`
+  }
+  return `${tracks.length} tracks clipped ${when}`
+}
+
+/** What the recording screen says when nothing is wrong. */
+export function recordingLine(trackCount: number): string {
+  return trackCount === 1 ? "1 track recording" : `All ${trackCount} tracks recording`
+}
+
 /** "2026-09-18T19:00:00" -> "18 Sep 2026, 19:00" */
 export function formatDateHuman(iso: string): string {
   if (!iso) return ""

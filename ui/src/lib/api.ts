@@ -125,10 +125,21 @@ export type SessionState =
       songs: Song[]
       next_take_number: number
       next_take_name: string
+      /** The latest go at the song the next take is named for, if any. */
+      last_attempt?: LastAttempt | null
       recording: boolean
       /** Takes the app is copying to the cloud folder right now. */
       cloud_queue?: Record<number, "queued" | "working">
     }
+
+/**
+ * How long the last go at a song ran, for the recording screen's
+ * "Vesna took 2:21 last time". Python finds it by the same rule as `songs`.
+ */
+export type LastAttempt = {
+  song: string
+  duration_sec: number
+}
 
 /**
  * A song a rehearsal was spent on, and how many goes it got. Worked out from

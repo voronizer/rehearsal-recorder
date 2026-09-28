@@ -168,12 +168,8 @@ def _songs_of(takes):
     songs = []
     by_key = {}
     for take in takes:
-        name = (take.get("name") or "").strip()
-        if not name or _UNNAMED_TAKE.match(name):
-            continue
-        attempt = _ATTEMPT_NUMBER.match(name)
-        base = attempt.group(1).strip() if attempt else name
-        if not base:
+        base = _song_of(take.get("name"))
+        if base is None:
             continue
         # Case folded only to group: what shows is the first spelling used.
         key = base.casefold()
@@ -186,6 +182,36 @@ def _songs_of(takes):
             by_key[key] = song
             songs.append(song)
     return songs
+
+
+def _song_of(name):
+    """The song a take name is a go at — "Polyn 3" -> "Polyn" — or None for
+    a take the app named itself, which is no song at all."""
+    name = (name or "").strip()
+    if not name or _UNNAMED_TAKE.match(name):
+        return None
+    attempt = _ATTEMPT_NUMBER.match(name)
+    base = attempt.group(1).strip() if attempt else name
+    return base or None
+
+
+def _last_attempt(takes, next_name):
+    """
+    How long the latest go at the song `next_name` is another go at ran, as
+    {"song", "duration_sec"}, or None when there was none. The recording
+    screen says it under its clock — "Vesna took 2:21 last time" — so the
+    band can see how far into the song they are. The song is named the way
+    _songs_of first spelled it, so the two never disagree about what it is.
+    """
+    song = _song_of(next_name)
+    if song is None:
+        return None
+    key = song.casefold()
+    goes = [t for t in takes if (_song_of(t.get("name")) or "").casefold() == key]
+    if not goes:
+        return None
+    return {"song": _song_of(goes[0].get("name")),
+            "duration_sec": goes[-1].get("duration_sec")}
 
 
 def _folder_bytes(folder):
@@ -1049,6 +1075,7 @@ class Api:
             return {"active": False}
         s = self._session
         takes = self._session_takes()
+        next_name = self.suggest_take_name()
         return {
             "active": True,
             "name": s["name"],
@@ -1057,7 +1084,8 @@ class Api:
             "takes": takes,
             "songs": _songs_of(takes),
             "next_take_number": s["take_counter"] + 1,
-            "next_take_name": self.suggest_take_name(),
+            "next_take_name": next_name,
+            "last_attempt": _last_attempt(takes, next_name),
             "recording": self._recorder is not None,
             "cloud_queue": self._cloud_queue.states(s["folder"]),
         }

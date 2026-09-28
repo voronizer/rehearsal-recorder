@@ -20,6 +20,17 @@ opening.
   the way the app does, too — where each is plugged in on this card, a
   stereo track's second input included — rather than a list that no longer
   carries the inputs, which stopped it before it asked anything.
+- The recording screen is made to be read from across the room, not from the
+  laptop: nobody stands at it while they play. A big clock; under it, on a
+  second go at a song, how long the last go took ("Vesna took 2:21 last
+  time") on a bar that fills as you play; one line that says all is well, or
+  which track clipped — kept for a minute, since nobody was looking when it
+  happened — or that the disk is running out; and a tile per track that
+  fills with its level, red-edged after a clip and dimmed while nothing
+  comes in. Every track gets a tile of one width in one row, sixteen of them
+  included, with a stereo track split down the middle and the track's name
+  running up the tile from its bottom corner, so a long one is not broken
+  in two across a narrow tile.
 - A disk that lasts for days says "Room for many hours of recording". It said
   "Room for about many hours", on the setup screen and while recording.
 - The guide in `docs/using-it.md` is written for the person recording, in
