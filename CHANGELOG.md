@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.9
 
 - `--audio-probe` listens, instead of only opening. It called a card "ok"
   as soon as the stream opened, and the Realtek ASIO driver on some laptops
