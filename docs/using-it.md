@@ -336,7 +336,9 @@ Unplugged, switched off or out of power mid-take, the card stops sending
 sound, and three seconds later the take stops by itself. Everything recorded
 until then is kept and waits on the review screen like any other take, with a
 note saying why it ended. Plug the card back in and record the next take; if
-the card is not offered, **Look again** in Settings finds it.
+the card is not offered, **Look again** in Settings finds it. A card that has
+only just been started gets five seconds to send its first sound, since some
+drivers take a couple to wake it.
 
 The same goes for the signal check, which stops and says the card went quiet,
 and for playback, which pauses. Press play once the card is back: it tries the

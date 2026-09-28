@@ -79,7 +79,10 @@ callback of every stream notes each call (`audio/heartbeat.py`), and three
 seconds without one, outside a call, is a card that has gone: the take stops
 and is kept, the signal check stops and says so, and the player pauses and
 tries the card again on the next play. A call that takes long — a block a
-slow disk is slow to take — is the app being busy, not the card gone.
+slow disk is slow to take — is the app being busy, not the card gone. Nor is
+the wait for the first block, for five seconds: a driver can take a couple
+to start its card, and FlexASIO's first block came two seconds after the
+stream started, which counted against three would have left one to spare.
 
 Turning ASIO on moved every later device index, so a choice is saved as the
 device's name and audio system beside its index and found again by those. An

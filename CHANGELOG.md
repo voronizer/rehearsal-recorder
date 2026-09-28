@@ -22,6 +22,8 @@ opening.
   Three seconds with no sound from the card now stops the take, saves what
   was captured, and says why in a notice that stays on the review screen —
   which is where the reason used to vanish even when the card did say so.
+  A card that has just been started gets five for its first sound: FlexASIO
+  took two to send one.
 - The signal check and playback notice a card that goes quiet too. The
   check stops and says so beside it; playback pauses and says so, and the
   next play tries the card again before falling back to the system output.

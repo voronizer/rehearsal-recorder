@@ -3443,6 +3443,7 @@ def main():
     quiet.start()
     ok("a take that has only just started is not called stalled",
        quiet.problem() is None)
+    quiet._callback(np.zeros((256, 1), dtype=np.int16), 256, None, None)
     quiet._heartbeat._last -= hbmod.SILENCE_SEC + 1
     said = quiet.problem() or ""
     ok("no sound for longer than that stops the take, and says why",
@@ -3878,6 +3879,24 @@ def main():
     ok("a stream not yet running is not silent", not beat.silent())
     beat.start()
     ok("one that has just started is not either", not beat.silent())
+    # A driver can take a couple of seconds to send its first block —
+    # FlexASIO took two — so a card is given five before it is called gone.
+    beat._last -= 4
+    ok("a card that has sent nothing yet is given more than three seconds",
+       not beat.silent())
+    beat._last -= 2
+    ok("but not more than five", beat.silent())
+    beat.enter()
+    beat.leave()
+    beat._last -= 4
+    ok("once it has sent a block, three seconds without one is silence",
+       beat.silent())
+    beat.start()
+    beat._last -= 4
+    ok("a stream started again is given its five seconds again",
+       not beat.silent())
+    beat.enter()
+    beat.leave()
     beat._last -= hbmod.SILENCE_SEC + 1
     ok("one not called for longer than that is", beat.silent())
     beat.enter()
@@ -3896,7 +3915,10 @@ def main():
     a39.start_monitor(0, 48000, one)
     ok("a check that has just started is healthy",
        a39.monitor_health() == {"checking": True, "problem": None})
-    a39._monitor._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    # The fake streams here are never called, so these cards have sent
+    # nothing at all: gone is past the wait for a first block.
+    gone = hbmod.FIRST_BLOCK_SEC + 1
+    a39._monitor._heartbeat._last -= gone
     said = a39.monitor_health()
     ok("a card gone quiet during the check says so, by name",
        said["checking"] is True and "“Interface”" in (said["problem"] or "")
@@ -3923,7 +3945,7 @@ def main():
     ok("a healthy player has nothing to report",
        opened.get("ok") and opened.get("problem") is None)
     a39.player_play()
-    a39._player._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    a39._player._heartbeat._last -= gone
     lost = a39.player_state()
     ok("a playback card gone quiet stops playback",
        lost["playing"] is False)
@@ -3938,7 +3960,7 @@ def main():
        and a39._player._stream.kw.get("device") == 0)
     ok("with nothing left to report", back.get("problem") is None
        and "warning" not in back)
-    a39._player._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    a39._player._heartbeat._last -= gone
     a39.player_state()
 
     # Still gone when play is pressed. PortAudio's list does not change when
@@ -3965,7 +3987,7 @@ def main():
 
     # Gone quiet while paused, with nobody polling: the first press of play
     # still notices, rather than playing into a dead stream first.
-    a39._player._heartbeat._last -= hbmod.SILENCE_SEC + 1
+    a39._player._heartbeat._last -= gone
     first_press = a39.player_play()
     ok("a card lost while paused is given back on the first play",
        first_press.get("reopened") is True and first_press["playing"] is True)
