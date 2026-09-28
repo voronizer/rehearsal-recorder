@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Kbd, Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
+import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
@@ -19,6 +20,7 @@ import {
   type Take,
 } from "@/lib/api"
 import { croppedButNotSwept, takesLabel } from "@/lib/format"
+import { pollSoon, useRunning } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 import { canBePutBack, goPlural } from "@/lib/deletion"
 
@@ -38,6 +40,10 @@ export function Rehearsal({
   onChanged: () => void
 }) {
   const { selected, select, reselect, openAt, player } = useTakeStripPlayer()
+  const cropping = useRunning(
+    "crop",
+    (e) => e.folder === session.folder && e.take_number === selected?.take_number
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toDelete, setToDelete] = useState<Take | null>(null)
@@ -133,6 +139,7 @@ export function Rehearsal({
     setError(null)
     dismiss("rehearsal")
     player.pause()
+    pollSoon()
     const res = await api().crop_take(session.folder, take.take_number, from, to)
     setBusy(false)
     if (!res.ok) {
@@ -278,6 +285,7 @@ export function Rehearsal({
             onRemoveMarker={(sec) => removeMarker(selected, sec)}
             onCrop={(from, to) => void cropTake(selected, from, to)}
             canCrop={!busy}
+            status={<RunningLine entry={cropping} label="Cropping" />}
             spaceKey
           />
         ) : (

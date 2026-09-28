@@ -3,6 +3,7 @@ import { HardDrive, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Kbd, Shell } from "@/components/Shell"
 import { LevelMeter } from "@/components/LevelMeter"
+import { RunningLine } from "@/components/RunningLine"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
@@ -12,6 +13,7 @@ import {
   type PlacedTrack,
 } from "@/lib/api"
 import { formatDuration, formatHMS } from "@/lib/format"
+import { pollSoon, useRunning } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 import { cn } from "@/lib/utils"
 
@@ -42,6 +44,8 @@ export function Recording({
   const [health, setHealth] = useState<RecordingHealth | null>(null)
   const startedAt = useRef(Date.now())
   const stopRef = useRef<() => Promise<void>>(async () => {})
+  // Turning every raw track into a .wav takes real seconds on a long take.
+  const saving = useRunning("stop")
 
   // A new take is recording: why the last one stopped by itself no longer
   // stands, and "Recording stopped" over a take that is recording is wrong.
@@ -80,6 +84,7 @@ export function Recording({
   const stop = async () => {
     if (stopping) return
     setStopping(true)
+    pollSoon()
     const res = await api().stop_take()
     if (!res.ok) {
       setStopping(false)
@@ -142,7 +147,11 @@ export function Recording({
             Stop
             <Kbd>Space</Kbd>
           </Button>
-          <p className="text-xs text-muted-foreground">autosaved every 30 s</p>
+          {stopping ? (
+            <RunningLine entry={saving} label="Saving the take" active />
+          ) : (
+            <p className="text-xs text-muted-foreground">autosaved every 30 s</p>
+          )}
         </div>
       }
     >

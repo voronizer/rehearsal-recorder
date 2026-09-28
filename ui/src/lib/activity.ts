@@ -16,6 +16,9 @@ export const IDLE_MS = 2000
 let current: Activity = { entries: [], recording: false }
 let listOpen = false
 let started = false
+let timer = 0
+let inFlight = false
+let soon = false
 const known = new Map<number, ActivityEntry["state"]>()
 const listeners = new Set<() => void>()
 const settledListeners = new Set<(e: ActivityEntry) => void>()
@@ -49,6 +52,7 @@ function announce(next: ActivityEntry[]) {
 }
 
 async function tick() {
+  inFlight = true
   try {
     const next = await poll("activity")
     announce(next.entries)
@@ -61,7 +65,21 @@ async function tick() {
   } catch {
     /* the bridge blinked — ask again next time */
   }
-  window.setTimeout(tick, busy() ? BUSY_MS : IDLE_MS)
+  inFlight = false
+  timer = window.setTimeout(tick, soon ? 0 : busy() ? BUSY_MS : IDLE_MS)
+  soon = false
+}
+
+/** Ask at once rather than at the next tick — for a screen that has just
+ *  started an operation and would otherwise wait up to IDLE_MS to show it. */
+export function pollSoon() {
+  if (!started) return ensureStarted()
+  if (inFlight) {
+    soon = true
+    return
+  }
+  window.clearTimeout(timer)
+  timer = window.setTimeout(tick, 0)
 }
 
 function ensureStarted() {

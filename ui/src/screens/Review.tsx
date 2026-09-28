@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Kbd, Shell } from "@/components/Shell"
+import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
@@ -19,6 +20,7 @@ import {
 } from "@/lib/api"
 import { croppedButNotSwept, formatMMSS } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
+import { pollSoon, useRunning } from "@/lib/activity"
 
 /**
  * Right after stopping: listen and decide the take's fate. Until it is saved
@@ -52,6 +54,7 @@ export function Review({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const player = useMultitrackPlayer(take.tracks, take.duration_sec)
+  const cropping = useRunning("crop", (e) => e.folder === take.temp_dir)
 
   // Marks made here are held in memory until the take is saved: it has no
   // folder yet, so there is nowhere on disk to put them. They travel with
@@ -167,6 +170,7 @@ export function Review({
     setError(null)
     dismiss("review")
     player.pause()
+    pollSoon()
     const res = await api().crop_draft(take.temp_dir, take.tracks, from, to)
     setBusy(false)
     if (!res.ok) {
@@ -278,6 +282,7 @@ export function Review({
           onRemoveMarker={removeMarker}
           onCrop={(from, to) => void cropDraft(from, to)}
           canCrop={!busy}
+          status={<RunningLine entry={cropping} label="Cropping" />}
         />
       </div>
 

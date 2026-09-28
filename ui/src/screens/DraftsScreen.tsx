@@ -3,9 +3,11 @@ import { LifeBuoy, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Shell } from "@/components/Shell"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { RunningLine } from "@/components/RunningLine"
 import { api, type Draft } from "@/lib/api"
 import { formatDateHuman, formatMMSS } from "@/lib/format"
 import { canBePutBack, goesTo } from "@/lib/deletion"
+import { pollSoon, useActivity } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 
 /**
@@ -28,6 +30,8 @@ export function DraftsScreen({
 }) {
   const [remaining, setRemaining] = useState(drafts)
   const [busy, setBusy] = useState<string | null>(null)
+  // Turning a long take's raw tracks into .wav takes real seconds.
+  const { entries: work } = useActivity()
   const [toDiscard, setToDiscard] = useState<Draft | null>(null)
 
   const finish = (rest: Draft[]) => {
@@ -38,6 +42,7 @@ export function DraftsScreen({
   const recover = async (draft: Draft) => {
     setBusy(draft.dir)
     dismiss(SAID)
+    pollSoon()
     const res = await api().recover_draft(draft.dir)
     setBusy(null)
     if (!res.ok) {
@@ -99,6 +104,15 @@ export function DraftsScreen({
                   {draft.tracks.length === 1 ? "track" : "tracks"} ·{" "}
                   <span className="tnum">{formatMMSS(draft.duration_sec)}</span>
                 </div>
+                <RunningLine
+                  entry={
+                    work.find(
+                      (e) =>
+                        e.kind === "recover" && e.state === "running" && e.folder === draft.dir
+                    ) ?? null
+                  }
+                  label="Recovering"
+                />
               </div>
 
               <Button

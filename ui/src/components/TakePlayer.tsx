@@ -45,6 +45,7 @@ export function TakePlayer({
   onCrop,
   canCrop = true,
   spaceKey = false,
+  status,
 }: {
   player: MultitrackPlayer
   /** Saved listening markers, in order. */
@@ -58,6 +59,9 @@ export function TakePlayer({
    *  real seconds, and a second click is not a no-op: Python re-reads the now
    *  shorter take and cuts it again. */
   canCrop?: boolean
+  /** A line of its own above the player's warnings — how far along a crop
+   *  of this take is. */
+  status?: React.ReactNode
   /** Space plays and pauses on this screen. On the review screen it saves
    *  the take instead, and Play must not claim it. */
   spaceKey?: boolean
@@ -107,6 +111,8 @@ export function TakePlayer({
               : "that is the whole take"
         }
       />
+
+      {status}
 
       {player.outputWarning && !player.loadError && (
         <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">

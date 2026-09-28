@@ -5,6 +5,7 @@ import { Shell, EmptyState } from "@/components/Shell"
 import { RehearsalRow } from "@/components/RehearsalRow"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
+import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
@@ -28,7 +29,7 @@ import {
   takesLabel,
 } from "@/lib/format"
 import { canBePutBack, goPlural, goesTo } from "@/lib/deletion"
-import { useCloudSettled } from "@/lib/activity"
+import { pollSoon, useCloudSettled, useRunning } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 
 /**
@@ -80,6 +81,10 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     useState<RehearsalSummary | null>(null)
   const [renamingOpened, setRenamingOpened] = useState(false)
   const { selected, select, reselect, openAt, player } = useTakeStripPlayer()
+  const cropping = useRunning(
+    "crop",
+    (e) => e.folder === opened?.folder && e.take_number === selected?.take_number
+  )
 
   const refresh = async () => setRehearsals(await api().list_rehearsals())
 
@@ -165,6 +170,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     setBusy(true)
     dismiss(SAID)
     player.pause()
+    pollSoon()
     const res = await api().crop_take(opened.folder, take.take_number, from, to)
     setBusy(false)
     if (!res.ok) {
@@ -318,6 +324,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
               onCrop={(from, to) => void cropTake(selected, from, to)}
               spaceKey
               canCrop={!busy}
+              status={<RunningLine entry={cropping} label="Cropping" />}
             />
           ) : (
             opened.takes.length > 0 && (

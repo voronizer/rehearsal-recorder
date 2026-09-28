@@ -123,6 +123,13 @@ function levels() {
     return [n, [silent ? 0 : Math.round(raw * P.volumes[n] * 1000) / 1000]];
   }));
 }
+// A test can hold a call where it is — window.__HOLD__[name], a promise it
+// resolves when it has seen what it came to see.
+async function held(name) {
+  const h = window.__HOLD__ && window.__HOLD__[name];
+  if (h) await h;
+}
+
 function playerState() {
   if (!P) return {open:false};
   return {open:true, ok:true, playing:P.playing, position:position(), duration:P.duration,
@@ -297,7 +304,7 @@ window.__MAKE_API__ = () => ({
 
   start_take: track('start_take', async () => { takeCounter += 1; return {ok:true, take_number:takeCounter}; }),
   get_levels: async () => ({'Guitar':[0.99], 'Vocals':[0.005]}),
-  stop_take: track('stop_take', async () => ({ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
+  stop_take: track('stop_take', async () => (await held('stop_take'), {ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
     duration_sec:TAKE, suggested_name:suggestName(takeCounter),
     tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]})),
   keep_take: track('keep_take', async (n, _t, name, dur, tracks, markers) => {
@@ -309,6 +316,7 @@ window.__MAKE_API__ = () => ({
   }),
   discard_take: track('discard_take', async () => ({ok:true})),
   crop_take: track('crop_take', async (folder, n, a, b) => {
+    await held('crop_take');
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (!take) return {ok:false, error:'Take not found'};
     let dropped = 0;
@@ -327,6 +335,7 @@ window.__MAKE_API__ = () => ({
       {ok:true, take, trashed:true, location:null, markers_dropped:dropped}));
   }),
   crop_draft: track('crop_draft', async (dir, tracks, a, b) => {
+    await held('crop_draft');
     const cut = (tracks || []).map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
     for (const t of cut) fileDurations[t.file] = b - a;
     P = null;
@@ -429,6 +438,7 @@ window.__MAKE_API__ = () => ({
 
   list_drafts: async () => drafts,
   recover_draft: track('recover_draft', async (dir) => {
+    await held('recover_draft');
     if (window.__RECOVER_FAILS__)
       return {ok:false, error:'Could not recover the take: its folder is read-only'};
     drafts = drafts.filter(d => d.dir !== dir);
@@ -1405,6 +1415,8 @@ def main():
         ok("the folder picker was called", len(calls("choose_cloud_dir")) == 1)
         page.get_by_role("button", name="Both", exact=True).click()
         page.wait_for_timeout(400)
+        ok("the dialog lets go as soon as the copy is queued",
+           page.get_by_role("dialog").count() == 0)
         share = calls("share_take")
         ok("the take went up", len(share) == 1 and share[0]["args"][2] == "both")
         ok("and the row shows it is there",
@@ -2616,6 +2628,93 @@ def main():
         bg.wait_for_selector(button, timeout=4000)
         ok("a later copy brings it back", bg.locator(button).count() == 1)
         bg.close()
+
+        print("\n[12p] Long work shows its progress where it runs")
+        here = browser.new_page(viewport={"width": 1180, "height": 820})
+        here.add_init_script("window.__ACTIVITY__ = [];" + MOCK)
+        here.goto(server.base_url, wait_until="networkidle")
+
+        def hold(name):
+            here.evaluate("""name => { window.__HOLD__ = window.__HOLD__ || {};
+                window.__HOLD__[name] = new Promise(r => { window['__RELEASE_' + name] = r; }); }""",
+                          name)
+
+        def release(name):
+            here.evaluate("name => { window['__RELEASE_' + name](); delete window.__HOLD__[name]; }",
+                          name)
+
+        def running(kind, fraction, **kw):
+            e = {"id": 50, "kind": kind, "title": kind, "folder": None,
+                 "take_number": None, "state": "running", "fraction": fraction,
+                 "step": None, "error": None, "detail": None, "retry": None,
+                 "seen": False}
+            e.update(kw)
+            here.evaluate(f"() => {{ window.__ACTIVITY__ = [{json.dumps(e)}]; }}")
+
+        here.wait_for_selector("text=Start rehearsal")
+        here.click("text=Start rehearsal")
+        here.wait_for_selector("text=Record take 1")
+        here.click("text=Record take 1")
+        here.wait_for_selector("button:has-text('Stop')")
+        hold("stop_take")
+        running("stop", 0.45, folder="/tmp/draft", take_number=1)
+        here.click("button:has-text('Stop')")
+        here.wait_for_selector("text=Saving the take… 45%", timeout=4000)
+        ok("a take being saved says how far along it is, under Stop", True)
+        release("stop_take")
+        here.wait_for_selector("text=Save take")
+
+        hold("crop_draft")
+        drag_region(here, 0.25, 0.75)
+        here.click("button[aria-label='Crop to the region']")
+        here.wait_for_selector("text=Keep only")
+        running("crop", 0.4, folder="/tmp/draft")
+        here.get_by_role("button", name="Crop", exact=True).click()
+        here.wait_for_selector("text=Cropping… 40%", timeout=4000)
+        ok("a take under review being cropped says how far along it is", True)
+        release("crop_draft")
+        here.evaluate("() => { window.__ACTIVITY__ = []; }")
+        here.wait_for_timeout(600)
+        ok("and the line goes when it is done",
+           here.locator("text=Cropping…").count() == 0)
+
+        # Saved, and cropped again from the rehearsal screen.
+        here.fill("#take-name", "Polyn")
+        here.click("text=Save take")
+        here.wait_for_selector("text=Record take 2")
+        here.click("button[aria-label^='Take 1 Polyn']")
+        here.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
+        hold("crop_take")
+        drag_region(here, 0.25, 0.75)
+        here.click("button[aria-label='Crop to the region']")
+        here.wait_for_selector("text=Keep only")
+        started_as = here.evaluate(
+            "() => window.__CALLS__.filter(c => c.name === 'start_rehearsal')[0].args[0]")
+        running("crop", 0.4, folder="/rec/" + started_as, take_number=1)
+        here.get_by_role("button", name="Crop", exact=True).click()
+        here.wait_for_selector("text=Cropping… 40%", timeout=4000)
+        ok("a saved take being cropped says how far along it is, by the player",
+           True)
+        release("crop_take")
+        here.close()
+
+        dr = browser.new_page(viewport={"width": 1180, "height": 820})
+        dr.add_init_script(
+            """window.__ACTIVITY__ = [];
+               window.__DRAFTS__ = [{dir:'/rec/old/_drafts/take 1', name:'take 1',
+                 tracks:['Guitar','Vocals'], duration_sec:95,
+                 rehearsal_folder:'/rec/old', rehearsal_name:'Tuesday jam',
+                 created_at:'2026-09-10T19:00:00'}];""" + MOCK)
+        dr.goto(server.base_url, wait_until="networkidle")
+        dr.wait_for_selector("text=Unsaved takes found", timeout=8000)
+        here = dr
+        hold("recover_draft")
+        running("recover", 0.3, folder="/rec/old/_drafts/take 1")
+        dr.get_by_role("button", name="Recover").click()
+        dr.wait_for_selector("text=Recovering… 30%", timeout=4000)
+        ok("a take being recovered says how far along it is, in its row", True)
+        release("recover_draft")
+        dr.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})
