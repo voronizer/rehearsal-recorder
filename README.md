@@ -8,7 +8,7 @@ Built for the situation it is actually used in: nobody is watching the screen
 while the band plays, nobody is riding the gain, the laptop might get kicked,
 and there may be no internet in the room.
 
-![Recording, with a level meter per track](docs/screenshots/recording.png)
+![A four-piece take open in the player: drums, bass, guitar and vocals on one timeline, with coloured markers and the bridge selected to repeat](docs/screenshots/player.png)
 
 ## Get it
 
@@ -55,10 +55,6 @@ shares one timeline, so where two of them parted company is something you can
 point at rather than guess. Drag across it to set the repeat region, and zoom
 into it with the wheel when the spot needs finding exactly.
 
-![A take playing, with the repeat region drawn across both tracks and each fader showing how loud its track is coming out](docs/screenshots/player-markers.png)
-
-![A take zoomed in](docs/screenshots/zoom.png)
-
 **Markers say what happened, not just where.** A note and a kind — keep this,
 went wrong, do again — coloured on the timeline and on the take's pill, so a
 glance at the strip says which take has red in it.
@@ -67,8 +63,6 @@ glance at the strip says which take has red in it.
 not how anyone recognises an evening, so each one says what was played in it,
 how long it ran and what it weighs on disk. It is read from the take names,
 so nothing extra has to be filled in while you are playing.
-
-![Past rehearsals, each saying what was played in it](docs/screenshots/history.png)
 
 **Sends the good ones to the cloud.** A whole rehearsal is mostly failed
 attempts, so the recordings folder does not sync — only the takes you keep,
@@ -82,17 +76,15 @@ the card is asked before the choice is shown rather than after it fails.
 24-bit is the default: at a rehearsal nobody watches the gain, and the
 headroom is worth the extra disk.
 
-![Settings](docs/screenshots/settings.png)
-
 **Never destroys anything.** Deleting means the Trash, or a `_deleted` folder
 where there is no Trash to reach. A recording of a rehearsal cannot be made
 again.
 
 ## Where the rest of it is
 
-- **[docs/using-it.md](docs/using-it.md)** — the guide. Every screen, what the
-  player does, recording quality, cloud copies, where the files live, and what
-  protects a recording.
+- **[docs/using-it.md](docs/using-it.md)** — the guide, with a picture of
+  every screen: a rehearsal from setting up to sharing the good takes, and
+  what to do when something goes wrong.
 - **[docs/development.md](docs/development.md)** — running it from source,
   the hot-reload loop, and what every file in here is for.
 - **[docs/building.md](docs/building.md)** — packaging it into an app, and

@@ -286,6 +286,129 @@ transaction takes the write lock the moment it starts, so the interface
 thread and the publishing thread wait for each other instead of one of them
 failing with "database is locked" after doing some of its work.
 
+## The player
+
+**Python plays the audio, not the browser** (`audio/player.py`). The reason
+was choosing the output device: a web page switches output with `setSinkId`,
+and WebKit does not offer it for `AudioContext`. It also removed the memory
+ceiling and the split between two playback modes.
+
+- All tracks are mixed into one stream from one position, so they cannot
+  drift apart.
+- Tracks are read through `memmap`: the system pages in what is needed, so a
+  twenty-minute take costs no more memory than a three-minute one, and
+  seeking is a change of index.
+- Volume, mute and solo are applied with a short ramp on the coefficient;
+  without it, switching clicks.
+- The waveform is computed in Python (`audio/waveform.py`, numpy) and arrives
+  as peaks. When zoomed in, the peaks are fetched again for the part on
+  screen.
+
+**One surface for seeking and selecting.** A press on the lanes that does not
+travel is a click and seeks; one that travels draws the repeat region. The
+region's edges are grabbed on the ruler, not in the lanes, so a press in the
+lanes always starts a new region, even exactly where the old one ended. The
+playhead has its own grip on the ruler for scrubbing. There used to be A and
+B buttons that put an edge at the playback position, the only way to place
+one to a tenth of a second; once the timeline could zoom, a drag was finer
+than that, and they went. Zoom stops at two seconds across the screen: closer
+than that is detail nobody looks for, and the gesture turns twitchy.
+
+**Nothing is open when a rehearsal opens.** No audio file is read until
+someone picks a take; until then the space shows the overview.
+
+**Markers on a take that has no folder yet.** The review screen offers
+markers, but the take is still a draft with nowhere on disk to write them.
+They are held in the screen and passed along when the take is saved, and
+dropped with it when it is discarded.
+
+**Crop is refused** for a region under a second, which is far more likely a
+slip of the mouse than an intention, and for one covering the whole take.
+Both grey the button out, which is why the guide mentions them: a greyed-out
+button beside a region just drawn otherwise looks broken.
+
+**Renaming a take moves its files**, so the player reopens it from the start.
+
+## Asking a card what it can do
+
+The rates and depths offered are the ones the card accepts, asked before the
+choice is shown rather than found out when it fails. ASIO answers about the
+rate and says nothing about the depth, so a rate it takes is offered at both
+depths — and it is asked once per rate, not once per combination, because
+each question loads and unloads the driver in full.
+
+A card can also refuse to answer at all, and the screen says so. It used to
+fall back to the usual three rates in silence, so a card that said nothing
+looked like one that said yes to everything: an XR18, which has no 96 kHz
+and takes only the rate its own mixer is set to, was offered all three. A
+saved choice that stops being possible — another card, another setup — is
+replaced by one that works, instead of failing when everyone is ready to
+play.
+
+## Cloud copies
+
+Converting goes through libsndfile, via the `soundfile` package, which comes
+as a prebuilt wheel of about a megabyte on macOS, Windows and Linux.
+
+The first version called `afconvert` instead, on the reasoning that another
+native audio library was a risk after this project had already had one
+memory fault. That was applied too widely: `afconvert` exists only on macOS,
+so the feature did nothing on Windows, and the fault it guarded against was
+in the recording path, where a realtime callback runs and a crash costs a
+take. Converting runs afterwards, on a copy, in an ordinary call.
+
+- Files are converted a block at a time, so a long eight-track take does not
+  have to fit in memory. Without `soundfile` a copy stays WAV and Settings
+  says so. That FLAC round-trips bit for bit at both depths is checked by the
+  test suite.
+- MP3 is variable bitrate: around 320 kbps for a stereo mix and 128 for a
+  mono track, the same quality per channel.
+- The mix is written 16-bit, because it is what gets sent to people and every
+  phone plays it. If the tracks would clip when summed, the level is pulled
+  down, and by how much is recorded.
+- A copy remembers what it was made from: the take's name, what was sent,
+  the format, the balance and the folder. A change to any of them sends the
+  takes of the rehearsal in progress again; nothing else is mixed twice.
+- Automatic copies wait while a take records: mixing is not something to
+  start competing with the sound card.
+- The recording itself stays WAV. It is the one thing here that cannot be
+  made again, and disk is cheap.
+
+## Screens and keys
+
+**Settings is four groups** — Audio, Folders, Appearance, Under the hood —
+because six sections stacked in one column was a wall nobody could scan. The
+track layout is not repeated there: it is edited where it is defined, on the
+setup screen. The interface and the quality are the opposite case: they
+belong to the room and the card, so they are set once in Settings and the
+setup screen only shows them.
+
+**History measures a rehearsal's size by walking its folder**, not from the
+durations, so it is the number the file manager gives.
+
+**A key is shown on a button only while the key presses it.** With a take
+open, Space plays the take rather than recording, so Record take stops
+showing it; Escape closes the take first, so Finish does too.
+
+**Where Escape's next step is a decision, it asks.** Finishing a rehearsal
+that has takes asks, because doing it by accident puts the rest of the
+evening in a second folder; an empty rehearsal does not, since there is
+nothing to protect and Python removes its folder anyway. The review screen
+asks before discarding: that take was played seconds ago and cannot be
+played again. The buttons themselves do not ask, because pressing a labelled
+button is not an accident. Escape never stops a recording.
+
+## Theme and scale
+
+The theme and the scale are stored twice. The real copy is in `config.json`
+with the other settings; a copy in localStorage lets the page apply them
+before its first paint, while the bridge to Python is still coming up, so
+somebody who chose light does not see a dark window for a moment. When the
+two disagree, the Python config wins.
+
+The scale sets the root font size, and the layout is in rem, so padding,
+buttons and the waveform grow with the text.
+
 ## Deliberately not done
 
 - **Panning per track** — volume and mute/solo only.

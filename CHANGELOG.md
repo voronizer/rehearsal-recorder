@@ -22,6 +22,11 @@ opening.
   carries the inputs, which stopped it before it asked anything.
 - A disk that lasts for days says "Room for many hours of recording". It said
   "Room for about many hours", on the setup screen and while recording.
+- The guide in `docs/using-it.md` is written for the person recording, in
+  plain words, with a picture of every screen. The reasons behind how things
+  work moved to `docs/design-notes.md`. The pictures show a band of four and
+  waveforms that look like one, and `tests/docs_screenshots.py` takes them
+  again after a change; the README keeps one of them.
 
 ## 0.7.8
 

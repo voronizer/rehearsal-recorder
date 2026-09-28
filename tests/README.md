@@ -47,6 +47,15 @@ before the first paint, the interface as it looks on a machine with no Trash.
 Needs `ui/dist` built (`cd ui && npm run build`) and Playwright installed.
 Screenshots land in `tests/screenshots/` and CI keeps them as artifacts.
 
+## docs_screenshots.py — the pictures in the docs
+
+Not a suite: it checks nothing and `run_all.py` does not run it. It takes the
+pictures in the README and `docs/using-it.md` — the same bundle and the same
+mocked bridge as `test_interface.py`, with a band of four on an XR18 and
+waveforms worked out from a song, so the pictures look like a rehearsal
+rather than a test. It writes `docs/screenshots/*.png`. Run it after changing
+anything they show, and look at them before committing.
+
 ## Why not pytest
 
 `test_engine.py` stubs the `sounddevice` module before importing anything
