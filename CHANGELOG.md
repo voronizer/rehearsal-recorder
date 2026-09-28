@@ -13,6 +13,10 @@ opening.
 - **Finish** sits beside **Record take**, the way Discard sits beside Save
   take. It was up in the header, away from the only other thing to do on
   that screen.
+- The background-work button says what it is about, beside **History**: "1
+  working · 64%" while a copy runs, then "Done", or "1 failed" in red, until
+  it has been looked at. It was a ring the size of a letter, and then a dot,
+  easy to take for nothing at all.
 
 ## 0.7.7
 

@@ -376,9 +376,10 @@ background either way:
   button once it is there, or "Not in the cloud" with the reason when
   something went wrong.
 
-Whichever screen you are on, the button in the header shows what is being
-copied and how far along it is, and lists what finished — with **Retry** on a
-copy that did not make it. The corner says so too, when a copy lands or
+Whichever screen you are on, the button in the header, beside **History**,
+says what is being copied and how far along it is — "1 working · 64%" — and
+then how it went, "Done" or "1 failed" in red, until you have looked. Pressed,
+it lists what finished — with **Retry** on a copy that did not make it. The corner says so too, when a copy lands or
 fails. The same list shows a take being cropped, saved after Stop or
 recovered, each of which also shows its progress where it runs.
 

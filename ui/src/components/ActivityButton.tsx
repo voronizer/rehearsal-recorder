@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Popover } from "radix-ui"
-import { Check, Loader2, X } from "lucide-react"
+import { Check, ListChecks, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { api, type ActivityEntry } from "@/lib/api"
@@ -18,10 +18,12 @@ function isActive(e: ActivityEntry) {
 /**
  * What long work is running and how it ended, in the header of every screen
  * — see lib/activity.ts and activity.py. There only when there is something
- * to show: while anything waits or runs, a ring filled to how far along it
- * all is; once it has finished and nobody has looked, a dot, red if anything
- * failed. Pressed, the list: what is running with a bar each, what finished
- * with what it came to, and Retry on a cloud copy that failed.
+ * to show, and in words beside History, since a dot on its own was easy to
+ * miss: while anything waits or runs, a ring filled to how far along it all
+ * is and "2 working · 64%"; once it has finished and nobody has looked,
+ * "Done", or "1 failed" in red. Looked at, just an icon until Clear. Pressed,
+ * the list: what is running with a bar each, what finished with what it came
+ * to, and Retry on a cloud copy that failed.
  *
  * Escape closes the list and nothing else: Radix gives its content
  * role="dialog", which useEscape (hooks/useSpacebar.ts) already leaves alone.
@@ -41,7 +43,7 @@ export function ActivityButton() {
   const active = entries.filter(isActive)
   const finished = entries.filter((e) => !isActive(e))
   const unseen = finished.filter((e) => !e.seen)
-  const failedUnseen = unseen.some((e) => e.state === "failed")
+  const failedUnseen = unseen.filter((e) => e.state === "failed").length
   const overall = active.length
     ? active.reduce((sum, e) => sum + (e.state === "running" ? e.fraction : 0), 0) /
       active.length
@@ -56,7 +58,21 @@ export function ActivityButton() {
   return (
     <Popover.Root open={open} onOpenChange={show}>
       <Popover.Trigger asChild>
-        <Button variant="ghost" size="sm" aria-label={label} className="gap-1.5">
+        <Button
+          variant="outline"
+          size={active.length === 0 && unseen.length === 0 ? "icon" : "default"}
+          aria-label={label}
+          className={cn(
+            // Kept on hover too: outline turns its text to the accent colour
+            // there, and the pointer is on it the moment it is pressed.
+            active.length === 0 &&
+              (failedUnseen
+                ? "text-destructive hover:text-destructive"
+                : unseen.length
+                  ? "text-signal hover:text-signal"
+                  : "text-muted-foreground")
+          )}
+        >
           {active.length > 0 ? (
             <>
               <svg viewBox="0 0 18 18" className="size-4.5 -rotate-90" aria-hidden>
@@ -71,20 +87,24 @@ export function ActivityButton() {
                   strokeDashoffset={RING_C * (1 - overall)}
                 />
               </svg>
-              <span className="tnum text-xs">{active.length}</span>
+              <span className="tabular-nums">
+                {active.length === waiting
+                  ? `${waiting} waiting`
+                  : `${active.length} working · ${Math.round(overall * 100)}%`}
+              </span>
+            </>
+          ) : failedUnseen ? (
+            <>
+              <X />
+              <span className="tabular-nums">{failedUnseen} failed</span>
+            </>
+          ) : unseen.length ? (
+            <>
+              <Check />
+              Done
             </>
           ) : (
-            <span
-              aria-hidden
-              className={cn(
-                "size-2.5 rounded-full",
-                unseen.length === 0
-                  ? "bg-muted-foreground/40"
-                  : failedUnseen
-                    ? "bg-destructive"
-                    : "bg-signal"
-              )}
-            />
+            <ListChecks />
           )}
         </Button>
       </Popover.Trigger>

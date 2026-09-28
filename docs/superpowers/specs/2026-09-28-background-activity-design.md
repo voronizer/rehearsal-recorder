@@ -178,10 +178,14 @@ anything waiting or running, or anything finished in this run. The Recording
 screen has no header and needs none: cloud copies wait while recording, and
 the take's own saving is shown under its Stop button.
 
+An outline button like **History** beside it, saying it in words — a dot on
+its own was easy to miss:
+
 - Running: a ring filled to the overall fraction (the running entries' work
-  together), and the number running.
-- Finished and not yet looked at: a dot — green when all of it worked, red
-  when anything failed.
+  together), and "2 working · 64%"; "1 waiting" while nothing runs yet.
+- Finished and not yet looked at: "✓ Done" in green when all of it worked,
+  "✕ 1 failed" in red when anything failed.
+- Looked at: a quiet icon, no words, until **Clear**.
 - Its accessible name says it in words: "Background work: 1 running, 2
   finished".
 
@@ -193,8 +197,8 @@ already has):
 - **Done**: ✓ or ✕, the title, the detail or the error, and **Retry** on a
   failed cloud copy. **Clear** at the bottom drops the finished ones.
 
-Opening the list marks what is in it seen (`activity_seen`), and the dot
-goes. Escape closes
+Opening the list marks what is in it seen (`activity_seen`), and the words
+go. Escape closes
 the list and nothing else — the screen underneath keeps its own Escape
 (`hooks/useSpacebar.ts`).
 
@@ -217,9 +221,10 @@ the list and nothing else — the screen underneath keeps its own Escape
 
 `tests/test_interface.py`, with `activity` mocked:
 
-- no indicator when there is nothing to show; a ring and a count while
-  something runs; the list shows running and finished entries; opening it
-  clears the dot; Retry calls `retry_cloud`; Clear calls `clear_activity`.
+- no indicator when there is nothing to show; a ring and "N working · P%"
+  while something runs; "Done" or "N failed" until looked at, then no words;
+  the list shows running and finished entries; opening it clears the words;
+  Retry calls `retry_cloud`; Clear calls `clear_activity`.
 - a cloud copy finishing raises a notice, a failure raises one that stays.
 - the share dialog closes as soon as the copy is queued; the existing share
   tests change to that.

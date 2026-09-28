@@ -2573,6 +2573,19 @@ def main():
             bg.evaluate(f"() => {{ window.__ACTIVITY__ = {json.dumps(entries)}; }}")
 
         button = "button[aria-label^='Background work']"
+
+        def button_says(want, timeout=4000):
+            """Waits for the button's words to be `want` — a poll away, and
+            with nothing running the poll is two seconds apart."""
+            try:
+                bg.wait_for_function(
+                    "([sel, want]) => { const b = document.querySelector(sel);"
+                    " return !!b && b.innerText.trim() === want }",
+                    arg=[button, want], timeout=timeout)
+                return True
+            except Exception:
+                return False
+
         bg.wait_for_timeout(2500)
         ok("with nothing running or finished there is no button",
            bg.locator(button).count() == 0)
@@ -2581,11 +2594,19 @@ def main():
         bg.wait_for_selector(button, timeout=4000)
         ok("something running brings it, saying how many",
            "1 running" in bg.locator(button).get_attribute("aria-label"))
+        ok("and says so in words, not only a ring",
+           button_says("1 working · 64%"))
         set_activity([entry(), entry(id=9, take_number=9, state="waiting",
                                      fraction=0.0, step=None)])
         bg.wait_for_timeout(900)
         ok("and a copy that waits is said to wait, not to run",
            "1 running, 1 waiting" in bg.locator(button).get_attribute("aria-label"))
+        ok("the words count both, and how far along the two are together",
+           button_says("2 working · 32%"))
+        set_activity([entry(id=9, take_number=9, state="waiting",
+                            fraction=0.0, step=None)])
+        ok("with nothing running yet, only waiting, it says waiting",
+           button_says("1 waiting"))
         set_activity([entry()])
         bg.click(button)
         bg.wait_for_selector("text=Encoding the mix", timeout=2000)
@@ -2657,6 +2678,22 @@ def main():
         ok("and after Clear the list is closed: a new failure stays unseen, the dot red",
            "not yet seen" in (bg.locator(button).get_attribute("aria-label") or "")
            and len(bg_calls("activity_seen")) == seen_before)
+        ok("a failure nobody has looked at says how many failed",
+           button_says("1 failed"))
+        bg.wait_for_timeout(400)  # the button's colour eases in
+        bg.screenshot(path=str(SHOTS / "64-activity-failed.png"))
+        set_activity([entry(id=5, state="done", fraction=1.0, step=None,
+                            detail="MP3 of the mix")])
+        ok("work that went well and was not looked at says Done",
+           button_says("Done"))
+        bg.wait_for_timeout(400)  # the button's colour eases in
+        bg.screenshot(path=str(SHOTS / "65-activity-done-closed.png"))
+        set_activity([entry(id=5, state="done", fraction=1.0, step=None,
+                            detail="MP3 of the mix", seen=True)])
+        ok("once looked at, it stays until Clear, but says nothing",
+           button_says("") and bg.locator(button).count() == 1)
+        bg.wait_for_timeout(400)  # the button's colour eases in
+        bg.screenshot(path=str(SHOTS / "66-activity-quiet.png"))
         bg.close()
 
         # Finished has no header of its own, and it is where a copy started
