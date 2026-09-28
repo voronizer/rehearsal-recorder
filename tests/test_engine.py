@@ -2675,21 +2675,26 @@ def main():
             dtype = np.dtype(kw["dtype"])
             if self._halt.wait(self.delay):
                 return
+            # Paced by the clock, not by the length of a sleep: each time it
+            # wakes it sends every block due by then, at twice real time. A
+            # CI machine can stretch a 10 ms sleep several times over.
+            began = _t.monotonic()
             sent = 0
             while not self._halt.is_set():
+                due = int((_t.monotonic() - began) * kw["samplerate"] * 2 / frames) + 1
+                while sent < due and (self.blocks is None or sent < self.blocks):
+                    block = np.zeros((frames, ins), dtype=dtype)
+                    block[:, 0] = (np.iinfo(dtype).max + 1) // 4
+                    if duplex:
+                        out = np.ones((frames, kw["channels"][1]), dtype=dtype)
+                        kw["callback"](block, out, frames, None, None)
+                        _Card.out_dirty = _Card.out_dirty or bool(out.any())
+                    else:
+                        kw["callback"](block, frames, None, None)
+                    sent += 1
                 if self.blocks is not None and sent >= self.blocks:
                     return
-                block = np.zeros((frames, ins), dtype=dtype)
-                block[:, 0] = (np.iinfo(dtype).max + 1) // 4
-                if duplex:
-                    out = np.ones((frames, kw["channels"][1]), dtype=dtype)
-                    kw["callback"](block, out, frames, None, None)
-                    _Card.out_dirty = _Card.out_dirty or bool(out.any())
-                else:
-                    kw["callback"](block, frames, None, None)
-                sent += 1
-                # Faster than real time: Windows sleeps in 15 ms steps.
-                self._halt.wait(frames / kw["samplerate"] / 2)
+                self._halt.wait(0.005)
 
         def stop(self):
             self._halt.set()
@@ -2724,10 +2729,19 @@ def main():
         return probemod.try_attempt(card(cls), 0, attempt or plan2[0],
                                     seconds=0.25, first_block=first_block)
 
+    def heard(row):
+        """Whether the probe heard it — and when not, what it counted, so a
+        CI log says more than FAIL."""
+        if row.get("flowing") is True:
+            return True
+        print(f"       heard {row.get('frames')} of {row.get('expected')} "
+              f"frames; opened {row.get('opened')}; {row.get('error')}")
+        return False
+
     _Card.made_on.clear()
     sent = listen(_Sends)
     ok("a card that sends is heard: it opened, and sound arrived",
-       sent["opened"] and sent.get("flowing") is True)
+       sent["opened"] and heard(sent))
     ok("it is opened the way the app opens a card, on the audio thread",
        _Card.made_on == ["audio"])
     peaks = sent.get("peaks") or [0.0, 1.0]
@@ -2737,7 +2751,7 @@ def main():
     ok("a card that opens and then sends one block is not heard",
        stalled["opened"] and stalled.get("flowing") is False)
     ok("a card slow to send its first block is waited for",
-       listen(_Slow).get("flowing") is True)
+       heard(listen(_Slow)))
     began = _t.monotonic()
     mute = listen(_Mute, first_block=0.3)
     ok("one that sends nothing is given up on after the wait for a first block",
@@ -2749,13 +2763,13 @@ def main():
        and "-9999" in (refused["error"] or ""))
     duplex = next(a for a in plan2 if a["label"] == probemod.WITH_OUTPUTS)
     ok("the attempt with the outputs attached is heard too",
-       listen(_Sends, duplex).get("flowing") is True)
+       heard(listen(_Sends, duplex)))
     ok("and it plays silence while it listens", not _Card.out_dirty)
 
     rows = probemod.probe(card(_Sends), 0, plan2, first_seconds=0.25,
                           seconds=0.25, first_block=0.6)
     ok("when the settings in force are heard, nothing else is tried",
-       [r["label"] for r in rows] == [AS_CONFIGURED]
+       heard(rows[0]) and [r["label"] for r in rows] == [AS_CONFIGURED]
        and verdict(rows)["cause"] == "none")
     rows = probemod.probe(card(_Stalls), 0, plan2, first_seconds=0.25,
                           seconds=0.25, first_block=0.3)
