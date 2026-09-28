@@ -696,7 +696,11 @@ def main():
         ok("template filled the tracks in",
            page.input_value("input[aria-label='Track 1 name']") == "Guitar")
         ok("free space is always on screen",
-           page.locator("text=Room for about").count() > 0)
+           page.locator("text=Room for").count() > 0)
+        # The mock's disk lasts for weeks: past two days the estimate is
+        # "many hours", which "about" does not go in front of.
+        ok("and a disk that lasts for days says many hours, without an about",
+           page.get_by_text("Room for many hours of recording", exact=True).count() == 1)
         page.click("text=Check signal")
         page.wait_for_timeout(600)
         ok("the monitor started", len(calls("start_monitor")) == 1)
@@ -744,6 +748,9 @@ def main():
         page.wait_for_timeout(2500)
         ok("the status line is shown",
            page.locator("text=Interface connected").count() > 0)
+        ok("and an estimate under two days keeps its about",
+           page.get_by_text("Interface connected · room for about 10 h 40 min more",
+                            exact=True).count() == 1)
         ok("clipping is called out", page.locator("text=clipping").count() > 0)
         ok("a silent input is called out", page.locator("text=silent").count() > 0)
         page.screenshot(path=str(SHOTS / "52-recording.png"))

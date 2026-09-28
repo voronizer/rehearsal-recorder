@@ -12,7 +12,7 @@ import {
   type RecordingHealth,
   type PlacedTrack,
 } from "@/lib/api"
-import { formatDuration, formatHMS } from "@/lib/format"
+import { aboutDuration, formatHMS } from "@/lib/format"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 import { cn } from "@/lib/utils"
@@ -193,13 +193,13 @@ export function Recording({
             <span>Checking free space…</span>
           ) : health.low_space ? (
             <span>
-              Running out of space: about {formatDuration(health.minutes_left ?? 0)}{" "}
+              Running out of space: {aboutDuration(health.minutes_left ?? 0)}{" "}
               left. Free some up or finish the rehearsal.
             </span>
           ) : (
             <span>
-              Interface connected · room for about{" "}
-              {formatDuration(health.minutes_left ?? 0)} more
+              Interface connected · room for{" "}
+              {aboutDuration(health.minutes_left ?? 0)} more
             </span>
           )}
         </div>

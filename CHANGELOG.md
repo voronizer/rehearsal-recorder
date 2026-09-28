@@ -20,6 +20,8 @@ opening.
   the way the app does, too — where each is plugged in on this card, a
   stereo track's second input included — rather than a list that no longer
   carries the inputs, which stopped it before it asked anything.
+- A disk that lasts for days says "Room for many hours of recording". It said
+  "Room for about many hours", on the setup screen and while recording.
 
 ## 0.7.8
 

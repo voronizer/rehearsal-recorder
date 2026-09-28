@@ -24,7 +24,7 @@ import {
 import { Kbd, Shell } from "@/components/Shell"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
-import { formatDuration, notConnected } from "@/lib/format"
+import { aboutDuration, notConnected } from "@/lib/format"
 import {
   api,
   type Device,
@@ -655,8 +655,8 @@ export function Setup({
               >
                 <HardDrive className="size-3.5" />
                 {disk.low
-                  ? `Low disk space: room for about ${formatDuration(disk.minutes)}`
-                  : `Room for about ${formatDuration(disk.minutes)} of recording`}
+                  ? `Low disk space: room for ${aboutDuration(disk.minutes)}`
+                  : `Room for ${aboutDuration(disk.minutes)} of recording`}
               </span>
             )}
           </div>

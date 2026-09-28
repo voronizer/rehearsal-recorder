@@ -73,6 +73,12 @@ export function formatDuration(minutes: number): string {
   return mins === 0 ? `${hours} h` : `${hours} h ${mins} min`
 }
 
+/** An estimate: "about 3 h 20 min", or "many hours", which takes no "about". */
+export function aboutDuration(minutes: number): string {
+  const said = formatDuration(minutes)
+  return said === "many hours" ? said : `about ${said}`
+}
+
 /** Peak 0..1 as dBFS, for the meter caption. */
 export function peakToDb(peak: number): string {
   if (peak <= 0) return "−∞"
