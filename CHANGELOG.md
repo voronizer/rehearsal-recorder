@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.8
 
 - **Record take** stands on its own. The line under it, "records “Take 1”",
   mostly repeated the button; the name a take inherits — "Polyn 2" after
