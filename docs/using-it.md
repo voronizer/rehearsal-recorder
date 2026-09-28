@@ -360,17 +360,25 @@ already watching — and only takes worth keeping go there. A failed attempt is
 discarded on the review screen and never becomes a take at all, so "the takes
 you saved" is already the list you would have picked by hand.
 
-Two ways to get them there, and they do the same work underneath:
+Two ways to get them there, and they do the same work underneath, in the
+background either way:
 
 - **By hand**, from the cloud button on the take, after listening. Right for
-  one take out of an old rehearsal, or one the setting below skipped.
+  one take out of an old rehearsal, or one the setting below skipped. The
+  dialog closes as soon as you choose; the copy is made while you carry on.
 - **On their own**, if **Send saved takes automatically** is ticked in
-  Settings. Every take you keep is copied in the background, in the gap after
-  it is saved: no copy is begun while a take is recording, because mixing one
-  is not something to start competing with the sound card. The take says
-  where it has got to: "Waiting for the cloud", "Copying to the cloud", the
-  green cloud button once it is there, or "Not in the cloud" with the reason
-  when something went wrong.
+  Settings. Every take you keep is copied in the gap after it is saved: no
+  copy is begun while a take is recording, because mixing one is not
+  something to start competing with the sound card. The take says where it
+  has got to: "Waiting for the cloud", "Copying to the cloud", the green cloud
+  button once it is there, or "Not in the cloud" with the reason when
+  something went wrong.
+
+Whichever screen you are on, the button in the header shows what is being
+copied and how far along it is, and lists what finished — with **Retry** on a
+copy that did not make it. The corner says so too, when a copy lands or
+fails. The same list shows a take being cropped, saved after Stop or
+recovered, each of which also shows its progress where it runs.
 
 The setting needs a cloud folder and is greyed out until there is one.
 Forgetting the folder switches it off again, rather than leaving every take

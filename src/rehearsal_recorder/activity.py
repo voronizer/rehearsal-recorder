@@ -52,8 +52,7 @@ class Entry:
         # the bar jump back.
         with self._journal._lock:
             f = max(0.0, min(1.0, float(fraction)))
-            if f > self._data["fraction"]:
-                self._data["fraction"] = f
+            self._data["fraction"] = max(self._data["fraction"], f)
             if step is not None:
                 self._data["step"] = step
 

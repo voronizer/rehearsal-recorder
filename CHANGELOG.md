@@ -41,6 +41,15 @@ opening.
   back as a 0:00 unsaved take — and kept the rehearsal folder from ever being
   cleaned away.
 
+- Long work says how far along it is and how it ended, on every screen. A
+  button in the header shows what is running — a cloud copy, a crop, a take
+  being saved or recovered — with a bar each, and what has finished, with
+  Retry on a copy that failed. Copying a take to the cloud by hand now runs
+  in the background like the automatic copies: the dialog closes at once, and
+  the corner says when the copy is there, or why it is not.
+- Saving a stopped take no longer reads each track into memory whole: about
+  500 MB for an hour of one 24-bit track.
+
 ## 0.7.6
 
 - An interface switched on after the app started can be found without

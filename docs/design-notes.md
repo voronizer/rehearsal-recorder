@@ -92,6 +92,24 @@ recycle bin, no encoder, Windows naming rules — and checks it takes the right
 branch, which is worth something but is not the same as having run it there.
 The first Windows run will find things.
 
+## Long work, and how far along it is
+
+Four things take real time on a long take: a cloud copy (a mixdown and an
+encode, or every track encoded), a crop (every track rewritten), a stop and a
+recovery (every raw track wrapped as .wav). Each registers with one journal,
+`activity.py`, and reports a fraction weighed by how much each part has to
+get through, in frames — so a copy of the mix and eight tracks at 64% has
+done 64% of the work, not "the fifth of nine". The interface polls it over
+http like the meters, through one store (`ui/src/lib/activity.ts`) that feeds
+the header of every screen, the corner notices for cloud results and each
+screen's own progress line.
+
+Cloud copies, by hand as well as automatic, run on the publishing thread and
+never block a screen. Crop, stop and recover still run inside their bridge
+call: what comes next needs them, and a take being rewritten must not be
+played, cropped again or saved meanwhile. A screen left half-way lets them
+finish; their result is in the list.
+
 ## Why the meters do not go through the bridge
 
 pywebview starts a new OS thread for every call that crosses from JavaScript
