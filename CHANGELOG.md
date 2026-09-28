@@ -5,6 +5,22 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- `--audio-probe` listens, instead of only opening. It called a card "ok"
+  as soon as the stream opened, and the Realtek ASIO driver on some laptops
+  opens every time and then sends one block and nothing more. Each attempt
+  now waits for a first block as long as the app does, counts what arrives
+  after it, and when sound comes with the settings in force it says which
+  inputs had signal and stops there. A card that opens and sends nothing
+  gets its own answer. The probe also opens the card the way the app does,
+  on the audio thread with a callback: from the main thread in blocking
+  mode it crashed that same Realtek driver, and could never have shown the
+  "Failed to load ASIO driver" the app itself ran into. It reads the tracks
+  the way the app does, too — where each is plugged in on this card, a
+  stereo track's second input included — rather than a list that no longer
+  carries the inputs, which stopped it before it asked anything.
+
 ## 0.7.8
 
 - **Record take** stands on its own. The line under it, "records “Take 1”",

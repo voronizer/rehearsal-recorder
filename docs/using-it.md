@@ -300,12 +300,13 @@ signal check waits for both sides before it calls a track checked.
 A stereo track costs twice the disk of a mono one, which the estimate on the
 setup screen counts. It has no balance control: a rehearsal is not panned.
 
-## When the card will not open
+## When the card will not open, or sends nothing
 
 Checking the signal, or starting a take, can fail with a message ending in
 `[PaErrorCode -9999]`. That number carries no meaning of its own: it is
 PortAudio saying "the driver refused and told me nothing useful". It comes up
-almost only on Windows with ASIO.
+almost only on Windows with ASIO. Or the card opens and the bars never move,
+and a few seconds later the check says there is no sound from it.
 
 The app can ask the card why. From a terminal, in the folder the app was
 unpacked into:
@@ -314,11 +315,17 @@ unpacked into:
 RehearsalRecorder.exe --audio-probe
 ```
 
-It opens the saved card several times over, changing exactly one thing each
+It opens the saved card the way the app does, with the tracks' own inputs,
+and listens. Play or talk into the inputs while it does. When sound arrives
+it says so, and which inputs had signal — `signal on inputs 1, 2, 5; the
+rest silent` — and that is the answer, in five seconds or so. When it does
+not, it opens the card several times more, changing exactly one thing each
 time — two channels instead of eight, the rate the driver is already at, the
 block size left to the driver, the outputs opened alongside the inputs — and
-reads the answer off which attempts got in. Then it says what to do about it.
-Add an index from the list it prints to ask about a different card.
+reads the answer off which attempts brought sound. Then it says what to do
+about it. A card that opens and sends nothing can take ten seconds to let go
+each time, so that round takes up to a minute. Add an index from the list it
+prints to ask about a different card.
 
 The common answer is the dull one: an ASIO card belongs to one program at a
 time, and something else has it — a DAW, the card's own mixer or control
@@ -328,7 +335,9 @@ driver wants reinstalling.
 
 If the probe says the driver will only hand over its inputs together with its
 outputs, record through WASAPI instead for now: the same card is listed there
-too, with fewer inputs but no such condition.
+too, with fewer inputs but no such condition. The same goes for a card that
+opens but sends no sound whatever is changed — the Realtek ASIO driver that
+comes with some laptops does just that.
 
 ## When the card goes away
 

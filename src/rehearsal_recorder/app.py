@@ -229,10 +229,12 @@ def main():
     if "--selftest" in sys.argv:
         return selftest()
 
-    # --audio-probe asks the saved card, several times over, why it refuses to
-    # open, and reads the diagnosis off which attempts got in. Needed because
-    # a refused ASIO stream reports -9999 and nothing else. An index after the
-    # flag asks about that device instead of the saved one.
+    # --audio-probe listens to the saved card the way the app opens it, and
+    # when no sound comes, asks again several times over and reads the
+    # diagnosis off which attempts brought sound. Needed because a refused
+    # ASIO stream reports -9999 and nothing else, and a card that opens and
+    # sends nothing reports nothing at all. An index after the flag asks
+    # about that device instead of the saved one.
     if "--audio-probe" in sys.argv:
         from rehearsal_recorder.audio.probe import run as audio_probe
 

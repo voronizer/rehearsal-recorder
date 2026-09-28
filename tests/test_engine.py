@@ -2588,11 +2588,13 @@ def main():
        len(labels) >= 6 and len(set(labels)) == len(labels))
 
     def only(*opens):
-        """A result per attempt, with only the named ones opening."""
+        """A result per attempt, with only the named ones opening — and
+        sending, once open."""
         return [
             {
                 "label": a["label"],
                 "opened": a["label"] in opens,
+                "flowing": a["label"] in opens,
                 "error": None if a["label"] in opens else
                 "Unanticipated host error [PaErrorCode -9999]",
             }
@@ -2619,6 +2621,187 @@ def main():
     ok("every verdict says something a person can act on",
        all(verdict(only(*w))["advice"].strip()
            for w in ([], [by_cause["input_only"]], [by_cause["channels"]], labels)))
+
+    def opened_quiet(*sending):
+        """Every attempt opens; only the named ones send anything."""
+        return [{"label": a["label"], "opened": True,
+                 "flowing": a["label"] in sending, "error": None} for a in plan]
+
+    ok("everything opens but nothing sends — the card is not delivering",
+       verdict(opened_quiet())["cause"] == "no_sound")
+    ok("and that says something a person can act on too",
+       verdict(opened_quiet())["advice"].strip() != "")
+    ok("opens everywhere, only the driver's own block size sends — the block size",
+       verdict(opened_quiet(by_cause["blocksize"]))["cause"] == "blocksize")
+
+    # Listening, not just opening. Realtek's ASIO driver opens every time
+    # and then sends one block and nothing more; the probe used to call
+    # that "ok". And it opened the card from the main thread in blocking
+    # mode, which crashed that same driver and could not have shown a card
+    # that fails from any other thread.
+    import threading as _th
+    import time as _t
+
+    from rehearsal_recorder.audio import probe as probemod
+
+    class _Card:
+        """Sends `blocks` blocks (None: for as long as it is open), the first
+        after `delay` seconds; a quarter of full scale on input 1 and silence
+        on the rest, from a thread of its own, the way PortAudio calls."""
+
+        blocks = None
+        delay = 0.0
+        refuse = None
+        made_on = []
+        out_dirty = False
+
+        def __init__(self, **kw):
+            if self.refuse:
+                raise RuntimeError(self.refuse)
+            _Card.made_on.append(_th.current_thread().name)
+            self.kw = kw
+            self._halt = _th.Event()
+            self._thread = None
+
+        def start(self):
+            self._thread = _th.Thread(target=self._run, daemon=True)
+            self._thread.start()
+
+        def _run(self):
+            kw = self.kw
+            duplex = isinstance(kw["channels"], tuple)
+            ins = kw["channels"][0] if duplex else kw["channels"]
+            frames = kw.get("blocksize") or 512
+            dtype = np.dtype(kw["dtype"])
+            if self._halt.wait(self.delay):
+                return
+            sent = 0
+            while not self._halt.is_set():
+                if self.blocks is not None and sent >= self.blocks:
+                    return
+                block = np.zeros((frames, ins), dtype=dtype)
+                block[:, 0] = (np.iinfo(dtype).max + 1) // 4
+                if duplex:
+                    out = np.ones((frames, kw["channels"][1]), dtype=dtype)
+                    kw["callback"](block, out, frames, None, None)
+                    _Card.out_dirty = _Card.out_dirty or bool(out.any())
+                else:
+                    kw["callback"](block, frames, None, None)
+                sent += 1
+                # Faster than real time: Windows sleeps in 15 ms steps.
+                self._halt.wait(frames / kw["samplerate"] / 2)
+
+        def stop(self):
+            self._halt.set()
+            if self._thread is not None:
+                self._thread.join()
+
+        def close(self):
+            pass
+
+    class _Sends(_Card):
+        pass
+
+    class _Stalls(_Card):
+        blocks = 1
+
+    class _Slow(_Card):
+        delay = 0.3
+
+    class _Mute(_Card):
+        blocks = 0
+
+    class _Refuses(_Card):
+        refuse = "Unanticipated host error [PaErrorCode -9999]"
+
+    def card(cls):
+        return types.SimpleNamespace(InputStream=cls, Stream=cls)
+
+    plan2 = attempts(samplerate=48000, channels=2, bit_depth=24,
+                     driver_samplerate=48000)
+
+    def listen(cls, attempt=None, first_block=0.6):
+        return probemod.try_attempt(card(cls), 0, attempt or plan2[0],
+                                    seconds=0.25, first_block=first_block)
+
+    _Card.made_on.clear()
+    sent = listen(_Sends)
+    ok("a card that sends is heard: it opened, and sound arrived",
+       sent["opened"] and sent.get("flowing") is True)
+    ok("it is opened the way the app opens a card, on the audio thread",
+       _Card.made_on == ["audio"])
+    peaks = sent.get("peaks") or [0.0, 1.0]
+    ok("each input's loudest moment is measured — the first loud, the second not",
+       abs(peaks[0] - 0.25) < 0.01 and peaks[1] == 0)
+    stalled = listen(_Stalls)
+    ok("a card that opens and then sends one block is not heard",
+       stalled["opened"] and stalled.get("flowing") is False)
+    ok("a card slow to send its first block is waited for",
+       listen(_Slow).get("flowing") is True)
+    began = _t.monotonic()
+    mute = listen(_Mute, first_block=0.3)
+    ok("one that sends nothing is given up on after the wait for a first block",
+       mute["opened"] and mute.get("flowing") is False
+       and _t.monotonic() - began < 2)
+    refused = listen(_Refuses)
+    ok("a refusal did not open, and keeps the driver's words",
+       not refused["opened"] and refused.get("flowing") is False
+       and "-9999" in (refused["error"] or ""))
+    duplex = next(a for a in plan2 if a["label"] == probemod.WITH_OUTPUTS)
+    ok("the attempt with the outputs attached is heard too",
+       listen(_Sends, duplex).get("flowing") is True)
+    ok("and it plays silence while it listens", not _Card.out_dirty)
+
+    rows = probemod.probe(card(_Sends), 0, plan2, first_seconds=0.25,
+                          seconds=0.25, first_block=0.6)
+    ok("when the settings in force are heard, nothing else is tried",
+       [r["label"] for r in rows] == [AS_CONFIGURED]
+       and verdict(rows)["cause"] == "none")
+    rows = probemod.probe(card(_Stalls), 0, plan2, first_seconds=0.25,
+                          seconds=0.25, first_block=0.3)
+    ok("when they are not, every other attempt is tried in turn",
+       [r["label"] for r in rows] == [a["label"] for a in plan2])
+    ok("and a card that opens every time but never sends says so",
+       verdict(rows)["cause"] == "no_sound")
+
+    ok("the channels asked for reach the second half of a stereo track",
+       probemod.channels_for([{"name": "Keys", "channel": 17, "stereo": True},
+                              {"name": "Vox", "channel": 3}]) == 18)
+    ok("and with no tracks saved, two", probemod.channels_for([]) == 2)
+
+    def safely(fn):
+        try:
+            return fn()
+        except Exception:
+            return None
+
+    ok("a track left without an input asks for nothing",
+       safely(lambda: probemod.channels_for(
+           [{"name": "Sax", "channel": None}, {"name": "Vox", "channel": 3}])) == 3)
+    # The config as the app writes it: the band's names in `tracks`, and
+    # each card's inputs in `layouts` — see rehearsal_recorder/layouts.py.
+    band_cfg = {
+        "tracks": [{"name": "Vox"}, {"name": "Keys", "stereo": True}],
+        "layouts": [{"device": {"name": "XR18", "host_api": "ASIO"},
+                     "inputs": {"Vox": 1, "Keys": 17}}],
+    }
+    xr18 = {"name": "XR18", "host_api": "ASIO"}
+    ok("the tracks are the band placed on this card's own inputs",
+       safely(lambda: probemod.channels_for(
+           probemod.tracks_for(band_cfg, xr18, 18))) == 18)
+    ok("and on a card that has never seen them, the lowest free inputs",
+       safely(lambda: probemod.channels_for(probemod.tracks_for(
+           band_cfg, {"name": "FlexASIO", "host_api": "ASIO"}, 8))) == 3)
+
+    ok("which inputs have signal, numbered the way the person numbers them",
+       probemod.signal_line([0.3, 0.0, 0.05])
+       == "signal on inputs 1, 3; the rest silent")
+    ok("one of them", probemod.signal_line([0.0, 0.4])
+       == "signal on input 2; the rest silent")
+    ok("all of them", probemod.signal_line([0.5, 0.5]) == "signal on every input")
+    ok("none of them, with what to do about it",
+       probemod.signal_line([0.0, 0.001])
+       .startswith("sound arrives, but every input is silent"))
 
     print("\n[29] Asking an ASIO card what it can do, without wearing it out")
     from rehearsal_recorder.audio.devices import recording_formats as _formats

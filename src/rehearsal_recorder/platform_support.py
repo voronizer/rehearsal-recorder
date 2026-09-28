@@ -231,8 +231,9 @@ def enter_com_apartment(platform=sys.platform, ole32=None):
     driver". It joins one itself only for the thread that starts it, and
     leaves the rest to the caller. pywebview answers every interface call on
     a fresh thread that has joined nothing, so no ASIO stream opened from the
-    app at all. `--audio-probe` cannot show this: it runs on the main thread,
-    which PortAudio joined when it started.
+    app at all. The main thread would not show it, being the one PortAudio
+    joined when it started, which is why `--audio-probe` opens through the
+    audio thread like everything else.
 
     Single-threaded, not multithreaded, on purpose: ASIO drivers register as
     apartment-threaded, and one created from a multithreaded apartment is put

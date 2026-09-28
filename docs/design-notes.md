@@ -55,8 +55,9 @@ caller, and the interface's calls each arrive on a fresh thread that has
 joined nothing. So every stream is opened, started, stopped and closed, and
 every card asked what it can do, on one long-lived audio thread that joins a
 single-threaded apartment before its first job (`AudioThread` in
-`audio/devices.py`). `--audio-probe` runs on the main thread and would never
-have seen the difference.
+`audio/devices.py`). `--audio-probe` opens through that thread too. It used
+to open from the main thread, in blocking mode: it could never have seen the
+difference, and Realtek's ASIO driver crashed under it.
 
 Nothing waits on that thread for ever, with one exception. A call that takes
 longer than fifteen seconds is given up on, and until the thread is free

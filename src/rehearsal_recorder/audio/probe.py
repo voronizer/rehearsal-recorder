@@ -1,5 +1,5 @@
 """
-Asking a card why it will not open.
+Asking a card why it will not open, or will not send.
 
 When an ASIO stream is refused, PortAudio almost always answers -9999,
 paUnanticipatedHostError. That code carries no meaning of its own: it means
@@ -15,11 +15,26 @@ driver refuses to hand over the inputs without the outputs — a known habit of
 several ASIO drivers, and something the app can work around. Nothing opens at
 all: another program is holding the card, and no parameter will help.
 
+Opening is not the whole of it. A card can take the stream and then never
+deliver — Realtek's ASIO driver sends one block and nothing after — so an
+attempt that opens is listened to: for as long as the app itself waits for
+a first block (heartbeat.FIRST_BLOCK_SEC), then a second more, counting what
+arrives. And it is opened the way the app opens a card, on the audio thread
+with a callback. From the main thread in blocking mode, the probe could not
+see a card that refuses any other thread, and that same Realtek driver
+crashed under it.
+
 This is a diagnostic, not part of recording. Nothing here is called while a
 rehearsal is running — every attempt opens and closes a stream, which an ASIO
 driver only tolerates when it is otherwise idle.
 """
 
+import threading
+import time
+
+import numpy as np
+
+from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.format import capture_dtype, normalize_depth
 
 # The attempts, by name. Each name is also how the report refers to it, so
@@ -46,6 +61,20 @@ LABEL_FOR = {cause: label for label, cause in CAUSE_OF.items() if cause}
 # The block size recording uses. Kept here rather than imported from capture.py
 # so the probe reports what the app actually asks for even if that changes.
 BLOCK_FRAMES = 1024
+
+# How long an attempt listens once its first block is in. The settings in
+# force listen longest: which inputs have signal is read off them.
+LISTEN_SEC = 1.0
+LISTEN_FIRST_SEC = 3.0
+
+# Less than half the frames the listening should have brought, and the card
+# is not delivering. Realtek's driver sends one block in ~47.
+FLOWING_SHARE = 0.5
+
+# Where the meters draw the line between signal and silence (QUIET_THRESHOLD
+# in ui/src/components/LevelMeter.tsx), so "silent" here means what it does
+# on screen.
+SIGNAL_PEAK = 0.02
 
 
 def attempts(samplerate, channels, bit_depth, driver_samplerate,
@@ -92,7 +121,8 @@ def attempts(samplerate, channels, bit_depth, driver_samplerate,
 
 _VERDICTS = {
     "none": (
-        "It opens now, with the settings in force.",
+        "It works now: the card opens with the settings in force, and sound "
+        "arrives.",
         "Whatever refused was not the settings. Almost always that means "
         "something else had the card at that moment — a DAW, the card's own "
         "mixer, or a second copy of this app. Open the check again and it "
@@ -106,6 +136,16 @@ _VERDICTS = {
         "panel or mixer, a second copy of this app — and try again. If "
         "nothing else is running, the card is unplugged or its driver needs "
         "reinstalling.",
+    ),
+    "no_sound": (
+        "The card opens, but sends no sound.",
+        "The driver takes the stream and then delivers little or nothing, "
+        "whatever the settings — the Realtek ASIO driver that comes with some "
+        "laptops does exactly this. Close the card's control panel and "
+        "anything else that uses it, unplug the card and plug it back in, and "
+        "run this again. If it still sends nothing, its driver wants "
+        "reinstalling; until then, record through WASAPI, where the same card "
+        "is listed too.",
     ),
     "input_only": (
         "The driver hands over the inputs only when the outputs go with them.",
@@ -153,22 +193,26 @@ def verdict(results):
     What the pattern of successes and failures says, as
     {"cause", "headline", "advice"}.
 
-    `results` is one {"label", "opened", "error"} per attempt.
+    `results` is one {"label", "opened", "flowing", "error"} per attempt
+    tried. What counts is what worked: opened, and sound arrived.
     """
     opened = {r["label"] for r in results if r.get("opened")}
+    working = {r["label"] for r in results if r.get("opened") and r.get("flowing")}
 
-    if AS_CONFIGURED in opened:
+    if AS_CONFIGURED in working:
         cause = "none"
     elif not opened:
         cause = "driver"
-    elif opened == {WITH_OUTPUTS}:
+    elif not working:
+        cause = "no_sound"
+    elif working == {WITH_OUTPUTS}:
         cause = "input_only"
     else:
-        # Order matters: a card that opens both with fewer channels and at
+        # Order matters: a card that works both with fewer channels and at
         # another rate is short of channels first — that is the one the person
         # can act on.
         for candidate in ("channels", "samplerate", "bit_depth", "blocksize"):
-            if LABEL_FOR[candidate] in opened:
+            if LABEL_FOR[candidate] in working:
                 cause = candidate
                 break
         else:
@@ -184,38 +228,147 @@ def describe(exc):
     return f"{type(exc).__name__}: {exc}"
 
 
-def try_attempt(sd, device_index, attempt):
-    """Open and immediately close one attempt. Returns its result row."""
+def tracks_for(config, identity, max_inputs):
+    """The tracks the setup screen would put on this card: the band from
+    `tracks`, on the inputs this card's entry in `layouts` gives them — the
+    app's own layouts.for_device(), on a config migrated the app's way."""
+    from rehearsal_recorder import layouts
+
+    config = layouts.migrate(dict(config))
+    return layouts.for_device(
+        config["tracks"], config["layouts"], identity, max_inputs
+    )
+
+
+def channels_for(tracks):
+    """The channels a stream has to open to reach every track — a stereo
+    track's second half included, a track left without an input not counted.
+    Two when there is nothing to reach."""
+    return max(
+        (t["channel"] + (1 if t.get("stereo") else 0)
+         for t in tracks if t.get("channel") is not None),
+        default=2,
+    )
+
+
+def signal_line(peaks):
+    """Which inputs had signal, numbered from 1 the way the tracks number
+    them, as one line."""
+    loud = [i + 1 for i, p in enumerate(peaks) if p > SIGNAL_PEAK]
+    if not loud:
+        return (
+            "sound arrives, but every input is silent — play into them, or "
+            "check what the card's own routing sends, and run it again"
+        )
+    if len(loud) == len(peaks):
+        return "signal on every input"
+    which = (
+        f"input {loud[0]}" if len(loud) == 1
+        else "inputs " + ", ".join(str(n) for n in loud)
+    )
+    return f"signal on {which}; the rest silent"
+
+
+def probe(sd, device_index, plan, first_seconds=LISTEN_FIRST_SEC,
+          seconds=LISTEN_SEC, first_block=None, report=None):
+    """
+    Tries the plan in order and returns a row per attempt tried.
+
+    The settings in force come first and listen longest. When sound arrives
+    with them, that is the answer and nothing else is tried: every other
+    attempt could only cost another load of the driver. `report(attempt,
+    row)` hears of each row as it comes, for a person watching.
+    """
+    rows = []
+    for i, attempt in enumerate(plan):
+        row = try_attempt(sd, device_index, attempt,
+                          seconds=first_seconds if i == 0 else seconds,
+                          first_block=first_block)
+        rows.append(row)
+        if report is not None:
+            report(attempt, row)
+        if i == 0 and row["flowing"]:
+            break
+    return rows
+
+
+def try_attempt(sd, device_index, attempt, seconds=LISTEN_SEC, first_block=None):
+    """
+    Opens one attempt the way the app opens a card — on the audio thread,
+    with a callback — and listens: up to `first_block` seconds for its first
+    block (heartbeat.FIRST_BLOCK_SEC when not given), then `seconds` more.
+
+    Returns its row: "opened"; "flowing", when at least FLOWING_SHARE of the
+    frames `seconds` should bring arrived after the first block; "frames" and
+    "expected", those two counts; "peaks", each input's loudest moment from
+    0 to 1; and "error", the driver's words when it refused.
+    """
+    from rehearsal_recorder.audio.devices import close_stream, open_stream
+
+    if first_block is None:
+        first_block = heartbeat.FIRST_BLOCK_SEC
     params = attempt["params"]
+    channels = params["channels"]
+    row = {
+        "label": attempt["label"], "opened": False, "flowing": False,
+        "error": None, "frames": 0,
+        "expected": int(seconds * params["samplerate"]),
+        "peaks": [0.0] * channels,
+    }
+    arrived = {"frames": 0}
+    loudest = np.zeros(channels)
+    first = threading.Event()
+
+    # The audio thread. Allocating here is fine for a diagnostic that never
+    # runs beside a take.
+    def heard(indata, frames):
+        arrived["frames"] += frames
+        scale = np.iinfo(indata.dtype).max + 1 if indata.dtype.kind == "i" else 1
+        peaks = np.abs(indata[:frames].astype(np.float64)).max(axis=0) / scale
+        np.maximum(loudest, peaks[:channels], out=loudest)
+        first.set()
+
+    def on_input(indata, frames, time_info, status):
+        heard(indata, frames)
+
+    def on_duplex(indata, outdata, frames, time_info, status):
+        outdata.fill(0)
+        heard(indata, frames)
+
     common = {
         "samplerate": params["samplerate"],
         "dtype": params["dtype"],
         "blocksize": params["blocksize"],
     }
-    stream = None
     try:
         if params["kind"] == "duplex":
-            stream = sd.Stream(
-                device=(device_index, device_index),
-                channels=(params["channels"], 2),
-                **common,
+            stream = open_stream(
+                sd.Stream, device=(device_index, device_index),
+                channels=(channels, 2), callback=on_duplex, **common,
             )
         else:
-            stream = sd.InputStream(
-                device=device_index, channels=params["channels"], **common
+            stream = open_stream(
+                sd.InputStream, device=device_index, channels=channels,
+                callback=on_input, **common,
             )
-        stream.start()
-        stream.stop()
-        return {"label": attempt["label"], "opened": True, "error": None}
     except Exception as e:  # noqa: BLE001 — every failure is a data point
-        return {"label": attempt["label"], "opened": False,
-                "error": describe(e)}
+        row["error"] = describe(e)
+        return row
+
+    row["opened"] = True
+    try:
+        if first.wait(first_block):
+            before = arrived["frames"]
+            time.sleep(seconds)
+            row["frames"] = arrived["frames"] - before
     finally:
-        if stream is not None:
-            try:
-                stream.close()
-            except Exception:
-                pass
+        try:
+            close_stream(stream)
+        except Exception as e:  # noqa: BLE001 — a driver that will not let go
+            row["error"] = describe(e)
+    row["flowing"] = row["frames"] >= FLOWING_SHARE * row["expected"]
+    row["peaks"] = [float(p) for p in loudest]
+    return row
 
 
 def _saved_config():
@@ -239,12 +392,12 @@ def run(device_index=None):
 
         RehearsalRecorder --audio-probe [index]
 
-    Returns 0 when the card opened with the settings in force, 1 otherwise —
-    so it can be run from a script as well as read.
+    Returns 0 when the card opened with the settings in force and sound
+    arrived, 1 otherwise — so it can be run from a script as well as read.
     """
     import sounddevice as sd
 
-    from rehearsal_recorder.audio.devices import saved_device
+    from rehearsal_recorder.audio.devices import device_identity, saved_device
 
     print(f"PortAudio {sd.get_portaudio_version()[1]}")
     try:
@@ -275,11 +428,13 @@ def run(device_index=None):
     info = sd.query_devices(device_index)
     samplerate = int(config.get("samplerate") or info["default_samplerate"])
     depth = normalize_depth(config.get("bit_depth"))
-    tracks = config.get("tracks") or []
-    channels = max((t["channel"] for t in tracks), default=2)
+    channels = channels_for(tracks_for(
+        config, device_identity(device_index), info["max_input_channels"]
+    ))
 
     print(f"\nAsking [{device_index}] {info['name']} — "
           f"{channels} channels, {samplerate} Hz, {depth} bits")
+    print("Play or talk into the inputs while it listens.")
 
     plan = attempts(
         samplerate=samplerate,
@@ -289,14 +444,20 @@ def run(device_index=None):
         has_outputs=info.get("max_output_channels", 0) > 0,
     )
 
-    results = []
-    for attempt in plan:
-        result = try_attempt(sd, device_index, attempt)
-        results.append(result)
-        mark = "ok  " if result["opened"] else "no  "
-        print(f"  {mark} {attempt['label']}")
-        if result["error"]:
-            print(f"       {result['error']}")
+    def say(attempt, row):
+        if row["flowing"]:
+            print(f"  ok   {attempt['label']} — sound arrives")
+        elif row["opened"]:
+            print(f"  no   {attempt['label']} — opens, but sent {row['frames']} "
+                  f"of ~{row['expected']} frames")
+        else:
+            print(f"  no   {attempt['label']}")
+        if row["error"]:
+            print(f"       {row['error']}")
+
+    results = probe(sd, device_index, plan, report=say)
+    if results[0]["flowing"]:
+        print(f"       {signal_line(results[0]['peaks'])}")
 
     answer = verdict(results)
     print(f"\n{answer['headline']}\n{answer['advice']}")
