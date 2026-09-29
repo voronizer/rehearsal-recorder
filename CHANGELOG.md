@@ -15,6 +15,19 @@ opening.
   meter shows the whole mix and turns red when the tracks add up past full
   scale, which no track's own meter can show. It stays in view while the
   tracks scroll.
+- **A rehearsal's takes are a list you can play.** With no take open, the
+  rehearsal screen and a rehearsal in History show each song with every go
+  at it as a row: a bar drawn to the take's length, with its markers where
+  they fell and its notes under it. A go that ran long or stopped short
+  shows before anything is read. They were small chips of a number and a
+  length, and the notes were a separate list below. **Play** on a row plays
+  the take right there, without the player: the bar fills as it goes, and
+  Space pauses it, the arrows skip and Esc stops it. The bar opens the take
+  in the player, and one that is playing goes on playing there. Back from
+  the player, a take that is playing plays on in the list. Pointing at a
+  row shows rename, the cloud and delete for that take. Above the songs
+  are how long was played, how many takes and songs, how many are in the
+  cloud, and how many notes of each kind.
 - The meters beside the faders go to rest as soon as a take is paused. They
   stayed at the last level until it played again.
 - **The keys work after the mouse.** On Windows a clicked button keeps the

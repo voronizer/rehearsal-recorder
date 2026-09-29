@@ -1268,6 +1268,18 @@ def main():
         ok("and Escape is on Finish",
            key_on(page, "button:has-text('Finish')") == "Esc")
 
+        # Played from its row, a take has Space until Escape puts it away.
+        page.click("[aria-label='Rehearsal overview'] button[aria-label='Play Polyn 2']")
+        page.wait_for_selector("button[aria-label='Pause Polyn 2']")
+        ok("a take plays from its row, the overview still on screen",
+           page.get_by_role("group", name="Take timeline").count() == 0)
+        ok("and Space is its, not Record's",
+           key_on(page, "button:has-text('Record take')") is None)
+        page.keyboard.press("Escape")
+        page.wait_for_selector("button[aria-label='Play Polyn 2']")
+        ok("Escape puts it away, and gives Space back to Record",
+           key_on(page, "button:has-text('Record take')") == "Space")
+
         page.click("button[aria-label^='Take 2 Polyn 2']")
         page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
 
@@ -2628,17 +2640,28 @@ def main():
         eve.click("text=Tuesday jam")
         eve.wait_for_selector("[aria-label='Rehearsal overview']")
         overview = eve.locator("[aria-label='Rehearsal overview']").inner_text()
-        ok("it says how long and how many", "4 takes" in overview and "11:50" in overview)
-        ok("each song with its goes", "Polyn" in overview and "×2" in overview
+        ok("it says how long and how many",
+           "11:50\nplayed" in overview and "4\ntakes" in overview
+           and "2\nsongs" in overview)
+        ok("and how many are in the cloud", "1 of 4\nin the cloud" in overview)
+        ok("each song with its goes", "Polyn" in overview and "2 goes" in overview
            and "Vesna" in overview)
+        ok("and how many notes of each kind",
+           "1 keep this" in overview and "1 went wrong" in overview)
         ok("and the takes nobody named, together", "Not named" in overview)
         ok("the notes are listed", "this one is the take" in overview
            and "guitar drifts here" in overview)
         ok("a plain mark with nothing written is not a note",
            eve.locator("[aria-label='Rehearsal overview'] [data-note]").count() == 2)
         ok("no lonely 'pick a take' line", eve.locator("text=Pick a take").count() == 0)
-        ok("a take already in the cloud folder says so on its chip",
-           eve.locator("button[aria-label='Take 2 Polyn 2'] [data-in-cloud]").count() == 1)
+        ok("a take already in the cloud folder says so on its row",
+           eve.locator("[data-take='2'] [data-in-cloud]").count() == 1)
+        # Every go on one scale: the four-minute Vesna is the longest bar.
+        widths = eve.evaluate("""() => Object.fromEntries(
+          [...document.querySelectorAll('[data-take]')].map(r => [r.dataset.take,
+            r.querySelector('button[aria-label^="Take "]').getBoundingClientRect().width]))""")
+        ok("each go is a bar drawn to its length",
+           widths["4"] > widths["1"] > widths["3"])
         ok("and the others do not",
            eve.locator("[aria-label='Rehearsal overview'] [data-in-cloud]").count() == 1)
         ok("and no strip of pills repeating it",
@@ -2668,6 +2691,59 @@ def main():
         ok("in History too, deleting a take that is in the cloud says its copy goes",
            "Its copy in the cloud folder goes too."
            in (text_of(eve.get_by_role("dialog")) or ""))
+        escape_closes(eve, "go to the Trash")
+        eve.keyboard.press("Escape")
+        eve.wait_for_selector("[aria-label='Rehearsal overview']")
+
+        print("\n[12f2] A take plays from its row in the overview")
+        def eve_calls(name):
+            return eve.evaluate(
+                f"() => window.__CALLS__.filter(c => c.name === '{name}')")
+        opens = len(eve_calls("player_open"))
+        eve.click("[aria-label='Rehearsal overview'] button[aria-label='Play Vesna']")
+        eve.wait_for_selector("button[aria-label='Pause Vesna']")
+        ok("Play on a row plays the take right there",
+           len(eve_calls("player_open")) == opens + 1
+           and eve.locator("[aria-label='Take timeline']").count() == 0)
+        eve.wait_for_timeout(400)
+        ok("with how far it has got beside its bar",
+           "/ 4:10" in eve.locator("[data-take='4']").inner_text())
+        eve.keyboard.press("Space")
+        try:
+            eve.wait_for_selector("button[aria-label='Play Vesna']", timeout=4000)
+        except Exception:
+            pass
+        ok("Space pauses it, though the mouse pressed Play",
+           eve.locator("button[aria-label='Play Vesna']").count() == 1)
+        eve.keyboard.press("Space")
+        eve.wait_for_selector("button[aria-label='Pause Vesna']")
+        eve.click("[aria-label='Rehearsal overview'] button[aria-label='Take 4 Vesna']")
+        eve.wait_for_selector("[aria-label='Take timeline']")
+        ok("its bar opens it in the player, without opening it again",
+           len(eve_calls("player_open")) == opens + 1)
+        ok("and it carries on playing there",
+           eve.locator("button[aria-label='Pause']").count() == 1)
+        eve.keyboard.press("Escape")
+        eve.wait_for_selector("[aria-label='Rehearsal overview']")
+        ok("back in the overview, a take that is playing plays on",
+           eve.locator("button[aria-label='Pause Vesna']").count() == 1)
+        closes = len(eve_calls("player_close"))
+        eve.keyboard.press("Escape")
+        eve.wait_for_selector("button[aria-label='Play Vesna']")
+        ok("Escape stops it and puts it away",
+           len(eve_calls("player_close")) > closes
+           and eve.locator("[aria-label='Rehearsal overview']").count() == 1)
+        # The row's own buttons, for the take under the mouse.
+        eve.hover("[data-take='1']")
+        eve.click("[data-take='1'] button[aria-label='Rename take Polyn']")
+        eve.wait_for_selector("text=Rename take")
+        ok("a row can be renamed without opening its take",
+           eve.locator("[aria-label='Take timeline']").count() == 0)
+        escape_closes(eve, "Rename take")
+        eve.keyboard.press("Escape")
+        eve.wait_for_selector("text=Tuesday jam")
+        ok("and the next Escape leaves the rehearsal",
+           eve.locator("[aria-label='Rehearsal overview']").count() == 0)
         eve.close()
 
         print("\n[12g] A call that fails in Python says so")

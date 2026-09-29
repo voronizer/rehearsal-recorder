@@ -39,7 +39,20 @@ export function Rehearsal({
   onFinished: (folder: string, takeCount: number) => void
   onChanged: () => void
 }) {
-  const { selected, select, reselect, openAt, player } = useTakeStripPlayer()
+  const {
+    selected,
+    cued,
+    select,
+    uncue,
+    reselect,
+    forget,
+    openAt,
+    playInOverview,
+    player,
+  } = useTakeStripPlayer()
+  // A take open in the player, or playing in the overview: either way Space
+  // is its, and Escape puts it away before it finishes anything.
+  const inHand = selected !== null || cued !== null
   const cropping = useRunning(
     "crop",
     (e) => e.folder === session.folder && e.take_number === selected?.take_number
@@ -70,17 +83,19 @@ export function Rehearsal({
     onStartTake(res.take_number, session.next_take_name)
   }
 
-  // With a take open, Space plays it back rather than starting a new one;
+  // With a take in hand, Space plays it back rather than starting a new one;
   // Escape below is what points Space at recording again.
-  useSpacebar(selected ? player.toggle : startTake, !busy)
-  usePlayerKeys(player.skip, selected !== null)
+  useSpacebar(inHand ? player.toggle : startTake, !busy)
+  usePlayerKeys(player.skip, inHand)
   // Escape climbs the same ladder here as everywhere: the open take first,
-  // and then the rehearsal itself, because finishing is the only way up from
-  // this screen. It asks once there are takes in the rehearsal — ending it by
-  // accident would leave the rest of the evening in a second folder — but an
-  // empty one has nothing to protect, and Python takes its folder with it.
+  // then a take playing in the overview, and then the rehearsal itself,
+  // because finishing is the only way up from this screen. It asks once
+  // there are takes in the rehearsal — ending it by accident would leave the
+  // rest of the evening in a second folder — but an empty one has nothing to
+  // protect, and Python takes its folder with it.
   useEscape(() => {
     if (selected) select(null)
+    else if (cued) uncue()
     else if (session.takes.length === 0) void finish()
     else setFinishing(true)
   }, !busy)
@@ -111,7 +126,7 @@ export function Rehearsal({
       setError(res.error ?? "Could not delete the take")
       return
     }
-    if (selected?.take_number === take.take_number) reselect(null)
+    forget(take.take_number)
     onChanged()
   }
 
@@ -125,7 +140,7 @@ export function Rehearsal({
     // paths. That is a new `tracks` identity, so the open effect underneath
     // tears down and reopens from zero — the take stays selected and on
     // screen, but playback and the A–B region do not survive this.
-    if (selected?.take_number === take.take_number && res.take) reselect(res.take)
+    if (res.take) reselect(res.take)
     onChanged()
   }
 
@@ -165,10 +180,9 @@ export function Rehearsal({
       return
     }
     // The whole folder moved, so every take's paths changed with it.
-    if (selected && res.takes) {
-      const fresh = res.takes.find(
-        (t) => t.take_number === selected.take_number
-      )
+    const held = selected ?? cued
+    if (held && res.takes) {
+      const fresh = res.takes.find((t) => t.take_number === held.take_number)
       if (fresh) reselect(fresh)
     }
     onChanged()
@@ -222,27 +236,27 @@ export function Rehearsal({
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex items-center gap-3">
-            {/* Escape finishes only with no take open; with one, it closes
-                the take — see useEscape above. */}
+            {/* Escape finishes only with no take in hand; with one, it puts
+                the take away — see useEscape above. */}
             <Button
               variant="ghost"
               onClick={finish}
-              aria-keyshortcuts={selected ? undefined : "Escape"}
+              aria-keyshortcuts={inHand ? undefined : "Escape"}
             >
               Finish
-              {!selected && <Kbd>Esc</Kbd>}
+              {!inHand && <Kbd>Esc</Kbd>}
             </Button>
             <Button
               size="xl"
               variant="destructive"
               onClick={startTake}
               disabled={busy}
-              aria-keyshortcuts={selected ? undefined : "Space"}
+              aria-keyshortcuts={inHand ? undefined : "Space"}
             >
               <Circle className="fill-current" />
               Record take {session.next_take_number}
-              {/* With a take open Space plays it, and the key is on Play. */}
-              {!selected && <Kbd>Space</Kbd>}
+              {/* With a take in hand Space plays it, and the key is on Play. */}
+              {!inHand && <Kbd>Space</Kbd>}
             </Button>
           </div>
         </div>
@@ -287,8 +301,21 @@ export function Rehearsal({
             <RehearsalOverview
               takes={session.takes}
               songs={session.songs ?? []}
+              playback={
+                cued && {
+                  take: cued.take_number,
+                  playing: player.playing,
+                  loading: player.loading,
+                  position: player.position,
+                  duration: player.duration,
+                }
+              }
+              onPlay={playInOverview}
               onOpen={select}
               onOpenAt={openAt}
+              onRename={setToRename}
+              onShare={setToShare}
+              onDelete={setToDelete}
               cloudStates={session.cloud_queue}
             />
           )

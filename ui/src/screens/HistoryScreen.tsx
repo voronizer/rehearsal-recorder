@@ -86,7 +86,18 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   const [rehearsalToForget, setRehearsalToForget] =
     useState<RehearsalSummary | null>(null)
   const [renamingOpened, setRenamingOpened] = useState(false)
-  const { selected, select, reselect, openAt, player } = useTakeStripPlayer()
+  const {
+    selected,
+    cued,
+    select,
+    close,
+    uncue,
+    reselect,
+    forget,
+    openAt,
+    playInOverview,
+    player,
+  } = useTakeStripPlayer()
   const cropping = useRunning(
     "crop",
     (e) => e.folder === opened?.folder && e.take_number === selected?.take_number
@@ -98,12 +109,14 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     void refresh()
   }, [])
 
-  useSpacebar(player.toggle, selected !== null)
-  usePlayerKeys(player.skip, selected !== null)
-  // Escape peels one layer at a time: the open take first, then the rehearsal
-  // it was in, then history itself — the same ladder the back button climbs,
-  // one rung per press.
-  useEscape(() => (selected ? select(null) : back()))
+  // A take playing in the overview has the keys as much as an open one.
+  const inHand = selected !== null || cued !== null
+  useSpacebar(player.toggle, inHand)
+  usePlayerKeys(player.skip, inHand)
+  // Escape peels one layer at a time: the open take first, then a take
+  // playing in the overview, then the rehearsal it was in, then history
+  // itself — the same ladder the back button climbs, one rung per press.
+  useEscape(() => (selected ? select(null) : cued ? uncue() : back()))
 
   const open = async (summary: RehearsalSummary) => {
     dismiss(SAID)
@@ -112,7 +125,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the rehearsal" })
       return
     }
-    select(null)
+    close()
     setOpened(res)
   }
 
@@ -130,7 +143,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
   const back = () => {
     player.pause()
     if (opened) {
-      select(null)
+      close()
       setOpened(null)
       void refresh()
     } else {
@@ -147,7 +160,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not delete the take" })
       return
     }
-    if (selected?.take_number === take.take_number) reselect(null)
+    forget(take.take_number)
     await reopen(opened.folder)
   }
 
@@ -163,7 +176,7 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
     // paths. That is a new `tracks` identity, so the open effect underneath
     // tears down and reopens from zero — the take stays selected and on
     // screen, but playback and the A–B region do not survive this.
-    if (selected?.take_number === take.take_number && res.take) reselect(res.take)
+    if (res.take) reselect(res.take)
     await reopen(opened.folder)
   }
 
@@ -202,10 +215,9 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not rename the rehearsal" })
       return
     }
-    if (selected && res.takes) {
-      const fresh = res.takes.find(
-        (t) => t.take_number === selected.take_number
-      )
+    const held = selected ?? cued
+    if (held && res.takes) {
+      const fresh = res.takes.find((t) => t.take_number === held.take_number)
       if (fresh) reselect(fresh)
     }
     await refresh()
@@ -336,8 +348,21 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
               <RehearsalOverview
                 takes={opened.takes}
                 songs={opened.songs ?? []}
+                playback={
+                  cued && {
+                    take: cued.take_number,
+                    playing: player.playing,
+                    loading: player.loading,
+                    position: player.position,
+                    duration: player.duration,
+                  }
+                }
+                onPlay={playInOverview}
                 onOpen={select}
                 onOpenAt={openAt}
+                onRename={setTakeToRename}
+                onShare={setTakeToShare}
+                onDelete={setTakeToDelete}
               />
             )
           )}

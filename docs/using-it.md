@@ -68,8 +68,16 @@ recording quality into account.
 ![A rehearsal with three takes, grouped by song, and the notes left on them](screenshots/rehearsal.png)
 
 Press **Start rehearsal**, or Space. The rehearsal screen shows the takes
-recorded so far, grouped by song, and the notes you left while listening.
-Click a take or a note to open it in the player.
+recorded so far, grouped by song. Each take is a bar drawn to its length,
+with its markers on it and its notes under it, so a go that ran long or
+stopped short stands out before you read anything.
+
+- **Play** at the start of a row plays the take right there. Space pauses
+  and continues it, and Esc stops it.
+- Click the bar to open the take in the player. If it is playing, it goes
+  on playing from the same place.
+- Click a note to open its take at that spot.
+- Point at a row to rename the take, send it to the cloud or delete it.
 
 Press **Record take**, or Space, to start recording. **Finish** ends the
 rehearsal.
@@ -165,8 +173,9 @@ A few things about cropping:
   still shows the shorter length, and the markers stay where the crop moved
   them.
 
-Press Esc to close the take. While a take is open, Space plays it instead of
-starting a new recording.
+Press Esc to close the take. If it is playing, it goes on playing in the
+list of takes; press Esc again to stop it. While a take is open or playing,
+Space plays and pauses it instead of starting a new recording.
 
 ### Zooming in
 
@@ -361,8 +370,8 @@ While listening:
 | R | turn Repeat on or off |
 | ? | show the keys |
 
-Esc goes one step back. It closes a dialog first, then the open take, then
-the screen. On the rehearsal screen it finishes the rehearsal, and asks first
+Esc goes one step back. It closes a dialog first, then the open take, then a
+take playing in the list of takes, then the screen. On the rehearsal screen it finishes the rehearsal, and asks first
 if there are takes in it. After a take, it asks before discarding the take.
 Esc never stops a recording; press **Stop** for that.
 

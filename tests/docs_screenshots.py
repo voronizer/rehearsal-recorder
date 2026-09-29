@@ -277,7 +277,7 @@ DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 5', name:'take 5',
 # How tall the window is for each picture: tall enough for all four tracks
 # where there is a player, and no taller than the screen needs elsewhere,
 # so a picture is not half empty.
-HEIGHT = {"unsaved-takes": 420, "setup": 720, "settings": 760, "rehearsal": 600,
+HEIGHT = {"unsaved-takes": 420, "setup": 720, "settings": 760, "rehearsal": 770,
           "recording": 720, "review": 1235, "player": 1235, "zoom": 1235,
           "history": 520}
 
