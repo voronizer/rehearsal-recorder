@@ -1633,9 +1633,22 @@ def main():
         # Python for a picture nobody has finished aiming yet.
         ranged_before = len([c for c in calls("take_media")
                              if len(c["args"]) > 2 and c["args"][2] is not None])
-        page.mouse.move(box["x"] + box["width"] * 0.5, mid_y)
-        for _ in range(6):
-            page.mouse.wheel(0, -120)
+        # Six notches 16 ms apart, sent from inside the page, the way a wheel
+        # sends them. Six page.mouse.wheel() calls are six round trips from
+        # the test to the browser, and on a busy runner those came further
+        # apart than the settle time, so each notch settled on its own and
+        # was fetched: that failed the macOS build of 0.7.13, while the same
+        # commit passed beside it.
+        page.evaluate("""([x, y]) => new Promise((done) => {
+          const el = document.querySelector("[aria-label='Take timeline']");
+          let left = 6;
+          const notch = () => {
+            el.dispatchEvent(new WheelEvent('wheel', {deltaY: -120, clientX: x,
+              clientY: y, bubbles: true, cancelable: true}));
+            if (--left > 0) setTimeout(notch, 16); else done();
+          };
+          notch();
+        })""", [box["x"] + box["width"] * 0.5, mid_y])
         page.wait_for_timeout(900)
         ranged = [c for c in calls("take_media")
                   if len(c["args"]) > 2 and c["args"][2] is not None]
