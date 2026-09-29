@@ -146,6 +146,12 @@ class TakePlayer:
         self._loop = None  # (start_frame, end_frame)
         self._soloed = None
         self._finished = False
+        # How loud the whole mix comes out, after every track's own fader —
+        # the knob on the speaker rather than the balance of the band. The
+        # faders make the cloud mix too; this only makes listening louder or
+        # quieter, so the tracks' meters are read before it.
+        self.master = 1.0
+        self._master_gain = 1.0
 
         # The mix is always stereo. Where it goes on the card is separate: the
         # stream is opened as wide as the highest output asked for, and
@@ -299,6 +305,9 @@ class TakePlayer:
             result.fill(0)
             for track in self.tracks:
                 track.levels = [0.0] * track.width
+            # Turned down while paused, the take must start quiet, not ease
+            # down from where it was over the first few blocks.
+            self._master_gain = self.master
             return result
 
         # Cleared once per block rather than per segment: one block can cross
@@ -366,6 +375,12 @@ class TakePlayer:
 
             self._pos += n
             written += n
+
+        self._master_gain += (self.master - self._master_gain) * GAIN_SMOOTHING
+        if abs(self.master - self._master_gain) < 1e-4:
+            self._master_gain = self.master
+        if self._master_gain != 1.0:
+            out *= self._master_gain
 
         np.clip(out, -32768, 32767, out=out)
         np.copyto(result, out, casting="unsafe")
@@ -461,6 +476,10 @@ class TakePlayer:
         with self._lock:
             self._soloed = name
 
+    def set_master(self, volume):
+        with self._lock:
+            self.master = float(min(1.0, max(0.0, volume)))
+
     # ---------- state ----------
 
     def state(self):
@@ -491,6 +510,7 @@ class TakePlayer:
                 "soloed": self._soloed,
                 "muted": [t.name for t in self.tracks if t.muted],
                 "volumes": {t.name: t.volume for t in self.tracks},
+                "master": self.master,
             }
 
     def close_output(self):

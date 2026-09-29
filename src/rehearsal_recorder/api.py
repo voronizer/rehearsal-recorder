@@ -795,6 +795,14 @@ class Api:
         self._enqueue_session_takes()
         return {"ok": True}
 
+    def save_master_volume(self, volume):
+        """How loud takes play back, kept for the next take and the next run.
+        Unlike save_mix, nothing is queued for the cloud: the cloud mix is
+        made from the faders alone, and this is only the listening level."""
+        self._config["master_volume"] = float(min(1.0, max(0.0, volume)))
+        self._write_config()
+        return {"ok": True}
+
     def save_appearance(self, theme, ui_scale):
         if theme in ("dark", "light", "system"):
             self._config["theme"] = theme
@@ -2220,6 +2228,7 @@ class Api:
 
             for name, v in self._config.get("volumes", {}).items():
                 player.set_volume(name, v)
+            player.set_master(self._config.get("master_volume", 1.0))
 
             self._player = player
             self._open_tracks = tracks
@@ -2298,6 +2307,12 @@ class Api:
         if self._player is None:
             return {"ok": False, "error": "No take open"}
         self._player.set_volume(name, volume)
+        return {"ok": True}
+
+    def player_set_master(self, volume):
+        if self._player is None:
+            return {"ok": False, "error": "No take open"}
+        self._player.set_master(volume)
         return {"ok": True}
 
     def player_set_muted(self, name, muted):

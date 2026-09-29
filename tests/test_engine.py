@@ -206,6 +206,31 @@ def main():
     p.set_volume("A", 1.0)
     p.set_volume("B", 1.0)
 
+    print("\n[2b] The whole mix turned down")
+    p.seek(0)
+    p.set_master(0.5)
+    ok("the master turns the whole mix down",
+       abs(int(settle(p)[:, 0].mean()) - 1500) < 30)
+    # The faders are the band's balance and the cloud mix is made from them;
+    # the master is only how loud somebody listens, so the meters beside the
+    # faders stay where the faders put them.
+    ok("while each track still reads what its own fader lets through",
+       abs(p.state()["levels"]["B"][0] - 2000 / 32768) < 0.005)
+    ok("and the state says where it is", p.state()["master"] == 0.5)
+    p.set_master(7)
+    ok("it goes no higher than full", p.state()["master"] == 1.0)
+    # Turned down while paused, the first block after play is already quiet
+    # — easing down from full over the first blocks is a burst of loud.
+    p.pause()
+    p.set_master(0.1)
+    p._render(256)
+    p.play()
+    first = p._render(256)
+    ok("turned down while paused, it starts quiet",
+       abs(int(first[:, 0].mean()) - 300) < 30)
+    p.set_master(1.0)
+    settle(p)
+
     print("\n[3] Seeking and end of take")
     p.seek(1.5)
     ok("seek is exact", abs(p.state()["position"] - 1.5) < 0.01)
@@ -452,6 +477,21 @@ def main():
     ok("choosing another card starts it again from 1–2",
        a.get_settings()["output_channels"] == [1, 2]
        and a._player._stream.kw["channels"] == 2)
+
+    ok("the master starts at full", a.player_state()["master"] == 1.0)
+    a.player_set_master(0.4)
+    ok("and turns down in the take that is open",
+       a.player_state()["master"] == 0.4)
+    a.save_master_volume(0.4)
+    saved = json.loads(apimod.CONFIG_PATH.read_text())
+    ok("where it was left is saved", saved.get("master_volume") == 0.4)
+    a.player_close()
+    ok("and the next take opens at it",
+       a.player_open(tracks)["master"] == 0.4)
+    a.save_master_volume(-3)
+    ok("nothing below silence is saved",
+       json.loads(apimod.CONFIG_PATH.read_text()).get("master_volume") == 0.0)
+    a.save_master_volume(1.0)
     a.player_close()
 
     print("\n[5] Tracks of different length do not break the mix")

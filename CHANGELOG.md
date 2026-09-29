@@ -5,6 +5,33 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **The player has one volume for the whole take**, to the right of
+  Repeat. It is for listening: turning the band down meant pulling every
+  fader, which lost the balance and changed the copy sent to the cloud,
+  since that is mixed from the faders. The volume changes neither, and
+  the next take, or the next time the app starts, plays at the same level.
+- **The keys work after the mouse.** On Windows a clicked button keeps the
+  focus, and Space pressed it again. Pressed after **Check signal**, Space
+  started the check again instead of the rehearsal. After a fader had been
+  touched, no shortcut worked, Escape included. Now Space, Escape and the
+  player's keys do what the screen says whatever was clicked last. A button
+  reached with Tab is still pressed by Space. In a text field the keys still
+  type, and Esc leaves the field and does nothing else. So on the review
+  screen you can type the take's name, press Esc, then Space to save it,
+  without being asked about discarding it. An open dropdown keeps its keys
+  too: Space in the list of inputs on the setup screen used to start the
+  rehearsal, and Esc in a list in Settings closed Settings as well.
+- **Settings › Playback output always shows the Outputs.** They were shown
+  only for a device with more than two outputs, so the choice was hard to
+  find. On Windows the same desk has two outputs under MME or WASAPI and
+  all of them under ASIO. Each output device now says how many outputs it
+  has. Where there are several drivers, a device with two says that another
+  driver may show more. With the
+  system output, the Outputs are greyed out and it says to choose the
+  interface itself.
+
 ## 0.7.12
 
 - **The meters read like the mixer's.** When checking the signal and while

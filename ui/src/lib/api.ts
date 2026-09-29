@@ -215,6 +215,8 @@ export type PlayerState = {
   soloed?: string | null
   muted?: string[]
   volumes?: Record<string, number>
+  /** 0..1, how loud the whole mix plays, after every track's fader. */
+  master?: number
   /** 0..1 per channel of each track, as it came out of the mix a moment
    *  ago. A list even for a mono track, so one shape serves both. */
   levels?: Record<string, number[]>
@@ -570,6 +572,8 @@ type PyApi = {
     Ok<{ recordings_dir?: string; cancelled?: boolean }>
   >
   save_mix(volumes: Record<string, number>): Promise<Ok>
+  /** The listening level, kept between takes. Not part of the cloud mix. */
+  save_master_volume(volume: number): Promise<Ok>
   save_appearance(theme: string, uiScale: number): Promise<Ok>
   /** `warning` when a take is open and it now plays somewhere else. */
   set_output_device(deviceIndex: number | null): Promise<Ok<{ warning?: string }>>
@@ -600,6 +604,7 @@ type PyApi = {
     endSec: number | null
   ): Promise<PlayerState>
   player_set_volume(name: string, volume: number): Promise<Ok>
+  player_set_master(volume: number): Promise<Ok>
   player_set_muted(name: string, muted: boolean): Promise<PlayerState>
   player_set_solo(name: string | null): Promise<PlayerState>
 

@@ -10,9 +10,13 @@ import {
   SkipBack,
   Undo2,
   Redo2,
+  Volume1,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FaderInput } from "@/components/LaneControls"
 import { Timeline } from "@/components/Timeline"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { PlayerKeys } from "@/components/PlayerKeys"
@@ -384,7 +388,49 @@ function Transport({
           </>
         )}
 
+        <MasterVolume player={player} />
+
         <PlayerKeys spaceKey={spaceKey} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * How loud the whole take plays, on top of the faders beside the tracks.
+ *
+ * The faders are the band's balance, and the take sent to the cloud is mixed
+ * from them; turning all of them down to make the room quieter would lose
+ * that balance and change the cloud copy. This turns the listening down and
+ * nothing else, and is remembered for the next take.
+ */
+function MasterVolume({ player }: { player: MultitrackPlayer }) {
+  const { master } = player
+  const Icon = master === 0 ? VolumeX : master < 0.5 ? Volume1 : Volume2
+  const percent = Math.round(master * 100)
+
+  return (
+    <div
+      className="ml-1.5 flex items-center gap-2"
+      title={`Volume of the whole take: ${percent}%`}
+    >
+      <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+      <div className="relative h-4 w-24">
+        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-muted">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-primary/50"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+        <FaderInput
+          value={master}
+          onChange={(e) => player.setMaster(Number(e.target.value))}
+          onPointerUp={player.persistMaster}
+          onKeyUp={player.persistMaster}
+          disabled={player.loading}
+          aria-label="Volume"
+          aria-valuetext={`${percent}%`}
+        />
       </div>
     </div>
   )

@@ -530,6 +530,11 @@ export function Settings({
             disabled={rescanning}
             placeholder="System output"
             systemDefault
+            // How many outputs each device has under this driver, since that
+            // is what decides which pairs there are to choose from below.
+            detail={(d) => ` · ${d.max_output_channels} ${
+              d.max_output_channels === 1 ? "output" : "outputs"
+            }`}
             onChange={async (idx) => {
               dismiss(SAID)
               const res = await api().set_output_device(idx)
@@ -547,34 +552,62 @@ export function Settings({
             }}
           />
 
-          {/* Only for a card with more than a pair: on a stereo output there
-              is nothing to choose, and the system output is the system's. */}
           {(() => {
             const card = outputs.find(
               (d) => d.index === settings?.output_device_index
             )
-            if (!card || card.max_output_channels <= 2) return null
+            // The system output is the system's: which of its channels are
+            // which is not the app's to say, so it always plays through 1–2.
+            if (!card) {
+              return (
+                <>
+                  <OutputChannels
+                    count={2}
+                    value={[1, 2]}
+                    onChange={() => {}}
+                    disabled
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The system output plays through 1–2. To play through
+                    other outputs, choose the interface itself above.
+                  </p>
+                </>
+              )
+            }
             return (
-              <OutputChannels
-                count={card.max_output_channels}
-                value={settings?.output_channels ?? [1, 2]}
-                onChange={async (channels) => {
-                  dismiss(SAID)
-                  const res = await api().set_output_channels(channels)
-                  if (!res.ok) {
-                    notify({
-                      key: SAID,
-                      kind: "error",
-                      text: res.error ?? "Could not switch the outputs",
-                    })
-                    return
-                  }
-                  if (res.warning) {
-                    notify({ key: PLAYBACK, kind: "warning", text: res.warning })
-                  } else dismiss(PLAYBACK)
-                  setSettings(await api().get_settings())
-                }}
-              />
+              <>
+                <OutputChannels
+                  count={card.max_output_channels}
+                  value={settings?.output_channels ?? [1, 2]}
+                  onChange={async (channels) => {
+                    dismiss(SAID)
+                    const res = await api().set_output_channels(channels)
+                    if (!res.ok) {
+                      notify({
+                        key: SAID,
+                        kind: "error",
+                        text: res.error ?? "Could not switch the outputs",
+                      })
+                      return
+                    }
+                    if (res.warning) {
+                      notify({ key: PLAYBACK, kind: "warning", text: res.warning })
+                    } else dismiss(PLAYBACK)
+                    setSettings(await api().get_settings())
+                  }}
+                />
+                {/* The same words as for the inputs, and for the same reason:
+                    through MME or WASAPI a desk with sixteen outputs is often
+                    a stereo device, and only another driver shows the rest. */}
+                {card.max_output_channels <= 2 &&
+                  new Set(outputs.map((d) => d.host_api)).size > 1 && (
+                    <p className="text-xs text-muted-foreground">
+                      This driver offers two outputs on it. If your interface
+                      has more, choose it under another driver — ASIO, where
+                      there is one, usually offers all of them.
+                    </p>
+                  )}
+              </>
             )
           })()}
         </section>

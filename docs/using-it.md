@@ -24,8 +24,12 @@ accepts are offered. See [Recording quality](#recording-quality) if you are
 not sure which to pick.
 
 Under **Playback output**, choose where takes are played back, for example
-the headphone outputs of your interface instead of the laptop speakers. On an
-interface with more than two outputs you can also choose which pair to use.
+the headphone outputs of your interface instead of the laptop speakers. Each
+device shows how many outputs it has. Under **Outputs**, choose which of them
+to use: a pair such as 3–4, or one output on its own. On Windows a driver
+other than ASIO often shows an interface with only two outputs; choose it
+under **ASIO** to get all of them. The system output always plays through
+1–2.
 
 ### Set up the tracks
 
@@ -107,7 +111,8 @@ during a take. Press **Stop**, or Space, when the song is over.
 
 After you stop, the take opens straight away so you can listen to it. Check
 its name, then press **Save take** (Space) or **Discard**. A discarded take
-goes to the Trash. Pressing Esc also discards it, but asks first.
+goes to the Trash. Pressing Esc also discards it, but asks first. If you are
+typing the name, the first Esc only leaves the name field.
 
 The name is filled in for you. After a take called "Polyn", the next one is
 called "Polyn 2". See [Names and songs](#names-and-songs).
@@ -131,6 +136,9 @@ on one timeline, so they always stay in sync.
 - **Balance the band** with the fader under each track name. **M** mutes a
   track and **S** plays it on its own. Volumes are remembered by track name,
   so the next take starts with the same balance.
+- **Turn the whole take up or down** with the volume to the right of
+  **Repeat**. It only changes how loud you hear it. The balance and the copy
+  sent to the cloud stay as they are. The app remembers it for the next take.
 - **Mark a moment** with **Mark**, or the M key, while the take plays. Type a
   short note and pick a kind: a plain note, *keep this*, *went wrong* or *do
   again*. Each kind has its own colour, and the take's button in the strip
@@ -357,7 +365,12 @@ the screen. On the rehearsal screen it finishes the rehearsal, and asks first
 if there are takes in it. After a take, it asks before discarding the take.
 Esc never stops a recording; press **Stop** for that.
 
-The keys do nothing while you are typing in a text field.
+While you are typing in a text field, the keys type. Press Esc to leave the
+field, and the keys work again.
+
+Clicking a button or moving a fader with the mouse does not take the keys
+away. Space still does the main thing, and the other keys still work. To
+press a button with Space, move to it with Tab.
 
 ## When something goes wrong
 

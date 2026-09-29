@@ -5,6 +5,35 @@ import { cn } from "@/lib/utils"
 const CLIP_THRESHOLD = 0.97
 
 /**
+ * A fader from 0 to 1: a native range input, so it keeps its keyboard
+ * behaviour, laid over whatever is drawn beneath it. Its track is made
+ * transparent so that shows through, which means the thumb has to be drawn
+ * here rather than left to the engine. The track faders and the master in
+ * the transport share it.
+ */
+export function FaderInput({ className, ...props }: React.ComponentProps<"input">) {
+  return (
+    <input
+      type="range"
+      min={0}
+      max={1}
+      step={0.01}
+      {...props}
+      className={cn(
+        "absolute inset-0 w-full cursor-pointer appearance-none bg-transparent",
+        "focus-visible:outline-none",
+        "[&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none",
+        "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary",
+        "[&::-webkit-slider-thumb]:ring-2 [&::-webkit-slider-thumb]:ring-card",
+        "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:border-0",
+        "[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary",
+        className
+      )}
+    />
+  )
+}
+
+/**
  * One track's controls, beside its lane: the name, mute and solo, a fader,
  * and under it how loud that track is coming out.
  *
@@ -90,12 +119,7 @@ export function LaneControls({
           you set, the green as how close the track is getting to it, and the
           gap between them as the headroom left. Two separate bars could not
           say that; side by side they only invited being mistaken for each
-          other.
-
-          The slider stays a native range input, so it keeps its keyboard
-          behaviour; only its track is made transparent so the meter shows
-          through, which means the thumb has to be drawn here rather than
-          left to the engine. */}
+          other. */}
       <div className="relative h-4 w-full">
         <div
           role="meter"
@@ -115,25 +139,12 @@ export function LaneControls({
           />
         </div>
 
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
+        <FaderInput
           value={volume}
           onChange={(e) => onVolume(Number(e.target.value))}
           onPointerUp={onVolumeCommit}
           onKeyUp={onVolumeCommit}
           aria-label={`${name} volume`}
-          className={cn(
-            "absolute inset-0 w-full cursor-pointer appearance-none bg-transparent",
-            "focus-visible:outline-none",
-            "[&::-webkit-slider-thumb]:size-3.5 [&::-webkit-slider-thumb]:appearance-none",
-            "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary",
-            "[&::-webkit-slider-thumb]:ring-2 [&::-webkit-slider-thumb]:ring-card",
-            "[&::-moz-range-thumb]:size-3.5 [&::-moz-range-thumb]:border-0",
-            "[&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary"
-          )}
         />
       </div>
     </div>

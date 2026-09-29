@@ -135,7 +135,8 @@ async function held(name) {
 function playerState() {
   if (!P) return {open:false};
   return {open:true, ok:true, playing:P.playing, position:position(), duration:P.duration,
-          loop:P.loop, muted:P.muted, soloed:P.soloed, volumes:P.volumes, levels:levels()};
+          loop:P.loop, muted:P.muted, soloed:P.soloed, volumes:P.volumes, master:P.master,
+          levels:levels()};
 }
 function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = clock(); }
 
@@ -379,7 +380,8 @@ window.__MAKE_API__ = () => ({
   player_open: track('player_open', async (tracks) => {
     const dur = tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
     P = {playing:false, position:0, t0:clock(), duration:dur, loop:null, muted:[], soloed:null,
-         volumes:Object.fromEntries(tracks.map(t => [t.name, 1]))};
+         volumes:Object.fromEntries(tracks.map(t => [t.name, 1])),
+         master:readCfg().master_volume ?? 1};
     const out = {ok:true, ...playerState()};
     if (window.__OUTPUT_GONE__) out.warning = 'That playback device is gone — using the system output.';
     return out;
@@ -413,6 +415,7 @@ window.__MAKE_API__ = () => ({
     return {ok:true, ...playerState()};
   }),
   player_set_volume: track('player_set_volume', async (n, v) => { if (P) P.volumes[n] = v; return {ok:true}; }),
+  player_set_master: track('player_set_master', async (v) => { if (P) P.master = v; return {ok:true}; }),
   player_set_muted: track('player_set_muted', async (n, m) => {
     if (!P) return {ok:false};
     P.muted = m ? [...new Set([...P.muted, n])] : P.muted.filter(x => x !== n);
@@ -653,8 +656,12 @@ window.__MAKE_API__ = () => ({
     : {ok:true, recordings_dir:p}),
   choose_recordings_dir: track('choose_recordings_dir', async () => ({ok:true, recordings_dir:'/Users/alex/Dropbox/Band'})),
   save_mix: track('save_mix', async () => ({ok:true})),
+  save_master_volume: track('save_master_volume', async (v) => {
+    writeCfg({...readCfg(), master_volume:v});
+    return {ok:true};
+  }),
   save_appearance: track('save_appearance', async (theme, scale) => {
-    writeCfg({theme, ui_scale:scale});
+    writeCfg({...readCfg(), theme, ui_scale:scale});
     return {ok:true};
   }),
 });
@@ -881,8 +888,21 @@ def main():
         print("\n[5] Recording: status is visible, not only on failure")
         ok("the setup screen shows what it will record with",
            page.locator("text=44.1 kHz · 24 bit").count() == 1)
-        page.click("text=Start rehearsal")
-        page.wait_for_selector("text=Record take 1")
+        # Clicked last, the check's button still has focus, as a clicked
+        # button does in Chromium — the browser the app runs in on Windows.
+        # Space used to press it again: the check started, not the rehearsal.
+        ok("the check's button keeps focus after the mouse clicked it",
+           "Check signal" in page.evaluate("document.activeElement.textContent"))
+        monitors = len(calls("start_monitor"))
+        page.keyboard.press("Space")
+        try:
+            page.wait_for_selector("text=Record take 1", timeout=4000)
+        except Exception:
+            pass
+        ok("Space after clicking Check signal starts the rehearsal",
+           len(calls("start_rehearsal")) == 1)
+        ok("and does not start the check again",
+           len(calls("start_monitor")) == monitors)
         started = calls("start_rehearsal")
         ok("and starts the rehearsal with exactly that",
            started and started[-1]["args"][2] == 44100
@@ -1037,9 +1057,17 @@ def main():
            page.locator("span", has_text="/ 0:03").count() >= 1)
 
         # Everywhere else in the app space runs the screen's main action, and
-        # here that action is saving the take.
+        # here that action is saving the take. Escape takes the name field's
+        # keys back first — only that: this screen's Escape asks to throw the
+        # take away, and a name just typed is no reason to be asked that.
         page.fill("#take-name", "Polyn")
-        page.locator("#take-name").blur()
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(300)
+        ok("Escape in the name field leaves it",
+           page.evaluate("document.activeElement.id") != "take-name")
+        ok("and does not ask to discard the take",
+           page.locator("text=Discard this take?").count() == 0)
+        ok("keeping what was typed", page.input_value("#take-name") == "Polyn")
         page.keyboard.press("Space")
         page.wait_for_timeout(600)
         ok("space saves the take", len(calls("keep_take")) == 1)
@@ -1363,6 +1391,92 @@ def main():
         ok("mute reached Python", calls("player_set_muted")[-1]["args"] == ["Guitar", True])
         ok("solo reached Python", calls("player_set_solo")[-1]["args"] == ["Vocals"])
 
+        # Solo was clicked last and keeps focus. Space is the player's, not a
+        # second press of whatever the mouse happened to touch.
+        toggles = len(calls("player_toggle"))
+        solos = len(calls("player_set_solo"))
+        page.keyboard.press("Space")
+        page.wait_for_timeout(300)
+        ok("Space after clicking a button plays, instead of pressing it again",
+           len(calls("player_toggle")) == toggles + 1
+           and len(calls("player_set_solo")) == solos)
+        page.keyboard.press("Space")
+        page.wait_for_timeout(300)
+        ok("and pauses again", len(calls("player_toggle")) == toggles + 2)
+        # Reached with Tab, a button is what Space is aimed at: that is how a
+        # keyboard presses one.
+        page.focus("button[aria-label='Mute Guitar']")
+        page.keyboard.press("Tab")
+        ok("Tab moves on to the next button",
+           page.evaluate("document.activeElement.getAttribute('aria-label')")
+           == "Solo Guitar")
+        page.keyboard.press("Space")
+        page.wait_for_timeout(300)
+        ok("and Space presses a button reached with the keyboard",
+           calls("player_set_solo")[-1]["args"] == ["Guitar"]
+           and len(calls("player_toggle")) == toggles + 2)
+        page.click("button[aria-label='Solo Vocals']")
+        page.wait_for_timeout(300)
+
+        print("\n[9b] One volume for the whole take")
+        master = page.get_by_role("slider", name="Volume", exact=True)
+        ok("the transport has a volume for the whole take, at full to begin with",
+           master.input_value() == "1")
+        mixes = len(calls("save_mix"))
+        spot = master.bounding_box()
+        page.mouse.click(spot["x"] + spot["width"] * 0.3,
+                         spot["y"] + spot["height"] / 2)
+        page.wait_for_timeout(300)
+        turned = calls("player_set_master")
+        ok("turned down, it reaches Python",
+           turned and turned[-1]["args"][0] < 0.5)
+        kept = calls("save_master_volume")
+        ok("and is kept for the next take without being asked",
+           kept and kept[-1]["args"][0] == turned[-1]["args"][0])
+        ok("while the balance the cloud mix is made from is left alone",
+           len(calls("save_mix")) == mixes)
+        # A fader is an input, and every key used to go dead once one had
+        # been touched.
+        page.keyboard.press("Space")
+        page.wait_for_timeout(300)
+        ok("Space right after it still plays",
+           len(calls("player_toggle")) == toggles + 3)
+        page.keyboard.press("Space")
+        page.wait_for_timeout(300)
+        master_level = master.input_value()
+
+        # The same for every other key of the player: a fader dragged with
+        # the mouse keeps none of them.
+        page.mouse.click(spot["x"] + spot["width"] * 0.3,
+                         spot["y"] + spot["height"] / 2)
+        seeks = len(calls("player_seek"))
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(300)
+        ok("the arrows scrub after the fader was dragged",
+           len(calls("player_seek")) == seeks + 1
+           and master.input_value() == master_level)
+        page.mouse.click(spot["x"] + spot["width"] * 0.3,
+                         spot["y"] + spot["height"] / 2)
+        seeks = len(calls("player_seek"))
+        page.keyboard.press("Home")
+        page.wait_for_timeout(300)
+        ok("and Home goes to the start",
+           len(calls("player_seek")) == seeks + 1
+           and master.input_value() == master_level)
+        # Reached with the keyboard, the fader is what the arrows are aimed at.
+        page.focus("button[aria-label='Player keys']")
+        page.keyboard.press("Shift+Tab")
+        seeks = len(calls("player_seek"))
+        tabbed = page.evaluate("document.activeElement.getAttribute('aria-label')")
+        if tabbed == "Volume":
+            page.keyboard.press("ArrowLeft")
+            page.wait_for_timeout(300)
+        ok("a fader reached with Tab keeps its arrows",
+           tabbed == "Volume" and len(calls("player_seek")) == seeks
+           and float(master.input_value()) < float(master_level))
+        page.keyboard.press("ArrowRight")
+        page.evaluate("document.activeElement.blur()")
+
         print("\n[9c] Zooming the timeline")
         # Fifteen seconds of a nine-minute take is twenty pixels wide: the
         # gesture built last release is at its worst exactly where it is
@@ -1481,6 +1595,9 @@ def main():
            page.locator("text=Whole take").count() == 0)
         page.click("button[aria-label^='Take 2 Polyn (best)']")
         page.wait_for_selector("button[aria-label='Mute Guitar']", timeout=8000)
+        page.wait_for_timeout(300)
+        ok("another take opens at the volume the last one was left at",
+           master.input_value() == master_level and master_level != "1")
 
         print("\n[9d] The waveform sharpens to what is on screen")
         # Stretching the same 900 bars over two seconds shows no more than it
@@ -1835,8 +1952,16 @@ def main():
            and page.locator("#output-device-driver").count() == 0)
         ok("and nothing is said about drivers",
            page.locator("text=Each driver can offer").count() == 0)
-        ok("nor about outputs, with the system output chosen",
-           page.locator("#output-channels").count() == 0)
+        # Shown only where there was a choice, the outputs were a setting
+        # nobody knew existed. With the system output there is nothing to
+        # pick, and it says what to pick instead.
+        ok("the outputs are there with the system output chosen",
+           page.locator("#output-channels").count() == 1)
+        ok("greyed out, at 1–2",
+           page.locator("#output-channels").is_disabled()
+           and "1–2" in page.inner_text("#output-channels"))
+        ok("saying how to choose others",
+           page.locator("text=choose the interface itself").count() == 1)
         ok("the rates the card can do are offered",
            page.locator("button[aria-label='44.1 kHz']").count() == 1
            and page.locator("button[aria-label='96 kHz']").count() == 1)
@@ -2368,7 +2493,7 @@ def main():
         win.click("#output-device")
         ok("the system output is still there under any driver",
            win.get_by_role("option").all_inner_texts()
-           == ["System output", "X32 USB"])
+           == ["System output", "X32 USB · 16 outputs"])
         win.get_by_role("option", name="X32 USB").click()
         win.wait_for_timeout(300)
         ok("and picking a card switches to it",
@@ -2382,6 +2507,8 @@ def main():
         offered = win.get_by_role("option").all_inner_texts()
         ok("pairs first, the way cards label them",
            offered[:3] == ["1–2", "3–4", "5–6"] and "2–3" not in offered)
+        ok("and nothing about other drivers, with all sixteen offered",
+           win.locator("text=This driver offers two outputs").count() == 0)
         ok("then each output on its own",
            "1 (mono)" in offered and "16 (mono)" in offered
            and len(offered) == 8 + 16)
@@ -2400,6 +2527,17 @@ def main():
            "System output" not in win.inner_text("#output-device"))
         ok("a neutral placeholder is shown instead",
            "Pick an output" in win.inner_text("#output-device"))
+
+        # Through MME a desk is often a stereo device. Whoever picked it there
+        # saw no outputs to choose and had no reason to look under ASIO.
+        win.click("#output-device")
+        win.get_by_role("option", name="Speakers").click()
+        win.wait_for_timeout(300)
+        ok("a card with two outputs still offers them",
+           win.locator("#output-channels").count() == 1
+           and not win.locator("#output-channels").is_disabled())
+        ok("and says another driver may show more",
+           win.locator("text=This driver offers two outputs").count() == 1)
 
         win.get_by_role("button", name="Folders", exact=True).first.click()
         win.wait_for_selector("#recordings-dir")
@@ -3396,6 +3534,42 @@ def main():
                       "?.innerText.includes('Stopped')")
            and len(hood_calls("stop_interface_check")) == 1)
         hood_ctx.close()
+
+        print("\n[12r] An open dropdown keeps its keys")
+        # A dropdown's list is not a dialog, and the screen's keys used to
+        # reach through it: Space picking an input started the rehearsal,
+        # and Escape closing a list left Settings along with it.
+        drop = browser.new_page(viewport={"width": 1180, "height": 820})
+        drop.add_init_script(MOCK)
+        drop.goto(server.base_url, wait_until="networkidle")
+        drop.wait_for_selector("text=Start rehearsal")
+
+        def drop_calls(name):
+            return drop.evaluate(
+                f"() => window.__CALLS__.filter(c => c.name === '{name}')")
+
+        drop.locator("button[role='combobox']").first.click()
+        drop.wait_for_selector("[role='listbox']")
+        drop.keyboard.press("Space")
+        drop.wait_for_timeout(400)
+        ok("Space in an open list picks from it, and starts nothing",
+           len(drop_calls("start_rehearsal")) == 0)
+        drop.click("button[aria-label='Settings']")
+        drop.wait_for_selector("#output-device")
+        drop.click("#output-device")
+        drop.wait_for_selector("[role='listbox']")
+        drop.keyboard.press("Escape")
+        drop.wait_for_selector("[role='listbox']", state="detached")
+        ok("Escape in an open list closes the list and not Settings",
+           drop.locator("#output-device").count() == 1)
+        drop.keyboard.press("Escape")
+        try:
+            drop.wait_for_selector("text=Start rehearsal", timeout=4000)
+        except Exception:
+            pass
+        ok("and the next Escape leaves Settings",
+           drop.locator("#output-device").count() == 0)
+        drop.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})
