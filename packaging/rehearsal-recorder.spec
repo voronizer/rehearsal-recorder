@@ -101,6 +101,10 @@ exe = EXE(
     # No terminal window behind the app on Windows. The crash log in
     # ~/.rehearsal-recorder/crash.log is where to look instead.
     console=False,
+    # The app's own icon, rather than PyInstaller's. Drawn in icon.svg and
+    # turned into these by make_icons.py; they are ready-made files, so the
+    # build needs no image library to read them.
+    icon=str(ROOT / "packaging" / ("icon.icns" if sys.platform == "darwin" else "icon.ico")),
 )
 
 coll = COLLECT(
@@ -116,6 +120,7 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name=f"{NAME}.app",
+        icon=str(ROOT / "packaging" / "icon.icns"),
         bundle_identifier="band.rehearsal.recorder",
         info_plist={
             # Without this the app is killed on its first take, with no

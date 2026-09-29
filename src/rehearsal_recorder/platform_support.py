@@ -50,6 +50,23 @@ def app_root():
     return _SOURCE_ROOT
 
 
+def window_icon(system=sys.platform, frozen=None):
+    """
+    The icon to give the window, or None to leave it to the toolkit.
+
+    A built app needs none: the window takes its .exe's icon, which the build
+    set. Run from source on Windows, the program is python.exe, so without
+    this the taskbar shows the Python logo; the .ico beside the build spec is
+    the app's own. Elsewhere the toolkit does not use what it is given here.
+    """
+    if frozen is None:
+        frozen = bool(getattr(sys, "_MEIPASS", None))
+    if system != "win32" or frozen:
+        return None
+    icon = _SOURCE_ROOT / "packaging" / "icon.ico"
+    return str(icon) if icon.exists() else None
+
+
 def _send2trash():
     """The proper recycle bin, if the package is installed. Optional on
     purpose: without it the fallback below still never destroys anything."""

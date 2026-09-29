@@ -672,6 +672,15 @@ def main():
         page = browser.new_page(viewport={"width": 1180, "height": 820})
         page.add_init_script("window.pywebview = { api: {} };")
         page.goto(server.base_url, wait_until="domcontentloaded")
+        # The first thing the window shows, while Python comes up.
+        try:
+            page.wait_for_selector("text=Connecting to the audio engine", timeout=5000)
+            page.wait_for_timeout(300)
+        except Exception:
+            pass
+        ok("while it connects, the window shows the app's logo",
+           page.evaluate("""() => [...document.querySelectorAll('img[src$="logo.svg"]')]
+                              .some(i => i.complete && i.naturalWidth > 0)"""))
         try:
             page.wait_for_selector("text=Could not reach the audio engine", timeout=20000)
             ok("an error instead of an endless spinner", True)
@@ -722,6 +731,15 @@ def main():
             )
 
         print("\n[4] Setup: template, signal check, disk space")
+        # The one screen that says the app's name says it with the logo; the
+        # working screens after it carry neither.
+        ok("the setup screen's header has the logo beside the app's name",
+           page.evaluate("""() => {
+             const h = document.querySelector('header h1');
+             const img = h && h.querySelector('img[src$="favicon.svg"]');
+             return !!img && img.complete && img.naturalWidth > 0
+               && h.textContent.trim() === 'Rehearsal Recorder';
+           }"""))
         ok("template filled the tracks in",
            page.input_value("input[aria-label='Track 1 name']") == "Guitar")
         ok("free space is always on screen",

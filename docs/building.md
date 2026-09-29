@@ -16,6 +16,23 @@ normal, and an app that needs the internet before it can record is useless.
 `ui/dist` has to be built first (`cd ui && npm run build`); the spec refuses
 to package without it rather than producing an app with no interface.
 
+**The icon** is drawn in `packaging/icon.svg`, and again for 32 px and under
+in `icon-small.svg`: at 16 px, in a title bar, the full drawing's waveform is
+thinner than a pixel, so the small one has no tile and three bars on whole
+pixels. After changing either, run
+
+    python packaging/make_icons.py
+
+and commit what it writes: `packaging/icon.ico` for Windows, `icon.icns` for
+macOS, and for the interface the small drawing as `ui/public/favicon.svg`
+(the tab, and the setup screen's header) and the full one as `logo.svg` (the
+screen shown while the app starts). It draws the sizes
+with the Chromium Playwright installs for the interface tests, and both icon
+formats hold PNGs as they are, so no image library is needed. The build reads
+the finished files, so building needs nothing it does. Run from source on
+Windows, the window is given the `.ico` too; otherwise the taskbar would show
+python.exe's icon.
+
 **The self-test is the point.** A packaged app fails in a particular way: it
 starts, and then the first time it reaches for the sound card it turns out a
 native library was never bundled. Nothing in the source can catch that — only

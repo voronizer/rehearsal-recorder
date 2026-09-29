@@ -243,6 +243,73 @@ def main():
     ok("and so is a Windows where COM cannot be reached at all",
        isinstance(ps.enter_com_apartment("win32", object()), str))
 
+    print("\n[icon] The app has its own icon on both systems")
+    # Without one, PyInstaller gives the app its own default, and the taskbar
+    # shows a Python logo for an app about recording a band. The icon is
+    # drawn once, in packaging/icon.svg; packaging/make_icons.py turns it into
+    # what each system reads, and the build names those files.
+    import struct as _struct
+    packaging = PROJECT / "packaging"
+    spec = (packaging / "rehearsal-recorder.spec").read_text(encoding="utf-8")
+    ok("the build gives the Windows app its icon",
+       'icon.ico' in spec and "icon=" in spec.split("exe = EXE(")[1].split(")\n")[0])
+    ok("and the Mac app its own",
+       'icon.icns' in spec and "icon=" in spec.split("app = BUNDLE(")[1])
+
+    ico = (packaging / "icon.ico").read_bytes() if (packaging / "icon.ico").exists() else b""
+    sizes = []
+    if ico[:4] == b"\x00\x00\x01\x00":
+        count = _struct.unpack_from("<H", ico, 4)[0]
+        # A width byte of 0 is 256: the format has one byte for it.
+        sizes = [ico[6 + 16 * i] or 256 for i in range(count)]
+    ok("the Windows icon is an .ico holding every size the taskbar and "
+       "Explorer ask for", {16, 24, 32, 48, 256} <= set(sizes))
+
+    icns = (packaging / "icon.icns").read_bytes() if (packaging / "icon.icns").exists() else b""
+    kinds, at = [], 8
+    if icns[:4] == b"icns" and _struct.unpack_from(">I", icns, 4)[0] == len(icns):
+        while at + 8 <= len(icns):
+            kind, length = icns[at:at + 4], _struct.unpack_from(">I", icns, at + 4)[0]
+            if length < 8:
+                break
+            kinds.append(kind)
+            at += length
+    ok("the Mac icon is an .icns from 16 px up to the 1024 of a Retina Dock",
+       {b"icp4", b"ic07", b"ic08", b"ic10"} <= set(kinds) and at == len(icns))
+
+    # Run from source on Windows, the window would otherwise show python.exe's
+    # icon, since that is the program running; a built app shows its own
+    # .exe's icon without being told, and the drawing is not in the bundle.
+    source_icon = ps.window_icon("win32", frozen=False)
+    ok("from source on Windows the window is given the app's icon",
+       source_icon is not None and Path(source_icon) == packaging / "icon.ico"
+       and Path(source_icon).exists())
+    ok("a built app keeps the icon of its own .exe",
+       ps.window_icon("win32", frozen=True) is None)
+    ok("and elsewhere nothing is passed that the toolkit would not use",
+       ps.window_icon("darwin", frozen=False) is None)
+
+    # At 16 px the full drawing's waveform is thinner than a pixel and the
+    # icon in a title bar was a red smudge, so the small sizes have a drawing
+    # of their own: no tile, and three bars that sit on whole pixels.
+    sys.path.insert(0, str(packaging))
+    import make_icons
+    ok("up to 32 px the icon is drawn from the small drawing",
+       all(make_icons.drawing_for(s) == packaging / "icon-small.svg"
+           for s in (16, 20, 24, 32)))
+    ok("and above that from the full one",
+       all(make_icons.drawing_for(s) == packaging / "icon.svg"
+           for s in (40, 48, 64, 256, 1024)))
+
+    index = (PROJECT / "ui" / "index.html").read_text(encoding="utf-8")
+    favicon = PROJECT / "ui" / "public" / "favicon.svg"
+    ok("the interface carries the small drawing, since a tab shows it at 16 px",
+       'rel="icon"' in index and favicon.exists()
+       and favicon.read_bytes() == (packaging / "icon-small.svg").read_bytes())
+    logo = PROJECT / "ui" / "public" / "logo.svg"
+    ok("and the full one, for where the window shows it large",
+       logo.exists() and logo.read_bytes() == (packaging / "icon.svg").read_bytes())
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

@@ -153,9 +153,12 @@ export function App() {
 
   if (screen.name === "loading") {
     return (
-      <div className="flex h-full items-center justify-center gap-3 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-        <span className="text-sm">Connecting to the audio engine…</span>
+      <div className="flex h-full flex-col items-center justify-center gap-5 text-muted-foreground">
+        <img src="./logo.svg" alt="" className="size-16" />
+        <div className="flex items-center gap-3">
+          <Loader2 className="size-5 animate-spin" />
+          <span className="text-sm">Connecting to the audio engine…</span>
+        </div>
       </div>
     )
   }

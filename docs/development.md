@@ -204,7 +204,10 @@ ui/dist/                    the built interface (build output, not in git)
 
 tests/                      the four suites
 docs/                       this file and its neighbours
-packaging/                  the PyInstaller spec and the debug-allocator run
+packaging/                  the PyInstaller spec, the debug-allocator run, and
+                            the app's icon: icon.svg and icon-small.svg, drawn
+                            by hand, and the .ico and .icns make_icons.py
+                            turns them into
 build.command, build.bat    in the root because you double-click them
 pyproject.toml              how the package installs; deps come from
                             requirements.txt, which stays the one list

@@ -250,6 +250,7 @@ def main():
     import webview
 
     from rehearsal_recorder.api import Api
+    from rehearsal_recorder.platform_support import window_icon
 
     keep_open = _arm_crash_log()  # noqa: F841 — the file must outlive main()
     api = Api(server_port=DEV_SERVER_PORT if dev else 0)
@@ -282,7 +283,8 @@ def main():
     # Needed for the native folder picker in Settings.
     api.attach_window(window)
     try:
-        webview.start()  # returns when the window is closed
+        # Returns when the window is closed.
+        webview.start(icon=window_icon())
     finally:
         api.shutdown()
     return 0

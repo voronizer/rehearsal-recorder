@@ -318,7 +318,14 @@ export function Setup({
 
   return (
     <Shell
-      title="Rehearsal Recorder"
+      // The one screen that says the app's name, so the logo goes with it —
+      // the small drawing, the one that still reads at this size.
+      title={
+        <span className="flex items-center gap-2.5">
+          <img src="./favicon.svg" alt="" className="size-6 shrink-0" />
+          Rehearsal Recorder
+        </span>
+      }
       headerAction={
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={onOpenHistory}>
