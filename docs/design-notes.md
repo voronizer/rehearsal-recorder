@@ -418,7 +418,29 @@ line for a minute, because the person who would act on it was playing, not
 watching, when it happened. Silence only dims a tile: a singer between
 verses is silent, and an alarm for that would soon be ignored along with the
 real ones. Every tile is one width, a stereo one split down the middle, so
-the sixteen inputs of an XR18 still fit in one row. Two other layouts were
+the sixteen inputs of an XR18 still fit in one row.
+
+**The meters are in dB, from −60 to full scale.** They were drawn on a
+straight scale, and a band that set its gain on the desk, for the loudest
+hit to reach −18 dBFS, saw that hit fill an eighth of a tile. The figure on
+the tile showed the loudest moment of the last poll, fourteen times a
+second, so what the eye kept of it was the troughs between the hits. The
+band reported "−50 here, −18 on the mixer". Silence was anything below −34
+dBFS, which is where a quiet passage sits at that gain. Now the figure holds the peak that
+the line holds, and silence is below −60 dBFS, the bottom of the meters. A
+dead input on a desk's preamp lies well below that. A meter rises at once
+and falls back 20 dB a second. Dropped to each poll's level, a voice made it
+blink, because in dB the quiet between two syllables is half a tile. The
+player's meter stays straight, because it shares its bar with a straight
+fader and must not pass the thumb.
+
+**Inputs ask for 50 ms of latency.** Opened without one, PortAudio takes the
+driver's "high" latency, and FlexASIO's is a second: the meters ran a second
+behind, and the sound came in one burst a second. The app asks for 50 ms, or
+the driver's own low latency if that is longer. It does not go lower,
+because the callback is Python: while another thread holds the interpreter
+it waits, and a short buffer would overrun during a take. The player's
+output still takes the default. Two other layouts were
 drawn and dropped: a waveform per track growing as it records, which cannot
 be read from behind the kit, and markers dropped with a key during the take,
 which nobody would press while playing.

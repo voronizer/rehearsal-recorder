@@ -1,8 +1,10 @@
 import { cn } from "@/lib/utils"
 import { peakToDb } from "@/lib/format"
-import { CLIP_THRESHOLD, QUIET_THRESHOLD } from "@/lib/levels"
+import { CLIP_THRESHOLD, QUIET_THRESHOLD, meterReach } from "@/lib/levels"
 
 const percent = (peak: number) => Math.min(100, Math.max(0, peak * 100))
+/** How high the fill reaches, in dB as on the desk — see meterReach. */
+const reach = (peak: number) => meterReach(peak) * 100
 
 /**
  * One track while it records, as a tile that fills from the bottom with its
@@ -16,13 +18,16 @@ const percent = (peak: number) => Math.min(100, Math.max(0, peak * 100))
  * The writing on it shrinks with the tile rather than with the track count,
  * and what does not fit at that size — the input, the words — goes, leaving
  * the colour to say it: a red edge for a clip in the last minute, dimmed for
- * silence. The level in dB sits at the top, out of the name's way.
+ * silence. The latest peak in dB sits at the top, out of the name's way,
+ * and the fill is in dB too, from −60 at the bottom to full scale at the top,
+ * as on the desk the band sets its gain on.
  */
 export function TrackTile({
   name,
   channel,
   stereo,
   peaks,
+  shown,
   held,
   clips,
   silent,
@@ -32,6 +37,8 @@ export function TrackTile({
   stereo?: boolean
   /** One figure per side, 0..1. */
   peaks: number[]
+  /** Where each side's meter stands, falling back from its peaks, 0..1. */
+  shown: number[]
   /** The highest each side reached lately, 0..1. */
   held: number[]
   /** Clips in the last minute. */
@@ -39,7 +46,10 @@ export function TrackTile({
   silent: boolean
 }) {
   const sides = peaks.length ? peaks : [0]
-  const peak = Math.max(...sides)
+  // The figure is the peak the line holds, not the last poll's: that
+  // changed fourteen times a second, and what the eye kept of it was the
+  // troughs between the hits.
+  const peak = Math.max(...sides, ...held)
 
   return (
     <div
@@ -63,22 +73,24 @@ export function TrackTile({
             className="relative flex-1"
           >
             {/* Nothing at all for silence: a lit line along the bottom of a
-                dead input would read as a little signal. */}
-            {side >= QUIET_THRESHOLD && (
+                dead input would read as a little signal. The fill stands
+                where the meter has fallen back to, not at the last poll. */}
+            {(shown[i] ?? side) >= QUIET_THRESHOLD && (
               <div
+                data-fill
                 className={cn(
                   "absolute inset-x-0 bottom-0 border-t-2 transition-[height] duration-75",
                   side > CLIP_THRESHOLD
                     ? "border-destructive bg-destructive/25"
                     : "border-signal bg-signal/15"
                 )}
-                style={{ height: `${percent(side)}%` }}
+                style={{ height: `${reach(shown[i] ?? side)}%` }}
               />
             )}
             {(held[i] ?? 0) > QUIET_THRESHOLD && (
               <div
                 className="absolute inset-x-0 h-0.5 bg-foreground/35"
-                style={{ bottom: `${percent(held[i])}%` }}
+                style={{ bottom: `${reach(held[i])}%` }}
               />
             )}
           </div>
@@ -86,7 +98,9 @@ export function TrackTile({
       </div>
 
       <div className="relative grid h-full grid-rows-[auto_minmax(0,1fr)] gap-2 p-[clamp(0.375rem,7cqi,1.25rem)]">
-        <div className="flex flex-col items-end gap-1 text-right">
+        {/* On a card of their own: in dB a level that is set well stands
+            near the top, and the fill and its line ran through the figure. */}
+        <div className="flex flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:bg-card/85 [&>span]:px-1">
           <span
             className={cn(
               "tnum",

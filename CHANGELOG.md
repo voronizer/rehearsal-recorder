@@ -5,6 +5,30 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **The meters read like the mixer's.** When checking the signal and while
+  recording, the level is drawn in dB, from −60 at the bottom to full scale
+  at the top. With the gain set on the desk so that the loudest hit reaches
+  −18 dBFS, that hit fills about two thirds of a tile. Before, it filled an
+  eighth. The figure on a tile holds the latest peak for a moment, the way
+  the line does. It used to change fourteen times a second, and what the eye
+  kept of it was the quiet between the hits, far below the peak a mixer
+  shows. An input counts as silent below −60 dBFS. The line was −34, where
+  a quiet passage sits at that gain. So a singer between phrases dimmed as
+  silent, and an input played quietly read as silent on the setup screen
+  and in Check the interface. A meter rises at once and falls back 20 dB a
+  second, as on a desk; dropped to each moment's level, a voice made it
+  blink. The player's meter is unchanged.
+- **The meters follow the sound as it is played.** Inputs were opened with
+  whatever the driver calls its "high" latency. For FlexASIO that is a
+  second: the meters ran a second behind the voice, the sound came in one
+  burst a second, so a tile lit up and went dark, and a take's first sound
+  arrived two seconds after it started. Now the card is asked for 50 ms, or
+  its own low latency if that is longer. On FlexASIO that gives 64 ms, with
+  the first sound in under a third of a second. The level written to disk
+  is the one arriving from the card, as it always was.
+
 ## 0.7.11
 
 - **Settings › Under the hood** is a page to open when something has gone

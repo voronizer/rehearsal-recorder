@@ -330,6 +330,7 @@ export function Recording({
                 channel={t.channel}
                 stereo={t.stereo}
                 peaks={levels[t.name] ?? (t.stereo ? [0, 0] : [0])}
+                shown={seen?.shown ?? []}
                 held={seen?.hold.map((h) => h.peak) ?? []}
                 clips={clipsInLastMinute(seen, watch.at)}
                 silent={isSilent(seen, watch.at)}

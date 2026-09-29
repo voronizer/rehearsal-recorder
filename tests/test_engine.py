@@ -2855,6 +2855,8 @@ def main():
         delay = 0.0
         refuse = None
         made_on = []
+        # What each opening asked for, as PortAudio would be asked.
+        asked = []
         out_dirty = False
         # False: blocks of silence, the way a card with nothing plugged in sends.
         loud = True
@@ -2863,6 +2865,7 @@ def main():
             if self.refuse:
                 raise RuntimeError(self.refuse)
             _Card.made_on.append(_th.current_thread().name)
+            _Card.asked.append(kw)
             self.kw = kw
             self._halt = _th.Event()
             self._thread = None
@@ -2944,11 +2947,16 @@ def main():
         return False
 
     _Card.made_on.clear()
+    _Card.asked.clear()
     sent = listen(_Sends)
     ok("a card that sends is heard: it opened, and sound arrived",
        sent["opened"] and heard(sent))
     ok("it is opened the way the app opens a card, on the audio thread",
        _Card.made_on == ["audio"])
+    ok("and with the short latency a take asks for, not the driver's own",
+       len(_Card.asked) == 1
+       and isinstance(_Card.asked[0].get("latency"), float)
+       and 0 < _Card.asked[0]["latency"] <= 0.1)
     peaks = sent.get("peaks") or [0.0, 1.0]
     ok("each input's loudest moment is measured — the first loud, the second not",
        abs(peaks[0] - 0.25) < 0.01 and peaks[1] == 0)
@@ -3021,6 +3029,12 @@ def main():
     ok("none of them, with what to do about it",
        probemod.signal_line([0.0, 0.001])
        .startswith("sound arrives, but every input is silent"))
+    # Where the meters draw the line: a band sets its gain for the loudest
+    # hit, so an input played quietly sits around −48 dBFS, and a dead one on
+    # a desk's preamp lies far below −60.
+    ok("an input played quietly, at -48 dBFS, has signal; one at -66 does not",
+       probemod.signal_line([0.004, 0.0005])
+       == "signal on input 1; the rest silent")
 
     print("\n[29] Asking an ASIO card what it can do, without wearing it out")
     from rehearsal_recorder.audio.devices import recording_formats as _formats
@@ -4992,6 +5006,37 @@ def main():
             del _sd.get_portaudio_version
         else:
             _sd.get_portaudio_version = real_pa
+
+    print("\n[48] An input arrives as it is played, not a second later")
+    # Opened without a latency, PortAudio takes the driver's "high" one, and
+    # FlexASIO's is a second: the meters ran a second behind the voice, and
+    # the sound came in one burst a second, so a tile lit up and went dark
+    # rather than following it.
+    from rehearsal_recorder.audio.monitor import LevelMonitor
+
+    real_interface = _DEVICES[0]
+    _DEVICES[0] = {**real_interface, "default_low_input_latency": 0.02,
+                   "default_high_input_latency": 1.0}
+    try:
+        def latency_of(opened):
+            opened.start()
+            try:
+                return (opened._stream.kw or {}).get("latency")
+            finally:
+                opened.stop()
+
+        one = [{"name": "Gtr", "channel": 1}]
+        asked = latency_of(AudioRecorder(0, SR, one, Path(tempfile.mkdtemp()) / "t"))
+        ok("a take asks the card for a short latency, not its second-long one",
+           isinstance(asked, float) and 0 < asked <= 0.1)
+        asked = latency_of(LevelMonitor(0, SR, one))
+        ok("and so does the signal check",
+           isinstance(asked, float) and 0 < asked <= 0.1)
+        _DEVICES[0] = {**_DEVICES[0], "default_low_input_latency": 0.09}
+        asked = latency_of(AudioRecorder(0, SR, one, Path(tempfile.mkdtemp()) / "t"))
+        ok("but never less than what the driver itself calls low", asked == 0.09)
+    finally:
+        _DEVICES[0] = real_interface
 
     print("\n" + "=" * 60)
     if problems:

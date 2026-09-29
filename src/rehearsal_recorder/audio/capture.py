@@ -25,6 +25,7 @@ from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
     close_stream,
+    input_latency,
     open_stream,
 )
 from rehearsal_recorder.audio.format import (
@@ -263,6 +264,7 @@ class AudioRecorder:
                     samplerate=self.samplerate,
                     dtype=self._dtype,
                     blocksize=BLOCK_FRAMES,
+                    latency=input_latency(sd, self.device_index),
                     callback=self._callback,
                     finished_callback=self._finished,
                 )

@@ -14,9 +14,12 @@ the app is busy with it: a take's block that a slow disk takes seconds to
 swallow must not stop the take.
 
 Nor does the wait for the first block, up to a point. A driver can take a
-couple of seconds to start its card — FlexASIO's first block came two
-seconds after the stream started — and counted from the start, that is
+couple of seconds to start its card, and counted from the start, that is
 most of SILENCE_SEC gone before the card has had a chance to say anything.
+FlexASIO's first block came two seconds after the stream started while
+inputs were opened with the driver's "high" latency, a second's buffer;
+with the short one devices.input_latency asks for, it comes in a fraction
+of a second, but another driver can still be slow to start.
 """
 
 import time

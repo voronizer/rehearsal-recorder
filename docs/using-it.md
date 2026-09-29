@@ -86,10 +86,14 @@ laptop.
   3 times in the last minute" — and stays red for a minute after the last
   clip, so you still see it if you were playing when it happened. It turns
   yellow when the disk is about to run out.
-- **Each track has a tile** that fills from the bottom with its level. A
-  stereo track is split down the middle, left and right. A tile that clipped
-  gets a red edge. A tile with nothing coming in goes dim, which is normal
-  while someone is not playing.
+- **Each track has a tile** that fills from the bottom with its level. The
+  fill is in dB, like the meters on a mixer: −60 dB at the bottom, full
+  scale at the top. If the gain is set so that the loudest hit reaches about
+  −18 dB on the mixer, that hit fills about two thirds of the tile. The fill
+  jumps up with each hit and sinks back slowly, as on a mixer. The figure at
+  the top is the latest peak, held for a moment so that it can be read. A stereo track is split down the middle, left and right. A tile that
+  clipped gets a red edge. A tile with nothing coming in, below −60 dB, goes
+  dim, which is normal while someone is not playing.
 
 The top corner says that the interface is connected and how much recording
 time the disk has left.

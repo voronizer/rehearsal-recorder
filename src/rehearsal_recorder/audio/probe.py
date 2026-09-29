@@ -72,8 +72,11 @@ LISTEN_FIRST_SEC = 3.0
 FLOWING_SHARE = 0.5
 
 # Where the meters draw the line between signal and silence (QUIET_THRESHOLD
-# in ui/src/lib/levels.ts), so "silent" here means what it does on screen.
-SIGNAL_PEAK = 0.02
+# in ui/src/lib/levels.ts), so "silent" here means what it does on screen:
+# −60 dBFS, the bottom of the meters. A band sets its gain for the loudest
+# hit, so an input played quietly sits well above it, and a dead one on a
+# desk's preamp well below.
+SIGNAL_PEAK = 10 ** (-60 / 20)
 
 
 def attempts(samplerate, channels, bit_depth, driver_samplerate,
@@ -306,7 +309,11 @@ def try_attempt(sd, device_index, attempt, seconds=LISTEN_SEC, first_block=None)
     "expected", those two counts; "peaks", each input's loudest moment from
     0 to 1; and "error", the driver's words when it refused.
     """
-    from rehearsal_recorder.audio.devices import close_stream, open_stream
+    from rehearsal_recorder.audio.devices import (
+        close_stream,
+        input_latency,
+        open_stream,
+    )
 
     if first_block is None:
         first_block = heartbeat.FIRST_BLOCK_SEC
@@ -342,6 +349,9 @@ def try_attempt(sd, device_index, attempt, seconds=LISTEN_SEC, first_block=None)
         "samplerate": params["samplerate"],
         "dtype": params["dtype"],
         "blocksize": params["blocksize"],
+        # What a take asks for, so a card that cannot keep up with it is
+        # found out here rather than in the middle of a song.
+        "latency": input_latency(sd, device_index),
     }
     try:
         if params["kind"] == "duplex":

@@ -25,6 +25,7 @@ import { Kbd, Shell } from "@/components/Shell"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 import { aboutDuration, notConnected } from "@/lib/format"
+import { QUIET_THRESHOLD, fallBack, meterReach } from "@/lib/levels"
 import {
   api,
   type Device,
@@ -66,7 +67,10 @@ export function Setup({
   // Why the check stopped by itself: the card went quiet. True until the
   // next check, so it is said in place rather than as a notice.
   const [checkProblem, setCheckProblem] = useState<string | null>(null)
+  // Where each bar stands, falling back from its peaks as on the recording
+  // screen, and when it was last moved.
   const [levels, setLevels] = useState<Record<string, number[]>>({})
+  const levelsAt = useRef(0)
   const [seen, setSeen] = useState<Record<string, boolean>>({})
   const checkingRef = useRef(false)
 
@@ -214,6 +218,7 @@ export function Setup({
     checkingRef.current = false
     setChecking(false)
     setLevels({})
+    levelsAt.current = 0
     await stopMonitorQuietly()
   }
 
@@ -237,13 +242,23 @@ export function Setup({
       try {
         const next = await pollPython("monitor_levels")
         if (!checkingRef.current) return
-        setLevels(next)
+        const now = Date.now()
+        const since = levelsAt.current ? now - levelsAt.current : 0
+        levelsAt.current = now
+        setLevels((prev) =>
+          Object.fromEntries(
+            Object.entries(next).map(([trackName, sides]) => [
+              trackName,
+              sides.map((p, i) => fallBack(prev[trackName]?.[i] ?? 0, p, since)),
+            ])
+          )
+        )
         setSeen((prev) => {
           const merged = { ...prev }
           for (const [trackName, sides] of Object.entries(next)) {
             // Every side has to arrive before a track counts as checked: half
             // a stereo pair is exactly what this screen is here to catch.
-            if (sides.length && sides.every((p) => p > 0.02)) {
+            if (sides.length && sides.every((p) => p > QUIET_THRESHOLD)) {
               merged[trackName] = true
             }
           }
@@ -593,14 +608,18 @@ export function Setup({
                     {/* One bar of the usual height, split along its length for
                         a stereo track: left above, right below. A dead half
                         of a pair has to be visible here or the check has not
-                        done its job. */}
-                    <div className="relative h-2 flex-1 overflow-hidden rounded-full border bg-background">
+                        done its job. In dB, as on the recording screen and
+                        the desk. */}
+                    <div
+                      data-meter={track.name}
+                      className="relative h-2 flex-1 overflow-hidden rounded-full border bg-background"
+                    >
                       {(levels[track.name] ?? [0]).map((side, i, all) => (
                         <div
                           key={i}
                           className="absolute left-0 bg-signal transition-[width] duration-75"
                           style={{
-                            width: `${Math.min(100, side * 100)}%`,
+                            width: `${meterReach(side) * 100}%`,
                             top: all.length > 1 && i === 1 ? "50%" : 0,
                             bottom: all.length > 1 && i === 0 ? "50%" : 0,
                           }}

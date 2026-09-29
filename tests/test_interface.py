@@ -274,7 +274,8 @@ window.__MAKE_API__ = () => ({
     minutes_left: window.__LOW_SPACE__ ? 5 : 640, low_space: !!window.__LOW_SPACE__}),
 
   start_monitor: track('start_monitor', async () => ({ok:true})),
-  monitor_levels: track('monitor_levels', async () => ({'Guitar':[0.62], 'Vocals':[0.004]})),
+  monitor_levels: track('monitor_levels', async () =>
+    window.__MONITOR_LEVELS__ || ({'Guitar':[0.62], 'Vocals':[0.0004]})),
   monitor_health: async () => ({checking:true, problem: window.__CHECK_QUIET__ || null}),
 
   // Long work, scripted by the test through window.__ACTIVITY__.
@@ -325,7 +326,11 @@ window.__MAKE_API__ = () => ({
 
   start_take: track('start_take', async () => { takeCounter += 1; return {ok:true, take_number:takeCounter}; }),
   // One input pinned at the top and one silent, unless a test plays its own.
-  get_levels: async () => window.__LEVELS__ || ({'Guitar':[0.99], 'Vocals':[0.005]}),
+  // Counted, so a test can wait for the page to have asked again.
+  get_levels: async () => {
+    window.__LEVEL_POLLS__ = (window.__LEVEL_POLLS__ || 0) + 1;
+    return window.__LEVELS__ || ({'Guitar':[0.99], 'Vocals':[0.0005]});
+  },
   stop_take: track('stop_take', async () => (await held('stop_take'), {ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
     duration_sec:TAKE, suggested_name:suggestName(takeCounter),
     tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]})),
@@ -818,7 +823,52 @@ def main():
         ok("levels are polled", len(calls("monitor_levels")) > 2)
         ok("one input shows signal", page.locator("text=signal").count() > 0)
         ok("the other shows silence", page.locator("text=silent").count() > 0)
+        # In dB, like the recording screen and the desk: −4 dBFS is most of
+        # the bar. On a straight scale it was three fifths of it, and −18,
+        # where a band sets its gain, an eighth.
+        guitar_reach = """() => {
+          const m = document.querySelector("[data-meter='Guitar']");
+          const bar = m && m.firstElementChild;
+          return m && bar
+            ? bar.getBoundingClientRect().width / m.getBoundingClientRect().width
+            : 0;
+        }"""
+        reach = page.evaluate(guitar_reach)
+        ok("the check's bar is drawn in dB: -4 dBFS fills nine tenths of it",
+           0.88 < reach < 0.97)
         page.screenshot(path=str(SHOTS / "51-setup.png"))
+        # A quiet input is not a dead one: with the gain set for the loudest
+        # hit, whole passages sit around −48 dBFS.
+        page.evaluate("() => { window.__MONITOR_LEVELS__ = "
+                      "{'Guitar':[0.62], 'Vocals':[0.004]}; }")
+        try:
+            page.wait_for_function(
+                "() => !document.body.innerText.includes('silent')", timeout=6000)
+        except Exception:
+            pass
+        ok("an input playing quietly, at -48 dBFS, counts as signal",
+           page.locator("text=silent").count() == 0)
+        # A meter rises at once and falls back at a steady rate, as on the
+        # desk. Dropping to each poll's level made a voice blink: in dB the
+        # quiet between two syllables is half the bar.
+        page.evaluate("() => { window.__MONITOR_LEVELS__ = "
+                      "{'Guitar':[0.0004], 'Vocals':[0.004]}; }")
+        polls = len(calls("monitor_levels"))
+        try:
+            page.wait_for_function(
+                "() => window.__CALLS__.filter(c => c.name === 'monitor_levels')"
+                f".length >= {polls + 2}", timeout=6000)
+        except Exception:
+            pass
+        ok("the check's bar falls back, rather than dropping the moment the sound does",
+           page.evaluate(guitar_reach) > 0.3)
+        try:
+            page.wait_for_function(f"() => ({guitar_reach})() < 0.05", timeout=8000)
+        except Exception:
+            pass
+        ok("and is at the bottom within a few seconds",
+           page.evaluate(guitar_reach) < 0.05)
+        page.evaluate("() => { window.__MONITOR_LEVELS__ = null; }")
         ok("Start rehearsal carries its key",
            key_on(page, "button:has-text('Start rehearsal')") == "Space")
         page.click("text=Stop checking")
@@ -3047,6 +3097,12 @@ def main():
                          "[aria-label='Vocals']\")?.dataset.silent !== undefined) === "
                          + ("true" if yes else "false"))
 
+        def polled():
+            """Until the page has asked for the levels twice more, so that
+            what is on the tiles comes from after whatever the test did."""
+            n = far.evaluate("() => window.__LEVEL_POLLS__ || 0")
+            return until(f"() => (window.__LEVEL_POLLS__ || 0) >= {n + 2}")
+
         def timer_like(pattern):
             return until("() => /" + pattern + "/.test(document.querySelector("
                          "\"[role=timer]\")?.innerText.trim() ?? '')")
@@ -3087,7 +3143,15 @@ def main():
            re.fullmatch(r"1:0\d", (text_of(far.get_by_role("timer")) or ""))
            is not None)
 
+        # A quiet singer is not a dead input: with the gain set for the
+        # loudest hit, whole passages sit around −48 dBFS.
         levels(0.5, 0.004)
+        vocals_at(0)
+        far.clock.fast_forward(2_000)
+        polled()
+        ok("a track playing quietly, at -48 dBFS, is not called silent",
+           attr_of(vocals, "data-silent") is None)
+        levels(0.5, 0.0005)
         vocals_silent(True)
         ok("a track gone quiet dims, with no alarm: a singer between verses is quiet",
            attr_of(vocals, "data-silent") is not None
@@ -3096,6 +3160,52 @@ def main():
         vocals_silent(False)
         ok("and lights up again the moment it plays",
            attr_of(vocals, "data-silent") is None)
+
+        # The fill is in dB, as on the desk. A band sets its gain for the
+        # loudest hit to reach about −18 dBFS, which on a straight scale was
+        # an eighth of the tile: "much lower than on the mixer".
+        reach = """() => {
+          const side = document.querySelector(
+            "main [role=group][aria-label='Vocals'] [data-side='1']");
+          const fill = side && side.querySelector('[data-fill]');
+          return side && fill
+            ? fill.getBoundingClientRect().height / side.getBoundingClientRect().height
+            : 0;
+        }"""
+        levels(0.5, 0.126)
+        vocals_at(13)
+        until(f"() => {{ const r = ({reach})(); return r > 0.65 && r < 0.75; }}")
+        ok("-18 dBFS fills about seven tenths of the tile, as it would on the desk",
+           0.65 < far.evaluate(reach) < 0.75)
+
+        # A meter rises at once and falls back at a steady rate, as on the
+        # desk. Dropping to each poll's level made a voice blink: in dB the
+        # quiet between two syllables is half a tile.
+        levels(0.5, 0.5)
+        vocals_at(50)
+        until(f"() => ({reach})() > 0.85")
+        levels(0.5, 0.0005)
+        vocals_at(0)
+        ok("a tile falls back, rather than dropping the moment the sound does",
+           far.evaluate(reach) > 0.3)
+        far.clock.fast_forward(3_000)
+        until(f"() => ({reach})() < 0.05")
+        ok("and is at the bottom within a few seconds", far.evaluate(reach) < 0.05)
+
+        # The figure is the peak the line holds, not the last poll's: that
+        # changed fourteen times a second, and what the eye kept of it was
+        # the troughs between the hits.
+        levels(0.5, 0.5)
+        vocals_at(50)
+        levels(0.5, 0.126)
+        vocals_at(13)
+        ok("the figure on a tile holds the latest peak",
+           "-6.0 dB" in (text_of(vocals) or ""))
+        far.clock.fast_forward(2_000)
+        until("() => document.querySelector(\"main [role=group]"
+              "[aria-label='Vocals']\")?.innerText.includes('-18.0')")
+        ok("and comes down to the level once the hold is over",
+           "-18.0 dB" in (text_of(vocals) or ""))
 
         levels(0.5, 0.99)
         vocals_at(99)

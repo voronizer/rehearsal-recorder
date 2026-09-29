@@ -48,6 +48,24 @@ DRIVER_PATIENCE_SEC = 15
 # run()'s default: DRIVER_PATIENCE_SEC as it stands when the call is made.
 _PATIENCE = object()
 
+# How far behind the card an input may run. Opened without a latency,
+# PortAudio takes the driver's "high" one, and FlexASIO's is a second: the
+# meters ran a second behind the voice, and the sound came in one burst a
+# second, so a tile lit up and went dark rather than following it. Never less
+# than what the driver itself calls low, and never less than this, which
+# leaves the callback room to wait while another thread holds the interpreter.
+INPUT_LATENCY_SEC = 0.05
+
+
+def input_latency(sd, device_index):
+    """The latency, in seconds, to open device_index's inputs with."""
+    try:
+        low = float(sd.query_devices(device_index)["default_low_input_latency"])
+    except Exception:
+        return INPUT_LATENCY_SEC
+    return max(low, INPUT_LATENCY_SEC)
+
+
 NOT_ANSWERING = (
     "The audio driver has stopped answering, so nothing can be opened or "
     "closed until it does. Unplug the interface and plug it back in; if that "

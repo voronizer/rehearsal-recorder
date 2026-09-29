@@ -207,10 +207,13 @@ api.recording_health = async () => ({recording: true, error: null, active: true,
   free_bytes: 61e9, minutes_left: 1720, low_space: false});
 
 // Meters, from a chorus as it would be playing now: the loud part, with
-// everyone in, is what a level check is for.
+// everyone in, is what a level check is for. At the level a band sets its
+// gain for, the loudest hit reaching about −18 dBFS, since the meters are in
+// dB and a song at full scale would stand every tile at the top.
 const song = () => SECTION('chorus') + (performance.now() / 1000) % 12;
+const AS_SET = 10 ** (-18 / 20);
 const meters = () => Object.fromEntries(PARTS.map(p =>
-  [p.name, [VOICE[p.name](song(), {seed: 9, end: SONG_END})]]));
+  [p.name, [AS_SET * VOICE[p.name](song(), {seed: 9, end: SONG_END})]]));
 api.monitor_levels = async () => meters();
 api.get_levels = async () => meters();
 levels = function () {

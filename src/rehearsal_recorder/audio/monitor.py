@@ -15,6 +15,7 @@ from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
     close_stream,
+    input_latency,
     open_stream,
 )
 
@@ -85,6 +86,7 @@ class LevelMonitor:
                 samplerate=self.samplerate,
                 dtype="int16",
                 blocksize=BLOCK_FRAMES,
+                latency=input_latency(sd, self.device_index),
                 callback=self._callback,
             )
         self._heartbeat.start()

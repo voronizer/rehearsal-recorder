@@ -10,8 +10,41 @@
 
 /** A peak this close to full scale is a clip. */
 export const CLIP_THRESHOLD = 0.97
-/** Below this an input is taken to be silent. */
-export const QUIET_THRESHOLD = 0.02
+/**
+ * The bottom of every meter, in dB below full scale, as on a desk. A band
+ * sets its gain for the loudest hit to reach about −18 dBFS: on a straight
+ * scale that was an eighth of a meter, and the quiet passages were nothing.
+ */
+export const METER_FLOOR_DB = -60
+/**
+ * Below this an input is taken to be silent: the bottom of the meters. It
+ * was −34 dBFS, where a singer playing quietly with the gain set for the
+ * loudest hit sits, and a dead input on a desk's preamp lies far below this.
+ */
+export const QUIET_THRESHOLD = 10 ** (METER_FLOOR_DB / 20)
+
+/**
+ * How fast a meter falls back once the sound drops, as on a desk; it rises at
+ * once. Dropping to each poll's level made a voice blink: in dB the quiet
+ * between two syllables is half a tile.
+ */
+export const METER_FALL_DB_PER_SEC = 20
+
+/**
+ * Where a meter stands (a peak, 0..1) `ms` after it stood at `was`, now that
+ * the latest peak is `peak`.
+ */
+export function fallBack(was: number, peak: number, ms: number): number {
+  const fallen = was * 10 ** ((-METER_FALL_DB_PER_SEC * Math.max(0, ms)) / 20_000)
+  return Math.max(peak, fallen)
+}
+
+/** How far up a meter a peak (0..1) reaches, 0..1, on a scale in dB. */
+export function meterReach(peak: number): number {
+  if (!(peak > 0)) return 0
+  const db = 20 * Math.log10(peak)
+  return Math.min(1, Math.max(0, 1 - db / METER_FLOOR_DB))
+}
 /** How long a clip is remembered. */
 export const CLIP_MEMORY_MS = 60_000
 /** How long a track stays quiet before it is called silent. */
@@ -28,6 +61,10 @@ export type TrackWatch = {
   quietSince: number | null
   /** The highest peak each side reached lately, and when. */
   hold: { peak: number; at: number }[]
+  /** Where each side's meter stands, falling back from its peaks. */
+  shown: number[]
+  /** When this poll was. */
+  at: number
 }
 
 /** The track's state after one more poll of its peaks (0..1, one per side). */
@@ -50,7 +87,9 @@ export function watchStep(
       ? held
       : { peak, at: now }
   })
-  return { clips, clipping, quietSince, hold }
+  const since = prev ? now - prev.at : 0
+  const shown = sides.map((peak, i) => fallBack(prev?.shown[i] ?? 0, peak, since))
+  return { clips, clipping, quietSince, hold, shown, at: now }
 }
 
 /** Quiet for long enough to say so. */
