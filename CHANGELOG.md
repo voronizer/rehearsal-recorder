@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.13
 
 - **The player has a Master for the whole take**, under the tracks, as on a
   desk. It is for listening: turning the band down meant pulling every
