@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.11
 
 - **Settings › Under the hood** is a page to open when something has gone
   wrong. It says which version this is and whether it is the built app, what
