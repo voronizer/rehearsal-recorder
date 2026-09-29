@@ -125,6 +125,13 @@ function levels() {
     return [n, [silent ? 0 : Math.round(raw * P.volumes[n] * 1000) / 1000]];
   }));
 }
+// The whole mix after the master, the way player.py measures it: the tracks
+// add up, and a sum past full scale reads full.
+function masterLevel() {
+  if (!P || !P.playing) return 0;
+  const sum = Object.values(levels()).reduce((a, v) => a + v[0], 0);
+  return Math.min(1, Math.round(sum * P.master * 1000) / 1000);
+}
 // A test can hold a call where it is — window.__HOLD__[name], a promise it
 // resolves when it has seen what it came to see.
 async function held(name) {
@@ -136,7 +143,7 @@ function playerState() {
   if (!P) return {open:false};
   return {open:true, ok:true, playing:P.playing, position:position(), duration:P.duration,
           loop:P.loop, muted:P.muted, soloed:P.soloed, volumes:P.volumes, master:P.master,
-          levels:levels()};
+          levels:levels(), master_level:masterLevel()};
 }
 function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = clock(); }
 
@@ -1419,9 +1426,12 @@ def main():
         page.wait_for_timeout(300)
 
         print("\n[9b] One volume for the whole take")
-        master = page.get_by_role("slider", name="Volume", exact=True)
-        ok("the transport has a volume for the whole take, at full to begin with",
+        master = page.get_by_role("slider", name="Master volume", exact=True)
+        ok("under the tracks is a master for the whole take, at full to begin with",
            master.input_value() == "1")
+        ok("below the last of them",
+           master.bounding_box()["y"]
+           > page.get_by_role("slider", name="Vocals volume").bounding_box()["y"])
         mixes = len(calls("save_mix"))
         spot = master.bounding_box()
         page.mouse.click(spot["x"] + spot["width"] * 0.3,
@@ -1438,11 +1448,16 @@ def main():
         # A fader is an input, and every key used to go dead once one had
         # been touched.
         page.keyboard.press("Space")
-        page.wait_for_timeout(300)
+        page.wait_for_timeout(600)
         ok("Space right after it still plays",
            len(calls("player_toggle")) == toggles + 3)
+        master_meter = page.get_by_role("meter", name="Master level")
+        ok("and the master's meter shows the whole mix as it plays",
+           int(master_meter.get_attribute("aria-valuenow")) > 0)
         page.keyboard.press("Space")
         page.wait_for_timeout(300)
+        ok("and rests when it stops",
+           master_meter.get_attribute("aria-valuenow") == "0")
         master_level = master.input_value()
 
         # The same for every other key of the player: a fader dragged with
@@ -1464,15 +1479,15 @@ def main():
            len(calls("player_seek")) == seeks + 1
            and master.input_value() == master_level)
         # Reached with the keyboard, the fader is what the arrows are aimed at.
-        page.focus("button[aria-label='Player keys']")
-        page.keyboard.press("Shift+Tab")
+        page.focus("input[aria-label='Vocals volume']")
+        page.keyboard.press("Tab")
         seeks = len(calls("player_seek"))
         tabbed = page.evaluate("document.activeElement.getAttribute('aria-label')")
-        if tabbed == "Volume":
+        if tabbed == "Master volume":
             page.keyboard.press("ArrowLeft")
             page.wait_for_timeout(300)
         ok("a fader reached with Tab keeps its arrows",
-           tabbed == "Volume" and len(calls("player_seek")) == seeks
+           tabbed == "Master volume" and len(calls("player_seek")) == seeks
            and float(master.input_value()) < float(master_level))
         page.keyboard.press("ArrowRight")
         page.evaluate("document.activeElement.blur()")

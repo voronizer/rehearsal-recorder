@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { LaneControls } from "@/components/LaneControls"
+import { LaneControls, MasterControls } from "@/components/LaneControls"
 import { Waveform } from "@/components/Waveform"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
@@ -238,239 +238,266 @@ export function Timeline({
   const ticks = tickTimes(from, to, width)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div
-        className="grid min-h-0 flex-1"
-        style={{
-          gridTemplateColumns: `${GUTTER_PX}px 1fr`,
-          // `repeat(0, …)` is invalid, which drops the whole declaration —
-          // and rows is 0 on every load until the first track's media
-          // arrives, permanently so once loadError is set.
-          gridTemplateRows:
-            rows > 0
-              ? `${RULER_PX}px repeat(${rows}, minmax(${LANE_MIN_PX}px, 1fr))`
-              : `${RULER_PX}px`,
-          gap: `${ROW_GAP_PX}px 12px`,
-          // Two tracks in a tall window would otherwise give lanes the height
-          // of a door. Past this the leftover space simply stays empty, which
-          // is honest about there being room for more tracks.
-          maxHeight: RULER_PX + rows * (LANE_MAX_PX + ROW_GAP_PX),
-        }}
-      >
-        {/* Every child below is placed explicitly. The surface (further down)
-            is also explicitly placed, spanning all of column 2 — leaving any
-            other child to auto-place would make CSS grid skip that occupied
-            column entirely and stack everything into column 1 instead. */}
+    <>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div
-          className="flex items-end justify-between gap-2 pb-1 text-xs text-muted-foreground"
-          style={{ gridColumn: 1, gridRow: 1 }}
+          className="grid min-h-0 flex-1"
+          style={{
+            gridTemplateColumns: `${GUTTER_PX}px 1fr`,
+            // `repeat(0, …)` is invalid, which drops the whole declaration —
+            // and rows is 0 on every load until the first track's media
+            // arrives, permanently so once loadError is set.
+            gridTemplateRows:
+              rows > 0
+                ? `${RULER_PX}px repeat(${rows}, minmax(${LANE_MIN_PX}px, 1fr))`
+                : `${RULER_PX}px`,
+            gap: `${ROW_GAP_PX}px 12px`,
+            // Two tracks in a tall window would otherwise give lanes the height
+            // of a door. Past this the leftover space simply stays empty, which
+            // is honest about there being room for more tracks.
+            maxHeight: RULER_PX + rows * (LANE_MAX_PX + ROW_GAP_PX),
+          }}
         >
-          {player.view ? (
-            <>
-              {/* Wraps rather than truncates: "0:04 - 0:06 · closest" does
-                  not fit the gutter beside the button on one line, and a
-                  read-out cut off mid-word says less than no read-out. */}
-              <span className="leading-tight">
-                <span className="tnum">
-                  {formatMMSS(from)} – {formatMMSS(to)}
+          {/* Every child below is placed explicitly. The surface (further down)
+              is also explicitly placed, spanning all of column 2 — leaving any
+              other child to auto-place would make CSS grid skip that occupied
+              column entirely and stack everything into column 1 instead. */}
+          <div
+            className="flex items-end justify-between gap-2 pb-1 text-xs text-muted-foreground"
+            style={{ gridColumn: 1, gridRow: 1 }}
+          >
+            {player.view ? (
+              <>
+                {/* Wraps rather than truncates: "0:04 - 0:06 · closest" does
+                    not fit the gutter beside the button on one line, and a
+                    read-out cut off mid-word says less than no read-out. */}
+                <span className="leading-tight">
+                  <span className="tnum">
+                    {formatMMSS(from)} – {formatMMSS(to)}
+                  </span>
+                  {/* Otherwise the wheel simply stops answering and the reason
+                      is invisible — the window is as narrow as it goes. */}
+                  {span <= MIN_VIEW_SEC + 0.01 && " · closest"}
                 </span>
-                {/* Otherwise the wheel simply stops answering and the reason
-                    is invisible — the window is as narrow as it goes. */}
-                {span <= MIN_VIEW_SEC + 0.01 && " · closest"}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 shrink-0 px-2 text-xs"
-                onClick={player.resetView}
-              >
-                Whole take
-              </Button>
-            </>
-          ) : (
-            <span>{band ? "Drag the edges" : "Drag across to loop"}</span>
-          )}
-        </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 shrink-0 px-2 text-xs"
+                  onClick={player.resetView}
+                >
+                  Whole take
+                </Button>
+              </>
+            ) : (
+              <span>{band ? "Drag the edges" : "Drag across to loop"}</span>
+            )}
+          </div>
 
-        <div
-          role="group"
-          aria-label="Timeline clock"
-          className="relative border-b"
-          style={{ gridColumn: 2, gridRow: 1 }}
-        >
-          {ticks.map((t) => (
-            <Fragment key={t}>
-              <span
-                className="absolute top-4 bottom-0 w-px bg-border"
-                style={{ left: `${pct(t)}%` }}
-              />
-              {/* A tick just short of the end has no room for its label on
-                  the right, so it goes on the left of the line instead.
-                  Left hanging past the edge, it widened the lanes' scroll
-                  container — overflow-y: auto makes overflow-x auto too — and
-                  a sideways scrollbar appeared under the last track. */}
-              <span
-                className={cn(
-                  "tnum absolute top-0 text-[11px] text-muted-foreground",
-                  ((to - t) / (to - from)) * width < TICK_LABEL_PX
-                    ? "-translate-x-full pr-1.5"
-                    : "pl-1.5"
-                )}
-                style={{ left: `${pct(t)}%` }}
-              >
-                {formatMMSS(t)}
-              </span>
-            </Fragment>
-          ))}
-        </div>
-
-        {media.map((m, i) => {
-          const muted = player.isMuted(m.name)
-          const soloed = player.isSoloed(m.name)
-          const dimmed = muted || (player.hasSolo && !soloed)
-          return (
-            <Fragment key={m.name}>
-              <div
-                className="min-h-0"
-                style={{ gridColumn: 1, gridRow: i + 2 }}
-              >
-                <LaneControls
-                  name={m.name}
-                  muted={muted}
-                  soloed={soloed}
-                  dimmed={dimmed}
-                  volume={player.getVolume(m.name)}
-                  level={player.getLevel(m.name)}
-                  onToggleMute={() => player.toggleMute(m.name)}
-                  onToggleSolo={() => player.toggleSolo(m.name)}
-                  onVolume={(v) => player.setVolume(m.name, v)}
-                  onVolumeCommit={player.persistVolumes}
-                />
-              </div>
-
-              <div className="min-w-0" style={{ gridColumn: 2, gridRow: i + 2 }}>
-                <Waveform
-                  peaks={m.peaks}
-                  peaksFrom={player.peaksWindow.from}
-                  peaksTo={player.peaksWindow.to}
-                  viewFrom={from}
-                  viewTo={to}
-                  position={position}
-                  dimmed={dimmed}
-                  className={cn("h-full rounded-lg border", dimmed && "opacity-60")}
-                />
-              </div>
-            </Fragment>
-          )
-        })}
-
-        <div
-          ref={surfaceRef}
-          role="group"
-          aria-label="Take timeline"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={finishPointer}
-          onPointerCancel={cancelPointer}
-          className="relative cursor-crosshair overflow-hidden select-none"
-          style={{ gridColumn: 2, gridRow: "1 / -1", touchAction: "none" }}
-        >
-          {band && (
-            <span
-              className="pointer-events-none absolute border-x border-warn/60 bg-warn/10"
-              style={{
-                left: `${pct(band.a)}%`,
-                width: `${pct(band.b) - pct(band.a)}%`,
-                top: RULER_PX,
-                bottom: 0,
-              }}
-            />
-          )}
-
-          {/* Only while the band actually overlaps the window — otherwise the
-              rectangle is correctly clipped away by overflow-hidden, but the
-              chip has nowhere honest to sit and would be left pinned to an
-              edge, labelling a stretch of the take it has nothing to do
-              with. */}
-          {band && band.b >= from && band.a <= to && (
-            <span
-              data-region-span
-              className="pointer-events-none absolute rounded bg-warn px-1.5 py-px text-[11px] text-warn-foreground tnum"
-              style={{ left: `${Math.max(0, pct(band.a))}%`, top: RULER_PX + 6, marginLeft: 8 }}
-            >
-              {formatMMSS(band.a)} – {formatMMSS(band.b)}
-            </span>
-          )}
-
-          {markers
-            .filter((m) => m.at >= from && m.at <= to)
-            .map((m) => (
-              <Fragment key={m.at}>
+          <div
+            role="group"
+            aria-label="Timeline clock"
+            className="relative border-b"
+            style={{ gridColumn: 2, gridRow: 1 }}
+          >
+            {ticks.map((t) => (
+              <Fragment key={t}>
                 <span
-                  className="pointer-events-none absolute w-0.5 opacity-60"
-                  style={{
-                    left: `${pct(m.at)}%`,
-                    top: RULER_PX,
-                    bottom: 0,
-                    background: `var(${markerStyle(m.kind).cssVar})`,
-                  }}
+                  className="absolute top-4 bottom-0 w-px bg-border"
+                  style={{ left: `${pct(t)}%` }}
                 />
+                {/* A tick just short of the end has no room for its label on
+                    the right, so it goes on the left of the line instead.
+                    Left hanging past the edge, it widened the lanes' scroll
+                    container — overflow-y: auto makes overflow-x auto too — and
+                    a sideways scrollbar appeared under the last track. */}
                 <span
-                  data-marker-at={m.at}
-                  className="pointer-events-none absolute size-2.5 -translate-x-1 rotate-45 rounded-[2px]"
-                  style={{
-                    left: `${pct(m.at)}%`,
-                    top: RULER_PX - 13,
-                    background: `var(${markerStyle(m.kind).cssVar})`,
-                  }}
-                />
+                  className={cn(
+                    "tnum absolute top-0 text-[11px] text-muted-foreground",
+                    ((to - t) / (to - from)) * width < TICK_LABEL_PX
+                      ? "-translate-x-full pr-1.5"
+                      : "pl-1.5"
+                  )}
+                  style={{ left: `${pct(t)}%` }}
+                >
+                  {formatMMSS(t)}
+                </span>
               </Fragment>
             ))}
+          </div>
 
-          {/* The grab target lives entirely inside the ruler band, not down
-              the whole lane height — a press anywhere on the tracks always
-              starts a fresh region. The full-height band border above still
-              marks the edge through the lanes; this is only where you take
-              hold of it. The ruler's own height is this project's minimum
-              touch target, and a higher z-index keeps it from losing presses
-              to the playhead grip, which occupies the same band. Each handle
-              only appears once its own end is actually set — a region with
-              just an A has nothing to grab at B yet. */}
-          {region.a !== null && (
-            <span
-              onPointerDown={grabHandle("a")}
-              className="absolute z-10 flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
-              style={{ left: `${pct(region.a)}%`, top: 0, height: RULER_PX }}
-            >
-              <span className="h-11 w-1.5 rounded-full bg-warn" />
-            </span>
-          )}
-          {region.b !== null && (
-            <span
-              onPointerDown={grabHandle("b")}
-              className="absolute z-10 flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
-              style={{ left: `${pct(region.b)}%`, top: 0, height: RULER_PX }}
-            >
-              <span className="h-11 w-1.5 rounded-full bg-warn" />
-            </span>
-          )}
+          {media.map((m, i) => {
+            const muted = player.isMuted(m.name)
+            const soloed = player.isSoloed(m.name)
+            const dimmed = muted || (player.hasSolo && !soloed)
+            return (
+              <Fragment key={m.name}>
+                <div
+                  className="min-h-0"
+                  style={{ gridColumn: 1, gridRow: i + 2 }}
+                >
+                  <LaneControls
+                    name={m.name}
+                    muted={muted}
+                    soloed={soloed}
+                    dimmed={dimmed}
+                    volume={player.getVolume(m.name)}
+                    level={player.getLevel(m.name)}
+                    onToggleMute={() => player.toggleMute(m.name)}
+                    onToggleSolo={() => player.toggleSolo(m.name)}
+                    onVolume={(v) => player.setVolume(m.name, v)}
+                    onVolumeCommit={player.persistVolumes}
+                  />
+                </div>
 
-          <span
-            className="pointer-events-none absolute w-0.5 bg-primary"
-            style={{ left: `${pct(displayPosition)}%`, top: RULER_PX - 14, bottom: 0 }}
-          />
-          {/* Dragging the waveform used to scrub. That gesture now draws the
-              region, so scrubbing gets a grip of its own rather than being
-              quietly dropped. Local while held, same as the edges — see
-              `displayPosition`. */}
-          <span
-            onPointerDown={grabHandle("position")}
-            aria-hidden="true"
-            className="absolute size-3 -translate-x-1.5 cursor-ew-resize rounded-full bg-primary"
-            style={{ left: `${pct(displayPosition)}%`, top: RULER_PX - 20 }}
-          />
+                <div className="min-w-0" style={{ gridColumn: 2, gridRow: i + 2 }}>
+                  <Waveform
+                    peaks={m.peaks}
+                    peaksFrom={player.peaksWindow.from}
+                    peaksTo={player.peaksWindow.to}
+                    viewFrom={from}
+                    viewTo={to}
+                    position={position}
+                    dimmed={dimmed}
+                    className={cn("h-full rounded-lg border", dimmed && "opacity-60")}
+                  />
+                </div>
+              </Fragment>
+            )
+          })}
+
+          <div
+            ref={surfaceRef}
+            role="group"
+            aria-label="Take timeline"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={finishPointer}
+            onPointerCancel={cancelPointer}
+            className="relative cursor-crosshair overflow-hidden select-none"
+            style={{ gridColumn: 2, gridRow: "1 / -1", touchAction: "none" }}
+          >
+            {band && (
+              <span
+                className="pointer-events-none absolute border-x border-warn/60 bg-warn/10"
+                style={{
+                  left: `${pct(band.a)}%`,
+                  width: `${pct(band.b) - pct(band.a)}%`,
+                  top: RULER_PX,
+                  bottom: 0,
+                }}
+              />
+            )}
+
+            {/* Only while the band actually overlaps the window — otherwise the
+                rectangle is correctly clipped away by overflow-hidden, but the
+                chip has nowhere honest to sit and would be left pinned to an
+                edge, labelling a stretch of the take it has nothing to do
+                with. */}
+            {band && band.b >= from && band.a <= to && (
+              <span
+                data-region-span
+                className="pointer-events-none absolute rounded bg-warn px-1.5 py-px text-[11px] text-warn-foreground tnum"
+                style={{ left: `${Math.max(0, pct(band.a))}%`, top: RULER_PX + 6, marginLeft: 8 }}
+              >
+                {formatMMSS(band.a)} – {formatMMSS(band.b)}
+              </span>
+            )}
+
+            {markers
+              .filter((m) => m.at >= from && m.at <= to)
+              .map((m) => (
+                <Fragment key={m.at}>
+                  <span
+                    className="pointer-events-none absolute w-0.5 opacity-60"
+                    style={{
+                      left: `${pct(m.at)}%`,
+                      top: RULER_PX,
+                      bottom: 0,
+                      background: `var(${markerStyle(m.kind).cssVar})`,
+                    }}
+                  />
+                  <span
+                    data-marker-at={m.at}
+                    className="pointer-events-none absolute size-2.5 -translate-x-1 rotate-45 rounded-[2px]"
+                    style={{
+                      left: `${pct(m.at)}%`,
+                      top: RULER_PX - 13,
+                      background: `var(${markerStyle(m.kind).cssVar})`,
+                    }}
+                  />
+                </Fragment>
+              ))}
+
+            {/* The grab target lives entirely inside the ruler band, not down
+                the whole lane height — a press anywhere on the tracks always
+                starts a fresh region. The full-height band border above still
+                marks the edge through the lanes; this is only where you take
+                hold of it. The ruler's own height is this project's minimum
+                touch target, and a higher z-index keeps it from losing presses
+                to the playhead grip, which occupies the same band. Each handle
+                only appears once its own end is actually set — a region with
+                just an A has nothing to grab at B yet. */}
+            {region.a !== null && (
+              <span
+                onPointerDown={grabHandle("a")}
+                className="absolute z-10 flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
+                style={{ left: `${pct(region.a)}%`, top: 0, height: RULER_PX }}
+              >
+                <span className="h-11 w-1.5 rounded-full bg-warn" />
+              </span>
+            )}
+            {region.b !== null && (
+              <span
+                onPointerDown={grabHandle("b")}
+                className="absolute z-10 flex w-4 -translate-x-2 cursor-ew-resize items-center justify-center"
+                style={{ left: `${pct(region.b)}%`, top: 0, height: RULER_PX }}
+              >
+                <span className="h-11 w-1.5 rounded-full bg-warn" />
+              </span>
+            )}
+
+            <span
+              className="pointer-events-none absolute w-0.5 bg-primary"
+              style={{ left: `${pct(displayPosition)}%`, top: RULER_PX - 14, bottom: 0 }}
+            />
+            {/* Dragging the waveform used to scrub. That gesture now draws the
+                region, so scrubbing gets a grip of its own rather than being
+                quietly dropped. Local while held, same as the edges — see
+                `displayPosition`. */}
+            <span
+              onPointerDown={grabHandle("position")}
+              aria-hidden="true"
+              className="absolute size-3 -translate-x-1.5 cursor-ew-resize rounded-full bg-primary"
+              style={{ left: `${pct(displayPosition)}%`, top: RULER_PX - 20 }}
+            />
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* The desk's master, under the tracks' faders and as wide as them. It
+          is outside the box above, whose overflow would make that box the one
+          it sticks in — a box that never scrolls; the page does. Here it
+          holds to the bottom of the window while the page scrolls the tracks
+          under it, and with eight of them in a small window the master is
+          still where the hand goes for it.
+
+          Held to the very edge of the page, not the edge of its padding
+          (Shell's py-6): stuck at that, it left a strip of the next track
+          showing beneath it. Its own padding and background cover the rest,
+          and the negative margin gives the gap it adds back in the flow. */}
+      {rows > 0 && (
+        <div
+          className="sticky -bottom-6 z-10 -mt-1 -mb-2 bg-background pt-1 pb-2"
+          style={{ width: GUTTER_PX }}
+        >
+          <MasterControls
+            volume={player.master}
+            level={player.masterLevel}
+            onVolume={player.setMaster}
+            onVolumeCommit={player.persistMaster}
+          />
+        </div>
+      )}
+    </>
   )
 }

@@ -217,6 +217,9 @@ export type PlayerState = {
   volumes?: Record<string, number>
   /** 0..1, how loud the whole mix plays, after every track's fader. */
   master?: number
+  /** 0..1, the whole mix as it went out a moment ago; past full scale reads
+   *  1. Zero while paused. */
+  master_level?: number
   /** 0..1 per channel of each track, as it came out of the mix a moment
    *  ago. A list even for a mono track, so one shape serves both. */
   levels?: Record<string, number[]>

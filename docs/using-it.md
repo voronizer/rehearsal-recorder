@@ -136,9 +136,10 @@ on one timeline, so they always stay in sync.
 - **Balance the band** with the fader under each track name. **M** mutes a
   track and **S** plays it on its own. Volumes are remembered by track name,
   so the next take starts with the same balance.
-- **Turn the whole take up or down** with the volume to the right of
-  **Repeat**. It only changes how loud you hear it. The balance and the copy
-  sent to the cloud stay as they are. The app remembers it for the next take.
+- **Turn the whole take up or down** with **Master** under the tracks. It
+  only changes how loud you hear it. The balance and the copy sent to the
+  cloud stay as they are. The app remembers it for the next take. Its meter
+  shows the whole mix, and turns red when the tracks together are too loud.
 - **Mark a moment** with **Mark**, or the M key, while the take plays. Type a
   short note and pick a kind: a plain note, *keep this*, *went wrong* or *do
   again*. Each kind has its own colour, and the take's button in the strip

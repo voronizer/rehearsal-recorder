@@ -39,6 +39,7 @@ export function useMultitrackPlayer(
   // The whole mix, after the faders. Python says where it was left when the
   // take opens.
   const [master, setMasterState] = useState(1)
+  const [masterLevel, setMasterLevel] = useState(0)
   const [looping, setLooping] = useState(false)
   // How loud each track came out of the mix, 0..1, measured in Python while
   // it played. Empty whenever nothing is playing, which is what a meter at
@@ -71,6 +72,7 @@ export function useMultitrackPlayer(
       soloed?: string | null
       volumes?: Record<string, number>
       master?: number
+      master_level?: number
       levels?: Record<string, number[]>
       loop?: { a: number; b: number } | null
       problem?: string | null
@@ -92,6 +94,7 @@ export function useMultitrackPlayer(
       if (s.soloed !== undefined) setSoloed(s.soloed)
       if (s.volumes) setVolumes(s.volumes)
       if (typeof s.master === "number") setMasterState(s.master)
+      if (typeof s.master_level === "number") setMasterLevel(s.master_level)
       if (s.levels) setLevels(s.levels)
       if (s.loop !== undefined) setLooping(s.loop !== null)
     },
@@ -107,6 +110,7 @@ export function useMultitrackPlayer(
     setPosition(0)
     setRegionState({ a: null, b: null })
     setLevels({})
+    setMasterLevel(0)
     setViewState(null)
     setPeaksWindow({ from: 0, to: 0 })
     setLooping(false)
@@ -339,6 +343,8 @@ export function useMultitrackPlayer(
     },
     /** 0..1, how loud the whole take plays — for listening only. */
     master,
+    /** 0..1, the whole mix as it last went out; 0 while nothing plays. */
+    masterLevel,
     setMaster: (v: number) => {
       setMasterState(v)
       void call(() => api().player_set_master(v))

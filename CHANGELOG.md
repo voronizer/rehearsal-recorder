@@ -7,11 +7,16 @@ opening.
 
 ## Unreleased
 
-- **The player has one volume for the whole take**, to the right of
-  Repeat. It is for listening: turning the band down meant pulling every
+- **The player has a Master for the whole take**, under the tracks, as on a
+  desk. It is for listening: turning the band down meant pulling every
   fader, which lost the balance and changed the copy sent to the cloud,
-  since that is mixed from the faders. The volume changes neither, and
-  the next take, or the next time the app starts, plays at the same level.
+  since that is mixed from the faders. The master changes neither, and the
+  next take, or the next time the app starts, plays at the same level. Its
+  meter shows the whole mix and turns red when the tracks add up past full
+  scale, which no track's own meter can show. It stays in view while the
+  tracks scroll.
+- The meters beside the faders go to rest as soon as a take is paused. They
+  stayed at the last level until it played again.
 - **The keys work after the mouse.** On Windows a clicked button keeps the
   focus, and Space pressed it again. Pressed after **Check signal**, Space
   started the check again instead of the rehearsal. After a fader had been

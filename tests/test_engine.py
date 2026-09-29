@@ -182,9 +182,15 @@ def main():
     p.set_muted("A", False)
     settle(p)
 
+    ok("the whole mix says how loud it came out",
+       abs(p.state()["master_level"] - 3000 / 32768) < 0.005)
+
     p.pause()
+    ok("and nothing reads anything the moment playback stops",
+       all(c == 0.0 for v in p.state()["levels"].values() for c in v)
+       and p.state()["master_level"] == 0.0)
     p._render(256)
-    ok("and nothing reads anything once playback stops",
+    ok("nor after",
        all(c == 0.0 for v in p.state()["levels"].values() for c in v))
 
     # Back to the start: the checks below carry on with this same player, and
@@ -217,6 +223,8 @@ def main():
     ok("while each track still reads what its own fader lets through",
        abs(p.state()["levels"]["B"][0] - 2000 / 32768) < 0.005)
     ok("and the state says where it is", p.state()["master"] == 0.5)
+    ok("the whole mix's meter reads after it",
+       abs(p.state()["master_level"] - 1500 / 32768) < 0.005)
     p.set_master(7)
     ok("it goes no higher than full", p.state()["master"] == 1.0)
     # Turned down while paused, the first block after play is already quiet
@@ -230,6 +238,25 @@ def main():
        abs(int(first[:, 0].mean()) - 300) < 30)
     p.set_master(1.0)
     settle(p)
+
+    # Two tracks each well short of full scale can still add up past it, and
+    # the mix is where that shows: it is clipped on the way out.
+    write_wav(tmp / "loud1.wav", 20000)
+    write_wav(tmp / "loud2.wav", 20000)
+    loud = TakePlayer([
+        {"name": "L1", "file": str(tmp / "loud1.wav")},
+        {"name": "L2", "file": str(tmp / "loud2.wav")},
+    ])
+    loud.play()
+    settle(loud)
+    st = loud.state()
+    ok("a sum past full scale reads full on the mix's meter",
+       st["master_level"] == 1.0 and st["levels"]["L1"][0] < 0.7)
+    loud.set_master(0.5)
+    settle(loud)
+    ok("and turned down it no longer does",
+       abs(loud.state()["master_level"] - 20000 / 32768) < 0.005)
+    loud.close()
 
     print("\n[3] Seeking and end of take")
     p.seek(1.5)

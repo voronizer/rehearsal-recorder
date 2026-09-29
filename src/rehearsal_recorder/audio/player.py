@@ -152,6 +152,10 @@ class TakePlayer:
         # quieter, so the tracks' meters are read before it.
         self.master = 1.0
         self._master_gain = 1.0
+        # Loudest sample of the last block of the whole mix, after the master
+        # and before the clip — so a sum of tracks that goes past full scale
+        # reads as past it, although no single track does.
+        self.master_level = 0.0
 
         # The mix is always stereo. Where it goes on the card is separate: the
         # stream is opened as wide as the highest output asked for, and
@@ -308,6 +312,7 @@ class TakePlayer:
             # Turned down while paused, the take must start quiet, not ease
             # down from where it was over the first few blocks.
             self._master_gain = self.master
+            self.master_level = 0.0
             return result
 
         # Cleared once per block rather than per segment: one block can cross
@@ -381,6 +386,7 @@ class TakePlayer:
             self._master_gain = self.master
         if self._master_gain != 1.0:
             out *= self._master_gain
+        self.master_level = max(float(out.max()), -float(out.min()))
 
         np.clip(out, -32768, 32767, out=out)
         np.copyto(result, out, casting="unsafe")
@@ -495,10 +501,22 @@ class TakePlayer:
                 # moment ago. The interface polls this several times a second,
                 # which is what the meters beside the faders are made of. A
                 # list even for a mono track, so one shape serves both.
+                #
+                # Nothing while paused, straight away. The last block's levels
+                # stay put until the next one is rendered, and a pause answers
+                # before that — and is the last thing the interface asks
+                # until play, so the meters stood still at the last level.
                 "levels": {
-                    t.name: [round(min(1.0, v / 32768.0), 3) for v in t.levels]
+                    t.name: [
+                        round(min(1.0, v / 32768.0), 3) if self._playing else 0.0
+                        for v in t.levels
+                    ]
                     for t in self.tracks
                 },
+                "master_level": (
+                    round(min(1.0, self.master_level / 32768.0), 3)
+                    if self._playing else 0.0
+                ),
                 "loop": (
                     {
                         "a": self._loop[0] / self.samplerate,
