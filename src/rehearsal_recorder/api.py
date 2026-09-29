@@ -124,6 +124,34 @@ def _cloud_subfolder(cloud, folder):
     return Path(cloud) / _safe_name(Path(folder).name)
 
 
+# How a rehearsal's folder is named, and so its folder in the cloud: "Tuesday
+# jam - 2026-09-22 19-00", with " (2)" after it when two rehearsals shared a
+# name and a minute. The sweep of emptied folders touches nothing else.
+_REHEARSAL_DIR_NAME = re.compile(r"^.+ - \d{4}-\d{2}-\d{2} \d{2}-\d{2}( \(\d+\))?$")
+
+
+def _shape_of(shared):
+    """What a take has in the cloud folder: "mix", "tracks", "both" or None."""
+    shared = shared or {}
+    parts = {k for k in ("mix", "tracks") if shared.get(k)}
+    return _shape_from(parts)
+
+
+def _shape_from(parts):
+    if parts == {"mix", "tracks"}:
+        return "both"
+    return next(iter(parts), None)
+
+
+def _with(shape, other):
+    """Both shapes at once: an automatic copy adds what the setting asks for
+    to what is already there, and never takes away what somebody sent."""
+    parts = set()
+    for s in (shape, other):
+        parts |= {"mix", "tracks"} if s == "both" else ({s} if s else set())
+    return _shape_from(parts)
+
+
 def _timestamp_suffix(created_at):
     """'2026-09-18T19:00:00' -> '2026-09-18 19-00' for folder names."""
     try:
@@ -381,6 +409,7 @@ class Api:
         # Only the real app runs the worker. The suites drive run_next
         # themselves, so nothing races them.
         self._cloud_queue.start()
+        self._sweep_empty_cloud_dirs_later()
 
     def shutdown(self):
         """
@@ -1535,6 +1564,9 @@ class Api:
                 "songs": _songs_of(takes),
                 # Not walked when it is not there to walk.
                 "disk_bytes": 0 if r["missing"] else _folder_bytes(r["folder"]),
+                # Deleting the rehearsal takes these out of the cloud folder
+                # too, and the question before it says so.
+                "in_cloud": sum(1 for t in takes if _shape_of(t.get("cloud"))),
                 "missing": r["missing"],
             })
         return items
@@ -1619,7 +1651,7 @@ class Api:
             return {"ok": False, "error": "Take not found"}
 
         # The copies in the cloud folder are named after the take.
-        self._enqueue_publish(folder, take_number)
+        self._rename_take_copies(folder, take_number, updated)
         return {"ok": True, "take": updated}
 
     def rename_rehearsal(self, folder, new_name):
@@ -1672,10 +1704,11 @@ class Api:
             self._session["folder"] = folder
             self._session["name"] = display_name
 
-        # The copies sit in a cloud subfolder named after the rehearsal, so a
-        # new name is a new destination for all of them.
-        if self._session is not None and Path(self._session["folder"]) == folder:
-            self._enqueue_session_takes()
+        # The copies sit in a cloud subfolder named after the rehearsal, so
+        # that folder takes the new name too — this rehearsal's or one long
+        # finished, however its copies got there.
+        if folder != original:
+            self._move_rehearsal_copies(original, folder)
 
         return {
             "ok": True,
@@ -1920,6 +1953,7 @@ class Api:
         # copy already under way can write its record after this line, and
         # a record that still matched the shorter take would suppress its
         # own repair.
+        had = _shape_of(take.get("cloud"))
         self._remove_shared(take)
         if (self._lib.edit_markers(folder, take_number, shift) is None
                 or self._lib.update_take(
@@ -1928,7 +1962,13 @@ class Api:
             return {"ok": False, "error": "Take not found"}
         self._lib.set_cloud_copy(folder, take_number, None, None)
 
-        self._enqueue_publish(folder, take_number)
+        # A take that was in the cloud goes back there cropped, in the shape
+        # it had, whether sending on its own is on or not: the copy follows
+        # the take. One that was not is sent only if it is due to be.
+        if had:
+            self._queue_copy(folder, take_number, had)
+        else:
+            self._enqueue_publish(folder, take_number)
         self._retry_failed_publishes()
         return {
             "ok": True,
@@ -2172,6 +2212,10 @@ class Api:
                 self._release_player_in(d)
                 result = move_to_trash(d, self._recordings_dir)
 
+        # Its copy in the cloud goes the same way: a take deleted here must
+        # not stay in the band's folder looking like one worth keeping. A copy
+        # still being made cleans up after itself when it finds the take gone.
+        self._remove_shared(target)
         left = self._lib.delete_take(folder, take_number)
         return {**result, "takes_left": left}
 
@@ -2186,6 +2230,10 @@ class Api:
         self._release_player_in(folder)
         result = move_to_trash(folder, self._recordings_dir)
         if result.get("ok"):
+            # And its copies in the cloud, take by take — only what the app
+            # put there, then the folder they were in once nothing is left.
+            for take in (self._lib.rehearsal(folder) or {}).get("takes", []):
+                self._remove_shared(take)
             self._lib.forget_rehearsal(folder)
         return result
 
@@ -2314,6 +2362,10 @@ class Api:
         # Nothing of this rehearsal has ever been copied into a folder chosen
         # a moment ago, whatever the takes still say about the old one.
         self._enqueue_session_takes()
+        # Here, not on a thread of its own: a folder was picked a moment ago
+        # and the reply waits for it anyway, and a sweep still running when
+        # the first copy lands in the folder must not take it back out.
+        self._sweep_empty_cloud_dirs()
         return {"ok": True, "cloud_dir": str(folder)}
 
     def choose_cloud_dir(self):
@@ -2379,11 +2431,31 @@ class Api:
         """
         if take is None:
             take = self._take_in(folder, take_number) or {}
-        if take.get("cloud_skip"):
-            return
-        if not self._config.get("auto_publish") and not take.get("cloud_send"):
-            return
+        # One that is in the cloud already is kept up to date there whatever
+        # the setting says: sending on its own decides what goes up, not what
+        # becomes of what is there. Only when it is out of date, though —
+        # "waiting for the cloud" on a take that is fine there would be noise.
+        if not self._copy_due(take):
+            there = _shape_of(take.get("cloud"))
+            if there is None or self._copy_current(folder, take, there):
+                return
         self._queue_copy(folder, take_number, None, take)
+
+    def _copy_current(self, folder, take, what):
+        """Whether the cloud folder already holds this take as `what`, made
+        the way the settings now say."""
+        return cloudmod.is_current(
+            take, what, self._config.get("volumes", {}),
+            normalize_format(self._config.get("cloud_format")),
+            self._cloud_target(folder))
+
+    def _copy_due(self, take):
+        """Whether sending on its own sends this take: the setting is on and
+        it was not kept with "not this one", or it was kept with "send this
+        one" (see keep_take)."""
+        if take.get("cloud_skip"):
+            return False
+        return bool(self._config.get("auto_publish") or take.get("cloud_send"))
 
     def _queue_copy(self, folder, take_number, what, take=None):
         """The queue and the journal together: one waiting entry per take,
@@ -2460,12 +2532,17 @@ class Api:
         if what is None:
             # Asked again here, not only when queued: the setting or the
             # take's own answer can have changed while it waited.
-            if take is None or take.get("cloud_skip") or (
-                not self._config.get("auto_publish") and not take.get("cloud_send")
-            ):
+            there = _shape_of((take or {}).get("cloud"))
+            due = take is not None and self._copy_due(take)
+            if take is None or (not due and there is None):
                 entry.discard()
                 return
-            what = self._config.get("auto_publish_what") or "mix"
+            # What is there already, and what the setting sends if it sends
+            # this take: a take sent by hand as its tracks too keeps them when
+            # a new balance or format makes it again, and one the setting does
+            # not send is made again as it was, not as the setting would.
+            what = (_with(there, self._config.get("auto_publish_what") or "mix")
+                    if due else there)
             fmt = normalize_format(self._config.get("cloud_format"))
             target = self._cloud_target(folder)
             if cloudmod.is_current(take, what, self._config.get("volumes", {}),
@@ -2646,6 +2723,10 @@ class Api:
         # while the copy was being made is kept; a copy that succeeded settles
         # whatever went wrong last time.
         if not self._lib.set_cloud_copy(folder, take_number, shared, cloud):
+            # Deleted while this was being written. delete_take has been and
+            # gone, so nothing else will take out what was just put there for
+            # a take that no longer exists.
+            self._remove_shared({"cloud": shared})
             return {"ok": False, "error": "Take not found"}
 
         # The caller gets back the take it asked to share, carrying the result.
@@ -2699,4 +2780,159 @@ class Api:
             res = move_to_trash(path, cloud)
             trashed = trashed and res.get("trashed", False)
             removed.append(str(path))
+        # The rehearsal's folder in the cloud, if that was the last of it.
+        for parent in {Path(p).parent for p in removed}:
+            self._prune_cloud_dir(parent)
         return {"removed": removed, "trashed": trashed if removed else False}
+
+    def _prune_cloud_dir(self, path):
+        """
+        Takes one rehearsal's folder out of the cloud folder once nothing is
+        left in it. Only an empty one, only inside the cloud folder, never the
+        cloud folder itself: everything else in there is the band's.
+        """
+        cloud = self._cloud_dir
+        path = Path(path)
+        if cloud is None or not _is_inside(path, cloud):
+            return
+        if path.resolve() == cloud.resolve():
+            return
+        try:
+            path.rmdir()  # which refuses a folder with anything in it
+        except OSError:
+            pass
+
+    def _sweep_empty_cloud_dirs(self):
+        """
+        Rehearsal folders in the cloud that earlier versions emptied and left
+        behind, when a rename or a new copy moved what was in them elsewhere.
+        Only empty folders straight inside the cloud folder that are named the
+        way the app names a rehearsal's: nothing else is the app's to remove.
+        """
+        cloud = self._cloud_dir
+        if cloud is None:
+            return
+        try:
+            entries = list(cloud.iterdir())
+        except OSError:
+            return
+        for entry in entries:
+            if _REHEARSAL_DIR_NAME.match(entry.name) and entry.is_dir():
+                self._prune_cloud_dir(entry)
+
+    def _sweep_empty_cloud_dirs_later(self):
+        """The same, off the calling thread: the cloud folder can be a drive
+        that answers slowly, and nothing is waiting for this."""
+        threading.Thread(target=self._sweep_empty_cloud_dirs, daemon=True).start()
+
+    def _copy_busy(self, folder, take_number=None):
+        """Whether a copy of this take — or of any take of this rehearsal —
+        is waiting or being made. One in flight has read where it writes to,
+        so moving its files under it would leave them where nothing points."""
+        states = self._cloud_queue.states(str(folder))
+        return bool(states) if take_number is None else int(take_number) in states
+
+    def _cloud_base(self, take_number, take):
+        """What a take's copies are called: "03 - Polyn"."""
+        return (f"{int(take_number):02d} - "
+                f"{_safe_name(take.get('name', '') or f'Take {take_number}')}")
+
+    def _rename_take_copies(self, folder, take_number, take):
+        """
+        After a take is renamed: its copies in the cloud are renamed to match,
+        where they are, rather than mixed again — however they got there, and
+        whether or not sending on its own is on. `take` is its record as it
+        now is. Copies that cannot be moved (not where the record says, or
+        one being made right now) are made again under the new name instead.
+        """
+        cloud = self._cloud_dir
+        if cloud is None:
+            # With no cloud folder there is nothing to move and no telling
+            # what was sent; asking for a copy is what records why there is
+            # none, and what sends it once the folder is back.
+            self._enqueue_publish(folder, take_number, take=take)
+            return
+        shared = dict(take.get("cloud") or {})
+        shape = _shape_of(shared)
+        if shape is None:
+            return
+        base = self._cloud_base(take_number, take)
+        parts = {k: Path(shared[k]) for k in ("mix", "tracks") if shared.get(k)}
+        goes_to = {k: p.with_name(base + (p.suffix if k == "mix" else ""))
+                   for k, p in parts.items()}
+        if (self._copy_busy(folder, take_number)
+                or not all(p.exists() and _is_inside(p, cloud) for p in parts.values())):
+            self._queue_copy(folder, take_number, shape, take)
+            return
+        moved = []
+        try:
+            for k, p in parts.items():
+                if goes_to[k] != p:
+                    p.rename(goes_to[k])
+                    moved.append((goes_to[k], p))
+        except OSError as e:
+            print(f"[cloud] renaming the copies of take {take_number}: {e}")
+            for new, old in reversed(moved):
+                try:
+                    new.rename(old)
+                except OSError:
+                    pass
+            self._queue_copy(folder, take_number, shape, take)
+            return
+        shared.update({k: str(p) for k, p in goes_to.items()})
+        # Only the name changed. The rest of what the copy was made from —
+        # the balance, the format — is still what it was made with.
+        shared["source"] = {**(shared.get("source") or {}),
+                            "name": take.get("name", "")}
+        self._lib.set_cloud_copy(folder, take_number, shared, cloud)
+
+    def _move_rehearsal_copies(self, old_folder, new_folder):
+        """
+        After a rehearsal is renamed: its folder in the cloud takes the new
+        name, with every copy in it, and each take's record follows. When that
+        cannot be done in one move — a copy being made, a copy not where its
+        record says, a folder already there under the new name — each take
+        that was in the cloud is made again in the new folder instead, and the
+        old one goes once it is empty.
+        """
+        cloud = self._cloud_dir
+        if cloud is None:
+            # As in _rename_take_copies: nothing to move, so ask, and let the
+            # copy say why it is not there.
+            if self._session is not None and _same_folder(self._session["folder"], new_folder):
+                self._enqueue_session_takes()
+            return
+        takes = [t for t in (self._lib.rehearsal(new_folder) or {}).get("takes", [])
+                 if _shape_of(t.get("cloud"))]
+        if not takes:
+            return
+        was, goes_to = _cloud_subfolder(cloud, old_folder), _cloud_subfolder(cloud, new_folder)
+        if was == goes_to:
+            return
+
+        def paths(take):
+            return [Path(v) for k, v in take["cloud"].items() if k in ("mix", "tracks") and v]
+
+        movable = (
+            not self._copy_busy(new_folder) and not self._copy_busy(old_folder)
+            and was.is_dir() and not goes_to.exists()
+            and all(p.parent == was and p.exists() for t in takes for p in paths(t))
+        )
+        if movable:
+            try:
+                was.rename(goes_to)
+            except OSError as e:
+                print(f"[cloud] renaming the rehearsal's folder: {e}")
+                movable = False
+        if not movable:
+            for t in takes:
+                self._queue_copy(new_folder, t["take_number"], _shape_of(t["cloud"]), t)
+            return
+        target = self._cloud_target(new_folder)
+        for t in takes:
+            shared = dict(t["cloud"])
+            for k in ("mix", "tracks"):
+                if shared.get(k):
+                    shared[k] = str(goes_to / Path(shared[k]).name)
+            shared["source"] = {**(shared.get("source") or {}), "dir": target}
+            self._lib.set_cloud_copy(new_folder, t["take_number"], shared, cloud)

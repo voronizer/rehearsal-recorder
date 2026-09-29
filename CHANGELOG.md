@@ -5,6 +5,22 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- A take's copy in the cloud follows the take, however it got there. A
+  renamed take or rehearsal renamed nothing in the cloud when automatic
+  sending was off, or when the rehearsal was already finished; with sending
+  on, every take was mixed again into a new folder and the old one was left
+  behind, empty. A rename now moves the files where they are, with nothing
+  mixed again. A cropped take sent by hand vanished from the cloud, and one
+  sent as mix and tracks came back as the mix alone: it is now made again
+  from the cropped take in the shape it had. A deleted take or rehearsal
+  takes its copies to the Trash, and its folder in the cloud goes once it is
+  empty; the question before deleting says so, since that folder is the
+  band's. A new balance or format also mixes again the takes of the rehearsal
+  in progress that were sent by hand, keeping their tracks. Empty rehearsal
+  folders left in the cloud by earlier versions are swept up at start.
+
 ## 0.7.9
 
 - `--audio-probe` listens, instead of only opening. It called a card "ok"

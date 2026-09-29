@@ -472,7 +472,7 @@ window.__MAKE_API__ = () => ({
 
   list_rehearsals: async () => ([
     {folder:'/rec/old', name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
-     take_count:9, total_duration_sec:2520, disk_bytes:1200000000,
+     take_count:9, total_duration_sec:2520, disk_bytes:1200000000, in_cloud:3,
      songs:[{name:'Polyn', takes:3}, {name:'Vesna', takes:2}, {name:'Ogon', takes:1},
             {name:'Sonce', takes:1}, {name:'Dym', takes:1}, {name:'Ptaha', takes:1}]},
     {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
@@ -1068,6 +1068,8 @@ def main():
         # case a tag-only guard cannot see and the one that matters for the
         # other two hooks too.
         page.click("text=go to the Trash")
+        ok("a take that is not in the cloud says nothing about the cloud",
+           "cloud" not in (text_of(page.get_by_role("dialog")) or "cloud"))
 
         # A trusted keypress would also activate whatever has focus (e.g. a
         # button, natively, on release) and confound the check, so this
@@ -1480,6 +1482,16 @@ def main():
            page.locator("button[aria-label='Cloud copies of Polyn (best)']").count() == 1)
         page.screenshot(path=str(SHOTS / "55-cloud.png"))
 
+        # Deleting a take takes its copy out of the cloud folder too, which
+        # is the band's: somebody else may be listening to it. So it says so.
+        page.click("button[aria-label='Delete take Polyn (best)']")
+        page.wait_for_selector("text=go to the Trash")
+        ok("deleting a take that is in the cloud says its copy goes too",
+           "Its copy in the cloud folder goes too."
+           in (text_of(page.get_by_role("dialog")) or ""))
+        page.get_by_role("button", name="Cancel").click()
+        page.wait_for_timeout(200)
+
         page.click("button[aria-label='Cloud copies of Polyn (best)']")
         page.wait_for_selector("text=already there")
         page.click("text=Remove from the cloud")
@@ -1599,6 +1611,9 @@ def main():
         # confirmation says how much of it is coming back.
         ok("the confirmation says what is being freed",
            page.get_by_text("9 takes, 1.2 GB").count() == 1)
+        ok("and that the copies of its takes in the cloud go with it",
+           "So do the copies of 3 of them in the cloud folder."
+           in (text_of(page.get_by_role("dialog")) or ""))
         page.click("text=Cancel")
         page.wait_for_timeout(200)
         ok("cancel deletes nothing", len(calls("delete_rehearsal")) == 0)
@@ -2359,6 +2374,11 @@ def main():
         eve.wait_for_selector("[aria-label='Take timeline']")
         ok("a take in the overview opens it",
            "Polyn 2" in eve.locator("button[aria-current='true']").inner_text())
+        eve.click("button[aria-label='Delete take Polyn 2']")
+        eve.wait_for_selector("text=go to the Trash")
+        ok("in History too, deleting a take that is in the cloud says its copy goes",
+           "Its copy in the cloud folder goes too."
+           in (text_of(eve.get_by_role("dialog")) or ""))
         eve.close()
 
         print("\n[12g] A call that fails in Python says so")

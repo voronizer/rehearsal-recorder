@@ -1,4 +1,4 @@
-import { api } from "@/lib/api"
+import { api, type Take } from "@/lib/api"
 
 /**
  * What deleting actually does on this machine, in words.
@@ -43,4 +43,29 @@ export function canBePutBack() {
   return where?.kind === "folder"
     ? "Nothing is destroyed — you can move it back, or empty that folder yourself."
     : "You can put it back from there."
+}
+
+/**
+ * The sentence for a take's copy in the cloud, which a delete takes with it.
+ * That folder is the band's, and somebody may be listening to the copy — so
+ * a question that only mentioned the laptop would be answered not knowing.
+ * Empty for a take that is not there.
+ */
+export function takeCloudToo(take: Take | null): string {
+  return take?.cloud?.mix || take?.cloud?.tracks
+    ? " Its copy in the cloud folder goes too."
+    : ""
+}
+
+/** The same for a whole rehearsal: how many of its takes are there. */
+export function rehearsalCloudToo(inCloud = 0, takes = 0): string {
+  if (inCloud <= 0) return ""
+  if (inCloud >= takes) {
+    return takes === 1
+      ? " So does its copy in the cloud folder."
+      : " So do their copies in the cloud folder."
+  }
+  return inCloud === 1
+    ? " So does the copy of one of them in the cloud folder."
+    : ` So do the copies of ${inCloud} of them in the cloud folder.`
 }

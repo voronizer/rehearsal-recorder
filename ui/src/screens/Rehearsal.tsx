@@ -22,7 +22,7 @@ import {
 import { croppedButNotSwept, takesLabel } from "@/lib/format"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
-import { canBePutBack, goPlural } from "@/lib/deletion"
+import { canBePutBack, goPlural, takeCloudToo } from "@/lib/deletion"
 
 /**
  * The rehearsal hub: what has been recorded, and a big button to record more.
@@ -320,7 +320,9 @@ export function Rehearsal({
         open={toDelete !== null}
         onOpenChange={(open) => !open && setToDelete(null)}
         title={`Delete “${toDelete?.name ?? ""}”?`}
-        description={`The take and all its tracks ${goPlural()}. ${canBePutBack()}`}
+        description={`The take and all its tracks ${goPlural()}.${takeCloudToo(
+          toDelete
+        )} ${canBePutBack()}`}
         onConfirm={() => {
           if (toDelete) void deleteTake(toDelete)
           setToDelete(null)

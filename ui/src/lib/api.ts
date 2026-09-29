@@ -163,6 +163,8 @@ export type RehearsalSummary = {
   songs: Song[]
   /** What the whole folder weighs, measured on disk rather than estimated. */
   disk_bytes: number
+  /** How many of its takes have a copy in the cloud folder. */
+  in_cloud?: number
   /** The folder is not on disk — deleted, renamed outside the app, or on a
    *  drive that is not plugged in. */
   missing?: boolean

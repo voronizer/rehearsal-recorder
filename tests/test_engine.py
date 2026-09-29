@@ -1433,15 +1433,15 @@ def main():
     while a._cloud_queue.run_next():
         pass
 
-    print("\n[11g] A rename and a new balance send it again")
+    print("\n[11g] A rename moves the copy, and a new balance sends it again")
     folder = Path(a.session_state()["folder"])
     old_mix = Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"])
     a.rename_take(str(folder), 1, "Polyn again")
-    ok("renaming queues the take again",
-       a.session_state()["cloud_queue"] == {1: "queued"})
-    a._cloud_queue.run_next()
+    ok("renaming does not mix the take again",
+       a.session_state()["cloud_queue"] == {})
     new_mix = Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"])
-    ok("the copy is named after the new name", "Polyn again" in new_mix.name)
+    ok("the copy is named after the new name",
+       "Polyn again" in new_mix.name and new_mix.exists())
     ok("and the copy under the old name is gone", not old_mix.exists())
 
     a.save_mix({"A": 0.5})
@@ -1520,15 +1520,15 @@ def main():
        Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"]).exists())
 
     # The copies live in a folder named after the rehearsal, so renaming it
-    # leaves them under a name that is no longer anybody's.
+    # would leave them under a name that is no longer anybody's.
+    old_sub = Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"]).parent
     folder = Path(a.rename_rehearsal(str(folder), "Late evening")["folder"])
-    ok("renaming the rehearsal queues its takes",
-       a.session_state()["cloud_queue"].get(1) == "queued")
-    while a._cloud_queue.run_next():
-        pass
     take = a.get_rehearsal(str(folder))["takes"][0]
-    ok("and the copies follow it to a folder under the new name",
-       Path(take["cloud"]["mix"]).parent.name.startswith("Late evening"))
+    ok("renaming the rehearsal moves its copies to a folder under the new name",
+       Path(take["cloud"]["mix"]).parent.name.startswith("Late evening")
+       and Path(take["cloud"]["mix"]).exists())
+    ok("without mixing them again, and without the old folder left behind",
+       a.session_state()["cloud_queue"] == {} and not old_sub.exists())
 
     # The format is in the fingerprint as well, so choosing another one makes
     # every copy of this rehearsal stale by definition.
@@ -1654,6 +1654,182 @@ def main():
                      if t["take_number"] == rescued["take"]["take_number"])
     ok("and it lands in the cloud folder",
        Path((recovered.get("cloud") or {}).get("mix", "")).exists())
+
+    print("\n[11m] A copy in the cloud follows its take, however it got there")
+    # Sending on its own decides whether a new take goes up; it has no say in
+    # what happens to one that is already there. A take that is renamed,
+    # cropped or deleted takes its copy with it — sent by hand or not, from
+    # the rehearsal still open or one long finished — and a rename moves the
+    # files rather than mixing them again.
+    tmpc = Path(tempfile.mkdtemp())
+    _, fc = fresh_api(tmpc)
+    band = tmpc / "Drive" / "Band"
+    fc.set_cloud_dir(str(band))
+    fc.set_auto_publish(False, "mix")
+    fc.start_rehearsal("Tuesday", 0, SR, [{"name": "Gtr", "channel": 1}])
+    cf = Path(fc._session["folder"])
+    for number, name in ((1, "Polyn"), (2, "Vesna")):
+        draft = cf / "_drafts" / f"take {number}"
+        write_wav(draft / "Gtr.wav", 1000 * number, seconds=3.0)
+        fc._session["take_counter"] = number
+        fc.keep_take(number, str(draft), name, 3.0,
+                     [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    fc._copy_to_cloud(str(cf), 1, "both")
+    fc._copy_to_cloud(str(cf), 2, "mix")
+
+    def drain_c():
+        while fc._cloud_queue.run_next():
+            pass
+
+    def copy_of(n, where=None):
+        take = next(t for t in fc.get_rehearsal(str(where or cf))["takes"]
+                    if t["take_number"] == n)
+        return take, take.get("cloud") or {}
+
+    def current(n, what, where=None):
+        where = where or cf
+        take, _ = copy_of(n, where)
+        return cloudmod.is_current(take, what, fc.get_settings()["volumes"],
+                                   "wav", fc._cloud_target(where))
+
+    def listing():
+        return sorted(str(p.relative_to(band)).replace("\\", "/")
+                      for p in band.rglob("*")) if band.exists() else []
+
+    def is_file(path):
+        """A file that is there: an empty path is the current folder, not one."""
+        return bool(path) and Path(path).is_file()
+
+    def is_dir(path):
+        return bool(path) and Path(path).is_dir()
+
+    _, before = copy_of(1)
+    mix_written = Path(before["mix"]).stat().st_mtime_ns
+    fc.rename_take(str(cf), 1, "Polyn best")
+    _, after = copy_of(1)
+    ok("a take sent by hand, with sending off, is renamed in the cloud too",
+       Path(after.get("mix", "")).name == "01 - Polyn best.wav"
+       and is_file(after["mix"]) and not Path(before["mix"]).exists())
+    ok("its tracks as well as its mix",
+       Path(after.get("tracks", "")).name == "01 - Polyn best"
+       and is_dir(after["tracks"]) and not Path(before["tracks"]).exists())
+    ok("by moving the files, not by mixing them again",
+       is_file(after.get("mix")) and "Polyn best" in after["mix"]
+       and Path(after["mix"]).stat().st_mtime_ns == mix_written
+       and fc.session_state()["cloud_queue"] == {})
+    ok("and the copy still counts as current", current(1, "both"))
+
+    fc.finish_rehearsal()
+    old_sub = band / cf.name
+    cf = Path(fc.rename_rehearsal(str(cf), "Friday")["folder"])
+    new_sub = band / cf.name
+    ok("a finished rehearsal renamed from History moves its cloud folder",
+       new_sub.is_dir() and not old_sub.exists() and old_sub != new_sub)
+    ok("with every copy in it, and the records pointing there",
+       all(Path(v).exists() and Path(v).parent == new_sub
+           for n in (1, 2) for k, v in copy_of(n)[1].items() if k in ("mix", "tracks")))
+    ok("still current, mixed no more times than before",
+       current(1, "both") and current(2, "mix") and fc._cloud_queue.states(str(cf)) == {})
+
+    cropped = fc.crop_take(str(cf), 1, 0.5, 2.0)
+    drain_c()
+    take1, now1 = copy_of(1)
+    ok("a cropped take sent by hand is sent again, with sending off",
+       cropped["ok"] and is_file(now1.get("mix")))
+    ok("in the shape it had: the tracks come back with the mix",
+       is_dir(now1.get("tracks")))
+    frames = 0
+    if is_file(now1.get("mix")):
+        with wave.open(now1["mix"]) as w:
+            frames = w.getnframes()
+    ok("and what is there is the cropped take",
+       abs(frames / SR - take1["duration_sec"]) < 0.01
+       and take1["duration_sec"] < 2.0)
+
+    mix2 = Path(copy_of(2)[1].get("mix", ""))
+    fc.delete_take(str(cf), 2)
+    ok("a deleted take takes its copy out of the cloud",
+       mix2.name and not mix2.exists())
+    ok("and leaves the other take's alone",
+       is_file(copy_of(1)[1].get("mix")))
+
+    listed = next(r for r in fc.list_rehearsals() if r["folder"] == str(cf))
+    ok("History says how many of a rehearsal's takes are in the cloud, "
+       "for the question before deleting it", listed.get("in_cloud") == 1)
+    fc.delete_rehearsal(str(cf))
+    ok("a deleted rehearsal takes its copies, and its emptied folder, with it",
+       not new_sub.exists())
+    ok("and nothing of it is left in the cloud folder", listing() == [])
+
+    # A copy of the rehearsal still open, sent with sending on, is mixed
+    # again when the balance moves — but not stripped down to what sending
+    # on its own would send: somebody put the tracks there by hand.
+    fc.set_auto_publish(True, "mix")
+    fc.start_rehearsal("Saturday", 0, SR, [{"name": "Gtr", "channel": 1}])
+    sf = Path(fc._session["folder"])
+    draft = sf / "_drafts" / "take 1"
+    write_wav(draft / "Gtr.wav", 1500, seconds=3.0)
+    fc._session["take_counter"] = 1
+    fc.keep_take(1, str(draft), "Ogon", 3.0,
+                 [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
+    drain_c()
+    fc._copy_to_cloud(str(sf), 1, "both")
+    fc.save_mix({"Gtr": 0.4})
+    drain_c()
+    _, redone = copy_of(1, sf)
+    ok("a new balance mixes it again without dropping the tracks sent by hand",
+       is_file(redone.get("mix")) and is_dir(redone.get("tracks"))
+       and current(1, "both", sf))
+    fc.set_auto_publish(False, "mix")
+    drain_c()
+    fc.save_mix({"Gtr": 0.7})
+    drain_c()
+    ok("with sending off, a take sent by hand is mixed again with a new balance too",
+       current(1, "both", sf))
+
+    # A copy that is not where its record says — a sync client that has not
+    # caught up, a file moved by hand — cannot be moved, so it is made again.
+    Path(redone["mix"]).unlink()
+    fc.rename_take(str(sf), 1, "Ogon 2")
+    drain_c()
+    _, remade = copy_of(1, sf)
+    ok("a copy that could not be moved is made again under the new name",
+       Path(remade.get("mix", "")).name == "01 - Ogon 2.wav"
+       and is_file(remade["mix"]) and is_dir(remade.get("tracks")))
+
+    # A take deleted while its copy is being made: the copy finishes after it
+    # and has no take left to belong to.
+    real_set = fc._lib.set_cloud_copy
+
+    def deleted_meanwhile(folder, number, shared, cloud_dir):
+        fc._lib.delete_take(folder, number)
+        return real_set(folder, number, shared, cloud_dir)
+
+    fc._lib.set_cloud_copy = deleted_meanwhile
+    try:
+        fc._copy_to_cloud(str(sf), 1, "both")
+    finally:
+        fc._lib.set_cloud_copy = real_set
+    ok("a copy that finishes after its take was deleted is not left behind",
+       not any(p.name.startswith("01 - Ogon 2") for p in band.rglob("*")))
+
+    print("\n[11n] Emptied folders already in the cloud are swept up")
+    # Earlier versions left a rehearsal's folder behind in the cloud when its
+    # copies moved out of it. Only folders that are empty and are named the
+    # way the app names them go: the cloud folder is the band's, and anything
+    # else in it is somebody's.
+    for name in ("Tuesday jam - 2026-09-22 19-00", "Old - 2026-09-01 10-00 (2)",
+                 "Band photos", "Soundcheck - 2026-09-12 18-30"):
+        (band / name).mkdir(parents=True, exist_ok=True)
+    (band / "Soundcheck - 2026-09-12 18-30" / "notes.txt").write_text("keep")
+    fc._sweep_empty_cloud_dirs()
+    ok("an emptied rehearsal folder is swept up",
+       not (band / "Tuesday jam - 2026-09-22 19-00").exists()
+       and not (band / "Old - 2026-09-01 10-00 (2)").exists())
+    ok("a folder with something in it stays",
+       (band / "Soundcheck - 2026-09-12 18-30" / "notes.txt").exists())
+    ok("and so does an empty one the app did not name",
+       (band / "Band photos").is_dir())
 
     print("\n[15] The version the app is running")
     import rehearsal_recorder

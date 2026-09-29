@@ -367,8 +367,23 @@ take. Converting runs afterwards, on a copy, in an ordinary call.
   phone plays it. If the tracks would clip when summed, the level is pulled
   down, and by how much is recorded.
 - A copy remembers what it was made from: the take's name, what was sent,
-  the format, the balance and the folder. A change to any of them sends the
+  the format, the balance and the folder. A new balance or format sends the
   takes of the rehearsal in progress again; nothing else is mixed twice.
+- A copy follows its take, whatever sent it. Sending on its own decides what
+  goes up, not what becomes of what is there — that was the first version's
+  mistake: a rename was "send it again", so with the setting off, or for a
+  rehearsal already finished, nothing happened and the cloud kept the old
+  name; with it on, every take was mixed again and the emptied folder left
+  behind, and a take sent by hand as its tracks too came back as a mix alone.
+  Now a rename moves the files and rewrites their record, a crop makes the
+  copy again in the shape it had, a delete takes it to the Trash, and a
+  rehearsal's folder in the cloud goes once it is empty. What cannot simply
+  be moved — a copy being made at that moment, one not where its record says
+  — is made again instead.
+- Folders earlier versions emptied and left are swept at start and when a
+  cloud folder is chosen: only empty ones, named the way the app names a
+  rehearsal's folder, straight inside the cloud folder. The rest of it is the
+  band's.
 - Automatic copies wait while a take records: mixing is not something to
   start competing with the sound card.
 - The recording itself stays WAV. It is the one thing here that cannot be

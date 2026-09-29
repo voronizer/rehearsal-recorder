@@ -250,11 +250,22 @@ a copy that failed. The same list shows takes being cropped, saved or
 recovered.
 
 Sending a take again replaces its earlier copy. **Remove from the cloud**
-deletes the copies but not the recording. If you rename a take or the
-rehearsal, move a fader, or change the format or the cloud folder during a
-rehearsal, the takes of that rehearsal are sent again with the change. Takes
-of older rehearsals keep the copies they have; send one again by hand if you
-want it redone.
+deletes the copies but not the recording.
+
+A take that is in the cloud stays the same there as on the laptop, in any
+rehearsal, however it was sent, and whether automatic sending is on or not:
+
+- Rename a take or a rehearsal, and its copies in the cloud get the new name.
+- Crop a take, and its copy is made again from the cropped take: the mix, the
+  tracks or both, whatever was there before.
+- Delete a take or a rehearsal, and its copies go to the Trash with it; the
+  question before deleting says so. A rehearsal's folder in the cloud goes
+  once nothing is left in it.
+
+If you move a fader, or change the format or the cloud folder, the takes of
+the rehearsal in progress are sent again with the change. Takes of older
+rehearsals keep the copies they have; send one again by hand if you want it
+redone.
 
 If the cloud folder is not available, for example because the Drive app is
 signed out or a drive is unplugged, the take says so. The next take you save

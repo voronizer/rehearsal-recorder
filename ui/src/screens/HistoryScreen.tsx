@@ -28,7 +28,13 @@ import {
   songsLabel,
   takesLabel,
 } from "@/lib/format"
-import { canBePutBack, goPlural, goesTo } from "@/lib/deletion"
+import {
+  canBePutBack,
+  goPlural,
+  goesTo,
+  rehearsalCloudToo,
+  takeCloudToo,
+} from "@/lib/deletion"
 import { useCloudSettled, useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 
@@ -341,7 +347,9 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
           open={takeToDelete !== null}
           onOpenChange={(open) => !open && setTakeToDelete(null)}
           title={`Delete “${takeToDelete?.name ?? ""}”?`}
-          description={`The take and all its tracks ${goPlural()}. ${canBePutBack()}`}
+          description={`The take and all its tracks ${goPlural()}.${takeCloudToo(
+            takeToDelete
+          )} ${canBePutBack()}`}
           onConfirm={() => {
             if (takeToDelete) void deleteTake(takeToDelete)
             setTakeToDelete(null)
@@ -429,7 +437,10 @@ export function HistoryScreen({ onBack }: { onBack: () => void }) {
         title={`Delete “${rehearsalToDelete?.name ?? ""}”?`}
         description={`The whole folder, with all its takes (${takesAndSize(
           rehearsalToDelete
-        )}), ${goesTo()}. ${canBePutBack()}`}
+        )}), ${goesTo()}.${rehearsalCloudToo(
+          rehearsalToDelete?.in_cloud,
+          rehearsalToDelete?.take_count
+        )} ${canBePutBack()}`}
         onConfirm={() => {
           if (rehearsalToDelete) void deleteRehearsal(rehearsalToDelete)
           setRehearsalToDelete(null)
