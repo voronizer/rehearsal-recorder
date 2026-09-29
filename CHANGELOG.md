@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.10
 
 - A take's copy in the cloud follows the take, however it got there. A
   renamed take or rehearsal renamed nothing in the cloud when automatic
