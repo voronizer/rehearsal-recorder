@@ -85,6 +85,7 @@ let rescans = 0;
 // take happens to reuse that dummy path.
 let fileDurations = {};
 let cloudQueue = {};
+let checkState = {running:false};
 // A rehearsal whose folder is gone — set to null once it is relocated or
 // removed from history, the way the real database would stop listing it.
 let missingRehearsal = {folder:'/rec/gone', name:'Missing jam',
@@ -550,6 +551,69 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({ok:true, removed:[], trashed:true}));
   }),
 
+  // Settings › Under the hood: the machine, the report, and the check of
+  // the interface, which a page scripts through __CHECK_RESULT__ ('works',
+  // 'no_sound') and __CHECK_MS__, how long it listens.
+  under_the_hood: track('under_the_hood', async () => ({
+    version:'0.2.0', running_as:'source', executable:'python.exe',
+    system:'Windows 11 Pro 10.0.26200, x64',
+    audio:{engine:'PortAudio V19.7.0-devel',
+           systems:[{name:'MME', devices:6}, {name:'ASIO', devices:2},
+                    {name:'Windows WASAPI', devices:4}],
+           recording:{name:'X32 USB', host_api:'ASIO', inputs:16,
+                      samplerate:48000, bit_depth:24},
+           playback:'System output'},
+    files:[{key:'settings', path:'C:\\\\Users\\\\alex\\\\.rehearsal-recorder\\\\config.json',
+            exists:true, size:2100, modified:'2026-09-29T10:00:00'},
+           {key:'history', path:'C:\\\\Users\\\\alex\\\\RehearsalRecordings\\\\library.sqlite',
+            exists:true, size:98304, modified:'2026-09-29T10:00:00'},
+           {key:'crash_log', path:'C:\\\\Users\\\\alex\\\\.rehearsal-recorder\\\\crash.log',
+            exists:true, size:5120, modified:'2026-09-29T10:00:00'}],
+    deleting:'system', fallback_trash:'_deleted', libsndfile:'1.2.2',
+    server_url:'http://127.0.0.1:1234',
+    releases_url:'https://github.com/voronizer/rehearsal-recorder/releases'})),
+  bug_report: track('bug_report', async () => ({ok:true,
+    text:'Rehearsal Recorder 0.2.0, run from source\\nWindows 11 Pro 10.0.26200, x64\\n'})),
+  show_file: track('show_file', async () => ({ok:true})),
+  open_releases: track('open_releases', async () => ({ok:true})),
+  start_interface_check: track('start_interface_check', async () => {
+    const result = window.__CHECK_RESULT__ || 'works';
+    const works = result !== 'no_sound';
+    const first = {label:'the settings in force', opened:true, flowing:works,
+                   frames: works ? 48000 : 1024, expected:48000, error:null};
+    checkState = {running:true, stopped:false, rows:[], verdict:null, peaks:null,
+      signal:null, checked_at:null,
+      device:{name:'X32 USB', host_api:'ASIO', channels:6, samplerate:48000, bit_depth:24}};
+    const mine = checkState;
+    setTimeout(() => { if (mine.running) mine.rows = [first]; }, 150);
+    setTimeout(() => {
+      if (!mine.running) return;
+      if (works) {
+        mine.rows = [first];
+        mine.verdict = {cause:'none', headline:'It works now.', advice:'-'};
+        const hushed = result === 'silent';
+        mine.peaks = hushed ? [0, 0, 0, 0, 0, 0] : [0.4, 0.3, 0, 0.2, 0, 0];
+        mine.signal = hushed
+          ? "sound arrives, but every input is silent — play into them, or look at what the card's own routing sends, and check again"
+          : 'signal on inputs 1, 2, 4; the rest silent';
+      } else {
+        mine.rows = [first, {...first, label:'the first two channels only'}];
+        mine.verdict = {cause:'no_sound', headline:'The card opens, but sends no sound.',
+          advice:'The driver takes the stream and then delivers little or nothing.'};
+      }
+      mine.checked_at = '2026-09-29T14:05:00';
+      mine.running = false;
+    }, window.__CHECK_MS__ || 900);
+    return {ok:true};
+  }),
+  interface_check: async () => JSON.parse(JSON.stringify(checkState)),
+  stop_interface_check: track('stop_interface_check', async () => {
+    if (checkState.running) {
+      checkState.running = false; checkState.stopped = true;
+      checkState.checked_at = '2026-09-29T14:06:00';
+    }
+    return {ok:true};
+  }),
   get_settings: async () => ({recordings_dir:'/Users/alex/RehearsalRecordings',
     default_recordings_dir:'/Users/alex/RehearsalRecordings',
     device_index: window.__PLUGGED_IN_LATE__ ? (pluggedIn ? 1 : null)
@@ -1685,8 +1749,12 @@ def main():
         # quotes when something has gone wrong.
         page.get_by_role("button", name="Under the hood", exact=True).first.click()
         page.wait_for_timeout(200)
+        try:
+            page.wait_for_selector("[aria-label='About this copy']", timeout=4000)
+        except Exception:
+            pass
         ok("the version it is running is on screen",
-           page.locator("dd", has_text="0.2.0").count() == 1)
+           page.locator("[aria-label='About this copy']").get_by_text("0.2.0", exact=True).count() == 1)
         page.get_by_role("button", name="Audio", exact=True).first.click()
         page.wait_for_timeout(200)
         page.screenshot(path=str(SHOTS / "58-settings-audio.png"))
@@ -3119,6 +3187,105 @@ def main():
         ok("so a side that has gone dead shows as dead",
            attr_of(keys.locator("[data-side='2']"), "data-level") == "0")
         wide.close()
+
+        print("\n[12r] Under the hood says what the app runs on, and checks the interface")
+        # The page someone opens when something has gone wrong: what this
+        # copy is and runs on, where it keeps things, a report to paste into
+        # a message, and --audio-probe for someone with no command line.
+        hood_ctx = browser.new_context(viewport={"width": 1180, "height": 900},
+                                       permissions=["clipboard-read", "clipboard-write"])
+        hood = hood_ctx.new_page()
+        hood.on("pageerror", lambda e: problems.append(f"pageerror: {e}"))
+        hood.add_init_script("window.__CHECK_MS__ = 900;" + MOCK)
+        hood.goto(server.base_url, wait_until="networkidle")
+        hood.wait_for_selector("text=Start rehearsal")
+        hood.get_by_role("button", name="Settings").click()
+        hood.wait_for_selector("#input-device")
+        hood.get_by_role("button", name="Under the hood", exact=True).first.click()
+
+        def hood_calls(name):
+            return hood.evaluate(f"() => window.__CALLS__.filter(c => c.name === '{name}')")
+
+        def hood_until(js, timeout=5000):
+            try:
+                hood.wait_for_function(js, timeout=timeout)
+                return True
+            except Exception:
+                return False
+
+        hood_until("() => document.querySelector(\"[aria-label='About this copy']\")")
+        about = hood.locator("[aria-label='About this copy']")
+        ok("it says which version this is, and that it runs from source",
+           "0.2.0" in (text_of(about) or "") and "from source" in (text_of(about) or ""))
+        systems = hood.get_by_role("list", name="Audio systems")
+        ok("the audio systems on the machine, each with its devices",
+           systems.count() == 1 and systems.get_by_role("listitem").count() == 3
+           and "ASIO" in (text_of(systems) or ""))
+        ok("the one the interface records through stands out",
+           attr_of(systems.get_by_role("listitem").filter(has_text="ASIO"),
+                   "data-in-use") is not None)
+        ok("what it records with",
+           "X32 USB" in (text_of(hood.locator("main")) or ""))
+
+        hood.get_by_role("button", name="Copy details for a bug report").click()
+        copied = hood_until("() => [...document.querySelectorAll('button')]"
+                            ".some(b => b.innerText.includes('Copied'))")
+        ok("Copy details puts the report on the clipboard, and says so",
+           copied and len(hood_calls("bug_report")) == 1
+           and hood.evaluate("() => navigator.clipboard.readText()")
+           .startswith("Rehearsal Recorder 0.2.0"))
+
+        hood.get_by_role("button", name="Show the crash log").click()
+        hood.wait_for_timeout(200)
+        shown = hood_calls("show_file")
+        ok("Show opens the crash log's folder",
+           len(shown) == 1 and shown[0]["args"] == ["crash_log"])
+        hood.get_by_role("button", name="Releases on GitHub").click()
+        hood.wait_for_timeout(200)
+        ok("and the releases page opens in the browser, not in the window",
+           len(hood_calls("open_releases")) == 1)
+
+        check = hood.locator("[aria-label='Interface check']")
+        hood.get_by_role("button", name="Check the interface").click()
+        ok("while it listens it says so, and what to do meanwhile",
+           hood_until("() => document.querySelector(\"[aria-label='Interface check']\")"
+                      "?.innerText.includes('Listening to X32 USB')"))
+        ok("and it can be stopped", hood.get_by_role("button", name="Stop").count() == 1)
+        ok("a card that works says so",
+           hood_until("() => document.querySelector(\"[aria-label='Interface check']\")"
+                      "?.innerText.includes('X32 USB works')"))
+        inputs = check.get_by_role("list", name="Inputs with signal")
+        ok("with each input it opened, and the ones sound came in on lit",
+           inputs.get_by_role("listitem").count() == 6
+           and inputs.locator("[data-signal]").count() == 3)
+        hood.screenshot(path=str(SHOTS / "60-under-the-hood.png"), full_page=True)
+
+        hood.evaluate("() => { window.__CHECK_RESULT__ = 'silent'; }")
+        hood.get_by_role("button", name="Check again").click()
+        ok("a card that sends only silence is not called working",
+           hood_until("() => document.querySelector(\"[aria-label='Interface check']\")"
+                      "?.innerText.includes('X32 USB opens and sends, but every input is silent')")
+           and attr_of(check, "data-state") == "silent")
+
+        hood.evaluate("() => { window.__CHECK_RESULT__ = 'no_sound'; }")
+        hood.get_by_role("button", name="Check again").click()
+        ok("a card that does not work says what is wrong, and what to do",
+           hood_until("() => document.querySelector(\"[aria-label='Interface check']\")"
+                      "?.innerText.includes('The card opens, but sends no sound')")
+           and "delivers little or nothing" in (text_of(check) or ""))
+        ok("with every way it was tried",
+           "The first two channels only" in (text_of(check) or ""))
+        hood.screenshot(path=str(SHOTS / "61-under-the-hood-fails.png"), full_page=True)
+
+        hood.evaluate("() => { window.__CHECK_MS__ = 60000; }")
+        hood.get_by_role("button", name="Check again").click()
+        hood_until("() => [...document.querySelectorAll('button')].some(b => b.innerText.trim() === 'Stop')")
+        hood.get_by_role("button", name="Stop").click()
+        ok("Stop stops it, and it says it was stopped",
+           hood_until("() => document.querySelector(\"[aria-label='Interface check']\")"
+                      "?.innerText.includes('Stopped')")
+           and len(hood_calls("stop_interface_check")) == 1)
+        hood_ctx.close()
 
         print("\n[13] Appearance is applied before Python answers")
         ctx = browser.new_context(viewport={"width": 1180, "height": 820})

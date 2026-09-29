@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DevicePicker } from "@/components/DevicePicker"
 import { OutputChannels } from "@/components/OutputChannels"
+import { UnderTheHood } from "@/components/UnderTheHood"
 import { Shell } from "@/components/Shell"
 import { useEscape } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
@@ -60,7 +61,7 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[]
     id: "about",
     label: "Under the hood",
     icon: <Info className="size-4" />,
-    blurb: "Paths and the local server",
+    blurb: "What this copy of the app runs on, and where it keeps things",
   },
 ]
 
@@ -842,24 +843,7 @@ export function Settings({
         </section>
         </>)}
 
-        {tab === "about" && (
-
-        <section className="flex flex-col gap-2">
-          <Label>Under the hood</Label>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
-            <dt>Version</dt>
-            <dd>{settings?.version}</dd>
-            <dt>Settings</dt>
-            <dd className="break-all">{settings?.config_path}</dd>
-            <dt>Local server</dt>
-            <dd>{settings?.server_url}</dd>
-          </dl>
-          <p className="text-xs text-muted-foreground">
-            The server hands the interface and the audio to this machine only
-            (127.0.0.1) and lives as long as the app is open.
-          </p>
-        </section>
-        )}
+        {tab === "about" && <UnderTheHood />}
         </div>
       </div>
     </Shell>

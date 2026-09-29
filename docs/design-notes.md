@@ -345,6 +345,19 @@ saved choice that stops being possible — another card, another setup — is
 replaced by one that works, instead of failing when everyone is ready to
 play.
 
+**When a card will not work, the window asks it why.** Settings › Under the
+hood's Check the interface is `--audio-probe` for someone at a rehearsal
+with no command line: the same attempts, from `probe.plan_for`, run by
+`probe.InterfaceCheck` on a thread of its own and read by the page as they
+come in. It never runs beside a take, and it takes the card from the signal
+check if that has it: an ASIO card is one stream's at a time, and the check
+opening it beside another would find the other one, not the fault. Stop
+waits for the attempt under way, because a driver closed halfway through
+opening is worse than a few seconds. The page's Copy details puts what the
+page says, the band on the card's inputs and the last check on the
+clipboard as plain lines: a report worth having is one that is actually
+sent, and one step is what gets it sent.
+
 ## Cloud copies
 
 Converting goes through libsndfile, via the `soundfile` package, which comes

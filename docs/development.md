@@ -184,6 +184,7 @@ src/rehearsal_recorder/     the Python application
   api.py                    the bridge to JS: rehearsals, takes, devices
   mediaserver.py            the local HTTP server (interface, audio, polling)
   platform_support.py       where macOS, Windows and Linux differ — all of it
+  diagnostics.py            what Settings › Under the hood says, and its report
   audio/capture.py          multichannel capture with continuous write
   audio/player.py           playback and mixing of a take
   audio/monitor.py          listening to inputs without recording
@@ -192,6 +193,8 @@ src/rehearsal_recorder/     the Python application
   audio/crop.py             cutting a take down to the part worth keeping
   audio/drafts.py           unsaved takes: finding, describing, finalizing
   audio/devices.py          the stream lock, and asking a card what it can do
+  audio/probe.py            asking a card why it will not open or send
+                            (--audio-probe, and Check the interface)
   audio/format.py           16- and 24-bit: packing, unpacking, what each costs
   audio/encode.py           compressing cloud copies (FLAC/MP3 via libsndfile)
   store/                    the rehearsal history: models.py, db.py

@@ -23,8 +23,10 @@ import logging
 import os
 import re
 import shutil
+import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 import sounddevice as sd
@@ -75,17 +77,24 @@ from rehearsal_recorder.store import library as librarymod
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
 from rehearsal_recorder.store.library import Library, as_marker
+from rehearsal_recorder.store.db import DB_NAME
+from rehearsal_recorder import diagnostics
+from rehearsal_recorder.audio.probe import InterfaceCheck, plan_for, tracks_for
 from rehearsal_recorder.platform_support import (
+    CRASH_LOG,
     FALLBACK_TRASH,
     app_root,
     describe_path_limit,
     move_to_trash,
+    reveal_in_file_manager,
     safe_filename,
     trash_kind,
 )
 
 CONFIG_PATH = Path.home() / ".rehearsal-recorder" / "config.json"
 RECORDINGS_ROOT = Path.home() / "RehearsalRecordings"
+# Where Under the hood sends someone to see whether there is a newer version.
+RELEASES_URL = "https://github.com/voronizer/rehearsal-recorder/releases"
 UI_DIR = app_root() / "ui" / "dist"
 
 # Warn below this much recording time left.
@@ -362,6 +371,8 @@ class Api:
         self._recorder_temp_dir = None
         self._session = None
         self._monitor = None
+        # Settings › Under the hood's check of the interface; see probe.py.
+        self._check = InterfaceCheck()
         self._player = None
         # What the open player was opened with, so a step that has to let go of
         # the files can put back exactly the take that was playing.
@@ -558,6 +569,173 @@ class Api:
             "config_path": str(CONFIG_PATH),
             "version": __version__,
         }
+
+    # ---------- Settings › Under the hood ----------
+
+    def _own_files(self):
+        """The app's own files, by the key the window asks for them with."""
+        return {
+            "settings": Path(CONFIG_PATH),
+            "history": self._recordings_dir / DB_NAME,
+            "crash_log": Path(CRASH_LOG),
+        }
+
+    def under_the_hood(self):
+        """
+        What this copy of the app runs on and where it keeps things, for the
+        page a person opens when something has gone wrong: asked of the
+        machine now, each part on its own, so one that cannot be answered
+        leaves the rest standing.
+        """
+        apis, devices = [], []
+        try:
+            with STREAM_LOCK:
+                apis = list(sd.query_hostapis())
+                devices = list(sd.query_devices())
+        except Exception as e:  # noqa: BLE001
+            print(f"[hood] audio systems: {e}")
+
+        recording = None
+        index = saved_device(self._config, "device", True)
+        if index is not None and index < len(devices):
+            d = devices[index]
+            api = d.get("hostapi", -1)
+            recording = {
+                "name": d["name"],
+                "host_api": apis[api]["name"] if 0 <= api < len(apis) else "",
+                "inputs": d.get("max_input_channels", 0),
+                "samplerate": int(self._config.get("samplerate") or DEFAULT_SAMPLERATE),
+                "bit_depth": normalize_depth(self._config.get("bit_depth")),
+            }
+        elif self._missing_device():
+            gone = self._missing_device()
+            recording = {"name": gone["name"], "host_api": gone["host_api"],
+                         "inputs": 0, "missing": True,
+                         "samplerate": int(self._config.get("samplerate") or DEFAULT_SAMPLERATE),
+                         "bit_depth": normalize_depth(self._config.get("bit_depth"))}
+
+        out = saved_device(self._config, "output_device", False)
+        playback = (devices[out]["name"] if out is not None and out < len(devices)
+                    else "System output")
+
+        files = []
+        for key, path in self._own_files().items():
+            try:
+                stat = path.stat()
+                exists, size = True, stat.st_size
+                modified = datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds")
+            except OSError:
+                exists, size, modified = False, None, None
+            files.append({"key": key, "path": str(path), "exists": exists,
+                          "size": size, "modified": modified})
+
+        try:
+            import soundfile
+
+            libsndfile = soundfile.__libsndfile_version__
+        except Exception:  # noqa: BLE001
+            libsndfile = None
+
+        frozen = bool(getattr(sys, "frozen", False))
+        return {
+            "version": __version__,
+            "running_as": "built" if frozen else "source",
+            "executable": Path(sys.executable).name,
+            "system": diagnostics.system_line(),
+            "audio": {
+                "engine": diagnostics.engine_line(sd),
+                "systems": diagnostics.audio_systems(apis, devices),
+                "recording": recording,
+                "playback": playback,
+            },
+            "files": files,
+            "deleting": trash_kind(),
+            "fallback_trash": FALLBACK_TRASH,
+            "libsndfile": libsndfile if encoder_available() else None,
+            "server_url": self._server.base_url,
+            "releases_url": RELEASES_URL,
+        }
+
+    def bug_report(self):
+        """The text Copy details puts on the clipboard: the page above, the
+        band on the card's inputs, the cloud and the last check, as lines
+        that survive being pasted anywhere."""
+        hood = self.under_the_hood()
+        index = saved_device(self._config, "device", True)
+        try:
+            max_inputs = sd.query_devices(index)["max_input_channels"] if index is not None else 0
+            tracks = tracks_for(self._config, device_identity(index), max_inputs)
+        except Exception:  # noqa: BLE001
+            tracks = [{"name": t.get("name", "?"), "channel": None}
+                      for t in self._config.get("tracks", [])]
+        if not self._config.get("cloud_dir"):
+            cloud = "no cloud folder"
+        else:
+            fmt = normalize_format(self._config.get("cloud_format")).upper()
+            what = {"mix": "the mix", "tracks": "the tracks",
+                    "both": "the mix and the tracks"}.get(
+                self._config.get("auto_publish_what") or "mix", "the mix")
+            cloud = (f"sending on, {what} as {fmt}" if self._config.get("auto_publish")
+                     else f"a folder is set, sending is off; copies as {fmt}")
+        if hood.get("libsndfile"):
+            cloud += f"; compressing through libsndfile {hood['libsndfile']}"
+        return {"ok": True,
+                "text": diagnostics.report_text(hood, tracks, cloud, self._check.state())}
+
+    def show_file(self, which):
+        """Opens the folder one of the app's own files is in, with the file
+        picked out. Only those: the window names one by its key."""
+        path = self._own_files().get(which)
+        if path is None:
+            return {"ok": False, "error": "Not one of the app's own files"}
+        if not path.exists():
+            if not path.parent.is_dir():
+                return {"ok": False, "error": "It is not there yet"}
+            return reveal_in_file_manager(path.parent)
+        return reveal_in_file_manager(path)
+
+    def open_releases(self):
+        """The releases page, in the browser: the window would open it in
+        itself, with no way back."""
+        import webbrowser
+
+        try:
+            webbrowser.open(RELEASES_URL)
+            return {"ok": True}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)}
+
+    def start_interface_check(self):
+        """
+        Checks the recording interface the way --audio-probe does, in the
+        background: the settings in force first, and if they do not work,
+        one change at a time. Never beside a take, and it takes the card from
+        the signal check if that has it — an ASIO card is one program's, and
+        one stream's, at a time.
+        """
+        if self._recorder is not None:
+            return {"ok": False, "error": "Stop the take first"}
+        if self._check.state().get("running"):
+            return {"ok": False, "error": "A check is already running"}
+        self.stop_monitor()
+        try:
+            asked = plan_for(sd, self._config)
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": f"Could not ask the interface: {e}"}
+        if asked is None:
+            return {"ok": False, "error":
+                    "No recording interface is chosen — pick one in Settings › Audio."}
+        if not self._check.start(sd, asked):
+            return {"ok": False, "error": "A check is already running"}
+        return {"ok": True}
+
+    def interface_check(self):
+        """What the check has found so far, or its verdict once done."""
+        return self._check.state()
+
+    def stop_interface_check(self):
+        self._check.stop()
+        return {"ok": True}
 
     def set_recordings_dir(self, path):
         folder = Path(path).expanduser()

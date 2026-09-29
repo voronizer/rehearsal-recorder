@@ -285,6 +285,74 @@ export type RecordingHealth = {
   low_space?: boolean
 }
 
+/** One of the app's own files, for Under the hood's Show buttons. */
+export type OwnFile = {
+  key: "settings" | "history" | "crash_log"
+  path: string
+  exists: boolean
+  size: number | null
+  modified: string | null
+}
+
+/** What this copy of the app runs on — see api.under_the_hood. */
+export type UnderTheHood = {
+  version: string
+  running_as: "built" | "source"
+  executable: string
+  system: string
+  audio: {
+    engine: string | null
+    /** Each audio system PortAudio found, with how many devices it lists. */
+    systems: { name: string; devices: number }[]
+    recording: {
+      name: string
+      host_api: string
+      inputs: number
+      samplerate: number
+      bit_depth: number
+      /** Saved, but not plugged in. */
+      missing?: boolean
+    } | null
+    playback: string
+  }
+  files: OwnFile[]
+  deleting: "system" | "folder"
+  fallback_trash: string
+  /** Its version when copies can be compressed, else null. */
+  libsndfile: string | null
+  server_url: string
+  releases_url: string
+}
+
+/** One way the check opened the card, and what came of it. */
+export type CheckRow = {
+  label: string
+  opened: boolean
+  flowing: boolean
+  frames: number
+  expected: number
+  error: string | null
+}
+
+/** The check of the interface, as far as it has got — see probe.InterfaceCheck. */
+export type InterfaceCheck = {
+  running: boolean
+  stopped?: boolean
+  device?: {
+    name: string
+    host_api: string
+    channels: number
+    samplerate: number
+    bit_depth: number
+  }
+  rows?: CheckRow[]
+  verdict?: { cause: string; headline: string; advice: string } | null
+  /** Each input's loudest moment, 0..1, when the settings in force worked. */
+  peaks?: number[] | null
+  signal?: string | null
+  checked_at?: string | null
+}
+
 export type Settings = {
   recordings_dir: string
   default_recordings_dir: string
@@ -487,6 +555,16 @@ type PyApi = {
   discard_draft(draftDir: string): Promise<DeleteResult>
 
   get_settings(): Promise<Settings>
+  /** Settings › Under the hood: what this copy runs on, asked now. */
+  under_the_hood(): Promise<UnderTheHood>
+  /** The text Copy details puts on the clipboard. */
+  bug_report(): Promise<Ok<{ text?: string }>>
+  /** The folder one of the app's own files is in, with the file picked out. */
+  show_file(which: OwnFile["key"]): Promise<Ok>
+  open_releases(): Promise<Ok>
+  start_interface_check(): Promise<Ok>
+  interface_check(): Promise<InterfaceCheck>
+  stop_interface_check(): Promise<Ok>
   set_recordings_dir(path: string): Promise<Ok<{ recordings_dir?: string }>>
   choose_recordings_dir(): Promise<
     Ok<{ recordings_dir?: string; cancelled?: boolean }>

@@ -369,26 +369,34 @@ program at a time. Close any other program that might be using it: a DAW,
 the interface's own mixer or control app, or a second copy of Rehearsal
 Recorder. Then try again.
 
-If that does not help, the app can test the interface for you. Open a
-terminal in the folder where you unpacked the app and run:
+If that does not help, the app can test the interface for you. Open
+**Settings**, go to **Under the hood** and press **Check the interface**.
+
+Play or talk into the inputs while it listens. If sound arrives, it says so
+and lights up the inputs that had signal. That takes about five seconds. If no
+sound arrives, it tries several more times, changing one setting each time,
+and then tells you what is wrong and what to do. An interface that opens but
+sends nothing can take up to a minute to test; **Stop** ends it early.
+
+If it says that the driver only works with its outputs opened too, or that
+the interface opens but sends no sound, record through WASAPI for now. The
+same interface is listed there too, usually with fewer inputs. The Realtek
+ASIO driver that comes with some laptops is known to behave like this.
+
+To ask for help, press **Copy details for a bug report** on the same page and
+paste what it copies into your message. It says which version you have, what
+the computer is, which interface and settings you record with, what the last
+check found, and where the app keeps its files. The **Show** buttons there
+open the folder with the settings, the history or the crash log, if someone
+asks you to send one.
+
+The same test also runs from a terminal, in the folder where you unpacked the
+app, which can test another interface too — add its number from the list it
+prints:
 
 ```
 RehearsalRecorder.exe --audio-probe
 ```
-
-Play or talk into the inputs while it listens. If sound arrives, it says so
-and lists the inputs that had signal, for example `signal on inputs 1, 2, 5;
-the rest silent`. That takes about five seconds. If no sound arrives, it tries
-several more times, changing one setting each time, and then tells you what
-to do. An interface that opens but sends nothing can take up to a minute to
-test. To test a different interface, add its number from the list the probe
-prints.
-
-If the probe says that the driver only works with its outputs opened too, or
-that the interface opens but sends no sound, record through WASAPI for now.
-The same interface is listed there too, usually with fewer inputs. The
-Realtek ASIO driver that comes with some laptops is known to behave like
-this.
 
 ### The interface goes away during a take
 

@@ -2856,6 +2856,8 @@ def main():
         refuse = None
         made_on = []
         out_dirty = False
+        # False: blocks of silence, the way a card with nothing plugged in sends.
+        loud = True
 
         def __init__(self, **kw):
             if self.refuse:
@@ -2886,7 +2888,8 @@ def main():
                 due = int((_t.monotonic() - began) * kw["samplerate"] * 2 / frames) + 1
                 while sent < due and (self.blocks is None or sent < self.blocks):
                     block = np.zeros((frames, ins), dtype=dtype)
-                    block[:, 0] = (np.iinfo(dtype).max + 1) // 4
+                    if self.loud:
+                        block[:, 0] = (np.iinfo(dtype).max + 1) // 4
                     if duplex:
                         out = np.ones((frames, kw["channels"][1]), dtype=dtype)
                         kw["callback"](block, out, frames, None, None)
@@ -4811,6 +4814,184 @@ def main():
        apimod45._copy_detail("both", {"cloud": {"mix_format": "mp3",
                                                 "tracks_format": "mp3"}})
        == "MP3 of the mix and every track")
+
+    print("\n[46] Under the hood: what the app runs on, and where it keeps things")
+    # The page a person opens when something is wrong, and the text they
+    # paste into a message about it. Everything on it is asked of the machine
+    # as it is now, not remembered.
+    import rehearsal_recorder
+    from rehearsal_recorder import diagnostics as diag
+
+    tmp46 = Path(tempfile.mkdtemp())
+    apimod46, h46 = fresh_api(tmp46)
+    apimod46.CRASH_LOG = tmp46 / "crash.log"
+    real_pa = getattr(_sd, "get_portaudio_version", None)
+    _sd.get_portaudio_version = lambda: (1246976, "PortAudio V19.7.0-devel, revision unknown")
+    h46._remember_device("device", 0)
+    h46._config["samplerate"] = 48000
+    h46._config["bit_depth"] = 24
+    h46._config["tracks"] = [{"name": "Gtr"}, {"name": "Keys", "stereo": True}]
+    info = h46.under_the_hood()
+    ok("it says which version is running, and whether it is the built app",
+       info["version"] == rehearsal_recorder.__version__
+       and info["running_as"] in ("built", "source"))
+    ok("the audio engine, without PortAudio's 'revision unknown'",
+       info["audio"]["engine"] == "PortAudio V19.7.0-devel")
+    ok("every audio system on the machine, with how many devices it has",
+       info["audio"]["systems"] == [{"name": "CoreAudio", "devices": 4}])
+    ok("what it records with",
+       info["audio"]["recording"] == {"name": "Interface", "host_api": "CoreAudio",
+                                      "inputs": 8, "samplerate": 48000,
+                                      "bit_depth": 24})
+    ok("and where it plays back", info["audio"]["playback"] == "System output")
+    files46 = {f["key"]: f for f in info["files"]}
+    ok("where its own files are: the settings, the history, the crash log",
+       set(files46) == {"settings", "history", "crash_log"}
+       and files46["settings"]["path"] == str(apimod46.CONFIG_PATH)
+       and files46["history"]["path"] == str(tmp46 / "Rec" / "library.sqlite"))
+    ok("a crash log never written is said not to be there",
+       files46["crash_log"]["exists"] is False and files46["crash_log"]["modified"] is None)
+    (tmp46 / "crash.log").write_text("boom\n", encoding="utf-8")
+    written = {f["key"]: f for f in h46.under_the_hood()["files"]}["crash_log"]
+    ok("and one that was, with when", written["exists"] and written["modified"])
+
+    fake_win = types.SimpleNamespace(
+        system=lambda: "Windows", win32_ver=lambda: ("11", "10.0.26200", "SP0", ""),
+        win32_edition=lambda: "Professional", machine=lambda: "AMD64")
+    ok("Windows is named the way its own About box names it",
+       diag.system_line(fake_win) == "Windows 11 Pro 10.0.26200, x64")
+    fake_mac = types.SimpleNamespace(
+        system=lambda: "Darwin", mac_ver=lambda: ("15.1", ("", "", ""), "arm64"),
+        machine=lambda: "arm64")
+    ok("and so is a Mac", diag.system_line(fake_mac) == "macOS 15.1, arm64")
+
+    shown46 = []
+    real_reveal = apimod46.reveal_in_file_manager
+    apimod46.reveal_in_file_manager = lambda p: shown46.append(str(p)) or {"ok": True}
+    try:
+        h46._write_config()
+        h46.show_file("settings")
+        ok("Show opens the file's folder, with the file picked out",
+           shown46 == [str(apimod46.CONFIG_PATH)])
+        h46.show_file("crash_log")
+        ok("and for a file not written yet, the folder it will be in",
+           shown46[-1] == str(tmp46) if not (tmp46 / "crash.log").exists()
+           else shown46[-1] == str(tmp46 / "crash.log"))
+        shown46[:] = shown46[:1]
+        refused46 = h46.show_file(str(tmp46))
+        ok("and only the app's own files can be shown that way",
+           refused46["ok"] is False and len(shown46) == 1)
+    finally:
+        apimod46.reveal_in_file_manager = real_reveal
+
+    report46 = h46.bug_report()["text"]
+    ok("the report for a bug starts with the version and the system",
+       report46.splitlines()[0].startswith(f"Rehearsal Recorder {rehearsal_recorder.__version__}")
+       and diag.system_line() in report46)
+    ok("and says what it records with, and the band on its inputs",
+       "Recording with: Interface — CoreAudio, 8 inputs, 48000 Hz, 24 bit" in report46
+       and "Tracks: Gtr on input 1, Keys on inputs 2–3 (stereo)" in report46)
+    ok("the audio systems it could see",
+       "Audio systems: CoreAudio (4)" in report46)
+    ok("and where its files are",
+       str(apimod46.CONFIG_PATH) in report46 and "library.sqlite" in report46)
+
+    print("\n[47] Checking the interface from the window")
+    # --audio-probe for someone at a rehearsal with no command line: the same
+    # attempts, run in the background, with what it has found readable while
+    # it goes, and a verdict at the end.
+    from rehearsal_recorder.audio import heartbeat as hb47
+
+    real_streams = (_sd.InputStream, getattr(_sd, "Stream", None))
+    real_listen = (probemod.LISTEN_FIRST_SEC, probemod.LISTEN_SEC, hb47.FIRST_BLOCK_SEC)
+    probemod.LISTEN_FIRST_SEC = probemod.LISTEN_SEC = 0.25
+    hb47.FIRST_BLOCK_SEC = 0.6
+
+    def check_with(cls):
+        _sd.InputStream = _sd.Stream = cls
+        started = h46.start_interface_check()
+        h46._check.wait(20)
+        return started, h46.interface_check()
+
+    class _Monitor:
+        stopped = False
+
+        def stop(self):
+            _Monitor.stopped = True
+
+    try:
+        h46._monitor = _Monitor()
+        _sd.InputStream = _sd.Stream = _Sends
+        started = h46.start_interface_check()
+        ok("the check starts", started.get("ok") is True)
+        ok("and says it is listening while it does",
+           h46.interface_check().get("running") is True)
+        ok("a second one is not started over it",
+           h46.start_interface_check().get("ok") is False)
+        ok("the signal check lets go of the card for it",
+           _Monitor.stopped and h46._monitor is None)
+        h46._check.wait(20)
+        done = h46.interface_check()
+        ok("a card that sends is found to work with the settings in force",
+           done.get("running") is False
+           and (done.get("verdict") or {}).get("cause") == "none"
+           and [r["label"] for r in done.get("rows", [])] == [probemod.AS_CONFIGURED])
+        ok("with which inputs had signal",
+           (done.get("peaks") or [0])[0] > 0.2
+           and all(p == 0 for p in (done.get("peaks") or [1, 1])[1:])
+           and done.get("signal") == "signal on input 1; the rest silent")
+        ok("and what it asked, to say back",
+           done.get("device") == {"name": "Interface", "host_api": "CoreAudio",
+                                  "channels": 3, "samplerate": 48000, "bit_depth": 24}
+           and bool(done.get("checked_at")))
+
+        class _Hushed(_Card):
+            loud = False
+
+        started, hushed = check_with(_Hushed)
+        ok("a card that sends only silence opens, and says every input was silent",
+           (hushed.get("verdict") or {}).get("cause") == "none"
+           and "every input is silent" in (hushed.get("signal") or ""))
+        ok("and the report does not call that working",
+           "opens and sends, but every input was silent" in h46.bug_report()["text"])
+
+        started, bad = check_with(_Stalls)
+        ok("a card that opens and never sends is found out, every other way tried",
+           (bad.get("verdict") or {}).get("cause") == "no_sound"
+           and len(bad.get("rows", [])) > 1 and bad.get("peaks") is None)
+        ok("the report for a bug carries the last check",
+           "Last check of the interface" in h46.bug_report()["text"])
+
+        _sd.InputStream = _sd.Stream = _Stalls
+        h46.start_interface_check()
+        h46.stop_interface_check()
+        h46._check.wait(20)
+        halted = h46.interface_check()
+        ok("Stop ends it after the attempt under way, and says it was stopped",
+           halted.get("stopped") is True and halted.get("verdict") is None
+           and len(halted.get("rows", [])) <= 1)
+
+        h46._recorder = object()
+        try:
+            ok("it is not run while a take records",
+               h46.start_interface_check().get("ok") is False)
+        finally:
+            h46._recorder = None
+
+        h46._config.pop("device_index", None)
+        h46._config.pop("device", None)
+        nothing = h46.start_interface_check()
+        ok("with no interface chosen it says to choose one",
+           nothing.get("ok") is False and "Settings" in (nothing.get("error") or ""))
+    finally:
+        _sd.InputStream = real_streams[0]
+        if real_streams[1] is not None:
+            _sd.Stream = real_streams[1]
+        probemod.LISTEN_FIRST_SEC, probemod.LISTEN_SEC, hb47.FIRST_BLOCK_SEC = real_listen
+        if real_pa is None:
+            del _sd.get_portaudio_version
+        else:
+            _sd.get_portaudio_version = real_pa
 
     print("\n" + "=" * 60)
     if problems:

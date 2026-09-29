@@ -7,10 +7,26 @@ opening.
 
 ## Unreleased
 
+- **Settings › Under the hood** is a page to open when something has gone
+  wrong. It says which version this is and whether it is the built app, what
+  the app records and plays back through, every audio system on the machine
+  with how many devices each lists — so whether ASIO is there at all is
+  plain — and the audio engine, the system, where deleted things go and what
+  compresses the cloud copies. **Check the interface** runs `--audio-probe`
+  from the window: it listens with the settings in force, tries again one
+  change at a time if that fails, shows each attempt as it goes, and ends
+  with which inputs had signal — or, for a card that sends only silence,
+  that it is not the card — or what is wrong and what to do; **Stop** ends
+  it early. **Copy details for a bug report** puts all of that, with the band
+  on the card's inputs and the last check, on the clipboard as plain lines,
+  and **Show** opens the folder with the settings, the history or the crash
+  log. It used to be a version number, a path and the local server's
+  address.
 - The app has its own icon: a red record button with a waveform in it, on
   the taskbar and in Explorer on Windows and in the Dock and Finder on
   macOS. It had PyInstaller's default, and run from source on Windows the
-  Python logo. The small sizes, in a title bar or on the taskbar, have a
+  Python logo — on the taskbar too, which goes by the program rather than
+  the window until the app says it is an app of its own. The small sizes, in a title bar or on the taskbar, have a
   plainer drawing of their own that still reads at 16 px. The same logo
   sits beside the app's name on the setup screen and above the line shown
   while the app starts.

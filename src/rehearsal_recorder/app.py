@@ -12,11 +12,8 @@ import logging
 import signal
 import sys
 from datetime import datetime
-from pathlib import Path
 
-
-
-CRASH_LOG = Path.home() / ".rehearsal-recorder" / "crash.log"
+from rehearsal_recorder.platform_support import CRASH_LOG
 
 
 def _arm_crash_log():
@@ -250,7 +247,11 @@ def main():
     import webview
 
     from rehearsal_recorder.api import Api
-    from rehearsal_recorder.platform_support import window_icon
+    from rehearsal_recorder.platform_support import claim_taskbar_identity, window_icon
+
+    # Before the window exists: the taskbar decides whose icon to show when
+    # the window first appears.
+    claim_taskbar_identity()
 
     keep_open = _arm_crash_log()  # noqa: F841 — the file must outlive main()
     api = Api(server_port=DEV_SERVER_PORT if dev else 0)

@@ -243,6 +243,29 @@ def main():
     ok("and so is a Windows where COM cannot be reached at all",
        isinstance(ps.enter_com_apartment("win32", object()), str))
 
+    print("\n[reveal] Show picks a file out in its folder")
+    # Under the hood's Show buttons: the folder opens with the file already
+    # selected, which is what makes "send me the crash log" one step.
+    ran = []
+    ps.reveal_in_file_manager(r"C:\Users\a\.rehearsal-recorder\crash.log",
+                              system="win32", run=ran.append)
+    ok("on Windows, Explorer with the file selected",
+       ran[-1:] == ['explorer /select,"C:\\Users\\a\\.rehearsal-recorder\\crash.log"'])
+    ps.reveal_in_file_manager("/Users/a/.rehearsal-recorder/crash.log",
+                              system="darwin", run=ran.append)
+    ok("on a Mac, Finder with it revealed",
+       ran[-1:] == [["open", "-R", "/Users/a/.rehearsal-recorder/crash.log"]])
+    ps.reveal_in_file_manager("/home/a/.rehearsal-recorder/crash.log",
+                              system="linux", run=ran.append)
+    ok("elsewhere, the folder it is in",
+       ran[-1:] == [["xdg-open", "/home/a/.rehearsal-recorder"]])
+
+    def refuses(command):
+        raise OSError("no file manager")
+
+    ok("a file manager that will not start is said, not raised",
+       ps.reveal_in_file_manager("/x", system="linux", run=refuses)["ok"] is False)
+
     print("\n[icon] The app has its own icon on both systems")
     # Without one, PyInstaller gives the app its own default, and the taskbar
     # shows a Python logo for an app about recording a band. The icon is
@@ -300,6 +323,29 @@ def main():
     ok("and above that from the full one",
        all(make_icons.drawing_for(s) == packaging / "icon.svg"
            for s in (40, 48, 64, 256, 1024)))
+
+    # The window's icon is not what the taskbar shows: it groups windows by
+    # the program they belong to, and run from source that is python.exe.
+    # Saying the app is an app of its own is what makes the taskbar use the
+    # window's icon instead of Python's.
+    class Shell32:
+        def __init__(self):
+            self.said = []
+
+        def SetCurrentProcessExplicitAppUserModelID(self, app_id):
+            self.said.append(app_id)
+            return 0
+
+    shell = Shell32()
+    ps.claim_taskbar_identity("win32", frozen=False, shell32=shell)
+    ok("from source on Windows the app tells the taskbar it is not Python",
+       shell.said == [ps.APP_ID] and "Rehearsal" in ps.APP_ID)
+    built = Shell32()
+    ps.claim_taskbar_identity("win32", frozen=True, shell32=built)
+    ok("a built app is its own .exe already, and a pinned one keeps working",
+       built.said == [])
+    ok("and elsewhere there is no such thing to say",
+       ps.claim_taskbar_identity("darwin", frozen=False, shell32=Shell32()) is None)
 
     index = (PROJECT / "ui" / "index.html").read_text(encoding="utf-8")
     favicon = PROJECT / "ui" / "public" / "favicon.svg"

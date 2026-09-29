@@ -26,6 +26,10 @@ FALLBACK_TRASH = "_deleted"
 WINDOWS = sys.platform == "win32"
 MACOS = sys.platform == "darwin"
 
+# Where the app writes what every thread was doing if it dies hard — see
+# app._arm_crash_log. Here so the window can say where it is too.
+CRASH_LOG = Path.home() / ".rehearsal-recorder" / "crash.log"
+
 
 # This file is src/rehearsal_recorder/platform_support.py, so the folder that
 # holds ui/ is two levels up. Named here rather than computed by searching,
@@ -48,6 +52,35 @@ def app_root():
     if bundled:
         return Path(bundled)
     return _SOURCE_ROOT
+
+
+# Who the app is to the Windows taskbar, when it is not an .exe of its own.
+APP_ID = "Voronizer.RehearsalRecorder"
+
+
+def claim_taskbar_identity(system=sys.platform, frozen=None, shell32=None):
+    """
+    Run from source, the program is python.exe, and the taskbar groups the
+    window under it with Python's icon, whatever the window's own icon says.
+    Saying the process is an app of its own makes the taskbar use the
+    window's icon. Before any window is made, or the taskbar has already
+    decided. A built app is its own .exe with its own icon already, and
+    giving it an id would part it from a pinned shortcut to it.
+    """
+    if frozen is None:
+        frozen = bool(getattr(sys, "_MEIPASS", None))
+    if system != "win32" or frozen:
+        return None
+    try:
+        if shell32 is None:
+            import ctypes
+
+            shell32 = ctypes.windll.shell32
+        shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+        return APP_ID
+    except Exception as e:  # noqa: BLE001 — a Python icon is no reason not to start
+        print(f"[taskbar] {e}")
+        return None
 
 
 def window_icon(system=sys.platform, frozen=None):
@@ -214,6 +247,32 @@ def describe_path_limit(path):
         "260, and take and track names are added on top — a shorter "
         "recordings folder would be safer."
     )
+
+
+def reveal_in_file_manager(path, system=sys.platform, run=None):
+    """
+    Opens the folder a file is in, with the file picked out — Explorer's
+    /select, Finder's reveal — so "send me the crash log" is one step. Where
+    the desktop has no such thing, the folder it is in.
+
+    `run` takes the command; by default it is started and not waited for.
+    """
+    import subprocess
+
+    path = str(path)
+    if system == "win32":
+        # A string, not a list: Explorer wants /select,"path" as it stands,
+        # and a list would have Python quote the whole argument instead.
+        command = f'explorer /select,"{path}"'
+    elif system == "darwin":
+        command = ["open", "-R", path]
+    else:
+        command = ["xdg-open", os.path.dirname(path)]
+    try:
+        (run or subprocess.Popen)(command)
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 def open_in_file_manager(path):

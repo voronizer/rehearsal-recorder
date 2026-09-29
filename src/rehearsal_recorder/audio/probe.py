@@ -142,7 +142,7 @@ _VERDICTS = {
         "whatever the settings — the Realtek ASIO driver that comes with some "
         "laptops does exactly this. Close the card's control panel and "
         "anything else that uses it, unplug the card and plug it back in, and "
-        "run this again. If it still sends nothing, its driver wants "
+        "check again. If it still sends nothing, its driver wants "
         "reinstalling; until then, record through WASAPI, where the same card "
         "is listed too.",
     ),
@@ -257,7 +257,7 @@ def signal_line(peaks):
     if not loud:
         return (
             "sound arrives, but every input is silent — play into them, or "
-            "check what the card's own routing sends, and run it again"
+            "look at what the card's own routing sends, and check again"
         )
     if len(loud) == len(peaks):
         return "signal on every input"
@@ -269,17 +269,21 @@ def signal_line(peaks):
 
 
 def probe(sd, device_index, plan, first_seconds=LISTEN_FIRST_SEC,
-          seconds=LISTEN_SEC, first_block=None, report=None):
+          seconds=LISTEN_SEC, first_block=None, report=None, stop=None):
     """
     Tries the plan in order and returns a row per attempt tried.
 
     The settings in force come first and listen longest. When sound arrives
     with them, that is the answer and nothing else is tried: every other
     attempt could only cost another load of the driver. `report(attempt,
-    row)` hears of each row as it comes, for a person watching.
+    row)` hears of each row as it comes, for a person watching. `stop`, an
+    Event, ends it before the next attempt: one under way is let finish, since
+    an ASIO driver half opened is worse than a few seconds' wait.
     """
     rows = []
     for i, attempt in enumerate(plan):
+        if stop is not None and stop.is_set():
+            break
         row = try_attempt(sd, device_index, attempt,
                           seconds=first_seconds if i == 0 else seconds,
                           first_block=first_block)
@@ -370,6 +374,127 @@ def try_attempt(sd, device_index, attempt, seconds=LISTEN_SEC, first_block=None)
     return row
 
 
+def plan_for(sd, config, device_index=None):
+    """
+    What a check asks of the saved recording card, or of the one named: the
+    settings in force and the band on this card's inputs, the way a take
+    would open it. {"device_index", "name", "host_api", "channels",
+    "samplerate", "bit_depth", "plan"}, or None with no card to ask.
+    """
+    from rehearsal_recorder.audio.devices import device_identity, saved_device
+
+    if device_index is None:
+        device_index = saved_device(config, "device", True)
+    if device_index is None:
+        return None
+    info = sd.query_devices(device_index)
+    identity = device_identity(device_index) or {}
+    samplerate = int(config.get("samplerate") or info["default_samplerate"])
+    depth = normalize_depth(config.get("bit_depth"))
+    channels = channels_for(tracks_for(
+        config, device_identity(device_index), info["max_input_channels"]
+    ))
+    return {
+        "device_index": device_index,
+        "name": info["name"],
+        "host_api": identity.get("host_api", ""),
+        "channels": channels,
+        "samplerate": samplerate,
+        "bit_depth": depth,
+        "plan": attempts(
+            samplerate=samplerate,
+            channels=channels,
+            bit_depth=depth,
+            driver_samplerate=int(info["default_samplerate"]),
+            has_outputs=info.get("max_output_channels", 0) > 0,
+        ),
+    }
+
+
+class InterfaceCheck:
+    """
+    The check the window runs, from Settings › Under the hood: probe() on a
+    thread of its own, with what it has found so far readable at any moment,
+    so the page can show each attempt as it comes and the verdict at the end.
+
+    The listening times are read when it starts rather than bound when this
+    file loads, so the suites can shorten them.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread = None
+        self._state = {"running": False}
+
+    def start(self, sd, asked):
+        """Starts checking what plan_for() asked; False when one is running."""
+        with self._lock:
+            if self._state.get("running"):
+                return False
+            self._stop.clear()
+            self._state = {
+                "running": True,
+                "stopped": False,
+                "device": {k: asked[k] for k in
+                           ("name", "host_api", "channels", "samplerate", "bit_depth")},
+                "rows": [],
+                "verdict": None,
+                "peaks": None,
+                "signal": None,
+                "checked_at": None,
+            }
+        self._thread = threading.Thread(
+            target=self._run, args=(sd, asked), name="interface-check", daemon=True)
+        self._thread.start()
+        return True
+
+    def _run(self, sd, asked):
+        def heard(attempt, row):
+            with self._lock:
+                self._state["rows"].append({k: row.get(k) for k in (
+                    "label", "opened", "flowing", "frames", "expected", "error")})
+
+        try:
+            rows = probe(sd, asked["device_index"], asked["plan"],
+                         first_seconds=LISTEN_FIRST_SEC, seconds=LISTEN_SEC,
+                         report=heard, stop=self._stop)
+            stopped = self._stop.is_set() and len(rows) < len(asked["plan"]) \
+                and not (rows and rows[0]["flowing"])
+        except Exception as e:  # noqa: BLE001 — said on the page, not raised
+            rows, stopped = [], False
+            with self._lock:
+                self._state["rows"].append({"label": AS_CONFIGURED, "opened": False,
+                                            "flowing": False, "frames": 0,
+                                            "expected": 0, "error": describe(e)})
+        with self._lock:
+            self._state["stopped"] = stopped
+            if not stopped and rows:
+                self._state["verdict"] = verdict(rows)
+                if rows[0]["flowing"]:
+                    self._state["peaks"] = rows[0]["peaks"]
+                    self._state["signal"] = signal_line(rows[0]["peaks"])
+            elif not stopped:
+                self._state["verdict"] = verdict(self._state["rows"])
+            self._state["checked_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            self._state["running"] = False
+
+    def stop(self):
+        """Ends it once the attempt under way has finished."""
+        self._stop.set()
+
+    def state(self):
+        with self._lock:
+            return {**self._state,
+                    "rows": [dict(r) for r in self._state.get("rows", [])]}
+
+    def wait(self, timeout=None):
+        """For the suites: until the check has finished."""
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout)
+
+
 def _saved_config():
     """The app's settings, read without starting the app — constructing Api
     would open a web server, which a diagnostic has no business doing."""
@@ -396,8 +521,6 @@ def run(device_index=None):
     """
     import sounddevice as sd
 
-    from rehearsal_recorder.audio.devices import device_identity, saved_device
-
     print(f"PortAudio {sd.get_portaudio_version()[1]}")
     try:
         apis = [h["name"] for h in sd.query_hostapis()]
@@ -416,32 +539,17 @@ def run(device_index=None):
               f"{d['max_input_channels']} in, {d.get('max_output_channels', 0)} out, "
               f"{int(d['default_samplerate'])} Hz")
 
-    config = _saved_config()
-    if device_index is None:
-        device_index = saved_device(config, "device", True)
-    if device_index is None:
+    asked = plan_for(sd, _saved_config(), device_index)
+    if asked is None:
         print("\nNo recording device is saved and none was named — "
               "run it again with the index from the list above.")
         return 1
+    device_index, plan = asked["device_index"], asked["plan"]
 
-    info = sd.query_devices(device_index)
-    samplerate = int(config.get("samplerate") or info["default_samplerate"])
-    depth = normalize_depth(config.get("bit_depth"))
-    channels = channels_for(tracks_for(
-        config, device_identity(device_index), info["max_input_channels"]
-    ))
-
-    print(f"\nAsking [{device_index}] {info['name']} — "
-          f"{channels} channels, {samplerate} Hz, {depth} bits")
+    print(f"\nAsking [{device_index}] {asked['name']} — "
+          f"{asked['channels']} channels, {asked['samplerate']} Hz, "
+          f"{asked['bit_depth']} bits")
     print("Play or talk into the inputs while it listens.")
-
-    plan = attempts(
-        samplerate=samplerate,
-        channels=channels,
-        bit_depth=depth,
-        driver_samplerate=int(info["default_samplerate"]),
-        has_outputs=info.get("max_output_channels", 0) > 0,
-    )
 
     def say(attempt, row):
         if row["flowing"]:
