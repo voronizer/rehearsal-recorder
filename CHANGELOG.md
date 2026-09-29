@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.12
 
 - **The meters read like the mixer's.** When checking the signal and while
   recording, the level is drawn in dB, from −60 at the bottom to full scale
