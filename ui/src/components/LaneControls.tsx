@@ -1,4 +1,5 @@
 import { Volume1, Volume2, VolumeX } from "lucide-react"
+import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -15,22 +16,34 @@ const CLIP_THRESHOLD = 0.97
  * The slider stays a native range input, so it keeps its keyboard
  * behaviour; only its track is made transparent so the meter shows through,
  * which means the thumb has to be drawn here rather than left to the engine.
+ *
+ * A stereo track's meter is in two along its length, left above right, the
+ * way the setup screen's check draws it: one bar for the louder side would
+ * hide a side that went quiet.
  */
 function MeteredFader({
   name,
   volume,
-  level,
+  levels,
+  channels = 1,
   onVolume,
   onVolumeCommit,
 }: {
   /** What the fader and the meter are called: "Guitar volume", "Guitar level". */
   name: string
   volume: number
-  level: number
+  /** One per channel, 0..1. */
+  levels: number[]
+  /** How many bars to draw, whatever is playing: two for a stereo file,
+   *  even while nothing plays and no level has come. */
+  channels?: number
   onVolume: (value: number) => void
   onVolumeCommit: () => void
 }) {
+  const sides = Array.from({ length: channels > 1 ? 2 : 1 }, (_, i) => levels[i] ?? 0)
+  const level = Math.max(0, ...sides)
   const clipping = level >= CLIP_THRESHOLD
+  const split = sides.length > 1
 
   return (
     <div className="relative h-4 w-full">
@@ -41,15 +54,27 @@ function MeteredFader({
         aria-valuemin={0}
         aria-valuemax={100}
         data-clipping={clipping || undefined}
-        className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-muted"
+        className={cn(
+          "absolute inset-x-0 top-1/2 -translate-y-1/2 overflow-hidden rounded-full bg-muted",
+          split ? "h-2" : "h-1.5"
+        )}
       >
-        <div
-          className={cn(
-            "absolute inset-y-0 left-0 rounded-full transition-[width] duration-75",
-            clipping ? "bg-destructive" : "bg-signal"
-          )}
-          style={{ width: `${Math.min(100, Math.max(0, level * 100))}%` }}
-        />
+        {sides.map((side, i) => (
+          <div
+            key={i}
+            data-fill
+            className={cn(
+              "absolute left-0 transition-[width] duration-75",
+              !split && "rounded-full",
+              side >= CLIP_THRESHOLD ? "bg-destructive" : "bg-signal"
+            )}
+            style={{
+              width: `${Math.min(100, Math.max(0, side * 100))}%`,
+              top: split && i === 1 ? "calc(50% + 0.5px)" : 0,
+              bottom: split && i === 0 ? "calc(50% + 0.5px)" : 0,
+            }}
+          />
+        ))}
       </div>
 
       <input
@@ -78,8 +103,13 @@ function MeteredFader({
 }
 
 /**
- * One track's controls, beside its lane: the name, mute and solo, a fader,
- * and under it how loud that track is coming out.
+ * One track's controls, beside its lane: its icon and name, whether it is one
+ * channel or two, mute and solo, a fader, and under it how loud that track is
+ * coming out.
+ *
+ * Mono or stereo is read from the file, not from how the band is set up
+ * today: a take recorded before the keyboard went stereo is still one
+ * channel.
  *
  * The level is measured in Python, in the mix, after this track's gain — so
  * it is what came out, not what is on disk, and mute and solo are already in
@@ -96,39 +126,51 @@ function MeteredFader({
  */
 export function LaneControls({
   name,
+  icon,
+  channels,
   muted,
   soloed,
   dimmed,
   volume,
-  level,
+  levels,
   onToggleMute,
   onToggleSolo,
   onVolume,
   onVolumeCommit,
 }: {
   name: string
+  /** The band's icon for this name; none draws the neutral one. */
+  icon?: string
+  /** In the file: 1, 2, or 0 when it could not be read. */
+  channels: number
   muted: boolean
   soloed: boolean
   /** Muted, or another track is soloed — either way, silent. */
   dimmed: boolean
   volume: number
-  /** 0..1, already through the fader and the mute. */
-  level: number
+  /** One per channel, 0..1, already through the fader and the mute. */
+  levels: number[]
   onToggleMute: () => void
   onToggleSolo: () => void
   onVolume: (value: number) => void
   onVolumeCommit: () => void
 }) {
   return (
-    <div className="flex h-full flex-col justify-center gap-4 rounded-lg border bg-card px-3.5 py-3">
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-sm",
-            dimmed && "text-muted-foreground"
+    <div
+      data-plate={name}
+      className="flex h-full flex-col justify-center gap-2.5 rounded-lg border bg-card px-3.5 py-2"
+    >
+      <div className="flex items-center gap-2.5">
+        <InstrumentIcon icon={icon} className="size-4 shrink-0 text-muted-foreground" />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className={cn("truncate text-sm", dimmed && "text-muted-foreground")}>
+            {name}
+          </span>
+          {channels > 0 && (
+            <span className="text-[11px] leading-3.5 text-muted-foreground">
+              {channels > 1 ? "Stereo" : "Mono"}
+            </span>
           )}
-        >
-          {name}
         </span>
         <Button
           variant={muted ? "default" : "outline"}
@@ -161,7 +203,8 @@ export function LaneControls({
       <MeteredFader
         name={name}
         volume={volume}
-        level={level}
+        levels={levels}
+        channels={channels}
         onVolume={onVolume}
         onVolumeCommit={onVolumeCommit}
       />
@@ -208,7 +251,7 @@ export function MasterControls({
       <MeteredFader
         name="Master"
         volume={volume}
-        level={level}
+        levels={[level]}
         onVolume={onVolume}
         onVolumeCommit={onVolumeCommit}
       />

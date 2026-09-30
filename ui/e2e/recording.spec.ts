@@ -264,3 +264,24 @@ test("sixteen tracks still fit in one row, a stereo one split down the middle", 
   await expect(keys.locator("[data-side]")).toHaveCount(2)
   await expect(keys.locator("[data-side='2']")).toHaveAttribute("data-level", "0")
 })
+
+test("a tile carries its track's icon in its top left corner", async ({ page }) => {
+  await openApp(page, {
+    before: `window.__SESSION_TRACKS__ = [{name: 'Guitar', channel: 1, icon: 'guitar-electric'},
+      {name: 'Vocals', channel: 2}];`,
+  })
+  await startRehearsal(page)
+  await page.getByRole("button", { name: /Record take 1/ }).click()
+  const guitar = tile(page, "Guitar")
+  const icon = guitar.locator("[data-icon]")
+  await expect(icon).toHaveAttribute("data-icon", "guitar-electric")
+  // None chosen: the neutral one, so every tile reads the same way.
+  await expect(tile(page, "Vocals").locator("[data-icon]")).toHaveAttribute("data-icon", "other")
+
+  const box = (await guitar.boundingBox())!
+  const at = (await icon.boundingBox())!
+  const name = (await guitar.locator("[data-name]").boundingBox())!
+  expect(at.x - box.x).toBeLessThan(box.width / 4)
+  expect(at.y - box.y).toBeLessThan(box.height / 4)
+  expect(at.y + at.height).toBeLessThan(name.y)
+})

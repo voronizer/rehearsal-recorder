@@ -420,6 +420,18 @@ verses is silent, and an alarm for that would soon be ignored along with the
 real ones. Every tile is one width, a stereo one split down the middle, so
 the sixteen inputs of an XR18 still fit in one row.
 
+**A track's icon is chosen, not guessed.** Each member of the band has one,
+picked from a grid on the setup screen and kept with the band in the config,
+as stereo is. A rule reading "Bass" off the name would be right for "Bass"
+and wrong for "Dave", and a wrong icon is worse than none. A take knows its
+tracks only by name and file, so the player gets each icon from the band by
+that name, in `take_media`: an old take whose tracks were called something
+else gets the neutral one, and nothing about icons is kept in the database.
+Nine of the fourteen are lucide's. The five it lacks (electric guitar, bass,
+maracas, saxophone, violin) have no line-drawn version in any open set, so
+they are drawn in `ui/src/components/DrawnIcons.tsx` on lucide's grid, to
+read as one set with the rest.
+
 **The meters are in dB, from −60 to full scale.** They were drawn on a
 straight scale, and a band that set its gain on the desk, for the loudest
 hit to reach −18 dBFS, saw that hit fill an eighth of a tile. The figure on

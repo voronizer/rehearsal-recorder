@@ -3595,6 +3595,39 @@ def main():
        and abs(int(out[:, 1].mean()) - 500) < 30)
     sp.close()
 
+    print("  an instrument's icon")
+    # Chosen on the setup screen and kept with the band, as stereo is: the
+    # bass player's icon is theirs whichever card they plug into.
+    ok("a member's icon comes back with it",
+       L.for_device([{"name": "Bass", "icon": "bass"}], [], xr18, 8)
+       == [{"name": "Bass", "channel": 1, "stereo": False, "icon": "bass"}])
+    ok("and one with no icon has none, rather than a guess",
+       "icon" not in L.for_device([{"name": "Gtr"}], [], xr18, 8)[0])
+
+    apimod35, a35 = fresh_api(Path(tempfile.mkdtemp()))
+    a35.save_default_tracks({"device_index": 0, "tracks": [
+        {"name": "Bass", "channel": 1, "icon": "bass"},
+        {"name": "Keys", "channel": 2, "stereo": True, "icon": "keys"},
+        {"name": "Gtr", "channel": 4}]})
+    ok("the template keeps each member's icon",
+       a35._config["tracks"] == [{"name": "Bass", "icon": "bass"},
+                                 {"name": "Keys", "stereo": True, "icon": "keys"},
+                                 {"name": "Gtr"}])
+    ok("and the setup screen gets them back",
+       [t.get("icon") for t in a35.load_default_tracks()["tracks"]]
+       == ["bass", "keys", None])
+    ok("as it does the band on screen, placed again after a rescan",
+       a35.load_default_tracks([{"name": "Vox", "icon": "vocals"}])["tracks"][0]
+       .get("icon") == "vocals")
+
+    # The player is shown takes, and a take's tracks are only names and
+    # files: the icon is the band's, found by the name.
+    media = a35.take_media([{"name": "Bass", "file": str(sides / "Gtr.wav")},
+                            {"name": "Gtr", "file": str(sides / "Gtr.wav")},
+                            {"name": "Keys", "file": str(sides / "nowhere.wav")}])
+    ok("the player is told each track's icon, by its name in the band",
+       [m.get("icon") for m in media] == ["bass", None, "keys"])
+
     print("\n[34] Looking for interfaces again")
     # PortAudio lists devices once, when it starts, so a card plugged in
     # later is not offered until it is torn down and started again. The fake

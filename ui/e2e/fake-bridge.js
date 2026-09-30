@@ -66,6 +66,14 @@ function position() {
   }
   return t;
 }
+// Which files are two channels: the tracks named in __STEREO_TRACKS__.
+function stereo(name) { return (window.__STEREO_TRACKS__ || []).includes(name); }
+// The icon the band keeps for a name, from __BAND_ICONS__, the way
+// layouts.for_device and take_media hand it out.
+function withIcon(t) {
+  const icon = (window.__BAND_ICONS__ || {})[t.name];
+  return icon ? {...t, icon} : t;
+}
 // Mirrors what audio/player.py measures in the mix: post-fader, silent when
 // muted or when another track is soloed, and nothing at all while stopped.
 function levels() {
@@ -74,7 +82,10 @@ function levels() {
   return Object.fromEntries(Object.keys(P.volumes).map(n => {
     const silent = P.muted.includes(n) || (P.soloed && P.soloed !== n);
     const raw = Math.abs(Math.sin(t * 2.7)) * 0.9;
-    return [n, [silent ? 0 : Math.round(raw * P.volumes[n] * 1000) / 1000]];
+    const left = silent ? 0 : Math.round(raw * P.volumes[n] * 1000) / 1000;
+    // A stereo track's right side at half the left, so the two can be told
+    // apart.
+    return [n, stereo(n) ? [left, Math.round(left * 500) / 1000] : [left]];
   }));
 }
 // The whole mix after the master, the way player.py measures it: the tracks
@@ -198,11 +209,11 @@ window.__MAKE_API__ = () => ({
     // Like layouts.for_device: with no card there is one input to go round;
     // with the desk, every name gets its own.
     tracks: (band || [{name:'Guitar'}, {name:'Vocals'}]).map((t, i) => ({
-      name: t.name, stereo: !!t.stereo,
+      name: t.name, stereo: !!t.stereo, ...(t.icon ? {icon: t.icon} : {}),
       channel: pluggedIn ? i + 1 : (i === 0 ? 1 : null)}))}) : ({
-    tracks: window.__TRACKS_FROM_A_BIGGER_CARD__
+    tracks: (window.__TRACKS_FROM_A_BIGGER_CARD__
       ? [{name:'Guitar', channel:1}, {name:'Vocals', channel:12}]
-      : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]})),
+      : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]).map(withIcon)})),
   set_recording_format: track('set_recording_format', async (dev, rate, depth) => {
     recording = {device_index: dev, samplerate: rate, bit_depth: depth};
     return {ok:true, ...recording};
@@ -335,8 +346,11 @@ window.__MAKE_API__ = () => ({
 
   take_media: track('take_media', async (tracks, _buckets, _from, _to) => tracks.map(t => {
     const dur = fileDurations[t.file] ?? TAKE;
-    return {name:t.name, url:'about:blank', frames:48000*dur, samplerate:48000, duration_sec:dur,
-      peaks: [Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9)]};
+    const row = Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9);
+    const {icon} = withIcon({name: t.name});
+    return {name:t.name, ...(icon ? {icon} : {}), url:'about:blank', frames:48000*dur,
+      samplerate:48000, duration_sec:dur,
+      peaks: stereo(t.name) ? [row, row.map(v => v / 2)] : [row]};
   })),
 
   player_open: track('player_open', async (tracks) => {

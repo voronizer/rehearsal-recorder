@@ -831,14 +831,21 @@ class Api:
 
         start_sec/end_sec narrow the waveform to the part on screen. The
         bridge turns a missing argument into None, so the bucket count falls
-        back here rather than being duplicated in the interface."""
+        back here rather than being duplicated in the interface.
+
+        A take knows its tracks only by name and file. The icon beside each
+        is the band's, found by that name: an old take whose tracks were
+        called something else gets none, and is drawn with the neutral one."""
         buckets = buckets or DEFAULT_BUCKETS
+        icon_of = layouts.icons(self._config.get("tracks"))
         result = []
         for t in tracks:
+            icon = {"icon": icon_of[t["name"]]} if t["name"] in icon_of else {}
             path = Path(t["file"])
             if not path.exists():
                 result.append({
                     "name": t["name"],
+                    **icon,
                     "url": None,
                     "error": "Track file not found",
                     "frames": 0,
@@ -858,6 +865,7 @@ class Api:
 
             result.append({
                 "name": t["name"],
+                **icon,
                 "url": self._server.media_url(path),
                 "frames": frames,
                 "samplerate": samplerate,
@@ -1035,10 +1043,7 @@ class Api:
 
         The band is one list whatever is plugged in; the inputs belong to the
         card. See rehearsal_recorder/layouts.py."""
-        self._config["tracks"] = [
-            {"name": t["name"], **({"stereo": True} if t.get("stereo") else {})}
-            for t in tracks
-        ]
+        self._config["tracks"] = [layouts.band_member(t) for t in tracks]
         self._config["layouts"] = layouts.remember(
             self._config.get("layouts", []),
             device_identity(device_index),
@@ -1054,18 +1059,15 @@ class Api:
         left over, or the first-run pair — belongs in one place, and that
         place is layouts.for_device().
 
-        `band` is the names and stereo switches to place, when the screen
-        already has some: a card that turns up after a rescan takes the band
-        as it is on screen, edits and all, rather than the saved one.
+        `band` is the names, stereo switches and icons to place, when the
+        screen already has some: a card that turns up after a rescan takes
+        the band as it is on screen, edits and all, rather than the saved one.
         """
         index = saved_device(self._config, "device", True)
         if band is None:
             members = self._config.get("tracks", [])
         else:
-            members = [
-                {"name": t["name"], **({"stereo": True} if t.get("stereo") else {})}
-                for t in band
-            ]
+            members = [layouts.band_member(t) for t in band]
         return {
             "device_index": index,
             "samplerate": self._config.get("samplerate"),

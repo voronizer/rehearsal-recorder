@@ -7,6 +7,18 @@ opening.
 
 ## Unreleased
 
+- **Each track has an icon**, chosen at the start of its row on the setup
+  screen: vocals, a microphone, electric and acoustic guitar, bass, drums,
+  percussion, keys, synth, winds, strings, a click, a backing track, or a
+  plain one. It is in the top left corner of the track's tile while
+  recording, and beside its name in the player. Nothing is guessed from the
+  name, and until one is chosen a track has the plain one. It is kept with
+  the band, like stereo.
+- **The player's tracks are lower**, 96 px at most rather than 160: beside a
+  tall lane the name, M, S and the fader sat in a mostly empty card. Each
+  track now says whether its file is **Mono** or **Stereo**, and a stereo
+  track's meter is two bars, left above right, as on the waveform.
+
 - **A take's whole row opens it** in a rehearsal's list of takes, not only
   its bar. The bar is drawn to the take's length, so a short take's bar was
   a small thing to aim at, while the row lit up under the mouse all the way

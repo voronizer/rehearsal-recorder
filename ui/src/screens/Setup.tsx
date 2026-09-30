@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { IconPicker } from "@/components/IconPicker"
 import { Kbd, Shell } from "@/components/Shell"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
@@ -89,7 +90,7 @@ export function Setup({
    *
    * Returns whether the chosen interface is still missing.
    */
-  const loadInterface = async (band?: Pick<Track, "name" | "stereo">[]) => {
+  const loadInterface = async (band?: Pick<Track, "name" | "stereo" | "icon">[]) => {
     const devs = await api().list_input_devices()
     setDevices(devs)
 
@@ -197,7 +198,7 @@ export function Setup({
         return
       }
       setStillMissing(
-        await loadInterface(tracks.map((t) => ({ name: t.name, stereo: t.stereo })))
+        await loadInterface(tracks.map((t) => ({ name: t.name, stereo: t.stereo, icon: t.icon })))
       )
     } finally {
       setRescanning(false)
@@ -520,6 +521,16 @@ export function Setup({
                 key={i}
                 className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3"
               >
+                <IconPicker
+                  label={`Track ${i + 1} icon`}
+                  name={track.name || `track ${i + 1}`}
+                  value={track.icon}
+                  onChange={(icon) =>
+                    setTracks((prev) =>
+                      prev.map((t, j) => (j === i ? { ...t, icon } : t))
+                    )
+                  }
+                />
                 <Input
                   value={track.name}
                   aria-label={`Track ${i + 1} name`}

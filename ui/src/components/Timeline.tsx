@@ -13,9 +13,11 @@ import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 /** A press that never travelled this far is a click, and a click seeks. */
 const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
-/** The name row, then the fader and its meter, with room between. */
+/** The name row, then the fader and its meter, with room between. No taller
+ *  than that: at 160 a lane's plate was mostly empty card, and five tracks
+ *  took a laptop's screen and more. */
 const LANE_MIN_PX = 92
-const LANE_MAX_PX = 160
+const LANE_MAX_PX = 96
 const RULER_PX = 44
 /** What a tick label needs to the right of its line: "10:00" at 11 px and
  *  its padding, with a little to spare. */
@@ -467,11 +469,13 @@ export function Timeline({
                 >
                   <LaneControls
                     name={m.name}
+                    icon={m.icon}
+                    channels={m.peaks.length}
                     muted={muted}
                     soloed={soloed}
                     dimmed={dimmed}
                     volume={player.getVolume(m.name)}
-                    level={player.getLevel(m.name)}
+                    levels={player.getLevels(m.name)}
                     onToggleMute={() => player.toggleMute(m.name)}
                     onToggleSolo={() => player.toggleSolo(m.name)}
                     onVolume={(v) => player.setVolume(m.name, v)}

@@ -573,6 +573,49 @@ test.describe("the mix", () => {
   })
 })
 
+test.describe("a track's plate", () => {
+  test("says what the track is: its icon, and one channel or two", async ({ page }) => {
+    await openApp(page, {
+      before: `window.__BAND_ICONS__ = {Guitar: 'guitar-electric'};
+        window.__STEREO_TRACKS__ = ['Vocals'];`,
+    })
+    await startRehearsal(page)
+    await recordTake(page, 1)
+    const guitar = page.locator("[data-plate='Guitar']")
+    const vocals = page.locator("[data-plate='Vocals']")
+    await expect(guitar.locator("[data-icon]")).toHaveAttribute("data-icon", "guitar-electric")
+    await expect(vocals.locator("[data-icon]")).toHaveAttribute("data-icon", "other")
+    // Read from the file: how many channels it has, not how it was set up.
+    await expect(guitar).toContainText("Mono")
+    await expect(vocals).toContainText("Stereo")
+
+    // A stereo track's meter is in two, left above right, so a dead side
+    // shows while it plays.
+    const fills = (name: string) =>
+      page.getByRole("meter", { name: `${name} level` }).locator("[data-fill]")
+    await expect(fills("Guitar")).toHaveCount(1)
+    await expect(fills("Vocals")).toHaveCount(2)
+    await page.getByRole("button", { name: "Play", exact: true }).click()
+    await expect
+      .poll(async () => {
+        const [left, right] = await fills("Vocals").evaluateAll((els) =>
+          els.map((e) => e.getBoundingClientRect().width)
+        )
+        return left > 0 && right > 0 && right < left
+      })
+      .toBe(true)
+  })
+
+  test("is no taller than it needs, however tall the window", async ({ page }) => {
+    await page.setViewportSize({ width: 1180, height: 1400 })
+    await review(page)
+    for (const name of ["Guitar", "Vocals"]) {
+      const box = (await page.locator(`[data-plate='${name}']`).boundingBox())!
+      expect(box.height).toBeLessThanOrEqual(96)
+    }
+  })
+})
+
 test.describe("zooming the timeline", () => {
   // Fifteen seconds of a nine-minute take is twenty pixels wide: drawing a
   // region is at its worst exactly where it is needed most.

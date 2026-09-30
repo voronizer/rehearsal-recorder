@@ -1,3 +1,4 @@
+import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { cn } from "@/lib/utils"
 import { peakToDb } from "@/lib/format"
 import { CLIP_THRESHOLD, QUIET_THRESHOLD, meterReach } from "@/lib/levels"
@@ -20,10 +21,12 @@ const reach = (peak: number) => meterReach(peak) * 100
  * the colour to say it: a red edge for a clip in the last minute, dimmed for
  * silence. The latest peak in dB sits at the top, out of the name's way,
  * and the fill is in dB too, from −60 at the bottom to full scale at the top,
- * as on the desk the band sets its gain on.
+ * as on the desk the band sets its gain on. The track's icon stands in the
+ * corner opposite the figure, as a second way to find your own tile.
  */
 export function TrackTile({
   name,
+  icon,
   channel,
   stereo,
   peaks,
@@ -33,6 +36,7 @@ export function TrackTile({
   silent,
 }: {
   name: string
+  icon?: string
   channel: number | null
   stereo?: boolean
   /** One figure per side, 0..1. */
@@ -98,29 +102,35 @@ export function TrackTile({
       </div>
 
       <div className="relative grid h-full grid-rows-[auto_minmax(0,1fr)] gap-2 p-[clamp(0.375rem,7cqi,1.25rem)]">
-        {/* On a card of their own: in dB a level that is set well stands
-            near the top, and the fill and its line ran through the figure. */}
-        <div className="flex flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:bg-card/85 [&>span]:px-1">
-          <span
-            className={cn(
-              "tnum",
-              peak > CLIP_THRESHOLD ? "text-destructive" : "text-muted-foreground"
-            )}
-            style={{ fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }}
-          >
-            {peakToDb(peak)}
-            <span className="@max-[7rem]:hidden"> dB</span>
+        {/* On a card of their own, the icon and the figure alike: in dB a
+            level that is set well stands near the top, and the fill and its
+            line ran through the figure. */}
+        <div className="flex items-start justify-between gap-1">
+          <span className="shrink-0 rounded bg-card/85 p-0.5">
+            <InstrumentIcon icon={icon} className="size-[clamp(1rem,14cqi,1.75rem)]" />
           </span>
-          {clips > 0 && (
-            <span className="text-xs font-semibold text-destructive @max-[7rem]:hidden">
-              {clips > 1 ? `clipped ${clips}×` : "clipped"}
+          <div className="flex min-w-0 flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:bg-card/85 [&>span]:px-1">
+            <span
+              className={cn(
+                "tnum",
+                peak > CLIP_THRESHOLD ? "text-destructive" : "text-muted-foreground"
+              )}
+              style={{ fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }}
+            >
+              {peakToDb(peak)}
+              <span className="@max-[7rem]:hidden"> dB</span>
             </span>
-          )}
-          {silent && clips === 0 && (
-            <span className="text-xs text-muted-foreground @max-[7rem]:hidden">
-              silent
-            </span>
-          )}
+            {clips > 0 && (
+              <span className="text-xs font-semibold text-destructive @max-[7rem]:hidden">
+                {clips > 1 ? `clipped ${clips}×` : "clipped"}
+              </span>
+            )}
+            {silent && clips === 0 && (
+              <span className="text-xs text-muted-foreground @max-[7rem]:hidden">
+                silent
+              </span>
+            )}
+          </div>
         </div>
 
         {/* The name runs up the tile from its bottom left corner, as on the

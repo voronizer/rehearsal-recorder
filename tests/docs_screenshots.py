@@ -147,8 +147,10 @@ function vocals(t, k) {
   return Math.max(bleed, level * shape * syllables * grain);
 }
 const VOICE = {Drums: drums, Bass: bass, Guitar: guitar, Vocals: vocals};
-const PARTS = [{name: 'Drums', channel: 1}, {name: 'Bass', channel: 2},
-               {name: 'Guitar', channel: 3}, {name: 'Vocals', channel: 4}];
+const PARTS = [{name: 'Drums', channel: 1, icon: 'drums'},
+               {name: 'Bass', channel: 2, icon: 'bass'},
+               {name: 'Guitar', channel: 3, icon: 'guitar-electric'},
+               {name: 'Vocals', channel: 4, icon: 'vocals'}];
 
 // ---- The takes ---------------------------------------------------------
 // seed makes each take a little different; end is where the song stopped,
@@ -256,7 +258,9 @@ api.stop_take = async () => {
 api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
   const dur = fileDurations[t.file] ?? 6;
   const a = from ?? 0, b = to ?? dur;
-  return {name: t.name, url: 'about:blank', frames: 48000 * dur, samplerate: 48000,
+  // The band's icon, found by the name, as take_media does.
+  const icon = (PARTS.find(p => p.name === t.name) || {}).icon;
+  return {name: t.name, icon, url: 'about:blank', frames: 48000 * dur, samplerate: 48000,
           duration_sec: dur, peaks: [peaksOf(t.file, buckets || 900, a, b)]};
 });
 
@@ -294,7 +298,7 @@ DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 5', name:'take 5',
 # where there is a player, and no taller than the screen needs elsewhere,
 # so a picture is not half empty.
 HEIGHT = {"unsaved-takes": 420, "setup": 720, "settings": 760, "rehearsal": 770,
-          "recording": 720, "review": 1235, "player": 1235, "zoom": 1235,
+          "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
           "history": 520}
 
 

@@ -234,3 +234,74 @@ test.describe("an interface switched on after the app", () => {
     await expect(page.getByText("Found “X18/XR18”")).toHaveCount(0)
   })
 })
+
+test.describe("a track's icon", () => {
+  test.use({ viewport: { width: 1180, height: 900 } })
+
+  test("is chosen from a grid at the start of its row, and goes with the band", async ({
+    page,
+  }) => {
+    await openApp(page)
+    const first = page.getByRole("button", { name: "Track 1 icon" })
+    // None chosen yet: the neutral one, not a guess from the name.
+    await expect(first).toHaveAttribute("data-icon", "other")
+    await first.click()
+    const grid = page.getByRole("dialog", { name: "Icon for Guitar" })
+    await expect(grid.getByRole("button")).toHaveCount(14)
+    await expect(grid.getByRole("button", { name: "Other" })).toHaveAttribute("aria-pressed", "true")
+    await grid.getByRole("button", { name: "Electric guitar" }).click()
+    await expect(grid).toHaveCount(0)
+    await expect(first).toHaveAttribute("data-icon", "guitar-electric")
+    await expect(first).toBeFocused()
+
+    // From the keys: the grid opens on the one chosen, the arrows move
+    // through it, Enter takes one and Escape takes none.
+    const second = page.getByRole("button", { name: "Track 2 icon" })
+    await second.focus()
+    await page.keyboard.press("Enter")
+    const vocals = page.getByRole("dialog", { name: "Icon for Vocals" })
+    await expect(vocals.getByRole("button", { name: "Other" })).toBeFocused()
+    await page.keyboard.press("Home")
+    await expect(vocals.getByRole("button", { name: "Vocals" })).toBeFocused()
+    await page.keyboard.press("ArrowDown")
+    await expect(vocals.getByRole("button", { name: "Drums" })).toBeFocused()
+    await page.keyboard.press("ArrowRight")
+    await expect(vocals.getByRole("button", { name: "Percussion" })).toBeFocused()
+    await page.keyboard.press("Escape")
+    await expect(vocals).toHaveCount(0)
+    await expect(second).toHaveAttribute("data-icon", "other")
+    await page.keyboard.press("Enter")
+    await page.keyboard.press("Home")
+    await page.keyboard.press("Enter")
+    await expect(second).toHaveAttribute("data-icon", "vocals")
+
+    // Kept with the band, as stereo is: in the template and when it starts.
+    await page.getByRole("button", { name: "Save as template" }).click()
+    const saved = (await calls(page, "save_default_tracks")).at(-1)?.args[0] as {
+      tracks: { name: string; icon?: string }[]
+    }
+    expect(saved.tracks.map((t) => [t.name, t.icon])).toEqual([
+      ["Guitar", "guitar-electric"],
+      ["Vocals", "vocals"],
+    ])
+    await startButton(page).click()
+    const started = (await calls(page, "start_rehearsal"))[0].args[3] as { icon?: string }[]
+    expect(started.map((t) => t.icon)).toEqual(["guitar-electric", "vocals"])
+  })
+
+  test("comes back from the saved band", async ({ page }) => {
+    await openApp(page, { before: "window.__BAND_ICONS__ = {Guitar: 'bass'};" })
+    await expect(page.getByRole("button", { name: "Track 1 icon" })).toHaveAttribute(
+      "data-icon",
+      "bass"
+    )
+  })
+
+  test("one it does not know is drawn as the neutral one", async ({ page }) => {
+    await openApp(page, { before: "window.__BAND_ICONS__ = {Guitar: 'theremin'};" })
+    await expect(page.getByRole("button", { name: "Track 1 icon" })).toHaveAttribute(
+      "data-icon",
+      "other"
+    )
+  })
+})

@@ -330,10 +330,10 @@ export function useMultitrackPlayer(
     toggleSolo: (name: string) =>
       void call(() => api().player_set_solo(soloed === name ? null : name)),
     getVolume: (name: string) => volumes[name] ?? 1,
-    /** 0..1 as it last came out of the mix; 0 while nothing plays. */
-    // The loudest of a track's channels: the fader's little meter is one
-    // bar, and a stereo track's two sides are told apart on the waveform.
-    getLevel: (name: string) => Math.max(0, ...(levels[name] ?? [0])),
+    /** Each channel, 0..1, as it last came out of the mix; 0 while nothing
+     *  plays. A stereo track's two sides are kept apart, as on the waveform:
+     *  the loudest of them would hide one that went quiet. */
+    getLevels: (name: string) => levels[name] ?? [0],
     setVolume: (name: string, v: number) => {
       setVolumes((prev) => ({ ...prev, [name]: v }))
       void api().player_set_volume(name, v)

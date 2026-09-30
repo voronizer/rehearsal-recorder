@@ -27,6 +27,9 @@ export type Track = {
    *  two-channel file. A property of the instrument, so it travels with the
    *  band between interfaces. */
   stereo?: boolean
+  /** The icon chosen for it on the setup screen, a key of
+   *  components/InstrumentIcon. Kept with the band, like stereo. */
+  icon?: string
   /** The interface input this track comes from, counted from 1. null when
    *  the layout came from a card with more inputs than this one has and
    *  nobody has yet said who plays and who sits out. */
@@ -43,6 +46,7 @@ export type PlacedTrack = {
   channel: number
   /** Two adjacent inputs, written as one two-channel file. */
   stereo?: boolean
+  icon?: string
 }
 
 export type TrackFile = {
@@ -193,6 +197,8 @@ export type TrackTemplate = {
 /** A track of a take as take_media returns it: address, length and waveform. */
 export type TrackMedia = {
   name: string
+  /** The band's icon for this name, when it has one. */
+  icon?: string
   url: string | null
   error?: string
   frames: number
@@ -400,9 +406,10 @@ type PyApi = {
   list_input_devices(): Promise<Device[]>
   list_output_devices(): Promise<OutputDevice[]>
   /** The band placed on the interface in force. Without `band`, the saved
-   *  one; with it, those names and stereo switches — what is on screen. */
+   *  one; with it, those names, stereo switches and icons — what is on
+   *  screen. */
   load_default_tracks(
-    band?: Pick<Track, "name" | "stereo">[]
+    band?: Pick<Track, "name" | "stereo" | "icon">[]
   ): Promise<TrackTemplate | null>
   /** Looks for interfaces again — one plugged in after the app started is
    *  not listed until it does. Refused while recording. `found` and `gone`

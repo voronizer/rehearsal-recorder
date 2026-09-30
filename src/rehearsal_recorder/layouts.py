@@ -9,9 +9,10 @@ exist. Kept as one record, changing the interface left the band pointing at
 inputs belonging to a different card.
 
 So the two are stored apart. `tracks` is the band: one entry per member, in order, the same whatever is
-plugged in. An entry is a name and whether that instrument is stereo — a
+plugged in. An entry is a name, whether that instrument is stereo — a
 keyboard has two outputs wherever it is plugged in, so being stereo belongs
-to the band and not to any card. `layouts` holds one entry per interface, and each
+to the band and not to any card — and the icon chosen for it on the setup
+screen, for the same reason. `layouts` holds one entry per interface, and each
 entry maps a name to the input that person uses on that card. Switching
 cards keeps everyone and swaps the numbers.
 
@@ -24,6 +25,25 @@ touched, which is what makes the cases in for_device() testable without one.
 
 # What a fresh install starts with, when there is no band yet.
 DEFAULT_BAND = ({"name": "Guitar 1"}, {"name": "Vocals"})
+
+
+def band_member(track):
+    """The band's entry for a track on screen: its name, and stereo and its
+    icon when it has them. The input is the card's, not the band's.
+
+    The icon is whatever name the interface gave it; this side only keeps
+    it. One it does not know is drawn as the neutral one there."""
+    icon = track.get("icon")
+    return {
+        "name": track["name"],
+        **({"stereo": True} if track.get("stereo") else {}),
+        **({"icon": icon} if isinstance(icon, str) and icon else {}),
+    }
+
+
+def icons(band):
+    """Each member's icon by name, for those that have one."""
+    return {m["name"]: m["icon"] for m in band or [] if m.get("icon")}
 
 
 def _identity(entry):
@@ -190,5 +210,6 @@ def for_device(band, layouts, identity, max_inputs):
             "name": member["name"],
             "channel": channel,
             "stereo": bool(member.get("stereo")),
+            **({"icon": member["icon"]} if member.get("icon") else {}),
         })
     return out

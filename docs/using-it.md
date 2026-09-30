@@ -41,13 +41,17 @@ it has and the recording quality. Click it to open Settings.
 
 - Type a name for the rehearsal, or keep the date.
 - Name the tracks and choose each one's input.
+- **The icon** at the start of a row says what the track is. Click it and
+  choose one: vocals, electric or acoustic guitar, bass, drums, keys and
+  more. It is shown on the recording screen and in the player. A new track
+  has a plain one until you choose.
 - **Add track** adds a musician, and the bin icon removes one.
 - **Stereo** records an input and the next one together as one stereo track,
   for a keyboard or a pair of overhead microphones. See
   [Stereo instruments](#stereo-instruments).
 
-The tracks and their inputs are saved when you start the rehearsal, and they
-are filled in for you next time. **Save as template** saves them without
+The tracks, their icons and their inputs are saved when you start the
+rehearsal, and they are filled in for you next time. **Save as template** saves them without
 starting.
 
 ### Check the signal
@@ -103,7 +107,9 @@ laptop.
   scale at the top. If the gain is set so that the loudest hit reaches about
   −18 dB on the mixer, that hit fills about two thirds of the tile. The fill
   jumps up with each hit and sinks back slowly, as on a mixer. The figure at
-  the top is the latest peak, held for a moment so that it can be read. A stereo track is split down the middle, left and right. A tile that
+  the top is the latest peak, held for a moment so that it can be read. The
+  track's icon is in the top left corner. A stereo track is split down the
+  middle, left and right. A tile that
   clipped gets a red edge. A tile with nothing coming in, below −60 dB, goes
   dim, which is normal while someone is not playing.
 
@@ -141,6 +147,8 @@ on one timeline, so they always stay in sync.
 - **Play and pause** with the big button or Space. The arrow keys jump 10
   seconds back and forward, and Home goes back to the start. Click anywhere
   on the tracks to jump there.
+- **Each track** shows its icon and name, and whether the file is **Mono**
+  or **Stereo**.
 - **Balance the band** with the fader under each track name. **M** mutes a
   track and **S** plays it on its own. Volumes are remembered by track name,
   so the next take starts with the same balance.
@@ -362,8 +370,9 @@ Both inputs have to be free. If the next input already belongs to another
 track, the stereo track waits for an input and the screen says so.
 
 A stereo track stays stereo when you change interfaces. Its tile on the
-recording screen is split into left and right, and its waveform shows left
-above right, so you notice straight away if one microphone stops working. A
+recording screen is split into left and right, and its waveform and its
+meter in the player show left above right, so you notice straight away if
+one microphone stops working. A
 stereo track takes twice the disk space of a mono one.
 
 ## Keyboard

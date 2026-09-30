@@ -327,6 +327,7 @@ export function Recording({
               <TrackTile
                 key={t.name}
                 name={t.name}
+                icon={t.icon}
                 channel={t.channel}
                 stereo={t.stereo}
                 peaks={levels[t.name] ?? (t.stereo ? [0, 0] : [0])}
