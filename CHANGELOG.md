@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.7.14
 
 - **Songs you have played are a click away when naming a take.** Under the
   name on the review screen, and in the Rename take dialog, are this
