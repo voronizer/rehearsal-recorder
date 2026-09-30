@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## 0.7.14
+## 0.8.0
 
 - **Songs you have played are a click away when naming a take.** Under the
   name on the review screen, and in the Rename take dialog, are this
@@ -86,6 +86,10 @@ opening.
   file against the app's own. Run from source on macOS, the Dock, the menu
   bar and About had Python's icon, name, version and copyright, and now have
   the app's own, as the Windows taskbar already did.
+- The self-test writes UTF-8. On Windows its output into the build's log
+  showed "—" as "�", and a path the system's code page cannot spell, such
+  as a Cyrillic user name on an English Windows, stopped it at its first
+  line.
 
 ## 0.7.13
 
