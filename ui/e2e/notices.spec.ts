@@ -150,7 +150,7 @@ test("an output that falls back says so, and a second one takes the first's plac
 
 test("History says in the corner when a rehearsal will not open", async ({ page }) => {
   await openApp(page, { before: "window.__REHEARSAL_UNREADABLE__ = true;" })
-  await page.getByText("History").click()
+  await page.getByRole("button", { name: "History", exact: true }).click()
   const row = page.getByText("Tuesday jam").first()
   await expect(row).toBeVisible()
   const rowTop = (await row.boundingBox())?.y

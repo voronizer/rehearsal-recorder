@@ -210,14 +210,18 @@ export function LastTime({
             </span>
           </button>
         ))}
+        {/* Called what the button in the header is called, since it goes
+            to the same place: two names would read as two screens. */}
         <button
           type="button"
           onClick={onAll}
           className="flex items-center gap-1.5 self-start rounded-md px-2 py-1.5 text-[13px] font-semibold transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <History className="size-3.5" />
-          All rehearsals
-          <span className="font-normal text-muted-foreground">· {data.count}</span>
+          History
+          <span className="font-normal text-muted-foreground">
+            · {data.count === 1 ? "1 rehearsal" : `${data.count} rehearsals`}
+          </span>
         </button>
       </section>
     </aside>

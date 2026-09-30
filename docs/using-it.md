@@ -75,7 +75,8 @@ before you start.
 
 Under it are the songs you did not play last time, each with the day it was
 last played and its last go to listen to, and the rehearsals before that.
-**Open**, or a rehearsal in the list, opens it in History. A soundcheck with
+**Open**, or a rehearsal in the list, opens it in History, and **History**
+under the list opens the newest, as the button at the top does. A soundcheck with
 no named takes is skipped: last time is the last rehearsal that played a
 song.
 

@@ -259,7 +259,7 @@ test.describe("on a machine shaped like Windows", () => {
 
   test("deleting names the _deleted folder rather than promising a Trash", async ({ page }) => {
     await openApp(page, { before: WINDOWS })
-    await page.getByText("History").click()
+    await page.getByRole("button", { name: "History", exact: true }).click()
     await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
     await expect(page.getByText("_deleted folder")).toBeVisible()
     await expect(page.getByText("goes to the Trash")).toHaveCount(0)

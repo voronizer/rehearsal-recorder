@@ -401,7 +401,7 @@ test.describe("last time, on the setup screen", () => {
     await expect(earlier).toContainText("Wednesday jam")
     await expect(earlier).toContainText("First rehearsal")
     await expect(earlier.getByRole("button", { name: /Missing jam/ })).toContainText("not found")
-    await expect(panel.getByRole("button", { name: /All rehearsals/ })).toContainText("4")
+    await expect(panel.getByRole("button", { name: /^History/ })).toContainText("4 rehearsals")
   })
 
   test("a song's button plays its last go, and has Space and Escape while it plays", async ({
@@ -462,7 +462,7 @@ test.describe("last time, on the setup screen", () => {
     await expect(list.locator("[aria-current='true']")).toContainText("First rehearsal")
     await page.keyboard.press("Escape")
 
-    await lastTime(page).getByRole("button", { name: /All rehearsals/ }).click()
+    await lastTime(page).getByRole("button", { name: /^History/ }).click()
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
   })
 
