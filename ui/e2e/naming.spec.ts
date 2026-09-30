@@ -115,9 +115,21 @@ test.describe("the next take", () => {
     await expect(lit(page)).toHaveText("Take 1")
     await expect(row(page).getByRole("button", { name: "Vesna", exact: true })).toBeVisible()
 
-    await row(page).getByRole("button", { name: "Vesna", exact: true }).click()
+    // Nothing moves under the pointer: the one clicked is lit where it is,
+    // and the name the take would have had stays in front, to go back to.
+    const vesna = row(page).getByRole("button", { name: "Vesna", exact: true })
+    const before = await row(page).locator("[data-song-choice]").allTextContents()
+    const at = (await vesna.boundingBox())!.x
+    await vesna.click()
     await expect(lit(page)).toHaveText("Vesna")
     expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Vesna"])
+    expect(await row(page).locator("[data-song-choice]").allTextContents()).toEqual(before)
+    expect((await vesna.boundingBox())!.x).toBe(at)
+    await row(page).getByRole("button", { name: "Take 1", exact: true }).click()
+    await expect(lit(page)).toHaveText("Take 1")
+    expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual([""])
+    await vesna.click()
+    await expect(lit(page)).toHaveText("Vesna")
     // The click left the keyboard to the screen: Space records.
     await page.keyboard.press("Space")
     // The recording screen already says the song, and review has the name.

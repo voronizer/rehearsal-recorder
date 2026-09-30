@@ -113,8 +113,8 @@ function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = c
 
 // Mirrors api.suggest_take_name: n is the take being named, left out it means
 // the one that comes next.
-function suggestName(n) {
-  if (session && nextName) return nextName;
+function suggestName(n, chosen = true) {
+  if (chosen && session && nextName) return nextName;
   const number = n === undefined ? takeCounter + 1 : n;
   if (!session || session.takes.length === 0) return 'Take ' + number;
   const last = session.takes[session.takes.length - 1].name;
@@ -374,7 +374,8 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({active:true, name:session.name, folder:session.folder,
        tracks:session.tracks, takes:session.takes, songs:songsOf(session.takes),
        next_take_number:takeCounter + 1,
-       next_take_name:suggestName(), last_attempt:lastAttempt(session.takes, suggestName()),
+       next_take_name:suggestName(), next_take_default:suggestName(undefined, false),
+       last_attempt:lastAttempt(session.takes, suggestName()),
        recording:false, cloud_queue:cq}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {

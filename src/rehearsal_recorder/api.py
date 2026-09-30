@@ -1349,12 +1349,15 @@ class Api:
             "songs": _songs_of(takes),
             "next_take_number": s["take_counter"] + 1,
             "next_take_name": next_name,
+            # What it would be called without a name picked for it, which
+            # the rehearsal screen offers to go back to.
+            "next_take_default": self.suggest_take_name(chosen=False),
             "last_attempt": _last_attempt(takes, next_name),
             "recording": self._recorder is not None,
             "cloud_queue": self._cloud_queue.states(s["folder"]),
         }
 
-    def suggest_take_name(self, take_number=None):
+    def suggest_take_name(self, take_number=None, chosen=True):
         """
         A new take is usually another attempt at the same song, so it inherits
         the previous take's name with the counter bumped: "Polyn" -> "Polyn 2".
@@ -1365,13 +1368,13 @@ class Api:
         would be offered as "Take 2".
 
         A name chosen for the next take on the rehearsal screen comes before
-        all of that (see set_next_take_name).
+        all of that (see set_next_take_name), unless `chosen` is False: then
+        this is the name the take would have without it.
         """
         if self._session is None:
             return "Take 1"
-        chosen = self._session.get("next_name")
-        if chosen:
-            return chosen
+        if chosen and self._session.get("next_name"):
+            return self._session["next_name"]
         takes = self._session_takes()
         number = (
             take_number

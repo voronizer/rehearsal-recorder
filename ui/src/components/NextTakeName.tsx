@@ -19,22 +19,33 @@ const SHOWN = 6
  * screen compared it with Polyn's length.
  *
  * The songs are out in the open rather than behind a menu: a menu under
- * "Next take: Take 1" read as a caption, and nobody found it. First the
- * name the take has now, lit; then what this rehearsal played, as the next
- * go at each; then the rest of the repertoire, the latest played first.
- * Other… has every song and a field for a name nobody has played.
+ * "Next take: Take 1" read as a caption, and nobody found it. They are what
+ * this rehearsal played, as the next go at each, then the rest of the
+ * repertoire, the latest played first; Other… has every song and a field
+ * for a name nobody has played.
+ *
+ * The one picked is lit where it stands. Nothing moves when one is
+ * clicked: with the picked one put first, the song clicked jumped out from
+ * under the pointer and the rest shifted along. So the name the take would
+ * have anyway, "Take 1" before anything is named, leads the row while it
+ * is no song's, and stays there to go back to; a name from Other… that the
+ * row has no place for comes last.
  *
  * Python keeps the choice until a take is kept, so a take thrown away
  * leaves it for the go after.
  */
 export function NextTakeName({
   name,
+  defaultName,
   version,
   onChoose,
 }: {
   name: string
+  /** What it would be called without a name picked for it. */
+  defaultName: string
   /** Changes with the rehearsal's takes, so the songs follow them. */
   version: string
+  /** The name picked, or "" to go back to the default. */
   onChoose: (name: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -47,13 +58,24 @@ export function NextTakeName({
     setOpen(false)
   }
 
-  const all = choices ? [...choices.here, ...choices.other] : []
-  const said = name.trim().toLocaleLowerCase()
-  const itsOwn = all.find((c) => c.name.toLocaleLowerCase() === said)
-  // The name the take has now, whether or not it is one of the songs: the
-  // app's own "Take 1" before anything is named, or a name typed in Other….
-  const current: SongChoice = itsOwn ?? { song: name, name }
-  const others = all.filter((c) => c !== itsOwn).slice(0, SHOWN)
+  const songs = choices ? [...choices.here, ...choices.other] : []
+  const same = (a: string, b: string) =>
+    a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase()
+  const lead: SongChoice | null = songs.some((c) => same(c.name, defaultName))
+    ? null
+    : { song: defaultName, name: defaultName }
+  const shown = songs.slice(0, SHOWN)
+  const placed = [...(lead ? [lead] : []), ...shown]
+  const last: SongChoice | null = placed.some((c) => same(c.name, name))
+    ? null
+    : (songs.find((c) => same(c.name, name)) ?? { song: name, name })
+  const row = [...placed, ...(last ? [last] : [])]
+  const pick = (c: SongChoice) => {
+    // The lead goes back to the name the take would have had, picked or not.
+    if (c === lead) {
+      if (!same(name, defaultName)) onChoose("")
+    } else choose(c.name)
+  }
   const chip = "px-3 py-1 text-sm"
 
   return (
@@ -63,9 +85,14 @@ export function NextTakeName({
       className="flex max-w-3xl flex-wrap items-center justify-center gap-1.5"
     >
       <span className="mr-1 text-sm text-muted-foreground">Next take:</span>
-      <SongChip choice={current} current onPick={choose} className={chip} />
-      {others.map((c) => (
-        <SongChip key={c.song} choice={c} current={false} onPick={choose} className={chip} />
+      {row.map((c) => (
+        <SongChip
+          key={c.song}
+          choice={c}
+          current={same(c.name, name)}
+          onPick={() => pick(c)}
+          className={chip}
+        />
       ))}
       <Popover
         open={open}

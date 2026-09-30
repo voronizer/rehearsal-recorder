@@ -129,6 +129,8 @@ export type SessionState =
       songs: Song[]
       next_take_number: number
       next_take_name: string
+      /** What the next take would be called without a name picked for it. */
+      next_take_default?: string
       /** The latest go at the song the next take is named for, if any. */
       last_attempt?: LastAttempt | null
       recording: boolean

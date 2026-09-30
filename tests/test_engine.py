@@ -832,6 +832,8 @@ def main():
     ok("a name picked for the next take is the one it gets",
        a.set_next_take_name(" Vesna ")["next_take_name"] == "Vesna"
        and a.session_state()["next_take_name"] == "Vesna")
+    ok("and the name it would have had is still known, to go back to",
+       a.session_state()["next_take_default"] == "Polyn 3")
     a._session["take_counter"] = 3
     ok("the review screen is offered it for the take just recorded",
        a.suggest_take_name(3) == "Vesna")

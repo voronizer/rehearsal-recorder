@@ -252,6 +252,7 @@ export function Rehearsal({
           {error && <p className="text-sm text-destructive">{error}</p>}
           <NextTakeName
             name={session.next_take_name}
+            defaultName={session.next_take_default ?? session.next_take_name}
             version={session.takes.map((t) => `${t.take_number}:${t.name}`).join("|")}
             onChoose={(name) => void nameNextTake(name)}
           />
