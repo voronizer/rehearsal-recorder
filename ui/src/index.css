@@ -53,7 +53,9 @@
      the player. */
   color-scheme: light;
 
-  --radius: 0.75rem;
+  /* 6 px: 12 made every block look soft. The others follow from it — a
+     button 4, a tile on the recording screen 10. */
+  --radius: 0.375rem;
 
   --background: oklch(0.985 0 0);
   --foreground: oklch(0.21 0.006 285.9);
