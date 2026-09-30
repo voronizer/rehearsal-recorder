@@ -302,7 +302,10 @@ def zoom_to(page, ratio, seconds):
             times.append(int(minutes) * 60 + int(secs))
         if len(times) > 1 and (times[-1] - times[0]) * len(times) / (len(times) - 1) <= seconds:
             return
+        # Ctrl and the wheel zoom: the wheel on its own scrolls the page.
+        page.keyboard.down("Control")
         page.mouse.wheel(0, -120)
+        page.keyboard.up("Control")
         page.wait_for_timeout(250)
 
 

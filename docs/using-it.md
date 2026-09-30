@@ -181,12 +181,15 @@ Space plays and pauses it instead of starting a new recording.
 
 ![Zoomed in to a few seconds, where every drum hit shows](screenshots/zoom.png)
 
-At first the whole take is on screen. To look closer, scroll the mouse wheel
-over the tracks. The point under the mouse stays where it is. To move along
-the take, swipe sideways with two fingers on a touchpad, or hold Shift and
-scroll. The waveform is redrawn for the part on screen, so you see real
-detail. **Whole take**, to the left of the ruler, zooms back out. At the
-closest zoom about two seconds fit on the screen.
+At first the whole take is on screen. To look closer, hold Ctrl (⌘ on a Mac)
+and scroll the mouse wheel over the tracks, or pinch on a touchpad. The point
+under the mouse stays where it is. The wheel on its own scrolls the page, as
+it does everywhere else. To move along the take, swipe sideways with two
+fingers on a touchpad, or hold Shift and scroll. The waveform is redrawn for
+the part on screen, so you see real detail. **Whole take**, to the left of
+the ruler, zooms back out. At the closest zoom about two seconds fit on the
+screen. The keys button at the end of the player's row, or the ? key, lists
+all of this with the player's keys.
 
 While a take plays, the view follows the playhead. If you scroll away, it
 stops following until the playhead comes back into view.

@@ -3,6 +3,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { Keyboard } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useKey } from "@/hooks/useSpacebar"
+import { ZOOM_KEY } from "@/lib/platform"
 
 const overlayClass =
   "fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
@@ -31,6 +32,10 @@ export function PlayerKeys({ spaceKey }: { spaceKey: boolean }) {
     [["Home"], "To the start"],
     [["M"], "Mark this spot"],
     [["R"], "Repeat on / off"],
+    // Not keys, but the other thing nobody finds without being told: the
+    // wheel on its own scrolls the page.
+    [[`${ZOOM_KEY} + wheel`], "Zoom in / out"],
+    [["Shift + wheel"], "Along the take"],
   ]
 
   return (

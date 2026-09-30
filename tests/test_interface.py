@@ -998,6 +998,11 @@ def main():
         listed = page.get_by_role("dialog").inner_text()
         ok("? lists the player's keys",
            all(k in listed for k in ("Home", "To the start", "Mark", "Repeat", "10 seconds")))
+        # The wheel is not a key, but it is the other thing nobody finds
+        # without being told: on its own it scrolls, with Ctrl it zooms.
+        ok("and the wheel: Ctrl to zoom, Shift to move along the take",
+           "Ctrl + wheel" in listed and "Zoom in / out" in listed
+           and "Shift + wheel" in listed)
         ok("without Space here, where Space saves the take",
            "Play / pause" not in listed)
         escape_closes(page, "Keys in the player")
@@ -1023,6 +1028,29 @@ def main():
         ok("with the list open and focus anywhere else, Escape is still the list's",
            page.locator("text=Keys in the player").count() == 0
            and page.locator("text=Discard this take?").count() == 0)
+
+        # On a Mac the zoom is Cmd and the wheel, and the list says so, the
+        # way the Mac's own menus write it.
+        mac = browser.new_page(viewport={"width": 1180, "height": 820})
+        mac.on("pageerror", lambda e: problems.append(f"pageerror: {e}"))
+        mac.add_init_script(
+            "Object.defineProperty(navigator, 'platform', {get: () => 'MacIntel'});"
+            + MOCK)
+        mac.goto(server.base_url, wait_until="networkidle")
+        mac.wait_for_selector("text=Start rehearsal")
+        mac.click("text=Start rehearsal")
+        mac.wait_for_selector("text=Record take 1")
+        mac.click("text=Record take 1")
+        mac.wait_for_selector("button:has-text('Stop')")
+        mac.click("button:has-text('Stop')")
+        mac.wait_for_selector("#take-name")
+        mac.evaluate("document.activeElement && document.activeElement.blur()")
+        mac.keyboard.press("?")
+        mac.wait_for_selector("text=Keys in the player")
+        on_mac = mac.get_by_role("dialog").inner_text()
+        ok("on a Mac the list says Cmd for the zoom, not Ctrl",
+           "⌘ + wheel" in on_mac and "Ctrl + wheel" not in on_mac)
+        mac.close()
 
         page.keyboard.press("r")
         page.wait_for_timeout(150)
@@ -1521,10 +1549,17 @@ def main():
             page.wait_for_timeout(250)
             return calls("player_seek")[-1]["args"][0]
 
-        def wheel_at(ratio, dx, dy):
+        def wheel_at(ratio, dx, dy, holding=None):
             page.mouse.move(box["x"] + box["width"] * ratio, mid_y)
+            if holding:
+                page.keyboard.down(holding)
             page.mouse.wheel(dx, dy)
+            if holding:
+                page.keyboard.up(holding)
             page.wait_for_timeout(400)
+
+        def zoom_at(ratio, dy):
+            wheel_at(ratio, 0, dy, holding="Control")
 
         def clock_labels():
             """The times written on the ruler, in seconds."""
@@ -1535,8 +1570,20 @@ def main():
             return out
 
         whole_take_labels = clock_labels()
-        before = seek_at(0.3)
+        # The wheel on its own is the page's: it scrolls the tracks, over the
+        # waveforms as over the names beside them. It used to zoom, and a
+        # page with the tracks below the fold could not be scrolled from the
+        # middle of it.
         wheel_at(0.3, 0, -500)
+        ok("the wheel on its own does not zoom",
+           clock_labels() == whole_take_labels
+           and page.locator("text=Whole take").count() == 0)
+        left = page.get_by_role("group", name="Take timeline").evaluate(
+            "el => el.dispatchEvent(new WheelEvent('wheel', {deltaY: 120, "
+            "bubbles: true, cancelable: true}))")
+        ok("it is left to the page, to scroll", left is True)
+        before = seek_at(0.3)
+        zoom_at(0.3, -500)
         # A ruler with nothing left on it also reads differently from the whole
         # take's, so "the text changed" is not enough: a tick ladder that
         # starts above the shortest zoom window empties the ruler instead of
@@ -1544,7 +1591,7 @@ def main():
         # window is panned. This asks the zoomed ruler for a clock, and asks
         # that the clock belongs to the part of the take being shown.
         zoomed = clock_labels()
-        ok("the wheel zooms in", zoomed != whole_take_labels)
+        ok("Ctrl and the wheel zoom in", zoomed != whole_take_labels)
         ok("and the timeline says what part of the take is on screen",
            page.locator("text=Whole take").count() == 1)
         # Where a click at each end of the surface lands is the window itself,
@@ -1581,12 +1628,25 @@ def main():
            page.locator("text=Whole take").count() == 0
            and clock.inner_text() == whole_take_clock)
 
+        # On a Mac the hand goes to Cmd, not Ctrl. Dispatched from the page:
+        # headless Chromium sends no wheel with Meta held.
+        page.get_by_role("group", name="Take timeline").evaluate(
+            """(el, [x, y]) => el.dispatchEvent(new WheelEvent('wheel', {
+                 metaKey: true, deltaY: -500, clientX: x, clientY: y,
+                 bubbles: true, cancelable: true}))""",
+            [box["x"] + box["width"] * 0.5, mid_y])
+        page.wait_for_timeout(400)
+        ok("and on a Mac, Cmd and the wheel zoom in too",
+           page.locator("text=Whole take").count() == 1)
+        page.click("text=Whole take")
+        page.wait_for_timeout(400)
+
         # A marker off the side of the window is not drawn at all: without
         # that it would be pinned to the edge, pointing at the wrong second.
         all_markers = page.locator("[data-marker-at]").evaluate_all(
             "els => els.map(e => Number(e.dataset.markerAt))")
         ok("markers are on the timeline to start with", len(all_markers) > 1)
-        wheel_at(0.98, 0, -900)   # the last seconds of the take
+        zoom_at(0.98, -900)   # the last seconds of the take
         # Past this the wheel simply stops answering, and without a word
         # saying so that reads as the zoom having broken.
         ok("the closest window says it is the closest",
@@ -1612,7 +1672,7 @@ def main():
         drag_region(page, 0.05, 0.2)
         ok("the region's read-out shows while the window overlaps it",
            page.locator("[data-region-span]").count() == 1)
-        wheel_at(0.98, 0, -900)   # the far end, nowhere near the region
+        zoom_at(0.98, -900)   # the far end, nowhere near the region
         ok("and it is gone once the window has nothing to do with the region",
            page.locator("[data-region-span]").count() == 0)
 
@@ -1644,7 +1704,7 @@ def main():
           let left = 6;
           const notch = () => {
             el.dispatchEvent(new WheelEvent('wheel', {deltaY: -120, clientX: x,
-              clientY: y, bubbles: true, cancelable: true}));
+              clientY: y, ctrlKey: true, bubbles: true, cancelable: true}));
             if (--left > 0) setTimeout(notch, 16); else done();
           };
           notch();

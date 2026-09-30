@@ -14,6 +14,12 @@ opening.
   still do their own jobs.
 - **Corners are rounded less**, 6 px rather than 12 for a block, a button 4,
   a tile on the recording screen 10. Everything looked soft.
+- **The wheel scrolls the page in the player, and Ctrl and the wheel zoom**,
+  ⌘ and the wheel on a Mac. The wheel on its own zoomed the take whenever
+  the mouse was over the tracks, so a page with tracks below the fold could
+  not be scrolled from the middle of it. A pinch on a touchpad still zooms,
+  and Shift and the wheel, or a sideways swipe, still move along the take.
+  The list of the player's keys, behind ? and the keys button, has both.
 
 ## 0.7.13
 

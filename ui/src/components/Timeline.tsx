@@ -73,11 +73,13 @@ export function Timeline({
     return () => ro.disconnect()
   }, [])
 
-  // The wheel belongs to the gesture surface, which covers the waveforms and
-  // nothing else — so a wheel over the track names beside them still scrolls
-  // the lane stack, which is the only way to reach the eighth track. It has
-  // to be a non-passive listener: React's onWheel cannot preventDefault, and
-  // without that the scroll container takes the gesture.
+  // The wheel on its own is the page's: it scrolls the tracks, over the
+  // waveforms as over the names beside them. It used to zoom, and a page with
+  // the tracks below the fold could not be scrolled from the middle of it.
+  // Ctrl and the wheel zoom, and ⌘ and the wheel on a Mac; Shift and the
+  // wheel, or sideways on a trackpad, move along the take. Those need a
+  // non-passive listener: React's onWheel cannot preventDefault, and without
+  // that the scroll container, or the page's own zoom, takes the gesture.
   const { setView } = player
   useEffect(() => {
     const el = surfaceRef.current
@@ -86,15 +88,17 @@ export function Timeline({
       if (duration <= 0) return
       const box = el.getBoundingClientRect()
       if (box.width === 0) return
-      e.preventDefault()
-      followingRef.current = false
-
-      // Sideways on a trackpad, shift+wheel on a mouse: along the take.
+      const zoom = e.ctrlKey || e.metaKey
       // Whichever axis carries the value, and that is not belt and braces:
       // Chromium leaves a shifted wheel in deltaY, while WebKit and Firefox
       // move it to deltaX and leave deltaY at zero — and WebKit is what this
       // app runs in on macOS, where reading deltaY would pan by nothing.
-      if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      const along = !zoom && (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY))
+      if (!zoom && !along) return
+      e.preventDefault()
+      followingRef.current = false
+
+      if (along) {
         const by = ((e.deltaX || e.deltaY) / box.width) * span
         setView(from + by, to + by)
         return
