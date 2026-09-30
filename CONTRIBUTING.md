@@ -18,16 +18,16 @@ in the report.
 python3 -m venv venv
 source venv/bin/activate          # venv\Scripts\activate on Windows
 pip install -e .
-pip install playwright && playwright install chromium   # for the interface suite
-
-cd ui && npm install && npm run build && cd ..
+cd ui && npm install && npm run build
+npx playwright install chromium   # the browser the interface's tests run in
+cd ..
 python3 -m rehearsal_recorder
 ```
 
 Node is needed: `ui/dist` is what the app actually serves, and it is build
 output rather than something in the repository, so a fresh clone has to build
 it once. **Rebuild it whenever you change anything under `ui/src/`**, or
-neither the running app nor the interface suite will see the change.
+neither the running app nor the interface's browser tests will see the change.
 
 While you are working on the interface, `npm run dev` plus
 `python3 -m rehearsal_recorder --dev` gives you hot reload instead of a

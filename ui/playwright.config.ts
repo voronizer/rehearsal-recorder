@@ -11,8 +11,13 @@ const PORT = 4178
 
 export default defineConfig({
   testDir: "./e2e",
-  // Each test sets up the state it needs, so they run side by side.
+  // Each test sets up the state it needs, so they run side by side — four at
+  // a time. Eight browsers at once on an eight-core laptop starved each
+  // other, and a player test that takes a few seconds on its own ran past
+  // its time; CI's Linux runner has four cores.
   fullyParallel: true,
+  workers: 4,
+  timeout: 60_000,
   forbidOnly: !!process.env.CI,
   // A test that passes on its second go is a test that fails sometimes; that
   // is worth seeing, not hiding.

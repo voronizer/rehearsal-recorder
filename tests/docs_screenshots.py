@@ -1,11 +1,11 @@
 """
 The pictures in the README and docs/using-it.md.
 
-They are taken of the built interface against the interface suite's mocked
-bridge (tests/test_interface.py), with a band of four on an XR18 and a song
-for them to play. The suite's own waveform is one sine curve, the same on
-every track: enough to check that a waveform is drawn, and nothing like what
-a band sounds like.
+They are taken of the built interface against the faked Python side the
+interface's tests use (ui/e2e/fake-bridge.js), with a band of four on an
+XR18 and a song for them to play. The fake's own waveform is one sine curve,
+the same on every track: enough to check that a waveform is drawn, and
+nothing like what a band sounds like. Needs Playwright for Python.
 
     python tests/docs_screenshots.py
 
@@ -20,10 +20,26 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_interface import MOCK, PROJECT, UI_DIST, drag_region  # noqa: E402
+PROJECT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT / "src"))
 
 from rehearsal_recorder.mediaserver import AppServer  # noqa: E402
+
+UI_DIST = PROJECT / "ui" / "dist"
+# The faked Python side the interface's tests run against, which the band
+# below is laid over.
+MOCK = (PROJECT / "ui" / "e2e" / "fake-bridge.js").read_text(encoding="utf-8")
+
+
+def drag_region(page, from_ratio, to_ratio):
+    """Draw a region across the timeline, the way a person does."""
+    box = page.get_by_role("group", name="Take timeline").bounding_box()
+    y = box["y"] + box["height"] / 2
+    page.mouse.move(box["x"] + box["width"] * from_ratio, y)
+    page.mouse.down()
+    page.mouse.move(box["x"] + box["width"] * to_ratio, y, steps=10)
+    page.mouse.up()
+    page.wait_for_timeout(250)
 
 OUT = PROJECT / "docs" / "screenshots"
 VIEWPORT = {"width": 1180, "height": 820}

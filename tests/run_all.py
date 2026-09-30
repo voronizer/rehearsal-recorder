@@ -1,5 +1,5 @@
 """
-Every suite, one command:
+Every Python suite, one command:
 
     python tests/run_all.py
 
@@ -19,19 +19,13 @@ things to be true:
     test_store.py      the history database — schema, migrations, and the move of
                        old session.json files into it.
 
-    test_interface.py  the built interface in a headless browser against a
-                       mocked Python bridge. Needs `ui/dist` built and
-                       Playwright installed.
+The interface's tests are in ui/, beside the code they test: `npm test` and
+`npm run test:e2e` there. See tests/README.md.
 
 They are plain scripts rather than pytest modules, and that is deliberate:
 test_engine stubs the `sounddevice` module before importing anything that
 needs a sound card, which has to happen at import time and fights with how
 pytest collects. Each exits non-zero on failure, which is all CI needs.
-
-test_interface.py is being moved over to TypeScript, section by section,
-into ui/e2e/ (Playwright) and the *.test.ts files beside the code (Vitest):
-`npm test` and `npm run test:e2e` in ui/. `--without-interface` leaves it
-out, for a machine that has no Playwright for Python.
 """
 
 import subprocess
@@ -39,15 +33,12 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SUITES = ("test_engine.py", "test_platform.py", "test_store.py", "test_interface.py")
+SUITES = ("test_engine.py", "test_platform.py", "test_store.py")
 
 
 def main():
     failed = []
-    suites = SUITES
-    if "--without-interface" in sys.argv[1:]:
-        suites = tuple(s for s in SUITES if s != "test_interface.py")
-    for suite in suites:
+    for suite in SUITES:
         print(f"\n{'=' * 60}\n{suite}\n{'=' * 60}")
         result = subprocess.run([sys.executable, str(HERE / suite)])
         if result.returncode != 0:

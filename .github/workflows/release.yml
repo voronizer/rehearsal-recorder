@@ -67,11 +67,12 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install -e . pyinstaller playwright
-          playwright install chromium
+          pip install -e . pyinstaller
 
-      # Same suites as tests.yml, but here on the system being shipped —
-      # which is the only place some of the platform branches are real.
+      # Same Python suites as tests.yml, but here on the system being shipped
+      # — which is the only place some of the platform branches are real.
+      # The interface's tests have nothing that differs between systems, and
+      # ran in tests.yml on the commit being tagged.
       - name: Run every suite
         run: python tests/run_all.py
 

@@ -18,11 +18,16 @@ where they are, so an edit under `src/` takes effect on the next run with no
 reinstall. It reads its dependency list from `requirements.txt` through
 `pyproject.toml`, so there is still only one list.
 
-Playwright too, if you want to run the interface suite:
+The browser the interface's tests run in, once:
 
 ```bash
-pip install playwright && playwright install chromium
+cd ui && npx playwright install chromium
 ```
+
+Playwright for Python only takes the pictures in the docs
+(`tests/docs_screenshots.py`) and draws the app's icons
+(`packaging/make_icons.py`): `pip install playwright && playwright install
+chromium` if you change either.
 
 ## Changing Python — the audio, the API, the packaging
 

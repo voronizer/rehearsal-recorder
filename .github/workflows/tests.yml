@@ -19,8 +19,7 @@
 # The interface is the exception. Its tests run in a browser against a faked
 # Python side, and nothing in them depends on the system underneath, so they
 # run once, on Linux, in a job of their own beside the other two: the
-# `interface` job below. Until test_interface.py has been moved over to it
-# entirely, what is left of it runs on Windows.
+# `interface` job below.
 
 name: Tests
 
@@ -46,10 +45,8 @@ jobs:
         include:
           - os: macos-latest
             label: macos
-            interface: false
           - os: windows-latest
             label: windows
-            interface: true
 
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
@@ -66,7 +63,7 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
-      # The interface suite drives the built bundle, not the sources.
+      # --selftest below checks that the app finds its built interface.
       - name: Build the interface
         working-directory: ui
         run: |
@@ -81,42 +78,18 @@ jobs:
       # `pip install -e .` rather than requirements.txt on purpose: it reads
       # the same list through pyproject.toml, and it means every push also
       # checks that the package metadata still installs.
-      #
-      # `playwright install` without `--with-deps`: that flag installs system
-      # libraries with apt and exists only on Linux.
       - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Install Playwright for what is left of test_interface.py
-        if: matrix.interface
-        run: |
-          pip install playwright
-          playwright install chromium
-
       - name: Run every suite
-        if: matrix.interface
         run: python tests/run_all.py
-
-      - name: Run every suite but the interface's
-        if: ${{ !matrix.interface }}
-        run: python tests/run_all.py --without-interface
 
       # The entry point the docs tell people to use. Cheap, and it catches a
       # package that imports from a clone but not once installed.
       - name: Does it start
         run: python -m rehearsal_recorder --selftest
-
-      # The screenshots the interface suite takes along the way. Worth having
-      # when something fails and the message alone is not enough. Named per
-      # platform: two jobs uploading one name is an error, not a merge.
-      - uses: actions/upload-artifact@v7
-        if: always() && matrix.interface
-        with:
-          name: interface-screenshots-${{ matrix.label }}
-          path: tests/screenshots/
-          if-no-files-found: ignore
 
   # The interface: the Vitest files beside the code, and Playwright against
   # the built bundle. Linux, because what they test is the same everywhere,

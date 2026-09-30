@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test"
-import { openApp } from "./app.ts"
+import { calls, expect, openApp, startButton, test } from "./app.ts"
 
 // Starting up: the window comes up before Python has, and has to cope with a
 // bridge that is late, or never there at all.
@@ -16,7 +15,7 @@ test("waits for a bridge whose methods arrive after its ready event", async ({ p
       setTimeout(() => { window.pywebview.api = realApi; }, 800);
     `,
   })
-  await expect(page.getByRole("button", { name: /Start rehearsal/ })).toBeVisible()
+  await expect(startButton(page)).toBeVisible()
 })
 
 test("shows the logo while it connects, and an error rather than a spinner for ever", async ({
@@ -66,6 +65,24 @@ test("puts the chosen theme up before Python answers, and keeps it", async ({ co
   })
   const dark = () => page.evaluate(() => document.documentElement.classList.contains("dark"))
   expect(await dark()).toBe(false)
-  await expect(page.getByRole("button", { name: /Start rehearsal/ })).toBeVisible()
+  await expect(startButton(page)).toBeVisible()
   expect(await dark()).toBe(false)
+})
+
+test("offers unsaved takes before anything else, and moves on once one is recovered", async ({
+  page,
+}) => {
+  await openApp(page, {
+    before: `window.__DRAFTS__ = [{dir: '/rec/old/_drafts/take 1', name: 'take 1',
+      tracks: ['Guitar', 'Vocals'], duration_sec: 95,
+      rehearsal_folder: '/rec/old', rehearsal_name: 'Tuesday jam',
+      created_at: '2026-09-10T19:00:00'}];`,
+  })
+  await expect(page.getByText("Unsaved takes found")).toBeVisible()
+  // Which rehearsal it was from, and how long it is.
+  await expect(page.getByText("Tuesday jam").first()).toBeVisible()
+  await expect(page.getByText("1:35").first()).toBeVisible()
+  await page.getByRole("button", { name: "Recover" }).click()
+  await expect(startButton(page)).toBeVisible()
+  expect(await calls(page, "recover_draft")).toHaveLength(1)
 })

@@ -20,9 +20,6 @@ ui/node_modules/
 # Personal Claude Code settings for this checkout, not the project's.
 .claude/settings.local.json
 
-# Screenshots the interface suite takes as it runs
-tests/screenshots/
-
 # Written by setuptools-scm from the git tag at build time.
 src/rehearsal_recorder/_version.py
 

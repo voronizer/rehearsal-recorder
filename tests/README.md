@@ -1,10 +1,13 @@
 # Tests
 
 ```bash
-python tests/run_all.py
+python tests/run_all.py              # the Python suites
+cd ui && npm test                    # the interface, what needs no browser
+cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
-Four suites, because they answer different questions.
+Three Python suites and two for the interface, because they answer different
+questions.
 
 ## test_engine.py — the audio
 
@@ -23,10 +26,10 @@ shape deliberately: no recycle bin, no encoder, Windows naming rules, a path
 near the 260-character limit.
 
 This proves the code takes the right branch, not that the branch works where
-it runs: only the system itself shows that. CI runs every suite on macOS and
-on Windows for exactly that reason — it used to run them on Linux, where a
-check about a filesystem that ignores case had nothing to catch and skipped
-itself for weeks.
+it runs: only the system itself shows that. CI runs the Python suites on
+macOS and on Windows for exactly that reason — it used to run them on Linux,
+where a check about a filesystem that ignores case had nothing to catch and
+skipped itself for weeks.
 
 ## test_store.py — the history database
 
@@ -39,45 +42,37 @@ them.
 
 ## The interface — in ui/, in TypeScript
 
-```bash
-cd ui
-npm test                             # Vitest: what needs no browser, seconds
-npm run build && npm run test:e2e    # Playwright: the built bundle in a browser
-```
+Beside the code it tests, in two kinds:
 
-The interface's tests are being moved out of Python into `ui/`, where the
-code they test is:
-
-- **`src/**/*.test.ts`**, beside the code, under Vitest: what can be checked
+- **`ui/src/**/*.test.ts`**, under Vitest (`npm test`): what can be checked
   without a browser. How loud a meter draws, what a time is written as, where
-  the ruler puts its ticks.
-- **`e2e/*.spec.ts`**, under Playwright Test: the built `ui/dist` in a real
-  browser, against the faked Python side in `e2e/fake-bridge.js`. For what
-  needs a page laid out and a mouse. Each test sets up the state it needs, so
-  they run side by side, and they wait for what they are waiting for rather
-  than for a length of time.
+  the ruler puts its ticks. Seconds.
+- **`ui/e2e/*.spec.ts`**, under Playwright Test (`npm run test:e2e`): the
+  built `ui/dist` in a real browser, against the faked Python side in
+  `ui/e2e/fake-bridge.js`, served by `ui/e2e/serve.mjs` with no `/api` so
+  the interface polls over the bridge. For what needs a page laid out, a
+  mouse and a keyboard: every screen, the timeline, the recording screen's
+  tiles, the keys. Each test sets up the state it needs, so they run side by
+  side; they wait for what they are waiting for rather than for a length of
+  time, and a page's clock is fast-forwarded where the app counts seconds.
+  An error in the page's console fails a test, unless the test says it
+  expects that one.
 
-CI runs both once, on Linux: nothing in them depends on the system
-underneath.
+Build first: the browser tests drive `ui/dist`, not `ui/src`. The first time,
+`cd ui && npx playwright install chromium` fetches the browser.
 
-## test_interface.py — what has not been moved yet
-
-The rest of the interface's tests, the old way: one long run through every
-screen in a headless browser, against the same `ui/e2e/fake-bridge.js`.
-Its sections move to `ui/e2e/` one at a time and are deleted here as they
-do. CI runs what is left on Windows.
-
-Needs `ui/dist` built (`cd ui && npm run build`) and Playwright for Python.
-Screenshots land in `tests/screenshots/` and CI keeps them as artifacts.
+CI runs both once, on Linux: they run in a browser against a faked Python
+side, and nothing in them depends on the system underneath.
 
 ## docs_screenshots.py — the pictures in the docs
 
 Not a suite: it checks nothing and `run_all.py` does not run it. It takes the
-pictures in the README and `docs/using-it.md` — the same bundle and the same
-mocked bridge as `test_interface.py`, with a band of four on an XR18 and
-waveforms worked out from a song, so the pictures look like a rehearsal
-rather than a test. It writes `docs/screenshots/*.png`. Run it after changing
-anything they show, and look at them before committing.
+pictures in the README and `docs/using-it.md` — the built bundle and the
+same `ui/e2e/fake-bridge.js`, with a band of four on an XR18 and waveforms
+worked out from a song, so the pictures look like a rehearsal rather than a
+test. It writes `docs/screenshots/*.png`. Run it after changing anything they
+show, and look at them before committing. Needs Playwright for Python:
+`pip install playwright && playwright install chromium`.
 
 ## Why not pytest
 

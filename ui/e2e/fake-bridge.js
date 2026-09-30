@@ -1,14 +1,13 @@
 // The Python side of the app, faked for the interface's tests: every call
 // the interface makes over the pywebview bridge, answered from state kept
-// here. Loaded into the page before the app starts, by the TypeScript
-// suites in ui/e2e/ and, while they are being moved over, by
-// tests/test_interface.py.
+// here. Loaded into the page before the app starts, by the tests in ui/e2e/
+// and by tests/docs_screenshots.py, which lays a band over it.
 //
 // A page can set things up before it loads — window.__LEVELS__,
 // window.__DRAFTS__, window.__FAIL__ and the rest below — and a test can
 // change them while it runs.
 
-// How long the fake's own takes are, in seconds. TAKE_SECONDS in the suites
+// How long the fake's own takes are, in seconds. TAKE_SECONDS in e2e/app.ts
 // is the same number.
 const TAKE = 6;
 window.__CALLS__ = [];
@@ -239,9 +238,12 @@ window.__MAKE_API__ = () => ({
     window.__MONITOR_LEVELS__ || ({'Guitar':[0.62], 'Vocals':[0.0004]})),
   monitor_health: async () => ({checking:true, problem: window.__CHECK_QUIET__ || null}),
 
-  // Long work, scripted by the test through window.__ACTIVITY__.
-  activity: async () => ({entries: JSON.parse(JSON.stringify(window.__ACTIVITY__ || [])),
-                          recording: false}),
+  // Long work, scripted by the test through window.__ACTIVITY__. Counted, so
+  // a test can wait for the screen to have looked again.
+  activity: async () => {
+    window.__ACTIVITY_POLLS__ = (window.__ACTIVITY_POLLS__ || 0) + 1;
+    return {entries: JSON.parse(JSON.stringify(window.__ACTIVITY__ || [])), recording: false};
+  },
   activity_seen: track('activity_seen', async () => {
     for (const e of (window.__ACTIVITY__ || []))
       if (e.state === 'done' || e.state === 'failed') e.seen = true;
