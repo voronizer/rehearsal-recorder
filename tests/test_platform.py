@@ -353,17 +353,28 @@ def main():
     ok("a built app is its own .exe already, and a pinned one keeps working",
        built.said == [])
 
-    # On macOS the program is Python.app, and the Dock and the menu bar
-    # called the app Python: they read the name from its Info.plist, which
-    # can be changed in memory before Cocoa starts.
-    info = {"CFBundleName": "Python"}
-    ps.claim_taskbar_identity("darwin", frozen=False, info=info)
+    # On macOS the program is Python.app, and the Dock, the menu bar and
+    # About said Python, with its version and copyright: they read them from
+    # its Info.plist, which can be changed in memory before Cocoa starts.
+    python_info = {
+        "CFBundleName": "Python",
+        "CFBundleShortVersionString": "3.12.2",
+        "CFBundleVersion": "3.12.2",
+        "NSHumanReadableCopyright": "(c) 2001-2023 Python Software Foundation.",
+    }
+    info = dict(python_info)
+    ps.claim_taskbar_identity("darwin", frozen=False, info=info, version="1.2.3")
     ok("from source on macOS the Dock and the menu bar are given the app's name",
        info["CFBundleName"] == ps.APP_NAME == "Rehearsal Recorder")
-    built_info = {"CFBundleName": "Rehearsal Recorder"}
-    ps.claim_taskbar_identity("darwin", frozen=True, info=built_info)
-    ok("a built .app keeps the name in its own Info.plist",
-       built_info == {"CFBundleName": "Rehearsal Recorder"})
+    ok("and About its version and copyright, with no Python build in brackets",
+       info["CFBundleShortVersionString"] == "1.2.3"
+       and info["NSHumanReadableCopyright"] == ps.COPYRIGHT
+       and "Python" not in ps.COPYRIGHT
+       and "CFBundleVersion" not in info)
+    built_info = dict(python_info)
+    ps.claim_taskbar_identity("darwin", frozen=True, info=built_info, version="1.2.3")
+    ok("a built .app keeps what its own Info.plist says",
+       built_info == python_info)
     ok("and elsewhere there is no such thing to say",
        ps.claim_taskbar_identity("linux", frozen=False, shell32=Shell32(), info={}) is None)
 

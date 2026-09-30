@@ -56,12 +56,14 @@ def app_root():
 
 # Who the app is to the Windows taskbar, when it is not an .exe of its own.
 APP_ID = "Voronizer.RehearsalRecorder"
-# And what the Dock and the menu bar call it on macOS, when it is not an .app
-# of its own.
+# And who it is to macOS, in the Dock, the menu bar and About, when it is not
+# an .app of its own. The build writes the same into the .app's Info.plist.
 APP_NAME = "Rehearsal Recorder"
+COPYRIGHT = "© 2026 Aliaksandr Varanishcha"
 
 
-def claim_taskbar_identity(system=sys.platform, frozen=None, shell32=None, info=None):
+def claim_taskbar_identity(system=sys.platform, frozen=None, shell32=None,
+                           info=None, version=None):
     """
     Run from source, the program is python.exe, and the taskbar groups the
     window under it with Python's icon, whatever the window's own icon says.
@@ -70,10 +72,13 @@ def claim_taskbar_identity(system=sys.platform, frozen=None, shell32=None, info=
     decided. A built app is its own .exe with its own icon already, and
     giving it an id would part it from a pinned shortcut to it.
 
-    On macOS the program is Python.app, and the Dock and the menu bar call
-    the app Python. They take the name from its Info.plist as it stands when
-    Cocoa starts, and until then the copy in memory can still be changed.
-    A built .app has the name in an Info.plist of its own.
+    On macOS the program is Python.app, and the Dock, the menu bar and About
+    said Python, with Python's version and copyright. They read these from
+    its Info.plist as it stands when Cocoa starts, and until then the copy
+    in memory can still be changed. About draws the image registered as the
+    application's icon, which stays Python's rocket whatever the Dock was
+    given, so the app's own is registered under that name. A built .app has
+    all of it in an Info.plist and an icon of its own.
     """
     if frozen is None:
         frozen = bool(getattr(sys, "_MEIPASS", None))
@@ -89,10 +94,22 @@ def claim_taskbar_identity(system=sys.platform, frozen=None, shell32=None, info=
             return APP_ID
         if system == "darwin":
             if info is None:
+                from AppKit import NSImage, NSImageNameApplicationIcon
                 from Foundation import NSBundle
 
                 info = NSBundle.mainBundle().infoDictionary()
+                icon = window_icon(system, frozen)
+                if icon:
+                    image = NSImage.alloc().initByReferencingFile_(icon)
+                    image.setName_(NSImageNameApplicationIcon)
+            if version is None:
+                from rehearsal_recorder import __version__ as version
             info["CFBundleName"] = APP_NAME
+            info["CFBundleShortVersionString"] = version
+            info["NSHumanReadableCopyright"] = COPYRIGHT
+            # Python's build number, which About would add in brackets.
+            if "CFBundleVersion" in info:
+                del info["CFBundleVersion"]
             return APP_NAME
     except Exception as e:  # noqa: BLE001 — Python's name is no reason not to start
         print(f"[taskbar] {e}")

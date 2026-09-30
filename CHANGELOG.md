@@ -47,9 +47,11 @@ opening.
   read as clearing that part of the take. **Crop** is under them. **Repeat** in the player's
   row has moved next to the time, with the playing, and **Mark** to the end
   of the row.
-- Run from source on macOS, the app has its own icon and name in the Dock
-  and the menu bar rather than Python's, as it already had on the Windows
-  taskbar.
+- **About on macOS says which version it is.** In the built app it said
+  0.0.0, in Finder's Get Info too, and it now gives the release's number
+  and the copyright. Run from source, the Dock, the menu bar and About had
+  Python's icon, name, version and copyright, and now have the app's own,
+  as the Windows taskbar already did.
 
 ## 0.7.13
 

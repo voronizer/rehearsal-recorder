@@ -36,6 +36,15 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 ROOT = Path(SPECPATH).parent
 NAME = "RehearsalRecorder"
 
+# What Finder's Get Info and About read from the .app's Info.plist: without
+# a version PyInstaller writes 0.0.0. The number is the release tag's,
+# written by setuptools-scm when the package was installed (see
+# src/rehearsal_recorder/__init__.py); the name and copyright are the ones
+# the app gives itself when it runs from source.
+sys.path.insert(0, str(ROOT / "src"))
+from rehearsal_recorder import __version__
+from rehearsal_recorder.platform_support import APP_NAME, COPYRIGHT
+
 ui_dist = ROOT / "ui" / "dist"
 if not (ui_dist / "index.html").exists():
     raise SystemExit(
@@ -122,14 +131,16 @@ if sys.platform == "darwin":
         name=f"{NAME}.app",
         icon=str(ROOT / "packaging" / "icon.icns"),
         bundle_identifier="band.rehearsal.recorder",
+        version=__version__,
         info_plist={
             # Without this the app is killed on its first take, with no
             # message anyone could act on.
             "NSMicrophoneUsageDescription":
                 "Rehearsal Recorder records your band through your audio "
                 "interface.",
-            "CFBundleName": "Rehearsal Recorder",
-            "CFBundleDisplayName": "Rehearsal Recorder",
+            "CFBundleName": APP_NAME,
+            "CFBundleDisplayName": APP_NAME,
+            "NSHumanReadableCopyright": COPYRIGHT,
             "NSHighResolutionCapable": True,
             # It is a window, not a menu-bar accessory.
             "LSUIElement": False,
