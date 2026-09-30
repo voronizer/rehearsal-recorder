@@ -73,6 +73,11 @@ test.describe("the review screen", () => {
   })
 
   test("lists its keys behind ?, and Escape closes the list, not the take", async ({ page }) => {
+    // Ctrl, as everywhere but a Mac, on whatever machine runs the tests: on
+    // a Mac this said ⌘ and failed. The Mac's own list is the next test's.
+    await page.addInitScript(
+      "Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});"
+    )
     await review(page)
     await page.keyboard.press("?")
     const listed = keysList(page)
