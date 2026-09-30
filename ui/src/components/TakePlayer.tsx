@@ -6,7 +6,6 @@ import {
   Pause,
   Play,
   Repeat,
-  Scissors,
   SkipBack,
   Undo2,
   Redo2,
@@ -89,27 +88,6 @@ export function TakePlayer({
         markers={markers}
         onAddMarker={onAddMarker}
         onEditMarker={onEditMarker}
-        onCropClick={onCrop ? () => setCropping(true) : undefined}
-        canCrop={cropRegionOk && canCrop}
-        // The two reasons the button can be off are opposite mistakes, and
-        // the advice for one is no help at all with the other.
-        cropTitle={
-          cropRegionOk
-            ? "Keep only this part of the take"
-            : tooShort
-              ? "Mark at least a second of the take to keep"
-              : "Mark a shorter part of the take to keep"
-        }
-        // And the title above never reaches anybody while it matters: a
-        // disabled button takes no pointer events, so it cannot be hovered.
-        // The reason has to be on screen, beside the button it explains.
-        cropWhyOff={
-          cropRegionOk
-            ? undefined
-            : tooShort
-              ? "at least a second to crop"
-              : "that is the whole take"
-        }
       />
 
       {status}
@@ -126,7 +104,34 @@ export function TakePlayer({
         </div>
       )}
 
-      <Timeline player={player} markers={markers} />
+      <Timeline
+        player={player}
+        markers={markers}
+        crop={
+          onCrop
+            ? {
+                onClick: () => setCropping(true),
+                enabled: cropRegionOk && canCrop && !player.loading,
+                // The two reasons the button can be off are opposite
+                // mistakes, and the advice for one is no help at all with
+                // the other.
+                title: cropRegionOk
+                  ? "Keep only this part of the take"
+                  : tooShort
+                    ? "Mark at least a second of the take to keep"
+                    : "Mark a shorter part of the take to keep",
+                // And the title never reaches anybody while it matters: a
+                // disabled button cannot be hovered. The reason has to be
+                // on screen, beside the button it explains.
+                whyOff: cropRegionOk
+                  ? undefined
+                  : tooShort
+                    ? "at least a second to crop"
+                    : "that is the whole take",
+              }
+            : undefined
+        }
+      />
 
       {markers.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
@@ -214,10 +219,6 @@ function Transport({
   markers,
   onAddMarker,
   onEditMarker,
-  onCropClick,
-  canCrop,
-  cropTitle,
-  cropWhyOff,
   spaceKey,
 }: {
   player: MultitrackPlayer
@@ -225,11 +226,6 @@ function Transport({
   markers: Marker[]
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
-  onCropClick?: () => void
-  canCrop?: boolean
-  cropTitle?: string
-  /** Why Crop is off, in a few words, or absent when it is usable. */
-  cropWhyOff?: string
 }) {
   const { looping, position, duration, region } = player
   // The same rule the timeline draws by: one end set reaches to the take's
@@ -311,77 +307,42 @@ function Transport({
         <span className="text-muted-foreground"> / {formatMMSS(duration)}</span>
       </span>
 
-      {onAddMarker && (
-        <Button
-          variant={nearby !== undefined ? "default" : "outline"}
-          size="sm"
-          onClick={mark}
-          disabled={player.loading}
-          aria-label={nearby !== undefined ? "Edit marker" : "Add marker"}
-          aria-keyshortcuts="M"
-          title={
-            nearby !== undefined
-              ? "There is already a marker here — open it"
-              : "Mark this spot and say what happened"
-          }
-        >
-          <Flag />
-          {nearby !== undefined ? "Open mark" : "Mark"}
-        </Button>
-      )}
+      {/* Repeat is part of how the take plays, so it sits with the playing,
+          by the time. Clear and Crop are not here: they are about the
+          region, and sit under its times on the timeline. */}
+      <Button
+        variant={looping ? "default" : "outline"}
+        size="sm"
+        onClick={player.toggleLoop}
+        disabled={player.loading}
+        aria-pressed={looping}
+        aria-label="Repeat"
+        aria-keyshortcuts="R"
+        title={loopBand ? "Loop the marked stretch" : "Loop the whole take"}
+        className={cn(looping && "bg-warn text-warn-foreground hover:bg-warn/90")}
+      >
+        <Repeat />
+        Repeat
+      </Button>
 
       <div className="ml-auto flex items-center gap-1.5">
-        {/* Clear comes before Repeat: it is about the region, and the region
-            is what the eye arrives from — the timeline sits directly under
-            all this. No times here either; the band on the timeline already
-            carries them, written across the stretch they describe. */}
-        {loopBand && (
+        {onAddMarker && (
           <Button
-            variant="ghost"
+            variant={nearby !== undefined ? "default" : "outline"}
             size="sm"
-            onClick={player.clearRegion}
-            aria-label="Clear the loop region"
-            title="Clear it — Repeat then loops the whole take"
+            onClick={mark}
+            disabled={player.loading}
+            aria-label={nearby !== undefined ? "Edit marker" : "Add marker"}
+            aria-keyshortcuts="M"
+            title={
+              nearby !== undefined
+                ? "There is already a marker here — open it"
+                : "Mark this spot and say what happened"
+            }
           >
-            <X />
-            Clear
+            <Flag />
+            {nearby !== undefined ? "Open mark" : "Mark"}
           </Button>
-        )}
-
-        <Button
-          variant={looping ? "default" : "outline"}
-          size="sm"
-          onClick={player.toggleLoop}
-          disabled={player.loading}
-          aria-pressed={looping}
-          aria-label="Repeat"
-          aria-keyshortcuts="R"
-          title={loopBand ? "Loop the marked stretch" : "Loop the whole take"}
-          className={cn(looping && "bg-warn text-warn-foreground hover:bg-warn/90")}
-        >
-          <Repeat />
-          Repeat
-        </Button>
-
-        {loopBand && onCropClick && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onCropClick}
-              disabled={player.loading || !canCrop}
-              aria-label="Crop to the region"
-              title={cropTitle}
-            >
-              <Scissors />
-              Crop
-            </Button>
-            {cropWhyOff && (
-              <span className="text-xs text-muted-foreground">
-                {cropWhyOff}
-              </span>
-            )}
-          </>
         )}
 
         <PlayerKeys spaceKey={spaceKey} />

@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useRef, useState } from "react"
-import { Button } from "@/components/ui/button"
+import { Fragment, useEffect, useId, useRef, useState } from "react"
 import { LaneControls, MasterControls } from "@/components/LaneControls"
+import { RegionTag, type RegionCrop } from "@/components/RegionTag"
+import { TakeMap } from "@/components/TakeMap"
 import { Waveform } from "@/components/Waveform"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
@@ -20,6 +21,8 @@ const RULER_PX = 44
  *  its padding, with a little to spare. */
 const TICK_LABEL_PX = 44
 const ROW_GAP_PX = 8
+/** Between the track controls and the waveforms; the map above keeps it. */
+const COLUMN_GAP_PX = 12
 /** How fast the wheel zooms. One notch of a mouse wheel is about 100 units,
  *  so this makes a notch a fifth of the window. */
 const ZOOM_PER_PIXEL = 0.002
@@ -36,10 +39,14 @@ const ZOOM_PER_PIXEL = 0.002
 export function Timeline({
   player,
   markers = [],
+  crop,
 }: {
   player: MultitrackPlayer
   markers?: Marker[]
+  /** Crop, offered under the region's times, where the take can be cut. */
+  crop?: RegionCrop
 }) {
+  const surfaceId = useId()
   const { media, duration, position, region } = player
   const from = player.view?.from ?? 0
   const to = player.view?.to ?? duration
@@ -243,6 +250,29 @@ export function Timeline({
 
   return (
     <>
+      {/* Zoomed out too, the frame round all of it: a row that came and went
+          with the zoom moved every track down the moment the wheel turned. */}
+      {duration > 0 && (
+        <TakeMap
+          duration={duration}
+          from={from}
+          to={to}
+          zoomed={player.view !== null}
+          position={displayPosition}
+          region={committed}
+          closest={span <= MIN_VIEW_SEC + 0.01}
+          gutterPx={GUTTER_PX}
+          gapPx={COLUMN_GAP_PX}
+          controls={surfaceId}
+          onMove={(a, b) => {
+            // Moved by hand, the window stops chasing the playhead, as it
+            // does for the wheel.
+            followingRef.current = false
+            setView(a, b)
+          }}
+          onWhole={player.resetView}
+        />
+      )}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <div
           className="grid min-h-0 flex-1"
@@ -255,46 +285,25 @@ export function Timeline({
               rows > 0
                 ? `${RULER_PX}px repeat(${rows}, minmax(${LANE_MIN_PX}px, 1fr))`
                 : `${RULER_PX}px`,
-            gap: `${ROW_GAP_PX}px 12px`,
+            gap: `${ROW_GAP_PX}px ${COLUMN_GAP_PX}px`,
             // Two tracks in a tall window would otherwise give lanes the height
             // of a door. Past this the leftover space simply stays empty, which
             // is honest about there being room for more tracks.
             maxHeight: RULER_PX + rows * (LANE_MAX_PX + ROW_GAP_PX),
           }}
         >
-          {/* Every child below is placed explicitly. The surface (further down)
-              is also explicitly placed, spanning all of column 2 — leaving any
-              other child to auto-place would make CSS grid skip that occupied
-              column entirely and stack everything into column 1 instead. */}
+          {/* Every child below is placed explicitly. The surface (after the
+              ruler) is also explicitly placed, spanning all of column 2 —
+              leaving any other child to auto-place would make CSS grid skip
+              that occupied column entirely and stack everything into column 1
+              instead. */}
           <div
             className="flex items-end justify-between gap-2 pb-1 text-xs text-muted-foreground"
             style={{ gridColumn: 1, gridRow: 1 }}
           >
-            {player.view ? (
-              <>
-                {/* Wraps rather than truncates: "0:04 - 0:06 · closest" does
-                    not fit the gutter beside the button on one line, and a
-                    read-out cut off mid-word says less than no read-out. */}
-                <span className="leading-tight">
-                  <span className="tnum">
-                    {formatMMSS(from)} – {formatMMSS(to)}
-                  </span>
-                  {/* Otherwise the wheel simply stops answering and the reason
-                      is invisible — the window is as narrow as it goes. */}
-                  {span <= MIN_VIEW_SEC + 0.01 && " · closest"}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 shrink-0 px-2 text-xs"
-                  onClick={player.resetView}
-                >
-                  Whole take
-                </Button>
-              </>
-            ) : (
-              <span>{band ? "Drag the edges" : "Drag across to loop"}</span>
-            )}
+            {/* Zoomed in, which part of the take is on screen is said by the
+                map above, with Whole take beside it. */}
+            <span>{band ? "Drag the edges" : "Drag across to loop"}</span>
           </div>
 
           <div
@@ -329,55 +338,20 @@ export function Timeline({
             ))}
           </div>
 
-          {media.map((m, i) => {
-            const muted = player.isMuted(m.name)
-            const soloed = player.isSoloed(m.name)
-            const dimmed = muted || (player.hasSolo && !soloed)
-            return (
-              <Fragment key={m.name}>
-                <div
-                  className="min-h-0"
-                  style={{ gridColumn: 1, gridRow: i + 2 }}
-                >
-                  <LaneControls
-                    name={m.name}
-                    muted={muted}
-                    soloed={soloed}
-                    dimmed={dimmed}
-                    volume={player.getVolume(m.name)}
-                    level={player.getLevel(m.name)}
-                    onToggleMute={() => player.toggleMute(m.name)}
-                    onToggleSolo={() => player.toggleSolo(m.name)}
-                    onVolume={(v) => player.setVolume(m.name, v)}
-                    onVolumeCommit={player.persistVolumes}
-                  />
-                </div>
-
-                <div className="min-w-0" style={{ gridColumn: 2, gridRow: i + 2 }}>
-                  <Waveform
-                    peaks={m.peaks}
-                    peaksFrom={player.peaksWindow.from}
-                    peaksTo={player.peaksWindow.to}
-                    viewFrom={from}
-                    viewTo={to}
-                    position={position}
-                    dimmed={dimmed}
-                    className={cn("h-full rounded-lg border", dimmed && "opacity-60")}
-                  />
-                </div>
-              </Fragment>
-            )
-          })}
-
+          {/* Before the lanes rather than after them, so Tab reaches Clear and
+              Crop, at the top, before the tracks' faders and not between the
+              last of them and the master. Drawn over the waveforms all the
+              same: the z-index, not the order, puts it there. */}
           <div
             ref={surfaceRef}
+            id={surfaceId}
             role="group"
             aria-label="Take timeline"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={finishPointer}
             onPointerCancel={cancelPointer}
-            className="relative cursor-crosshair overflow-hidden select-none"
+            className="relative z-[1] cursor-crosshair overflow-hidden select-none"
             style={{ gridColumn: 2, gridRow: "1 / -1", touchAction: "none" }}
           >
             {band && (
@@ -394,17 +368,22 @@ export function Timeline({
 
             {/* Only while the band actually overlaps the window — otherwise the
                 rectangle is correctly clipped away by overflow-hidden, but the
-                chip has nowhere honest to sit and would be left pinned to an
+                tag has nowhere honest to sit and would be left pinned to an
                 edge, labelling a stretch of the take it has nothing to do
-                with. */}
+                with. Its Clear and Crop go with it. */}
             {band && band.b >= from && band.a <= to && (
-              <span
-                data-region-span
-                className="pointer-events-none absolute rounded bg-warn px-1.5 py-px text-[11px] text-warn-foreground tnum"
-                style={{ left: `${Math.max(0, pct(band.a))}%`, top: RULER_PX + 6, marginLeft: 8 }}
-              >
-                {formatMMSS(band.a)} – {formatMMSS(band.b)}
-              </span>
+              <RegionTag
+                a={band.a}
+                b={band.b}
+                leftPx={(Math.max(0, pct(band.a)) / 100) * width + 8}
+                topPx={RULER_PX + 6}
+                roomPx={width}
+                actions={band === committed}
+                looping={player.looping}
+                onToggleLoop={player.toggleLoop}
+                onClear={player.clearRegion}
+                crop={crop}
+              />
             )}
 
             {markers
@@ -475,6 +454,46 @@ export function Timeline({
               style={{ left: `${pct(displayPosition)}%`, top: RULER_PX - 20 }}
             />
           </div>
+
+          {media.map((m, i) => {
+            const muted = player.isMuted(m.name)
+            const soloed = player.isSoloed(m.name)
+            const dimmed = muted || (player.hasSolo && !soloed)
+            return (
+              <Fragment key={m.name}>
+                <div
+                  className="min-h-0"
+                  style={{ gridColumn: 1, gridRow: i + 2 }}
+                >
+                  <LaneControls
+                    name={m.name}
+                    muted={muted}
+                    soloed={soloed}
+                    dimmed={dimmed}
+                    volume={player.getVolume(m.name)}
+                    level={player.getLevel(m.name)}
+                    onToggleMute={() => player.toggleMute(m.name)}
+                    onToggleSolo={() => player.toggleSolo(m.name)}
+                    onVolume={(v) => player.setVolume(m.name, v)}
+                    onVolumeCommit={player.persistVolumes}
+                  />
+                </div>
+
+                <div className="min-w-0" style={{ gridColumn: 2, gridRow: i + 2 }}>
+                  <Waveform
+                    peaks={m.peaks}
+                    peaksFrom={player.peaksWindow.from}
+                    peaksTo={player.peaksWindow.to}
+                    viewFrom={from}
+                    viewTo={to}
+                    position={position}
+                    dimmed={dimmed}
+                    className={cn("h-full rounded-lg border", dimmed && "opacity-60")}
+                  />
+                </div>
+              </Fragment>
+            )
+          })}
         </div>
       </div>
 

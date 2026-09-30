@@ -154,10 +154,12 @@ on one timeline, so they always stay in sync.
   shows those colours too, so you can see which takes have problems without
   opening them. Click a marker to jump to it.
 - **Loop a part:** drag across the tracks to select it, then turn on
-  **Repeat**. Drag the edges on the ruler to adjust the selection. **Clear**
-  removes it.
-- **Trim a take:** select the part worth keeping and press **Crop**. The rest
-  goes to the Trash, and the markers inside the part move with it.
+  **Repeat**, next to the time, or the loop button beside the selection's
+  times. Drag the edges on the ruler to adjust the selection. The cross
+  beside its times removes the selection. It leaves the take as it was.
+- **Trim a take:** select the part worth keeping and press **Crop**, under
+  the selection's times. The rest goes to the Trash, and the markers inside
+  the part move with it.
 
 A few things about cropping:
 
@@ -186,10 +188,17 @@ and scroll the mouse wheel over the tracks, or pinch on a touchpad. The point
 under the mouse stays where it is. The wheel on its own scrolls the page, as
 it does everywhere else. To move along the take, swipe sideways with two
 fingers on a touchpad, or hold Shift and scroll. The waveform is redrawn for
-the part on screen, so you see real detail. **Whole take**, to the left of
-the ruler, zooms back out. At the closest zoom about two seconds fit on the
-screen. The keys button at the end of the player's row, or the ? key, lists
-all of this with the player's keys.
+the part on screen, so you see real detail. At the closest zoom about two
+seconds fit on the screen. The keys button at the end of the player's row,
+or the ? key, lists all of this with the player's keys.
+
+Above the ruler is a map of the whole take. Zoomed in, the blue stretch on
+it is the part on screen, and the orange one is the selection, if there is
+one. At the closest zoom the map says so. Drag the blue stretch to move along the take, or
+click anywhere else on the map to go there. Zoomed in, **Whole take**, beside the
+map, zooms back out. The buttons beside the selection's times and Crop are
+only on screen with the selection: zoomed to another part of the take, go
+back to it on the map or with Whole take.
 
 While a take plays, the view follows the playhead. If you scroll away, it
 stops following until the playhead comes back into view.

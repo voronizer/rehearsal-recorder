@@ -993,6 +993,16 @@ def main():
         ok("the transport draws no keys on its buttons",
            page.locator("[role='toolbar'][aria-label='Transport'] :is(kbd, [data-key])").count() == 0
            and page.locator("[role='toolbar'][aria-label='Transport']").count() == 1)
+        # Repeat is part of how the take plays, so it sits with the playing,
+        # by the time; Mark goes to the far end of the row.
+        row = page.get_by_role("toolbar", name="Transport")
+        repeat_at = row.get_by_role("button", name="Repeat").bounding_box()
+        mark_at = row.locator(
+            "button[aria-label='Add marker'], button[aria-label='Edit marker']").first.bounding_box()
+        time_at = row.locator("span.tnum").first.bounding_box()
+        ok("Repeat is beside the time, and Mark after it at the end of the row",
+           bool(repeat_at and mark_at and time_at)
+           and time_at["x"] < repeat_at["x"] < mark_at["x"])
         page.keyboard.press("?")
         page.wait_for_selector("text=Keys in the player")
         listed = page.get_by_role("dialog").inner_text()
@@ -1362,12 +1372,74 @@ def main():
         ok("dragging across the tracks sets the loop region",
            loop and abs(loop[-1]["args"][0] - TAKE_SECONDS * 0.25) < 0.4
            and abs(loop[-1]["args"][1] - TAKE_SECONDS * 0.75) < 0.4)
-        # The times live on the band itself, checked in [9c]; the transport
-        # only offers to clear it.
+        # Clear and Crop are about the region, so they are on it. In the
+        # transport they were far from the stretch they act on, two more
+        # buttons in a row of them. Clear is a cross beside the region's
+        # times, the way a tag is closed: a button that said Clear under
+        # them read as clearing that part of the take. Beside it, the same
+        # small kind of button loops the region, so the hand that drew it
+        # need not go up to Repeat.
+        transport = page.get_by_role("toolbar", name="Transport")
+        ok("Clear and Crop are not in the transport",
+           transport.get_by_role("button", name="Clear the loop region").count() == 0
+           and transport.get_by_role("button", name="Crop to the region").count() == 0)
+        chip_box = page.locator("[data-region-span]").bounding_box()
+        clear = page.get_by_role("button", name="Clear the loop region")
+        clear_box = clear.bounding_box()
+        loop_here = page.get_by_role("button", name="Loop the region")
+        loop_box = loop_here.bounding_box() if loop_here.count() else None
+        crop_box = page.get_by_role("button", name="Crop to the region").bounding_box()
+
+        def beside_the_times(b):
+            return (b["x"] >= chip_box["x"] + chip_box["width"] - 1
+                    and abs((b["y"] + b["height"] / 2)
+                            - (chip_box["y"] + chip_box["height"] / 2)) < 4)
+        ok("Clear is a cross beside the region's times",
+           bool(chip_box and clear_box) and beside_the_times(clear_box)
+           and (clear.inner_text() or "").strip() == "")
+        ok("with a loop beside it, next to the times too",
+           bool(loop_box) and beside_the_times(loop_box)
+           and loop_box["x"] < clear_box["x"])
+        ok("and Crop under the times",
+           bool(crop_box) and crop_box["y"] >= chip_box["y"] + chip_box["height"] - 1
+           and abs(crop_box["x"] - chip_box["x"]) < 2)
+        # Whatever the tests before left Repeat at, a press turns it over and
+        # a second puts it back.
+        repeat = transport.get_by_role("button", name="Repeat")
+        was = repeat.get_attribute("aria-pressed")
+        turned = "false" if was == "true" else "true"
+        if loop_box:
+            loop_here.click()
+            page.wait_for_timeout(250)
+        ok("the loop beside the times is Repeat, a hand's width from the region",
+           repeat.get_attribute("aria-pressed") == turned
+           and loop_here.count() == 1 and loop_here.get_attribute("aria-pressed") == turned)
+        if loop_box:
+            loop_here.click()
+            page.wait_for_timeout(250)
+        ok("and a second press puts it back",
+           bool(loop_box) and repeat.get_attribute("aria-pressed") == was)
+        seeks = len(calls("player_seek"))
         page.get_by_role("button", name="Clear the loop region").click()
         page.wait_for_timeout(250)
         ok("clearing it takes the offer to clear with it",
            page.get_by_role("button", name="Clear the loop region").count() == 0)
+        # They sit on the tracks, where a press starts a region and a click
+        # seeks. A press on them must be theirs alone.
+        ok("and pressing it neither moves the playhead nor starts a region",
+           len(calls("player_seek")) == seeks
+           and page.locator("[data-region-span]").count() == 0)
+
+        drag(0.9, 0.99)
+        surface_box = page.get_by_role("group", name="Take timeline").bounding_box()
+        crop_box = page.get_by_role("button", name="Crop to the region").bounding_box()
+        clear_box = page.get_by_role("button", name="Clear the loop region").bounding_box()
+        ok("near the right edge they stay on the timeline rather than off its end",
+           bool(crop_box and clear_box)
+           and crop_box["x"] + crop_box["width"] <= surface_box["x"] + surface_box["width"]
+           and clear_box["x"] + clear_box["width"] <= surface_box["x"] + surface_box["width"])
+        page.get_by_role("button", name="Clear the loop region").click()
+        page.wait_for_timeout(250)
         ok("and tells Python there is no region left",
            calls("player_set_loop")[-1]["args"] == [None, None]
            or calls("player_set_loop")[-1]["args"] == [0, TAKE_SECONDS])
@@ -1641,6 +1713,97 @@ def main():
         page.click("text=Whole take")
         page.wait_for_timeout(400)
 
+        # Zoomed in, only two times in a corner said which part of the take
+        # was on screen. A map of the whole take above the ruler, with a frame
+        # for the part on screen, says it at a glance, and goes elsewhere by
+        # dragging the frame or clicking the map. It is there zoomed out too,
+        # with nothing framed: a row that came and went with the zoom moved
+        # every track down the moment the wheel was turned, and a frame round
+        # all of it was only a thick blue edge.
+        take_map = page.get_by_role("scrollbar", name="Part of the take on screen")
+
+        def view_now():
+            """Where the window starts and how long it is, in seconds, from
+            where clicks near its two ends land."""
+            t02, t98 = seek_at(0.02), seek_at(0.98)
+            length = (t98 - t02) / 0.96
+            return t02 - 0.02 * length, length
+
+        def box_of(locator):
+            """Its box, or None at once: bounding_box() waits for an element
+            that is not there, and the check after it should fail instead."""
+            return locator.bounding_box() if locator.count() else None
+
+        def frame_on_map():
+            strip = box_of(take_map)
+            frame = box_of(take_map.locator("[data-view-frame]"))
+            if not strip or not frame:
+                return None, None, strip, frame
+            return ((frame["x"] - strip["x"]) / strip["width"],
+                    (frame["x"] + frame["width"] - strip["x"]) / strip["width"],
+                    strip, frame)
+
+        ok("the map is there with the whole take on screen, and nothing on it framed",
+           take_map.count() == 1
+           and take_map.locator("[data-view-frame]").count() == 0)
+        ok("and no Whole take while the whole take is what is on screen",
+           page.get_by_role("button", name="Whole take").count() == 0)
+        lanes_top = box_of(page.get_by_role("group", name="Take timeline"))
+        zoom_at(0.5, -500)
+        still_top = box_of(page.get_by_role("group", name="Take timeline"))
+        ok("zooming in moves nothing down the page",
+           bool(lanes_top and still_top) and abs(lanes_top["y"] - still_top["y"]) < 1)
+
+        start, length = view_now()
+        a, b, strip, frame = frame_on_map()
+        ok("its frame is the part on screen",
+           a is not None and abs(a - start / TAKE_SECONDS) < 0.02
+           and abs(b - (start + length) / TAKE_SECONDS) < 0.02)
+        if frame:
+            cx, cy = frame["x"] + frame["width"] / 2, frame["y"] + frame["height"] / 2
+            page.mouse.move(cx, cy)
+            page.mouse.down()
+            page.mouse.move(cx - strip["width"] * 0.2, cy, steps=8)
+            page.mouse.up()
+            page.wait_for_timeout(300)
+        moved, still = view_now()
+        ok("dragging the frame moves along the take as far as it was dragged",
+           abs((start - moved) - 0.2 * TAKE_SECONDS) < 0.3 and abs(still - length) < 0.2)
+        if strip:
+            page.mouse.click(strip["x"] + strip["width"] * 0.9, strip["y"] + strip["height"] / 2)
+            page.wait_for_timeout(300)
+        jumped, _ = view_now()
+        expected = min(TAKE_SECONDS - length, max(0.0, 0.9 * TAKE_SECONDS - length / 2))
+        ok("a click on the map away from the frame brings that part on screen",
+           abs(jumped - expected) < 0.3)
+        whole = page.get_by_role("button", name="Whole take")
+        wb, mb = box_of(whole), box_of(take_map)
+        ok("Whole take is beside the map, where the eye already is",
+           bool(wb and mb) and wb["x"] + wb["width"] <= mb["x"]
+           and abs((wb["y"] + wb["height"] / 2) - (mb["y"] + mb["height"] / 2)) < 8)
+        whole.click()
+        page.wait_for_timeout(400)
+        ok("and gives the whole take back, with the frame gone from the map",
+           take_map.count() == 1
+           and take_map.locator("[data-view-frame]").count() == 0)
+
+        # Clear and Crop go with the region's times: zoomed to another part of
+        # the take there is nothing for them to sit under. The map still
+        # shows where the region is.
+        drag_region(page, 0.55, 0.72)
+        zoom_at(0.05, -900)
+        ok("zoomed away from the region, Clear and Crop go with its times",
+           page.get_by_role("button", name="Clear the loop region").count() == 0
+           and page.locator("[data-region-span]").count() == 0)
+        ok("while the map still shows where it is",
+           take_map.locator("[data-map-region]").count() == 1)
+        page.get_by_role("button", name="Whole take").click()
+        page.wait_for_timeout(400)
+        ok("and they come back with it",
+           page.get_by_role("button", name="Clear the loop region").count() == 1)
+        page.get_by_role("button", name="Clear the loop region").click()
+        page.wait_for_timeout(300)
+
         # A marker off the side of the window is not drawn at all: without
         # that it would be pinned to the edge, pointing at the wrong second.
         all_markers = page.locator("[data-marker-at]").evaluate_all(
@@ -1651,6 +1814,13 @@ def main():
         # saying so that reads as the zoom having broken.
         ok("the closest window says it is the closest",
            page.locator("text=closest").count() == 1)
+        # Said on the map: beside Whole take, "0:04 – 0:06 · closest" did not
+        # fit its column and broke over two lines.
+        shown = page.locator("[data-view-range]")
+        line = shown.bounding_box() if shown.count() else None
+        ok("and the times on screen stay on one line beside Whole take",
+           bool(line) and line["height"] < 20
+           and "closest" not in (shown.inner_text() or ""))
         wheel_at(0.5, 300, 0)     # and right up against the end itself
         drawn = page.locator("[data-marker-at]").evaluate_all(
             "els => els.map(e => Number(e.dataset.markerAt))")

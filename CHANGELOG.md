@@ -20,6 +20,21 @@ opening.
   not be scrolled from the middle of it. A pinch on a touchpad still zooms,
   and Shift and the wheel, or a sideways swipe, still move along the take.
   The list of the player's keys, behind ? and the keys button, has both.
+- **A map of the whole take above the ruler**. Zoomed in, the part on
+  screen is a blue stretch on it and the selection an orange one. Drag the
+  blue stretch to move along the take, or click the map to go there. Only
+  two times in a corner said which part was on screen, and **Whole take**
+  beside them read as one more word. It is a button now, beside the map,
+  and at the closest zoom the map says so rather than the times breaking
+  over two lines. The map is there zoomed out too, so nothing moves down
+  when the wheel first zooms.
+- **The selection carries its own buttons**, and only while it is on
+  screen. They were in the player's row, far from the stretch they act on.
+  In the selection's orange tag with its times, a loop turns Repeat on and
+  off, and a cross removes the selection: a Clear button under the times
+  read as clearing that part of the take. **Crop** is under them. **Repeat** in the player's
+  row has moved next to the time, with the playing, and **Mark** to the end
+  of the row.
 
 ## 0.7.13
 
