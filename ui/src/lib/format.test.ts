@@ -3,16 +3,21 @@ import {
   aboutDuration,
   clippedLine,
   croppedButNotSwept,
+  daysAgo,
   describeRescan,
   formatBytes,
   formatClock,
   formatDateHuman,
+  formatDay,
   formatDuration,
   formatMMSS,
+  formatMonth,
+  formatWhen,
+  goesLabel,
+  longAgo,
   notConnected,
   peakToDb,
   recordingLine,
-  songsLabel,
   takesLabel,
 } from "@/lib/format"
 
@@ -32,6 +37,33 @@ describe("times", () => {
     expect(formatDateHuman("2026-09-18T19:00:00")).toBe("18 Sep 2026, 19:00")
     expect(formatDateHuman("2026-09-18")).toBe("18 Sep 2026")
     expect(formatDateHuman("")).toBe("")
+  })
+  it("names a rehearsal's day by its weekday, and its month in full", () => {
+    expect(formatDay("2026-09-22T19:00:00")).toBe("Tue 22 Sep")
+    expect(formatDay("2026-08-25")).toBe("Tue 25 Aug")
+    expect(formatDay("2026-09-26T23:59:00")).toBe("Sat 26 Sep")
+    expect(formatDay("")).toBe("")
+    expect(formatMonth("2026-09-22T19:00:00")).toBe("September 2026")
+    expect(formatMonth("")).toBe("")
+  })
+  it("says how long ago a day was, in days and then weeks and months", () => {
+    // Late in the evening: the time of day does not tip a date over.
+    const now = new Date(2026, 8, 30, 23, 30)
+    expect(daysAgo("2026-09-30T19:00:00", now)).toBe("today")
+    expect(daysAgo("2026-09-29T23:00:00", now)).toBe("yesterday")
+    expect(daysAgo("2026-09-22T19:00:00", now)).toBe("8 days ago")
+    expect(daysAgo("2026-09-15T19:00:00", now)).toBe("2 weeks ago")
+    expect(daysAgo("2026-07-01T19:00:00", now)).toBe("3 months ago")
+    expect(daysAgo("2023-09-01T19:00:00", now)).toBe("3 years ago")
+    // Beside a date, only once it is a while back.
+    expect(longAgo("2026-09-22T19:00:00", now)).toBe("")
+    expect(longAgo("2026-09-15T19:00:00", now)).toBe("2 weeks ago")
+    expect(formatWhen("2026-09-22T19:00:00")).toBe("Tue 22 Sep, 19:00")
+    expect(formatWhen("2026-09-22")).toBe("Tue 22 Sep")
+  })
+  it("counts goes at a song", () => {
+    expect(goesLabel(1)).toBe("1 go")
+    expect(goesLabel(4)).toBe("4 goes")
   })
 })
 
@@ -70,17 +102,12 @@ describe("amounts", () => {
     expect(formatBytes(1_200_000_000)).toBe("1.2 GB")
     expect(formatBytes(340_000_000)).toBe("340 MB")
   })
-  it("names four songs and counts the rest", () => {
-    const songs = ["Polyn", "Vesna", "Ogon", "Dym", "Reka"].map((name, i) => ({
-      name,
-      takes: i === 0 ? 3 : 1,
-    }))
-    expect(songsLabel(songs)).toBe("Polyn ×3 · Vesna · Ogon · Dym · and 1 more")
-  })
   it("says how long the disk lasts, without an about for many hours", () => {
     expect(formatDuration(45)).toBe("45 min")
     expect(formatDuration(200)).toBe("3 h 20 min")
     expect(formatDuration(120)).toBe("2 h")
+    expect(formatDuration(119.7)).toBe("2 h")
+    expect(formatDuration(79.8)).toBe("1 h 20 min")
     expect(formatDuration(49 * 60)).toBe("many hours")
     expect(aboutDuration(200)).toBe("about 3 h 20 min")
     expect(aboutDuration(49 * 60)).toBe("many hours")

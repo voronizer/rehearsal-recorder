@@ -64,8 +64,78 @@ export function formatDateHuman(iso: string): string {
   return `${d} ${month} ${y}${timePart ? `, ${timePart.slice(0, 5)}` : ""}`
 }
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+]
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+/** The calendar day an ISO time falls on, as days since 1970. Worked out
+ *  from the digits, not through the clock's time zone: "2026-09-22T00:30"
+ *  is the 22nd wherever the laptop thinks it is. */
+function dayNumber(iso: string): number | null {
+  const [y, m, d] = (iso.split("T")[0] ?? "").split("-").map(Number)
+  if (!y || !m || !d) return null
+  return Date.UTC(y, m - 1, d) / 86_400_000
+}
+
+/** "2026-09-22T19:00:00" -> "Tue 22 Sep": a rehearsal is remembered by its
+ *  weekday as much as by its date. */
+export function formatDay(iso: string): string {
+  const day = dayNumber(iso)
+  if (day === null) return ""
+  const date = new Date(day * 86_400_000)
+  return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()].slice(0, 3)}`
+}
+
+/** "2026-09-22T19:00:00" -> "September 2026", over a month of history. */
+export function formatMonth(iso: string): string {
+  const [y, m] = (iso.split("T")[0] ?? "").split("-").map(Number)
+  if (!y || !m) return ""
+  return `${MONTHS[m - 1]} ${y}`
+}
+
+/** "Tue 22 Sep, 19:00": when a rehearsal was, by the weekday the band meets. */
+export function formatWhen(iso: string): string {
+  const time = iso.split("T")[1]?.slice(0, 5)
+  return time ? `${formatDay(iso)}, ${time}` : formatDay(iso)
+}
+
+/** Whole days from that day to today, on the calendar. */
+function daysSince(iso: string, now: Date): number | null {
+  const then = dayNumber(iso)
+  if (then === null) return null
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86_400_000
+  return Math.round(today - then)
+}
+
+/** How long ago, but only once it is long enough to be worth saying next
+ *  to a date: two weeks. Otherwise nothing. */
+export function longAgo(iso: string, now: Date = new Date()): string {
+  const days = daysSince(iso, now)
+  return days !== null && days >= 14 ? daysAgo(iso, now) : ""
+}
+
+/** How long ago that day was, in words: "today", "8 days ago", "3 weeks
+ *  ago". Past two weeks, days stop being worth counting. */
+export function daysAgo(iso: string, now: Date = new Date()): string {
+  const days = daysSince(iso, now)
+  if (days === null) return ""
+  if (days <= 0) return "today"
+  if (days === 1) return "yesterday"
+  if (days < 14) return `${days} days ago`
+  if (days < 60) return `${Math.floor(days / 7)} weeks ago`
+  const months = Math.floor(days / 30)
+  return months < 24 ? `${months} months ago` : `${Math.floor(days / 365)} years ago`
+}
+
 export function takesLabel(n: number): string {
   return `${n} ${n === 1 ? "take" : "takes"}`
+}
+
+/** "1 go", "4 goes": takes at one song, which are attempts at it. */
+export function goesLabel(n: number): string {
+  return n === 1 ? "1 go" : `${n} goes`
 }
 
 /**
@@ -87,24 +157,13 @@ export function formatBytes(bytes: number): string {
   return `${n.toFixed(unit === 0 || n >= 10 ? 0 : 1)} ${units[unit]}`
 }
 
-/** How many songs a rehearsal row names before it stops being a glance. */
-const SONGS_SHOWN = 4
-
-/** "Polyn ×3 · Vesna ×2 · Ogon": what a rehearsal was spent on. */
-export function songsLabel(songs: { name: string; takes: number }[]): string {
-  const shown = songs
-    .slice(0, SONGS_SHOWN)
-    .map((s) => (s.takes > 1 ? `${s.name} ×${s.takes}` : s.name))
-  const rest = songs.length - shown.length
-  if (rest > 0) shown.push(`and ${rest} more`)
-  return shown.join(" · ")
-}
-
 /** Minutes -> "3 h 20 min" / "45 min": for the disk-space estimate. */
 export function formatDuration(minutes: number): string {
   if (!isFinite(minutes) || minutes < 0) minutes = 0
-  const hours = Math.floor(minutes / 60)
-  const mins = Math.round(minutes % 60)
+  // Rounded before it is split, or 119.7 minutes came out as "1 h 60 min".
+  const whole = Math.round(minutes)
+  const hours = Math.floor(whole / 60)
+  const mins = whole % 60
   if (hours === 0) return `${mins} min`
   if (hours > 48) return "many hours"
   return mins === 0 ? `${hours} h` : `${hours} h ${mins} min`

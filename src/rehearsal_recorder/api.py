@@ -221,6 +221,31 @@ def _songs_of(takes):
     return songs
 
 
+def _runs_of(takes):
+    """
+    The evening as it was played, for the strip history draws of a
+    rehearsal: the takes in order, in runs of goes at the same song, as
+    [{"song", "takes": [{"duration_sec", "keep"}]}]. A song played, left and
+    come back to is two runs, since that is how the evening went. "song" is
+    spelled as _songs_of spells it, and is None for takes the app named
+    itself; "keep" is a take somebody marked to keep. Marks are few, so the
+    runs are what the strip says without them: how many songs, how many
+    goes at each, and how long.
+    """
+    spelled = {s["name"].casefold(): s["name"] for s in _songs_of(takes)}
+    runs = []
+    for take in takes:
+        base = _song_of(take.get("name"))
+        song = spelled.get(base.casefold()) if base else None
+        go = {"duration_sec": take.get("duration_sec") or 0,
+              "keep": any(m.get("kind") == "good" for m in take.get("markers") or [])}
+        if runs and runs[-1]["song"] == song:
+            runs[-1]["takes"].append(go)
+        else:
+            runs.append({"song": song, "takes": [go]})
+    return runs
+
+
 def _song_of(name):
     """The song a take name is a go at — "Polyn 3" -> "Polyn" — or None for
     a take the app named itself, which is no song at all."""
@@ -1750,6 +1775,7 @@ class Api:
                 "take_count": len(takes),
                 "total_duration_sec": sum(t["duration_sec"] for t in takes),
                 "songs": _songs_of(takes),
+                "runs": _runs_of(takes),
                 # Not walked when it is not there to walk.
                 "disk_bytes": 0 if r["missing"] else _folder_bytes(r["folder"]),
                 # Deleting the rehearsal takes these out of the cloud folder
@@ -1774,6 +1800,77 @@ class Api:
             "created_at": r["created_at"],
             "takes": takes,
             "songs": _songs_of(takes),
+        }
+
+    def last_time(self):
+        """
+        What the setup screen says about the rehearsals before this one: the
+        last one song by song, the songs it left out, and the few before it.
+
+        "last" is the newest rehearsal on disk with a named take in it, with
+        its takes as get_rehearsal gives them, so any of them can be played
+        from there: a soundcheck recorded after it, or a jam nobody named,
+        has nothing to say song by song. With no named take anywhere it is
+        the newest rehearsal with takes, and None when there is none.
+
+        "not_played" is every song of an older rehearsal that "last" did not
+        play, the latest time it was played first, with how many goes it got
+        then and the last of them as "take". Only rehearsals on disk: a song
+        whose takes cannot be played is no use here.
+
+        "earlier" is the three rehearsals after "last" in the list, as
+        history lists them, and "count" how many there are in all.
+
+        Read from the database alone. Nothing here walks a folder for its
+        size, which is what makes history's list slow to fill.
+        """
+        rehearsals = self._lib.rehearsals()
+        on_disk = [r for r in rehearsals if not r["missing"] and r["takes"]]
+        named = [r for r in on_disk if _songs_of(r["takes"])]
+        last = (named or on_disk or [None])[0]
+
+        played = set()
+        not_played = []
+        if last is not None:
+            played = {s["name"].casefold() for s in _songs_of(last["takes"])}
+            # Newest first, so what comes after it in the list is older.
+            for r in on_disk[on_disk.index(last) + 1:]:
+                for song in _songs_of(r["takes"]):
+                    key = song["name"].casefold()
+                    if key in played:
+                        continue
+                    played.add(key)
+                    goes = [t for t in r["takes"] if t["take_number"] in song["take_numbers"]]
+                    not_played.append({
+                        "name": song["name"],
+                        "folder": r["folder"],
+                        "rehearsal": r["name"],
+                        "created_at": r["created_at"],
+                        "goes": len(goes),
+                        "take": goes[-1],
+                    })
+
+        earlier = [r for r in rehearsals if r is not last][:3]
+        return {
+            "last": None if last is None else {
+                "folder": last["folder"],
+                "name": last["name"],
+                "created_at": last["created_at"],
+                "takes": last["takes"],
+                "songs": _songs_of(last["takes"]),
+                "runs": _runs_of(last["takes"]),
+                "in_cloud": sum(1 for t in last["takes"] if _shape_of(t.get("cloud"))),
+            },
+            "not_played": not_played,
+            "earlier": [{
+                "folder": r["folder"],
+                "name": r["name"],
+                "created_at": r["created_at"],
+                "take_count": len(r["takes"]),
+                "total_duration_sec": sum(t["duration_sec"] for t in r["takes"]),
+                "missing": r["missing"],
+            } for r in earlier],
+            "count": len(rehearsals),
         }
 
     # ---------- renaming ----------

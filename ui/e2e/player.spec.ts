@@ -6,6 +6,7 @@ import {
   expect,
   keyOn,
   openApp,
+  openHistory,
   recordTake,
   startRehearsal,
   test,
@@ -979,8 +980,7 @@ test("a tick at the very end of the ruler does not push the lanes sideways", asy
   // overflow-x auto as well — grew a horizontal scrollbar under the last
   // track. Headless Chromium hides scrollbars, so the overflow is measured.
   await openApp(page, { before: "window.__OLD_LENGTH_SEC__ = 606;" })
-  await page.getByText("History").click()
-  await page.getByText("Tuesday jam").click()
+  await openHistory(page)
   await page.getByRole("button", { name: "Take 1 Polyn" }).click()
   const ruler = page.getByRole("group", { name: "Timeline clock" })
   await expect(ruler.getByText("10:00")).toBeVisible()

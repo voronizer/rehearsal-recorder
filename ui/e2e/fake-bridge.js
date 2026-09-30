@@ -42,7 +42,7 @@ let checkState = {running:false};
 // removed from history, the way the real database would stop listing it.
 let missingRehearsal = {folder:'/rec/gone', name:'Missing jam',
   created_at:'2026-08-20T19:00:00', take_count:5, total_duration_sec:1200,
-  disk_bytes:0, songs:[], missing:true};
+  disk_bytes:0, songs:[], runs:[], missing:true};
 
 // The Python config lives in a file and survives a reload, so keep it in its
 // own storage key rather than in page memory.
@@ -134,6 +134,68 @@ function songsOf(takes) {
     else { byKey[key] = {name: base, takes: 1, take_numbers: [t.take_number]}; songs.push(byKey[key]); }
   }
   return songs;
+}
+
+// And api._runs_of: the evening in order, in runs of goes at one song, each
+// go as its length and whether it was marked to keep.
+function runsOf(takes) {
+  const spelled = {};
+  for (const s of songsOf(takes)) spelled[s.name.toLowerCase()] = s.name;
+  const runs = [];
+  for (const t of takes) {
+    const name = (t.name || '').trim();
+    const base = !name || /^Take \d+$/.test(name) ? null : name.replace(/\s+\d+$/, '');
+    const song = base ? spelled[base.toLowerCase()] : null;
+    const go = {duration_sec: t.duration_sec,
+                keep: (t.markers || []).some(m => m.kind === 'good')};
+    if (runs.length && runs[runs.length - 1].song === song) runs[runs.length - 1].takes.push(go);
+    else runs.push({song, takes: [go]});
+  }
+  return runs;
+}
+
+// The rehearsals before this one, as get_rehearsal gives them. Tuesday jam
+// is one take long unless a page asks for a fuller evening; the others are
+// what the setup screen's last time needs: one with nothing named, and an
+// older one with a song Tuesday jam did not play.
+function pastRehearsal(folder) {
+  if (folder === '/rec/quiet') {
+    const takes = [
+      {take_number:1, name:'Take 1', duration_sec:300, markers:[],
+       tracks:[{name:'Guitar', file:'/rec/quiet/t1.wav'}]},
+      {take_number:2, name:'Take 2', duration_sec:300, markers:[],
+       tracks:[{name:'Guitar', file:'/rec/quiet/t2.wav'}]}];
+    return {folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes};
+  }
+  if (folder === '/rec/older') {
+    const takes = [
+      {take_number:1, name:'Doroga', duration_sec:230, markers:[],
+       tracks:[{name:'Guitar', file:'/rec/older/d1.wav'}]},
+      {take_number:2, name:'Doroga 2', duration_sec:240, markers:[],
+       tracks:[{name:'Guitar', file:'/rec/older/d2.wav'}]}];
+    return {folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes};
+  }
+  // Its own path, distinct from the live session's /rec/g.wav — two takes
+  // sharing a dummy path would let one's mocked length leak onto the other.
+  // A page can ask for another length, to put a tick where it wants one.
+  const oldLength = window.__OLD_LENGTH_SEC__ || 600;
+  // A page can ask for a fuller evening, for the rehearsal overview.
+  const takes = window.__FULL_EVENING__ ? [
+    {take_number:1, name:'Polyn', duration_sec:192, markers:[],
+     tracks:[{name:'Guitar', file:'/rec/old/p1.wav'}]},
+    {take_number:2, name:'Polyn 2', duration_sec:178,
+     markers:[{at:72, note:'this one is the take', kind:'good'}],
+     cloud:{mix:'/cloud/Tuesday jam/02 - Polyn 2.mp3', mix_format:'mp3'},
+     tracks:[{name:'Guitar', file:'/rec/old/p2.wav'}]},
+    {take_number:3, name:'Take 3', duration_sec:90,
+     markers:[{at:5, note:'', kind:'note'}],
+     tracks:[{name:'Guitar', file:'/rec/old/t3.wav'}]},
+    {take_number:4, name:'Vesna', duration_sec:250,
+     markers:[{at:40, note:'guitar drifts here', kind:'issue'}],
+     tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
+  ] : [{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
+        tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
+  return {folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes};
 }
 
 // And api._last_attempt: how long the latest go at the song the next take
@@ -455,14 +517,25 @@ window.__MAKE_API__ = () => ({
     return {ok:true, trashed:true};
   }),
 
-  list_rehearsals: async () => ([
+  list_rehearsals: track('list_rehearsals', async () => ([
     {folder:'/rec/old', name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
      take_count:9, total_duration_sec:2520, disk_bytes:1200000000, in_cloud:3,
      songs:[{name:'Polyn', takes:3}, {name:'Vesna', takes:2}, {name:'Ogon', takes:1},
-            {name:'Sonce', takes:1}, {name:'Dym', takes:1}, {name:'Ptaha', takes:1}]},
+            {name:'Sonce', takes:1}, {name:'Dym', takes:1}, {name:'Ptaha', takes:1}],
+     runs:[{song:'Polyn', takes:[{duration_sec:300, keep:false}, {duration_sec:280, keep:false},
+                                 {duration_sec:290, keep:true}]},
+           {song:'Vesna', takes:[{duration_sec:260, keep:false}, {duration_sec:250, keep:false}]},
+           {song:'Ogon', takes:[{duration_sec:330, keep:false}]},
+           {song:'Sonce', takes:[{duration_sec:240, keep:false}]},
+           {song:'Dym', takes:[{duration_sec:270, keep:false}]},
+           {song:'Ptaha', takes:[{duration_sec:300, keep:false}]}]},
     {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
-     take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[]},
-    ...(missingRehearsal ? [missingRehearsal] : [])]),
+     take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[],
+     runs:runsOf(pastRehearsal('/rec/quiet').takes)},
+    {folder:'/rec/older', name:'First rehearsal', created_at:'2026-08-25T19:00:00',
+     take_count:2, total_duration_sec:470, disk_bytes:160000000, songs:[{name:'Doroga', takes:2}],
+     runs:runsOf(pastRehearsal('/rec/older').takes)},
+    ...(missingRehearsal ? [missingRehearsal] : [])])),
   forget_rehearsal: track('forget_rehearsal', async (folder) => {
     if (missingRehearsal && folder === missingRehearsal.folder) missingRehearsal = null;
     return {ok:true};
@@ -472,34 +545,38 @@ window.__MAKE_API__ = () => ({
     if (missingRehearsal && folder === missingRehearsal.folder) missingRehearsal = null;
     return {ok:true, folder:'/rec/relocated'};
   }),
-  get_rehearsal: async (folder) => {
+  get_rehearsal: track('get_rehearsal', async (folder) => {
     if (window.__REHEARSAL_UNREADABLE__)
       return {ok:false, error:'Could not read the rehearsal: session.json is damaged'};
-    // Its own path, distinct from the live session's /rec/g.wav — two takes
-    // sharing a dummy path would let one's mocked length leak onto the other.
-    // A page can ask for another length, to put a tick where it wants one.
-    const oldLength = window.__OLD_LENGTH_SEC__ || 600;
-    fileDurations['/rec/old/g.wav'] = oldLength;
-    // A page can ask for a fuller evening, for the rehearsal overview.
-    const takes = window.__FULL_EVENING__ ? [
-      {take_number:1, name:'Polyn', duration_sec:192, markers:[],
-       tracks:[{name:'Guitar', file:'/rec/old/p1.wav'}]},
-      {take_number:2, name:'Polyn 2', duration_sec:178,
-       markers:[{at:72, note:'this one is the take', kind:'good'}],
-       cloud:{mix:'/cloud/Tuesday jam/02 - Polyn 2.mp3', mix_format:'mp3'},
-       tracks:[{name:'Guitar', file:'/rec/old/p2.wav'}]},
-      {take_number:3, name:'Take 3', duration_sec:90,
-       markers:[{at:5, note:'', kind:'note'}],
-       tracks:[{name:'Guitar', file:'/rec/old/t3.wav'}]},
-      {take_number:4, name:'Vesna', duration_sec:250,
-       markers:[{at:40, note:'guitar drifts here', kind:'issue'}],
-       tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
-    ] : [{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
-          tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
-    for (const t of takes) fileDurations[t.tracks[0].file] = t.duration_sec;
-    return JSON.parse(JSON.stringify({ok:true, folder, name:'Tuesday jam',
-      created_at:'2026-09-10T19:00:00', takes, songs:songsOf(takes)}));
-  },
+    const r = pastRehearsal(folder);
+    for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
+    return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes)}));
+  }),
+  // The setup screen's last time (api.last_time): Tuesday jam song by song,
+  // Doroga from the rehearsal before it, and the others in history's order.
+  // A page with window.__NO_HISTORY__ has none of it.
+  last_time: track('last_time', async () => {
+    if (window.__NO_HISTORY__) return {last:null, not_played:[], earlier:[], count:0};
+    const last = pastRehearsal('/rec/old');
+    const older = pastRehearsal('/rec/older');
+    for (const r of [last, older])
+      for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
+    const inCloud = last.takes.filter(t => t.cloud && (t.cloud.mix || t.cloud.tracks)).length;
+    const earlier = [
+      {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
+       take_count:2, total_duration_sec:600, missing:false},
+      {folder:'/rec/older', name:'First rehearsal', created_at:'2026-08-25T19:00:00',
+       take_count:2, total_duration_sec:470, missing:false},
+      ...(missingRehearsal ? [{folder:missingRehearsal.folder, name:missingRehearsal.name,
+        created_at:missingRehearsal.created_at, take_count:5, total_duration_sec:1200,
+        missing:true}] : [])];
+    return JSON.parse(JSON.stringify({
+      last: {...last, songs:songsOf(last.takes), runs:runsOf(last.takes), in_cloud:inCloud},
+      not_played: [{name:'Doroga', folder:'/rec/older', rehearsal:'First rehearsal',
+                    created_at:'2026-08-25T19:00:00', goes:2, take:older.takes[1]}],
+      earlier,
+      count: earlier.length + 1}));
+  }),
   delete_take: track('delete_take', async () => ({ok:true, trashed:true, takes_left:0})),
   delete_rehearsal: track('delete_rehearsal', async () => ({ok:true, trashed:true})),
 

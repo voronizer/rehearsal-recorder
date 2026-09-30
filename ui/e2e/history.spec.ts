@@ -2,8 +2,11 @@ import {
   callCount,
   calls,
   expect,
+  keyOn,
   openApp,
+  openHistory,
   recordTake,
+  startButton,
   startRehearsal,
   test,
 } from "./app.ts"
@@ -69,41 +72,86 @@ test("finishing a rehearsal with takes in it asks, and is answered from the keyb
 })
 
 test.describe("History", () => {
-  test("opens a rehearsal and its takes, and Escape goes back a layer at a time", async ({
+  test("opens on the newest rehearsal beside the list, and Escape goes back a layer at a time", async ({
     page,
   }) => {
     await openApp(page)
-    await page.getByText("History").click()
-    await page.getByText("Tuesday jam").click()
+    const list = await openHistory(page)
+    // Chosen already, and on screen next to the list: no row to open first.
+    await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
+    await expect(list.locator("[aria-current='true']")).toContainText("Tuesday jam")
     await page.getByRole("button", { name: "Take 1 Polyn", exact: true }).click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     // A ten-minute take gets a clock in minutes.
     await expect(page.getByRole("group", { name: "Timeline clock" })).toContainText("2:00")
+    // The player has the whole window.
+    await expect(list).toHaveCount(0)
     await page.keyboard.press("Escape")
     await expect(page.getByRole("group", { name: "Take timeline" })).toHaveCount(0)
+    await expect(list).toBeVisible()
     await expect(page.getByRole("button", { name: "Take 1 Polyn", exact: true })).toHaveCount(1)
+    // The list is history itself, so the next rung is the setup screen.
     await page.keyboard.press("Escape")
-    await expect(page.getByText("Wednesday jam")).toBeVisible()
-    await expect(page.getByRole("button", { name: "Take 1 Polyn", exact: true })).toHaveCount(0)
+    await expect(startButton(page)).toBeVisible()
+    await expect(list).toHaveCount(0)
   })
 
-  test("says in each row what was rehearsed, how long, and how much disk", async ({ page }) => {
-    // Months later a rehearsal is recognised by what was played in it. A long
-    // list is cut off: the row has to be readable at a glance.
+  test("lists each rehearsal by month, with when, how long and its evening drawn", async ({
+    page,
+  }) => {
+    // Months later a rehearsal is recognised by what was played in it and
+    // how the evening went. The strip says it without a single mark.
     await openApp(page)
-    await page.getByText("History").click()
-    const named = page.locator("button", { hasText: "Tuesday jam" }).first()
-    const quiet = page.locator("button", { hasText: "Wednesday jam" }).first()
-    await expect(named).toContainText("Polyn ×3 · Vesna ×2 · Ogon · Sonce · and 2 more")
-    await expect(named).toContainText("10 Sep 2026, 19:00 · 42 min · 1.2 GB")
-    // Takes the app named itself are not songs, and there is nothing
-    // truthful to put on that line — so the line is not there.
-    expect((await quiet.innerText()).trim().split("\n")).toHaveLength(3)
+    const list = await openHistory(page)
+    await expect(list.getByRole("group", { name: "September 2026" })).toHaveCount(1)
+    await expect(list.getByRole("group", { name: "August 2026" })).toHaveCount(1)
+    const jam = list.getByRole("button", { name: /^Tuesday jam/ })
+    await expect(jam).toContainText("Thu 10 Sep, 19:00")
+    await expect(jam).toContainText("42 min")
+    await expect(jam).toContainText("9 takes")
+    // One run per song, one bar per go, and the go marked to keep in green.
+    const strip = jam.locator("[data-strip]")
+    await expect(strip.locator(":scope > div")).toHaveCount(6)
+    await expect(strip.locator("span")).toHaveCount(9)
+    await expect(strip.locator("[data-keep]")).toHaveCount(1)
+    // Takes nobody named are one run, still drawn.
+    const quiet = list.getByRole("button", { name: /^Wednesday jam/ })
+    await expect(quiet.locator("[data-strip] > div")).toHaveCount(1)
+    await expect(quiet.locator("[data-strip] span")).toHaveCount(2)
+    // All of it, in the header.
+    await expect(page.locator("header")).toContainText("4 rehearsals · 1 h 20 min played · 1.7 GB")
+  })
+
+  test("↑ and ↓ go through the rehearsals, and what was playing stops", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const list = await openHistory(page)
+    const overview = page.locator("[aria-label='Rehearsal overview']")
+    await overview.getByRole("button", { name: "Play Vesna" }).click()
+    await expect(page.getByRole("button", { name: "Pause Vesna" })).toBeVisible()
+    const closes = await callCount(page, "player_close")
+
+    await page.keyboard.press("ArrowDown")
+    await expect(page.getByRole("heading", { name: "Wednesday jam" })).toBeVisible()
+    await expect(list.locator("[aria-current='true']")).toContainText("Wednesday jam")
+    await expect(overview).toContainText("Not named")
+    // Vesna belonged to the rehearsal that was left.
+    await expect(page.getByRole("button", { name: /Pause/ })).toHaveCount(0)
+    expect(await callCount(page, "player_close")).toBeGreaterThan(closes)
+
+    await page.keyboard.press("ArrowUp")
+    await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
+    await expect(overview).toContainText("guitar drifts here")
+
+    // And by the mouse.
+    await list.getByRole("button", { name: /^First rehearsal/ }).click()
+    await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
+    await expect(overview).toContainText("Doroga")
+    await expect(overview).toContainText("2 goes")
   })
 
   test("deleting a rehearsal says what it frees and that its cloud copies go", async ({ page }) => {
     await openApp(page)
-    await page.getByText("History").click()
+    await openHistory(page)
     await page.getByRole("button", { name: "Delete rehearsal Tuesday jam" }).click()
     const dialog = page.getByRole("dialog")
     await expect(dialog).toContainText("goes to the Trash")
@@ -124,8 +172,7 @@ test.describe("History", () => {
 
 async function openEvening(page: Page) {
   await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
-  await page.getByText("History").click()
-  await page.getByText("Tuesday jam").click()
+  await openHistory(page)
   const overview = page.locator("[aria-label='Rehearsal overview']")
   await expect(overview).toBeVisible()
   return overview
@@ -272,29 +319,31 @@ test("a row's own buttons work on its take without opening it", async ({ page })
   await expect(page.locator("[aria-label='Take timeline']")).toHaveCount(0)
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog")).toHaveCount(0)
-  // The next Escape leaves the rehearsal.
+  // The next Escape leaves history.
   await page.keyboard.press("Escape")
-  await expect(page.getByText("Tuesday jam").first()).toBeVisible()
+  await expect(startButton(page)).toBeVisible()
   await expect(overview).toHaveCount(0)
 })
 
 test.describe("a rehearsal whose folder is gone", () => {
-  const missing = (page: Page) => page.locator(".rounded-xl", { hasText: "Missing jam" }).first()
-
-  test("is marked, does not open, and can be found again", async ({ page }) => {
+  test("is marked, says why rather than opening, and can be found again", async ({ page }) => {
     await openApp(page)
-    await page.getByText("History").click()
-    const row = missing(page)
-    await expect(row.getByText("Not found on disk")).toHaveCount(1)
-    await expect(page.getByText("Not found on disk")).toHaveCount(1)
-    // Its info area is marked not to be pressed, and pressing it opens
-    // nothing.
-    const info = row.locator("[aria-disabled='true']")
-    await expect(info).toHaveCount(1)
-    await info.click()
-    await row.getByRole("button", { name: "Locate folder…" }).click()
+    const list = await openHistory(page)
+    const item = list.getByRole("button", { name: /^Missing jam/ })
+    await expect(item).toContainText("Not found on disk")
+    await expect(item.locator("[data-strip]")).toHaveCount(0)
+    await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
+    const reads = await callCount(page, "get_rehearsal")
+    await item.click()
+    await expect(page.getByRole("heading", { name: "Missing jam" })).toBeVisible()
+    await expect(page.getByText("Not found on disk.")).toBeVisible()
+    // There is nothing to read, so nothing is asked for, and no overview.
+    expect(await callCount(page, "get_rehearsal")).toBe(reads)
+    await expect(page.locator("[aria-label='Rehearsal overview']")).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Delete rehearsal Missing jam" })).toHaveCount(0)
+
+    await page.getByRole("button", { name: "Locate folder…" }).click()
     await expect.poll(() => callCount(page, "choose_rehearsal_folder")).toBe(1)
-    expect(await callCount(page, "get_rehearsal")).toBe(0)
     expect((await calls(page, "choose_rehearsal_folder"))[0].args[0]).toBe("/rec/gone")
     // Found, it drops off the missing list.
     await expect(page.getByText("Not found on disk")).toHaveCount(0)
@@ -304,18 +353,123 @@ test.describe("a rehearsal whose folder is gone", () => {
     page,
   }) => {
     await openApp(page, { before: "window.__CANCEL_LOCATE__ = true;" })
-    await page.getByText("History").click()
-    await missing(page).getByRole("button", { name: "Locate folder…" }).click()
+    const list = await openHistory(page, "Missing jam")
+    await page.getByRole("button", { name: "Locate folder…" }).click()
     await expect.poll(() => callCount(page, "choose_rehearsal_folder")).toBe(1)
-    await expect(page.getByText("Not found on disk")).toHaveCount(1)
+    await expect(page.getByText("Not found on disk.")).toHaveCount(1)
 
-    await missing(page).getByRole("button", { name: "Remove from history" }).click()
+    await page.getByRole("button", { name: "Remove from history" }).click()
     await expect(page.getByText("Only the entry goes")).toBeVisible()
     // It asks before removing anything; confirmed, only the entry goes.
     expect(await callCount(page, "forget_rehearsal")).toBe(0)
     await page.getByRole("button", { name: "Remove", exact: true }).click()
     await expect.poll(() => callCount(page, "forget_rehearsal")).toBe(1)
     expect((await calls(page, "forget_rehearsal"))[0].args[0]).toBe("/rec/gone")
-    await expect(page.getByText("Missing jam")).toHaveCount(0)
+    await expect(list.getByText("Missing jam")).toHaveCount(0)
+    // The one beside it in the list takes its place.
+    await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
+  })
+})
+
+// Last time, beside the setup: the rehearsal before this one, song by song,
+// to listen to before starting.
+
+const lastTime = (page: Page) => page.getByRole("complementary", { name: "Last time" })
+
+test.describe("last time, on the setup screen", () => {
+  test("goes over the last rehearsal song by song, and needs no marks to", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const panel = lastTime(page)
+    await expect(panel).toContainText("Last time · Thu 10 Sep")
+    await expect(panel).toContainText("Tuesday jam")
+    await expect(panel).toContainText("12 min · 4 takes · 1 in the cloud")
+    // Each song with how many goes it got and how long they ran in all.
+    await expect(panel.locator("[data-song='Polyn']")).toContainText("2 goes · 6:10")
+    await expect(panel.locator("[data-song='Vesna']")).toContainText("1 go · 4:10")
+    await expect(panel.locator("[data-song='Not named']")).toContainText("1 take · 1:30")
+    // The notes, under their song where there are any; a mark with nothing
+    // written is not one.
+    await expect(panel.locator("[data-song='Polyn'] [data-note]")).toContainText("this one is the take")
+    await expect(panel.locator("[data-song='Vesna'] [data-note]")).toContainText("guitar drifts here")
+    await expect(panel.locator("[data-note]")).toHaveCount(2)
+    // What was not played last time, from before it.
+    const leftOut = panel.getByRole("region", { name: "Not played last time" })
+    await expect(leftOut).toContainText("Doroga")
+    await expect(leftOut).toContainText(/Tue 25 Aug.* · 2 goes/)
+    // And the rest of history.
+    const earlier = panel.getByRole("region", { name: "Earlier" })
+    await expect(earlier).toContainText("Wednesday jam")
+    await expect(earlier).toContainText("First rehearsal")
+    await expect(earlier.getByRole("button", { name: /Missing jam/ })).toContainText("not found")
+    await expect(panel.getByRole("button", { name: /All rehearsals/ })).toContainText("4")
+  })
+
+  test("a song's button plays its last go, and has Space and Escape while it plays", async ({
+    page,
+  }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const panel = lastTime(page)
+    await expect(keyOn(startButton(page))).resolves.toBe("Space")
+    await panel.getByRole("button", { name: "Play Polyn 2, the last go at Polyn" }).click()
+    await expect(panel.getByRole("button", { name: "Pause Polyn 2, the last go at Polyn" })).toBeVisible()
+    expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
+      { name: "Guitar", file: "/rec/old/p2.wav" },
+    ])
+    await expect(panel.locator("[data-song='Polyn']")).toContainText("/ 2:58")
+    // Space is the take's now, not Start's.
+    expect(await keyOn(startButton(page))).toBeNull()
+    await page.keyboard.press("Space")
+    await expect(panel.getByRole("button", { name: "Play Polyn 2, the last go at Polyn" })).toBeVisible()
+    await expect(page.getByRole("button", { name: /Record take/ })).toHaveCount(0)
+    await page.keyboard.press("Space")
+    await expect(panel.getByRole("button", { name: "Pause Polyn 2, the last go at Polyn" })).toBeVisible()
+
+    // Take 2 of another rehearsal is another take, not this one again.
+    const opens = await callCount(page, "player_open")
+    await panel.getByRole("button", { name: "Play Doroga 2, the last go at Doroga" }).click()
+    await expect(panel.getByRole("button", { name: "Pause Doroga 2, the last go at Doroga" })).toBeVisible()
+    expect(await callCount(page, "player_open")).toBe(opens + 1)
+    expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
+      { name: "Guitar", file: "/rec/older/d2.wav" },
+    ])
+
+    // Escape stops it, and Start has Space back.
+    await page.keyboard.press("Escape")
+    await expect(panel.getByRole("button", { name: /^Pause/ })).toHaveCount(0)
+    await expect(keyOn(startButton(page))).resolves.toBe("Space")
+  })
+
+  test("checking the signal stops what was playing", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const panel = lastTime(page)
+    await panel.getByRole("button", { name: "Play Vesna, the last go at Vesna" }).click()
+    await expect(panel.getByRole("button", { name: /^Pause Vesna/ })).toBeVisible()
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await expect(panel.getByRole("button", { name: /^Pause/ })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+  })
+
+  test("Open and the other rehearsals lead into history, on the one chosen", async ({ page }) => {
+    await openApp(page)
+    await lastTime(page).getByRole("button", { name: "Open Tuesday jam in history" }).click()
+    await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
+    await page.keyboard.press("Escape")
+
+    await lastTime(page).getByRole("region", { name: "Earlier" })
+      .getByRole("button", { name: /First rehearsal/ }).click()
+    await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
+    const list = page.getByRole("navigation", { name: "Rehearsals" })
+    await expect(list.locator("[aria-current='true']")).toContainText("First rehearsal")
+    await page.keyboard.press("Escape")
+
+    await lastTime(page).getByRole("button", { name: /All rehearsals/ }).click()
+    await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
+  })
+
+  test("with no rehearsal before, the setup has the screen to itself", async ({ page }) => {
+    await openApp(page, { before: "window.__NO_HISTORY__ = true;" })
+    await expect(startButton(page)).toBeVisible()
+    await expect.poll(() => callCount(page, "last_time")).toBe(1)
+    await expect(lastTime(page)).toHaveCount(0)
   })
 })

@@ -157,6 +157,17 @@ export type Song = {
   take_numbers?: number[]
 }
 
+/**
+ * A stretch of an evening spent on one song, as history draws a rehearsal:
+ * its goes in the order played, each as its length and whether it was marked
+ * to keep. Python cuts the evening into these, by the same rule as `songs`.
+ */
+export type Run = {
+  /** null for takes the app named itself. */
+  song: string | null
+  takes: { duration_sec: number; keep: boolean }[]
+}
+
 export type RehearsalSummary = {
   folder: string
   name: string
@@ -165,6 +176,8 @@ export type RehearsalSummary = {
   total_duration_sec: number
   /** Empty when the takes were never named — there is nothing to report. */
   songs: Song[]
+  /** The evening in order, song by song. */
+  runs?: Run[]
   /** What the whole folder weighs, measured on disk rather than estimated. */
   disk_bytes: number
   /** How many of its takes have a copy in the cloud folder. */
@@ -185,6 +198,46 @@ export type RehearsalDetail = {
   /** The folder is not on disk — deleted, renamed outside the app, or on a
    *  drive that is not plugged in. */
   missing?: boolean
+}
+
+/**
+ * What the setup screen says about the rehearsals before this one
+ * (api.last_time): the last one song by song, the songs it left out, and
+ * the few after it in history's list.
+ */
+export type LastTime = {
+  /** The newest rehearsal on disk that played a song, or with none named,
+   *  the newest with takes. */
+  last: {
+    folder: string
+    name: string
+    created_at: string
+    takes: Take[]
+    songs: Song[]
+    runs: Run[]
+    in_cloud: number
+  } | null
+  /** Songs of older rehearsals that the last one did not play, the latest
+   *  time each was played first, with the last go it got then. */
+  not_played: {
+    name: string
+    folder: string
+    /** The rehearsal it was last played at. */
+    rehearsal: string
+    created_at: string
+    goes: number
+    take: Take
+  }[]
+  earlier: {
+    folder: string
+    name: string
+    created_at: string
+    take_count: number
+    total_duration_sec: number
+    missing: boolean
+  }[]
+  /** Every rehearsal in history. */
+  count: number
 }
 
 export type TrackTemplate = {
@@ -488,6 +541,7 @@ type PyApi = {
 
   list_rehearsals(): Promise<RehearsalSummary[]>
   get_rehearsal(folder: string): Promise<RehearsalDetail>
+  last_time(): Promise<LastTime>
   /** Takes a rehearsal whose folder is gone out of history. Nothing on disk
    *  is touched — there is nothing left to touch. */
   forget_rehearsal(folder: string): Promise<Ok>

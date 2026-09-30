@@ -2,8 +2,16 @@ import { useEffect, useRef, useState } from "react"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import type { Take } from "@/lib/api"
 
-function sameTake(a: Take | null, b: Take | null): boolean {
-  return a !== null && b !== null && a.take_number === b.take_number
+/** Two copies of one take, within one rehearsal: a rename or a crop hands
+ *  back a fresh copy under the same number, with its files moved. */
+function byNumber(a: Take, b: Take): boolean {
+  return a.take_number === b.take_number
+}
+
+/** The same take, when they come from several rehearsals, as on the setup
+ *  screen: two rehearsals both have a take 2. Nothing is renamed there. */
+export function byFiles(a: Take, b: Take): boolean {
+  return a.take_number === b.take_number && a.tracks[0]?.file === b.tracks[0]?.file
 }
 
 /**
@@ -19,7 +27,8 @@ function sameTake(a: Take | null, b: Take | null): boolean {
  * different one, so handing it a fresh copy of the same take would stop the
  * music and start it again from nothing.
  */
-export function useTakeStripPlayer() {
+export function useTakeStripPlayer(same: (a: Take, b: Take) => boolean = byNumber) {
+  const sameTake = (a: Take | null, b: Take | null) => a !== null && b !== null && same(a, b)
   const [selected, setSelected] = useState<Take | null>(null)
   const [cued, setCued] = useState<Take | null>(null)
   const loaded = selected ?? cued

@@ -100,6 +100,18 @@ export function startButton(page: Page): Locator {
   return page.getByRole("button", { name: /Start rehearsal/ })
 }
 
+/**
+ * History, from the setup screen. It opens on the newest rehearsal, beside
+ * the list; `name` chooses another from the list. Returns the list.
+ */
+export async function openHistory(page: Page, name?: string): Promise<Locator> {
+  await page.getByRole("button", { name: "History", exact: true }).click()
+  const list = page.getByRole("navigation", { name: "Rehearsals" })
+  await expect(list).toBeVisible()
+  if (name) await list.getByRole("button", { name: new RegExp(`^${name}`) }).click()
+  return list
+}
+
 /** From the setup screen into a rehearsal, ready to record take `n`. */
 export async function startRehearsal(page: Page, n = 1) {
   await startButton(page).click()

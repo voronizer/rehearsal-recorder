@@ -264,20 +264,62 @@ api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
           duration_sec: dur, peaks: [peaksOf(t.file, buckets || 900, a, b)]};
 });
 
-api.list_rehearsals = async () => [
-  {folder: '/rec/tue', name: 'Tuesday jam', created_at: '2026-09-22T19:00:00',
-   take_count: 11, total_duration_sec: 2710, disk_bytes: 1560000000,
-   songs: [{name: 'Polyn', takes: 4}, {name: 'Vesna', takes: 3},
-           {name: 'Ogon', takes: 2}, {name: 'Sonce', takes: 1}]},
-  {folder: '/rec/sat', name: 'New songs', created_at: '2026-09-19T15:00:00',
-   take_count: 7, total_duration_sec: 1860, disk_bytes: 1070000000,
-   songs: [{name: 'Dym', takes: 4}, {name: 'Ptaha', takes: 3}]},
-  {folder: '/rec/tue-before', name: 'Tuesday jam', created_at: '2026-09-15T19:00:00',
-   take_count: 9, total_duration_sec: 2280, disk_bytes: 1310000000,
-   songs: [{name: 'Polyn', takes: 3}, {name: 'Vesna', takes: 2}, {name: 'Ogon', takes: 2},
-           {name: 'Sonce', takes: 1}, {name: 'Dym', takes: 1}]},
-  {folder: '/rec/soundcheck', name: 'Soundcheck', created_at: '2026-09-12T18:30:00',
-   take_count: 2, total_duration_sec: 300, disk_bytes: 173000000, songs: []}];
+// ---- History ----------------------------------------------------------
+// The evenings before this one, take by take: [name, seconds, marks]. Few
+// marks, as in life. Their files are never played in the pictures.
+const PAST = {
+  '/rec/tue': ['Tuesday jam', '2026-09-22T19:00:00', 1560000000, [
+    ['Polyn', 185, [{at: 111, note: 'came in late after the break', kind: 'issue'}]],
+    ['Polyn 2', 192, [{at: 58, note: 'chorus came in early', kind: 'issue'},
+                      {at: 134, note: 'bridge — try it slower', kind: 'redo'}]],
+    ['Polyn 3', 200, []],
+    ['Polyn 4', 198, [{at: 158, note: 'this one is the take', kind: 'good'}]],
+    ['Vesna', 250, [{at: 100, note: 'guitar drifts here', kind: 'issue'}]],
+    ['Vesna 2', 265, []], ['Vesna 3', 252, []],
+    ['Ogon', 340, [{at: 187, note: 'solo too long, cut to 8 bars', kind: 'redo'}]],
+    ['Ogon 2', 302, []], ['Sonce', 390, []], ['Take 11', 130, []]]],
+  '/rec/sat': ['New songs', '2026-09-19T15:00:00', 1070000000, [
+    ['Dym', 280, []], ['Dym 2', 275, []], ['Dym 3', 290, []],
+    ['Dym 4', 270, [{at: 200, note: 'keep this ending', kind: 'good'}]],
+    ['Ptaha', 245, []], ['Ptaha 2', 260, []], ['Ptaha 3', 255, []]]],
+  '/rec/tue-before': ['Tuesday jam', '2026-09-15T19:00:00', 1310000000, [
+    ['Polyn', 210, []], ['Polyn 2', 195, []], ['Polyn 3', 202, []],
+    ['Vesna', 280, []], ['Vesna 2', 270, []], ['Ogon', 310, []], ['Ogon 2', 295, []],
+    ['Sonce', 305, []], ['Dym', 228, []]]],
+  '/rec/soundcheck': ['Soundcheck', '2026-09-12T18:30:00', 173000000, [
+    ['Take 1', 140, []], ['Take 2', 165, []]]]};
+const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => ({
+  take_number: i + 1, name, duration_sec: length, markers,
+  tracks: PARTS.map(p => ({name: p.name, file: `${folder}/${i + 1}/${p.name}.wav`}))}));
+api.list_rehearsals = async () => Object.keys(PAST).map(folder => {
+  const [name, created_at, disk_bytes] = PAST[folder];
+  const takes = pastTakes(folder);
+  return {folder, name, created_at, take_count: takes.length, disk_bytes,
+          total_duration_sec: takes.reduce((sum, t) => sum + t.duration_sec, 0),
+          songs: songsOf(takes), runs: runsOf(takes), in_cloud: folder === '/rec/tue' ? 3 : 0};
+});
+api.get_rehearsal = async folder => {
+  const [name, created_at] = PAST[folder];
+  const takes = pastTakes(folder);
+  if (folder === '/rec/tue')
+    for (const n of [4, 7, 9]) takes[n - 1].cloud = {mix: `/cloud/${n}.mp3`, mix_format: 'mp3'};
+  return {ok: true, folder, name, created_at, takes, songs: songsOf(takes)};
+};
+api.last_time = async () => {
+  const last = await api.get_rehearsal('/rec/tue');
+  const sat = pastTakes('/rec/sat');
+  const all = await api.list_rehearsals();
+  return {
+    last: {...last, runs: runsOf(last.takes), in_cloud: 3},
+    not_played: [
+      {name: 'Dym', folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00',
+       goes: 4, take: sat[3]},
+      {name: 'Ptaha', folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00',
+       goes: 3, take: sat[6]}],
+    earlier: all.slice(1).map(r => ({folder: r.folder, name: r.name, created_at: r.created_at,
+      take_count: r.take_count, total_duration_sec: r.total_duration_sec, missing: false})),
+    count: all.length};
+};
 
 const settings = api.get_settings;
 api.get_settings = async () => ({...(await settings()),
@@ -297,9 +339,9 @@ DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 5', name:'take 5',
 # How tall the window is for each picture: tall enough for all four tracks
 # where there is a player, and no taller than the screen needs elsewhere,
 # so a picture is not half empty.
-HEIGHT = {"unsaved-takes": 420, "setup": 720, "settings": 760, "rehearsal": 770,
+HEIGHT = {"unsaved-takes": 420, "setup": 910, "settings": 760, "rehearsal": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
-          "history": 520}
+          "history": 820}
 
 
 def shoot(page, name):

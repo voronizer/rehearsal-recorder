@@ -2036,6 +2036,88 @@ def main():
     ok("and the bin is not mistaken for a rehearsal",
        "_deleted" not in {r["name"] for r in d.list_rehearsals()})
 
+    print("\n[16c] The evening as it went, and last time on the setup screen")
+    # History draws each rehearsal as a strip of its takes and the setup
+    # screen goes over the last one song by song. Marks are few in practice,
+    # so both stand on what every take has: its song, its place and its length.
+    tmp5 = Path(tempfile.mkdtemp())
+    _, e = fresh_api(tmp5)
+
+    def rehearsal(name, created_at, takes):
+        """takes: (name, seconds, marker kinds)."""
+        folder = tmp5 / "Rec" / f"{name} - {created_at[:10]} {created_at[11:13]}-00"
+        folder.mkdir(parents=True)
+        (folder / "session.json").write_text(json.dumps({
+            "name": name, "created_at": created_at, "samplerate": SR,
+            "tracks": [{"name": "Gtr", "channel": 1}],
+            "takes": [
+                {"take_number": i + 1, "name": n, "duration_sec": sec, "tracks": [],
+                 "markers": [{"at": 1.0, "kind": k, "note": ""} for k in kinds]}
+                for i, (n, sec, kinds) in enumerate(takes)
+            ],
+        }))
+        import_all(e._lib, e._cloud_dir)
+        return str(folder)
+
+    ok("with no rehearsal at all there is no last time",
+       e.last_time() == {"last": None, "not_played": [], "earlier": [], "count": 0})
+
+    older = rehearsal("First", "2026-08-25T19:00:00", [
+        ("Polyn", 200, ()), ("Doroga", 230, ()), ("Doroga 2", 240, ("good",))])
+    mid = rehearsal("New songs", "2026-09-19T15:00:00", [
+        ("Dym", 280, ()), ("Dym 2", 270, ("good",)), ("Ptaha", 250, ())])
+    last = rehearsal("Tuesday jam", "2026-09-22T19:00:00", [
+        ("Polyn", 185, ("issue",)), ("Polyn 2", 198, ("good", "redo")),
+        ("Vesna", 250, ()), ("Take 4", 130, ()), ("polyn 3", 190, ())])
+    rehearsal("Soundcheck", "2026-09-26T18:00:00", [("Take 1", 140, ()), ("Take 2", 165, ())])
+
+    runs = {r["name"]: r["runs"] for r in e.list_rehearsals()}
+    ok("history gets the evening as runs of goes at a song, in the order played",
+       [(r["song"], len(r["takes"])) for r in runs["Tuesday jam"]]
+       == [("Polyn", 2), ("Vesna", 1), (None, 1), ("Polyn", 1)])
+    ok("each go with its length, and whether it was marked to keep",
+       runs["Tuesday jam"][0]["takes"]
+       == [{"duration_sec": 185, "keep": False}, {"duration_sec": 198, "keep": True}])
+    ok("a song spelled another way is still the one the song list names",
+       runs["Tuesday jam"][-1]["song"] == "Polyn")
+    ok("and takes nobody named are one run with no song",
+       runs["Soundcheck"] == [{"song": None, "takes": [
+           {"duration_sec": 140, "keep": False}, {"duration_sec": 165, "keep": False}]}])
+
+    lt = e.last_time()
+    ok("last time is the newest rehearsal that played a song, past a soundcheck",
+       lt["last"]["folder"] == last and lt["last"]["name"] == "Tuesday jam")
+    ok("with every take as the player needs it, and its songs",
+       [t["name"] for t in lt["last"]["takes"]]
+       == ["Polyn", "Polyn 2", "Vesna", "Take 4", "polyn 3"]
+       and all("tracks" in t and "markers" in t for t in lt["last"]["takes"])
+       and [(s["name"], s["take_numbers"]) for s in lt["last"]["songs"]]
+       == [("Polyn", [1, 2, 5]), ("Vesna", [3])])
+    ok("and its evening, drawn the same way as in history",
+       lt["last"]["runs"] == runs["Tuesday jam"])
+    ok("songs it did not play come from the rehearsals before it, the latest first",
+       [(s["name"], s["rehearsal"], s["goes"]) for s in lt["not_played"]]
+       == [("Dym", "New songs", 2), ("Ptaha", "New songs", 1), ("Doroga", "First", 2)])
+    ok("each with its last go, ready to play",
+       [s["take"]["name"] for s in lt["not_played"]] == ["Dym 2", "Ptaha", "Doroga 2"]
+       and lt["not_played"][0]["folder"] == mid and lt["not_played"][2]["folder"] == older)
+    ok("a song it did play is not among them, however long ago it was first played",
+       "Polyn" not in {s["name"] for s in lt["not_played"]})
+    ok("the other rehearsals follow, newest first, the soundcheck included",
+       [r["name"] for r in lt["earlier"]] == ["Soundcheck", "New songs", "First"]
+       and lt["earlier"][0]["take_count"] == 2
+       and lt["earlier"][0]["total_duration_sec"] == 305)
+    ok("and how many there are in all", lt["count"] == 4)
+
+    # A folder that has gone is nothing to play from.
+    import shutil as _shutil
+    _shutil.move(mid, str(tmp5 / "elsewhere"))
+    lt = e.last_time()
+    ok("a rehearsal not on disk gives no songs to play",
+       [s["name"] for s in lt["not_played"]] == ["Doroga"])
+    ok("but is still listed among the others, as missing",
+       [(r["name"], r["missing"]) for r in lt["earlier"]][1] == ("New songs", True))
+
     print("\n[17] A discarded take is moved, not destroyed")
     # "Discard" on the review screen used to be the one place in this app where
     # a recording really did vanish: an rmtree of whatever path it was handed,

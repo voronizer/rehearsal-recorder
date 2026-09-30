@@ -65,6 +65,23 @@ The free disk space is shown under the tracks, as recording time: "Room for
 about 29 h 25 min of recording". It takes the number of tracks and the
 recording quality into account.
 
+### Last time
+
+Beside the tracks, or under them in a narrow window, is the rehearsal before
+this one, song by song: how many goes each song got and how long they ran,
+with the notes you left while listening. ▶ on a song plays its last go,
+which is usually the version you settled on. Listen to where you left off
+before you start.
+
+Under it are the songs you did not play last time, each with the day it was
+last played and its last go to listen to, and the rehearsals before that.
+**Open**, or a rehearsal in the list, opens it in History. A soundcheck with
+no named takes is skipped: last time is the last rehearsal that played a
+song.
+
+While something plays from here, Space pauses it and Esc stops it; then
+Space starts the rehearsal again. **Check signal** stops it.
+
 ## Recording takes
 
 ### The rehearsal screen
@@ -228,15 +245,25 @@ that is open in the player, it starts again from the beginning.
 
 ## History
 
-![Past rehearsals, each with the songs played in it](screenshots/history.png)
+![Past rehearsals down the left, the chosen one beside them](screenshots/history.png)
 
-**History** lists your past rehearsals. Each one shows when it was, how long
-it ran, how much disk space it takes and which songs were played:
-"Polyn ×4 · Vesna ×3 · Ogon ×2". Click a rehearsal to open it. Its takes work
-the same way as on the rehearsal screen.
+**History** lists your past rehearsals down the left, by month, and shows the
+chosen one beside the list. It opens on the newest. Each rehearsal in the
+list shows when it was, how long you played and how many takes there are,
+with the evening drawn as a strip: a bar for each take, as long as the take,
+grouped by song, and green for a take marked *keep this*. You can see at a
+glance how many songs you played and how many goes each one got.
 
-You can rename and delete takes and whole rehearsals here. Deleting asks
+Click a rehearsal to show it, or go through them with ↑ and ↓. Its takes
+work the same way as on the rehearsal screen: **Play** on a take plays it
+right there, and the take's bar opens it in the player, which then has the
+whole window. Esc brings the list back.
+
+You can rename and delete takes and whole rehearsals here. The pencil and
+the bin next to the rehearsal's name work on the rehearsal. Deleting asks
 first, tells you how much space it frees and moves the folder to the Trash.
+The header shows how many rehearsals there are, how long you played in all
+and how much disk space they take.
 
 If a rehearsal's folder was moved or renamed outside the app, or is on a
 drive that is not plugged in, the rehearsal is marked **Not found on disk**.
@@ -390,6 +417,8 @@ While listening:
 | M | add a marker |
 | R | turn Repeat on or off |
 | ? | show the keys |
+
+In History, ↑ and ↓ go through the rehearsals.
 
 Esc goes one step back. It closes a dialog first, then the open take, then a
 take playing in the list of takes, then the screen. On the rehearsal screen it finishes the rehearsal, and asks first

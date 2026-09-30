@@ -7,6 +7,26 @@ opening.
 
 ## Unreleased
 
+- **Last time, on the setup screen.** Beside the tracks is the rehearsal
+  before this one, song by song: how many goes each song got and how long
+  they ran, with the notes left while listening. ▶ on a song plays its last
+  go, so the band can hear where they left off before starting. Under it
+  are the songs not played last time, each with its own last go, and the
+  rehearsals before. It rests on what every take has, its song and its
+  length, rather than on marks, which few takes get. A soundcheck with no
+  named takes is skipped. While something plays there, Space and Esc are
+  its; **Check signal** and **Start rehearsal** stop it.
+- **History shows the list and the rehearsal together.** The rehearsals are
+  down the left, by month, and the chosen one's takes beside them, so looking
+  for the evening with the good take no longer means opening one after
+  another. ↑ and ↓ go through them. Each rehearsal in the list draws its
+  evening as a strip, a bar per take as long as the take, grouped by song,
+  in place of "Polyn ×4 · Vesna ×3 · and 2 more". A take opened in the
+  player has the whole window, and Esc brings the list back. The setup
+  screen's **Open** and its list of rehearsals open history on the one
+  chosen.
+- Durations just under a whole hour, such as the disk space left, read
+  "2 h" rather than "1 h 60 min".
 - **Each track has an icon**, chosen at the start of its row on the setup
   screen: vocals, a microphone, electric and acoustic guitar, bass, drums,
   percussion, keys, synth, winds, strings, a click, a backing track, or a
