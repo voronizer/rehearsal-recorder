@@ -391,6 +391,13 @@ export function Setup({
           </Button>
         </div>
       }
+      // With last time beside it the screen is two columns, each scrolling
+      // on its own; the Shell's padding moves into them.
+      className={
+        lastTime?.last
+          ? "p-0 min-[1100px]:flex min-[1100px]:overflow-hidden"
+          : undefined
+      }
       footer={
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -411,13 +418,11 @@ export function Setup({
           under it when it is not. */}
       <div
         className={cn(
-          "mx-auto grid gap-10",
-          lastTime?.last
-            ? "max-w-[76rem] min-[1100px]:grid-cols-[minmax(0,1fr)_24rem]"
-            : "max-w-3xl"
+          lastTime?.last &&
+            "px-6 py-6 min-[1100px]:min-w-0 min-[1100px]:flex-1 min-[1100px]:overflow-y-auto"
         )}
       >
-        <div className="flex min-w-0 flex-col gap-8">
+        <div className="mx-auto flex max-w-3xl min-w-0 flex-col gap-8">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="rehearsal-name">Rehearsal name</Label>
@@ -742,24 +747,32 @@ export function Setup({
             </div>
           </div>
         </div>
-        {lastTime?.last && (
-          <LastTime
-            data={lastTime}
-            playback={
-              cued && {
-                take: cued,
-                playing: player.playing,
-                loading: player.loading,
-                position: player.position,
-              }
-            }
-            problem={cued ? player.loadError : null}
-            onPlay={playLastTime}
-            onOpen={onOpenRehearsal}
-            onAll={onOpenHistory}
-          />
-        )}
       </div>
+      {/* The past set back from the rehearsal about to start: a panel of its
+          own, darker, down the side, as history's list is. With both on the
+          same background the two columns ran into one. */}
+      {lastTime?.last && (
+        <div className="border-t bg-panel px-6 py-6 min-[1100px]:w-[26rem] min-[1100px]:shrink-0 min-[1100px]:overflow-y-auto min-[1100px]:border-t-0 min-[1100px]:border-l min-[1100px]:px-5">
+          {/* Under the tracks, as wide as they are. */}
+          <div className="mx-auto max-w-3xl">
+            <LastTime
+              data={lastTime}
+              playback={
+                cued && {
+                  take: cued,
+                  playing: player.playing,
+                  loading: player.loading,
+                  position: player.position,
+                }
+              }
+              problem={cued ? player.loadError : null}
+              onPlay={playLastTime}
+              onOpen={onOpenRehearsal}
+              onAll={onOpenHistory}
+            />
+          </div>
+        </div>
+      )}
     </Shell>
   )
 }

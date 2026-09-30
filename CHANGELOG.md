@@ -5,6 +5,12 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Last time has a panel of its own** on the setup screen, down the side
+  and darker than the screen, as History's list is. On the same background
+  as the tracks, the two columns ran into one.
+
 ## 0.8.0
 
 - **Songs you have played are a click away when naming a take.** Under the

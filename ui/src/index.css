@@ -28,6 +28,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-panel: var(--panel);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
@@ -60,6 +61,9 @@
   --background: oklch(0.985 0 0);
   --foreground: oklch(0.21 0.006 285.9);
   --card: oklch(1 0 0);
+  /* A side panel set back from the screen it is beside, darker than the
+     background in both themes, with cards on it as they are elsewhere. */
+  --panel: oklch(0.955 0.003 286.3);
   --card-foreground: oklch(0.21 0.006 285.9);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.006 285.9);
@@ -87,6 +91,7 @@
   --background: oklch(0.18 0.006 285.9);
   --foreground: oklch(0.93 0.003 286.3);
   --card: oklch(0.22 0.007 285.9);
+  --panel: oklch(0.15 0.006 285.9);
   --card-foreground: oklch(0.93 0.003 286.3);
   --popover: oklch(0.24 0.007 285.9);
   --popover-foreground: oklch(0.93 0.003 286.3);

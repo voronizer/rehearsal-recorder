@@ -185,7 +185,7 @@ export function LastTime({
             key={r.folder}
             type="button"
             onClick={() => onOpen(r.folder)}
-            className="flex items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="flex items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-card focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <span className="w-20 shrink-0 text-xs text-muted-foreground">
               {formatDay(r.created_at)}
@@ -215,7 +215,7 @@ export function LastTime({
         <button
           type="button"
           onClick={onAll}
-          className="flex items-center gap-1.5 self-start rounded-md px-2 py-1.5 text-[13px] font-semibold transition-colors hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          className="flex items-center gap-1.5 self-start rounded-md px-2 py-1.5 text-[13px] font-semibold transition-colors hover:bg-card focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <History className="size-3.5" />
           History
@@ -347,7 +347,7 @@ function PlayButton({
       aria-keyshortcuts={here ? "Space" : undefined}
       className={cn(
         "flex size-7 items-center justify-center rounded-full border transition-colors",
-        here ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"
+        here ? "border-primary bg-primary text-primary-foreground" : "hover:bg-foreground/5"
       )}
     >
       {here?.loading ? (
