@@ -104,11 +104,12 @@ stopped short stands out before you read anything.
 Press **Record take**, or Space, to start recording. **Finish** ends the
 rehearsal.
 
-Above the button is the name the next take will get: **Next take: Polyn 3**.
-When you move on to another song, click it and pick the song, or type a new
-name and press Enter. The take is then recorded under that name, and the
-recording screen can say how long the last go at that song took. If you
-discard the take, the next one keeps the name you picked.
+Above the button is **Next take**: the name the next take will get, lit,
+and beside it the songs you could play instead. When you move on to another
+song, click it before you press Record. **Other…** lists every song and lets
+you type a new name; press Enter to use it. The take is then recorded under
+that name, and the recording screen can say how long the last go at that
+song took. If you discard the take, the next one keeps the name you picked.
 
 ### While recording
 

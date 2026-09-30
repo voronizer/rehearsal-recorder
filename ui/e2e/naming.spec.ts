@@ -102,46 +102,51 @@ test("renaming a take in history offers what that rehearsal played, as the next 
 })
 
 test.describe("the next take", () => {
-  test("is named before it is played, and keeps its name through a take thrown away", async ({
+  /** The row over Record: the name the next take has, lit, and the songs. */
+  const row = (page: Page) => page.getByRole("group", { name: "Next take" })
+  const lit = (page: Page) => row(page).locator("[aria-current='true']")
+
+  test("is named from the songs over Record, and keeps its name through a take thrown away", async ({
     page,
   }) => {
     await openApp(page)
     await startRehearsal(page)
-    const next = page.getByRole("button", { name: /^Next take:/ })
-    await expect(next).toContainText("Take 1")
+    // Out in the open, not behind a menu: the name it has and the songs.
+    await expect(lit(page)).toHaveText("Take 1")
+    await expect(row(page).getByRole("button", { name: "Vesna", exact: true })).toBeVisible()
 
-    await next.click()
-    await page.getByRole("dialog").getByRole("button", { name: "Vesna", exact: true }).click()
-    await expect(page.getByRole("dialog")).toHaveCount(0)
-    await expect(next).toContainText("Vesna")
+    await row(page).getByRole("button", { name: "Vesna", exact: true }).click()
+    await expect(lit(page)).toHaveText("Vesna")
     expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Vesna"])
-
+    // The click left the keyboard to the screen: Space records.
+    await page.keyboard.press("Space")
     // The recording screen already says the song, and review has the name.
-    await page.getByRole("button", { name: /Record take 1/ }).click()
     await expect(page.getByText("Take 1 · Vesna")).toBeVisible()
     await page.getByRole("button", { name: /^Stop/ }).click()
     await expect(nameField(page)).toHaveValue("Vesna")
 
     // Thrown away, it is played again under the same name.
     await page.getByRole("button", { name: /^Discard/ }).click()
-    await expect(next).toContainText("Vesna")
+    await expect(lit(page)).toHaveText("Vesna")
     await recordTake(page, 2)
     await expect(nameField(page)).toHaveValue("Vesna")
     await page.getByRole("button", { name: /Save take/ }).click()
-    // Kept, it is used up, and the next one follows on from it.
-    await expect(next).toContainText("Vesna 2")
+    // Kept, it is used up, and the next one follows on from it — and the
+    // song is not offered a second time beside it.
+    await expect(lit(page)).toHaveText("Vesna 2")
+    await expect(row(page).locator("[data-song-choice^='Vesna']")).toHaveCount(1)
   })
 
-  test("takes a typed name with Enter, and leaves Space and Escape to the picker", async ({
-    page,
-  }) => {
+  test("takes a typed name under Other…, and leaves Space and Escape to it", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
-    const next = page.getByRole("button", { name: /^Next take:/ })
-    await next.click()
+    const other = row(page).getByRole("button", { name: "Another name for the next take" })
+    await other.click()
     const field = page.getByRole("textbox", { name: "Name of the next take" })
     await expect(field).toBeFocused()
-    // Neither records nor finishes the rehearsal from inside the picker.
+    // Every song is in there, the ones the row had no room for too.
+    await expect(page.getByRole("dialog").locator("[data-song-choice]")).toHaveCount(7)
+    // Neither records nor finishes the rehearsal from inside it.
     await page.keyboard.press("Space")
     await page.keyboard.press("Escape")
     await expect(page.getByRole("dialog")).toHaveCount(0)
@@ -150,10 +155,10 @@ test.describe("the next take", () => {
     await expect(startButton(page)).toHaveCount(0)
     expect(await callCount(page, "set_next_take_name")).toBe(0)
 
-    await next.click()
+    await other.click()
     await field.fill("New song")
     await page.keyboard.press("Enter")
-    await expect(next).toContainText("New song")
+    await expect(lit(page)).toHaveText("New song")
     expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["New song"])
   })
 })

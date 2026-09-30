@@ -51,24 +51,7 @@ export function SongChips({
       </span>
       <div className="flex flex-wrap gap-1.5">
         {items.map((c) => (
-          <button
-            key={c.song}
-            type="button"
-            data-song-choice={c.name}
-            aria-current={isChoice(c) ? "true" : undefined}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onPick(c.name)}
-            className={cn(
-              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-              "hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-              isChoice(c) && "border-primary bg-primary/15 hover:bg-primary/20"
-            )}
-          >
-            {c.song}
-            {c.name !== c.song && (
-              <span className="text-muted-foreground">{c.name.slice(c.song.length)}</span>
-            )}
-          </button>
+          <SongChip key={c.song} choice={c} current={isChoice(c)} onPick={onPick} />
         ))}
       </div>
     </div>
@@ -79,5 +62,43 @@ export function SongChips({
       {here.length > 0 && row("This rehearsal", here)}
       {other.length > 0 && row(here.length > 0 ? "Other songs" : "Songs", other)}
     </div>
+  )
+}
+
+/**
+ * One song to name a take after, as the name it gives: "Polyn 3", with the
+ * number dimmed. Pressing it does not take focus, so the keys stay where
+ * they were — in the field being named, or with the screen.
+ */
+export function SongChip({
+  choice: c,
+  current,
+  onPick,
+  className,
+}: {
+  choice: SongChoice
+  current: boolean
+  onPick: (name: string) => void
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      data-song-choice={c.name}
+      aria-current={current ? "true" : undefined}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => onPick(c.name)}
+      className={cn(
+        "max-w-full truncate rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+        "hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+        current && "border-primary bg-primary/15 hover:bg-primary/20",
+        className
+      )}
+    >
+      {c.song}
+      {c.name !== c.song && (
+        <span className="text-muted-foreground">{c.name.slice(c.song.length)}</span>
+      )}
+    </button>
   )
 }

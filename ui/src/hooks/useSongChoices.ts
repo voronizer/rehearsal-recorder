@@ -5,11 +5,14 @@ import { api, type SongChoices } from "@/lib/api"
  * The songs a take can be named after, fetched while `enabled`: what its
  * rehearsal played and every other song in the library. `folder` left out
  * is the rehearsal in progress; `takeNumber` is the take being named.
+ * `version` is anything that changes when the rehearsal's takes do, for a
+ * list that stays on screen while they are renamed and added to.
  */
 export function useSongChoices(
   enabled: boolean,
   folder?: string | null,
-  takeNumber?: number | null
+  takeNumber?: number | null,
+  version?: string
 ): SongChoices | null {
   const [choices, setChoices] = useState<SongChoices | null>(null)
   useEffect(() => {
@@ -23,6 +26,6 @@ export function useSongChoices(
     return () => {
       current = false
     }
-  }, [enabled, folder, takeNumber])
+  }, [enabled, folder, takeNumber, version])
   return enabled ? choices : null
 }

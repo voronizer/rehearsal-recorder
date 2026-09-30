@@ -13,8 +13,9 @@ opening.
   played first. Each gives the take its next number, so with "Polyn" and
   "Polyn 2" recorded it names it "Polyn 3". Typing narrows the list.
 - **Name the next take before playing it.** Above **Record take** is the
-  name the next take will get. Click it to pick another song when the band
-  moves on, and the take is recorded under that name, with the recording
+  name the next take will get, with the songs it could be instead beside
+  it. When the band moves on, click the song, or **Other…** for the rest and
+  a new name. The take is recorded under that name, with the recording
   screen timing it against that song's last go. A discarded take leaves the
   name for the next go.
 - **Last time, on the setup screen.** Beside the tracks is the rehearsal
