@@ -31,7 +31,9 @@ with the Chromium Playwright installs for the interface tests, and both icon
 formats hold PNGs as they are, so no image library is needed. The build reads
 the finished files, so building needs nothing it does. Run from source on
 Windows, the window is given the `.ico` too; otherwise the taskbar would show
-python.exe's icon.
+python.exe's icon. Run from source on macOS, the Dock is given the `.icns`,
+and the menu bar and About the app's name, version and copyright; otherwise
+they would say Python.
 
 **The self-test is the point.** A packaged app fails in a particular way: it
 starts, and then the first time it reaches for the sound card it turns out a
@@ -51,7 +53,9 @@ the built thing knows. So the built thing is asked:
 
 It exits non-zero if anything is missing, and the CI build runs it on the
 artifact it just produced, on macOS and on Windows. A build that cannot answer
-for itself is not uploaded.
+for itself is not uploaded. On those two it also checks the version written
+on the file, which Finder and Explorer show, against the one the app knows:
+the `.app` once said 0.0.0 and the `.exe` nothing.
 
 **What the systems will say the first time.** The app is not signed with an
 Apple Developer certificate ($99/year) or an Authenticode certificate, so:

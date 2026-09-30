@@ -36,14 +36,18 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 ROOT = Path(SPECPATH).parent
 NAME = "RehearsalRecorder"
 
-# What Finder's Get Info and About read from the .app's Info.plist: without
-# a version PyInstaller writes 0.0.0. The number is the release tag's,
+# What the file says it is, which Finder's Get Info and About read from the
+# .app's Info.plist and Explorer from the .exe: without a version PyInstaller
+# writes 0.0.0 on the one and nothing on the other. The number is the tag's,
 # written by setuptools-scm when the package was installed (see
 # src/rehearsal_recorder/__init__.py); the name and copyright are the ones
 # the app gives itself when it runs from source.
 sys.path.insert(0, str(ROOT / "src"))
 from rehearsal_recorder import __version__
 from rehearsal_recorder.platform_support import APP_NAME, COPYRIGHT
+
+sys.path.insert(0, str(ROOT / "packaging"))
+import windows_version
 
 ui_dist = ROOT / "ui" / "dist"
 if not (ui_dist / "index.html").exists():
@@ -114,6 +118,11 @@ exe = EXE(
     # turned into these by make_icons.py; they are ready-made files, so the
     # build needs no image library to read them.
     icon=str(ROOT / "packaging" / ("icon.icns" if sys.platform == "darwin" else "icon.ico")),
+    # The version Explorer shows under Properties, and the name Task Manager
+    # gives the app; see windows_version.py. The .app has its own, below.
+    version=windows_version.version_resource(
+        __version__, APP_NAME, COPYRIGHT, f"{NAME}.exe"
+    ) if sys.platform == "win32" else None,
 )
 
 coll = COLLECT(

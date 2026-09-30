@@ -190,6 +190,16 @@ def selftest():
                 )
             return f"migrations up to {head}"
 
+    def version_on_file():
+        from rehearsal_recorder.platform_support import version_on_the_file
+
+        shown = version_on_the_file()
+        if shown is None:
+            return "nothing to read here"
+        if shown != __version__:
+            raise RuntimeError(f"the file says {shown!r}, the app {__version__!r}")
+        return shown
+
     def window_toolkit():
         import webview
 
@@ -206,6 +216,7 @@ def selftest():
     check("history database", database)
     check("window toolkit", window_toolkit)
     check("built interface", interface)
+    check("version on the file", version_on_file)
     check("deleting", lambda: f"goes to the {trash_kind()}")
 
     if problems:

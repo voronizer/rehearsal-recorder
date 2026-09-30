@@ -135,6 +135,55 @@ def window_icon(system=sys.platform, frozen=None):
     return str(icon) if icon.exists() else None
 
 
+def version_on_the_file(system=sys.platform, executable=None, frozen=None):
+    """
+    The version a built app's file says it is: what Finder or Explorer shows,
+    as against what the app knows inside, which comes with the package. The
+    build has to write it in, and wrote 0.0.0 on the .app and nothing on the
+    .exe until it was told. None where there is nothing to read: from source
+    the file is Python's, and on Linux there is no such thing.
+    """
+    if frozen is None:
+        frozen = bool(getattr(sys, "_MEIPASS", None))
+    if not frozen:
+        return None
+    executable = Path(executable or sys.executable)
+    if system == "darwin":
+        import plistlib
+
+        # RehearsalRecorder.app/Contents/MacOS/RehearsalRecorder
+        with open(executable.parents[1] / "Info.plist", "rb") as f:
+            return plistlib.load(f)["CFBundleShortVersionString"]
+    if system == "win32":
+        return windows_product_version(executable)
+    return None
+
+
+def windows_product_version(executable):
+    """The ProductVersion an .exe carries, in whichever language's table it
+    keeps its strings, as Explorer finds it."""
+    import ctypes
+    from ctypes import wintypes
+
+    version = ctypes.WinDLL("version")
+    path = str(executable)
+    size = version.GetFileVersionInfoSizeW(path, None)
+    data = ctypes.create_string_buffer(size)
+    if not size or not version.GetFileVersionInfoW(path, 0, size, data):
+        raise RuntimeError(f"{executable.name} carries no version")
+    pointer = ctypes.c_void_p()
+    length = wintypes.UINT()
+    if not version.VerQueryValueW(data, "\\VarFileInfo\\Translation",
+                                  ctypes.byref(pointer), ctypes.byref(length)):
+        raise RuntimeError(f"{executable.name} names no language for its version")
+    language, codepage = ctypes.cast(pointer, ctypes.POINTER(wintypes.WORD * 2)).contents
+    text = ctypes.c_wchar_p()
+    key = f"\\StringFileInfo\\{language:04x}{codepage:04x}\\ProductVersion"
+    if not version.VerQueryValueW(data, key, ctypes.byref(text), ctypes.byref(length)):
+        raise RuntimeError(f"{executable.name} has no ProductVersion")
+    return text.value
+
+
 def _send2trash():
     """The proper recycle bin, if the package is installed. Optional on
     purpose: without it the fallback below still never destroys anything."""

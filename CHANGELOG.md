@@ -47,11 +47,14 @@ opening.
   read as clearing that part of the take. **Crop** is under them. **Repeat** in the player's
   row has moved next to the time, with the playing, and **Mark** to the end
   of the row.
-- **About on macOS says which version it is.** In the built app it said
-  0.0.0, in Finder's Get Info too, and it now gives the release's number
-  and the copyright. Run from source, the Dock, the menu bar and About had
-  Python's icon, name, version and copyright, and now have the app's own,
-  as the Windows taskbar already did.
+- **The built app says which version it is.** On macOS About and Finder's
+  Get Info said 0.0.0, and they now give the release's number and the
+  copyright. On Windows the .exe had no version at all: Explorer now shows
+  it under Properties → Details, with the copyright, and Task Manager calls
+  the app Rehearsal Recorder. The build's self-test checks the number on the
+  file against the app's own. Run from source on macOS, the Dock, the menu
+  bar and About had Python's icon, name, version and copyright, and now have
+  the app's own, as the Windows taskbar already did.
 
 ## 0.7.13
 

@@ -387,6 +387,70 @@ def main():
     ok("and the full one, for where the window shows it large",
        logo.exists() and logo.read_bytes() == (packaging / "icon.svg").read_bytes())
 
+    print("\n[version] The built app's file says which version it is")
+    # The .app said 0.0.0 and the .exe nothing, since the build was never
+    # told the number. The .exe keeps it as four numbers beside the strings.
+    import windows_version
+    ok("a release is its own four numbers",
+       windows_version.numbers("0.7.13") == (0, 7, 13, 0))
+    ok("a build between releases counts as the release it leads to",
+       windows_version.numbers("0.7.14.dev11+g3613015.d20260930") == (0, 7, 14, 0))
+    ok("and a clone never installed is 0.0.0.0",
+       windows_version.numbers("unknown") == (0, 0, 0, 0))
+    ok("the build hands the .exe its version",
+       "windows_version.version_resource(" in spec and "version=__version__" in spec)
+
+    # PyInstaller reads its version classes with pefile, which it brings only
+    # on Windows, so the structure itself is checked where the build runs.
+    try:
+        from PyInstaller.utils.win32 import versioninfo
+    except ImportError:
+        versioninfo = None
+        print("  --   the .exe's version structure: PyInstaller cannot build one here")
+    if versioninfo is not None:
+        resource = windows_version.version_resource(
+            "0.7.13", ps.APP_NAME, ps.COPYRIGHT, "RehearsalRecorder.exe")
+        read = versioninfo.VSVersionInfo()
+        read.fromRaw(resource.toRaw())
+        strings = {s.name: s.val for s in read.kids[0].kids[0].kids}
+        ok("the .exe's version reads back with its name, number and copyright",
+           strings["ProductVersion"] == strings["FileVersion"] == "0.7.13"
+           and strings["FileDescription"] == ps.APP_NAME
+           and strings["LegalCopyright"] == ps.COPYRIGHT
+           and read.kids[0].kids[0].name == "040904b0"
+           and read.ffi.fileVersionMS == 7 and read.ffi.fileVersionLS == 13 << 16)
+
+    # The self-test compares what the file says with what the app knows.
+    ok("from source there is no file of the app's own to read",
+       ps.version_on_the_file("darwin", frozen=False) is None
+       and ps.version_on_the_file("win32", frozen=False) is None)
+    contents = tmp / "RehearsalRecorder.app" / "Contents"
+    (contents / "MacOS").mkdir(parents=True)
+    import plistlib
+    with open(contents / "Info.plist", "wb") as f:
+        plistlib.dump({"CFBundleShortVersionString": "0.7.13"}, f)
+    ok("a built .app's is read from its Info.plist",
+       ps.version_on_the_file(
+           "darwin", executable=contents / "MacOS" / "RehearsalRecorder", frozen=True
+       ) == "0.7.13")
+    ok("and on Linux there is none",
+       ps.version_on_the_file("linux", frozen=True) is None)
+    if sys.platform == "win32":
+        # Python's own .exe carries a version, under a language table of its
+        # own choosing, so reading it proves the reader finds the table.
+        found = ps.windows_product_version(Path(sys.executable))
+        ok("an .exe's version is read the way Explorer finds it",
+           found.startswith(f"{sys.version_info.major}.{sys.version_info.minor}"))
+        bare = tmp / "bare.exe"
+        bare.write_bytes(b"MZ")
+        try:
+            ps.windows_product_version(bare)
+            said = None
+        except RuntimeError as e:
+            said = str(e)
+        ok("and a file without one is said to have none",
+           said == "bare.exe carries no version")
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

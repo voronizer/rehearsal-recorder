@@ -89,8 +89,10 @@ is the first-time part. After that:
 There is no version number to bump anywhere: the tag is the version.
 setuptools-scm reads it at build time and writes it into the package, which
 is what the app shows under Settings → Under the hood and what `--selftest`
-prints. Run from a clone that was never installed, it says `unknown`, which
-is the truth — there is no tag to read.
+prints. The build writes it on the `.app` and the `.exe` too, where Finder
+and Explorer show it, and `--selftest` checks that the two agree. Run from a
+clone that was never installed, it says `unknown`, which is the truth —
+there is no tag to read.
 
 A build that fails its own self-test is never attached. That check exists
 because the way a packaged app fails is specific: it starts, and then the
