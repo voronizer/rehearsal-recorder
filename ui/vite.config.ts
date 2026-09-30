@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
@@ -15,6 +16,12 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+  },
+
+  // `npm test`: the files beside the code that need no browser. The ones
+  // that do are e2e/, under Playwright.
+  test: {
+    include: ["src/**/*.test.ts"],
   },
 
   // Development only (`npm run dev`, with `python3 -m rehearsal_recorder --dev`

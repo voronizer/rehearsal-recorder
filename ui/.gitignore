@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# What the interface tests leave behind
+test-results/
+playwright-report/
+blob-report/

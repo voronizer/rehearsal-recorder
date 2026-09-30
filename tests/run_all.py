@@ -27,6 +27,11 @@ They are plain scripts rather than pytest modules, and that is deliberate:
 test_engine stubs the `sounddevice` module before importing anything that
 needs a sound card, which has to happen at import time and fights with how
 pytest collects. Each exits non-zero on failure, which is all CI needs.
+
+test_interface.py is being moved over to TypeScript, section by section,
+into ui/e2e/ (Playwright) and the *.test.ts files beside the code (Vitest):
+`npm test` and `npm run test:e2e` in ui/. `--without-interface` leaves it
+out, for a machine that has no Playwright for Python.
 """
 
 import subprocess
@@ -39,7 +44,10 @@ SUITES = ("test_engine.py", "test_platform.py", "test_store.py", "test_interface
 
 def main():
     failed = []
-    for suite in SUITES:
+    suites = SUITES
+    if "--without-interface" in sys.argv[1:]:
+        suites = tuple(s for s in SUITES if s != "test_interface.py")
+    for suite in suites:
         print(f"\n{'=' * 60}\n{suite}\n{'=' * 60}")
         result = subprocess.run([sys.executable, str(HERE / suite)])
         if result.returncode != 0:

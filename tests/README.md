@@ -37,14 +37,37 @@ versions will add — so the backup taken first, and the rollback when one
 fails halfway, are checked before there is a second real migration to need
 them.
 
-## test_interface.py — the built interface
+## The interface — in ui/, in TypeScript
 
-The real `ui/dist` bundle in a headless browser, against a mocked Python
-bridge. Every screen, the whole flow, and specific past failures: the startup
-race where the bridge object exists before its methods do, appearance applied
-before the first paint, the interface as it looks on a machine with no Trash.
+```bash
+cd ui
+npm test                             # Vitest: what needs no browser, seconds
+npm run build && npm run test:e2e    # Playwright: the built bundle in a browser
+```
 
-Needs `ui/dist` built (`cd ui && npm run build`) and Playwright installed.
+The interface's tests are being moved out of Python into `ui/`, where the
+code they test is:
+
+- **`src/**/*.test.ts`**, beside the code, under Vitest: what can be checked
+  without a browser. How loud a meter draws, what a time is written as, where
+  the ruler puts its ticks.
+- **`e2e/*.spec.ts`**, under Playwright Test: the built `ui/dist` in a real
+  browser, against the faked Python side in `e2e/fake-bridge.js`. For what
+  needs a page laid out and a mouse. Each test sets up the state it needs, so
+  they run side by side, and they wait for what they are waiting for rather
+  than for a length of time.
+
+CI runs both once, on Linux: nothing in them depends on the system
+underneath.
+
+## test_interface.py — what has not been moved yet
+
+The rest of the interface's tests, the old way: one long run through every
+screen in a headless browser, against the same `ui/e2e/fake-bridge.js`.
+Its sections move to `ui/e2e/` one at a time and are deleted here as they
+do. CI runs what is left on Windows.
+
+Needs `ui/dist` built (`cd ui && npm run build`) and Playwright for Python.
 Screenshots land in `tests/screenshots/` and CI keeps them as artifacts.
 
 ## docs_screenshots.py — the pictures in the docs

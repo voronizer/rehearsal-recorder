@@ -76,25 +76,29 @@ look at. The two ports have to agree — 17817 in `app.py` and in
 ## Before committing an interface change
 
 ```bash
-cd ui && npm run build && cd ..
+cd ui && npm test && npm run build && npm run test:e2e && cd ..
 python tests/run_all.py
 ```
 
-The interface suite drives `ui/dist`, not `ui/src`, so a change that has not
-been built is a change the tests cannot see.
+The browser tests drive `ui/dist`, not `ui/src`, so a change that has not
+been built is a change they cannot see.
 
 ## Tests
 
 ```bash
-python tests/run_all.py
+python tests/run_all.py              # the audio, the systems, the database
+cd ui && npm test                    # the interface, what needs no browser
+cd ui && npm run test:e2e            # the interface in a browser (build first)
 ```
 
-Four suites and what each is for: [tests/README.md](../tests/README.md).
+What each is for: [tests/README.md](../tests/README.md).
 
-CI runs all of them on macOS and on Windows, on every push and every pull
-request. Both, because the two systems disagree about the things this app
-does most: a filesystem that ignores case, a file that cannot be moved while
-it is open, a code page with no Cyrillic.
+CI runs the Python suites on macOS and on Windows, on every push and every
+pull request. Both, because the two systems disagree about the things this
+app does most: a filesystem that ignores case, a file that cannot be moved
+while it is open, a code page with no Cyrillic. The interface's tests run
+once, on Linux: they run in a browser against a faked Python side, and
+nothing in them depends on the system.
 
 ## Packaging it into an app
 
