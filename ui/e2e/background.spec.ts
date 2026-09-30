@@ -25,6 +25,17 @@ const entry = (over: Entry = {}): Entry => ({
 const activity = (page: Page, entries: Entry[]) => setFake(page, "__ACTIVITY__", entries)
 const workButton = (page: Page) => page.locator("button[aria-label^='Background work']")
 
+/** Until the screen has had its first answer about background work and
+ *  asked again. What was already in the first answer is old news and is not
+ *  announced (lib/activity.ts), so work scripted before then says nothing. */
+async function primed(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __ACTIVITY_POLLS__?: number }).__ACTIVITY_POLLS__ ?? 0)
+    )
+    .toBeGreaterThanOrEqual(2)
+}
+
 test.describe("the background work button, from any screen", () => {
   test("comes and goes with the work, and says how far along it is", async ({ page }) => {
     await page.clock.install()
@@ -114,6 +125,7 @@ test.describe("the background work button, from any screen", () => {
   test("says what nobody has looked at yet: a failure, or work done", async ({ page }) => {
     await openApp(page, { before: "window.__ACTIVITY__ = [];" })
     const button = workButton(page)
+    await primed(page)
     // A copy that fails between two polls — a cloud folder on a drive that is
     // not plugged in fails in milliseconds — was never seen running, and
     // must still be said.
