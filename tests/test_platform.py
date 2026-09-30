@@ -451,7 +451,26 @@ def main():
         ok("and a file without one is said to have none",
            said == "bare.exe carries no version")
 
+    print("\n[selftest] The self-test writes UTF-8 into a pipe")
+    # How the build reads it. Windows wrote a pipe in its code page, and the
+    # build's log showed cp1252's "—" as "�"; the code page stands in here.
+    import os
+    import subprocess
+    run = subprocess.run(
+        [sys.executable, "-m", "rehearsal_recorder", "--selftest"],
+        capture_output=True, timeout=120,
+        env={**os.environ, "PYTHONIOENCODING": "cp1252",
+             "PYTHONPATH": str(PROJECT / "src")},
+    )
+    try:
+        said = run.stdout.decode("utf-8")
+    except UnicodeDecodeError:
+        said = None
+    ok("what it says reads as UTF-8, whatever the code page",
+       said is not None and " — " in said)
+
     print("\n" + "=" * 60)
+
     if problems:
         print("PROBLEMS:")
         for x in problems:

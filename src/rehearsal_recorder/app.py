@@ -96,6 +96,15 @@ def selftest():
     from rehearsal_recorder import __version__
     from rehearsal_recorder.platform_support import app_root, trash_kind
 
+    # In UTF-8 wherever it goes. Into a pipe, which is how the build reads it,
+    # Windows wrote the code page: cp1252 has "—" as a byte the build's log
+    # read as "�", and has no Cyrillic at all, so a path under a Russian user
+    # name stopped the self-test at its first line. A console is written in
+    # UTF-16 either way.
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
     problems = []
 
     def check(label, fn):
