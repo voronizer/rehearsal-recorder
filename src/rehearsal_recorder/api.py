@@ -257,6 +257,28 @@ def _song_of(name):
     return base or None
 
 
+def _next_go(takes, song):
+    """
+    What the next go at `song` among `takes` is called: the song itself the
+    first time, then one past the highest number a go carries — "Polyn 3"
+    after "Polyn 2", and after a deleted "Polyn 2" too, rather than a second
+    "Polyn 2". Spelled as the first go spelled it, as _songs_of spells it.
+    """
+    key = song.casefold()
+    spelled, highest = song, 0
+    for take in takes:
+        name = (take.get("name") or "").strip()
+        base = _song_of(name)
+        if base is None or base.casefold() != key:
+            continue
+        if not highest:
+            spelled = base
+        attempt = _ATTEMPT_NUMBER.match(name)
+        number = int(attempt.group(2)) if attempt and attempt.group(1).strip() else 1
+        highest = max(highest, number)
+    return f"{spelled} {highest + 1}" if highest else song
+
+
 def _last_attempt(takes, next_name):
     """
     How long the latest go at the song `next_name` is another go at ran, as
@@ -1341,9 +1363,15 @@ class Api:
         comes next — which is what the rehearsal screen shows before recording.
         Right after a take it must be passed, otherwise the very first take
         would be offered as "Take 2".
+
+        A name chosen for the next take on the rehearsal screen comes before
+        all of that (see set_next_take_name).
         """
         if self._session is None:
             return "Take 1"
+        chosen = self._session.get("next_name")
+        if chosen:
+            return chosen
         takes = self._session_takes()
         number = (
             take_number
@@ -1361,6 +1389,58 @@ class Api:
         if match:
             return f"{match.group(1)} {int(match.group(2)) + 1}"
         return f"{last} 2"
+
+    def set_next_take_name(self, name):
+        """
+        Names the take recorded next, picked on the rehearsal screen before
+        it is: the band has moved on to another song, and the recording
+        screen should already say which, and the review screen have nothing
+        to retype. Blank goes back to the name it would have had anyway.
+
+        It holds until a take is kept, not merely recorded: a take thrown
+        away is usually played again straight after, as the same song.
+        """
+        if self._session is None:
+            return {"ok": False, "error": "No rehearsal in progress"}
+        self._session["next_name"] = (name or "").strip() or None
+        return {"ok": True, "next_take_name": self.suggest_take_name()}
+
+    def song_choices(self, folder=None, take_number=None):
+        """
+        The songs a take can be named after, so that nobody types a title the
+        band has played before: {"here": [...], "other": [...]}, each
+        {"song", "name"}. "name" is what the take would be called — the next
+        go at the song in this rehearsal, "Polyn 3", or just the song where
+        it has not been played here.
+
+        "here" is what this rehearsal played, in the order it first played
+        it. "other" is every other song in the library, the most recently
+        played first; the interface shows as many as it has room for.
+
+        `folder` is the rehearsal, the one in progress when left out.
+        `take_number` is the take being named, which is not counted as a go:
+        "Polyn 2" renamed to Polyn stays Polyn 2.
+        """
+        if folder is None:
+            folder = self._session["folder"] if self._session else None
+        rehearsal = self._lib.rehearsal(Path(folder)) if folder else None
+        takes = rehearsal["takes"] if rehearsal else []
+        others = [t for t in takes if t.get("take_number") != take_number]
+
+        here = [{"song": s["name"], "name": _next_go(others, s["name"])}
+                for s in _songs_of(takes)]
+        seen = {c["song"].casefold() for c in here}
+        other = []
+        # Newest first, so the first spelling met is the latest one used.
+        for r in self._lib.rehearsals():
+            if folder and Path(r["folder"]) == Path(folder):
+                continue
+            for s in _songs_of(r["takes"]):
+                key = s["name"].casefold()
+                if key not in seen:
+                    seen.add(key)
+                    other.append({"song": s["name"], "name": s["name"]})
+        return {"here": here, "other": other}
 
     def finish_rehearsal(self):
         if self._session is None:
@@ -1576,6 +1656,10 @@ class Api:
         kept = self._add_moved_take(s["folder"], take_info, undo, take_dir)
         if kept is None:
             return {"ok": False, "error": "Rehearsal not found"}
+        # The name picked for this take is used up; the next one follows on
+        # from it. A draft rescued from an earlier take leaves it alone.
+        if take_number == s["take_counter"]:
+            s.pop("next_name", None)
 
         shutil.rmtree(temp_dir, ignore_errors=True)
         self._cleanup_drafts_dir(temp_dir)

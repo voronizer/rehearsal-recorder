@@ -20,6 +20,7 @@ const clock = () => performance.now() / 1000;
 let P = null;                 // player state, mirroring audio/player.py
 let session = null;
 let takeCounter = 0;
+let nextName = null;            // api.set_next_take_name, until a take is kept
 let drafts = window.__DRAFTS__ || [];
 let cloudDir = window.__CLOUD_DIR__ || null;
 let cloudFormat = window.__CLOUD_FORMAT__ || 'wav';
@@ -113,6 +114,7 @@ function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = c
 // Mirrors api.suggest_take_name: n is the take being named, left out it means
 // the one that comes next.
 function suggestName(n) {
+  if (session && nextName) return nextName;
   const number = n === undefined ? takeCounter + 1 : n;
   if (!session || session.takes.length === 0) return 'Take ' + number;
   const last = session.takes[session.takes.length - 1].name;
@@ -200,6 +202,26 @@ function pastRehearsal(folder) {
 
 // And api._last_attempt: how long the latest go at the song the next take
 // is named for ran, under the name songsOf gives that song.
+// And api._next_go: the song itself the first time, then one past the
+// highest number any go at it carries.
+function nextGo(takes, song) {
+  let highest = 0, spelled = song;
+  for (const t of takes) {
+    const name = (t.name || '').trim();
+    if (!name || /^Take \d+$/.test(name)) continue;
+    const m = /^(.*?)\s+(\d+)$/.exec(name);
+    const base = m ? m[1] : name;
+    if (base.toLowerCase() !== song.toLowerCase()) continue;
+    if (!highest) spelled = base;
+    highest = Math.max(highest, m ? Number(m[2]) : 1);
+  }
+  return highest ? `${spelled} ${highest + 1}` : song;
+}
+
+// The rest of the band's repertoire, as other rehearsals in the library
+// played it, the latest first.
+const REPERTOIRE = ['Polyn', 'Vesna', 'Ogon', 'Sonce', 'Dym', 'Ptaha', 'Doroga'];
+
 function lastAttempt(takes, nextName) {
   const songOf = (n) => {
     n = (n || '').trim();
@@ -335,6 +357,7 @@ window.__MAKE_API__ = () => ({
     session = {name, folder:'/rec/' + name, takes:[],
                tracks: window.__SESSION_TRACKS__ || [{name:'Guitar',channel:1},{name:'Vocals',channel:2}]};
     takeCounter = 0;
+    nextName = null;
     return {ok:true, folder:session.folder};
   }),
   session_state: async () => {
@@ -361,6 +384,23 @@ window.__MAKE_API__ = () => ({
   }),
 
   start_take: track('start_take', async () => { takeCounter += 1; return {ok:true, take_number:takeCounter}; }),
+  set_next_take_name: track('set_next_take_name', async (name) => {
+    if (!session) return {ok:false, error:'No rehearsal in progress'};
+    nextName = (name || '').trim() || null;
+    return {ok:true, next_take_name:suggestName()};
+  }),
+  // api.song_choices: the songs of the rehearsal (the live one with no
+  // folder), each as the next go at it, and the rest of the repertoire.
+  song_choices: track('song_choices', async (folder, n) => {
+    const takes = !folder || (session && folder === session.folder)
+      ? (session ? session.takes : []) : pastRehearsal(folder).takes;
+    const others = takes.filter(t => t.take_number !== n);
+    const here = songsOf(takes).map(s => ({song:s.name, name:nextGo(others, s.name)}));
+    const seen = new Set(here.map(c => c.song.toLowerCase()));
+    const other = REPERTOIRE.filter(song => !seen.has(song.toLowerCase()))
+      .map(song => ({song, name:song}));
+    return {here, other};
+  }),
   // One input pinned at the top and one silent, unless a test plays its own.
   // Counted, so a test can wait for the page to have asked again.
   get_levels: async () => {
@@ -374,6 +414,7 @@ window.__MAKE_API__ = () => ({
     const take = {take_number:n, name:name || ('Take ' + n), duration_sec:dur,
                   tracks, markers: markers || []};
     session.takes.push(take);
+    if (n === takeCounter) nextName = null;
     cloudQueue = {...cloudQueue, [n]: 'queued'};
     return {ok:true, take};
   }),

@@ -29,6 +29,9 @@ UI_DIST = PROJECT / "ui" / "dist"
 # The faked Python side the interface's tests run against, which the band
 # below is laid over.
 MOCK = (PROJECT / "ui" / "e2e" / "fake-bridge.js").read_text(encoding="utf-8")
+# The pictures show Windows, paths and all, whatever machine takes them: on a
+# Mac the interface would write ⌘ for Ctrl, and zoom only with ⌘ held.
+MOCK = "Object.defineProperty(Navigator.prototype, 'platform', {get: () => 'Win32'});\n" + MOCK
 
 
 def drag_region(page, from_ratio, to_ratio):

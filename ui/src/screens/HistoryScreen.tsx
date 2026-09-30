@@ -10,6 +10,8 @@ import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
+import { SongChips } from "@/components/SongChips"
+import { useSongChoices } from "@/hooks/useSongChoices"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
@@ -89,6 +91,11 @@ export function HistoryScreen({
   const [busy, setBusy] = useState(false)
   const [takeToDelete, setTakeToDelete] = useState<Take | null>(null)
   const [takeToRename, setTakeToRename] = useState<Take | null>(null)
+  const renameChoices = useSongChoices(
+    takeToRename !== null,
+    opened?.folder,
+    takeToRename?.take_number
+  )
   const [takeToShare, setTakeToShare] = useState<Take | null>(null)
   const [markerEdit, setMarkerEdit] = useState<{
     take: Take
@@ -394,6 +401,14 @@ export function HistoryScreen({
         title="Rename take"
         label="The folder on disk is renamed too."
         initialValue={takeToRename?.name ?? ""}
+        below={(value, fill) => (
+          <SongChips
+            choices={renameChoices}
+            value={value}
+            initial={takeToRename?.name ?? ""}
+            onPick={fill}
+          />
+        )}
         onSubmit={(name) => {
           if (takeToRename) void renameTake(takeToRename, name)
           setTakeToRename(null)

@@ -7,6 +7,16 @@ opening.
 
 ## Unreleased
 
+- **Songs you have played are a click away when naming a take.** Under the
+  name on the review screen, and in the Rename take dialog, are this
+  rehearsal's songs and then the rest of the band's, the most recently
+  played first. Each gives the take its next number, so with "Polyn" and
+  "Polyn 2" recorded it names it "Polyn 3". Typing narrows the list.
+- **Name the next take before playing it.** Above **Record take** is the
+  name the next take will get. Click it to pick another song when the band
+  moves on, and the take is recorded under that name, with the recording
+  screen timing it against that song's last go. A discarded take leaves the
+  name for the next go.
 - **Last time, on the setup screen.** Beside the tracks is the rehearsal
   before this one, song by song: how many goes each song got and how long
   they ran, with the notes left while listening. ▶ on a song plays its last

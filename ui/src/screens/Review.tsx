@@ -10,6 +10,8 @@ import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { SongChips } from "@/components/SongChips"
+import { useSongChoices } from "@/hooks/useSongChoices"
 import { canBePutBack, goesTo } from "@/lib/deletion"
 import {
   api,
@@ -48,9 +50,10 @@ export function Review({
 }) {
   // A new take is usually another go at the same song, so the name carries
   // over from the previous one with the counter bumped.
-  const [name, setName] = useState(
-    take.suggested_name ?? `Take ${take.take_number}`
-  )
+  const firstName = take.suggested_name ?? `Take ${take.take_number}`
+  const [name, setName] = useState(firstName)
+  // And when the band has moved on, the song they moved to is a click.
+  const songChoices = useSongChoices(true, null, take.take_number)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const player = useMultitrackPlayer(take.tracks, take.duration_sec)
@@ -270,6 +273,13 @@ export function Review({
             onChange={(e) => setName(e.target.value)}
             placeholder="A song title, for example"
             className="h-11 text-base"
+          />
+          <SongChips
+            choices={songChoices}
+            value={name}
+            initial={firstName}
+            onPick={setName}
+            className="mt-1"
           />
         </div>
 

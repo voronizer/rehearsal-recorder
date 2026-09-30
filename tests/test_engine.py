@@ -827,6 +827,41 @@ def main():
     keep(2, a.suggest_take_name())
     ok("the counter keeps climbing", a.suggest_take_name() == "Polyn 3")
 
+    # The band moves on to another song, and says so on the rehearsal screen
+    # before the take rather than retyping it after.
+    ok("a name picked for the next take is the one it gets",
+       a.set_next_take_name(" Vesna ")["next_take_name"] == "Vesna"
+       and a.session_state()["next_take_name"] == "Vesna")
+    a._session["take_counter"] = 3
+    ok("the review screen is offered it for the take just recorded",
+       a.suggest_take_name(3) == "Vesna")
+    a._session["take_counter"] = 2
+    ok("a take thrown away leaves it for the next go", a.suggest_take_name() == "Vesna")
+    keep(3, "Vesna")
+    ok("a kept take uses it up, and the next follows on from it",
+       a.suggest_take_name() == "Vesna 2")
+    a.set_next_take_name("Ogon")
+    a.set_next_take_name("  ")
+    ok("blank goes back to the name it would have had", a.suggest_take_name() == "Vesna 2")
+    a.set_next_take_name("Ogon")
+    d = folder / "_drafts" / "take 4"
+    write_wav(d / "Gtr.wav", 100, seconds=1.0)
+    a._session["take_counter"] = 5
+    a.keep_take(4, str(d), "Rescued", 1.0, [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
+    ok("a draft rescued from an earlier take leaves it alone",
+       a.suggest_take_name() == "Ogon")
+    a.set_next_take_name("")
+
+    # Naming a take offers the songs already played, as the name it would get.
+    ok("the songs of the rehearsal in progress, as the next go at each",
+       a.song_choices()["here"] == [{"song": "Polyn", "name": "Polyn 3"},
+                                    {"song": "Vesna", "name": "Vesna 2"},
+                                    {"song": "Rescued", "name": "Rescued 2"}])
+    ok("the take being renamed is not a go of its own",
+       a.song_choices(str(folder), 2)["here"][0] == {"song": "Polyn", "name": "Polyn 2"})
+    ok("nothing to name after with no rehearsal and no library",
+       fresh_api(tmp / "nothing")[1].song_choices() == {"here": [], "other": []})
+
     print("\n[8b] A take can arrive with marks already on it")
     # Marks made on the review screen, before the take had a folder, travel
     # with keep_take rather than being written as they are placed.
@@ -2108,6 +2143,25 @@ def main():
        and lt["earlier"][0]["take_count"] == 2
        and lt["earlier"][0]["total_duration_sec"] == 305)
     ok("and how many there are in all", lt["count"] == 4)
+
+    # Naming a take in one of them offers the whole repertoire.
+    ch = e.song_choices(last)
+    ok("naming a take offers what its rehearsal played, as the next go at each",
+       ch["here"] == [{"song": "Polyn", "name": "Polyn 4"},
+                      {"song": "Vesna", "name": "Vesna 2"}])
+    ok("and every other song, the most recently played first",
+       ch["other"] == [{"song": "Dym", "name": "Dym"}, {"song": "Ptaha", "name": "Ptaha"},
+                       {"song": "Doroga", "name": "Doroga"}])
+    ok("a go missing in between is not named again",
+       e.song_choices(last, 2)["here"][0]["name"] == "Polyn 4"
+       and e.song_choices(last, 5)["here"][0]["name"] == "Polyn 3")
+    ok("an older rehearsal is offered the songs played after it too",
+       [c["song"] for c in e.song_choices(older)["other"]] == ["Vesna", "Dym", "Ptaha"]
+       and e.song_choices(older)["here"][1] == {"song": "Doroga", "name": "Doroga 3"})
+    ok("with no rehearsal in progress every song is another's",
+       e.song_choices()["here"] == []
+       and [c["song"] for c in e.song_choices()["other"]]
+       == ["Polyn", "Vesna", "Dym", "Ptaha", "Doroga"])
 
     # A folder that has gone is nothing to play from.
     import shutil as _shutil

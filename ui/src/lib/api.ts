@@ -200,6 +200,14 @@ export type RehearsalDetail = {
   missing?: boolean
 }
 
+/** A song a take can be named after, and what naming it so would call the
+ *  take: "Polyn 3" where the rehearsal has had two goes at Polyn. */
+export type SongChoice = { song: string; name: string }
+
+/** The songs a take can be named after (api.song_choices): what its own
+ *  rehearsal played, in order, and every other, the most recent first. */
+export type SongChoices = { here: SongChoice[]; other: SongChoice[] }
+
 /**
  * What the setup screen says about the rehearsals before this one
  * (api.last_time): the last one song by song, the songs it left out, and
@@ -501,6 +509,9 @@ type PyApi = {
   >
 
   start_take(): Promise<Ok<{ take_number?: number }>>
+  /** Names the take recorded next; blank goes back to the name it would
+   *  have had. Holds until a take is kept. */
+  set_next_take_name(name: string): Promise<Ok<{ next_take_name?: string }>>
   get_levels(): Promise<Record<string, number>>
   stop_take(): Promise<PendingTake | { ok: false; error: string }>
   keep_take(
@@ -542,6 +553,10 @@ type PyApi = {
   list_rehearsals(): Promise<RehearsalSummary[]>
   get_rehearsal(folder: string): Promise<RehearsalDetail>
   last_time(): Promise<LastTime>
+  /** The songs a take of `folder` can be named after, `takeNumber` being
+   *  the take named, which does not count as a go. With no folder, the
+   *  rehearsal in progress. */
+  song_choices(folder?: string | null, takeNumber?: number | null): Promise<SongChoices>
   /** Takes a rehearsal whose folder is gone out of history. Nothing on disk
    *  is touched — there is nothing left to touch. */
   forget_rehearsal(folder: string): Promise<Ok>

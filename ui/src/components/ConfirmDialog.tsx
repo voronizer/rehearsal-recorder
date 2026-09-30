@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useId, useState, type ReactNode } from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -77,6 +77,7 @@ export function PromptDialog({
   initialValue,
   confirmLabel = "Rename",
   onSubmit,
+  below,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -85,8 +86,18 @@ export function PromptDialog({
   initialValue: string
   confirmLabel?: string
   onSubmit: (value: string) => void
+  /** Under the field: what can be put in it without typing, given what it
+   *  holds and a way to fill it that leaves the keyboard in the field. */
+  below?: (value: string, fill: (value: string) => void) => ReactNode
 }) {
   const [value, setValue] = useState(initialValue)
+  // Found by id when filled, so that Enter confirms what was put in it
+  // even after a click that reached it from the keyboard.
+  const inputId = useId()
+  const fill = (v: string) => {
+    setValue(v)
+    document.getElementById(inputId)?.focus()
+  }
 
   useEffect(() => {
     if (open) setValue(initialValue)
@@ -112,6 +123,7 @@ export function PromptDialog({
               <span className="text-xs text-muted-foreground">{label}</span>
             )}
             <Input
+              id={inputId}
               autoFocus
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -122,6 +134,7 @@ export function PromptDialog({
                 }
               }}
             />
+            {below && <div className="mt-2">{below(value, fill)}</div>}
           </div>
           <div className="mt-6 flex justify-end gap-3">
             <DialogPrimitive.Close asChild>

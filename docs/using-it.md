@@ -104,6 +104,12 @@ stopped short stands out before you read anything.
 Press **Record take**, or Space, to start recording. **Finish** ends the
 rehearsal.
 
+Above the button is the name the next take will get: **Next take: Polyn 3**.
+When you move on to another song, click it and pick the song, or type a new
+name and press Enter. The take is then recorded under that name, and the
+recording screen can say how long the last go at that song took. If you
+discard the take, the next one keeps the name you picked.
+
 ### While recording
 
 ![Recording: a big clock, how long the last go at this song took, and a tile for each track](screenshots/recording.png)
@@ -147,7 +153,9 @@ goes to the Trash. Pressing Esc also discards it, but asks first. If you are
 typing the name, the first Esc only leaves the name field.
 
 The name is filled in for you. After a take called "Polyn", the next one is
-called "Polyn 2". See [Names and songs](#names-and-songs).
+called "Polyn 2". Under the name are the songs you have played: this
+rehearsal's first, then the others, most recent first. Click one to name the
+take after it, then press Space to save. See [Names and songs](#names-and-songs).
 
 If you have a cloud folder, a checkbox above the buttons shows whether this
 take will be sent there. Changing it affects this take only.
@@ -238,6 +246,11 @@ the first take of each song.
 The app uses these names to show what a rehearsal was spent on: "Verse riff
 3" counts as the third go at "Verse riff". Takes you never named keep names
 like "Take 4" and are not counted as a song.
+
+Wherever you name a take, the songs you have already played are listed under
+the name, so you do not have to type them again. A song played in this
+rehearsal comes with the next number: with "Polyn" and "Polyn 2" already
+recorded, it gives "Polyn 3". Typing narrows the list to the songs that match.
 
 To rename a take or a rehearsal later, use the pencil button on the rehearsal
 screen or in History. The folder on disk is renamed too, and a rehearsal

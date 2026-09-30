@@ -10,6 +10,9 @@ import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
+import { SongChips } from "@/components/SongChips"
+import { useSongChoices } from "@/hooks/useSongChoices"
+import { NextTakeName } from "@/components/NextTakeName"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
@@ -61,6 +64,11 @@ export function Rehearsal({
   const [error, setError] = useState<string | null>(null)
   const [toDelete, setToDelete] = useState<Take | null>(null)
   const [toRename, setToRename] = useState<Take | null>(null)
+  const renameChoices = useSongChoices(
+    toRename !== null,
+    session.folder,
+    toRename?.take_number
+  )
   const [toShare, setToShare] = useState<Take | null>(null)
   const [markerEdit, setMarkerEdit] = useState<{
     take: Take
@@ -81,6 +89,13 @@ export function Rehearsal({
       return
     }
     onStartTake(res.take_number, session.next_take_name)
+  }
+
+  const nameNextTake = async (name: string) => {
+    setError(null)
+    const res = await api().set_next_take_name(name)
+    if (!res.ok) setError(res.error ?? "Could not name the next take")
+    onChanged()
   }
 
   // With a take in hand, Space plays it back rather than starting a new one;
@@ -235,6 +250,10 @@ export function Rehearsal({
       footer={
         <div className="flex flex-col items-center gap-3">
           {error && <p className="text-sm text-destructive">{error}</p>}
+          <NextTakeName
+            name={session.next_take_name}
+            onChoose={(name) => void nameNextTake(name)}
+          />
           <div className="flex items-center gap-3">
             {/* Escape finishes only with no take in hand; with one, it puts
                 the take away — see useEscape above. */}
@@ -362,6 +381,14 @@ export function Rehearsal({
         title="Rename take"
         label="The folder on disk is renamed too."
         initialValue={toRename?.name ?? ""}
+        below={(value, fill) => (
+          <SongChips
+            choices={renameChoices}
+            value={value}
+            initial={toRename?.name ?? ""}
+            onPick={fill}
+          />
+        )}
         onSubmit={(name) => {
           if (toRename) void renameTake(toRename, name)
           setToRename(null)
