@@ -2708,6 +2708,39 @@ def main():
         eve.keyboard.press("Escape")
         eve.wait_for_selector("[aria-label='Rehearsal overview']")
 
+        # The whole row opens its take, not only the bar drawn to its length:
+        # a short take's bar is a small thing to aim at, and the row lights up
+        # under the mouse all the way across.
+        def open_from(what, where):
+            try:
+                eve.mouse.click(*where())
+                eve.wait_for_selector("[aria-label='Take timeline']", timeout=4000)
+            except Exception:
+                pass
+            ok(f"a click {what} opens its take",
+               "Take 3" in (text_of(eve.locator("button[aria-current='true']")) or ""))
+            if eve.locator("[aria-label='Rehearsal overview']").count() == 0:
+                eve.keyboard.press("Escape")
+                eve.wait_for_selector("[aria-label='Rehearsal overview']")
+
+        def centre(selector):
+            box = eve.locator(selector).first.bounding_box()
+            return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+        def past_the_bar():
+            # Beside the actions, where a short take's row is empty.
+            box = eve.evaluate("""() => {
+              const row = document.querySelector("[data-take='3'] > div");
+              const actions = row.lastElementChild.getBoundingClientRect();
+              const r = row.getBoundingClientRect();
+              return {x: actions.left - 6, y: r.top + r.height / 2};
+            }""")
+            return box["x"], box["y"]
+
+        open_from("on the empty part of a row, past its bar", past_the_bar)
+        open_from("on a take's length", lambda: centre(
+            "[data-take='3'] > div span.tnum.shrink-0"))
+
         print("\n[12f2] A take plays from its row in the overview")
         def eve_calls(name):
             return eve.evaluate(

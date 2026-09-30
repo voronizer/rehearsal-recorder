@@ -74,8 +74,8 @@ stopped short stands out before you read anything.
 
 - **Play** at the start of a row plays the take right there. Space pauses
   and continues it, and Esc stops it.
-- Click the bar to open the take in the player. If it is playing, it goes
-  on playing from the same place.
+- Click anywhere on a take's row, the bar or past it, to open the take in
+  the player. If it is playing, it goes on playing from the same place.
 - Click a note to open its take at that spot.
 - Point at a row to rename the take, send it to the cloud or delete it.
 

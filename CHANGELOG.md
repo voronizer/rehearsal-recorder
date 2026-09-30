@@ -5,6 +5,16 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **A take's whole row opens it** in a rehearsal's list of takes, not only
+  its bar. The bar is drawn to the take's length, so a short take's bar was
+  a small thing to aim at, while the row lit up under the mouse all the way
+  across and a click on the rest of it did nothing. The buttons on the row
+  still do their own jobs.
+- **Corners are rounded less**, 6 px rather than 12 for a block, a button 4,
+  a tile on the recording screen 10. Everything looked soft.
+
 ## 0.7.13
 
 - **The player has a Master for the whole take**, under the tracks, as on a

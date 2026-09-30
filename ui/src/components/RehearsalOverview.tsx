@@ -59,8 +59,8 @@ function legendLabel(kind: MarkerKind, n: number): string {
  * was opened again at all: "this one is the take", "guitar drifts here".
  *
  * Play on a row plays the take right here, with no player on screen: the bar
- * fills as it goes. The bar opens the take in the player, and a take that is
- * playing carries on there from where it was. A note opens its take at the
+ * fills as it goes. The bar, or anywhere else on its row, opens the take in
+ * the player, and a take that is playing carries on there from where it was. A note opens its take at the
  * spot it was left. Rename, the cloud and Delete show on the row under the
  * mouse, the same three the strip offers for an open take.
  *
@@ -234,9 +234,16 @@ function TakeRow({
 
   return (
     <div data-take={take.take_number} className="flex flex-col gap-0.5">
+      {/* The whole row opens the take, as its bar does: a short take's bar
+          is a small thing to aim at, and the row lights up under the mouse
+          all the way across. The buttons on it keep their own jobs. The bar
+          stays the one to reach with Tab. */}
       <div
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest("button")) onOpen(take)
+        }}
         className={cn(
-          "group -mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-[10px] px-2 py-1 transition-colors",
+          "group -mx-2 grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1 transition-colors",
           "hover:bg-accent/60 focus-within:bg-accent/60",
           here && "bg-accent/60"
         )}
