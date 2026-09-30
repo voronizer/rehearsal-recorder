@@ -47,6 +47,8 @@ opening.
   read as clearing that part of the take. **Crop** is under them. **Repeat** in the player's
   row has moved next to the time, with the playing, and **Mark** to the end
   of the row.
+- Run from source on macOS, the app has its own icon in the Dock rather
+  than Python's, as it already had on the Windows taskbar.
 
 ## 0.7.13
 

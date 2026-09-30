@@ -87,16 +87,18 @@ def window_icon(system=sys.platform, frozen=None):
     """
     The icon to give the window, or None to leave it to the toolkit.
 
-    A built app needs none: the window takes its .exe's icon, which the build
-    set. Run from source on Windows, the program is python.exe, so without
-    this the taskbar shows the Python logo; the .ico beside the build spec is
-    the app's own. Elsewhere the toolkit does not use what it is given here.
+    A built app needs none: it takes the icon of its .exe or .app, which the
+    build set. Run from source, the program is Python, so without this the
+    Windows taskbar and the macOS Dock show the Python logo; the .ico and the
+    .icns beside the build spec are the app's own. Elsewhere the toolkit does
+    not use what it is given here.
     """
     if frozen is None:
         frozen = bool(getattr(sys, "_MEIPASS", None))
-    if system != "win32" or frozen:
+    name = {"win32": "icon.ico", "darwin": "icon.icns"}.get(system)
+    if name is None or frozen:
         return None
-    icon = _SOURCE_ROOT / "packaging" / "icon.ico"
+    icon = _SOURCE_ROOT / "packaging" / name
     return str(icon) if icon.exists() else None
 
 

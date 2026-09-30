@@ -309,8 +309,16 @@ def main():
        and Path(source_icon).exists())
     ok("a built app keeps the icon of its own .exe",
        ps.window_icon("win32", frozen=True) is None)
+    # On macOS the program is Python too, and the Dock showed its rocket;
+    # pywebview sets the Dock's icon from the file it is given.
+    source_icon = ps.window_icon("darwin", frozen=False)
+    ok("from source on macOS the Dock is given the app's icon",
+       source_icon is not None and Path(source_icon) == packaging / "icon.icns"
+       and Path(source_icon).exists())
+    ok("a built Mac app keeps the icon of its own .app",
+       ps.window_icon("darwin", frozen=True) is None)
     ok("and elsewhere nothing is passed that the toolkit would not use",
-       ps.window_icon("darwin", frozen=False) is None)
+       ps.window_icon("linux", frozen=False) is None)
 
     # At 16 px the full drawing's waveform is thinner than a pixel and the
     # icon in a title bar was a red smudge, so the small sizes have a drawing
