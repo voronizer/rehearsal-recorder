@@ -250,7 +250,8 @@ def main():
     from rehearsal_recorder.platform_support import claim_taskbar_identity, window_icon
 
     # Before the window exists: the taskbar decides whose icon to show when
-    # the window first appears.
+    # the window first appears, and the Dock takes the app's name when Cocoa
+    # starts.
     claim_taskbar_identity()
 
     keep_open = _arm_crash_log()  # noqa: F841 — the file must outlive main()

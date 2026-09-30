@@ -56,9 +56,12 @@ def app_root():
 
 # Who the app is to the Windows taskbar, when it is not an .exe of its own.
 APP_ID = "Voronizer.RehearsalRecorder"
+# And what the Dock and the menu bar call it on macOS, when it is not an .app
+# of its own.
+APP_NAME = "Rehearsal Recorder"
 
 
-def claim_taskbar_identity(system=sys.platform, frozen=None, shell32=None):
+def claim_taskbar_identity(system=sys.platform, frozen=None, shell32=None, info=None):
     """
     Run from source, the program is python.exe, and the taskbar groups the
     window under it with Python's icon, whatever the window's own icon says.
@@ -66,21 +69,34 @@ def claim_taskbar_identity(system=sys.platform, frozen=None, shell32=None):
     window's icon. Before any window is made, or the taskbar has already
     decided. A built app is its own .exe with its own icon already, and
     giving it an id would part it from a pinned shortcut to it.
+
+    On macOS the program is Python.app, and the Dock and the menu bar call
+    the app Python. They take the name from its Info.plist as it stands when
+    Cocoa starts, and until then the copy in memory can still be changed.
+    A built .app has the name in an Info.plist of its own.
     """
     if frozen is None:
         frozen = bool(getattr(sys, "_MEIPASS", None))
-    if system != "win32" or frozen:
+    if frozen:
         return None
     try:
-        if shell32 is None:
-            import ctypes
+        if system == "win32":
+            if shell32 is None:
+                import ctypes
 
-            shell32 = ctypes.windll.shell32
-        shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
-        return APP_ID
-    except Exception as e:  # noqa: BLE001 — a Python icon is no reason not to start
+                shell32 = ctypes.windll.shell32
+            shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+            return APP_ID
+        if system == "darwin":
+            if info is None:
+                from Foundation import NSBundle
+
+                info = NSBundle.mainBundle().infoDictionary()
+            info["CFBundleName"] = APP_NAME
+            return APP_NAME
+    except Exception as e:  # noqa: BLE001 — Python's name is no reason not to start
         print(f"[taskbar] {e}")
-        return None
+    return None
 
 
 def window_icon(system=sys.platform, frozen=None):

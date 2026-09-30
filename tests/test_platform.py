@@ -352,8 +352,20 @@ def main():
     ps.claim_taskbar_identity("win32", frozen=True, shell32=built)
     ok("a built app is its own .exe already, and a pinned one keeps working",
        built.said == [])
+
+    # On macOS the program is Python.app, and the Dock and the menu bar
+    # called the app Python: they read the name from its Info.plist, which
+    # can be changed in memory before Cocoa starts.
+    info = {"CFBundleName": "Python"}
+    ps.claim_taskbar_identity("darwin", frozen=False, info=info)
+    ok("from source on macOS the Dock and the menu bar are given the app's name",
+       info["CFBundleName"] == ps.APP_NAME == "Rehearsal Recorder")
+    built_info = {"CFBundleName": "Rehearsal Recorder"}
+    ps.claim_taskbar_identity("darwin", frozen=True, info=built_info)
+    ok("a built .app keeps the name in its own Info.plist",
+       built_info == {"CFBundleName": "Rehearsal Recorder"})
     ok("and elsewhere there is no such thing to say",
-       ps.claim_taskbar_identity("darwin", frozen=False, shell32=Shell32()) is None)
+       ps.claim_taskbar_identity("linux", frozen=False, shell32=Shell32(), info={}) is None)
 
     index = (PROJECT / "ui" / "index.html").read_text(encoding="utf-8")
     favicon = PROJECT / "ui" / "public" / "favicon.svg"
