@@ -14,10 +14,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DevicePicker } from "@/components/DevicePicker"
 import { OutputChannels } from "@/components/OutputChannels"
+import { NewDot } from "@/components/NewDot"
 import { UnderTheHood } from "@/components/UnderTheHood"
 import { Shell } from "@/components/Shell"
 import { useEscape } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
+import { useUpdate } from "@/lib/update"
 import { SCALE_OPTIONS, THEME_LABELS, type Theme } from "@/lib/appearance"
 import { describeRescan, notConnected } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
@@ -114,6 +116,10 @@ export function Settings({
   // Six sections in one column was a wall. They are grouped by what a person
   // came here to change, not by the order they happened to be written in.
   const [tab, setTab] = useState<TabId>("audio")
+  // Settings opens on Audio, and the new version is said in Under the hood:
+  // the dot there says which group to look in.
+  const newer = useUpdate().latest !== null
+  const flagged = (id: TabId) => newer && id === "about"
   // Looking for interfaces again. `rescans` counts the times it has been
   // done, so the card is asked for its rates again even when it is the same
   // card at the same place in the list.
@@ -285,6 +291,7 @@ export function Settings({
               type="button"
               onClick={() => setTab(t.id)}
               aria-current={tab === t.id ? "page" : undefined}
+              aria-label={flagged(t.id) ? `${t.label}, a new version is out` : undefined}
               className={cn(
                 "flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors",
                 "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
@@ -295,6 +302,7 @@ export function Settings({
             >
               <span className="shrink-0">{t.icon}</span>
               {t.label}
+              {flagged(t.id) && <NewDot className="ml-auto" />}
             </button>
           ))}
         </nav>
@@ -308,6 +316,7 @@ export function Settings({
                 type="button"
                 onClick={() => setTab(t.id)}
                 aria-current={tab === t.id ? "page" : undefined}
+                aria-label={flagged(t.id) ? `${t.label}, a new version is out` : undefined}
                 className={cn(
                   "shrink-0 rounded-lg px-3 py-1.5 text-sm transition-colors",
                   tab === t.id
@@ -316,6 +325,7 @@ export function Settings({
                 )}
               >
                 {t.label}
+                {flagged(t.id) && <NewDot className="ml-1.5 inline-block align-middle" />}
               </button>
             ))}
           </div>

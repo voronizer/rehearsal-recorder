@@ -568,3 +568,17 @@ open the folder. Your recordings are not affected.
 
 In **Settings → Appearance** you can choose a dark or light theme, or follow
 the system. You can also scale the whole interface from 90% to 150%.
+
+## A new version
+
+When a newer version is out, a dot appears on the gear on the setup screen,
+and another on **Under the hood** in Settings. There, beside the version you
+have, it says which one is out, and **See what's new** opens its page on
+GitHub, where you download it as you did the first time. The dots stay until
+you run the new version.
+
+To find out, the app asks GitHub which version is the latest when it starts,
+and once a day while it stays open. It sends nothing else and downloads
+nothing, and it never asks while a take is recording. With no internet in the
+room it simply does not find out. **Check for new versions** in
+**Settings → Under the hood** switches it off.

@@ -16,6 +16,11 @@ Download the build for your system from
 [Releases](../../releases), unzip, open. Nothing to install — Python, the
 audio libraries and the interface are all inside.
 
+The app tells you when a newer version is out, with a dot on the gear on
+the setup screen. To know, it asks GitHub which version is the latest when it
+starts and once a day, and sends nothing else; **Settings → Under the hood**
+switches that off.
+
 **On Windows, unblock the zip before you unpack it.** Right-click the
 downloaded file, choose **Properties**, tick **Unblock** at the bottom, then
 extract. Windows marks everything that arrives from the internet and passes

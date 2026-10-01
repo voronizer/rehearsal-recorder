@@ -304,6 +304,9 @@ def main():
     )
     # Needed for the native folder picker in Settings.
     api.attach_window(window)
+    # Once the interface is up, not before: nothing about it may hold up a
+    # band waiting to record. See updates.py.
+    window.events.loaded += api.start_update_checks
     try:
         # Returns when the window is closed.
         webview.start(icon=window_icon())

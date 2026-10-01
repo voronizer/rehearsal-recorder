@@ -7,6 +7,15 @@ opening.
 
 ## Unreleased
 
+- **The app says when a newer version is out.** A dot on the gear on the
+  setup screen, another on Under the hood in Settings, and there, beside the
+  version you have, which one is out and a link to it. To know, it asks GitHub
+  which version is the latest when it starts and once a day, sends nothing
+  else, downloads nothing, and never asks while a take records; with no
+  internet it just does not find out. **Check for new versions** in Under the
+  hood switches it off. Fetching and installing the new version itself waits
+  for the builds to be signed (#6).
+
 - **Last time has a panel of its own** on the setup screen, down the side
   and darker than the screen, as History's list is. On the same background
   as the tracks, the two columns ran into one.

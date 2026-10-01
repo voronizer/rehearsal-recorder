@@ -23,10 +23,12 @@ import {
 } from "@/components/ui/select"
 import { IconPicker } from "@/components/IconPicker"
 import { LastTime } from "@/components/LastTime"
+import { NewDot } from "@/components/NewDot"
 import { Kbd, Shell } from "@/components/Shell"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
 import { byFiles, useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { cn } from "@/lib/utils"
+import { useUpdate } from "@/lib/update"
 import { aboutDuration, notConnected } from "@/lib/format"
 import { QUIET_THRESHOLD, fallBack, meterReach } from "@/lib/levels"
 import {
@@ -58,6 +60,7 @@ export function Setup({
   onOpenSettings: () => void
 }) {
   const [devices, setDevices] = useState<Device[]>([])
+  const update = useUpdate()
   // The interface, rate and depth are settings, not per-rehearsal choices —
   // this screen reads them and shows what is in force.
   const [deviceIndex, setDeviceIndex] = useState<number | null>(null)
@@ -385,9 +388,12 @@ export function Setup({
             variant="ghost"
             size="icon"
             onClick={onOpenSettings}
-            aria-label="Settings"
+            aria-label={update.latest ? "Settings, a new version is out" : "Settings"}
+            title={update.latest ? `${update.latest.version} is out` : undefined}
+            className="relative"
           >
             <SettingsIcon />
+            {update.latest && <NewDot />}
           </Button>
         </div>
       }

@@ -72,6 +72,7 @@ from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
 from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder import cloud as cloudmod
 from rehearsal_recorder import layouts
+from rehearsal_recorder import updates
 from rehearsal_recorder.mediaserver import AppServer
 from rehearsal_recorder.store import library as librarymod
 from rehearsal_recorder.store.db import LibraryUnavailable
@@ -435,6 +436,13 @@ class Api:
         self._window = None
 
         self._config = self._read_config()
+        # Whether a newer version is out — see updates.py. Asked only once the
+        # window is up, and never while a take records.
+        self._updates = updates.UpdateChecker(
+            __version__,
+            enabled=lambda: bool(self._config.get("check_updates", True)),
+            busy=lambda: self._recorder is not None,
+        )
         self._recordings_dir = Path(
             self._config.get("recordings_dir") or RECORDINGS_ROOT
         )
@@ -490,6 +498,7 @@ class Api:
         self.stop_monitor()
         self.player_close()
         self._cloud_queue.stop()
+        self._updates.stop()
         if self._library is not None:
             self._library.close()
 
@@ -605,6 +614,7 @@ class Api:
             "cloud_formats": CLOUD_FORMATS_INFO,
             "auto_publish": bool(self._config.get("auto_publish", False)),
             "auto_publish_what": self._config.get("auto_publish_what") or "mix",
+            "check_updates": bool(self._config.get("check_updates", True)),
             "encoder": encoder_available(),
             "encoder_hint": (
                 None if encoder_available() else missing_encoder_hint()
@@ -741,16 +751,47 @@ class Api:
             return reveal_in_file_manager(path.parent)
         return reveal_in_file_manager(path)
 
-    def open_releases(self):
+    def open_releases(self, latest=False):
         """The releases page, in the browser: the window would open it in
-        itself, with no way back."""
+        itself, with no way back. `latest` opens the newest release's own
+        page — a fixed address, never one taken from GitHub's answer."""
         import webbrowser
 
         try:
-            webbrowser.open(RELEASES_URL)
+            webbrowser.open(updates.LATEST_PAGE if latest else RELEASES_URL)
             return {"ok": True}
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)}
+
+    # ---------- a newer version ----------
+
+    def start_update_checks(self):
+        """
+        Starts asking whether a newer version is out, once the window is up.
+        True when it started.
+
+        Only the built app asks. Run from source, the version is a
+        development build's, and the person running it is the one making
+        the releases.
+        """
+        if not getattr(sys, "frozen", False):
+            return False
+        self._updates.start()
+        return True
+
+    def update_status(self):
+        """{"on": ..., "latest": {"version": ...} or None}, polled over the
+        local server like the meters — see mediaserver.POLLABLE."""
+        return self._updates.status()
+
+    def set_check_updates(self, enabled):
+        """The switch in Settings. Switched on, it asks soon rather than
+        tomorrow."""
+        self._config["check_updates"] = bool(enabled)
+        self._write_config()
+        if enabled:
+            self._updates.wake()
+        return {"ok": True, "check_updates": self._config["check_updates"]}
 
     def start_interface_check(self):
         """

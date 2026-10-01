@@ -19,6 +19,7 @@ import {
 import { formatBytes } from "@/lib/format"
 import { QUIET_THRESHOLD } from "@/lib/levels"
 import { cn } from "@/lib/utils"
+import { switchUpdates, useUpdate } from "@/lib/update"
 
 // How often a running check is asked how far it has got.
 const CHECK_POLL_MS = 400
@@ -112,6 +113,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
  */
 export function UnderTheHood() {
   const [hood, setHood] = useState<Hood | null>(null)
+  const update = useUpdate()
 
   useEffect(() => {
     let alive = true
@@ -152,8 +154,43 @@ export function UnderTheHood() {
               Releases on GitHub
             </Button>
           </div>
+          {update.latest && (
+            <div className="mt-1 text-sm">
+              <span className="font-medium text-primary">
+                <span className="tnum">{update.latest.version}</span> is out
+              </span>
+              {" · "}
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => void api().open_releases(true)}
+              >
+                See what's new
+              </Button>
+            </div>
+          )}
         </div>
         <CopyReport label="Copy details for a bug report" />
+        {/* The one thing the app sends anywhere, said where it is switched
+            off. See updates.py. */}
+        <div className="flex basis-full items-start gap-3 border-t pt-3">
+          <input
+            id="check-updates"
+            type="checkbox"
+            className="mt-1 size-4"
+            checked={update.on}
+            onChange={(e) => void switchUpdates(e.target.checked)}
+          />
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="check-updates">Check for new versions</Label>
+            <p className="text-xs text-muted-foreground">
+              When the app starts, and once a day while it stays open, it asks
+              GitHub which version is the latest. It sends nothing else and
+              downloads nothing.
+              {hood.running_as !== "built" && " Run from source, it does not ask."}
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="flex flex-col gap-3">

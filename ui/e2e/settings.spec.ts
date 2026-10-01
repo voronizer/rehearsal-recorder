@@ -365,3 +365,50 @@ test.describe("on a machine shaped like Windows", () => {
     await expect(page.getByText("soundfile package is missing")).toHaveCount(1)
   })
 })
+
+test.describe("a newer version", () => {
+  // Asked of GitHub by Python, at start and once a day (updates.py). Said
+  // beside the version in Under the hood, with a dot on the way there: the
+  // gear, then the group, since Settings opens on Audio.
+  test.use({ viewport: { width: 1180, height: 900 } })
+
+  test("is said beside the version, with a dot on the way there", async ({ page }) => {
+    await openApp(page, { before: "window.__LATEST__ = {version: '0.3.0'};" })
+    const gear = page.getByRole("button", { name: /^Settings/ })
+    await expect(gear).toHaveAccessibleName("Settings, a new version is out")
+    await gear.click()
+    const hood = page.getByRole("button", { name: /^Under the hood/ }).first()
+    await expect(hood).toHaveAccessibleName("Under the hood, a new version is out")
+    await hood.click()
+    const about = page.locator("[aria-label='About this copy']")
+    await expect(about).toContainText("0.3.0 is out")
+    // The newest release's own page, in the browser.
+    await page.getByRole("button", { name: "See what's new" }).click()
+    await expect
+      .poll(async () => (await calls(page, "open_releases")).map((c) => c.args))
+      .toEqual([[true]])
+
+    // Switched off, nothing is said, and the dot goes with it.
+    const box = page.getByRole("checkbox", { name: "Check for new versions" })
+    await expect(box).toBeChecked()
+    await box.uncheck()
+    await expect
+      .poll(async () => (await calls(page, "set_check_updates")).map((c) => c.args))
+      .toEqual([[false]])
+    await expect(about).not.toContainText("is out")
+    await expect(hood).toHaveAccessibleName("Under the hood")
+    await box.check()
+    await expect(about).toContainText("0.3.0 is out")
+  })
+
+  test("with none newer, there is no dot and nothing is said", async ({ page }) => {
+    await openApp(page)
+    await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible()
+    await page.getByRole("button", { name: "Settings" }).click()
+    await group(page, "Under the hood").click()
+    const about = page.locator("[aria-label='About this copy']")
+    await expect(about).toBeVisible()
+    await expect(about).not.toContainText("is out")
+    await expect(page.getByRole("checkbox", { name: "Check for new versions" })).toBeChecked()
+  })
+})

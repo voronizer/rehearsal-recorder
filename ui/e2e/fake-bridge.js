@@ -678,7 +678,17 @@ window.__MAKE_API__ = () => ({
   bug_report: track('bug_report', async () => ({ok:true,
     text:'Rehearsal Recorder 0.2.0, run from source\nWindows 11 Pro 10.0.26200, x64\n'})),
   show_file: track('show_file', async () => ({ok:true})),
-  open_releases: track('open_releases', async () => ({ok:true})),
+  open_releases: track('open_releases', async (_latest) => ({ok:true})),
+  // What updates.py found: __LATEST__ is the newer release a test says is
+  // out, and nothing is said while checking is switched off.
+  update_status: track('update_status', async () => {
+    const on = readCfg().check_updates ?? true;
+    return {on, latest: on ? (window.__LATEST__ || null) : null};
+  }),
+  set_check_updates: track('set_check_updates', async (on) => {
+    writeCfg({...readCfg(), check_updates: !!on});
+    return {ok:true, check_updates: !!on};
+  }),
   start_interface_check: track('start_interface_check', async () => {
     const result = window.__CHECK_RESULT__ || 'works';
     const works = result !== 'no_sound';

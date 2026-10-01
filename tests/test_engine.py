@@ -5276,6 +5276,123 @@ def main():
     finally:
         _DEVICES[0] = real_interface
 
+    print("\n[49] Saying that a newer version is out")
+    from rehearsal_recorder import updates as U
+    from rehearsal_recorder.mediaserver import POLLABLE
+
+    ok("a release is newer than the one before it", U.newer("0.8.0", "0.8.1"))
+    ok("and than one with a lower minor", U.newer("0.7.13", "0.8.0"))
+    ok("but not newer than itself", not U.newer("0.8.0", "0.8.0"))
+    ok("nor than one we are already past", not U.newer("0.8.2", "0.8.1"))
+    ok("the numbers are compared as numbers, not as text",
+       U.newer("0.8.9", "0.8.10") and not U.newer("0.8.10", "0.8.9"))
+    ok("a tag with a v in front reads the same", U.newer("0.8.0", "v0.8.1"))
+    # setuptools-scm names a build between releases after the release to
+    # come: 0.8.1.dev32+g7663602 is on its way to 0.8.1, past 0.8.0.
+    ok("a development build after a release is not out of date",
+       not U.newer("0.8.1.dev32+g7663602", "0.8.0"))
+    ok("nor is one of the version that has just come out",
+       not U.newer("0.8.1.dev3+gabc1234", "0.8.1"))
+    ok("and a version that cannot be read is never told it is out of date",
+       not U.newer("unknown", "0.8.1") and not U.newer("0.8.0", "nightly"))
+
+    import io as _io
+
+    class _Answer(_io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.close()
+
+    asked = {}
+
+    def github(body):
+        def opener(request, timeout, context):
+            asked.update(url=request.full_url, timeout=timeout,
+                         agent=request.get_header("User-agent"),
+                         headers=dict(request.header_items()))
+            return _Answer(json.dumps(body).encode())
+        return opener
+
+    ok("GitHub is asked for its latest release",
+       U.fetch_latest(github({"tag_name": "0.8.1", "prerelease": False}))
+       == {"version": "0.8.1"}
+       and asked["url"].endswith("/repos/voronizer/rehearsal-recorder/releases/latest"))
+    ok("and told nothing but the app's name",
+       asked["agent"] == "rehearsal-recorder"
+       and set(asked["headers"]) <= {"User-agent", "Accept"})
+    ok("without waiting long for an answer", 0 < asked["timeout"] <= 10)
+    ok("a pre-release is never offered to someone on a stable version",
+       U.fetch_latest(github({"tag_name": "0.9.0rc1", "prerelease": True})) is None)
+    ok("nor is an answer with no version in it",
+       U.fetch_latest(github({"message": "Not Found"})) is None)
+
+    answers = []
+
+    def fetch():
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    now = {"on": True, "busy": False}
+    chk = U.UpdateChecker("0.8.0", enabled=lambda: now["on"],
+                          busy=lambda: now["busy"], fetch=fetch)
+    ok("before any check there is nothing to say",
+       chk.status() == {"on": True, "latest": None})
+    answers.append({"version": "0.8.1"})
+    ok("a check that finds a newer release says which",
+       chk.check_now() is True and chk.status()["latest"] == {"version": "0.8.1"})
+    answers.append({"version": "0.8.0"})
+    chk.check_now()
+    ok("and one that finds this same version says nothing",
+       chk.status()["latest"] is None)
+    answers.append({"version": "0.8.1"})
+    chk.check_now()
+    answers.append(OSError("no route to host"))
+    ok("a check with no network in the room is not an error",
+       chk.check_now() is True)
+    ok("and forgets nothing it found before", chk.status()["latest"] == {"version": "0.8.1"})
+
+    now["busy"] = True
+    answers.append({"version": "0.8.2"})
+    ok("nothing is asked while a take records, and the check waits",
+       chk.check_now() is False and len(answers) == 1)
+    now["busy"] = False
+    chk.check_now()
+    ok("until it has stopped", chk.status()["latest"] == {"version": "0.8.2"})
+
+    now["on"] = False
+    answers.append({"version": "9.9.9"})
+    ok("switched off, nothing is asked", chk.check_now() is False and len(answers) == 1)
+    ok("and nothing is said, even what was found before",
+       chk.status() == {"on": False, "latest": None})
+    answers.clear()
+
+    apimod49, a49 = fresh_api(Path(tempfile.mkdtemp()))
+    ok("checking is on until somebody switches it off",
+       a49.get_settings()["check_updates"] is True and a49.update_status()["on"] is True)
+    a49.set_check_updates(False)
+    ok("switched off, it says so, and the config keeps it",
+       a49.get_settings()["check_updates"] is False
+       and a49.update_status()["on"] is False
+       and json.loads(apimod49.CONFIG_PATH.read_text(encoding="utf-8"))["check_updates"]
+       is False)
+    a49.set_check_updates(True)
+    # This suite runs from source, like anyone developing the app: its version
+    # is a development build's and would read as out of date at every start.
+    ok("run from source, the app never asks", a49.start_update_checks() is False)
+    a49._updates._fetch = lambda: {"version": "99.0"}
+    a49._recorder = object()
+    try:
+        ok("and the app's own check waits while a take records",
+           a49._updates.check_now() is False)
+    finally:
+        a49._recorder = None
+    ok("the interface asks for it over the local server, as it does the meters",
+       "update_status" in POLLABLE)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

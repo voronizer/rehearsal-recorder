@@ -483,6 +483,40 @@ two disagree, the Python config wins.
 The scale sets the root font size, and the layout is in rem, so padding,
 buttons and the waveform grow with the text.
 
+## Asking whether a newer version is out
+
+`updates.py` asks GitHub for the latest release when the window has loaded,
+and once a day after that while the app stays open, and says so with a line
+in Under the hood and a dot on the way there (issue #6).
+
+- **It only reports.** The builds are not signed, and everything downloaded
+  arrives marked: an app that fetched and swapped in its own replacement would
+  hand people the same unblocking and quarantine they meet on the first
+  download, without their asking and with less idea of what went wrong.
+  Fetching and replacing wait for signing.
+- **Never in the way of a take.** The asking is on its own thread, a check
+  falls due while a take records waits until it stops, and the answer is a
+  line and a dot, never a dialog. A room with no internet is normal, so a
+  failed check says nothing and the next one is a day later.
+- **One request, and nothing in it but the app's name**, as the User-Agent
+  GitHub requires. It is said beside the switch that turns it off.
+- **Only the built app asks.** Run from source, the version is a development
+  build's — setuptools-scm names one after the release to come, but an
+  editable install keeps whatever it was installed at — and whoever runs it
+  is the one making the releases.
+- **Pre-releases are not offered.** GitHub's "latest" never is one, and the
+  answer is checked for it all the same.
+- **certifi as well as the system's certificates.** Python inside the macOS
+  build sees no system certificates, so every HTTPS request would fail as
+  unverified; on Windows the system's store is where a company that inspects
+  its traffic puts its own. Both, so neither loses what it needs.
+- **Polled over the local server**, like the meters, not over the bridge: the
+  interface asks once a minute while anything that could show it is on
+  screen.
+- **The dots stay until the new version runs.** Hiding them once seen was
+  considered and turned down: whoever would rather not update can live with a
+  dot.
+
 ## Deliberately not done
 
 - **Panning per track** — volume and mute/solo only.

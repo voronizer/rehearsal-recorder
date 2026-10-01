@@ -447,6 +447,8 @@ export type Settings = {
   cloud_formats: { id: CloudFormat; label: string; hint: string }[]
   auto_publish: boolean
   auto_publish_what: ShareWhat
+  /** Whether the app asks GitHub if a newer version is out — updates.py. */
+  check_updates: boolean
   /** Which encoder the machine has, if any. */
   encoder: string | null
   /** What to say when there is none — the reason differs by system. */
@@ -644,7 +646,11 @@ type PyApi = {
   bug_report(): Promise<Ok<{ text?: string }>>
   /** The folder one of the app's own files is in, with the file picked out. */
   show_file(which: OwnFile["key"]): Promise<Ok>
-  open_releases(): Promise<Ok>
+  /** The releases page, or with `latest` the newest release's own page. */
+  open_releases(latest?: boolean): Promise<Ok>
+  /** Whether a newer version is out, as far as the last check knows. */
+  update_status(): Promise<UpdateStatus>
+  set_check_updates(on: boolean): Promise<Ok<{ check_updates?: boolean }>>
   start_interface_check(): Promise<Ok>
   interface_check(): Promise<InterfaceCheck>
   stop_interface_check(): Promise<Ok>
@@ -830,6 +836,13 @@ export function api(): PyApi {
   return guarded.proxy
 }
 
+/** What updates.py last found. `latest` is only ever a newer release than
+ *  the one running, and none while checking is switched off. */
+export type UpdateStatus = {
+  on: boolean
+  latest: { version: string } | null
+}
+
 /** The read-only calls the interface asks for over and over. */
 type Pollable = {
   player_state: PlayerState
@@ -840,6 +853,7 @@ type Pollable = {
   activity: Activity
   recording_health: RecordingHealth
   session_state: SessionState
+  update_status: UpdateStatus
 }
 
 // Whether the http route works is decided once: either the interface is being

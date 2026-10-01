@@ -17,3 +17,8 @@ send2trash
 # schema kept by Alembic migrations — see store/db.py.
 sqlalchemy
 alembic
+
+# Certificates for the one HTTPS request the app makes, asking GitHub whether
+# a newer version is out (updates.py). Python inside the macOS build sees none
+# of the system's, so without these every such request fails as unverified.
+certifi
