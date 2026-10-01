@@ -229,6 +229,7 @@ export function Rehearsal({
 
   return (
     <Shell
+      playback
       subtitle="Rehearsal"
       title={
         <span className="inline-flex items-center gap-2">

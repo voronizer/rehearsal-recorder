@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react"
 import { ChevronLeft } from "lucide-react"
 import { ActivityButton } from "@/components/ActivityButton"
+import { ListeningVolume } from "@/components/ListeningVolume"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -20,6 +21,7 @@ export function Shell({
   children,
   className,
   activity = true,
+  playback = false,
 }: {
   title?: ReactNode
   subtitle?: ReactNode
@@ -34,6 +36,9 @@ export function Shell({
    *  in its top corner. Off on Recording: copies wait while a take records,
    *  and the take's own saving is said under its Stop button. */
   activity?: boolean
+  /** A take can be played on this screen, so the header has the speaker
+   *  that sets how loud (components/ListeningVolume). */
+  playback?: boolean
 }) {
   // Notices stack above the footer, never on it: the footer holds Start, Stop
   // and Save take, and at a larger scale or in a narrow window its button
@@ -94,6 +99,7 @@ export function Shell({
             )}
           </div>
           <ActivityButton />
+          {playback && <ListeningVolume />}
           {headerAction}
         </header>
       )}

@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api, type TrackFile, type TrackMedia, poll as pollPython } from "@/lib/api"
+import {
+  heard,
+  keepListeningVolume,
+  playerOpened,
+  turnListeningVolume,
+  useListeningVolume,
+  useMixLevel,
+} from "@/lib/listening"
 import { MIN_VIEW_SEC } from "@/lib/timeline"
 
 export type MultitrackPlayer = ReturnType<typeof useMultitrackPlayer>
@@ -37,9 +45,9 @@ export function useMultitrackPlayer(
   const [soloed, setSoloed] = useState<string | null>(null)
   const [volumes, setVolumes] = useState<Record<string, number>>({})
   // The whole mix, after the faders. Python says where it was left when the
-  // take opens.
-  const [master, setMasterState] = useState(1)
-  const [masterLevel, setMasterLevel] = useState(0)
+  // take opens. Shared with the header's speaker: lib/listening.ts.
+  const master = useListeningVolume()
+  const masterLevel = useMixLevel()
   const [looping, setLooping] = useState(false)
   // How loud each track came out of the mix, 0..1, measured in Python while
   // it played. Empty whenever nothing is playing, which is what a meter at
@@ -93,8 +101,7 @@ export function useMultitrackPlayer(
       if (s.muted) setMuted(s.muted)
       if (s.soloed !== undefined) setSoloed(s.soloed)
       if (s.volumes) setVolumes(s.volumes)
-      if (typeof s.master === "number") setMasterState(s.master)
-      if (typeof s.master_level === "number") setMasterLevel(s.master_level)
+      heard({ volume: s.master, level: s.master_level })
       if (s.levels) setLevels(s.levels)
       if (s.loop !== undefined) setLooping(s.loop !== null)
     },
@@ -110,7 +117,7 @@ export function useMultitrackPlayer(
     setPosition(0)
     setRegionState({ a: null, b: null })
     setLevels({})
-    setMasterLevel(0)
+    heard({ level: 0 })
     setViewState(null)
     setPeaksWindow({ from: 0, to: 0 })
     setLooping(false)
@@ -123,6 +130,9 @@ export function useMultitrackPlayer(
       return
     }
 
+    // A level turned anywhere, the header's speaker included, goes to this
+    // take from the moment it is open until it closes.
+    let release = () => {}
     setLoading(true)
     ;(async () => {
       try {
@@ -138,6 +148,7 @@ export function useMultitrackPlayer(
         if (!opened.ok) throw new Error(opened.error ?? "Could not open the take")
 
         openedRef.current = true
+        release = playerOpened((v) => void api().player_set_master(v))
         setOutputWarning(opened.warning ?? null)
         applyState(opened)
         setLoading(false)
@@ -151,6 +162,9 @@ export function useMultitrackPlayer(
     return () => {
       cancelled = true
       openedRef.current = false
+      release()
+      // Nothing of this take is coming out any more.
+      heard({ level: 0 })
       void api().player_close()
     }
   }, [tracks, fallbackDuration, applyState])
@@ -345,12 +359,7 @@ export function useMultitrackPlayer(
     master,
     /** 0..1, the whole mix as it last went out; 0 while nothing plays. */
     masterLevel,
-    setMaster: (v: number) => {
-      setMasterState(v)
-      void call(() => api().player_set_master(v))
-    },
-    persistMaster: () => {
-      void api().save_master_volume(master)
-    },
+    setMaster: turnListeningVolume,
+    persistMaster: keepListeningVolume,
   }
 }

@@ -370,6 +370,7 @@ export function Setup({
 
   return (
     <Shell
+      playback
       // The one screen that says the app's name, so the logo goes with it —
       // the small drawing, the one that still reads at this size.
       title={

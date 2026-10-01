@@ -603,6 +603,9 @@ class Api:
             "bit_depth": normalize_depth(self._config.get("bit_depth")),
             "supported_bit_depths": list(SUPPORTED_DEPTHS),
             "volumes": self._config.get("volumes", {}),
+            # How loud takes play back. The header's slider shows it before
+            # any take is open; player_open applies it to the one that opens.
+            "master_volume": self._config.get("master_volume", 1.0),
             "theme": self._config.get("theme", "dark"),
             "ui_scale": self._config.get("ui_scale", 1),
             "output_device_index": saved_device(

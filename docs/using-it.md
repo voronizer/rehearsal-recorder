@@ -183,6 +183,8 @@ on one timeline, so they always stay in sync.
   only changes how loud you hear it. The balance and the copy sent to the
   cloud stay as they are. The app remembers it for the next take. Its meter
   shows the whole mix, and turns red when the tracks together are too loud.
+  The speaker at the top of the window is the same control, there on every
+  screen a take can be played from, even with no take open.
 - **Mark a moment** with **Mark**, or the M key, while the take plays. Type a
   short note and pick a kind: a plain note, *keep this*, *went wrong* or *do
   again*. Each kind has its own colour, and the take's button in the strip

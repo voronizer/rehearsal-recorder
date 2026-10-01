@@ -212,6 +212,13 @@ export function LaneControls({
   )
 }
 
+/** A speaker that says roughly how loud: off, low, high. */
+export function VolumeIcon({ volume, className }: { volume: number; className?: string }) {
+  if (volume === 0) return <VolumeX className={className} aria-hidden />
+  if (volume < 0.5) return <Volume1 className={className} aria-hidden />
+  return <Volume2 className={className} aria-hidden />
+}
+
 /**
  * The whole mix, under the tracks, the way a desk ends in its master strip:
  * how loud the take plays, and how loud all of it is coming out.
@@ -230,19 +237,24 @@ export function MasterControls({
   level,
   onVolume,
   onVolumeCommit,
+  className,
 }: {
   volume: number
   /** 0..1, the whole mix after this fader, as it goes out. */
   level: number
   onVolume: (value: number) => void
   onVolumeCommit: () => void
+  className?: string
 }) {
-  const Icon = volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
-
   return (
-    <div className="flex h-full flex-col justify-center gap-3 rounded-lg border bg-card px-3.5 py-2.5">
+    <div
+      className={cn(
+        "flex h-full flex-col justify-center gap-3 rounded-lg border bg-card px-3.5 py-2.5",
+        className
+      )}
+    >
       <div className="flex items-center gap-2 text-sm">
-        <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <VolumeIcon volume={volume} className="size-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate">Master</span>
         <span className="tnum text-xs text-muted-foreground">
           {Math.round(volume * 100)}%

@@ -202,6 +202,7 @@ export function Review({
 
   return (
     <Shell
+      playback
       subtitle={`${rehearsalName} · ${formatMMSS(take.duration_sec)}`}
       title={`Take ${take.take_number} recorded`}
       footer={

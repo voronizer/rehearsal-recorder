@@ -439,6 +439,7 @@ export function HistoryScreen({
   if (opened && selected) {
     return (
       <Shell
+        playback
         subtitle={formatDateHuman(opened.created_at)}
         title={opened.name}
         onBack={back}
@@ -478,6 +479,7 @@ export function HistoryScreen({
 
   return (
     <Shell
+      playback
       title="Rehearsal history"
       onBack={back}
       backKey

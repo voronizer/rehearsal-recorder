@@ -5,6 +5,17 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **How loud takes play, from the header.** A speaker beside History, on
+  every screen a take can be played from: setup, the rehearsal, History and
+  the review screen. Behind it is the same **Master** as under a take's
+  tracks, and turning either moves both. A take played straight from a row,
+  in Last time or a rehearsal's overview, could only be turned down by
+  opening it; when the sound goes out through the audio interface, the
+  Mac's own volume keys often do nothing. It can be set before anything
+  plays, and the next take starts at it (#14).
+
 ## 0.9.0
 
 - **The app says when a newer version is out.** A dot on the gear on the

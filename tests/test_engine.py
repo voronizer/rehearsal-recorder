@@ -513,6 +513,8 @@ def main():
     saved = json.loads(apimod.CONFIG_PATH.read_text())
     ok("where it was left is saved", saved.get("master_volume") == 0.4)
     a.player_close()
+    ok("and the settings say so with no take open, for the header's slider",
+       a.get_settings()["master_volume"] == 0.4)
     ok("and the next take opens at it",
        a.player_open(tracks)["master"] == 0.4)
     a.save_master_volume(-3)

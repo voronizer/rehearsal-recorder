@@ -437,6 +437,8 @@ export type Settings = {
   bit_depth: number
   supported_bit_depths: number[]
   volumes: Record<string, number>
+  /** 0..1, how loud takes play back: lib/listening.ts. */
+  master_volume: number
   theme: "dark" | "light" | "system"
   ui_scale: number
   output_device_index: number | null
