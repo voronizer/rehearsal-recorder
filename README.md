@@ -18,7 +18,8 @@ audio libraries and the interface are all inside.
 
 The app tells you when a newer version is out, with a dot on the gear on
 the setup screen, and **Settings → Under the hood** downloads it into your
-Downloads folder when you ask. To know, it asks GitHub which version is the
+Downloads folder when you ask — on Windows with nothing to unblock, since the
+mark below is put on by browsers. To know, it asks GitHub which version is the
 latest when it starts and once a day, and sends nothing else; the same place
 switches that off.
 

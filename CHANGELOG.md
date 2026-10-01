@@ -5,8 +5,25 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.9.0
 
+- **The app says when a newer version is out.** A dot on the gear on the
+  setup screen, another on Under the hood in Settings, and there an Updates
+  section of its own, under the card with your version: which one is out,
+  **Download** and **What's new**, or that this is the latest once GitHub has
+  said so. To know, it asks GitHub which version is the latest when it starts
+  and once a day, sends nothing else, and never asks while a take records;
+  with no internet it just does not find out. **Check for new versions** in
+  Under the hood switches it off. It only does this from this version on, so
+  0.9.0 itself is the last one to find by hand (#6).
+- **Download, in Updates**, fetches the new version for your system into the
+  Downloads folder, checks its size, its SHA-256 and every file inside it
+  against the release, and opens the folder with it picked out. Unpack it,
+  close the app and open the new copy; the old one is not touched. On Windows
+  a zip the app downloads itself carries no "from the internet" mark, so it
+  needs no unblocking. A download cut short or damaged leaves nothing behind
+  and can be tried again. Only when asked: nothing is downloaded on its own.
+  Replacing the app itself waits for the builds to be signed (#6).
 - **A take sounds when Play is pressed.** The player's output was opened with
   whatever the driver calls its "high" latency, as the inputs were until
   0.7.12. Through FlexASIO that held the sound back by over three seconds:
@@ -15,22 +32,6 @@ opening.
   ran three seconds ahead of what was heard. Now the card is asked for 50 ms,
   or its own low latency if that is longer: about 0.2 s through FlexASIO and
   0.1 s through the system's own output.
-
-- **Download, in Updates**, fetches it for your system into the
-  Downloads folder, checks its size, its SHA-256 and every file inside it
-  against the release, and opens the folder with it picked out. A download
-  cut short or damaged leaves nothing behind and can be tried again. Only
-  when asked: nothing is downloaded on its own (#6).
-- **The app says when a newer version is out.** A dot on the gear on the
-  setup screen, another on Under the hood in Settings, and there an Updates
-  section of its own, under the card with your version: which one is out,
-  **Download** and **What's new**, or that this is the latest once GitHub has
-  said so. To know, it asks GitHub
-  which version is the latest when it starts and once a day, sends nothing
-  else, and never asks while a take records; with no internet it just does not
-  find out. **Check for new versions** in Under the hood switches it off.
-  Installing the new version itself waits for the builds to be signed (#6).
-
 - **Last time has a panel of its own** on the setup screen, down the side
   and darker than the screen, as History's list is. On the same background
   as the tracks, the two columns ran into one.

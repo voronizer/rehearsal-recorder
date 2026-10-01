@@ -581,7 +581,9 @@ until then it says it has not checked yet.
 **Download** fetches it for your system into your Downloads folder, checks
 that it is the release's own and that nothing in it is damaged, and opens the
 folder with it picked out. Unpack it, close the app and open the new copy.
-The old copy is not touched, so you can keep it until you are sure. If the
+The old copy is not touched, so you can keep it until you are sure. On
+Windows a zip the app downloads itself carries no "from the internet" mark,
+so there is nothing to unblock. If the
 download is cut short or damaged, nothing is left behind and **Try again**
 fetches it again. A download that is already there and whole is not fetched
 twice.
