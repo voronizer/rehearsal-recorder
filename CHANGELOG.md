@@ -7,6 +7,15 @@ opening.
 
 ## Unreleased
 
+- **A take sounds when Play is pressed.** The player's output was opened with
+  whatever the driver calls its "high" latency, as the inputs were until
+  0.7.12. Through FlexASIO that held the sound back by over three seconds:
+  Play started three seconds late, Pause stopped three seconds after it was
+  pressed, a jump played the old place first, and the playhead and the meters
+  ran three seconds ahead of what was heard. Now the card is asked for 50 ms,
+  or its own low latency if that is longer: about 0.2 s through FlexASIO and
+  0.1 s through the system's own output.
+
 - **Download, in Updates**, fetches it for your system into the
   Downloads folder, checks its size, its SHA-256 and every file inside it
   against the release, and opens the folder with it picked out. A download

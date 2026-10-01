@@ -5276,6 +5276,36 @@ def main():
     finally:
         _DEVICES[0] = real_interface
 
+    print("\n[48b] A take sounds when Play is pressed, not seconds later")
+    # The same as the inputs, the other way. Opened without a latency,
+    # PortAudio takes the driver's "high" one, and on FlexASIO the player's
+    # stream held 2.75 s: what was played was heard 3.3 s later, so Play
+    # sounded three seconds late, Pause stopped three seconds after it was
+    # pressed, and the playhead and the meters ran three seconds ahead of
+    # the sound.
+    real_interface = _DEVICES[0]
+    _DEVICES[0] = {**real_interface, "default_low_output_latency": 0.02,
+                   "default_high_output_latency": 1.0}
+    try:
+        tone = Path(tempfile.mkdtemp()) / "tone.wav"
+        write_wav(tone, 500, seconds=1.0)
+        heard = TakePlayer([{"name": "Gtr", "file": str(tone)}])
+        heard.open_output(0)
+        asked = heard._stream.kw.get("latency")
+        ok("the player asks the card for a short latency, not its second-long one",
+           isinstance(asked, float) and 0 < asked <= 0.1)
+        heard.open_output(None)
+        asked = heard._stream.kw.get("latency")
+        ok("and so it does of the system's output",
+           isinstance(asked, float) and 0 < asked <= 0.1)
+        _DEVICES[0] = {**_DEVICES[0], "default_low_output_latency": 0.09}
+        heard.open_output(0)
+        ok("but never less than what the driver itself calls low",
+           heard._stream.kw.get("latency") == 0.09)
+        heard.close()
+    finally:
+        _DEVICES[0] = real_interface
+
     print("\n[49] Saying that a newer version is out")
     from rehearsal_recorder import updates as U
     from rehearsal_recorder.mediaserver import POLLABLE

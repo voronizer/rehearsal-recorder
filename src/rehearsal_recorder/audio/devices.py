@@ -66,6 +66,25 @@ def input_latency(sd, device_index):
     return max(low, INPUT_LATENCY_SEC)
 
 
+# The same for the player's output. Opened without a latency, FlexASIO's
+# "high" made a buffer of 2.75 s, and what was played was heard 3.3 s later:
+# Play sounded three seconds late, Pause stopped three seconds after it was
+# pressed, and the playhead ran three seconds ahead of the sound. Measured on
+# FlexASIO this is about 0.2 s, and on the system's own output about 0.1.
+OUTPUT_LATENCY_SEC = 0.05
+
+
+def output_latency(sd, device_index):
+    """The latency, in seconds, to open device_index's outputs with — or the
+    system output's, for None."""
+    try:
+        info = sd.query_devices(device_index, "output")
+        low = float(info["default_low_output_latency"])
+    except Exception:
+        return OUTPUT_LATENCY_SEC
+    return max(low, OUTPUT_LATENCY_SEC)
+
+
 NOT_ANSWERING = (
     "The audio driver has stopped answering, so nothing can be opened or "
     "closed until it does. Unplug the interface and plug it back in; if that "

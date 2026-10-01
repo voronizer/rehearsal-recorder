@@ -451,8 +451,19 @@ driver's "high" latency, and FlexASIO's is a second: the meters ran a second
 behind, and the sound came in one burst a second. The app asks for 50 ms, or
 the driver's own low latency if that is longer. It does not go lower,
 because the callback is Python: while another thread holds the interpreter
-it waits, and a short buffer would overrun during a take. The player's
-output still takes the default. Two other layouts were
+it waits, and a short buffer would overrun during a take.
+
+**The player's output asks for the same.** Left to the default, FlexASIO's
+"high" made a buffer of 2.75 s, and what was played was heard 3.3 s later:
+Play sounded three seconds late, Pause stopped three seconds after it was
+pressed, a seek played the old place for three seconds, and the playhead and
+the meters ran three seconds ahead of the sound — they show what has been
+handed to the card, not what has come out of it. With 50 ms, or the driver's
+own low latency if that is longer, FlexASIO comes to about 0.2 s and the
+system's MME output to about 0.1 s; WASAPI was short already. The same floor
+as the inputs, for the same reason: a run dry is a click in the playback.
+Measured with five tracks playing and the state polled as the interface
+does, it did not run dry once. Two other layouts were
 drawn and dropped: a waveform per track growing as it records, which cannot
 be read from behind the kit, and markers dropped with a key during the take,
 which nobody would press while playing.

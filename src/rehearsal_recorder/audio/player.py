@@ -29,6 +29,7 @@ from rehearsal_recorder.audio.devices import (
     close_stream,
     open_stream,
     output_complaint,
+    output_latency,
     usable_output,
 )
 from rehearsal_recorder.audio.format import unpack24
@@ -234,6 +235,9 @@ class TakePlayer:
             samplerate=self.samplerate,
             dtype="int16",
             blocksize=BLOCK_FRAMES,
+            # Without it, what is played can be heard seconds later — see
+            # output_latency.
+            latency=output_latency(sd, index),
             callback=self._callback,
         )
         self._heartbeat.start()
