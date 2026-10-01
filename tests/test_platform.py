@@ -469,6 +469,16 @@ def main():
     ok("what it says reads as UTF-8, whatever the code page",
        said is not None and " — " in said)
 
+    print("\n[downloads] A new version goes where a browser would put it")
+    # Windows lets the Downloads folder be moved anywhere, so it is asked of
+    # the system rather than assumed to be in the home folder.
+    found = ps.downloads_folder()
+    ok("the Downloads folder is a whole path", isinstance(found, Path) and found.is_absolute())
+    if sys.platform == "win32":
+        ok("on Windows it is the one the system names, and it is there", found.is_dir())
+    ok("on a Mac it is Downloads in the home folder",
+       ps.downloads_folder(system="darwin") == Path.home() / "Downloads")
+
     print("\n" + "=" * 60)
 
     if problems:

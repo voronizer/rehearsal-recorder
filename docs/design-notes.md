@@ -486,14 +486,31 @@ buttons and the waveform grow with the text.
 ## Asking whether a newer version is out
 
 `updates.py` asks GitHub for the latest release when the window has loaded,
-and once a day after that while the app stays open, and says so with a line
-in Under the hood and a dot on the way there (issue #6).
+and once a day after that while the app stays open, and says so in an Updates
+section of Under the hood, with a dot on the way there (issue #6). The
+section is apart from the card that says what this copy is: put together,
+the news, its buttons and the switch read as one jumble with the version.
+"This is the latest version" is said only once GitHub has answered; before
+that, or with no internet, it says it has not checked.
 
-- **It only reports.** The builds are not signed, and everything downloaded
-  arrives marked: an app that fetched and swapped in its own replacement would
-  hand people the same unblocking and quarantine they meet on the first
-  download, without their asking and with less idea of what went wrong.
-  Fetching and replacing wait for signing.
+- **It fetches, and hands over; it does not replace.** Download puts the zip
+  in Downloads and opens the folder with it picked out; unpacking it and
+  opening the new copy are the person's. Swapping a running app for another
+  is per-platform, can leave somebody with no working app at all, and
+  without signing hands them the same unblocking and quarantine they met on
+  the first download. That waits for signing.
+- **Only on a button.** Thirty megabytes is not the app's to spend on a
+  phone's internet at the rehearsal space.
+- **What is in Downloads under the name is the release's, whole.** It
+  arrives as a `.part` file and is renamed only once its size and its SHA-256
+  match what GitHub gives for the asset and every file in the zip passes its
+  CRC; otherwise nothing is left behind. The address is built from the tag
+  and the asset's name, not taken from the answer, so nothing the network
+  says decides where the app downloads from. The version is in the file's
+  name, so it is not taken for a zip a browser saved earlier.
+- **It is not started while a take records.** Nor is it paused if one starts
+  meanwhile: thirty megabytes take seconds, and Settings, where the button
+  is, is not reachable while recording.
 - **Never in the way of a take.** The asking is on its own thread, a check
   falls due while a take records waits until it stops, and the answer is a
   line and a dot, never a dialog. A room with no internet is normal, so a

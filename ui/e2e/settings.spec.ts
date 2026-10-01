@@ -380,10 +380,14 @@ test.describe("a newer version", () => {
     const hood = page.getByRole("button", { name: /^Under the hood/ }).first()
     await expect(hood).toHaveAccessibleName("Under the hood, a new version is out")
     await hood.click()
-    const about = page.locator("[aria-label='About this copy']")
-    await expect(about).toContainText("0.3.0 is out")
+    // In a section of its own under the card, which says only what this
+    // copy is: the news, what to do with it, and the switch together.
+    const updates = page.getByRole("region", { name: "Updates" })
+    await expect(updates).toContainText("Version 0.3.0 is out")
+    await expect(updates).toContainText("You have 0.2.0")
+    await expect(page.locator("[aria-label='About this copy']")).not.toContainText("is out")
     // The newest release's own page, in the browser.
-    await page.getByRole("button", { name: "See what's new" }).click()
+    await updates.getByRole("button", { name: "What's new" }).click()
     await expect
       .poll(async () => (await calls(page, "open_releases")).map((c) => c.args))
       .toEqual([[true]])
@@ -395,20 +399,73 @@ test.describe("a newer version", () => {
     await expect
       .poll(async () => (await calls(page, "set_check_updates")).map((c) => c.args))
       .toEqual([[false]])
-    await expect(about).not.toContainText("is out")
+    await expect(updates).not.toContainText(/\d is out/)
+    await expect(updates).toContainText("Not checking for new versions")
     await expect(hood).toHaveAccessibleName("Under the hood")
     await box.check()
-    await expect(about).toContainText("0.3.0 is out")
+    await expect(updates).toContainText("Version 0.3.0 is out")
   })
 
-  test("with none newer, there is no dot and nothing is said", async ({ page }) => {
-    await openApp(page)
-    await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible()
-    await page.getByRole("button", { name: "Settings" }).click()
-    await group(page, "Under the hood").click()
-    const about = page.locator("[aria-label='About this copy']")
-    await expect(about).toBeVisible()
-    await expect(about).not.toContainText("is out")
-    await expect(page.getByRole("checkbox", { name: "Check for new versions" })).toBeChecked()
+  test("is fetched into Downloads when asked, and shown there", async ({ page }) => {
+    await openApp(page, { before: "window.__LATEST__ = {version: '0.3.0'};" })
+    await page.getByRole("button", { name: /^Settings/ }).click()
+    await page.getByRole("button", { name: /^Under the hood/ }).first().click()
+    const updates = page.getByRole("region", { name: "Updates" })
+    // Only when asked: on a phone's internet at the rehearsal space, thirty
+    // megabytes is not the app's to spend.
+    expect(await callCount(page, "download_update")).toBe(0)
+    await updates.getByRole("button", { name: "Download", exact: true }).click()
+    await expect.poll(() => callCount(page, "download_update")).toBe(1)
+    await expect(updates).toContainText("Downloading 0.3.0…")
+    await expect(updates.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "45")
+    await expect(updates.getByRole("button", { name: "Download", exact: true })).toHaveCount(0)
+
+    await setFake(page, "__DOWNLOAD__", {
+      state: "done",
+      version: "0.3.0",
+      fraction: 1,
+      file: "RehearsalRecorder-0.3.0-windows.zip",
+    })
+    await expect(updates).toContainText("0.3.0 is in Downloads")
+    await expect(updates).toContainText(
+      "RehearsalRecorder-0.3.0-windows.zip — unpack it, close this copy and open the new one"
+    )
+    await updates.getByRole("button", { name: "Show in folder" }).click()
+    await expect.poll(() => callCount(page, "show_update")).toBe(1)
   })
+
+  test("says why a download failed, and tries again", async ({ page }) => {
+    await openApp(page, {
+      before: `window.__LATEST__ = {version: '0.3.0'};
+        window.__DOWNLOAD__ = {state: 'failed', version: '0.3.0',
+          error: 'The download does not match the release'};`,
+    })
+    await page.getByRole("button", { name: /^Settings/ }).click()
+    await page.getByRole("button", { name: /^Under the hood/ }).first().click()
+    const updates = page.getByRole("region", { name: "Updates" })
+    await expect(updates).toContainText("Could not download 0.3.0")
+    await expect(updates).toContainText("The download does not match the release")
+    await updates.getByRole("button", { name: "Try again" }).click()
+    await expect.poll(() => callCount(page, "download_update")).toBe(1)
+    await expect(updates).toContainText("Downloading 0.3.0…")
+  })
+
+  // "The latest" only once GitHub has answered: before the first check, or in
+  // a room with no internet, nobody knows.
+  for (const [before, said] of [
+    ["window.__BUILT__ = true; window.__CHECKED__ = true;", "This is the latest version"],
+    ["window.__BUILT__ = true;", "Not checked yet"],
+    ["", "Run from source, the app does not check"],
+  ]) {
+    test(`with none newer, there is no dot, and it says: ${said}`, async ({ page }) => {
+      await openApp(page, { before })
+      await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible()
+      await page.getByRole("button", { name: "Settings" }).click()
+      await group(page, "Under the hood").click()
+      const updates = page.getByRole("region", { name: "Updates" })
+      await expect(updates).toContainText(said)
+      await expect(updates).not.toContainText(/\d is out/)
+      await expect(page.getByRole("checkbox", { name: "Check for new versions" })).toBeChecked()
+    })
+  }
 })

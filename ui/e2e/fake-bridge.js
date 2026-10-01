@@ -658,7 +658,7 @@ window.__MAKE_API__ = () => ({
   // the interface, which a page scripts through __CHECK_RESULT__ ('works',
   // 'no_sound') and __CHECK_MS__, how long it listens.
   under_the_hood: track('under_the_hood', async () => ({
-    version:'0.2.0', running_as:'source', executable:'python.exe',
+    version:'0.2.0', running_as: window.__BUILT__ ? 'built' : 'source', executable:'python.exe',
     system:'Windows 11 Pro 10.0.26200, x64',
     audio:{engine:'PortAudio V19.7.0-devel',
            systems:[{name:'MME', devices:6}, {name:'ASIO', devices:2},
@@ -683,8 +683,16 @@ window.__MAKE_API__ = () => ({
   // out, and nothing is said while checking is switched off.
   update_status: track('update_status', async () => {
     const on = readCfg().check_updates ?? true;
-    return {on, latest: on ? (window.__LATEST__ || null) : null};
+    return {on, latest: on ? (window.__LATEST__ || null) : null,
+            download: window.__DOWNLOAD__ || null, checked: on && !!window.__CHECKED__};
   }),
+  // A download as far as the test has scripted it in __DOWNLOAD__: asking
+  // for one starts it at 45%, and the test moves it on.
+  download_update: track('download_update', async () => {
+    window.__DOWNLOAD__ = {state: 'running', version: window.__LATEST__.version, fraction: 0.45};
+    return {ok: true};
+  }),
+  show_update: track('show_update', async () => ({ok: true})),
   set_check_updates: track('set_check_updates', async (on) => {
     writeCfg({...readCfg(), check_updates: !!on});
     return {ok:true, check_updates: !!on};

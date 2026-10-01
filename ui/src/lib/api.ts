@@ -651,6 +651,11 @@ type PyApi = {
   /** Whether a newer version is out, as far as the last check knows. */
   update_status(): Promise<UpdateStatus>
   set_check_updates(on: boolean): Promise<Ok<{ check_updates?: boolean }>>
+  /** Fetches the newer version's zip into Downloads, checks it, and shows it
+   *  in its folder; how far along it is comes in update_status. */
+  download_update(): Promise<Ok>
+  /** The downloaded zip, picked out in its folder again. */
+  show_update(): Promise<Ok>
   start_interface_check(): Promise<Ok>
   interface_check(): Promise<InterfaceCheck>
   stop_interface_check(): Promise<Ok>
@@ -841,6 +846,20 @@ export function api(): PyApi {
 export type UpdateStatus = {
   on: boolean
   latest: { version: string } | null
+  /** Once somebody has pressed Download: how far it got, the file's name in
+   *  Downloads once it is there and checked, what went wrong if not. */
+  download?: UpdateDownload | null
+  /** Whether GitHub has answered since the app started: no newer version
+   *  found before then says nothing. */
+  checked?: boolean
+}
+
+export type UpdateDownload = {
+  state: "running" | "done" | "failed"
+  version: string
+  fraction?: number
+  file?: string
+  error?: string
 }
 
 /** The read-only calls the interface asks for over and over. */

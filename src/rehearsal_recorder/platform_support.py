@@ -333,6 +333,37 @@ def describe_path_limit(path):
     )
 
 
+#: Windows' own name for the Downloads folder (FOLDERID_Downloads).
+_DOWNLOADS_ID = "374DE290-123F-4565-9164-39C4925E467B"
+
+
+def downloads_folder(system=sys.platform):
+    """
+    Where a browser would put a download: the system's Downloads folder.
+
+    On Windows it is asked of the system, since it can be moved anywhere and
+    often is; anywhere else, and if the asking fails, it is Downloads in the
+    home folder.
+    """
+    if system == "win32":
+        try:
+            import ctypes
+            import uuid
+
+            known = (ctypes.c_byte * 16).from_buffer_copy(uuid.UUID(_DOWNLOADS_ID).bytes_le)
+            found = ctypes.c_wchar_p()
+            if ctypes.windll.shell32.SHGetKnownFolderPath(
+                ctypes.byref(known), 0, None, ctypes.byref(found)
+            ) == 0:
+                try:
+                    return Path(found.value)
+                finally:
+                    ctypes.windll.ole32.CoTaskMemFree(found)
+        except Exception:  # noqa: BLE001 — the usual place, then
+            pass
+    return Path.home() / "Downloads"
+
+
 def reveal_in_file_manager(path, system=sys.platform, run=None):
     """
     Opens the folder a file is in, with the file picked out — Explorer's

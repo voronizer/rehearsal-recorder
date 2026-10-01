@@ -572,13 +572,22 @@ the system. You can also scale the whole interface from 90% to 150%.
 ## A new version
 
 When a newer version is out, a dot appears on the gear on the setup screen,
-and another on **Under the hood** in Settings. There, beside the version you
-have, it says which one is out, and **See what's new** opens its page on
-GitHub, where you download it as you did the first time. The dots stay until
-you run the new version.
+and another on **Under the hood** in Settings. There, the **Updates** section
+under the card with your version says which one is out, and **What's new**
+opens its page on GitHub. The dots stay until you run the new version. When
+there is nothing newer, the same place says so — once GitHub has answered;
+until then it says it has not checked yet.
+
+**Download** fetches it for your system into your Downloads folder, checks
+that it is the release's own and that nothing in it is damaged, and opens the
+folder with it picked out. Unpack it, close the app and open the new copy.
+The old copy is not touched, so you can keep it until you are sure. If the
+download is cut short or damaged, nothing is left behind and **Try again**
+fetches it again. A download that is already there and whole is not fetched
+twice.
 
 To find out, the app asks GitHub which version is the latest when it starts,
-and once a day while it stays open. It sends nothing else and downloads
-nothing, and it never asks while a take is recording. With no internet in the
-room it simply does not find out. **Check for new versions** in
-**Settings → Under the hood** switches it off.
+and once a day while it stays open. It sends nothing else, it downloads only
+when you press **Download**, and it never asks while a take is recording.
+With no internet in the room it simply does not find out. **Check for new
+versions** in **Settings → Under the hood** switches the asking off.

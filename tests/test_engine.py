@@ -5316,8 +5316,8 @@ def main():
         return opener
 
     ok("GitHub is asked for its latest release",
-       U.fetch_latest(github({"tag_name": "0.8.1", "prerelease": False}))
-       == {"version": "0.8.1"}
+       U.fetch_latest(github({"tag_name": "0.8.1", "prerelease": False}))["version"]
+       == "0.8.1"
        and asked["url"].endswith("/repos/voronizer/rehearsal-recorder/releases/latest"))
     ok("and told nothing but the app's name",
        asked["agent"] == "rehearsal-recorder"
@@ -5340,10 +5340,11 @@ def main():
     chk = U.UpdateChecker("0.8.0", enabled=lambda: now["on"],
                           busy=lambda: now["busy"], fetch=fetch)
     ok("before any check there is nothing to say",
-       chk.status() == {"on": True, "latest": None})
+       chk.status() == {"on": True, "latest": None, "download": None, "checked": False})
     answers.append({"version": "0.8.1"})
     ok("a check that finds a newer release says which",
        chk.check_now() is True and chk.status()["latest"] == {"version": "0.8.1"})
+    ok("and that it has been checked", chk.status()["checked"] is True)
     answers.append({"version": "0.8.0"})
     chk.check_now()
     ok("and one that finds this same version says nothing",
@@ -5354,6 +5355,11 @@ def main():
     ok("a check with no network in the room is not an error",
        chk.check_now() is True)
     ok("and forgets nothing it found before", chk.status()["latest"] == {"version": "0.8.1"})
+    unanswered = U.UpdateChecker("0.8.0", enabled=lambda: True, busy=lambda: False,
+                                 fetch=lambda: (_ for _ in ()).throw(OSError("offline")))
+    unanswered.check_now()
+    ok("a check that got no answer is not said to have checked: nobody knows "
+       "yet whether this is the latest", unanswered.status()["checked"] is False)
 
     now["busy"] = True
     answers.append({"version": "0.8.2"})
@@ -5367,7 +5373,7 @@ def main():
     answers.append({"version": "9.9.9"})
     ok("switched off, nothing is asked", chk.check_now() is False and len(answers) == 1)
     ok("and nothing is said, even what was found before",
-       chk.status() == {"on": False, "latest": None})
+       chk.status() == {"on": False, "latest": None, "download": None, "checked": False})
     answers.clear()
 
     apimod49, a49 = fresh_api(Path(tempfile.mkdtemp()))
@@ -5392,6 +5398,114 @@ def main():
         a49._recorder = None
     ok("the interface asks for it over the local server, as it does the meters",
        "update_status" in POLLABLE)
+
+    print("\n[50] Fetching a newer version and handing it over")
+    import hashlib
+    import zipfile
+
+    # A real zip, small: what is checked is that it opens and every file in
+    # it is whole, as well as its size and its digest.
+    made = _io.BytesIO()
+    with zipfile.ZipFile(made, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("RehearsalRecorder/RehearsalRecorder.exe", b"MZ" + b"x" * 5000)
+        z.writestr("RehearsalRecorder/_internal/python312.dll", b"y" * 9000)
+    archive = made.getvalue()
+    digest = hashlib.sha256(archive).hexdigest()
+
+    release = {
+        "tag_name": "0.9.0", "prerelease": False,
+        "assets": [
+            {"name": "RehearsalRecorder-macos.zip", "size": 1, "digest": "sha256:" + "0" * 64},
+            {"name": "RehearsalRecorder-windows.zip", "size": len(archive),
+             "digest": "sha256:" + digest,
+             "browser_download_url": "https://elsewhere.example/evil.zip"},
+        ],
+    }
+    found = U.fetch_latest(github(release), system="win32")
+    ok("the answer brings this system's archive, its size and its digest",
+       found["asset"] == {"name": "RehearsalRecorder-windows.zip", "size": len(archive),
+                          "sha256": digest})
+    ok("and the other system's is not taken for it",
+       U.fetch_latest(github(release), system="darwin")["asset"]["size"] == 1)
+    ok("a system with no build of its own gets no archive",
+       U.fetch_latest(github(release), system="linux")["asset"] is None)
+    ok("it is fetched from the release's own address, never one in the answer",
+       U.download_url(found) == "https://github.com/voronizer/rehearsal-recorder/"
+       "releases/download/0.9.0/RehearsalRecorder-windows.zip")
+
+    served = []
+
+    def serving(body):
+        def opener(request, timeout, context):
+            served.append(request.full_url)
+            return _Answer(body)
+        return opener
+
+    shown = []
+    folder = Path(tempfile.mkdtemp())
+    dl_now = {"busy": False}
+
+    def checker(body):
+        c = U.UpdateChecker("0.8.0", enabled=lambda: True,
+                            busy=lambda: dl_now["busy"], fetch=lambda: found,
+                            opener=serving(body), downloads=lambda: folder,
+                            reveal=shown.append)
+        c.check_now()
+        return c
+
+    whole = checker(archive)
+    ok("before anybody asks, nothing is downloaded",
+       whole.status()["download"] is None and not served)
+    whole.download_now()
+    saved = folder / "RehearsalRecorder-0.9.0-windows.zip"
+    ok("asked, it is fetched into Downloads under its version's name",
+       saved.is_file() and saved.read_bytes() == archive)
+    ok("from the release's own address", served[-1] == U.download_url(found))
+    ok("said to be done, with the file's name",
+       whole.status()["download"] == {"state": "done", "version": "0.9.0",
+                                      "fraction": 1.0, "file": saved.name})
+    ok("and the folder is opened with it picked out", shown == [saved])
+    ok("nothing half-written is left beside it",
+       sorted(p.name for p in folder.iterdir()) == [saved.name])
+    whole.show_download()
+    ok("Show in folder opens it again", shown == [saved, saved])
+
+    asked_before = len(served)
+    checker(archive).download_now()
+    ok("one already there and whole is not fetched again", len(served) == asked_before)
+
+    for name, body, said in [
+        ("cut short", archive[:-500], "cut short"),
+        ("not what the release has", archive[:-4] + b"oops", "does not match"),
+    ]:
+        saved.unlink(missing_ok=True)
+        broken = checker(body)
+        broken.download_now()
+        state = broken.status()["download"]
+        ok(f"one {name} is said to have failed, and why",
+           state["state"] == "failed" and said in state["error"])
+        ok("and nothing of it is left in Downloads", list(folder.iterdir()) == [])
+
+    def no_network(request, timeout, context):
+        raise OSError("no route to host")
+
+    offline = U.UpdateChecker("0.8.0", enabled=lambda: True, busy=lambda: False,
+                              fetch=lambda: found, opener=no_network,
+                              downloads=lambda: folder, reveal=shown.append)
+    offline.check_now()
+    offline.download_now()
+    ok("with no network it fails, saying so, rather than hanging on",
+       offline.status()["download"]["state"] == "failed"
+       and "no route to host" in offline.status()["download"]["error"])
+
+    dl_now["busy"] = True
+    refused = checker(archive)
+    ok("it cannot be started while a take records",
+       refused.start_download()["ok"] is False and refused.status()["download"] is None)
+    dl_now["busy"] = False
+    nothing = U.UpdateChecker("0.8.0", enabled=lambda: True, busy=lambda: False,
+                              fetch=lambda: None)
+    ok("nor when there is nothing newer to fetch", nothing.start_download()["ok"] is False)
 
     print("\n" + "=" * 60)
     if problems:

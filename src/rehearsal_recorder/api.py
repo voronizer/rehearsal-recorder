@@ -784,6 +784,16 @@ class Api:
         local server like the meters — see mediaserver.POLLABLE."""
         return self._updates.status()
 
+    def download_update(self):
+        """The Download button beside a newer version: fetches its zip into
+        Downloads, checks it, and opens the folder with it picked out. How
+        far along it is comes back in update_status."""
+        return self._updates.start_download()
+
+    def show_update(self):
+        """Show in folder, once the newer version's zip is downloaded."""
+        return self._updates.show_download()
+
     def set_check_updates(self, enabled):
         """The switch in Settings. Switched on, it asks soon rather than
         tomorrow."""

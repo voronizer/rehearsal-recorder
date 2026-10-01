@@ -15,11 +15,12 @@ import {
   type InterfaceCheck,
   type OwnFile,
   type UnderTheHood as Hood,
+  type UpdateStatus,
 } from "@/lib/api"
 import { formatBytes } from "@/lib/format"
 import { QUIET_THRESHOLD } from "@/lib/levels"
 import { cn } from "@/lib/utils"
-import { switchUpdates, useUpdate } from "@/lib/update"
+import { startDownload, switchUpdates, useUpdate } from "@/lib/update"
 
 // How often a running check is asked how far it has got.
 const CHECK_POLL_MS = 400
@@ -107,6 +108,144 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 /**
+ * Settings › Under the hood, Updates: whether a newer version is out, getting
+ * it, and the switch for asking at all — in a section of its own, so the card
+ * above it only says what this copy is.
+ *
+ * "This is the latest version" is said only once GitHub has answered: before
+ * the first check, or in a room with no internet, nobody knows. The zip is
+ * checked before it is called downloaded; see updates.py.
+ */
+function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
+  const latest = update.latest
+  const mine = latest && update.download?.version === latest.version ? update.download : null
+  const ours = hood.version.split("+")[0]
+  const whatsNew = (
+    <Button variant="outline" size="sm" onClick={() => void api().open_releases(true)}>
+      What's new
+    </Button>
+  )
+
+  let status
+  if (latest && mine?.state === "running") {
+    const pct = Math.round((mine.fraction ?? 0) * 100)
+    status = (
+      <>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">
+            Downloading {latest.version}…
+          </div>
+          <div
+            role="progressbar"
+            aria-label="Download"
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            className="mt-1.5 h-1.5 max-w-80 overflow-hidden rounded-full bg-muted"
+          >
+            <div className="h-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+        <span className="tnum text-sm text-muted-foreground">{pct}%</span>
+      </>
+    )
+  } else if (latest && mine?.state === "done") {
+    status = (
+      <>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">
+            {latest.version} is in Downloads
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {mine.file} — unpack it, close this copy and open the new one.
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => void api().show_update()}>
+          Show in folder
+        </Button>
+      </>
+    )
+  } else if (latest && mine?.state === "failed") {
+    status = (
+      <>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">
+            Could not download {latest.version}
+          </div>
+          <div className="text-xs text-destructive">{mine.error}</div>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => void startDownload()}>
+          Try again
+        </Button>
+        {whatsNew}
+      </>
+    )
+  } else if (latest) {
+    status = (
+      <>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium">
+            Version {latest.version} is out
+          </div>
+          <div className="text-xs text-muted-foreground">
+            You have {ours}
+          </div>
+        </div>
+        <Button size="sm" onClick={() => void startDownload()}>
+          Download
+        </Button>
+        {whatsNew}
+      </>
+    )
+  } else {
+    status = (
+      <p className="text-sm text-muted-foreground">
+        {!update.on
+          ? "Not checking for new versions."
+          : hood.running_as !== "built"
+            ? "Run from source, the app does not check."
+            : update.checked
+              ? "This is the latest version."
+              : "Not checked yet."}
+      </p>
+    )
+  }
+
+  return (
+    <section aria-label="Updates" className="flex flex-col gap-3">
+      <div>
+        <Label>Updates</Label>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Whether a newer version is out, and getting it
+        </p>
+      </div>
+      <div className="flex flex-col gap-3.5 rounded-xl border bg-card px-5 py-4">
+        <div className="flex flex-wrap items-center gap-3">{status}</div>
+        {/* The one thing the app sends anywhere, said where it is switched
+            off. See updates.py. */}
+        <div className="flex items-start gap-3 border-t pt-3.5">
+          <input
+            id="check-updates"
+            type="checkbox"
+            className="mt-1 size-4"
+            checked={update.on}
+            onChange={(e) => void switchUpdates(e.target.checked)}
+          />
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="check-updates">Check for new versions</Label>
+            <p className="text-xs text-muted-foreground">
+              When the app starts, and once a day while it stays open, it asks
+              GitHub which version is the latest. It sends nothing else, and
+              downloads a new version only when you press Download.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/**
  * Settings › Under the hood: what this copy of the app is and runs on, where
  * it keeps things, a report to paste into a message, and the check of the
  * interface — --audio-probe, for someone at a rehearsal with no command line.
@@ -134,6 +273,8 @@ export function UnderTheHood() {
 
   return (
     <div className="flex flex-col gap-7">
+      {/* This copy, and nothing else: what it is, and the two things to do
+          about it from here. Updates have their own section below. */}
       <section
         aria-label="About this copy"
         className="flex flex-wrap items-center gap-4 rounded-xl border bg-card px-5 py-4"
@@ -141,57 +282,26 @@ export function UnderTheHood() {
         <img src="./logo.svg" alt="" className="size-12 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="text-base font-semibold">Rehearsal Recorder</div>
-          <div className="text-sm text-muted-foreground">
-            <span className="tnum">{hood.version}</span>
-            {" · "}
-            {hood.running_as === "built" ? "the built app" : "run from source"}
-            {" · "}
-            <Button
-              variant="link"
-              className="h-auto p-0 text-sm"
-              onClick={() => void api().open_releases()}
-            >
-              Releases on GitHub
-            </Button>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span className="tnum break-all">{hood.version}</span>
+            {hood.running_as !== "built" && (
+              <span className="rounded border px-1.5 text-[11px] leading-5">Run from source</span>
+            )}
           </div>
-          {update.latest && (
-            <div className="mt-1 text-sm">
-              <span className="font-medium text-primary">
-                <span className="tnum">{update.latest.version}</span> is out
-              </span>
-              {" · "}
-              <Button
-                variant="link"
-                className="h-auto p-0 text-sm"
-                onClick={() => void api().open_releases(true)}
-              >
-                See what's new
-              </Button>
-            </div>
-          )}
         </div>
-        <CopyReport label="Copy details for a bug report" />
-        {/* The one thing the app sends anywhere, said where it is switched
-            off. See updates.py. */}
-        <div className="flex basis-full items-start gap-3 border-t pt-3">
-          <input
-            id="check-updates"
-            type="checkbox"
-            className="mt-1 size-4"
-            checked={update.on}
-            onChange={(e) => void switchUpdates(e.target.checked)}
-          />
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="check-updates">Check for new versions</Label>
-            <p className="text-xs text-muted-foreground">
-              When the app starts, and once a day while it stays open, it asks
-              GitHub which version is the latest. It sends nothing else and
-              downloads nothing.
-              {hood.running_as !== "built" && " Run from source, it does not ask."}
-            </p>
-          </div>
+        <div className="flex flex-col items-end gap-1.5">
+          <CopyReport label="Copy details for a bug report" />
+          <Button
+            variant="link"
+            className="h-auto p-0 text-sm"
+            onClick={() => void api().open_releases()}
+          >
+            All releases on GitHub
+          </Button>
         </div>
       </section>
+
+      <Updates hood={hood} update={update} />
 
       <section className="flex flex-col gap-3">
         <div>

@@ -7,14 +7,20 @@ opening.
 
 ## Unreleased
 
+- **Download, in Updates**, fetches it for your system into the
+  Downloads folder, checks its size, its SHA-256 and every file inside it
+  against the release, and opens the folder with it picked out. A download
+  cut short or damaged leaves nothing behind and can be tried again. Only
+  when asked: nothing is downloaded on its own (#6).
 - **The app says when a newer version is out.** A dot on the gear on the
-  setup screen, another on Under the hood in Settings, and there, beside the
-  version you have, which one is out and a link to it. To know, it asks GitHub
+  setup screen, another on Under the hood in Settings, and there an Updates
+  section of its own, under the card with your version: which one is out,
+  **Download** and **What's new**, or that this is the latest once GitHub has
+  said so. To know, it asks GitHub
   which version is the latest when it starts and once a day, sends nothing
-  else, downloads nothing, and never asks while a take records; with no
-  internet it just does not find out. **Check for new versions** in Under the
-  hood switches it off. Fetching and installing the new version itself waits
-  for the builds to be signed (#6).
+  else, and never asks while a take records; with no internet it just does not
+  find out. **Check for new versions** in Under the hood switches it off.
+  Installing the new version itself waits for the builds to be signed (#6).
 
 - **Last time has a panel of its own** on the setup screen, down the side
   and darker than the screen, as History's list is. On the same background
