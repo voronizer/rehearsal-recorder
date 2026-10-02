@@ -39,6 +39,7 @@ from rehearsal_recorder.store import db  # noqa: E402
 from rehearsal_recorder.store.importer import import_all  # noqa: E402
 from rehearsal_recorder.store.library import Library  # noqa: E402
 from rehearsal_recorder.store.models import Base  # noqa: E402
+from rehearsal_recorder.store.names import legacy_song, split_go, take_name  # noqa: E402
 
 problems = []
 
@@ -372,6 +373,24 @@ def main():
     ok("with no cloud folder set, an old copy is not kept",
        lib.rehearsal(no_cloud / "Jam")["takes"][0]["cloud"] == {})
     lib.close()
+
+    print("\n[8] What a take is called, and what an old name meant")
+    ok("a take is called by its song and its go, the first go too",
+       take_name("Polyn", 1, 4) == "Polyn 1" and take_name("Polyn", 3, 4) == "Polyn 3")
+    ok("a title ending in a number keeps it", take_name("Song 2", 2, 1) == "Song 2 2")
+    ok("a take with no song is called by its own number",
+       take_name(None, None, 7) == "Take 7")
+    ok("a trailing number is split off", split_go(" Polyn 3 ") == ("Polyn", 3))
+    ok("a name without one has none", split_go("Polyn") == ("Polyn", None))
+    ok("a bare number is a name, not a go", split_go("1999") == ("1999", None))
+    ok("old names: a trailing number was the go, the rest the song",
+       legacy_song("Polyn 3") == "Polyn" and legacy_song("Polyn") == "Polyn"
+       and legacy_song("Полынь 2") == "Полынь")
+    ok("old names: the app's own names are no song",
+       legacy_song("Take 4") is None and legacy_song("Recovered take 2") is None
+       and legacy_song("  ") is None and legacy_song(None) is None)
+    ok("old names: what the rule cannot know stays as it reads",
+       legacy_song("Опус 5") == "Опус")
 
     print()
     if problems:
