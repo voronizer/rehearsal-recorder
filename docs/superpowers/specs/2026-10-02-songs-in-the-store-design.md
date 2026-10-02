@@ -162,9 +162,10 @@ Python turns the string into a song and a go.
   One component draws it, used in:
   - the strip of takes (`TakeStrip.tsx`);
   - History's rows of a rehearsal (`RehearsalOverview.tsx`);
-  - the player's title;
-  - Last time's rows (`LastTime.tsx`);
   - the recording screen's name.
+
+  Last time's rows are songs, not takes, and the player's title is the
+  rehearsal's; neither changes.
 - **I2. The name field holds only the title.** Inside the field, after the
   text, the go it will be is shown muted, and it follows what is typed:
   - a song's go, taken from the choices the field already has;
