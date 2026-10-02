@@ -133,7 +133,7 @@ test.describe("the next take", () => {
     // The click left the keyboard to the screen: Space records.
     await page.keyboard.press("Space")
     // The recording screen already says the song, and review has the name.
-    await expect(page.getByText("Take 1 · Vesna")).toBeVisible()
+    await expect(page.getByRole("heading", { level: 1, name: "Vesna" })).toBeVisible()
     await page.getByRole("button", { name: /^Stop/ }).click()
     await expect(nameField(page)).toHaveValue("Vesna")
 

@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
-  CLIP_MEMORY_MS,
   QUIET_THRESHOLD,
   SILENT_AFTER_MS,
-  clipsInLastMinute,
   fallBack,
   isSilent,
   meterReach,
@@ -55,7 +53,7 @@ describe("watchStep: what a track has been doing, poll by poll", () => {
     let w = watchStep(undefined, [0.99], 0)
     w = watchStep(w, [0.99], 70)
     w = watchStep(w, [0.99], 140)
-    expect(clipsInLastMinute(w, 140)).toBe(1)
+    expect(w.clips).toBe(1)
   })
   it("counts three separate clips as three", () => {
     let w = watchStep(undefined, [0.5], 0)
@@ -63,12 +61,12 @@ describe("watchStep: what a track has been doing, poll by poll", () => {
       w = watchStep(w, [0.99], i * 200)
       w = watchStep(w, [0.5], i * 200 + 100)
     }
-    expect(clipsInLastMinute(w, 1000)).toBe(3)
+    expect(w.clips).toBe(3)
   })
-  it("forgets a clip after a minute", () => {
-    const w = watchStep(undefined, [0.99], 0)
-    expect(clipsInLastMinute(w, CLIP_MEMORY_MS - 1)).toBe(1)
-    expect(clipsInLastMinute(w, CLIP_MEMORY_MS)).toBe(0)
+  it("keeps a clip to the end of the take, however long it runs", () => {
+    let w = watchStep(undefined, [0.99], 0)
+    w = watchStep(w, [0.5], 3 * 3_600_000)
+    expect(w.clips).toBe(1)
   })
   it("calls a track silent only once it has been quiet for a moment", () => {
     let w = watchStep(undefined, [0.0005], 0)

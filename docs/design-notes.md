@@ -412,10 +412,16 @@ belong to the room and the card, so they are set once in Settings and the
 setup screen only shows them.
 
 **The recording screen is read from across the room.** Nobody stands at the
-laptop while they play, so it is a big clock, one line and a tile per track
-rather than a column of meters with figures on them. A clip is kept on that
-line for a minute, because the person who would act on it was playing, not
-watching, when it happened. Silence only dims a tile: a singer between
+laptop while they play, so it is the take's name over a big clock and a tile
+per track, rather than a column of meters with figures on them. The name is
+half the clock's size because it is what most often goes wrong — the band
+moved on to another song and nobody changed it — and is only shown, since a
+field there would invite a keypress while Space stops the take. A clip turns
+its tile red to the end of the take, because the person who would act on it
+was playing, not watching, when it happened, and a minute was shorter than
+the song. There is no status line: what is wrong is said on the tile it is
+wrong with, and running out of disk where the free space always is, in the
+corner. Each took room from the tiles. Silence only dims a tile: a singer between
 verses is silent, and an alarm for that would soon be ignored along with the
 real ones. Every tile is one width, a stereo one split down the middle, so
 the sixteen inputs of an XR18 still fit in one row.

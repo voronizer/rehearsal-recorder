@@ -2,20 +2,20 @@ import { expect, keyOn, openApp, setFake, startRehearsal, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The recording screen is read from across the room. Nobody stands at the
-// laptop while they play, so the screen is read from behind the kit: one line
-// that says what is wrong, and a tile per track that lights up. A clip is
-// remembered for a minute, because nobody was looking at the moment it
-// happened. The page's clock is a fake one, so the minute can pass without
-// waiting for it.
+// laptop while they play, so the screen is read from behind the kit: the
+// take's name over a big clock, and a tile per track that lights up. A clip
+// stays on its tile to the end of the take, because nobody was looking at the
+// moment it happened. The page's clock is a fake one, so time can pass
+// without waiting for it.
 
 /** The second go at "Vesna", recording, both tracks at half scale. */
-async function secondGo(page: Page) {
+async function secondGo(page: Page, song = "Vesna") {
   await page.clock.install()
   await openApp(page, { before: "window.__LEVELS__ = {'Guitar': [0.5], 'Vocals': [0.5]};" })
   await startRehearsal(page)
   await page.getByRole("button", { name: /Record take 1/ }).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
-  await page.fill("#take-name", "Vesna")
+  await page.fill("#take-name", song)
   await page.getByRole("button", { name: /Save take/ }).click()
   await page.getByRole("button", { name: /Record take 2/ }).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
@@ -31,8 +31,25 @@ const vocalsAt = (page: Page, level: number) =>
     page.locator("main [role=group][aria-label='Vocals'] [data-side]").first()
   ).toHaveAttribute("data-level", String(level))
 
-const status = (page: Page) => page.getByRole("status", { name: "Take status" })
 const tile = (page: Page, name: string) => page.getByRole("group", { name })
+/** The take's name, big over the clock. */
+const takeName = (page: Page) => page.getByRole("heading", { level: 1 })
+/** The line up top, beside the red RECORDING. */
+const topLine = (page: Page) => page.locator("[data-recording-line]")
+/** The pill in the middle that said all was well, or what was not. */
+const pill = (page: Page) => page.getByRole("status", { name: "Take status" })
+
+/** The track names a tile cuts short: no worse than it is without the take's
+ *  name over the clock, at each size checked. */
+const cutNames = (page: Page) =>
+  page.evaluate(() =>
+    [...document.querySelectorAll("main [role=group]")]
+      .filter((t) => {
+        const el = t.querySelector("[data-name]")!
+        return el.scrollHeight > el.clientHeight + 1
+      })
+      .map((t) => t.getAttribute("aria-label"))
+  )
 
 /** How far up its side the Vocals tile's fill reaches, 0..1. */
 const reach = (page: Page) =>
@@ -76,6 +93,10 @@ test("a first take says what is recording, what clipped and what is silent", asy
   await openApp(page)
   await startRehearsal(page)
   await page.getByRole("button", { name: /Record take 1/ }).click()
+  // A take nobody named says so, big: the sign that a name was forgotten.
+  // Said once — "Take 1" up top as well would say it twice.
+  await expect(takeName(page)).toHaveText("Take 1")
+  await expect(topLine(page)).toHaveText("Recording")
   // Silent is said once an input has been quiet for a moment.
   await expect(tile(page, "Vocals")).toHaveAttribute("data-silent")
   await expect(tile(page, "Vocals")).toContainText("silent")
@@ -84,9 +105,11 @@ test("a first take says what is recording, what clipped and what is silent", asy
     page.getByText("Interface connected · room for about 10 h 40 min more", { exact: true })
   ).toHaveCount(1)
   // Guitar at the top the whole time is one clip that has not ended, not
-  // one for every poll, in one line big enough to read from the kit.
-  await expect(status(page)).toHaveText("Guitar clipped in the last minute")
+  // one for every poll, said on its tile and nowhere else.
   await expect(tile(page, "Guitar")).toHaveAttribute("data-clipped")
+  await expect(tile(page, "Guitar")).toContainText("clipped")
+  await expect(tile(page, "Guitar")).not.toContainText("clipped 2×")
+  await expect(pill(page)).toHaveCount(0)
   // The clock counts minutes, not hours nobody has played yet, and a first
   // take has nothing to be measured against.
   await expect(page.getByRole("timer")).toHaveText(/^0:0\d$/)
@@ -95,21 +118,56 @@ test("a first take says what is recording, what clipped and what is silent", asy
   await expect(page.getByText("autosaved every 30 s", { exact: true })).toHaveCount(1)
 })
 
-test("a second go at a song is measured against the first, and all fine is said too", async ({
+test("a second go at a song is measured against the first, under the take's name", async ({
   page,
 }) => {
   await secondGo(page)
-  await expect(page.getByText("Vesna took 0:06 last time", { exact: true })).toHaveCount(1)
+  // The name, big over the clock, half its size and centred over it, so it
+  // reads from as far away. The number goes up beside RECORDING.
+  await expect(takeName(page)).toHaveText("Vesna 2")
+  await expect(topLine(page)).toHaveText(/^Recording\s*Take 2$/)
+  const shape = await page.evaluate(() => {
+    const name = document.querySelector("h1")!
+    const clock = document.querySelector("[role=timer]")!
+    const n = name.getBoundingClientRect()
+    const c = clock.getBoundingClientRect()
+    return {
+      half: parseFloat(getComputedStyle(name).fontSize) / parseFloat(getComputedStyle(clock).fontSize),
+      offCentre: Math.abs(n.left + n.width / 2 - (c.left + c.width / 2)),
+      over: c.top - n.bottom,
+    }
+  })
+  expect(shape.half).toBeCloseTo(0.5, 1)
+  expect(shape.offCentre).toBeLessThan(2)
+  expect(shape.over).toBeGreaterThanOrEqual(0)
+  expect(shape.over).toBeLessThan(12)
+
+  // The song is up there already; the bar under the clock says only the time.
+  await expect(page.getByText("Took 0:06 last time", { exact: true })).toHaveCount(1)
   // On a bar that fills as the band gets further into it.
   await expect(page.getByRole("progressbar", { name: "Against the last go" })).toHaveAttribute(
     "aria-valuemax",
     "6"
   )
-  // So that no news does not read as good news.
-  await expect(status(page)).toHaveText("All 2 tracks recording")
+  await expect(pill(page)).toHaveCount(0)
 })
 
-test("clips are counted, on the tile that clipped, and kept for a minute", async ({ page }) => {
+test("a long name is cut short on one line, and moves nothing", async ({ page }) => {
+  await secondGo(page, "A very long name for a song about spring, summer and a little autumn")
+  const name = takeName(page)
+  await expect(name).toHaveText(/^A very long name .* 2$/)
+  const cut = await name.evaluate((el) => ({
+    short: el.scrollWidth > el.clientWidth,
+    oneLine: el.getBoundingClientRect().height < parseFloat(getComputedStyle(el).fontSize) * 1.5,
+    inside: el.getBoundingClientRect().right <= window.innerWidth,
+    ellipsis: getComputedStyle(el).textOverflow,
+  }))
+  expect(cut).toEqual({ short: true, oneLine: true, inside: true, ellipsis: "ellipsis" })
+})
+
+test("clips are counted, on the tile that clipped, and kept to the end of the take", async ({
+  page,
+}) => {
   await secondGo(page)
   for (let i = 0; i < 3; i++) {
     await levels(page, 0.5, 0.99)
@@ -117,14 +175,16 @@ test("clips are counted, on the tile that clipped, and kept for a minute", async
     await levels(page, 0.5, 0.5)
     await vocalsAt(page, 50)
   }
-  await expect(status(page)).toHaveText("Vocals clipped 3 times in the last minute")
   await expect(tile(page, "Vocals")).toHaveAttribute("data-clipped")
   await expect(tile(page, "Vocals")).toContainText("clipped 3×")
   await expect(tile(page, "Guitar")).not.toHaveAttribute("data-clipped")
 
+  // Whoever was playing at the time sees it when they look up, however much
+  // later that is.
   await page.clock.fastForward(61_000)
-  await expect(status(page)).toHaveText("All 2 tracks recording")
-  await expect(tile(page, "Vocals")).not.toHaveAttribute("data-clipped")
+  await vocalsAt(page, 50)
+  await expect(tile(page, "Vocals")).toHaveAttribute("data-clipped")
+  await expect(tile(page, "Vocals")).toContainText("clipped 3×")
   // And the clock goes on in minutes past the first.
   await expect(page.getByRole("timer")).toHaveText(/^1:0\d$/)
 })
@@ -145,7 +205,7 @@ test("a quiet singer is not silent, and a dead input dims without an alarm", asy
   // A singer between verses is quiet: dimmed, and nothing said about it.
   await levels(page, 0.5, 0.0005)
   await expect(vocals).toHaveAttribute("data-silent")
-  await expect(status(page)).toHaveText("All 2 tracks recording")
+  await expect(page.locator("[data-notice]")).toHaveCount(0)
   await levels(page, 0.5, 0.5)
   await expect(vocals).not.toHaveAttribute("data-silent")
 })
@@ -182,15 +242,18 @@ test("the fill is in dB and falls back, and the figure holds the peak", async ({
   await expect(tile(page, "Vocals")).toContainText("-18.0 dB")
 })
 
-test("running out of disk outranks a clip, and past an hour the clock says the hours", async ({
+test("running out of disk is said on the disk line, and past an hour the clock says the hours", async ({
   page,
 }) => {
   await secondGo(page)
   await levels(page, 0.5, 0.99)
   await vocalsAt(page, 99)
   await setFake(page, "__LOW_SPACE__", true)
-  // It is what ends the take.
-  await expect(status(page)).toHaveText("Running out of space")
+  // Said where the free space always is, for as long as it holds: not a
+  // notice over the tiles, and not instead of the clip.
+  await expect(page.getByText(/^Running out of space: .* left\./)).toHaveCount(1)
+  await expect(page.locator("[data-notice]")).toHaveCount(0)
+  await expect(pill(page)).toHaveCount(0)
   await expect(tile(page, "Vocals")).toHaveAttribute("data-clipped")
   await setFake(page, "__LOW_SPACE__", false)
 
@@ -263,6 +326,35 @@ test("sixteen tracks still fit in one row, a stereo one split down the middle", 
   await expect(keys).toHaveAttribute("data-channels", "2")
   await expect(keys.locator("[data-side]")).toHaveCount(2)
   await expect(keys.locator("[data-side='2']")).toHaveAttribute("data-level", "0")
+})
+
+test("on a small laptop the take's name leaves the tiles room for their names", async ({
+  page,
+}) => {
+  // Eight tracks on a second go, with the bar under the clock: the tallest
+  // the screen gets. The name over the clock takes no more than the pill in
+  // the middle gave back.
+  const tracks = ["Kick", "Snare", "Overheads", "Bass", "Guitar", "Keys", "Vocals", "Backing"].map(
+    (name, i) => ({ name, channel: i + 1 })
+  )
+  await page.addInitScript(`window.__SESSION_TRACKS__ = ${JSON.stringify(tracks)};`)
+  await secondGo(page)
+  await expect(page.locator("main [role=group]")).toHaveCount(8)
+  for (const [width, height, longest] of [
+    [1366, 768, "whole"],
+    // The narrowest tiles were already too short for "Overheads" here.
+    [1024, 640, "may be cut"],
+  ] as const) {
+    await page.setViewportSize({ width, height })
+    await expect
+      .poll(() => page.evaluate(() => {
+        const main = document.querySelector("main")!
+        return main.scrollHeight > main.clientHeight + 1
+      }), { message: `scrolls at ${width}×${height}` })
+      .toBe(false)
+    const cut = await cutNames(page)
+    expect(longest === "whole" ? cut : cut.filter((n) => n !== "Overheads"), `names cut short at ${width}×${height}`).toEqual([])
+  }
 })
 
 test("a tile carries its track's icon in its top left corner", async ({ page }) => {

@@ -140,7 +140,7 @@ export type SessionState =
 
 /**
  * How long the last go at a song ran, for the recording screen's
- * "Vesna took 2:21 last time". Python finds it by the same rule as `songs`.
+ * "Took 2:21 last time". Python finds it by the same rule as `songs`.
  */
 export type LastAttempt = {
   song: string

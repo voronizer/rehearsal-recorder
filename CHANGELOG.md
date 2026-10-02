@@ -15,6 +15,20 @@ opening.
   opening it; when the sound goes out through the audio interface, the
   Mac's own volume keys often do nothing. It can be set before anything
   plays, and the next take starts at it (#14).
+- **The take's name, big, over the clock while it records.** It was the
+  smallest thing on the recording screen, grey in the corner, and it is
+  what most often goes wrong: the band has moved on to another song and
+  nobody changed it. Now it is half the size of the clock and reads from as
+  far. A take nobody named says "Take 3" there, which is the sign. The
+  number has moved up beside the red RECORDING, and the bar under the clock
+  says only "Took 2:21 last time", since the song is over it (#11).
+- **A clip stays on its tile until the take ends**, red and counted,
+  "clipped 3×". It was kept for a minute, and a minute is shorter than most
+  songs: whoever was playing when it happened looked up to nothing. The pill
+  in the middle that said "All 4 tracks recording", or which tracks had
+  clipped, is gone, and with it the room it took from the tiles. Running out
+  of disk is said where the free space always is, in the top corner, which
+  turns yellow.
 
 ## 0.9.0
 

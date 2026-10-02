@@ -3,9 +3,10 @@
  * of the levels to the next.
  *
  * The recording screen is read from behind the kit, by people who were
- * playing rather than watching when something happened. So a clip is kept
- * for a minute instead of flashing for one poll, and "silent" waits a moment
- * before it is said — a drum between hits is not a dead mic.
+ * playing rather than watching when something happened. So a clip stays on
+ * its tile to the end of the take instead of flashing for one poll — it was
+ * kept for a minute, and a minute is shorter than a song — and "silent"
+ * waits a moment before it is said: a drum between hits is not a dead mic.
  */
 
 /** A peak this close to full scale is a clip. */
@@ -45,16 +46,14 @@ export function meterReach(peak: number): number {
   const db = 20 * Math.log10(peak)
   return Math.min(1, Math.max(0, 1 - db / METER_FLOOR_DB))
 }
-/** How long a clip is remembered. */
-export const CLIP_MEMORY_MS = 60_000
 /** How long a track stays quiet before it is called silent. */
 export const SILENT_AFTER_MS = 1_500
 /** How long the line for the latest peak stays put before it falls back. */
 const HOLD_MS = 1_500
 
 export type TrackWatch = {
-  /** When each clip began, oldest first; none older than CLIP_MEMORY_MS. */
-  clips: number[]
+  /** Clips since the take began. */
+  clips: number
   /** Clipping on the last poll, so a clip that goes on is counted once. */
   clipping: boolean
   /** Since when every side has been quiet, or null while it plays. */
@@ -75,8 +74,7 @@ export function watchStep(
 ): TrackWatch {
   const sides = peaks.length ? peaks : [0]
   const clipping = sides.some((p) => p > CLIP_THRESHOLD)
-  const clips = (prev?.clips ?? []).filter((at) => now - at < CLIP_MEMORY_MS)
-  if (clipping && !prev?.clipping) clips.push(now)
+  const clips = (prev?.clips ?? 0) + (clipping && !prev?.clipping ? 1 : 0)
 
   const quiet = sides.every((p) => p < QUIET_THRESHOLD)
   const quietSince = quiet ? (prev?.quietSince ?? now) : null
@@ -97,12 +95,4 @@ export function isSilent(watch: TrackWatch | undefined, now: number): boolean {
   return (
     watch?.quietSince != null && now - watch.quietSince >= SILENT_AFTER_MS
   )
-}
-
-/** Clips in the last minute — the ones a later poll has not yet dropped. */
-export function clipsInLastMinute(
-  watch: TrackWatch | undefined,
-  now: number
-): number {
-  return (watch?.clips ?? []).filter((at) => now - at < CLIP_MEMORY_MS).length
 }

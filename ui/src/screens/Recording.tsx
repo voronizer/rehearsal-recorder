@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { CircleCheck, HardDrive, Square, TriangleAlert } from "lucide-react"
+import { HardDrive, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Kbd, Shell } from "@/components/Shell"
 import { TrackTile } from "@/components/TrackTile"
@@ -13,19 +13,8 @@ import {
   type RecordingHealth,
   type PlacedTrack,
 } from "@/lib/api"
-import {
-  aboutDuration,
-  clippedLine,
-  formatClock,
-  formatMMSS,
-  recordingLine,
-} from "@/lib/format"
-import {
-  clipsInLastMinute,
-  isSilent,
-  watchStep,
-  type TrackWatch,
-} from "@/lib/levels"
+import { aboutDuration, formatClock, formatMMSS } from "@/lib/format"
+import { isSilent, watchStep, type TrackWatch } from "@/lib/levels"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 import { cn } from "@/lib/utils"
@@ -38,12 +27,16 @@ const TIMER_TICK_MS = 200
 const HEALTH_POLL_MS = 2000
 // The slot this screen's notice takes: why a take stopped by itself.
 const SAID = "recording"
+// The clock is as big as the window's height allows, and the take's name
+// over it half that, so the two read from the same distance.
+const CLOCK_SIZE = "clamp(4rem, 19vh, 9.5rem)"
 
 /**
  * The take while it records, laid out to be read from behind the kit: nobody
- * stands at the laptop while they play. A big clock, how far into the song
- * the band is against the last go at it, one line that says what is wrong —
- * or that nothing is — and a tile per track that lights up with its level.
+ * stands at the laptop while they play. What is being recorded, big, over a
+ * big clock; how far into the song the band is against the last go at it;
+ * and a tile per track that lights up with its level and turns red if it
+ * clips. Running out of disk is said where the free space always is.
  */
 export function Recording({
   takeNumber,
@@ -62,8 +55,8 @@ export function Recording({
   const [elapsed, setElapsed] = useState(0)
   const [levels, setLevels] = useState<Record<string, number[]>>({})
   // What each track has been doing, kept across polls: a clip nobody saw
-  // stays on screen for a minute. Stamped with the poll's own time, so the
-  // tiles and the line agree about which clips are still in the minute.
+  // stays on its tile to the end of the take. Stamped with the poll's own
+  // time, which is what a tile's silence is measured from.
   const [watch, setWatch] = useState<{
     at: number
     tracks: Record<string, TrackWatch>
@@ -137,6 +130,10 @@ export function Recording({
 
   useSpacebar(stop, !stopping)
 
+  // A take nobody named is "Take 3" big, the sign that a name was forgotten,
+  // and the number up top would only say it again.
+  const named = takeName !== `Take ${takeNumber}`
+
   // Watch that the interface is still there and the disk is not filling up.
   useEffect(() => {
     let alive = true
@@ -172,21 +169,6 @@ export function Recording({
     }
   }, [])
 
-  // The one line read from across the room. Running out of disk comes first:
-  // it is what would end the take. A card that has gone is said up in the
-  // corner instead, for the moment before the take stops itself.
-  const clipped = tracks
-    .map((t) => ({ name: t.name, clips: clipsInLastMinute(watch.tracks[t.name], watch.at) }))
-    .filter((t) => t.clips > 0)
-  const said: { kind: "space" | "clip" | "fine"; text: string } | null =
-    health === null || health.error
-      ? null
-      : health.low_space
-        ? { kind: "space", text: "Running out of space" }
-        : clipped.length > 0
-          ? { kind: "clip", text: clippedLine(clipped) }
-          : { kind: "fine", text: recordingLine(tracks.length) }
-
   return (
     <Shell
       activity={false}
@@ -213,7 +195,7 @@ export function Recording({
     >
       <div className="flex h-full min-h-0 flex-col items-center gap-[2.5vh]">
         <div className="flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-1">
-          <div className="flex items-center gap-2.5 text-sm">
+          <div data-recording-line className="flex items-center gap-2.5 text-sm">
             <span className="relative flex size-2.5">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-destructive opacity-75" />
               <span className="relative inline-flex size-2.5 rounded-full bg-destructive" />
@@ -221,12 +203,7 @@ export function Recording({
             <span className="font-semibold tracking-wide text-destructive uppercase">
               Recording
             </span>
-            <span className="text-muted-foreground">
-              {/* "Take 3 · Take 3" for a take nobody has named yet says it twice */}
-              {takeName === `Take ${takeNumber}`
-                ? takeName
-                : `Take ${takeNumber} · ${takeName}`}
-            </span>
+            {named && <span className="text-muted-foreground">Take {takeNumber}</span>}
           </div>
 
           {/* Always there, not only when something is wrong: you should be
@@ -260,13 +237,26 @@ export function Recording({
           </div>
         </div>
 
-        <div
-          role="timer"
-          aria-label="Take time"
-          className="leading-none font-semibold tracking-tight tabular-nums"
-          style={{ fontSize: "clamp(4rem, 19vh, 9.5rem)" }}
-        >
-          {formatClock(elapsed)}
+        {/* The name was the smallest thing here, grey in the corner, and it
+            is what most often goes wrong: the band has moved on to another
+            song and nobody changed it. Only shown — a field would invite a
+            keypress, and Space stops the take. One line, cut short, so that
+            a long name never pushes the clock or the tiles about. */}
+        <div className="flex max-w-full flex-col items-center gap-1">
+          <h1
+            className="max-w-full truncate pb-[0.08em] leading-none font-semibold tracking-tight"
+            style={{ fontSize: `calc(${CLOCK_SIZE} / 2)` }}
+          >
+            {takeName}
+          </h1>
+          <div
+            role="timer"
+            aria-label="Take time"
+            className="leading-none font-semibold tracking-tight tabular-nums"
+            style={{ fontSize: CLOCK_SIZE }}
+          >
+            {formatClock(elapsed)}
+          </div>
         </div>
 
         {lastAttempt && lastAttempt.duration_sec > 0 && (
@@ -288,32 +278,11 @@ export function Recording({
             </div>
             <div className="flex justify-between gap-4 text-sm text-muted-foreground">
               <span className="tnum">0:00</span>
-              <span>
-                {lastAttempt.song} took {formatMMSS(lastAttempt.duration_sec)} last time
-              </span>
+              {/* The song is over the clock already. */}
+              <span>Took {formatMMSS(lastAttempt.duration_sec)} last time</span>
             </div>
           </div>
         )}
-
-        <div
-          role="status"
-          aria-label="Take status"
-          className={cn(
-            "inline-flex min-h-11 items-center gap-2.5 rounded-full border px-5 py-2 text-lg font-semibold",
-            !said && "invisible",
-            said?.kind === "fine" && "border-signal/45 bg-signal/10 text-signal",
-            said?.kind === "clip" &&
-              "border-destructive/50 bg-destructive/10 text-destructive",
-            said?.kind === "space" && "border-warn/50 bg-warn/10 text-warn"
-          )}
-        >
-          {said?.kind === "fine" ? (
-            <CircleCheck className="size-5 shrink-0" />
-          ) : (
-            said && <TriangleAlert className="size-5 shrink-0" />
-          )}
-          {said?.text}
-        </div>
 
         <div
           className="grid min-h-0 w-full flex-1 gap-[clamp(0.25rem,0.8vw,0.75rem)]"
@@ -333,7 +302,7 @@ export function Recording({
                 peaks={levels[t.name] ?? (t.stereo ? [0, 0] : [0])}
                 shown={seen?.shown ?? []}
                 held={seen?.hold.map((h) => h.peak) ?? []}
-                clips={clipsInLastMinute(seen, watch.at)}
+                clips={seen?.clips ?? 0}
                 silent={isSilent(seen, watch.at)}
               />
             )

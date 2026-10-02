@@ -18,7 +18,7 @@ const reach = (peak: number) => meterReach(peak) * 100
  *
  * The writing on it shrinks with the tile rather than with the track count,
  * and what does not fit at that size — the input, the words — goes, leaving
- * the colour to say it: a red edge for a clip in the last minute, dimmed for
+ * the colour to say it: red for a clip, to the end of the take, dimmed for
  * silence. The latest peak in dB sits at the top, out of the name's way,
  * and the fill is in dB too, from −60 at the bottom to full scale at the top,
  * as on the desk the band sets its gain on. The track's icon stands in the
@@ -45,7 +45,7 @@ export function TrackTile({
   shown: number[]
   /** The highest each side reached lately, 0..1. */
   held: number[]
-  /** Clips in the last minute. */
+  /** Clips since the take began. */
   clips: number
   silent: boolean
 }) {

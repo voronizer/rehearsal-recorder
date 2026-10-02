@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
   aboutDuration,
-  clippedLine,
   croppedButNotSwept,
   daysAgo,
   describeRescan,
@@ -17,7 +16,6 @@ import {
   longAgo,
   notConnected,
   peakToDb,
-  recordingLine,
   takesLabel,
 } from "@/lib/format"
 
@@ -64,30 +62,6 @@ describe("times", () => {
   it("counts goes at a song", () => {
     expect(goesLabel(1)).toBe("1 go")
     expect(goesLabel(4)).toBe("4 goes")
-  })
-})
-
-describe("the recording screen's line", () => {
-  it("names the one track that clipped, and how often", () => {
-    expect(clippedLine([{ name: "Vocals", clips: 1 }])).toBe("Vocals clipped in the last minute")
-    expect(clippedLine([{ name: "Vocals", clips: 3 }])).toBe(
-      "Vocals clipped 3 times in the last minute"
-    )
-  })
-  it("names two, and counts more than that", () => {
-    expect(
-      clippedLine([
-        { name: "Vocals", clips: 1 },
-        { name: "Bass", clips: 2 },
-      ])
-    ).toBe("Vocals and Bass clipped in the last minute")
-    expect(clippedLine([1, 2, 3, 4].map((n) => ({ name: `T${n}`, clips: 1 })))).toBe(
-      "4 tracks clipped in the last minute"
-    )
-  })
-  it("says all is fine too, so that no news does not read as good news", () => {
-    expect(recordingLine(1)).toBe("1 track recording")
-    expect(recordingLine(5)).toBe("All 5 tracks recording")
   })
 })
 

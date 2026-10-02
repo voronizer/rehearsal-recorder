@@ -113,20 +113,19 @@ song took. If you discard the take, the next one keeps the name you picked.
 
 ### While recording
 
-![Recording: a big clock, how long the last go at this song took, and a tile for each track](screenshots/recording.png)
+![Recording: the take's name over a big clock, how long the last go at this song took, and a tile for each track](screenshots/recording.png)
 
 The recording screen is made to be read from where you play, not from the
 laptop.
 
+- **The take's name** is over the clock, half its size, so you can see from
+  where you stand what you are recording. A take nobody named says "Take 3"
+  there: that is the sign the name was forgotten. Put it right after Stop.
+  The take's number is up top, beside the red RECORDING.
 - **The clock** shows how long the take has been running.
 - **The bar under it** shows up when this is another go at a song you have
-  already played in this rehearsal: "Vesna took 2:21 last time". It fills as
-  you play, so you can see how far into the song you are.
-- **The line in the middle** says whether all is well. It is green while
-  every track is recording. It turns red when a track clips — "Vocals clipped
-  3 times in the last minute" — and stays red for a minute after the last
-  clip, so you still see it if you were playing when it happened. It turns
-  yellow when the disk is about to run out.
+  already played in this rehearsal: "Took 2:21 last time". It fills as you
+  play, so you can see how far into the song you are.
 - **Each track has a tile** that fills from the bottom with its level. The
   fill is in dB, like the meters on a mixer: −60 dB at the bottom, full
   scale at the top. If the gain is set so that the loudest hit reaches about
@@ -134,12 +133,14 @@ laptop.
   jumps up with each hit and sinks back slowly, as on a mixer. The figure at
   the top is the latest peak, held for a moment so that it can be read. The
   track's icon is in the top left corner. A stereo track is split down the
-  middle, left and right. A tile that
-  clipped gets a red edge. A tile with nothing coming in, below −60 dB, goes
-  dim, which is normal while someone is not playing.
+  middle, left and right. A tile that clipped turns red and says how many
+  times, "clipped 3×", and stays red until the take ends, so you still see
+  it when you look up if you were playing when it happened. A tile with
+  nothing coming in, below −60 dB, goes dim, which is normal while someone
+  is not playing.
 
 The top corner says that the interface is connected and how much recording
-time the disk has left.
+time the disk has left. It turns yellow when the disk is about to run out.
 
 Every track is written to disk while you play, so there is nothing to save
 during a take. Press **Stop**, or Space, when the song is over.
