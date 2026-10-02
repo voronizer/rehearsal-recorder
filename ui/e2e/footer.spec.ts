@@ -22,6 +22,9 @@ const footer = (page: Page) =>
       main: (buttons[rightmost]?.textContent ?? "").trim(),
       onTheRight: boxes.every((r) => r.left > window.innerWidth / 2),
       sideways: document.documentElement.scrollWidth > window.innerWidth,
+      // Shell clips rather than scrolls, so a button cut off at the edge
+      // would not make `sideways` true: this catches it directly.
+      inside: boxes.every((r) => r.right <= window.innerWidth),
     }
   })
 
@@ -32,7 +35,7 @@ test("setup: Start rehearsal on the right", async ({ page }) => {
   await expect(startButton(page)).toBeVisible()
   const f = await footer(page)
   expect(f.main).toMatch(/^Start rehearsal/)
-  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false })
+  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
 })
 
 test("rehearsal: Finish with an edge, Record rightmost", async ({ page }) => {
@@ -41,7 +44,7 @@ test("rehearsal: Finish with an edge, Record rightmost", async ({ page }) => {
   const f = await footer(page)
   expect(f.main).toMatch(/^Record take 1/)
   expect(f.variants).toEqual(["outline", "destructive"])
-  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false })
+  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
 })
 
 test("recording: Stop on the right, autosave said under it", async ({ page }) => {
@@ -51,7 +54,7 @@ test("recording: Stop on the right, autosave said under it", async ({ page }) =>
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
   const f = await footer(page)
   expect(f.main).toMatch(/^Stop/)
-  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false })
+  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
   const under = await page.evaluate(() => {
     const stop = [...document.querySelectorAll("footer button")].find((b) =>
       b.textContent?.startsWith("Stop")
@@ -71,7 +74,7 @@ test("review: Discard with an edge, Save take rightmost", async ({ page }) => {
   const f = await footer(page)
   expect(f.main).toMatch(/^Save take/)
   expect(f.variants).toEqual(["outline", "default"])
-  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false })
+  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
 })
 
 test("finished: History with an edge, New rehearsal rightmost", async ({ page }) => {
@@ -82,7 +85,7 @@ test("finished: History with an edge, New rehearsal rightmost", async ({ page })
   const f = await footer(page)
   expect(f.main).toMatch(/^New rehearsal/)
   expect(f.variants).toEqual(["outline", "default"])
-  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false })
+  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
 })
 
 test("drafts: the note on the left, Decide later with an edge on the right", async ({ page }) => {
@@ -95,7 +98,7 @@ test("drafts: the note on the left, Decide later with an edge on the right", asy
   await expect(page.getByRole("button", { name: "Decide later" })).toBeVisible()
   const f = await footer(page)
   expect(f.variants).toEqual(["outline"])
-  expect(f).toMatchObject({ onTheRight: true, sideways: false })
+  expect(f).toMatchObject({ onTheRight: true, sideways: false, inside: true })
   const note = page.locator("footer").getByText("They stay on disk")
   expect((await note.boundingBox())!.x).toBeLessThan(960 / 2)
 })

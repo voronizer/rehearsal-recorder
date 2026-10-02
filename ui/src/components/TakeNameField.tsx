@@ -65,8 +65,14 @@ export function TakeNameField({
     if (name !== value) onCommit(name)
   }
   // A song or ✕ while typing goes into the field and stays there to type on.
+  // `startedAs` moves with it, so a fallback that is not itself a song (e.g.
+  // "Take 4") does not narrow the pills by its own text until the field is
+  // left and refocused.
   const put = (name: string) => {
-    if (draft !== null) setDraft(name)
+    if (draft !== null) {
+      setDraft(name)
+      setStartedAs(name)
+    }
     commit(name)
   }
 

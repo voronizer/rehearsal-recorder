@@ -7,10 +7,9 @@ import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
-import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
+import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
-import { SongChips } from "@/components/SongChips"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
@@ -395,23 +394,12 @@ export function HistoryScreen({
         }}
       />
 
-      <PromptDialog
-        open={takeToRename !== null}
+      <RenameTakeDialog
+        take={takeToRename}
+        choices={renameChoices}
         onOpenChange={(open) => !open && setTakeToRename(null)}
-        title="Rename take"
-        label="The folder on disk is renamed too."
-        initialValue={takeToRename?.name ?? ""}
-        below={(value, fill) => (
-          <SongChips
-            choices={renameChoices}
-            value={value}
-            initial={takeToRename?.name ?? ""}
-            onPick={fill}
-          />
-        )}
         onSubmit={(name) => {
           if (takeToRename) void renameTake(takeToRename, name)
-          setTakeToRename(null)
         }}
       />
 

@@ -960,6 +960,39 @@ def main():
     ok("the folder on disk was renamed too",
        any(p.name.startswith("01 - Polyn (best)") for p in folder.iterdir()))
 
+    # A rename to the take's own name, or only a case variant of it, must
+    # not chase it into "... (2)": _unique_path saw the take's own folder as
+    # already taken (it is — it's itself) and moved it sideways every time.
+    _, rn = fresh_api(tmp / "rename_own")
+    rn.start_rehearsal("Case", 0, SR, [{"name": "Gtr", "channel": 1}])
+    rn_folder = Path(rn._session["folder"])
+    d9 = rn_folder / "_drafts" / "take 1"
+    write_wav(d9 / "Gtr.wav", 100, seconds=1.0)
+    rn.keep_take(1, str(d9), "Polyn", 1.0, [{"name": "Gtr", "file": str(d9 / "Gtr.wav")}])
+
+    unchanged = rn.rename_take(str(rn_folder), 1, "Polyn")
+    ok("renaming a take to the name it already has succeeds", unchanged.get("ok"))
+    ok("its folder is unchanged",
+       Path(unchanged["take"]["tracks"][0]["file"]).parent.name == "01 - Polyn")
+    ok("and no '(2)' folder was created",
+       not any(p.name == "01 - Polyn (2)" for p in rn_folder.iterdir()))
+
+    # A separate take, so the case-only rename starts from "01 - Polyn"
+    # rather than whatever the check above left behind.
+    _, rn2 = fresh_api(tmp / "rename_case")
+    rn2.start_rehearsal("Case2", 0, SR, [{"name": "Gtr", "channel": 1}])
+    rn2_folder = Path(rn2._session["folder"])
+    d9b = rn2_folder / "_drafts" / "take 1"
+    write_wav(d9b / "Gtr.wav", 100, seconds=1.0)
+    rn2.keep_take(1, str(d9b), "Polyn", 1.0, [{"name": "Gtr", "file": str(d9b / "Gtr.wav")}])
+
+    cased = rn2.rename_take(str(rn2_folder), 1, "POLYN")
+    ok("renaming to a case-only variant succeeds", cased.get("ok"))
+    ok("the folder's name takes the new case",
+       Path(cased["take"]["tracks"][0]["file"]).parent.name == "01 - POLYN")
+    ok("and no '(2)' folder exists",
+       not any(p.name in ("01 - Polyn (2)", "01 - POLYN (2)") for p in rn2_folder.iterdir()))
+
     rr = a.rename_rehearsal(str(folder), "Tuesday jam")
     new_folder = Path(rr["folder"])
     ok("rehearsal renamed", rr["ok"] and new_folder.exists() and not folder.exists())

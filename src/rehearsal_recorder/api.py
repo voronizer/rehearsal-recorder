@@ -2052,10 +2052,24 @@ class Api:
         new_tracks = None
         if len(old_dirs) == 1:
             old_dir = old_dirs.pop()
-            new_dir = _unique_path(
-                folder / f"{take_number:02d} - {_safe_name(display_name)}"
+            target = folder / f"{take_number:02d} - {_safe_name(display_name)}"
+            # Path itself compares case-insensitively on Windows, so whether
+            # the spelling actually changed is asked of plain strings.
+            same_spelling = str(target) == str(old_dir)
+            same_folder = same_spelling or (
+                target.exists() and old_dir.exists() and target.samefile(old_dir)
             )
-            if old_dir.exists() and old_dir != new_dir:
+            if same_folder:
+                # The name is unchanged, or changes only in case (a
+                # case-blind file system sees the same folder either way).
+                # A case-only rename is still a real change to show, so it
+                # is made in place; otherwise nothing moves — chasing
+                # `_unique_path` here would only push the take into its own
+                # "(2)" folder.
+                new_dir = old_dir if same_spelling else target
+            else:
+                new_dir = _unique_path(target)
+            if old_dir.exists() and str(old_dir) != str(new_dir):
                 # Windows will not rename a folder holding a file the
                 # player has mapped, and the rehearsal screen is usually
                 # playing the very take it offers to rename. The interface

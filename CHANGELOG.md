@@ -26,6 +26,8 @@ opening.
   History and Decide later have an edge, and read as buttons. On the setup
   screen Last time has moved to the left, so the new rehearsal's setup is
   over Start rehearsal.
+- **Rename take uses the same field and songs**, on the rehearsal screen and
+  in History: ✕ there puts back the name the take has, and Enter renames.
 - **How loud takes play, from the header.** A speaker beside History, on
   every screen a take can be played from: setup, the rehearsal, History and
   the review screen. Behind it is the same **Master** as under a take's

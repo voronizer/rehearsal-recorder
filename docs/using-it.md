@@ -167,7 +167,7 @@ called "Polyn 2". Under the name are the songs you have played: this
 rehearsal's first, then the others, most recent first. Click one to name the
 take after it, then press Space to save. See [Names and songs](#names-and-songs).
 
-If you have a cloud folder, a checkbox above the buttons shows whether this
+If you have a cloud folder, a checkbox under the buttons shows whether this
 take will be sent there. Changing it affects this take only.
 
 You can listen, add markers and crop the take here, before you save it. The

@@ -96,6 +96,38 @@ test("two rows at most, in any window, and the songs played latest stay", async 
   }
 })
 
+test("a quick click on Record or Save take after a name nothing matches still lands", async ({
+  page,
+}) => {
+  await openApp(page, {
+    after:
+      "window.pywebview.api.song_choices = async () => ({here: [], other: " +
+      "Array.from({length: 30}, (_, i) => ({song: 'Song' + (i + 1), name: 'Song' + (i + 1)}))});",
+  })
+  await startRehearsal(page)
+  await expect.poll(() => rowsUnder(page, "Next take")).toBe(2)
+
+  const field = page.getByRole("textbox", { name: "Next take" })
+  await field.fill("Nothing like it")
+  const record = page.getByRole("button", { name: /Record take 1/ })
+  const recordBox = (await record.boundingBox())!
+  await page.mouse.move(recordBox.x + recordBox.width / 2, recordBox.y + 6)
+  await page.mouse.down()
+  await page.mouse.up()
+  await expect(page.getByRole("heading", { level: 1, name: "Nothing like it" })).toBeVisible()
+
+  await page.getByRole("button", { name: /^Stop/ }).click()
+  await nameField(page).fill("Still nothing")
+  const save = page.getByRole("button", { name: /Save take/ })
+  const saveBox = (await save.boundingBox())!
+  await page.mouse.move(saveBox.x + saveBox.width / 2, saveBox.y + 6)
+  await page.mouse.down()
+  await page.mouse.up()
+  await expect
+    .poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2])
+    .toBe("Still nothing")
+})
+
 test("a song name longer than the row is cut short, and is still one pill", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
@@ -122,7 +154,7 @@ test("with no songs at all, nothing is offered under the field", async ({ page }
   await expect(page.locator("[data-song-choice], [data-all-songs]")).toHaveCount(0)
 })
 
-test("renaming a take on the rehearsal screen offers them too, and Enter still renames", async ({
+test("renaming a take on the rehearsal screen offers the songs, ✕ puts its name back, and Enter renames", async ({
   page,
 }) => {
   await openApp(page)
@@ -135,13 +167,15 @@ test("renaming a take on the rehearsal screen offers them too, and Enter still r
   await page.hover("[data-take='2']")
   await page.getByRole("button", { name: "Rename take Polyn 2" }).click()
   const dialog = page.getByRole("dialog")
+  const field = dialog.getByRole("textbox", { name: "Take name" })
   // The take being renamed is not a go of its own: Polyn is still Polyn 2.
-  await expect(
-    dialog.getByRole("group", { name: "This rehearsal" }).getByRole("button")
-  ).toHaveText(["Polyn 2"])
-  await dialog.getByRole("button", { name: "Vesna", exact: true }).click()
-  await expect(dialog.locator("input")).toHaveValue("Vesna")
-  await expect(dialog.locator("input")).toBeFocused()
+  await expect(dialog.locator("[data-song-choice]").first()).toHaveText("Polyn 2")
+  await dialog.locator("[data-song-choice]").filter({ hasText: /^Vesna$/ }).click()
+  await expect(field).toHaveValue("Vesna")
+  await expect(field).toBeFocused()
+  await dialog.getByRole("button", { name: "Put back “Polyn 2”" }).click()
+  await expect(field).toHaveValue("Polyn 2")
+  await field.fill("Vesna")
   await page.keyboard.press("Enter")
   await expect(dialog).toHaveCount(0)
   expect((await calls(page, "rename_take")).at(-1)?.args.slice(1)).toEqual([2, "Vesna"])
@@ -155,13 +189,44 @@ test("renaming a take in history offers what that rehearsal played, as the next 
   await page.hover("[data-take='3']")
   await page.getByRole("button", { name: "Rename take Take 3" }).click()
   const dialog = page.getByRole("dialog")
-  await expect(
-    dialog.getByRole("group", { name: "This rehearsal" }).getByRole("button")
-  ).toHaveText(["Polyn 3", "Vesna 2"])
+  await expect(dialog.locator("[data-song-choice]").nth(0)).toHaveText("Polyn 3")
+  await expect(dialog.locator("[data-song-choice]").nth(1)).toHaveText("Vesna 2")
   expect((await calls(page, "song_choices")).at(-1)?.args).toEqual(["/rec/old", 3])
-  await dialog.getByRole("button", { name: "Polyn 3" }).click()
+
+  const field = dialog.getByRole("textbox", { name: "Take name" })
+  await field.fill("Something else")
+  await dialog.getByRole("button", { name: "Put back “Take 3”" }).click()
+  await expect(field).toHaveValue("Take 3")
+
+  await dialog.locator("[data-song-choice]").filter({ hasText: "Polyn 3" }).click()
   await dialog.getByRole("button", { name: "Rename" }).click()
   expect((await calls(page, "rename_take")).at(-1)?.args).toEqual(["/rec/old", 3, "Polyn 3"])
+})
+
+test("All songs… in the Rename take dialog lists every song and fills the dialog's field", async ({
+  page,
+}) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await recordTake(page)
+  await saveAs(page, "Polyn")
+  await recordTake(page, 2)
+  await saveAs(page, "Polyn 2")
+
+  await page.hover("[data-take='2']")
+  await page.getByRole("button", { name: "Rename take Polyn 2" }).click()
+  const dialog = page.getByRole("dialog")
+  const field = dialog.getByRole("textbox", { name: "Take name" })
+  await dialog.getByRole("button", { name: "All songs…" }).click()
+  const panel = page.getByRole("dialog", { name: "All songs" })
+  await expect(panel).toBeVisible()
+  await panel.getByRole("button", { name: "Ptaha" }).click()
+  await expect(panel).toHaveCount(0)
+  await expect(dialog).toBeVisible()
+  await expect(field).toHaveValue("Ptaha")
+  await page.keyboard.press("Enter")
+  await expect(dialog).toHaveCount(0)
+  expect((await calls(page, "rename_take")).at(-1)?.args.slice(1)).toEqual([2, "Ptaha"])
 })
 
 test.describe("the next take", () => {
@@ -232,6 +297,18 @@ test.describe("the next take", () => {
     expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Another one"])
   })
 
+  test("a case-only variant of the fallback settles on the fallback's own spelling", async ({
+    page,
+  }) => {
+    await openApp(page)
+    await startRehearsal(page)
+
+    await field(page).fill("take 1")
+    await page.keyboard.press("Enter")
+    await expect(field(page)).toHaveValue("Take 1")
+    expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual([""])
+  })
+
   test("a name of its own, left and come back to, still has every song under it", async ({
     page,
   }) => {
@@ -248,6 +325,21 @@ test.describe("the next take", () => {
     // Come back to it, without retyping: narrowed from what the field held
     // the first time it got focus, not from the name it settled on.
     await field(page).click()
+    await expect(songs(page).locator("[data-song-choice]")).toHaveCount(before)
+  })
+
+  test("✕ clicked while focused puts back the fallback without narrowing the pills", async ({
+    page,
+  }) => {
+    await openApp(page)
+    await startRehearsal(page)
+    const before = await songs(page).locator("[data-song-choice]").count()
+
+    await songs(page).getByRole("button", { name: "Vesna", exact: true }).click()
+    await expect(field(page)).toHaveValue("Vesna")
+    await field(page).click()
+    await page.getByRole("button", { name: "Put back “Take 1”" }).click()
+    await expect(field(page)).toHaveValue("Take 1")
     await expect(songs(page).locator("[data-song-choice]")).toHaveCount(before)
   })
 
@@ -290,6 +382,23 @@ test.describe("the next take", () => {
 
     await page.getByRole("button", { name: /Record take 1/ }).click()
     await expect(page.getByRole("heading", { level: 1, name: "Take 1" })).toBeVisible()
+  })
+
+  test("naming the take successfully clears an earlier error", async ({ page }) => {
+    await openApp(page, {
+      after:
+        "let n = 0; window.pywebview.api.set_next_take_name = async () => " +
+        "{ n += 1; return n === 1 ? {ok: false, error: 'Could not name it'} : {ok: true}; };",
+    })
+    await startRehearsal(page)
+    await field(page).fill("Lost")
+    await page.keyboard.press("Enter")
+    await expect(page.getByText("Could not name it")).toBeVisible()
+
+    await field(page).fill("Found")
+    await page.keyboard.press("Enter")
+    await expect(page.getByText("Could not name it")).toHaveCount(0)
+    await expect(field(page)).toHaveValue("Found")
   })
 
   test("Space types, Escape leaves the field, and an emptied field gets its name back", async ({

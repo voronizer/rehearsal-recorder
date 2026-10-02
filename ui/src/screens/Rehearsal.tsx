@@ -8,10 +8,9 @@ import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
-import { ConfirmDialog, PromptDialog } from "@/components/ConfirmDialog"
+import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
-import { SongChips } from "@/components/SongChips"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { TakeNameField } from "@/components/TakeNameField"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
@@ -104,14 +103,17 @@ export function Rehearsal({
   }, [nextName])
 
   const nameNextTake = (name: string) => {
-    setPicked({ against: session.next_take_name, name })
     // The name it would have anyway goes as "", so it goes on following
-    // the takes when one is renamed or deleted.
+    // the takes when one is renamed or deleted — and what the field keeps
+    // is the fallback's own spelling, not a case-only variant typed over it.
     const sent = name.toLocaleLowerCase() === fallback.toLocaleLowerCase() ? "" : name
+    setPicked({ against: session.next_take_name, name: sent === "" ? fallback : name })
     naming.current = naming.current.then(async () => {
       try {
         const res = await api().set_next_take_name(sent)
-        if (!res.ok) {
+        if (res.ok) {
+          setError(null)
+        } else {
           setError(res.error ?? "Could not name the next take")
           // Python never took it: the field goes back to the name it has.
           setPicked(null)
@@ -418,23 +420,12 @@ export function Rehearsal({
         }}
       />
 
-      <PromptDialog
-        open={toRename !== null}
+      <RenameTakeDialog
+        take={toRename}
+        choices={renameChoices}
         onOpenChange={(open) => !open && setToRename(null)}
-        title="Rename take"
-        label="The folder on disk is renamed too."
-        initialValue={toRename?.name ?? ""}
-        below={(value, fill) => (
-          <SongChips
-            choices={renameChoices}
-            value={value}
-            initial={toRename?.name ?? ""}
-            onPick={fill}
-          />
-        )}
         onSubmit={(name) => {
           if (toRename) void renameTake(toRename, name)
-          setToRename(null)
         }}
       />
 

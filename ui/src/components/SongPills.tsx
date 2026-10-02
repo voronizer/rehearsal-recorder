@@ -49,8 +49,11 @@ export function SongPills({
   const measure = useRef<HTMLDivElement>(null)
   const [shown, setShown] = useState<string[]>([])
 
-  // The observer answers once as soon as it starts, and then on every
-  // change of width: the first answer comes before the row is painted.
+  // `lay` runs once here, synchronously, so `shown` is set before the
+  // browser repaints — a layout effect's setState is flushed before paint,
+  // which is exactly what keeps a quick mousedown/mouseup right after the
+  // pills changed from landing between two different layouts. The observer
+  // then answers again on every later change of width.
   useLayoutEffect(() => {
     const rowEl = row.current
     const m = measure.current
@@ -60,8 +63,12 @@ export function SongPills({
       const width = new Map(candidates.map((c, i) => [c.name, kids[i].getBoundingClientRect().width]))
       const last = kids[candidates.length]?.getBoundingClientRect().width ?? 0
       const picked = pillsShown(here, other, (c) => width.get(c.name) ?? 0, last, rowEl.clientWidth, GAP)
+      // Measuring and setting this before the row paints is the point of
+      // doing it in a layout effect rather than the ResizeObserver alone.
+      // eslint-disable-next-line react/set-state-in-effect
       setShown(picked.map((c) => c.name))
     }
+    lay()
     const watch = new ResizeObserver(lay)
     watch.observe(rowEl)
     return () => watch.disconnect()

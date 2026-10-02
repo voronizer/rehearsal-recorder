@@ -1,7 +1,9 @@
-import { useEffect, useId, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { TakeNameField } from "@/components/TakeNameField"
+import type { SongChoices, Take } from "@/lib/api"
 
 const overlayClass =
   "fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
@@ -77,7 +79,6 @@ export function PromptDialog({
   initialValue,
   confirmLabel = "Rename",
   onSubmit,
-  below,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -86,18 +87,8 @@ export function PromptDialog({
   initialValue: string
   confirmLabel?: string
   onSubmit: (value: string) => void
-  /** Under the field: what can be put in it without typing, given what it
-   *  holds and a way to fill it that leaves the keyboard in the field. */
-  below?: (value: string, fill: (value: string) => void) => ReactNode
 }) {
   const [value, setValue] = useState(initialValue)
-  // Found by id when filled, so that Enter confirms what was put in it
-  // even after a click that reached it from the keyboard.
-  const inputId = useId()
-  const fill = (v: string) => {
-    setValue(v)
-    document.getElementById(inputId)?.focus()
-  }
 
   useEffect(() => {
     if (open) setValue(initialValue)
@@ -123,7 +114,6 @@ export function PromptDialog({
               <span className="text-xs text-muted-foreground">{label}</span>
             )}
             <Input
-              id={inputId}
               autoFocus
               value={value}
               onChange={(e) => setValue(e.target.value)}
@@ -134,7 +124,6 @@ export function PromptDialog({
                 }
               }}
             />
-            {below && <div className="mt-2">{below(value, fill)}</div>}
           </div>
           <div className="mt-6 flex justify-end gap-3">
             <DialogPrimitive.Close asChild>
@@ -147,5 +136,82 @@ export function PromptDialog({
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  )
+}
+
+/**
+ * Rename take: the take's name in the field it was named in before and after
+ * recording, at the dialog's size, with the songs under it. ✕ puts back the
+ * name it has now; Enter renames, as Rename does.
+ */
+export function RenameTakeDialog({
+  take,
+  choices,
+  onOpenChange,
+  onSubmit,
+}: {
+  take: Take | null
+  choices: SongChoices | null
+  onOpenChange: (open: boolean) => void
+  onSubmit: (name: string) => void
+}) {
+  return (
+    <DialogPrimitive.Root open={take !== null} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className={overlayClass} />
+        <DialogPrimitive.Content className={contentClass}>
+          <DialogPrimitive.Title className="text-base font-semibold">
+            Rename take
+          </DialogPrimitive.Title>
+          {/* Keyed by the take, so a second take opened starts from its own name. */}
+          {take && (
+            <RenameTakeForm
+              key={take.take_number}
+              take={take}
+              choices={choices}
+              onSubmit={(name) => {
+                onSubmit(name)
+                onOpenChange(false)
+              }}
+            />
+          )}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  )
+}
+
+function RenameTakeForm({
+  take,
+  choices,
+  onSubmit,
+}: {
+  take: Take
+  choices: SongChoices | null
+  onSubmit: (name: string) => void
+}) {
+  const [name, setName] = useState(take.name)
+  return (
+    <div className="mt-4 flex flex-col gap-4">
+      <span className="text-xs text-muted-foreground">The folder on disk is renamed too.</span>
+      <TakeNameField
+        id="rename-take"
+        label="Take name"
+        size="compact"
+        autoFocus
+        value={name}
+        fallback={take.name}
+        choices={choices}
+        onCommit={setName}
+        onEnter={onSubmit}
+      />
+      {/* As PromptDialog draws them. */}
+      <div className="mt-2 flex justify-end gap-3">
+        <DialogPrimitive.Close asChild>
+          <Button variant="ghost">Cancel</Button>
+        </DialogPrimitive.Close>
+        <Button onClick={() => onSubmit(name)}>Rename</Button>
+      </div>
+    </div>
   )
 }
