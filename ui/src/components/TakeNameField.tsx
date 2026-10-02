@@ -24,7 +24,9 @@ import { cn } from "@/lib/utils"
  *
  * Space types a space and Escape leaves the field (useSpacebar.ts does both
  * for any text field); Enter leaves it too, so the next Space does what the
- * main button says — or, given `onEnter`, does that instead.
+ * main button says — or, given `onEnter`, does that instead. A song or ✕
+ * clicked while typing leaves it as well, for the same Space; given
+ * `onEnter`, the field keeps focus instead, so Enter is still there to press.
  */
 export function TakeNameField({
   id,
@@ -49,6 +51,10 @@ export function TakeNameField({
 }) {
   // What is typed, while the field has focus; null shows `value`.
   const [draft, setDraft] = useState<string | null>(null)
+  // The same, for onBlur to read. A song clicked while typing leaves the
+  // field from inside its own click, before React has drawn anything new,
+  // and `shown` there would still be the half-typed name.
+  const typed = useRef<string | null>(null)
   // What the field held when focus arrived: the songs narrow from this, not
   // from `value`, so refocusing a name already settled on does not narrow
   // it by itself.
@@ -59,21 +65,34 @@ export function TakeNameField({
   const input = useRef<HTMLInputElement>(null)
   const songsArea = useRef<HTMLDivElement>(null)
   const shown = draft ?? value
-  const named = (typed: string) => typed.trim() || fallback
+  const named = (text: string) => text.trim() || fallback
+  const edit = (text: string | null) => {
+    typed.current = text
+    setDraft(text)
+  }
 
   const commit = (name: string) => {
     if (name !== value) onCommit(name)
   }
-  // A song or ✕ while typing goes into the field and stays there to type on.
+  // A song or ✕ while typing: the field is left, so the next Space records
+  // or saves rather than typing a space. What was typed is dropped first, so
+  // onBlur, which runs inside blur(), finds nothing of it to send. Given
+  // `onEnter`, the name goes into the field and stays there to type on;
   // `startedAs` moves with it, so a fallback that is not itself a song (e.g.
   // "Take 4") does not narrow the pills by its own text until the field is
   // left and refocused.
   const put = (name: string) => {
-    if (draft !== null) {
-      setDraft(name)
+    if (typed.current === null) {
+      commit(name)
+    } else if (onEnter) {
+      edit(name)
       setStartedAs(name)
+      commit(name)
+    } else {
+      typed.current = null
+      commit(name)
+      input.current?.blur()
     }
-    commit(name)
   }
 
   return (
@@ -101,16 +120,17 @@ export function TakeNameField({
           autoComplete="off"
           spellCheck={false}
           onFocus={() => {
-            setDraft(value)
+            edit(value)
             setStartedAs(value)
             setHeld(songsArea.current?.offsetHeight ?? null)
           }}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => edit(e.target.value)}
           onBlur={() => {
-            setDraft(null)
+            const left = typed.current
+            edit(null)
             setStartedAs(null)
             setHeld(null)
-            commit(named(shown))
+            if (left !== null) commit(named(left))
           }}
           onKeyDown={(e) => {
             if (e.key !== "Enter") return
@@ -126,7 +146,8 @@ export function TakeNameField({
         <button
           type="button"
           aria-label={`Put back “${fallback}”`}
-          // Leaves focus where it was, as the songs do.
+          // Takes no focus of its own, as the songs take none: `put` says
+          // whether the field keeps it.
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => put(fallback)}
           className="absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"

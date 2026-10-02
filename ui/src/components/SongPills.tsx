@@ -15,10 +15,11 @@ const PILL =
  * played, as the next go at each ("Polyn 3", the number dimmed), then the
  * other rehearsals' songs, the latest played first, and All songs… last.
  *
- * A click puts the song's name in the field; it leaves focus where it was,
- * so Space still records or saves. The one matching the field is lit where
- * it stands: nothing moves under the pointer. Typing narrows them over every
- * song, not only the ones shown.
+ * A click puts the song's name in the field and takes no focus of its own;
+ * a field being typed in is then left (TakeNameField's `put`), so Space
+ * records or saves. The one matching the field is lit where it stands:
+ * nothing moves under the pointer. Typing narrows them over every song, not
+ * only the ones shown.
  *
  * Which fit is worked out from the pills' own widths, measured off screen,
  * and again whenever the row changes width.

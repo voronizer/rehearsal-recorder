@@ -175,6 +175,7 @@ test("renaming a take on the rehearsal screen offers the songs, ✕ puts its nam
   await expect(field).toBeFocused()
   await dialog.getByRole("button", { name: "Put back “Polyn 2”" }).click()
   await expect(field).toHaveValue("Polyn 2")
+  await expect(field).toBeFocused()
   await field.fill("Vesna")
   await page.keyboard.press("Enter")
   await expect(dialog).toHaveCount(0)
@@ -295,6 +296,24 @@ test.describe("the next take", () => {
     const log = await order(page)
     expect(log.lastIndexOf("set_next_take_name")).toBeLessThan(log.lastIndexOf("start_take"))
     expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Another one"])
+  })
+
+  test("a song picked while typing leaves the field, and only the song is sent, so Space records", async ({
+    page,
+  }) => {
+    await openApp(page)
+    await startRehearsal(page)
+    await field(page).fill("Ves")
+    const sent = await callCount(page, "set_next_take_name")
+    await songs(page).getByRole("button", { name: "Vesna", exact: true }).click()
+    await expect(field(page)).toHaveValue("Vesna")
+    await expect(field(page)).not.toBeFocused()
+    // What was half typed is not sent on the way out, before or after it.
+    await expect
+      .poll(async () => (await calls(page, "set_next_take_name")).slice(sent).map((c) => c.args))
+      .toEqual([["Vesna"]])
+    await page.keyboard.press("Space")
+    await expect(page.getByRole("heading", { level: 1, name: "Vesna" })).toBeVisible()
   })
 
   test("a case-only variant of the fallback settles on the fallback's own spelling", async ({
@@ -451,6 +470,30 @@ test.describe("after Stop", () => {
     await page.getByRole("button", { name: /Save take/ }).click()
     expect((await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Take 1")
   })
+
+  test("a song picked while typing leaves the field, so Space saves it", async ({ page }) => {
+    await openApp(page)
+    await startRehearsal(page)
+    await recordTake(page)
+    await nameField(page).fill("Og")
+    await pills(page).filter({ hasText: /^Ogon$/ }).click()
+    await expect(nameField(page)).toHaveValue("Ogon")
+    await expect(nameField(page)).not.toBeFocused()
+    await page.keyboard.press("Space")
+    await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ogon")
+  })
+
+  test("✕ clicked while typing leaves the field too, so Space saves", async ({ page }) => {
+    await openApp(page)
+    await startRehearsal(page)
+    await recordTake(page)
+    await nameField(page).fill("Half a na")
+    await page.getByRole("button", { name: "Put back “Take 1”" }).click()
+    await expect(nameField(page)).toHaveValue("Take 1")
+    await expect(nameField(page)).not.toBeFocused()
+    await page.keyboard.press("Space")
+    await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Take 1")
+  })
 })
 
 test("All songs… lists every song alphabetically, and a click fills the field and closes it", async ({
@@ -496,5 +539,10 @@ test("All songs… opened while typing leaves the field as it was, and a song pi
   await panel.getByRole("button", { name: "Ptaha" }).click()
   await expect(panel).toHaveCount(0)
   await expect(field).toHaveValue("Ptaha")
-  expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Ptaha"])
+  await expect(field).not.toBeFocused()
+  expect((await calls(page, "set_next_take_name")).slice(before).map((c) => c.args)).toEqual([
+    ["Ptaha"],
+  ])
+  await page.keyboard.press("Space")
+  await expect(page.getByRole("heading", { level: 1, name: "Ptaha" })).toBeVisible()
 })

@@ -262,7 +262,9 @@ like "Take 4" and are not counted as a song.
 Wherever you name a take, the songs you have already played are listed under
 the name, so you do not have to type them again. A song played in this
 rehearsal comes with the next number: with "Polyn" and "Polyn 2" already
-recorded, it gives "Polyn 3". Typing narrows the list to the songs that match.
+recorded, it gives "Polyn 3". Typing narrows the list to the songs that match,
+and clicking one then takes you out of the field, so the next Space records
+or saves. In the Rename take dialog you stay in the field, and Enter renames.
 
 To rename a take or a rehearsal later, use the pencil button on the rehearsal
 screen or in History. The folder on disk is renamed too, and a rehearsal
