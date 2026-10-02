@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { HardDrive, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FooterRow } from "@/components/FooterRow"
 import { Kbd, Shell } from "@/components/Shell"
 import { TrackTile } from "@/components/TrackTile"
 import { RunningLine } from "@/components/RunningLine"
@@ -173,8 +174,7 @@ export function Recording({
     <Shell
       activity={false}
       footer={
-        <div className="flex flex-col items-center gap-3">
-          {error && <p className="text-sm text-destructive">{error}</p>}
+        <FooterRow error={error}>
           <Button
             size="xl"
             onClick={stop}
@@ -190,7 +190,7 @@ export function Recording({
           ) : (
             <p className="text-xs text-muted-foreground">autosaved every 30 s</p>
           )}
-        </div>
+        </FooterRow>
       }
     >
       <div className="flex h-full min-h-0 flex-col items-center gap-[2.5vh]">

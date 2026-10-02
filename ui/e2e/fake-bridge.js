@@ -409,7 +409,7 @@ window.__MAKE_API__ = () => ({
     return window.__LEVELS__ || ({'Guitar':[0.99], 'Vocals':[0.0005]});
   },
   stop_take: track('stop_take', async () => (await held('stop_take'), {ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
-    duration_sec:TAKE, suggested_name:suggestName(takeCounter),
+    duration_sec:TAKE, suggested_name:suggestName(takeCounter), default_name:suggestName(takeCounter, false),
     tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]})),
   keep_take: track('keep_take', async (n, _t, name, dur, tracks, markers) => {
     const take = {take_number:n, name:name || ('Take ' + n), duration_sec:dur,

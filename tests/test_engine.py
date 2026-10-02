@@ -5005,7 +5005,8 @@ def main():
     ok("a stop whose name cannot be looked up still stops and keeps the take",
        stopped44.get("ok") is True and a44._recorder is None
        and (Path(stopped44["temp_dir"]) / "Gtr.wav").exists()
-       and stopped44["suggested_name"] == f"Take {stopped44['take_number']}")
+       and stopped44["suggested_name"] == f"Take {stopped44['take_number']}"
+       and stopped44["default_name"] == f"Take {stopped44['take_number']}")
 
     print("\n[45] Removing a copy that is on its way, and saying what a copy is")
     root45 = Path(tempfile.mkdtemp())
@@ -5538,6 +5539,40 @@ def main():
     nothing = U.UpdateChecker("0.8.0", enabled=lambda: True, busy=lambda: False,
                               fetch=lambda: None)
     ok("nor when there is nothing newer to fetch", nothing.start_download()["ok"] is False)
+
+    print("\n[51] After Stop, the name the take would have had without one picked")
+    _, a51 = fresh_api(Path(tempfile.mkdtemp()))
+    a51.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+
+    def record51():
+        a51.start_take()
+        a51._recorder._callback(np.full((SR, 1), 900, dtype=np.int16), SR, None, None)
+        return a51.stop_take()
+
+    first51 = record51()
+    ok("a first take with no name picked would be Take 1 either way",
+       first51["suggested_name"] == "Take 1" and first51["default_name"] == "Take 1")
+    a51.keep_take(first51["take_number"], first51["temp_dir"], "Polyn",
+                  first51["duration_sec"], first51["tracks"])
+    a51.set_next_take_name("Vesna")
+    second51 = record51()
+    ok("a name picked before recording is offered, and the one it would have had beside it",
+       second51["suggested_name"] == "Vesna" and second51["default_name"] == "Polyn 2")
+
+    def no_lookup():
+        raise RuntimeError("database is locked")
+
+    a51.set_next_take_name("Ogon")
+    real_session_takes51 = a51._session_takes
+    a51._session_takes = no_lookup
+    try:
+        third51 = record51()
+    finally:
+        a51._session_takes = real_session_takes51
+    ok("a name picked before recording survives a library that cannot say "
+       "what the take would have been called",
+       third51["suggested_name"] == "Ogon"
+       and third51["default_name"] == f"Take {third51['take_number']}")
 
     print("\n" + "=" * 60)
     if problems:

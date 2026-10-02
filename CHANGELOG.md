@@ -7,6 +7,20 @@ opening.
 
 ## Unreleased
 
+- **The take's name is one field, over the main button, before recording
+  and after.** On the rehearsal screen it is left of Record, as *Next take*;
+  after Stop it is in the same place, left of Save take, holding the name
+  picked before recording, so a wrong one is put right there and then. Type
+  in it, or click a song under it; ✕ puts back the name the take would have
+  anyway, and the field is never left empty. Space types a space in it, and
+  Enter or Escape leave it, so the next Space records or saves. A name typed
+  and never confirmed is still the one recorded. Other… is gone: the field
+  is where another name goes (#10).
+- **Every footer is one row**, the buttons on the right and the main one
+  rightmost, so it is in the same place on every screen. Finish, Discard,
+  History and Decide later have an edge, and read as buttons. On the setup
+  screen Last time has moved to the left, so the new rehearsal's setup is
+  over Start rehearsal.
 - **How loud takes play, from the header.** A speaker beside History, on
   every screen a take can be played from: setup, the rehearsal, History and
   the review screen. Behind it is the same **Master** as under a take's

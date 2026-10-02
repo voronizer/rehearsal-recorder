@@ -1,5 +1,6 @@
 import { CheckCircle2, History, Radio } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FooterRow } from "@/components/FooterRow"
 import { Kbd, Shell } from "@/components/Shell"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import { takesLabel } from "@/lib/format"
@@ -20,7 +21,7 @@ export function Finished({
   return (
     <Shell
       footer={
-        <div className="flex flex-col items-center gap-3">
+        <FooterRow>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="lg" onClick={onOpenHistory}>
               <History />
@@ -36,7 +37,7 @@ export function Finished({
               <Kbd>Space</Kbd>
             </Button>
           </div>
-        </div>
+        </FooterRow>
       }
     >
       <div className="flex h-full flex-col items-center justify-center gap-4 text-center">

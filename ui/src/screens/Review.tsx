@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react"
 import { Check, Cloud, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { FooterRow } from "@/components/FooterRow"
 import { Kbd, Shell } from "@/components/Shell"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
+import { TakeNameField } from "@/components/TakeNameField"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
-import { SongChips } from "@/components/SongChips"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { canBePutBack, goesTo } from "@/lib/deletion"
 import {
@@ -206,8 +205,45 @@ export function Review({
       subtitle={`${rehearsalName} · ${formatMMSS(take.duration_sec)}`}
       title={`Take ${take.take_number} recorded`}
       footer={
-        <div className="flex flex-col items-center gap-3">
-          {error && <p className="text-sm text-destructive">{error}</p>}
+        <FooterRow
+          error={error}
+          rule
+          left={
+            <TakeNameField
+              id="take-name"
+              label="Take name"
+              value={name}
+              fallback={take.default_name ?? `Take ${take.take_number}`}
+              choices={songChoices}
+              onCommit={setName}
+            />
+          }
+        >
+          <div className="flex items-center gap-3">
+            {/* Escape asks before discarding; the button itself does not.
+                It is still the button Escape leads to. */}
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={discard}
+              disabled={busy}
+              aria-keyshortcuts="Escape"
+            >
+              <Trash2 />
+              Discard
+              <Kbd>Esc</Kbd>
+            </Button>
+            <Button
+              size="lg"
+              onClick={keep}
+              disabled={busy}
+              aria-keyshortcuts="Space"
+            >
+              <Check />
+              Save take
+              <Kbd>Space</Kbd>
+            </Button>
+          </div>
           {cloud &&
             (cloud.dir ? (
               <label
@@ -237,53 +273,10 @@ export function Review({
                 Stays on this computer — no cloud folder is set
               </p>
             ))}
-          <div className="flex items-center gap-3">
-            {/* Escape asks before discarding; the button itself does not.
-                It is still the button Escape leads to. */}
-            <Button
-              variant="ghost"
-              onClick={discard}
-              disabled={busy}
-              aria-keyshortcuts="Escape"
-            >
-              <Trash2 />
-              Discard
-              <Kbd>Esc</Kbd>
-            </Button>
-            <Button
-              size="lg"
-              onClick={keep}
-              disabled={busy}
-              aria-keyshortcuts="Space"
-            >
-              <Check />
-              Save take
-              <Kbd>Space</Kbd>
-            </Button>
-          </div>
-        </div>
+        </FooterRow>
       }
     >
-      {/* The player wants the width; the name field does not. */}
       <div className="flex w-full flex-col gap-6">
-        <div className="flex max-w-xl flex-col gap-2">
-          <Label htmlFor="take-name">Take name</Label>
-          <Input
-            id="take-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="A song title, for example"
-            className="h-11 text-base"
-          />
-          <SongChips
-            choices={songChoices}
-            value={name}
-            initial={firstName}
-            onPick={setName}
-            className="mt-1"
-          />
-        </div>
-
         <TakePlayer
           player={player}
           markers={markers}

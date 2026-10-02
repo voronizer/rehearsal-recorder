@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { LifeBuoy, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FooterRow } from "@/components/FooterRow"
 import { Shell } from "@/components/Shell"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { RunningLine } from "@/components/RunningLine"
@@ -67,14 +68,17 @@ export function DraftsScreen({
     <Shell
       title="Unsaved takes found"
       footer={
-        <div className="flex flex-col items-center gap-2">
-          <Button variant="ghost" onClick={onDone}>
+        <FooterRow
+          left={
+            <p className="text-xs text-muted-foreground">
+              They stay on disk and will be offered again next time.
+            </p>
+          }
+        >
+          <Button variant="outline" size="lg" onClick={onDone}>
             Decide later
           </Button>
-          <p className="text-xs text-muted-foreground">
-            They stay on disk and will be offered again next time.
-          </p>
-        </div>
+        </FooterRow>
       }
     >
       <div className="mx-auto flex max-w-3xl flex-col gap-4">

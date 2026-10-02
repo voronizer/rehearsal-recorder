@@ -104,6 +104,9 @@ export type PendingTake = {
   duration_sec: number
   tracks: TrackFile[]
   suggested_name?: string
+  /** The name it would have had with none picked before recording: what ✕
+   *  in the review screen's name field puts back. */
+  default_name?: string
 }
 
 /** A take that was recorded but never saved (the app died mid-take). */

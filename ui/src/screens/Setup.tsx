@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { FooterRow } from "@/components/FooterRow"
 import { IconPicker } from "@/components/IconPicker"
 import { LastTime } from "@/components/LastTime"
 import { NewDot } from "@/components/NewDot"
@@ -406,8 +407,7 @@ export function Setup({
           : undefined
       }
       footer={
-        <div className="flex flex-col items-center gap-3">
-          {error && <p className="text-sm text-destructive">{error}</p>}
+        <FooterRow error={error}>
           <Button
             size="xl"
             onClick={start}
@@ -418,10 +418,11 @@ export function Setup({
             Start rehearsal
             {!inHand && <Kbd>Space</Kbd>}
           </Button>
-        </div>
+        </FooterRow>
       }
     >
-      {/* Last time beside the setup when the window is wide enough for both,
+      {/* Last time beside the setup when the window is wide enough for both
+          — on the left, so that the setup is over Start rehearsal — and
           under it when it is not. */}
       <div
         className={cn(
@@ -759,7 +760,7 @@ export function Setup({
           own, darker, down the side, as history's list is. With both on the
           same background the two columns ran into one. */}
       {lastTime?.last && (
-        <div className="border-t bg-panel px-6 py-6 min-[1100px]:w-[26rem] min-[1100px]:shrink-0 min-[1100px]:overflow-y-auto min-[1100px]:border-t-0 min-[1100px]:border-l min-[1100px]:px-5">
+        <div className="border-t bg-panel px-6 py-6 min-[1100px]:order-first min-[1100px]:w-[26rem] min-[1100px]:shrink-0 min-[1100px]:overflow-y-auto min-[1100px]:border-t-0 min-[1100px]:border-r min-[1100px]:px-5">
           {/* Under the tracks, as wide as they are. */}
           <div className="mx-auto max-w-3xl">
             <LastTime

@@ -67,7 +67,7 @@ recording quality into account.
 
 ### Last time
 
-Beside the tracks, or under them in a narrow window, is the rehearsal before
+Left of the tracks, or under them in a narrow window, is the rehearsal before
 this one, song by song: how many goes each song got and how long they ran,
 with the notes you left while listening. ▶ on a song plays its last go,
 which is usually the version you settled on. Listen to where you left off
@@ -104,12 +104,13 @@ stopped short stands out before you read anything.
 Press **Record take**, or Space, to start recording. **Finish** ends the
 rehearsal.
 
-Above the button is **Next take**: the name the next take will get, lit,
-and beside it the songs you could play instead. When you move on to another
-song, click it before you press Record. **Other…** lists every song and lets
-you type a new name; press Enter to use it. The take is then recorded under
-that name, and the recording screen can say how long the last go at that
-song took. If you discard the take, the next one keeps the name you picked.
+Left of the button is **Next take**: the name the next take will get, in a
+field of its own, and under it the songs you could play instead. When you
+move on to another song, click it before you press Record, or type a name
+and press Enter. The take is then recorded under that name, and the
+recording screen can say how long the last go at that song took. ✕ puts
+back the name the take would have had anyway. If you discard the take, the
+next one keeps the name you picked.
 
 ### While recording
 
@@ -149,10 +150,13 @@ during a take. Press **Stop**, or Space, when the song is over.
 
 ![After stopping: name the take, then save or discard it](screenshots/review.png)
 
-After you stop, the take opens straight away so you can listen to it. Check
-its name, then press **Save take** (Space) or **Discard**. A discarded take
-goes to the Trash. Pressing Esc also discards it, but asks first. If you are
-typing the name, the first Esc only leaves the name field.
+After you stop, the take opens straight away so you can listen to it. Its
+name is in the same field, in the same place as before you recorded: check
+it, then press **Save take** (Space) or **Discard**. ✕ there puts back
+the name the take would have had if none had been picked before recording.
+A discarded take goes to the Trash. Pressing Esc also discards it, but asks
+first. If you are typing the name, the first Esc only leaves the name
+field.
 
 The name is filled in for you. After a take called "Polyn", the next one is
 called "Polyn 2". Under the name are the songs you have played: this

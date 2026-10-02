@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Circle, FolderOpen, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { FooterRow } from "@/components/FooterRow"
 import { Kbd, Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
@@ -12,7 +13,7 @@ import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { SongChips } from "@/components/SongChips"
 import { useSongChoices } from "@/hooks/useSongChoices"
-import { NextTakeName } from "@/components/NextTakeName"
+import { TakeNameField } from "@/components/TakeNameField"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
@@ -77,25 +78,65 @@ export function Rehearsal({
   const [renamingRehearsal, setRenamingRehearsal] = useState(false)
   const [finishing, setFinishing] = useState(false)
 
+  // The next take's name as the field last settled on it, against the
+  // session's name at the time: once Python has it, the session says the
+  // same, and a take kept moves the session on past it.
+  const [picked, setPicked] = useState<{ against: string; name: string } | null>(null)
+  const nextName =
+    picked && picked.against === session.next_take_name ? picked.name : session.next_take_name
+  const fallback = session.next_take_default ?? session.next_take_name
+  const nextChoices = useSongChoices(
+    true,
+    null,
+    null,
+    session.takes.map((t) => `${t.take_number}:${t.name}`).join("|")
+  )
+  // Names sent to Python, one after another: Record waits for the last one,
+  // so a name typed and Record clicked straight after is the one recorded.
+  const naming = useRef<Promise<void>>(Promise.resolve())
+  // The latest `nextName`, for `startTake` to read once it has waited for
+  // `naming` — set from an effect, not read off a stale closure, so a name
+  // Python refused (which rolls `picked` back below) is never the one a
+  // take gets recorded under.
+  const nextNameRef = useRef(nextName)
+  useEffect(() => {
+    nextNameRef.current = nextName
+  }, [nextName])
+
+  const nameNextTake = (name: string) => {
+    setPicked({ against: session.next_take_name, name })
+    // The name it would have anyway goes as "", so it goes on following
+    // the takes when one is renamed or deleted.
+    const sent = name.toLocaleLowerCase() === fallback.toLocaleLowerCase() ? "" : name
+    naming.current = naming.current.then(async () => {
+      try {
+        const res = await api().set_next_take_name(sent)
+        if (!res.ok) {
+          setError(res.error ?? "Could not name the next take")
+          // Python never took it: the field goes back to the name it has.
+          setPicked(null)
+        }
+      } catch {
+        setError("Could not name the next take")
+        setPicked(null)
+      }
+      onChanged()
+    })
+  }
+
   const startTake = async () => {
     if (busy) return
     setBusy(true)
     setError(null)
     player.pause()
+    await naming.current
     const res = await api().start_take()
     setBusy(false)
     if (!res.ok || res.take_number == null) {
       setError(res.error ?? "Could not start the take")
       return
     }
-    onStartTake(res.take_number, session.next_take_name)
-  }
-
-  const nameNextTake = async (name: string) => {
-    setError(null)
-    const res = await api().set_next_take_name(name)
-    if (!res.ok) setError(res.error ?? "Could not name the next take")
-    onChanged()
+    onStartTake(res.take_number, nextNameRef.current)
   }
 
   // With a take in hand, Space plays it back rather than starting a new one;
@@ -249,19 +290,26 @@ export function Rehearsal({
         <Badge variant="outline">{takesLabel(session.takes.length)}</Badge>
       }
       footer={
-        <div className="flex flex-col items-center gap-3">
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <NextTakeName
-            name={session.next_take_name}
-            defaultName={session.next_take_default ?? session.next_take_name}
-            version={session.takes.map((t) => `${t.take_number}:${t.name}`).join("|")}
-            onChoose={(name) => void nameNextTake(name)}
-          />
+        <FooterRow
+          error={error}
+          rule
+          left={
+            <TakeNameField
+              id="next-take-name"
+              label="Next take"
+              value={nextName}
+              fallback={fallback}
+              choices={nextChoices}
+              onCommit={nameNextTake}
+            />
+          }
+        >
           <div className="flex items-center gap-3">
             {/* Escape finishes only with no take in hand; with one, it puts
                 the take away — see useEscape above. */}
             <Button
-              variant="ghost"
+              variant="outline"
+              size="lg"
               onClick={finish}
               aria-keyshortcuts={inHand ? undefined : "Escape"}
             >
@@ -281,7 +329,7 @@ export function Rehearsal({
               {!inHand && <Kbd>Space</Kbd>}
             </Button>
           </div>
-        </div>
+        </FooterRow>
       }
     >
       <div className="flex w-full flex-col gap-4">

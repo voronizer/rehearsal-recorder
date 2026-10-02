@@ -256,7 +256,8 @@ api.start_rehearsal = async (name) => {
 api.stop_take = async () => {
   const draft = takeOf(takeCounter, 'draft', 151, 147, []);
   return {ok: true, take_number: takeCounter, temp_dir: '/rec/tue/_drafts',
-          duration_sec: 151, suggested_name: suggestName(takeCounter), tracks: draft.tracks};
+          duration_sec: 151, suggested_name: suggestName(takeCounter),
+          default_name: suggestName(takeCounter), tracks: draft.tracks};
 };
 api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
   const dur = fileDurations[t.file] ?? 6;

@@ -1645,6 +1645,12 @@ class Api:
             # The name comes from the library. A take is not left recording,
             # holding the card, because the library could not answer.
             name = f"Take {take_number}"
+        try:
+            # What ✕ on the review screen puts back: the name the take would
+            # have had with none picked before recording.
+            default = self.suggest_take_name(take_number, chosen=False)
+        except Exception:
+            default = f"Take {take_number}"
         result = self._journaled(
             "stop", f"Saving “{name}”", temp_dir, take_number,
             lambda progress: recorder.stop(progress=progress),
@@ -1656,6 +1662,7 @@ class Api:
             "duration_sec": result["duration_sec"],
             "tracks": result["tracks"],
             "suggested_name": name,
+            "default_name": default,
         }
 
     def keep_take(
