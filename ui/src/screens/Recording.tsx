@@ -249,10 +249,14 @@ export function Recording({
           >
             {takeName}
           </h1>
+          {/* Digits stand on the baseline, and the room a line keeps under
+              it for "g" and "y" was empty space that the tiles needed back
+              for the name over the clock. Trimmed only below: above, it is
+              the gap between the name and the digits. */}
           <div
             role="timer"
             aria-label="Take time"
-            className="leading-none font-semibold tracking-tight tabular-nums"
+            className="leading-none font-semibold tracking-tight tabular-nums [text-box:trim-end_cap_alphabetic]"
             style={{ fontSize: CLOCK_SIZE }}
           >
             {formatClock(elapsed)}

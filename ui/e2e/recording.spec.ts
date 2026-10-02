@@ -39,6 +39,13 @@ const topLine = (page: Page) => page.locator("[data-recording-line]")
 /** The pill in the middle that said all was well, or what was not. */
 const pill = (page: Page) => page.getByRole("status", { name: "Take status" })
 
+/** CI's Linux draws the page in Liberation Sans, which has Arial's metrics
+ *  and is wider than Segoe UI or San Francisco. Measured in Arial, the tiles
+ *  fit or do not the same on every machine, and a squeeze only CI would have
+ *  seen shows up here first. */
+const wideFont = (page: Page) =>
+  page.addStyleTag({ content: "html, body { font-family: Arial, sans-serif !important; }" })
+
 /** The track names a tile cuts short: no worse than it is without the take's
  *  name over the clock, at each size checked. */
 const cutNames = (page: Page) =>
@@ -287,6 +294,7 @@ test("sixteen tracks still fit in one row, a stereo one split down the middle", 
     before: `window.__SESSION_TRACKS__ = ${JSON.stringify(tracks)};
       window.__LEVELS__ = ${JSON.stringify(lit)};`,
   })
+  await wideFont(page)
   await startRehearsal(page)
   await page.getByRole("button", { name: /Record take 1/ }).click()
   await expect(page.locator("main [role=group]")).toHaveCount(16)
@@ -339,6 +347,7 @@ test("on a small laptop the take's name leaves the tiles room for their names", 
   )
   await page.addInitScript(`window.__SESSION_TRACKS__ = ${JSON.stringify(tracks)};`)
   await secondGo(page)
+  await wideFont(page)
   await expect(page.locator("main [role=group]")).toHaveCount(8)
   for (const [width, height, longest] of [
     [1366, 768, "whole"],
