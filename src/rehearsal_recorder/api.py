@@ -183,41 +183,34 @@ def _unique_path(path):
         counter += 1
 
 
-# A take the app named itself, as suggest_take_name writes it.
-_UNNAMED_TAKE = re.compile(r"^Take \d+$")
-# The attempt number a take name carries: "Polyn 3" -> "Polyn", "3".
-_ATTEMPT_NUMBER = re.compile(r"^(.*?)[\s]+(\d+)$")
+def _take_dir_name(take_number, name):
+    """What a take's folder is called: "03 - Polyn 3"."""
+    return f"{int(take_number):02d} - {_safe_name(name)}"
 
 
 def _songs_of(takes):
     """
     What was played, as [{"name", "takes", "take_numbers"}] in the order
-    things were first played. `take_numbers` is which takes they were, for the
-    rehearsal's own overview — so the interface is handed the grouping rather
-    than keeping a second copy of the rule below that could drift from it. Nobody types this in: a take inherits the previous one's name with
-    the attempt number bumped (see suggest_take_name), so "Polyn", "Polyn 2"
-    and "Polyn 3" are three goes at one song, and dropping that trailing
-    number is enough to group them.
+    things were first played. `take_numbers` is which takes they were, for
+    the rehearsal's own overview, so the interface is handed the grouping
+    rather than working it out again. A take's song is stored with it (see
+    store/names.py), so this only counts.
 
-    Takes the app named itself are left out. "Take ×4" beside a take count
-    that already says four is noise, and a rehearsal where nothing was named
-    is better off saying nothing at all.
+    Takes nobody named are left out. "Take ×4" beside a take count that
+    already says four is noise, and a rehearsal where nothing was named is
+    better off saying nothing at all.
     """
-    songs = []
-    by_key = {}
+    songs, by_title = [], {}
     for take in takes:
-        base = _song_of(take.get("name"))
-        if base is None:
+        title = take.get("song")
+        if title is None:
             continue
-        # Case folded only to group: what shows is the first spelling used.
-        key = base.casefold()
-        if key in by_key:
-            by_key[key]["takes"] += 1
-            by_key[key]["take_numbers"].append(take.get("take_number"))
+        if title in by_title:
+            by_title[title]["takes"] += 1
+            by_title[title]["take_numbers"].append(take.get("take_number"))
         else:
-            song = {"name": base, "takes": 1,
-                    "take_numbers": [take.get("take_number")]}
-            by_key[key] = song
+            song = {"name": title, "takes": 1, "take_numbers": [take.get("take_number")]}
+            by_title[title] = song
             songs.append(song)
     return songs
 
@@ -228,16 +221,11 @@ def _runs_of(takes):
     rehearsal: the takes in order, in runs of goes at the same song, as
     [{"song", "takes": [{"duration_sec", "keep"}]}]. A song played, left and
     come back to is two runs, since that is how the evening went. "song" is
-    spelled as _songs_of spells it, and is None for takes the app named
-    itself; "keep" is a take somebody marked to keep. Marks are few, so the
-    runs are what the strip says without them: how many songs, how many
-    goes at each, and how long.
+    None for takes nobody named; "keep" is a take somebody marked to keep.
     """
-    spelled = {s["name"].casefold(): s["name"] for s in _songs_of(takes)}
     runs = []
     for take in takes:
-        base = _song_of(take.get("name"))
-        song = spelled.get(base.casefold()) if base else None
+        song = take.get("song")
         go = {"duration_sec": take.get("duration_sec") or 0,
               "keep": any(m.get("kind") == "good" for m in take.get("markers") or [])}
         if runs and runs[-1]["song"] == song:
@@ -247,56 +235,26 @@ def _runs_of(takes):
     return runs
 
 
-def _song_of(name):
-    """The song a take name is a go at — "Polyn 3" -> "Polyn" — or None for
-    a take the app named itself, which is no song at all."""
-    name = (name or "").strip()
-    if not name or _UNNAMED_TAKE.match(name):
-        return None
-    attempt = _ATTEMPT_NUMBER.match(name)
-    base = attempt.group(1).strip() if attempt else name
-    return base or None
-
-
-def _next_go(takes, song):
+def _last_attempt(takes, song):
     """
-    What the next go at `song` among `takes` is called: the song itself the
-    first time, then one past the highest number a go carries — "Polyn 3"
-    after "Polyn 2", and after a deleted "Polyn 2" too, rather than a second
-    "Polyn 2". Spelled as the first go spelled it, as _songs_of spells it.
+    How long the latest go at `song` among `takes` ran, as {"song",
+    "duration_sec"}, or None when there was none. The recording screen says
+    it under its clock — "Vesna took 2:21 last time" — so the band can see
+    how far into the song they are.
     """
-    key = song.casefold()
-    spelled, highest = song, 0
-    for take in takes:
-        name = (take.get("name") or "").strip()
-        base = _song_of(name)
-        if base is None or base.casefold() != key:
-            continue
-        if not highest:
-            spelled = base
-        attempt = _ATTEMPT_NUMBER.match(name)
-        number = int(attempt.group(2)) if attempt and attempt.group(1).strip() else 1
-        highest = max(highest, number)
-    return f"{spelled} {highest + 1}" if highest else song
-
-
-def _last_attempt(takes, next_name):
-    """
-    How long the latest go at the song `next_name` is another go at ran, as
-    {"song", "duration_sec"}, or None when there was none. The recording
-    screen says it under its clock — "Vesna took 2:21 last time" — so the
-    band can see how far into the song they are. The song is named the way
-    _songs_of first spelled it, so the two never disagree about what it is.
-    """
-    song = _song_of(next_name)
     if song is None:
         return None
-    key = song.casefold()
-    goes = [t for t in takes if (_song_of(t.get("name")) or "").casefold() == key]
+    goes = [t for t in takes if t.get("song") == song]
     if not goes:
         return None
-    return {"song": _song_of(goes[0].get("name")),
-            "duration_sec": goes[-1].get("duration_sec")}
+    return {"song": song, "duration_sec": goes[-1].get("duration_sec")}
+
+
+def _field_text(named):
+    """What the name field holds for a take resolved to `named`
+    (Library.resolve_name): the song's title, its go shown beside it rather
+    than typed into it; or "Take N" for a take nobody named."""
+    return named["song"] or named["name"]
 
 
 def _folder_bytes(folder):
@@ -1393,7 +1351,7 @@ class Api:
             return {"active": False}
         s = self._session
         takes = self._session_takes()
-        next_name = self.suggest_take_name()
+        coming = self._next_take()
         return {
             "active": True,
             "name": s["name"],
@@ -1402,50 +1360,56 @@ class Api:
             "takes": takes,
             "songs": _songs_of(takes),
             "next_take_number": s["take_counter"] + 1,
-            "next_take_name": next_name,
-            # What it would be called without a name picked for it, which
-            # the rehearsal screen offers to go back to.
+            # What the name field holds, and the go shown beside it.
+            "next_take_name": _field_text(coming),
+            "next_take_go": coming["go"],
+            # What it would hold without a title picked, which the rehearsal
+            # screen offers to go back to.
             "next_take_default": self.suggest_take_name(chosen=False),
-            "last_attempt": _last_attempt(takes, next_name),
+            "last_attempt": _last_attempt(takes, coming["song"]),
             "recording": self._recorder is not None,
             "cloud_queue": self._cloud_queue.states(s["folder"]),
         }
 
-    def suggest_take_name(self, take_number=None, chosen=True):
+    def _next_take(self, take_number=None, chosen=True):
         """
-        A new take is usually another attempt at the same song, so it inherits
-        the previous take's name with the counter bumped: "Polyn" -> "Polyn 2".
+        What the take being named would be, as {"song", "go", "name"}.
+
+        A new take is usually another go at the same song, so it is the
+        previous take's song at its next go. After a take nobody named, it is
+        "Take N".
 
         take_number is the take being named. Left out, it means the take that
-        comes next — which is what the rehearsal screen shows before recording.
-        Right after a take it must be passed, otherwise the very first take
-        would be offered as "Take 2".
+        comes next, which is what the rehearsal screen shows before
+        recording. Right after a take it must be passed, otherwise the very
+        first take would be offered as "Take 2".
 
-        A name chosen for the next take on the rehearsal screen comes before
-        all of that (see set_next_take_name), unless `chosen` is False: then
-        this is the name the take would have without it.
+        A title picked for the next take on the rehearsal screen comes before
+        all of that (see set_next_take_name), resolved as any name is —
+        "polyn" is the next go at Polyn — unless `chosen` is False: then this
+        is what the take would be without it.
         """
         if self._session is None:
-            return "Take 1"
-        if chosen and self._session.get("next_name"):
-            return self._session["next_name"]
+            return {"song": None, "go": None, "name": "Take 1"}
+        number = (take_number if take_number is not None
+                  else self._session["take_counter"] + 1)
+        folder = self._session["folder"]
+        picked = self._session.get("next_name")
+        if chosen and picked:
+            try:
+                return self._lib.resolve_name(folder, picked, number)
+            except Exception:
+                # The library could not say which go it would be. The title
+                # picked is still the one to offer, as it was typed.
+                return {"song": None, "go": None, "name": picked}
         takes = self._session_takes()
-        number = (
-            take_number
-            if take_number is not None
-            else self._session["take_counter"] + 1
-        )
-        if not takes:
-            return f"Take {number}"
+        song = takes[-1].get("song") if takes else None
+        return self._lib.resolve_name(folder, song or "", number)
 
-        last = takes[-1].get("name", "").strip()
-        if not last:
-            return f"Take {number}"
-
-        match = re.match(r"^(.*?)[\s]+(\d+)$", last)
-        if match:
-            return f"{match.group(1)} {int(match.group(2)) + 1}"
-        return f"{last} 2"
+    def suggest_take_name(self, take_number=None, chosen=True):
+        """What the name field holds for the take being named: its song's
+        title, or "Take N" — see _next_take."""
+        return _field_text(self._next_take(take_number, chosen))
 
     def set_next_take_name(self, name):
         """
@@ -1460,34 +1424,42 @@ class Api:
         if self._session is None:
             return {"ok": False, "error": "No rehearsal in progress"}
         self._session["next_name"] = (name or "").strip() or None
-        return {"ok": True, "next_take_name": self.suggest_take_name()}
+        coming = self._next_take()
+        return {"ok": True, "next_take_name": _field_text(coming),
+                "next_take_go": coming["go"]}
 
     def song_choices(self, folder=None, take_number=None):
         """
         The songs a take can be named after, so that nobody types a title the
         band has played before: {"here": [...], "other": [...]}, each
-        {"song", "name"}. "name" is what the take would be called — the next
-        go at the song in this rehearsal, "Polyn 3", or just the song where
-        it has not been played here.
+        {"song", "go"}: the title, which a pill puts in the name field, and
+        the go a take would be as that song — one past its highest go
+        anywhere in the library, or, for the take being renamed, its own go
+        at its own song.
 
         "here" is what this rehearsal played, in the order it first played
-        it. "other" is every other song in the library, the most recently
-        played first; the interface shows as many as it has room for.
-        Each "here" entry also has "last_take", the number of its latest take.
+        it, each with "last_take", the number of its latest take. "other" is
+        every other song in the library, the most recently played first; the
+        interface shows as many as it has room for.
 
         `folder` is the rehearsal, the one in progress when left out.
-        `take_number` is the take being named, which is not counted as a go:
-        "Polyn 2" renamed to Polyn stays Polyn 2.
+        `take_number` is the take being named.
         """
         if folder is None:
             folder = self._session["folder"] if self._session else None
         rehearsal = self._lib.rehearsal(Path(folder)) if folder else None
         takes = rehearsal["takes"] if rehearsal else []
-        others = [t for t in takes if t.get("take_number") != take_number]
+        own = next((t for t in takes if t.get("take_number") == take_number), None)
+        nexts = self._lib.next_goes()
 
-        # last_take: which songs the interface keeps when this rehearsal's
-        # alone do not fit under the field — the ones played latest.
-        here = [{"song": s["name"], "name": _next_go(others, s["name"]),
+        def go_for(song):
+            if own is not None and own.get("song") == song:
+                return own["go"]
+            return nexts.get(song, 1)
+
+        # "name" holds the title too, for the interface until it shows the go
+        # beside the field (songs in the store, Task 3 of its plan).
+        here = [{"song": s["name"], "name": s["name"], "go": go_for(s["name"]),
                  "last_take": max(s["take_numbers"])}
                 for s in _songs_of(takes)]
         seen = {c["song"].casefold() for c in here}
@@ -1500,7 +1472,8 @@ class Api:
                 key = s["name"].casefold()
                 if key not in seen:
                     seen.add(key)
-                    other.append({"song": s["name"], "name": s["name"]})
+                    other.append({"song": s["name"], "name": s["name"],
+                                  "go": go_for(s["name"])})
         return {"here": here, "other": other}
 
     def finish_rehearsal(self):
@@ -1644,19 +1617,20 @@ class Api:
         self._recorder_temp_dir = None
 
         try:
-            name = self.suggest_take_name(take_number)
+            field = self.suggest_take_name(take_number)
+            plain_name = self._next_take(take_number)["name"]
         except Exception:
             # The name comes from the library. A take is not left recording,
             # holding the card, because the library could not answer.
-            name = f"Take {take_number}"
+            field = plain_name = f"Take {take_number}"
         try:
-            # What ✕ on the review screen puts back: the name the take would
-            # have had with none picked before recording.
+            # What ✕ on the review screen puts back: what the field would hold
+            # with no title picked before recording.
             default = self.suggest_take_name(take_number, chosen=False)
         except Exception:
             default = f"Take {take_number}"
         result = self._journaled(
-            "stop", f"Saving “{name}”", temp_dir, take_number,
+            "stop", f"Saving “{plain_name}”", temp_dir, take_number,
             lambda progress: recorder.stop(progress=progress),
         )
         return {
@@ -1665,7 +1639,7 @@ class Api:
             "temp_dir": str(temp_dir),
             "duration_sec": result["duration_sec"],
             "tracks": result["tracks"],
-            "suggested_name": name,
+            "suggested_name": field,
             "default_name": default,
         }
 
@@ -1699,10 +1673,10 @@ class Api:
             return {"ok": False, "error": "No rehearsal in progress"}
 
         s = self._session
-        display_name = (custom_name or "").strip() or f"Take {take_number}"
-        take_dir = _unique_path(
-            s["folder"] / f"{take_number:02d} - {_safe_name(display_name)}"
-        )
+        # Named as it will be kept: the song and go the name resolves to, not
+        # what was typed — "polyn" for the third go is "Polyn 3".
+        named = self._lib.resolve_name(s["folder"], custom_name, take_number)
+        take_dir = _unique_path(s["folder"] / _take_dir_name(take_number, named["name"]))
         take_dir.mkdir(parents=True, exist_ok=True)
 
         # The review screen is still playing these very files.
@@ -1712,7 +1686,7 @@ class Api:
 
         take_info = {
             "take_number": take_number,
-            "name": display_name,
+            "name": (custom_name or "").strip(),
             "duration_sec": duration_sec,
             "tracks": moved,
             "markers": [self._as_marker(m) for m in (markers or [])],
@@ -1865,11 +1839,10 @@ class Api:
             return result
 
         take_number = max((t["take_number"] for t in r["takes"]), default=0) + 1
-        display_name = (name or "").strip() or f"Recovered take {take_number}"
-
-        take_dir = _unique_path(
-            folder / f"{take_number:02d} - {_safe_name(display_name)}"
-        )
+        # A draft rescued with no name is a take nobody named: "Take 5".
+        display_name = (name or "").strip()
+        named = self._lib.resolve_name(folder, display_name, take_number)
+        take_dir = _unique_path(folder / _take_dir_name(take_number, named["name"]))
         take_dir.mkdir(parents=True, exist_ok=True)
 
         moved, undo = self._move_tracks(result["tracks"], take_dir)
@@ -2043,6 +2016,10 @@ class Api:
                 return {"ok": False, "error": "Rehearsal not found"}
             return {"ok": False, "error": "Take not found"}
 
+        # The folder carries the name the take ends up with, which can differ
+        # from what was typed: renamed to its own song, a take keeps its go.
+        named = self._lib.resolve_name(folder, display_name, take_number)
+
         # The take's own folder is named after it, so rename that too — the
         # names should still make sense when browsing the disk directly.
         old_dirs = {
@@ -2052,7 +2029,7 @@ class Api:
         new_tracks = None
         if len(old_dirs) == 1:
             old_dir = old_dirs.pop()
-            target = folder / f"{take_number:02d} - {_safe_name(display_name)}"
+            target = folder / _take_dir_name(take_number, named["name"])
             # Path itself compares case-insensitively on Windows, so whether
             # the spelling actually changed is asked of plain strings.
             same_spelling = str(target) == str(old_dir)

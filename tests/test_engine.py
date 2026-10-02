@@ -825,9 +825,11 @@ def main():
     a._session["take_counter"] = 0
 
     keep(1, "Polyn")
-    ok("next inherits the name", a.suggest_take_name() == "Polyn 2")
+    ok("the next take is another go at the same song",
+       a.suggest_take_name() == "Polyn" and a.session_state()["next_take_go"] == 2)
     keep(2, a.suggest_take_name())
-    ok("the counter keeps climbing", a.suggest_take_name() == "Polyn 3")
+    ok("the go keeps climbing",
+       a.suggest_take_name() == "Polyn" and a.session_state()["next_take_go"] == 3)
 
     # The band moves on to another song, and says so on the rehearsal screen
     # before the take rather than retyping it after.
@@ -835,7 +837,7 @@ def main():
        a.set_next_take_name(" Vesna ")["next_take_name"] == "Vesna"
        and a.session_state()["next_take_name"] == "Vesna")
     ok("and the name it would have had is still known, to go back to",
-       a.session_state()["next_take_default"] == "Polyn 3")
+       a.session_state()["next_take_default"] == "Polyn")
     a._session["take_counter"] = 3
     ok("the review screen is offered it for the take just recorded",
        a.suggest_take_name(3) == "Vesna")
@@ -843,10 +845,10 @@ def main():
     ok("a take thrown away leaves it for the next go", a.suggest_take_name() == "Vesna")
     keep(3, "Vesna")
     ok("a kept take uses it up, and the next follows on from it",
-       a.suggest_take_name() == "Vesna 2")
+       a.suggest_take_name() == "Vesna" and a.session_state()["next_take_go"] == 2)
     a.set_next_take_name("Ogon")
     a.set_next_take_name("  ")
-    ok("blank goes back to the name it would have had", a.suggest_take_name() == "Vesna 2")
+    ok("blank goes back to the name it would have had", a.suggest_take_name() == "Vesna")
     a.set_next_take_name("Ogon")
     d = folder / "_drafts" / "take 4"
     write_wav(d / "Gtr.wav", 100, seconds=1.0)
@@ -857,18 +859,18 @@ def main():
     a.set_next_take_name("")
 
     def plain(choices):
-        """A list of song choices as song and name only."""
-        return [{"song": c["song"], "name": c["name"]} for c in choices]
+        """A list of song choices as song and go only."""
+        return [{"song": c["song"], "go": c["go"]} for c in choices]
 
     # Naming a take offers the songs already played, as the name it would get.
     ok("the songs of the rehearsal in progress, as the next go at each",
-       plain(a.song_choices()["here"]) == [{"song": "Polyn", "name": "Polyn 3"},
-                                           {"song": "Vesna", "name": "Vesna 2"},
-                                           {"song": "Rescued", "name": "Rescued 2"}])
+       plain(a.song_choices()["here"]) == [{"song": "Polyn", "go": 3},
+                                           {"song": "Vesna", "go": 2},
+                                           {"song": "Rescued", "go": 2}])
     ok("each with the number of its latest take",
        [c["last_take"] for c in a.song_choices()["here"]] == [2, 3, 4])
-    ok("the take being renamed is not a go of its own",
-       plain(a.song_choices(str(folder), 2)["here"])[0] == {"song": "Polyn", "name": "Polyn 2"})
+    ok("the take being renamed keeps its own go at its own song",
+       plain(a.song_choices(str(folder), 2)["here"])[0] == {"song": "Polyn", "go": 2})
     ok("nothing to name after with no rehearsal and no library",
        fresh_api(tmp / "nothing")[1].song_choices() == {"here": [], "other": []})
 
@@ -915,10 +917,10 @@ def main():
     renamed = ru.rename_take(str(ru_folder), 1, "Полынь")
     ok("a take can be named in Cyrillic", renamed.get("ok"))
     ok("and the name is kept, readable back",
-       ru._lib.rehearsal(ru_folder)["takes"][0]["name"] == "Полынь")
+       ru._lib.rehearsal(ru_folder)["takes"][0]["name"] == "Полынь 1")
     reopened = Library(ru.recordings_dir)
     ok("from the file on disk too, whatever the system's code page",
-       reopened.rehearsal(ru_folder)["takes"][0]["name"] == "Полынь")
+       reopened.rehearsal(ru_folder)["takes"][0]["name"] == "Полынь 1")
     reopened.close()
 
     # The rehearsal screen plays the take it offers to rename, and Windows
@@ -928,7 +930,7 @@ def main():
     again = ru.rename_take(str(ru_folder), 1, "Весна")
     ok("renaming the take that is playing renames its folder too",
        again.get("ok")
-       and Path(again["take"]["tracks"][0]["file"]).parent.name == "01 - Весна"
+       and Path(again["take"]["tracks"][0]["file"]).parent.name == "01 - Весна 1"
        and Path(again["take"]["tracks"][0]["file"]).exists())
 
     ru.player_open(again["take"]["tracks"])
@@ -973,11 +975,11 @@ def main():
     unchanged = rn.rename_take(str(rn_folder), 1, "Polyn")
     ok("renaming a take to the name it already has succeeds", unchanged.get("ok"))
     ok("its folder is unchanged",
-       Path(unchanged["take"]["tracks"][0]["file"]).parent.name == "01 - Polyn")
+       Path(unchanged["take"]["tracks"][0]["file"]).parent.name == "01 - Polyn 1")
     ok("and no '(2)' folder was created",
-       not any(p.name == "01 - Polyn (2)" for p in rn_folder.iterdir()))
+       not any(p.name == "01 - Polyn 1 (2)" for p in rn_folder.iterdir()))
 
-    # A separate take, so the case-only rename starts from "01 - Polyn"
+    # A separate take, so the case-only rename starts from "01 - Polyn 1"
     # rather than whatever the check above left behind.
     _, rn2 = fresh_api(tmp / "rename_case")
     rn2.start_rehearsal("Case2", 0, SR, [{"name": "Gtr", "channel": 1}])
@@ -989,9 +991,9 @@ def main():
     cased = rn2.rename_take(str(rn2_folder), 1, "POLYN")
     ok("renaming to a case-only variant succeeds", cased.get("ok"))
     ok("the folder's name takes the new case",
-       Path(cased["take"]["tracks"][0]["file"]).parent.name == "01 - POLYN")
+       Path(cased["take"]["tracks"][0]["file"]).parent.name == "01 - POLYN 1")
     ok("and no '(2)' folder exists",
-       not any(p.name in ("01 - Polyn (2)", "01 - POLYN (2)") for p in rn2_folder.iterdir()))
+       not any(p.name in ("01 - Polyn 1 (2)", "01 - POLYN 1 (2)") for p in rn2_folder.iterdir()))
 
     rr = a.rename_rehearsal(str(folder), "Tuesday jam")
     new_folder = Path(rr["folder"])
@@ -1527,9 +1529,9 @@ def main():
 
     take9 = next(t for t in a.get_rehearsal(str(folder9))["takes"]
                  if t["take_number"] == 9)
-    ok("a rename during the mix is not reverted by it", take9["name"] == "After")
+    ok("a rename during the mix is not reverted by it", take9["name"] == "After 2")
     ok("and the copy still records the name it was written under",
-       take9["cloud"]["source"]["name"] == "Before")
+       take9["cloud"]["source"]["name"] == "Before 1")
     ok("so it does not claim to be current",
        not cloudmod.is_current(take9, "mix", a.get_settings()["volumes"], "wav",
                                a._cloud_target(folder9)))
@@ -1567,7 +1569,7 @@ def main():
     a.rename_take(str(folder9), 9, "Renamed once more")
     renamed9 = a._lib.take(folder9, 9)
     ok("the new name is in the database once the rename is done",
-       renamed9["name"] == "Renamed once more"
+       renamed9["name"] == "Renamed once more 1"
        and all(Path(t["file"]).exists() for t in renamed9["tracks"]))
     ok("and no session.json is written beside it",
        not list(Path(folder9).glob("session.json*")))
@@ -1853,10 +1855,10 @@ def main():
     fc.rename_take(str(cf), 1, "Polyn best")
     _, after = copy_of(1)
     ok("a take sent by hand, with sending off, is renamed in the cloud too",
-       Path(after.get("mix", "")).name == "01 - Polyn best.wav"
+       Path(after.get("mix", "")).name == "01 - Polyn best 1.wav"
        and is_file(after["mix"]) and not Path(before["mix"]).exists())
     ok("its tracks as well as its mix",
-       Path(after.get("tracks", "")).name == "01 - Polyn best"
+       Path(after.get("tracks", "")).name == "01 - Polyn best 1"
        and is_dir(after["tracks"]) and not Path(before["tracks"]).exists())
     ok("by moving the files, not by mixing them again",
        is_file(after.get("mix")) and "Polyn best" in after["mix"]
@@ -1935,11 +1937,11 @@ def main():
     # A copy that is not where its record says — a sync client that has not
     # caught up, a file moved by hand — cannot be moved, so it is made again.
     Path(redone["mix"]).unlink()
-    fc.rename_take(str(sf), 1, "Ogon 2")
+    fc.rename_take(str(sf), 1, "Zima")
     drain_c()
     _, remade = copy_of(1, sf)
     ok("a copy that could not be moved is made again under the new name",
-       Path(remade.get("mix", "")).name == "01 - Ogon 2.wav"
+       Path(remade.get("mix", "")).name == "01 - Zima 1.wav"
        and is_file(remade["mix"]) and is_dir(remade.get("tracks")))
 
     # A take deleted while its copy is being made: the copy finishes after it
@@ -1956,7 +1958,7 @@ def main():
     finally:
         fc._lib.set_cloud_copy = real_set
     ok("a copy that finishes after its take was deleted is not left behind",
-       not any(p.name.startswith("01 - Ogon 2") for p in band.rglob("*")))
+       not any(p.name.startswith("01 - Zima") for p in band.rglob("*")))
 
     print("\n[11n] Emptied folders already in the cloud are swept up")
     # Earlier versions left a rehearsal's folder behind in the cloud when its
@@ -2065,7 +2067,8 @@ def main():
     # next take's name less its attempt number — the same rule as above, so
     # the interface is handed the answer rather than a second copy of it.
     ok("the next take is another go at Vesna",
-       d.session_state()["next_take_name"] == "Vesna 3")
+       d.session_state()["next_take_name"] == "Vesna"
+       and d.session_state()["next_take_go"] == 5)
     ok("so it is told how long the last go at Vesna ran",
        d.session_state().get("last_attempt") == {"song": "Vesna", "duration_sec": 0.5})
     draft = live_folder / "_drafts" / "take 4"
@@ -2167,7 +2170,7 @@ def main():
        lt["last"]["folder"] == last and lt["last"]["name"] == "Tuesday jam")
     ok("with every take as the player needs it, and its songs",
        [t["name"] for t in lt["last"]["takes"]]
-       == ["Polyn", "Polyn 2", "Vesna", "Take 4", "polyn 3"]
+       == ["Polyn 2", "Polyn 3", "Vesna 1", "Take 4", "Polyn 4"]
        and all("tracks" in t and "markers" in t for t in lt["last"]["takes"])
        and [(s["name"], s["take_numbers"]) for s in lt["last"]["songs"]]
        == [("Polyn", [1, 2, 5]), ("Vesna", [3])])
@@ -2177,7 +2180,7 @@ def main():
        [(s["name"], s["rehearsal"], s["goes"]) for s in lt["not_played"]]
        == [("Dym", "New songs", 2), ("Ptaha", "New songs", 1), ("Doroga", "First", 2)])
     ok("each with its last go, ready to play",
-       [s["take"]["name"] for s in lt["not_played"]] == ["Dym 2", "Ptaha", "Doroga 2"]
+       [s["take"]["name"] for s in lt["not_played"]] == ["Dym 2", "Ptaha 1", "Doroga 2"]
        and lt["not_played"][0]["folder"] == mid and lt["not_played"][2]["folder"] == older)
     ok("a song it did play is not among them, however long ago it was first played",
        "Polyn" not in {s["name"] for s in lt["not_played"]})
@@ -2190,17 +2193,17 @@ def main():
     # Naming a take in one of them offers the whole repertoire.
     ch = e.song_choices(last)
     ok("naming a take offers what its rehearsal played, as the next go at each",
-       plain(ch["here"]) == [{"song": "Polyn", "name": "Polyn 4"},
-                             {"song": "Vesna", "name": "Vesna 2"}])
-    ok("and every other song, the most recently played first",
-       ch["other"] == [{"song": "Dym", "name": "Dym"}, {"song": "Ptaha", "name": "Ptaha"},
-                       {"song": "Doroga", "name": "Doroga"}])
-    ok("a go missing in between is not named again",
-       e.song_choices(last, 2)["here"][0]["name"] == "Polyn 4"
-       and e.song_choices(last, 5)["here"][0]["name"] == "Polyn 3")
+       plain(ch["here"]) == [{"song": "Polyn", "go": 5},
+                             {"song": "Vesna", "go": 2}])
+    ok("and every other song, the most recently played first, each at its next go",
+       plain(ch["other"]) == [{"song": "Dym", "go": 3}, {"song": "Ptaha", "go": 2},
+                              {"song": "Doroga", "go": 3}])
+    ok("a take being renamed keeps its own go at its own song",
+       e.song_choices(last, 2)["here"][0]["go"] == 3
+       and e.song_choices(last, 5)["here"][0]["go"] == 4)
     ok("an older rehearsal is offered the songs played after it too",
        [c["song"] for c in e.song_choices(older)["other"]] == ["Vesna", "Dym", "Ptaha"]
-       and plain(e.song_choices(older)["here"])[1] == {"song": "Doroga", "name": "Doroga 3"})
+       and plain(e.song_choices(older)["here"])[1] == {"song": "Doroga", "go": 3})
     ok("with no rehearsal in progress every song is another's",
        e.song_choices()["here"] == []
        and [c["song"] for c in e.song_choices()["other"]]
@@ -2539,7 +2542,7 @@ def main():
     kept = h.keep_take(1, str(draft), "Polyn", 2.0,
                        [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
     ok("a kept take is in session_state without anything copied over",
-       kept["ok"] and [t["name"] for t in h.session_state()["takes"]] == ["Polyn"])
+       kept["ok"] and [t["name"] for t in h.session_state()["takes"]] == ["Polyn 1"])
 
     h.rename_take(str(hf), 1, "Polyn best")
     hf = Path(h.rename_rehearsal(str(hf), "Stored again")["folder"])
@@ -2549,7 +2552,7 @@ def main():
     h._copy_to_cloud(str(hf), 1, "mix")
     stored = h._lib.take(hf, 1)
     ok("renames, markers, a crop and a copy all reach the database",
-       stored["name"] == "Polyn best"
+       stored["name"] == "Polyn best 1"
        and [m["at"] for m in stored["markers"]] == [0.5]
        and abs(stored["duration_sec"] - 1.5) < 0.01
        and Path(stored["cloud"].get("mix", "")).exists())
@@ -2624,7 +2627,7 @@ def main():
         del h._library.add_take
     ok("a take whose record cannot be written stays a draft",
        failed and (draft / "Gtr.wav").exists()
-       and not (other / "02 - Unkept").exists())
+       and not (other / "02 - Unkept 1").exists())
 
     take_dir = Path(h._lib.take(other, 1)["tracks"][0]["file"]).parent
     h._library.update_take = refuse
@@ -2633,7 +2636,7 @@ def main():
     finally:
         del h._library.update_take
     ok("a take folder is renamed back when its record cannot be",
-       failed and take_dir.is_dir() and not (other / "01 - Renamed").exists())
+       failed and take_dir.is_dir() and not (other / "01 - Renamed 1").exists())
 
     h._library.move_rehearsal = refuse
     try:
@@ -2799,7 +2802,7 @@ def main():
     ok("the live rehearsal's folder is not a place to locate onto",
        g.locate_rehearsal(str(lost), str(live)) == part)
     ok("nor a folder inside another rehearsal's",
-       g.locate_rehearsal(str(lost), str(live / "01 - Kept")) == part)
+       g.locate_rehearsal(str(lost), str(live / "01 - Kept 1")) == part)
     box = rec13 / "Box"
     inner = box / "Old - 2026-08-01 20-00"
     inner.mkdir(parents=True)
@@ -5596,7 +5599,7 @@ def main():
     a51.set_next_take_name("Vesna")
     second51 = record51()
     ok("a name picked before recording is offered, and the one it would have had beside it",
-       second51["suggested_name"] == "Vesna" and second51["default_name"] == "Polyn 2")
+       second51["suggested_name"] == "Vesna" and second51["default_name"] == "Polyn")
 
     def no_lookup():
         raise RuntimeError("database is locked")
@@ -5612,6 +5615,82 @@ def main():
        "what the take would have been called",
        third51["suggested_name"] == "Ogon"
        and third51["default_name"] == f"Take {third51['take_number']}")
+
+    print("\n[52] A take is a go at a song, numbered across the library")
+    _, s52 = fresh_api(Path(tempfile.mkdtemp()))
+
+    def keep52(number, name):
+        here = Path(s52._session["folder"])
+        draft = here / "_drafts" / f"take {number}"
+        write_wav(draft / "Gtr.wav", 100, seconds=0.5)
+        s52._session["take_counter"] = number
+        return s52.keep_take(number, str(draft), name, 0.5,
+                             [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])["take"]
+
+    def folder_of(take):
+        return Path(take["tracks"][0]["file"]).parent.name
+
+    s52.start_rehearsal("Monday", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+    first52 = keep52(1, "Polyn")
+    ok("a take is a go at its song: its name is the title and the go, folder and all",
+       (first52["name"], first52["song"], first52["go"]) == ("Polyn 1", "Polyn", 1)
+       and folder_of(first52) == "01 - Polyn 1")
+    ok("the field is offered the title alone, with the go beside it",
+       s52.session_state()["next_take_name"] == "Polyn"
+       and s52.session_state()["next_take_go"] == 2)
+    keep52(2, s52.suggest_take_name())
+    s52.finish_rehearsal()
+
+    s52.start_rehearsal("Tuesday", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+    f52 = Path(s52._session["folder"])
+    named52 = s52.set_next_take_name("polyn")
+    ok("goes run on across rehearsals: yesterday's 2 is followed by 3",
+       named52 == {"ok": True, "next_take_name": "Polyn", "next_take_go": 3})
+    typed52 = keep52(1, "Polyn 7")
+    ok("a number typed after the title names the song; the go is the app's",
+       typed52["name"] == "Polyn 3" and folder_of(typed52) == "01 - Polyn 3")
+    unnamed52 = keep52(2, "Take 9")
+    ok("a take nobody named is called by its own number",
+       (unnamed52["name"], unnamed52["song"]) == ("Take 2", None)
+       and folder_of(unnamed52) == "02 - Take 2")
+    titled52 = keep52(3, "Song 2")
+    ok("a title ending in a number is a song of its own when no shorter one exists",
+       (titled52["name"], titled52["song"], titled52["go"]) == ("Song 2 1", "Song 2", 1))
+    state52 = s52.session_state()
+    ok("after a take, the next is another go at its song",
+       state52["next_take_name"] == "Song 2" and state52["next_take_go"] == 2)
+    ok("songs, runs and how long the last go ran come from the songs",
+       [(s["name"], s["take_numbers"]) for s in state52["songs"]]
+       == [("Polyn", [1]), ("Song 2", [3])]
+       and [(r["song"], len(r["takes"])) for r in next(
+           r for r in s52.list_rehearsals() if r["name"] == "Tuesday")["runs"]]
+       == [("Polyn", 1), (None, 1), ("Song 2", 1)]
+       and state52["last_attempt"] == {"song": "Song 2", "duration_sec": 0.5})
+    ok("every song offered says which go it would be",
+       [(c["song"], c["go"]) for c in s52.song_choices()["here"]]
+       == [("Polyn", 4), ("Song 2", 2)])
+    ok("the take being renamed keeps its own go at its own song",
+       [(c["song"], c["go"]) for c in s52.song_choices(str(f52), 1)["here"]][0] == ("Polyn", 3))
+
+    same52 = s52.rename_take(str(f52), 1, "Polyn")
+    ok("renamed to its own song, a take keeps its go and its folder",
+       same52["ok"] and same52["take"]["name"] == "Polyn 3"
+       and folder_of(same52["take"]) == "01 - Polyn 3"
+       and not any(p.name.startswith("01 - Polyn 3 (") for p in f52.iterdir()))
+    moved52 = s52.rename_take(str(f52), 2, "polyn")
+    ok("renamed to a song, a take is its next go, folder and all",
+       moved52["take"]["name"] == "Polyn 4" and folder_of(moved52["take"]) == "02 - Polyn 4"
+       and Path(moved52["take"]["tracks"][0]["file"]).exists())
+    ok("a blank name is still refused",
+       s52.rename_take(str(f52), 2, "  ") == {"ok": False, "error": "Name cannot be empty"})
+
+    rescued52 = f52 / "_drafts" / "take 9"
+    rescued52.mkdir(parents=True)
+    (rescued52 / "Gtr.raw").write_bytes(struct.pack("<h", 1234) * SR)
+    got52 = s52.recover_draft(str(rescued52))
+    ok("a draft rescued with no name is a take nobody named",
+       got52["ok"] and got52["take"]["name"] == "Take 4"
+       and folder_of(got52["take"]) == "04 - Take 4")
 
     print("\n" + "=" * 60)
     if problems:

@@ -41,6 +41,21 @@ class Rehearsal(Base):
     )
 
 
+class Song(Base):
+    """
+    What takes are goes at. A take's name is not stored but follows from its
+    song and its go (names.take_name), so a title is spelled one way
+    everywhere. Titles are unique case-blind. library.py enforces that, as
+    SQLite's lower() folds only ASCII and would let "Полынь" and "полынь"
+    both in.
+    """
+
+    __tablename__ = "song"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String)
+
+
 class Track(Base):
     """One input as the rehearsal was set up: its name and which channel."""
 
@@ -66,7 +81,21 @@ class Take(Base):
         ForeignKey("rehearsal.id", ondelete="CASCADE"), index=True
     )
     take_number: Mapped[int] = mapped_column(Integer)
-    name: Mapped[str] = mapped_column(String)
+    # What the take is a go at, and which go: both None for a take nobody
+    # named. Goes are numbered per song across the whole library and kept,
+    # not counted again on every read: deleting Polyn 2 must not turn Polyn 3
+    # into another name, and so another folder and another cloud copy.
+    #
+    # The column is added by ALTER TABLE, which can only declare the foreign
+    # key inline, and SQLAlchemy does not read an inline key's ON DELETE back
+    # from SQLite. The database does have ON DELETE SET NULL (migration 0002);
+    # it is left off here so the two compare equal. Rebuilding `take` to
+    # declare it as a table constraint would cascade away its markers, files
+    # and cloud copies, and library.py never deletes a song that has takes.
+    song_id: Mapped[int | None] = mapped_column(
+        ForeignKey("song.id"), index=True, nullable=True
+    )
+    go: Mapped[int | None] = mapped_column(Integer, nullable=True)
     duration_sec: Mapped[float] = mapped_column(Float, default=0.0)
     # This take's own answer on the review screen — see Api.keep_take.
     cloud_skip: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -75,6 +104,7 @@ class Take(Base):
     cloud_error: Mapped[str | None] = mapped_column(String, nullable=True)
 
     rehearsal: Mapped[Rehearsal] = relationship(back_populates="takes")
+    song: Mapped["Song | None"] = relationship()
     files: Mapped[list["TakeFile"]] = relationship(
         back_populates="take", cascade="all, delete-orphan",
         passive_deletes=True, order_by="TakeFile.position",

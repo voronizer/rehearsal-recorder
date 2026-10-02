@@ -14,11 +14,14 @@ see models.py for why.
 
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload, sessionmaker
 
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
-from rehearsal_recorder.store.models import CloudCopy, Marker, Rehearsal, Take, TakeFile, Track
+from rehearsal_recorder.store.models import (
+    CloudCopy, Marker, Rehearsal, Song, Take, TakeFile, Track,
+)
+from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
 
 MARKER_KINDS = ("note", "good", "issue", "redo")
 
@@ -49,6 +52,7 @@ def _relative(path, root):
 
 _WITH_TAKES = (
     selectinload(Rehearsal.tracks),
+    selectinload(Rehearsal.takes).selectinload(Take.song),
     selectinload(Rehearsal.takes).selectinload(Take.files),
     selectinload(Rehearsal.takes).selectinload(Take.markers),
     selectinload(Rehearsal.takes).selectinload(Take.cloud_copy),
@@ -144,9 +148,13 @@ class Library:
     def _take_data(self, folder, take):
         """The take as the interface gets it, but with "cloud" still the raw
         row; _take_out finishes it."""
+        title = take.song.title if take.song is not None else None
         out = {
             "take_number": take.take_number,
-            "name": take.name,
+            # Not stored: it follows from the song and the go (D3).
+            "name": take_name(title, take.go, take.take_number),
+            "song": title,
+            "go": take.go if title is not None else None,
             "duration_sec": take.duration_sec,
             "tracks": [
                 {"name": f.name, "file": str(folder / Path(f.file))} for f in take.files
@@ -194,6 +202,120 @@ class Library:
             for i, t in enumerate(tracks)
         ]
 
+    # ---------- songs ----------
+    #
+    # A take is a go at a song or at nothing, and its name follows from the
+    # two (names.take_name). What was typed or clicked becomes a song and a
+    # go here, in the transaction that writes the take, by _resolve. Titles
+    # are unique case-blind, which SQLite cannot enforce for Cyrillic (its
+    # lower() folds only ASCII), so it is enforced here: a title is looked up
+    # casefolded before a song is made. A song with no takes left goes with
+    # its last one, in the methods that delete or rename takes.
+
+    @staticmethod
+    def _songs_by_key(db):
+        return {s.title.casefold(): s for s in db.scalars(select(Song))}
+
+    @staticmethod
+    def _has_other_takes(db, song_id, take_id):
+        return db.scalars(
+            select(Take.id).where(Take.song_id == song_id, Take.id != take_id).limit(1)
+        ).first() is not None
+
+    def _resolve(self, db, rehearsal_id, name, take_number):
+        """
+        What take `take_number` of a rehearsal is a go at when the name field
+        holds `name`: (song, title, go). `song` is the Song row when there is
+        one already; `title` is None for no song, and a new song's title
+        otherwise. In order:
+
+        1. Nothing, or "Take N", is no song.
+        2. A song whose title is the whole text, compared casefolded, is that
+           song.
+        3. A song whose title is the text less a trailing number is that
+           song: a number typed out of habit ("Polyn 3") is dropped.
+        4. Anything else is a new song with exactly that title — "Opus 5" is
+           a title of its own unless a song called "Opus" exists.
+
+        The go is the app's: one past the highest go at the song anywhere in
+        the library. A take already a go at the song keeps its go ("Polyn 2"
+        renamed to Polyn stays Polyn 2); and when it is the song's only take,
+        a name differing from the title only in case respells the song.
+        """
+        name = (name or "").strip()
+        if not name or UNNAMED_TAKE.match(name):
+            return None, None, None
+        current = None
+        if rehearsal_id is not None:
+            current = db.scalars(select(Take).where(
+                Take.rehearsal_id == rehearsal_id, Take.take_number == take_number
+            )).one_or_none()
+        songs = self._songs_by_key(db)
+        song = songs.get(name.casefold())
+        if song is None:
+            base, number = split_go(name)
+            if number is not None:
+                song = songs.get(base.casefold())
+        if song is None:
+            return None, name, 1
+        title = song.title
+        if current is not None and current.song_id == song.id:
+            if (name != title and name.casefold() == title.casefold()
+                    and not self._has_other_takes(db, song.id, current.id)):
+                title = name
+            return song, title, current.go
+        highest = db.scalar(select(func.max(Take.go)).where(Take.song_id == song.id))
+        return song, title, (highest or 0) + 1
+
+    @staticmethod
+    def _song_row(db, song, title):
+        """The Song a take resolved to (_resolve): made if it is new, and
+        respelled if _resolve said so. None for no song."""
+        if title is None:
+            return None
+        if song is None:
+            song = Song(title=title)
+            db.add(song)
+        elif song.title != title:
+            song.title = title
+        return song
+
+    @staticmethod
+    def _drop_songless(db, song_ids):
+        """Deletes those of `song_ids` that no take is a go at any more."""
+        db.flush()
+        for song_id in {i for i in song_ids if i is not None}:
+            if db.scalars(select(Take.id).where(Take.song_id == song_id).limit(1)).first() is None:
+                db.execute(delete(Song).where(Song.id == song_id))
+
+    def resolve_name(self, folder, name, take_number):
+        """
+        What take `take_number` of the rehearsal in `folder` would be if the
+        name field held `name`, by the rule add_take and update_take follow
+        (_resolve), without writing anything: {"song": title or None, "go":
+        int or None, "name": the plain-text name}. Used to name a take's
+        folder before the take is written, and the next take before it is
+        recorded.
+        """
+        take_number = int(take_number)
+        with self._session() as db:
+            rehearsal = self._find(db, folder)
+            _, title, go = self._resolve(
+                db, None if rehearsal is None else rehearsal.id, name, take_number)
+        return {"song": title, "go": go, "name": take_name(title, go, take_number)}
+
+    def next_goes(self):
+        """{title: the go the next take of that song would be}, for every
+        song: one past its highest go anywhere in the library, as _resolve
+        counts it. One query, for the songs offered under a take's name."""
+        with self._session() as db:
+            rows = db.execute(
+                select(Song.title, func.max(Take.go))
+                .join(Take, Take.song_id == Song.id)
+                .group_by(Song.id)
+            ).all()
+        return {title: (highest or 0) + 1 for title, highest in rows}
+
     # ---------- rehearsals ----------
 
     def rehearsals(self):
@@ -234,12 +356,39 @@ class Library:
                          tracks, takes, cloud, cloud_errors, cloud_dir):
         """
         A whole rehearsal at once, for the importer: all of it goes in or none
-        of it does. takes as for add_take; cloud: {take_number: shared} as for
+        of it does. takes as for add_take, their names read by the old rule
+        (names.legacy_song); cloud: {take_number: shared} as for
         set_cloud_copy, relative to cloud_dir; cloud_errors: {take_number:
         message}.
         """
         folder = Path(folder)
         with self._session.begin() as db:
+            songs = self._songs_by_key(db)
+            highest = dict(db.execute(
+                select(Take.song_id, func.max(Take.go))
+                .where(Take.song_id.is_not(None)).group_by(Take.song_id)
+            ).all())
+            counted = {}
+
+            def go_at(name):
+                # Old names by the old rule, as migration 0002 read the
+                # database's own. A song already in the library keeps its
+                # title, and its goes go on from its highest, however old
+                # this rehearsal is: a number, once given, is kept. A new
+                # song is spelled as this rehearsal first spells it.
+                title = legacy_song(name)
+                if title is None:
+                    return None, None
+                key = title.casefold()
+                if key not in songs:
+                    songs[key] = Song(title=title)
+                if key not in counted:
+                    counted[key] = highest.get(songs[key].id) or 0
+                counted[key] += 1
+                return songs[key], counted[key]
+
+            placed = {int(t["take_number"]): go_at(t.get("name"))
+                      for t in sorted(takes, key=lambda t: int(t["take_number"]))}
             db.add(Rehearsal(
                 folder=self.key(folder),
                 name=name,
@@ -253,7 +402,8 @@ class Library:
                 takes=[
                     Take(
                         take_number=int(t["take_number"]),
-                        name=t["name"],
+                        song=placed[int(t["take_number"])][0],
+                        go=placed[int(t["take_number"])][1],
                         duration_sec=float(t.get("duration_sec") or 0.0),
                         cloud_skip=bool(t.get("cloud_skip")),
                         cloud_send=bool(t.get("cloud_send")),
@@ -285,7 +435,9 @@ class Library:
             row = self._find(db, folder)
             if row is None:
                 return False
+            song_ids = db.scalars(select(Take.song_id).where(Take.rehearsal_id == row.id)).all()
             db.delete(row)
+            self._drop_songless(db, song_ids)
             return True
 
     # ---------- takes ----------
@@ -294,15 +446,15 @@ class Library:
         with self._session() as db:
             row = self._find_take(
                 db, folder, take_number,
-                selectinload(Take.files), selectinload(Take.markers),
-                selectinload(Take.cloud_copy),
+                selectinload(Take.song), selectinload(Take.files),
+                selectinload(Take.markers), selectinload(Take.cloud_copy),
             )
             data = None if row is None else self._take_data(Path(folder), row)
         return self._take_out(data, self._cloud_dir())
 
     def add_take(self, folder, take):
         """
-        take: {"take_number", "name", "duration_sec", "tracks": [{"name",
+        take: {"take_number", "name" (what the name field held — see _resolve), "duration_sec", "tracks": [{"name",
         "file": absolute}], "markers"?, "cloud_skip"?, "cloud_send"?}.
         Returns the take as it is now kept, or None without the rehearsal.
         """
@@ -311,10 +463,13 @@ class Library:
             rehearsal = self._find(db, folder)
             if rehearsal is None:
                 return None
+            number = int(take["take_number"])
+            song, title, go = self._resolve(db, rehearsal.id, take.get("name"), number)
             row = Take(
                 rehearsal_id=rehearsal.id,
-                take_number=int(take["take_number"]),
-                name=take["name"],
+                take_number=number,
+                song=self._song_row(db, song, title),
+                go=go,
                 duration_sec=float(take.get("duration_sec") or 0.0),
                 cloud_skip=bool(take.get("cloud_skip")),
                 cloud_send=bool(take.get("cloud_send")),
@@ -329,15 +484,21 @@ class Library:
 
     def update_take(self, folder, take_number, *, name=None, duration_sec=None,
                     tracks=None, markers=None):
-        """Changes what is given and leaves the rest. tracks: the take's files
-        at their new absolute paths. Returns the take, or None."""
+        """Changes what is given and leaves the rest. name: what the name field
+        held, made a song and a go as add_take makes it (_resolve), so the name
+        the take ends up with can differ. tracks: the take's files at their new
+        absolute paths. Returns the take, or None."""
         folder = Path(folder)
         with self._session.begin() as db:
             row = self._find_take(db, folder, take_number)
             if row is None:
                 return None
             if name is not None:
-                row.name = name
+                was = row.song_id
+                song, title, go = self._resolve(db, row.rehearsal_id, name, take_number)
+                row.song = self._song_row(db, song, title)
+                row.go = go
+                self._drop_songless(db, [was])
             if duration_sec is not None:
                 row.duration_sec = float(duration_sec)
             if tracks is not None:
@@ -368,9 +529,9 @@ class Library:
             row = self._find_take(db, folder, take_number)
             if row is None:
                 return None
-            rehearsal_id = row.rehearsal_id
+            rehearsal_id, song_id = row.rehearsal_id, row.song_id
             db.delete(row)
-            db.flush()
+            self._drop_songless(db, [song_id])
             return len(db.scalars(select(Take.id).where(Take.rehearsal_id == rehearsal_id)).all())
 
     # ---------- the cloud ----------

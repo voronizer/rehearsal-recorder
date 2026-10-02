@@ -33,6 +33,7 @@ sys.modules.setdefault("sounddevice", _sd)
 
 from alembic.autogenerate import compare_metadata  # noqa: E402
 from alembic.runtime.migration import MigrationContext  # noqa: E402
+from alembic.script import ScriptDirectory  # noqa: E402
 from sqlalchemy import inspect, text  # noqa: E402
 
 from rehearsal_recorder.store import db  # noqa: E402
@@ -40,6 +41,10 @@ from rehearsal_recorder.store.importer import import_all  # noqa: E402
 from rehearsal_recorder.store.library import Library  # noqa: E402
 from rehearsal_recorder.store.models import Base  # noqa: E402
 from rehearsal_recorder.store.names import legacy_song, split_go, take_name  # noqa: E402
+
+# The newest migration the app ships. The test-only migrations below sit on
+# top of it, so they keep working as real ones are added.
+HEAD = ScriptDirectory.from_config(db.alembic_config()).get_current_head()
 
 problems = []
 
@@ -60,9 +65,22 @@ def migrations_with(tmp, name, body):
     return folder
 
 
+def migrations_up_to(tmp, revision):
+    """The app's migrations as far as `revision`, in a folder of their own:
+    what an app from before the later ones would bring a database to."""
+    folder = tmp / f"migrations-to-{revision}"
+    if folder.exists():
+        shutil.rmtree(folder)
+    shutil.copytree(db.MIGRATIONS, folder, ignore=shutil.ignore_patterns("__pycache__"))
+    for f in (folder / "versions").glob("*.py"):
+        if f.name[:4] > revision:
+            f.unlink()
+    return folder
+
+
 SECOND = '''
-revision = "0002"
-down_revision = "0001"
+revision = "9002"
+down_revision = "{down}"
 branch_labels = None
 depends_on = None
 
@@ -127,7 +145,7 @@ def main():
     e1.dispose()
     e2.dispose()
 
-    ok("it is at the newest migration", db.current_revision(engine) == "0001")
+    ok("it is at the newest migration", db.current_revision(engine) == HEAD)
     ok("it lives in the recordings folder", (rec / "library.sqlite").exists())
     ok("a new database is not backed up", not list(rec.glob("*.bak-*")))
     engine.dispose()
@@ -157,7 +175,8 @@ def main():
     lib.create_rehearsal(old / "Jam", "Jam", "2026-01-01T10:00:00", 48000, 24, [])
     lib.close()
 
-    broken = migrations_with(tmp, "0002_broken.py", SECOND.format(
+    broken = migrations_with(tmp, "9002_broken.py", SECOND.format(
+        down=HEAD,
         extra='    op.execute("DELETE FROM rehearsal")\n'
               '    raise RuntimeError("the migration broke")\n'))
     try:
@@ -168,9 +187,9 @@ def main():
     ok("a failing migration makes the folder unavailable, saying why",
        failed is not None and "the migration broke" in failed)
     ok("the database was copied aside before it was touched",
-       (old / "library.sqlite.bak-0001").exists())
+       (old / f"library.sqlite.bak-{HEAD}").exists())
     engine = db.make_engine(db.database_path(old))
-    ok("it is still at the revision it was", db.current_revision(engine) == "0001")
+    ok("it is still at the revision it was", db.current_revision(engine) == HEAD)
     with engine.connect() as c:
         columns = [col["name"] for col in inspect(c).get_columns("rehearsal")]
         rows = c.execute(text("SELECT folder FROM rehearsal")).scalars().all()
@@ -178,9 +197,9 @@ def main():
     ok("the half-done ALTER was rolled back", "venue" not in columns)
     ok("and so was the half-done DELETE", rows == ["Jam"])
 
-    working = migrations_with(tmp, "0002_venue.py", SECOND.format(extra=""))
+    working = migrations_with(tmp, "9002_venue.py", SECOND.format(down=HEAD, extra=""))
     engine = db.open_engine(old, working)
-    ok("a working migration moves it on", db.current_revision(engine) == "0002")
+    ok("a working migration moves it on", db.current_revision(engine) == "9002")
     with engine.connect() as c:
         rows = c.execute(text("SELECT folder, venue FROM rehearsal")).all()
     engine.dispose()
@@ -249,7 +268,7 @@ def main():
     renamed = lib.update_take(jam, 1, name="Polyn", tracks=[
         {"name": "Gtr", "file": str(jam / "01 - Polyn" / "Gtr.wav")}])
     ok("a rename changes the name and the files",
-       renamed["name"] == "Polyn"
+       renamed["name"] == "Polyn 1"
        and renamed["tracks"][0]["file"] == str(jam / "01 - Polyn" / "Gtr.wav"))
     ok("and leaves the rest", renamed["duration_sec"] == 3.5 and len(renamed["markers"]) == 3)
 
@@ -333,7 +352,7 @@ def main():
 
     r = lib.rehearsal(cafe)
     first, second = r["takes"]
-    ok("cp1252 text is read as cp1252", r["name"] == "Café" and first["name"] == "Café")
+    ok("cp1252 text is read as cp1252", r["name"] == "Café" and first["name"] == "Café 1")
     ok("no bit depth meant 16", r["bit_depth"] == 16 and r["samplerate"] == 44100)
     ok("a path from before the folder moved is found again",
        first["tracks"][0]["file"] == str(cafe / "01 - Café" / "Gtr.wav"))
@@ -391,6 +410,177 @@ def main():
        and legacy_song("  ") is None and legacy_song(None) is None)
     ok("old names: what the rule cannot know stays as it reads",
        legacy_song("Опус 5") == "Опус")
+
+    print("\n[9] Old names become songs (migration 0002)")
+    rec9 = tmp / "Songs"
+    rec9.mkdir()
+    db.open_engine(rec9, migrations_up_to(tmp, "0001")).dispose()
+    old_names = {
+        # rehearsal: (created_at, take names in order)
+        "Old": ("2026-01-10T19:00:00",
+                ["polyn", "Take 2", "Recovered take 3", "", "Song 2", "polyn", "Опус 5"]),
+        "Mid": ("2026-02-10T19:00:00", ["Polyn", "Polyn 3", "Song", "ПОЛЫНЬ"]),
+        "New": ("2026-03-10T19:00:00", ["Полынь 2"]),
+    }
+    engine = db.make_engine(db.database_path(rec9))
+    with engine.begin() as c:
+        for folder, (created_at, names) in old_names.items():
+            rid = c.execute(text(
+                "INSERT INTO rehearsal (folder, name, created_at, samplerate, bit_depth) "
+                "VALUES (:f, :f, :c, 48000, 24)"), {"f": folder, "c": created_at}).lastrowid
+            for number, old in enumerate(names, start=1):
+                tid = c.execute(text(
+                    "INSERT INTO take (rehearsal_id, take_number, name, duration_sec, "
+                    "cloud_skip, cloud_send) VALUES (:r, :n, :name, 1.0, 0, 0)"),
+                    {"r": rid, "n": number, "name": old}).lastrowid
+                c.execute(text("INSERT INTO take_file (take_id, position, name, file) "
+                               "VALUES (:t, 0, 'Gtr', :f)"),
+                          {"t": tid, "f": f"{number:02d} - {old}/Gtr.wav"})
+                c.execute(text("INSERT INTO marker (take_id, at, kind, note) "
+                               "VALUES (:t, 1.0, 'good', '')"), {"t": tid})
+                c.execute(text("INSERT INTO cloud_copy (take_id, mix, source) "
+                               "VALUES (:t, :m, '{}')"),
+                          {"t": tid, "m": f"{folder}/{number:02d} - {old}.wav"})
+    engine.dispose()
+
+    engine = db.open_engine(rec9)
+    ok("an old database is moved on to the newest migration",
+       db.current_revision(engine) == HEAD)
+    ok("after it was copied aside", (rec9 / "library.sqlite.bak-0001").exists())
+    with engine.connect() as c:
+        drift = compare_metadata(MigrationContext.configure(c), Base.metadata)
+        columns = {col["name"] for col in inspect(c).get_columns("take")}
+        counts = {t: c.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
+                  for t in ("take", "take_file", "marker", "cloud_copy")}
+        titles = sorted(c.execute(text("SELECT title FROM song")).scalars().all())
+    engine.dispose()
+    ok("and it is then what models.py describes", drift == [])
+    ok("a take's name is not stored any more",
+       "name" not in columns and {"song_id", "go"} <= columns)
+    ok("every take keeps its files, its marks and its cloud copy",
+       counts == {"take": 12, "take_file": 12, "marker": 12, "cloud_copy": 12})
+    ok("one song per title, whatever the case or the script",
+       titles == ["Polyn", "Song", "Опус", "Полынь"])
+
+    lib = Library(rec9)
+
+    def names_of(folder):
+        return [(t["name"], t["song"], t["go"]) for t in lib.rehearsal(rec9 / folder)["takes"]]
+
+    ok("the app's own names are no song, a recovered take's and an empty one included",
+       names_of("Old")[1:4] == [("Take 2", None, None), ("Take 3", None, None),
+                                ("Take 4", None, None)])
+    ok("a song is spelled as the newest rehearsal first spells it",
+       names_of("Old")[0] == ("Polyn 1", "Polyn", 1)
+       and names_of("Mid")[3] == ("Полынь 1", "Полынь", 1)
+       and names_of("New") == [("Полынь 2", "Полынь", 2)])
+    ok("goes are numbered across rehearsals in the order played, gaps closed",
+       [names_of("Old")[0][2], names_of("Old")[5][2],
+        names_of("Mid")[0][2], names_of("Mid")[1][2]] == [1, 2, 3, 4])
+    ok("two takes of one name in a rehearsal get a go each",
+       names_of("Old")[5] == ("Polyn 2", "Polyn", 2))
+    ok("an old name with a trailing number is a go at the song without it",
+       names_of("Old")[4] == ("Song 1", "Song", 1) and names_of("Mid")[2] == ("Song 2", "Song", 2))
+    ok("even with no such song anywhere: what the rule cannot know stays as it reads",
+       names_of("Old")[6] == ("Опус 1", "Опус", 1))
+    lib.close()
+
+    try:
+        db.open_engine(rec9, migrations_up_to(tmp, "0001")).dispose()
+        refused = None
+    except db.LibraryUnavailable as e:
+        refused = str(e)
+    ok("an app from before songs refuses the database, as any older app would",
+       refused == db.NEWER_DATABASE)
+
+    print("\n[10] Naming a take: a go at a song, numbered across the library")
+    rec10 = tmp / "Naming"
+    rec10.mkdir()
+    lib = Library(rec10)
+    jam = rec10 / "Jam"
+    lib.create_rehearsal(jam, "Jam", "2026-10-01T19:00:00", 48000, 24, [])
+
+    def add(number, name, folder=jam):
+        t = lib.add_take(folder, {"take_number": number, "name": name, "tracks": []})
+        return t["name"], t["song"], t["go"]
+
+    def rename(number, name):
+        t = lib.update_take(jam, number, name=name)
+        return t["name"], t["song"], t["go"]
+
+    def song_titles():
+        e = db.make_engine(db.database_path(rec10))
+        with e.connect() as c:
+            found = sorted(c.execute(text("SELECT title FROM song")).scalars().all())
+        e.dispose()
+        return found
+
+    ok("a new title is a new song, at go 1", add(1, "Polyn") == ("Polyn 1", "Polyn", 1))
+    ok("the same title in another case is the same song, at its next go",
+       add(2, "polyn") == ("Polyn 2", "Polyn", 2))
+    ok("a number typed after the title names the song; the go is the app's",
+       add(3, "Polyn 7") == ("Polyn 3", "Polyn", 3))
+    ok("Take N is no song, and is called by the take's own number",
+       add(4, "Take 9") == ("Take 4", None, None))
+    ok("so is an empty name", add(5, "  ") == ("Take 5", None, None))
+    ok("a title ending in a number is a song of its own when no shorter one exists",
+       add(6, "Song 2") == ("Song 2 1", "Song 2", 1)
+       and add(7, "Song 2") == ("Song 2 2", "Song 2", 2))
+    ok("Cyrillic is compared case-blind too",
+       add(8, "Полынь") == ("Полынь 1", "Полынь", 1)
+       and add(9, "ПОЛЫНЬ 4") == ("Полынь 2", "Полынь", 2))
+    ok("one row per song", song_titles() == ["Polyn", "Song 2", "Полынь"])
+
+    before = song_titles()
+    ok("asking what a name would be writes nothing",
+       lib.resolve_name(jam, "Vesna", 10) == {"song": "Vesna", "go": 1, "name": "Vesna 1"}
+       and lib.resolve_name(jam, "polyn", 10) == {"song": "Polyn", "go": 4, "name": "Polyn 4"}
+       and lib.resolve_name(jam, "", 10) == {"song": None, "go": None, "name": "Take 10"}
+       and song_titles() == before)
+
+    other = rec10 / "Other"
+    lib.create_rehearsal(other, "Other", "2026-10-02T19:00:00", 48000, 24, [])
+    ok("goes run on across rehearsals", add(1, "Polyn", other) == ("Polyn 4", "Polyn", 4))
+    ok("the next go of every song, in one look",
+       lib.next_goes() == {"Polyn": 5, "Song 2": 3, "Полынь": 3})
+
+    ok("renamed to the song it already has, a take keeps its go",
+       rename(3, "Polyn") == ("Polyn 3", "Polyn", 3))
+    ok("renamed to another song, it is that song's next go",
+       rename(4, "polyn") == ("Polyn 5", "Polyn", 5))
+    ok("renamed to a new title, it is a new song", rename(9, "Vesna") == ("Vesna 1", "Vesna", 1))
+    ok("a case-only rename of a song's only take respells the song",
+       rename(8, "ПОЛЫНЬ") == ("ПОЛЫНЬ 1", "ПОЛЫНЬ", 1))
+    ok("but not a song that other takes are goes at",
+       rename(1, "POLYN") == ("Polyn 1", "Polyn", 1))
+    ok("a song left with no takes is gone",
+       rename(9, "Take 9") == ("Take 9", None, None) and "Vesna" not in song_titles())
+    lib.delete_take(jam, 2)
+    ok("deleting a go does not renumber the rest", lib.take(jam, 3)["name"] == "Polyn 3")
+    lib.delete_take(jam, 8)
+    ok("deleting a song's last take deletes the song", "ПОЛЫНЬ" not in song_titles())
+    lib.forget_rehearsal(jam)
+    lib.forget_rehearsal(other)
+    ok("forgetting rehearsals forgets the songs only they had", song_titles() == [])
+
+    lib.create_rehearsal(rec10 / "Kept", "Kept", "2026-10-03T19:00:00", 48000, 24, [])
+    add(1, "Polyn", rec10 / "Kept")
+    old_jam = rec10 / "Old jam - 2020-01-01 10-00"
+    old_jam.mkdir()
+    (old_jam / "session.json").write_text(json.dumps({
+        "name": "Old jam", "created_at": "2020-01-01T10:00:00", "samplerate": 48000,
+        "tracks": [], "takes": [
+            {"take_number": n, "name": name, "tracks": []}
+            for n, name in enumerate(
+                ["polyn", "Polyn 3", "Recovered take 3", "zima", "Zima 2", "Опус 5"], start=1)],
+    }), encoding="utf-8")
+    import_all(lib, None)
+    ok("an imported rehearsal is read by the old rule, its goes numbered after the "
+       "ones already there, even though it is older",
+       [(t["name"], t["song"], t["go"]) for t in lib.rehearsal(old_jam)["takes"]] == [
+           ("Polyn 2", "Polyn", 2), ("Polyn 3", "Polyn", 3), ("Take 3", None, None),
+           ("zima 1", "zima", 1), ("zima 2", "zima", 2), ("Опус 1", "Опус", 1)])
+    lib.close()
 
     print()
     if problems:
