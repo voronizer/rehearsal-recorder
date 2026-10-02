@@ -194,9 +194,13 @@ function AllSongsPill({
                 onPick(c.name)
                 setOpen(false)
               }}
+              // The ring and the focus outline are drawn inside the song's
+              // box: the window is WebKit on a Mac, which carried anything
+              // under the last song of a column to the top of the next.
               className={cn(
                 "block w-full truncate rounded-md px-1.5 py-0.5 text-left text-sm break-inside-avoid hover:bg-accent",
-                c.name.toLocaleLowerCase() === typed && "bg-primary/15 ring-1 ring-primary"
+                "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+                c.name.toLocaleLowerCase() === typed && "bg-primary/15 ring-1 ring-primary ring-inset"
               )}
             >
               <SongName choice={c} />

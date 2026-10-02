@@ -546,3 +546,37 @@ test("All songs… opened while typing leaves the field as it was, and a song pi
   await page.keyboard.press("Space")
   await expect(page.getByRole("heading", { level: 1, name: "Ptaha" })).toBeVisible()
 })
+
+test("All songs… draws a song lit or in focus inside its own box, so none of it shows in the next column", async ({
+  page,
+}) => {
+  // The window is WebKit on a Mac, and WebKit paints columns as one strip
+  // cut at the columns' height: a ring or an outline under the last song of
+  // a column showed at the top of the next one.
+  await openApp(page)
+  await startRehearsal(page)
+  await page.getByRole("textbox", { name: "Next take" }).fill("Ogon")
+  await page.keyboard.press("Enter")
+  await page.getByRole("button", { name: "All songs…" }).click()
+  const panel = page.getByRole("dialog", { name: "All songs" })
+  await expect(panel).toBeVisible()
+
+  const drawnOutside = (el: Element) => {
+    const cs = getComputedStyle(el)
+    const shadows = cs.boxShadow === "none" ? [] : cs.boxShadow.split(/,(?![^(]*\))/)
+    const shadow = shadows.some((s) => !s.includes("inset") && !s.includes("rgba(0, 0, 0, 0)"))
+    const width = parseFloat(cs.outlineWidth)
+    const outline = cs.outlineStyle !== "none" && width > 0 && parseFloat(cs.outlineOffset) > -width
+    return shadow || outline
+  }
+  const lit = panel.locator("[aria-current=true]")
+  await expect(lit).toHaveText("Ogon")
+  expect(await lit.evaluate(drawnOutside)).toBe(false)
+
+  // In focus from the keyboard.
+  await page.keyboard.press("Shift")
+  const other = panel.getByRole("button", { name: "Doroga" })
+  await other.focus()
+  expect(await other.evaluate((el) => el.matches(":focus-visible"))).toBe(true)
+  expect(await other.evaluate(drawnOutside)).toBe(false)
+})
