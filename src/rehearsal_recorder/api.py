@@ -1473,6 +1473,7 @@ class Api:
         "here" is what this rehearsal played, in the order it first played
         it. "other" is every other song in the library, the most recently
         played first; the interface shows as many as it has room for.
+        Each "here" entry also has "last_take", the number of its latest take.
 
         `folder` is the rehearsal, the one in progress when left out.
         `take_number` is the take being named, which is not counted as a go:
@@ -1484,7 +1485,10 @@ class Api:
         takes = rehearsal["takes"] if rehearsal else []
         others = [t for t in takes if t.get("take_number") != take_number]
 
-        here = [{"song": s["name"], "name": _next_go(others, s["name"])}
+        # last_take: which songs the interface keeps when this rehearsal's
+        # alone do not fit under the field — the ones played latest.
+        here = [{"song": s["name"], "name": _next_go(others, s["name"]),
+                 "last_take": max(s["take_numbers"])}
                 for s in _songs_of(takes)]
         seen = {c["song"].casefold() for c in here}
         other = []

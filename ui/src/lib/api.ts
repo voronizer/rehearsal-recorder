@@ -207,7 +207,12 @@ export type RehearsalDetail = {
 
 /** A song a take can be named after, and what naming it so would call the
  *  take: "Polyn 3" where the rehearsal has had two goes at Polyn. */
-export type SongChoice = { song: string; name: string }
+export type SongChoice = {
+  song: string
+  name: string
+  /** On a song this rehearsal played: the number of its latest take. */
+  last_take?: number
+}
 
 /** The songs a take can be named after (api.song_choices): what its own
  *  rehearsal played, in order, and every other, the most recent first. */

@@ -105,12 +105,16 @@ Press **Record take**, or Space, to start recording. **Finish** ends the
 rehearsal.
 
 Left of the button is **Next take**: the name the next take will get, in a
-field of its own, and under it the songs you could play instead. When you
-move on to another song, click it before you press Record, or type a name
-and press Enter. The take is then recorded under that name, and the
-recording screen can say how long the last go at that song took. ✕ puts
-back the name the take would have had anyway. If you discard the take, the
-next one keeps the name you picked.
+field of its own, and under it, in two rows, the songs you could play
+instead: tonight's first, as the next go at each ("Polyn 3"), then the
+songs of earlier rehearsals, the latest first. **All songs…** at the end
+lists every song you have ever played, in alphabetical order. Typing in
+the field narrows the songs to the ones that match. When you move on to
+another song, click it before you press Record, or type a name and press
+Enter. The take is then recorded under that name, and the recording
+screen can say how long the last go at that song took. ✕ puts back the
+name the take would have had anyway. If you discard the take, the next
+one keeps the name you picked.
 
 ### While recording
 

@@ -1,0 +1,201 @@
+import { useLayoutEffect, useRef, useState } from "react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import type { SongChoice, SongChoices } from "@/lib/api"
+import { pillsShown } from "@/lib/songPills"
+import { cn } from "@/lib/utils"
+
+/** The gap between pills, as `gap-1.5` draws it. */
+const GAP = 6
+const PILL =
+  "max-w-full truncate rounded-full border px-3 py-1 text-[13px] font-medium transition-colors " +
+  "hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+
+/**
+ * The songs under a take's name, in two rows at most: what this rehearsal
+ * played, as the next go at each ("Polyn 3", the number dimmed), then the
+ * other rehearsals' songs, the latest played first, and All songs… last.
+ *
+ * A click puts the song's name in the field; it leaves focus where it was,
+ * so Space still records or saves. The one matching the field is lit where
+ * it stands: nothing moves under the pointer. Typing narrows them over every
+ * song, not only the ones shown.
+ *
+ * Which fit is worked out from the pills' own widths, measured off screen,
+ * and again whenever the row changes width.
+ */
+export function SongPills({
+  choices,
+  value,
+  initial,
+  onPick,
+}: {
+  choices: SongChoices | null
+  value: string
+  /** What the field started from: it does not narrow them. */
+  initial: string
+  onPick: (name: string) => void
+}) {
+  const all = choices ? [...choices.here, ...choices.other] : []
+  const typed = value.trim().toLocaleLowerCase()
+  const isChoice = (c: SongChoice) => c.name.toLocaleLowerCase() === typed
+  const narrowing = typed !== "" && value.trim() !== initial.trim() && !all.some(isChoice)
+  const fits = (c: SongChoice) => !narrowing || c.song.toLocaleLowerCase().includes(typed)
+  const here = (choices?.here ?? []).filter(fits)
+  const other = (choices?.other ?? []).filter(fits)
+  const candidates = [...here, ...other]
+  const key = candidates.map((c) => c.name).join("\n")
+
+  const row = useRef<HTMLDivElement>(null)
+  const measure = useRef<HTMLDivElement>(null)
+  const [shown, setShown] = useState<string[]>([])
+
+  // The observer answers once as soon as it starts, and then on every
+  // change of width: the first answer comes before the row is painted.
+  useLayoutEffect(() => {
+    const rowEl = row.current
+    const m = measure.current
+    if (!rowEl || !m) return
+    const lay = () => {
+      const kids = [...m.children] as HTMLElement[]
+      const width = new Map(candidates.map((c, i) => [c.name, kids[i].getBoundingClientRect().width]))
+      const last = kids[candidates.length]?.getBoundingClientRect().width ?? 0
+      const picked = pillsShown(here, other, (c) => width.get(c.name) ?? 0, last, rowEl.clientWidth, GAP)
+      setShown(picked.map((c) => c.name))
+    }
+    const watch = new ResizeObserver(lay)
+    watch.observe(rowEl)
+    return () => watch.disconnect()
+    // `key` stands for the candidates: the same names, the same layout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+
+  if (all.length === 0) return null
+  const byName = new Map(candidates.map((c) => [c.name, c]))
+  const visible = shown.map((n) => byName.get(n)).filter((c): c is SongChoice => !!c)
+
+  return (
+    <div className="relative min-w-0">
+      <div ref={row} className="flex flex-wrap gap-1.5">
+        {visible.map((c) => (
+          <button
+            key={c.name}
+            type="button"
+            data-song-choice={c.name}
+            aria-current={isChoice(c) ? "true" : undefined}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onPick(c.name)}
+            className={cn(PILL, isChoice(c) && "border-primary bg-primary/15 hover:bg-primary/20")}
+          >
+            <SongName choice={c} />
+          </button>
+        ))}
+        <AllSongsPill choices={all} value={value} onPick={onPick} className={PILL} />
+      </div>
+      {/* The same pills, out of sight, to measure. */}
+      <div
+        ref={measure}
+        aria-hidden
+        inert
+        className="pointer-events-none invisible absolute top-0 left-0 flex w-max gap-1.5"
+      >
+        {candidates.map((c) => (
+          <span key={c.name} className={PILL}>
+            <SongName choice={c} />
+          </span>
+        ))}
+        <span className={PILL}>All songs…</span>
+      </div>
+    </div>
+  )
+}
+
+/** "Polyn 3", the number dimmed: the song, and which go at it this is. */
+export function SongName({ choice: c }: { choice: SongChoice }) {
+  return (
+    <>
+      {c.song}
+      {c.name !== c.song && (
+        <span className="text-muted-foreground">{c.name.slice(c.song.length)}</span>
+      )}
+    </>
+  )
+}
+
+/** Song titles in the order a person looks for them: alphabetical, any
+ *  script, capitals or not. History's list of songs (#12) uses the same. */
+const ALPHABETICAL = new Intl.Collator(undefined, { sensitivity: "base" })
+
+/**
+ * The last pill, and the whole repertoire behind it, over the field: in
+ * columns, alphabetical, scrolling when it is long. One click opens it, one
+ * fills the field and closes it. Closed, focus goes nowhere in particular,
+ * so the next Space is the screen's again.
+ */
+function AllSongsPill({
+  choices,
+  value,
+  onPick,
+  className,
+}: {
+  choices: SongChoice[]
+  value: string
+  onPick: (name: string) => void
+  className: string
+}) {
+  const [open, setOpen] = useState(false)
+  const typed = value.trim().toLocaleLowerCase()
+  const sorted = [...choices].sort((a, b) => ALPHABETICAL.compare(a.song, b.song))
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-all-songs
+          onMouseDown={(e) => e.preventDefault()}
+          className={cn(
+            className,
+            "border-dashed text-muted-foreground",
+            open && "bg-accent text-foreground"
+          )}
+        >
+          All songs…
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        aria-label="All songs"
+        // Opening the list must not take the keyboard from a field somebody
+        // is typing in: a half-typed name stays put, and unsent, until a
+        // song in the panel is actually clicked.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        className="max-h-[min(22rem,55vh)] w-[min(44rem,calc(100vw-2rem))] overflow-y-auto p-3"
+      >
+        <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+          All songs
+        </div>
+        <div className="mt-2 columns-[9rem] gap-4">
+          {sorted.map((c) => (
+            <button
+              key={c.name}
+              type="button"
+              data-song-choice={c.name}
+              aria-current={c.name.toLocaleLowerCase() === typed ? "true" : undefined}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onPick(c.name)
+                setOpen(false)
+              }}
+              className={cn(
+                "block w-full truncate rounded-md px-1.5 py-0.5 text-left text-sm break-inside-avoid hover:bg-accent",
+                c.name.toLocaleLowerCase() === typed && "bg-primary/15 ring-1 ring-primary"
+              )}
+            >
+              <SongName choice={c} />
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}

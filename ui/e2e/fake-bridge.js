@@ -396,7 +396,8 @@ window.__MAKE_API__ = () => ({
     const takes = !folder || (session && folder === session.folder)
       ? (session ? session.takes : []) : pastRehearsal(folder).takes;
     const others = takes.filter(t => t.take_number !== n);
-    const here = songsOf(takes).map(s => ({song:s.name, name:nextGo(others, s.name)}));
+    const here = songsOf(takes).map(s => ({song:s.name, name:nextGo(others, s.name),
+                                           last_take:Math.max(...s.take_numbers)}));
     const seen = new Set(here.map(c => c.song.toLowerCase()));
     const other = REPERTOIRE.filter(song => !seen.has(song.toLowerCase()))
       .map(song => ({song, name:song}));

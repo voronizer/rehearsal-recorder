@@ -7,6 +7,11 @@ opening.
 
 ## Unreleased
 
+- **The songs under the name fill two rows**, tonight's first and then the
+  ones played at earlier rehearsals, and **All songs…** at the end opens
+  every song you have played, alphabetically, in columns. When tonight
+  alone has played more than two rows hold, the songs played latest stay.
+  A click puts a song in the field; nothing moves under the pointer (#10).
 - **The take's name is one field, over the main button, before recording
   and after.** On the rehearsal screen it is left of Record, as *Next take*;
   after Stop it is in the same place, left of Save take, holding the name

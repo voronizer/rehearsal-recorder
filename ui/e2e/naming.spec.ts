@@ -18,45 +18,108 @@ import type { Page } from "@playwright/test"
 // Polyn, Vesna, Ogon, Sonce, Dym, Ptaha and Doroga.
 
 const nameField = (page: Page) => page.locator("#take-name")
-const group = (page: Page, name: string) => page.getByRole("group", { name, exact: true })
 
 async function saveAs(page: Page, name: string) {
   await nameField(page).fill(name)
   await page.getByRole("button", { name: /Save take/ }).click()
 }
 
-test("the review screen offers the songs already played, and a click names the take", async ({
+/** The pills under the review screen's field, in the order shown. */
+const pills = (page: Page) =>
+  page.getByRole("group", { name: "Take name" }).locator("[data-song-choice]")
+
+/** How many rows the pills under a field take, All songs… included. */
+const rowsUnder = (page: Page, field: string) =>
+  page.evaluate((label) => {
+    const group = document.querySelector(`[role=group][aria-label='${label}']`)!
+    const tops = [...group.querySelectorAll("[data-song-choice], [data-all-songs]")].map((p) =>
+      Math.round(p.getBoundingClientRect().top)
+    )
+    return new Set(tops).size
+  }, field)
+
+test("the songs under the review screen's name: this rehearsal's first, a click fills the field", async ({
   page,
 }) => {
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
-  // Nothing played yet tonight: the whole repertoire, as it is.
-  await expect(group(page, "This rehearsal")).toHaveCount(0)
-  await group(page, "Songs").getByRole("button", { name: "Ogon", exact: true }).click()
+  // Nothing played yet tonight: the whole repertoire, the latest played first.
+  await expect(pills(page)).toHaveText(["Polyn", "Vesna", "Ogon", "Sonce", "Dym", "Ptaha", "Doroga"])
+  await pills(page).filter({ hasText: /^Ogon$/ }).click()
   await expect(nameField(page)).toHaveValue("Ogon")
   // The click left the keyboard to the screen, so Space saves.
   await page.keyboard.press("Space")
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ogon")
 
-  // The next take is another go at it, and the song is lit as that.
+  // The next take is another go at it: first, lit, and not offered twice.
   await recordTake(page, 2)
   await expect(nameField(page)).toHaveValue("Ogon 2")
-  const here = group(page, "This rehearsal")
-  await expect(here.getByRole("button", { name: "Ogon 2" })).toHaveAttribute("aria-current", "true")
-  await expect(group(page, "Other songs")).not.toContainText("Ogon")
+  await expect(pills(page).first()).toHaveText("Ogon 2")
+  await expect(pills(page).first()).toHaveAttribute("aria-current", "true")
+  await expect(pills(page).filter({ hasText: /^Ogon$/ })).toHaveCount(0)
 
-  // Typing narrows them; the song typed out in full puts them all back.
+  // Typing narrows them over every song; the song typed out in full puts
+  // them all back; a title nobody has played leaves none in the way.
   await nameField(page).fill("do")
-  await expect(group(page, "Songs").getByRole("button")).toHaveText(["Doroga"])
+  await expect(pills(page)).toHaveText(["Doroga"])
   await nameField(page).fill("Doroga")
-  await expect(here).toBeVisible()
-  await expect(
-    group(page, "Other songs").getByRole("button", { name: "Doroga" })
-  ).toHaveAttribute("aria-current", "true")
-  // A title nobody has played is simply typed: nothing is in the way.
+  await expect(pills(page).first()).toHaveText("Ogon 2")
+  await expect(pills(page).filter({ hasText: /^Doroga$/ })).toHaveAttribute("aria-current", "true")
   await nameField(page).fill("Brand new")
-  await expect(page.locator("[data-song-choice]")).toHaveCount(0)
+  await expect(pills(page)).toHaveCount(0)
+})
+
+test("two rows at most, in any window, and the songs played latest stay", async ({ page }) => {
+  // Twenty songs played tonight, one go each: more than two rows hold.
+  // (Not "Song number N": the app reads a trailing number as a go count, so
+  // every one of those would collapse into a single song's 20th go.)
+  const takes = Array.from({ length: 20 }, (_, i) => `Song${i + 1}`)
+  await openApp(page)
+  await startRehearsal(page)
+  for (const [i, name] of takes.entries()) {
+    await recordTake(page, i + 1)
+    await nameField(page).fill(name)
+    await page.getByRole("button", { name: /Save take/ }).click()
+  }
+  for (const width of [1366, 1024, 960]) {
+    await page.setViewportSize({ width, height: 768 })
+    await expect.poll(() => rowsUnder(page, "Next take"), { message: `at ${width}` }).toBe(2)
+    // The ones kept are the latest played, still in the order played.
+    const shown = await page
+      .getByRole("group", { name: "Next take" })
+      .locator("[data-song-choice]")
+      .allTextContents()
+    const numbers = shown.map((s) => Number(/(\d+) 2$/.exec(s)![1]))
+    expect(numbers).toEqual([...numbers].sort((a, b) => a - b))
+    expect(numbers.at(-1)).toBe(20)
+  }
+})
+
+test("a song name longer than the row is cut short, and is still one pill", async ({ page }) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await recordTake(page)
+  // Long enough that no row this footer could ever be would hold it.
+  await nameField(page).fill(
+    "A song with a name so long that no footer anywhere could hold it in one line, " +
+      "so long in fact that it must wrap more than the width of any take name field " +
+      "could ever allow, however wide the window around it might be"
+  )
+  await page.getByRole("button", { name: /Save take/ }).click()
+  const pill = page.getByRole("group", { name: "Next take" }).locator("[data-song-choice]").first()
+  const cut = await pill.evaluate((el) => el.scrollWidth > el.clientWidth)
+  expect(cut).toBe(true)
+  expect(await rowsUnder(page, "Next take")).toBeLessThanOrEqual(2)
+})
+
+test("with no songs at all, nothing is offered under the field", async ({ page }) => {
+  await openApp(page, {
+    after: "window.pywebview.api.song_choices = async () => ({here: [], other: []});",
+  })
+  await startRehearsal(page)
+  await expect(page.getByRole("textbox", { name: "Next take" })).toBeVisible()
+  await expect(page.locator("[data-song-choice], [data-all-songs]")).toHaveCount(0)
 })
 
 test("renaming a take on the rehearsal screen offers them too, and Enter still renames", async ({
@@ -279,4 +342,50 @@ test.describe("after Stop", () => {
     await page.getByRole("button", { name: /Save take/ }).click()
     expect((await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Take 1")
   })
+})
+
+test("All songs… lists every song alphabetically, and a click fills the field and closes it", async ({
+  page,
+}) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await recordTake(page)
+  await nameField(page).fill("Vesna")
+  await page.getByRole("button", { name: /Save take/ }).click()
+  await page.getByRole("button", { name: "All songs…" }).click()
+  const panel = page.getByRole("dialog", { name: "All songs" })
+  await expect(panel).toBeVisible()
+  // Every song, case-blind alphabetical, tonight's as its next go.
+  await expect(panel.locator("[data-song-choice]")).toHaveText([
+    "Doroga", "Dym", "Ogon", "Polyn", "Ptaha", "Sonce", "Vesna 2",
+  ])
+  await panel.getByRole("button", { name: "Ptaha" }).click()
+  await expect(panel).toHaveCount(0)
+  await expect(page.getByRole("textbox", { name: "Next take" })).toHaveValue("Ptaha")
+  expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Ptaha"])
+  // Closed, it leaves the keyboard to the screen: Space records.
+  await page.keyboard.press("Space")
+  await expect(page.getByRole("heading", { level: 1, name: "Ptaha" })).toBeVisible()
+})
+
+test("All songs… opened while typing leaves the field as it was, and a song picked fills it", async ({
+  page,
+}) => {
+  await openApp(page)
+  await startRehearsal(page)
+  const field = page.getByRole("textbox", { name: "Next take" })
+  await field.fill("Pt")
+  const before = await callCount(page, "set_next_take_name")
+  await page.getByRole("button", { name: "All songs…" }).click()
+  const panel = page.getByRole("dialog", { name: "All songs" })
+  await expect(panel).toBeVisible()
+  // Opening the list does not steal the field's focus or send what it holds.
+  await expect(field).toBeFocused()
+  await expect(field).toHaveValue("Pt")
+  expect(await callCount(page, "set_next_take_name")).toBe(before)
+
+  await panel.getByRole("button", { name: "Ptaha" }).click()
+  await expect(panel).toHaveCount(0)
+  await expect(field).toHaveValue("Ptaha")
+  expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Ptaha"])
 })

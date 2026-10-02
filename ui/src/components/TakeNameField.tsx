@@ -1,6 +1,6 @@
 import { useRef, useState } from "react"
 import { X } from "lucide-react"
-import { SongChips } from "@/components/SongChips"
+import { SongPills } from "@/components/SongPills"
 import type { SongChoices } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -129,7 +129,7 @@ export function TakeNameField({
         </button>
       </div>
       <div ref={songsArea} style={{ minHeight: held ?? undefined }}>
-        <SongChips choices={choices} value={shown} initial={startedAs ?? shown} onPick={put} />
+        <SongPills choices={choices} value={shown} initial={startedAs ?? shown} onPick={put} />
       </div>
     </div>
   )

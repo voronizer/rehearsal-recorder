@@ -856,13 +856,19 @@ def main():
        a.suggest_take_name() == "Ogon")
     a.set_next_take_name("")
 
+    def plain(choices):
+        """A list of song choices as song and name only."""
+        return [{"song": c["song"], "name": c["name"]} for c in choices]
+
     # Naming a take offers the songs already played, as the name it would get.
     ok("the songs of the rehearsal in progress, as the next go at each",
-       a.song_choices()["here"] == [{"song": "Polyn", "name": "Polyn 3"},
-                                    {"song": "Vesna", "name": "Vesna 2"},
-                                    {"song": "Rescued", "name": "Rescued 2"}])
+       plain(a.song_choices()["here"]) == [{"song": "Polyn", "name": "Polyn 3"},
+                                           {"song": "Vesna", "name": "Vesna 2"},
+                                           {"song": "Rescued", "name": "Rescued 2"}])
+    ok("each with the number of its latest take",
+       [c["last_take"] for c in a.song_choices()["here"]] == [2, 3, 4])
     ok("the take being renamed is not a go of its own",
-       a.song_choices(str(folder), 2)["here"][0] == {"song": "Polyn", "name": "Polyn 2"})
+       plain(a.song_choices(str(folder), 2)["here"])[0] == {"song": "Polyn", "name": "Polyn 2"})
     ok("nothing to name after with no rehearsal and no library",
        fresh_api(tmp / "nothing")[1].song_choices() == {"here": [], "other": []})
 
@@ -2151,8 +2157,8 @@ def main():
     # Naming a take in one of them offers the whole repertoire.
     ch = e.song_choices(last)
     ok("naming a take offers what its rehearsal played, as the next go at each",
-       ch["here"] == [{"song": "Polyn", "name": "Polyn 4"},
-                      {"song": "Vesna", "name": "Vesna 2"}])
+       plain(ch["here"]) == [{"song": "Polyn", "name": "Polyn 4"},
+                             {"song": "Vesna", "name": "Vesna 2"}])
     ok("and every other song, the most recently played first",
        ch["other"] == [{"song": "Dym", "name": "Dym"}, {"song": "Ptaha", "name": "Ptaha"},
                        {"song": "Doroga", "name": "Doroga"}])
@@ -2161,7 +2167,7 @@ def main():
        and e.song_choices(last, 5)["here"][0]["name"] == "Polyn 3")
     ok("an older rehearsal is offered the songs played after it too",
        [c["song"] for c in e.song_choices(older)["other"]] == ["Vesna", "Dym", "Ptaha"]
-       and e.song_choices(older)["here"][1] == {"song": "Doroga", "name": "Doroga 3"})
+       and plain(e.song_choices(older)["here"])[1] == {"song": "Doroga", "name": "Doroga 3"})
     ok("with no rehearsal in progress every song is another's",
        e.song_choices()["here"] == []
        and [c["song"] for c in e.song_choices()["other"]]
