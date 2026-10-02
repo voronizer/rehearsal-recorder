@@ -50,7 +50,7 @@ the next song lit, each ticked off once played. It stands on
 
 - **R1. The plan's songs lead the pills under the name field**
   (`SongPills.tsx`), in plan order:
-  - each as its next go tonight ("Polyn 2" once Polyn has been played);
+  - each with the go it would be, as every pill shows it;
   - the first one not yet played is lit as *next*;
   - played ones carry a small ✓.
 

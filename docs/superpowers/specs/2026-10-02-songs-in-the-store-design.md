@@ -77,10 +77,17 @@ first step of the songs work in #12, and the one every other step stands on.
     only text: file names, dialog titles, the background-work list and
     labels for screen readers.
   - With no song, it is "Take N", N being the take's number, with no go.
-- **D4. Go numbers are counted within a rehearsal**, as today: Polyn 3 is the
-  third go at Polyn that evening.
-- **D5. The go is stored, not counted from the takes.** Deleting Polyn 2
-  does not turn Polyn 3 into Polyn 2, so it does not rename the take's files.
+- **D4. Go numbers run across the whole library, per song**, not per
+  rehearsal. If yesterday ended at Polyn 2, today's first go is Polyn 3. A go
+  number then names one take of a song wherever it was played: "Polyn 17 was
+  the one" needs no date.
+- **D5. A go number is given once and kept.** It is stored, not counted from
+  the takes:
+  - deleting Polyn 2 does not turn Polyn 3 into Polyn 2, so it does not
+    rename the take's files;
+  - a take that becomes a go at a song later (named, renamed) gets that
+    song's next number then, whenever it was played. Numbers follow the order
+    takes became goes, which is nearly always the order they were played.
 - **D6. A recovered draft with no name gets no song**, so it is "Take N" like
   any other take nobody named. The old "Recovered take N" names become
   "Take N".
@@ -118,9 +125,9 @@ Python turns the string into a song and a go.
      number is dropped, not used;
   4. anything else is a new song with exactly that title. "Опус 5" is a
      title of its own unless a song called "Опус" exists.
-- **N2. The go is the app's.** A take gets the next go at its song in its
-  rehearsal: one past the highest go there. A take renamed to the song it
-  already has keeps its go.
+- **N2. The go is the app's.** A take gets the next go at its song: one past
+  the highest go at it anywhere in the library (D4). A take renamed to the
+  song it already has keeps its go.
 - **N3. The next take** is the previous take's song, at its next go: the
   field shows the title, and the go beside it. After a take with no song, it
   is "Take N".
@@ -128,14 +135,15 @@ Python turns the string into a song and a go.
   `set_next_take_name` keeps holding a title picked for the next take until a
   take is kept. That title is resolved by N1 when it is used.
 - **N4. Renaming a take** (`rename_take`) gives it the song its text
-  resolves to (N1), and that song's next go there (N2). Its folder on disk
+  resolves to (N1), and that song's next go (N2). Its folder on disk
   and its cloud copy are renamed to match, as today.
 - **N5.** What the interface is sent:
   - every take has `name` (D3, plain text), `song` (the title, or null) and
     `go` (null with no song);
   - `song_choices` entries are `{song, go, last_take?}`: the title, and the
-    go a take would be as that song. For the take being renamed, its own go
-    at its own song. The old `name` key ("Polyn 3") goes;
+    go a take would be as that song, for every song offered, this
+    rehearsal's and the rest. For the take being renamed, its own go at its
+    own song. The old `name` key ("Polyn 3") goes;
   - `session_state`:
     - `next_take_name` is the field's text: the title, or "Take N";
     - `next_take_go` is the go beside it (null with no song);
@@ -178,25 +186,32 @@ Python turns the string into a song and a go.
   (D6). An empty name is no song. The title is the spelling of the newest
   rehearsal's first go at the song, which is how `song_choices` already
   spells it.
-- **M2. The go comes from the name:** "Polyn" → 1, "Polyn 3" → 3. Gaps stay
-  gaps. Two takes with the same name in one rehearsal keep the same go, as
-  their names do today: nothing is renumbered.
+- **M2. Goes are numbered afresh, per song, in the order played:** by
+  rehearsal date, then take number. Today's numbers cannot be kept: every
+  rehearsal has its own Polyn 1. So Polyn, Polyn 2 on 28 Sep and Polyn,
+  Polyn 2, Polyn 3 on 30 Sep become goes 1–2 and 3–5. Gaps left by deleted
+  takes close, and two takes with one name in a rehearsal get a number
+  each.
 - **M3. The importer** (`store/importer.py`) gives the takes of a
   `session.json` a song and a go by the same rule, through the same function
   as M1, so the two cannot differ. A song already in the library keeps its
-  title. A new one is spelled the way that rehearsal first spells it.
+  title. A new one is spelled the way that rehearsal first spells it. Its
+  goes get their songs' next numbers in take order (D5), even when the
+  rehearsal is older than ones already in the library.
 - **M4. The migration touches only the database.** It renames nothing on
   disk or in the cloud folder, so a failure leaves every file where it was,
   and the copy `db.py` made beside it is what it was before.
 - **M5. What the rule cannot know stays as it reads.** A song really called
-  "Song 2" in old data is read as the second go at "Song", as today. Renaming
-  or merging songs, a later step, puts it right.
+  "Song 2" in old data is read as a go at "Song", as today. Renaming or
+  merging songs, a later step, puts it right.
 
 ## Bringing files into line
 
-After M1 most takes' names come out differently from the names their files
-carry:
-- every first go gains its "1" (`01 - Polyn` becomes `01 - Polyn 1`, D7);
+After M1 and M2 almost every take's name comes out differently from the name
+its files carry:
+- the go is numbered across the library (`03 - Polyn 2` on 30 Sep becomes
+  `03 - Polyn 4`);
+- every first go gains its number (`01 - Polyn` becomes `01 - Polyn 3`, D7);
 - a spelling changed ("polyn 2" under a song now spelled "Polyn");
 - "Recovered take 5" becomes "Take 5";
 - a "Take 3" is take number 5.
@@ -227,19 +242,23 @@ Tests come before the code, and each is seen failing first.
   - case variants across rehearsals → one song spelled as the latest;
   - Cyrillic case variants → one song;
   - "Take 4", "Recovered take 2" and an empty name → no song;
-  - "Polyn" and "Polyn 3" with no "Polyn 2" → goes 1 and 3;
-  - two takes named "Polyn" in one rehearsal → both go 1;
+  - goes numbered across rehearsals in the order played: "Polyn", "Polyn 2"
+    on one date and "Polyn" on a later one → 1, 2 and 3;
+  - "Polyn" and "Polyn 3" with no "Polyn 2" → goes 1 and 2 (gaps close);
+  - two takes named "Polyn" in one rehearsal → two goes;
   - "Song 2" with "Song" elsewhere in the library → a go at Song;
   - "Song 2" with no "Song" anywhere → read as a go at "Song" too (M5);
   - every marker, track file and cloud copy is still there;
   - the backup file is there, and a downgrade is refused as before.
 - **Python, naming** (`tests/test_engine.py`): N1–N5 through `keep_take`,
   `set_next_take_name`, `rename_take`, `recover_draft`, `song_choices` and
-  `session_state`. This includes a new title ending in a number, a number
-  typed out of habit, and folders named `NN - Title G`.
+  `session_state`. This includes the next go after yesterday's, a new title
+  ending in a number, a number typed out of habit, and folders named
+  `NN - Title G`.
 - **Python, the pass:**
-  - `01 - Polyn` becomes `01 - Polyn 1`, and `03 - polyn 2` becomes
-    `03 - Polyn 2`, on disk and in the cloud folder, including a case-only
+  - `01 - Polyn` becomes `01 - Polyn 1`, `03 - Polyn 2` of a later
+    rehearsal becomes `03 - Polyn 4`, and `03 - polyn 2` becomes
+    `03 - Polyn 2`, on disk and in the cloud folder, the last a case-only
     rename on a case-insensitive disk;
   - a second run renames nothing;
   - a failure on one take leaves the others done;
@@ -247,7 +266,8 @@ Tests come before the code, and each is seen failing first.
     later.
 - **Playwright** (`ui/e2e/`):
   - the field shows the title, with the go beside it that follows typing (a
-    song's next go, 1 for a new title, none for "Take N");
+    song's next go across the library, 1 for a new title, none for "Take
+    N");
   - a pill puts only the title in the field;
   - the strip, History's rows and the recording screen show the title with
     its go, from 1.
@@ -260,8 +280,8 @@ Tests come before the code, and each is seen failing first.
 ## Docs
 
 - `docs/design-notes.md`: "Songs are still not stored" is replaced with why
-  they now are, why the go is a number of its own and why it is stored, and
-  why `take` is altered in place.
+  they now are, why the go is a number of its own, counted across the
+  library and stored, and why `take` is altered in place.
 - `docs/development.md`: batch mode is not for `take` or `rehearsal`.
 - `docs/using-it.md`: "Names and songs", rewritten for a title with the go
   beside it; an unnamed recovered take is "Take N".

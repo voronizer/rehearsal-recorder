@@ -43,10 +43,10 @@ are. It stands on
   History, at this rehearsal, with the take open in the player.
 - **S3. *Not named*, with the song pills under each take.**
   - The row is the overview's, and under it the pills that the name field
-    offers: tonight's songs as their next go, then the rest, then All
-    songs….
+    offers: tonight's songs, then the rest, then All songs…, each with the
+    go it would be.
   - A click names the take after that song: the take becomes its next go
-    tonight (songs in the store, N4), and moves into that song's group.
+    (songs in the store, N4), and moves into that song's group.
   - Typing is not offered here. A title nobody has played yet is given in
     the Rename dialog, as anywhere else.
 - **S4. Two actions over the evening, under it:**

@@ -29,11 +29,11 @@ everywhere. It stands on
 - **D2. One dialog does both.** It has the title field, and the other songs
   as pills under it. Typing a title no song has renames. Picking or typing
   another song's title merges, after saying what will happen.
-- **D3. In a rehearsal that has goes at both songs, a merge renumbers both
-  by the order they were played.** Polyn 1–2 and Polin 1 in one evening,
-  played as Polin, Polyn, Polyn 2, become Polyn, Polyn 2, Polyn 3. Without
-  this, two takes would carry the same name. Rehearsals that had only one
-  of the two keep their numbers.
+- **D3. The goes merged in are numbered after the song's own, in the order
+  they were played.** Go numbers run across the library and are given once
+  (songs in the store, D4–D5), so Polyn's goes keep theirs. Polyn 1–10 and
+  Polin 1–3 become Polyn 1–13, Polin 1 being Polyn 11. Without new numbers
+  two takes would carry the same name.
 - **D4. ★ after a merge.** If the song merged into has a one, it stays the
   one. If only the song merged away had one, that take becomes the one.
 - **D5. A merge cannot be undone as one step.** It asks first, saying how
@@ -53,9 +53,8 @@ everywhere. It stands on
     while the files follow.
 - **R3. A pill clicked, or another song's title typed,** turns the button
   into *Merge…*. It asks first: "Merge Polin into Polyn? 12 goes in 5
-  rehearsals become goes at Polyn, and their folders and cloud copies are
-  renamed. In 2 rehearsals that had both, the goes are renumbered in the
-  order played." Confirmed, the page becomes Polyn's.
+  rehearsals become Polyn 11–22, and their folders and cloud copies are
+  renamed." Confirmed, the page becomes Polyn's.
 - **R4. A title that differs only in case** ("polyn" for "Polyn") is a
   rename of the same song: it respells it.
 
@@ -66,7 +65,7 @@ everywhere. It stands on
     (case-blind); merging is A2;
   - otherwise sets the title, then starts the pass for the song's takes.
 - **A2.** `merge_songs(from_id, into_id)`:
-  - points `from_id`'s takes at `into_id` and renumbers per D3, in one
+  - points `from_id`'s takes at `into_id` and numbers them per D3, in one
     transaction;
   - applies D4, deletes `from_id`, then starts the pass for the takes whose
     names changed;
@@ -82,7 +81,8 @@ Tests come before the code, and each is seen failing first.
 
 - **Python:**
   - A1, including a case-only respelling and a clash refused;
-  - A2 with D3's renumbering across a shared rehearsal;
+  - A2 numbering the moved goes after the song's own, in the order played,
+    with the song's own goes unchanged;
   - D4 in both cases;
   - the dry run's counts;
   - the pass renaming folders and cloud copies afterwards, and a second run
