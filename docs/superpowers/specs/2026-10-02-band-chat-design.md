@@ -135,22 +135,40 @@ and [the one](2026-10-02-the-one-take-design.md).
 
 ## Setting up
 
-- **S1. Settings → *Band chat*,** a section beside the cloud folder's, with
-  the steps written out:
+- **S1. Settings gets a *Sending* group** for the two places takes go,
+  between *Folders* and *Appearance*. Today the cloud folder is the lower
+  half of *Folders*, under the recordings folder
+  (`ui/src/screens/Settings.tsx`). With a second place beside it, that
+  corner is too small, and sending has nothing to do with where takes are
+  recorded.
+  - *Folders* keeps the recordings folder alone: "Where rehearsals are
+    kept".
+  - *Sending*, "Where takes go to the band", has three parts, in order:
+    1. ***Send saved takes automatically***, above both places, since it
+       sends to each one that is set up (D1). Its line names them: "Every
+       take you keep goes to the cloud folder and the band's chat on its
+       own, between takes". While neither is set up it is absent, as the
+       cloud folder's questions are absent today with no folder.
+    2. ***Cloud folder***, moved as it is: the folder, *Forget the cloud
+       folder*, what the copies are written as, and what gets published.
+       What gets published stays under the cloud folder, as only the cloud
+       folder has a choice; the chat always gets the mix (D2).
+    3. ***Band chat***, S2–S4.
+- **S2. *Band chat* with nothing set up** has the steps written out:
   1. In Telegram, open @BotFather and send `/newbot`.
   2. Give it a name and a username ending in `bot`.
   3. Paste the token it sends here.
   4. Add the bot to the band's group and make it an administrator.
-- **S2. After the token is pasted,** the section waits for the bot to be
+- **S3. After the token is pasted,** the section waits for the bot to be
   added to a group, reading updates until a `my_chat_member` arrives. It
   then shows the group's name, with *Use this group* and *Send a test*.
-- **S3. Once connected:**
+- **S4. Once connected:**
   - the section shows the group;
   - *Disconnect* forgets the token and the group, and leaves the messages
     where they are;
   - the token is kept in `config.json`, sent nowhere but Telegram, and
     never shown again in full.
-- **S4. On connecting,** if takes have been sent to the cloud folder
+- **S5. On connecting,** if takes have been sent to the cloud folder
   before, it offers: "Post the 23 takes already sent? Oldest first, so the
   chat reads in order." Posting them is background work like any other.
 
@@ -167,7 +185,7 @@ and [the one](2026-10-02-the-one-take-design.md).
   upload, with no new dependency. It covers `getMe`, `getUpdates`,
   `sendAudio`, `editMessageCaption`, `editMessageMedia`, `deleteMessage`,
   `pinChatMessage` and `editMessageText`.
-- **A2.** `set_band_chat_token(token)`, `band_chat_status()` (S2's waiting,
+- **A2.** `set_band_chat_token(token)`, `band_chat_status()` (S3's waiting,
   and the group found), `use_band_chat(chat_id)`, `test_band_chat()`,
   `disconnect_band_chat()`.
 - **A3.** The send path builds the mix as `share_take` does, encodes it to
@@ -188,9 +206,12 @@ Tests come before the code, and each is seen failing first.
   - re-encoding over 50 MB, and refusing past 96 kbps;
   - K1–K5, including a refused delete;
   - `retry_after` and network errors;
-  - S4's back-posting order.
+  - S5's back-posting order.
 - **Playwright:**
-  - the Settings section's steps, the wait, *Use this group*, the test and
+  - the *Sending* group: the cloud folder's settings there and gone from
+    *Folders*; *Send saved takes automatically* above both places, naming
+    the ones set up, and absent with neither;
+  - the *Band chat* steps, the wait, *Use this group*, the test and
     disconnecting;
   - a take's chat status beside its cloud status.
 
@@ -203,14 +224,18 @@ Tests come before the code, and each is seen failing first.
    - message links in the pinned list.
 
    Adjust M2, K4 and M4 by what is found.
-2. Setting up (S1–S3) and posting a take (D1, D2, M1–M3, Q1–Q4).
+2. The *Sending* group, setting up (S1–S4), and posting a take (D1, D2,
+   M1–M3, Q1–Q4).
 3. Keeping in step (K1–K5).
-4. *The ones* (M4) and posting what was sent before (S4).
+4. *The ones* (M4) and posting what was sent before (S5).
 
 ## Docs
 
-- `docs/using-it.md`: a *Band chat* section beside "Sending takes to the
-  cloud", with the set-up steps.
+- `docs/using-it.md`:
+  - a *Band chat* section beside "Sending takes to the cloud", with the
+    set-up steps;
+  - "Settings → Folders" becomes "Settings → Sending" where it is about the
+    cloud folder.
 - `CHANGELOG.md`.
 
 ## Not part of this
