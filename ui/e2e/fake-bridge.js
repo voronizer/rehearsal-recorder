@@ -111,51 +111,6 @@ function playerState() {
 }
 function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = clock(); }
 
-// Mirrors api.suggest_take_name: n is the take being named, left out it means
-// the one that comes next.
-function suggestName(n, chosen = true) {
-  if (chosen && session && nextName) return nextName;
-  const number = n === undefined ? takeCounter + 1 : n;
-  if (!session || session.takes.length === 0) return 'Take ' + number;
-  const last = session.takes[session.takes.length - 1].name;
-  const m = /^(.*?)\s+(\d+)$/.exec(last);
-  return m ? `${m[1]} ${Number(m[2]) + 1}` : `${last} 2`;
-}
-
-// Python groups takes into songs (api._songs_of) and hands the result over;
-// the mock does the same, simply: drop a trailing attempt number, skip the
-// takes the app named itself.
-function songsOf(takes) {
-  const songs = [], byKey = {};
-  for (const t of takes) {
-    const name = (t.name || '').trim();
-    if (!name || /^Take \d+$/.test(name)) continue;
-    const base = name.replace(/\s+\d+$/, '');
-    const key = base.toLowerCase();
-    if (byKey[key]) { byKey[key].takes++; byKey[key].take_numbers.push(t.take_number); }
-    else { byKey[key] = {name: base, takes: 1, take_numbers: [t.take_number]}; songs.push(byKey[key]); }
-  }
-  return songs;
-}
-
-// And api._runs_of: the evening in order, in runs of goes at one song, each
-// go as its length and whether it was marked to keep.
-function runsOf(takes) {
-  const spelled = {};
-  for (const s of songsOf(takes)) spelled[s.name.toLowerCase()] = s.name;
-  const runs = [];
-  for (const t of takes) {
-    const name = (t.name || '').trim();
-    const base = !name || /^Take \d+$/.test(name) ? null : name.replace(/\s+\d+$/, '');
-    const song = base ? spelled[base.toLowerCase()] : null;
-    const go = {duration_sec: t.duration_sec,
-                keep: (t.markers || []).some(m => m.kind === 'good')};
-    if (runs.length && runs[runs.length - 1].song === song) runs[runs.length - 1].takes.push(go);
-    else runs.push({song, takes: [go]});
-  }
-  return runs;
-}
-
 // The rehearsals before this one, as get_rehearsal gives them. Tuesday jam
 // is one take long unless a page asks for a fuller evening; the others are
 // what the setup screen's last time needs: one with nothing named, and an
@@ -167,7 +122,7 @@ function pastRehearsal(folder) {
        tracks:[{name:'Guitar', file:'/rec/quiet/t1.wav'}]},
       {take_number:2, name:'Take 2', duration_sec:300, markers:[],
        tracks:[{name:'Guitar', file:'/rec/quiet/t2.wav'}]}];
-    return {folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes};
+    return {folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)};
   }
   if (folder === '/rec/older') {
     const takes = [
@@ -175,7 +130,7 @@ function pastRehearsal(folder) {
        tracks:[{name:'Guitar', file:'/rec/older/d1.wav'}]},
       {take_number:2, name:'Doroga 2', duration_sec:240, markers:[],
        tracks:[{name:'Guitar', file:'/rec/older/d2.wav'}]}];
-    return {folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes};
+    return {folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)};
   }
   // Its own path, distinct from the live session's /rec/g.wav — two takes
   // sharing a dummy path would let one's mocked length leak onto the other.
@@ -197,44 +152,96 @@ function pastRehearsal(folder) {
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
         tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
-  return {folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes};
-}
-
-// And api._last_attempt: how long the latest go at the song the next take
-// is named for ran, under the name songsOf gives that song.
-// And api._next_go: the song itself the first time, then one past the
-// highest number any go at it carries.
-function nextGo(takes, song) {
-  let highest = 0, spelled = song;
-  for (const t of takes) {
-    const name = (t.name || '').trim();
-    if (!name || /^Take \d+$/.test(name)) continue;
-    const m = /^(.*?)\s+(\d+)$/.exec(name);
-    const base = m ? m[1] : name;
-    if (base.toLowerCase() !== song.toLowerCase()) continue;
-    if (!highest) spelled = base;
-    highest = Math.max(highest, m ? Number(m[2]) : 1);
-  }
-  return highest ? `${spelled} ${highest + 1}` : song;
+  return {folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)};
 }
 
 // The rest of the band's repertoire, as other rehearsals in the library
 // played it, the latest first.
 const REPERTOIRE = ['Polyn', 'Vesna', 'Ogon', 'Sonce', 'Dym', 'Ptaha', 'Doroga'];
 
-function lastAttempt(takes, nextName) {
-  const songOf = (n) => {
-    n = (n || '').trim();
-    if (!n || /^Take \d+$/.test(n)) return null;
-    return n.replace(/\s+\d+$/, '') || null;
-  };
-  const song = songOf(nextName);
-  if (!song) return null;
-  const goes = takes.filter(t => (songOf(t.name) || '').toLowerCase() === song.toLowerCase());
-  return goes.length
-    ? {song: songOf(goes[0].name), duration_sec: goes[goes.length - 1].duration_sec}
-    : null;
+// Python groups takes by the song each is a go at (api._songs_of) and hands
+// the result over; the mock does the same.
+function songsOf(takes) {
+  const songs = [], bySong = {};
+  for (const t of takes) {
+    if (!t.song) continue;
+    if (bySong[t.song]) { bySong[t.song].takes++; bySong[t.song].take_numbers.push(t.take_number); }
+    else { bySong[t.song] = {name: t.song, takes: 1, take_numbers: [t.take_number]}; songs.push(bySong[t.song]); }
+  }
+  return songs;
 }
+
+// And api._runs_of: the evening in order, in runs of goes at one song, each
+// go as its length and whether it was marked to keep.
+function runsOf(takes) {
+  const runs = [];
+  for (const t of takes) {
+    const song = t.song || null;
+    const go = {duration_sec: t.duration_sec,
+                keep: (t.markers || []).some(m => m.kind === 'good')};
+    if (runs.length && runs[runs.length - 1].song === song) runs[runs.length - 1].takes.push(go);
+    else runs.push({song, takes: [go]});
+  }
+  return runs;
+}
+
+// And api._last_attempt: how long the latest go at the next take's song ran.
+function lastAttempt(takes, song) {
+  if (!song) return null;
+  const goes = takes.filter(t => t.song === song);
+  return goes.length ? {song, duration_sec: goes[goes.length - 1].duration_sec} : null;
+}
+
+// What a take is a go at, as Python's library resolves a name
+// (Library._resolve), over the songs the mock knows: the takes it is given
+// and REPERTOIRE. Python numbers goes across the whole library; the mock
+// counts them within the takes it is given, which is all the interface's
+// tests need — the interface shows what it is sent.
+function songOf(text, takes) {
+  const name = (text || '').trim();
+  if (!name || /^Take \d+$/.test(name)) return null;
+  const known = new Map();
+  for (const t of takes) if (t.song) known.set(t.song.toLowerCase(), t.song);
+  for (const s of REPERTOIRE) if (!known.has(s.toLowerCase())) known.set(s.toLowerCase(), s);
+  if (known.has(name.toLowerCase())) return known.get(name.toLowerCase());
+  const m = /^(.*?)\s+(\d+)$/.exec(name);
+  if (m && known.has(m[1].trim().toLowerCase())) return known.get(m[1].trim().toLowerCase());
+  return name;
+}
+function goAt(song, takes, n) {
+  const own = takes.find(t => t.take_number === n);
+  if (own && own.song === song) return own.go;
+  return Math.max(0, ...takes.filter(t => t.song === song && t.take_number !== n).map(t => t.go)) + 1;
+}
+// A take's song, go and name, as Python returns them.
+function resolved(text, takes, n) {
+  const song = songOf(text, takes);
+  if (!song) return {song: null, go: null, name: 'Take ' + n};
+  const go = goAt(song, takes, n);
+  return {song, go, name: `${song} ${go}`};
+}
+// The fixtures below are written as old names; this makes them what Python
+// sends.
+function asSent(takes) {
+  const out = [];
+  for (const t of takes) out.push({...t, ...resolved(t.name, out, t.take_number)});
+  return out;
+}
+
+// Mirrors api._next_take: what the take being named would be.
+function nextTake(n, chosen = true) {
+  const number = n === undefined ? takeCounter + 1 : n;
+  const takes = session ? session.takes : [];
+  if (chosen && session && nextName) return resolved(nextName, takes, number);
+  const last = takes[takes.length - 1];
+  return resolved(last && last.song ? last.song : '', takes, number);
+}
+// And the name field's text for it: the title, or "Take N".
+const fieldText = (r) => r.song || r.name;
+
+// Mirrors api.suggest_take_name: n is the take being named, left out it means
+// the one that comes next.
+function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); }
 
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
@@ -374,8 +381,9 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({active:true, name:session.name, folder:session.folder,
        tracks:session.tracks, takes:session.takes, songs:songsOf(session.takes),
        next_take_number:takeCounter + 1,
-       next_take_name:suggestName(), next_take_default:suggestName(undefined, false),
-       last_attempt:lastAttempt(session.takes, suggestName()),
+       next_take_name:suggestName(), next_take_go:nextTake().go,
+       next_take_default:suggestName(undefined, false),
+       last_attempt:lastAttempt(session.takes, nextTake().song),
        recording:false, cloud_queue:cq}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
@@ -388,19 +396,18 @@ window.__MAKE_API__ = () => ({
   set_next_take_name: track('set_next_take_name', async (name) => {
     if (!session) return {ok:false, error:'No rehearsal in progress'};
     nextName = (name || '').trim() || null;
-    return {ok:true, next_take_name:suggestName()};
+    return {ok:true, next_take_name:suggestName(), next_take_go:nextTake().go};
   }),
   // api.song_choices: the songs of the rehearsal (the live one with no
   // folder), each as the next go at it, and the rest of the repertoire.
   song_choices: track('song_choices', async (folder, n) => {
     const takes = !folder || (session && folder === session.folder)
       ? (session ? session.takes : []) : pastRehearsal(folder).takes;
-    const others = takes.filter(t => t.take_number !== n);
-    const here = songsOf(takes).map(s => ({song:s.name, name:nextGo(others, s.name),
+    const here = songsOf(takes).map(s => ({song:s.name, go:goAt(s.name, takes, n),
                                            last_take:Math.max(...s.take_numbers)}));
     const seen = new Set(here.map(c => c.song.toLowerCase()));
     const other = REPERTOIRE.filter(song => !seen.has(song.toLowerCase()))
-      .map(song => ({song, name:song}));
+      .map(song => ({song, go:1}));
     return {here, other};
   }),
   // One input pinned at the top and one silent, unless a test plays its own.
@@ -413,8 +420,7 @@ window.__MAKE_API__ = () => ({
     duration_sec:TAKE, suggested_name:suggestName(takeCounter), default_name:suggestName(takeCounter, false),
     tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]})),
   keep_take: track('keep_take', async (n, _t, name, dur, tracks, markers) => {
-    const take = {take_number:n, name:name || ('Take ' + n), duration_sec:dur,
-                  tracks, markers: markers || []};
+    const take = {take_number:n, ...resolved(name, session.takes, n), duration_sec:dur, tracks, markers: markers || []};
     session.takes.push(take);
     if (n === takeCounter) nextName = null;
     cloudQueue = {...cloudQueue, [n]: 'queued'};
@@ -535,7 +541,7 @@ window.__MAKE_API__ = () => ({
 
   rename_take: track('rename_take', async (folder, n, name) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
-    if (take) take.name = name;
+    if (take) Object.assign(take, resolved(name, session.takes, n));
     // Deep copy, same as session_state/get_rehearsal — a live handle would
     // alias the mock's own state, which the real bridge's JSON round-trip
     // never allows.
@@ -553,7 +559,7 @@ window.__MAKE_API__ = () => ({
     if (window.__RECOVER_FAILS__)
       return {ok:false, error:'Could not recover the take: its folder is read-only'};
     drafts = drafts.filter(d => d.dir !== dir);
-    return {ok:true, take:{take_number:1, name:'Recovered', duration_sec:5, tracks:[], markers:[]}};
+    return {ok:true, take:{take_number:1, song:'Recovered', go:1, name:'Recovered 1', duration_sec:5, tracks:[], markers:[]}};
   }),
   discard_draft: track('discard_draft', async (dir) => {
     drafts = drafts.filter(d => d.dir !== dir);

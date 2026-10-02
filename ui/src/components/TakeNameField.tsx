@@ -2,6 +2,7 @@ import { useRef, useState } from "react"
 import { X } from "lucide-react"
 import { SongPills } from "@/components/SongPills"
 import type { SongChoices } from "@/lib/api"
+import { goFor } from "@/lib/goes"
 import { cn } from "@/lib/utils"
 
 /**
@@ -65,6 +66,7 @@ export function TakeNameField({
   const input = useRef<HTMLInputElement>(null)
   const songsArea = useRef<HTMLDivElement>(null)
   const shown = draft ?? value
+  const go = goFor(shown, choices)
   const named = (text: string) => text.trim() || fallback
   const edit = (text: string | null) => {
     typed.current = text
@@ -112,8 +114,31 @@ export function TakeNameField({
           "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
         )}
       >
+        {/* The go this name will be, after the text: drawn over the field,
+            behind an invisible copy of the text, so it sits where the text
+            ends. It is never part of the name, so it cannot be selected or
+            typed over (songs in the store, D2). */}
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute inset-0 flex items-center overflow-hidden pr-11 pl-3.5 font-semibold whitespace-pre",
+            size === "big" ? "text-[1.75rem] leading-9" : "text-base"
+          )}
+        >
+          <span className="invisible">{shown}</span>
+          {go !== null && (
+            <span data-take-go className="tnum text-muted-foreground">
+              {" "}
+              {go}
+            </span>
+          )}
+        </div>
+        <span id={`${id}-go`} className="sr-only">
+          {go !== null ? `Go ${go}` : ""}
+        </span>
         <input
           id={id}
+          aria-describedby={`${id}-go`}
           ref={input}
           value={shown}
           autoFocus={autoFocus}

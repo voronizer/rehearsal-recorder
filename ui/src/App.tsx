@@ -30,7 +30,7 @@ type Screen =
   | { name: "drafts"; drafts: Draft[] }
   | { name: "setup" }
   | { name: "rehearsal" }
-  | { name: "recording"; takeNumber: number; takeName: string }
+  | { name: "recording"; takeNumber: number; takeName: string; takeGo: number | null }
   | { name: "review"; take: PendingTake }
   | { name: "history"; folder?: string }
   | { name: "settings" }
@@ -227,8 +227,8 @@ export function App() {
     return (
       <Rehearsal
         session={session}
-        onStartTake={(takeNumber, takeName) =>
-          setScreen({ name: "recording", takeNumber, takeName })
+        onStartTake={(takeNumber, takeName, takeGo) =>
+          setScreen({ name: "recording", takeNumber, takeName, takeGo })
         }
         onFinished={(folder, takeCount) =>
           setScreen({ name: "finished", folder, takeCount })
@@ -243,6 +243,7 @@ export function App() {
       <Recording
         takeNumber={screen.takeNumber}
         takeName={screen.takeName}
+        takeGo={screen.takeGo}
         tracks={session.tracks}
         lastAttempt={session.last_attempt}
         onStopped={(take) => setScreen({ name: "review", take })}

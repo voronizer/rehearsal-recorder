@@ -190,7 +190,7 @@ function RenameTakeForm({
   choices: SongChoices | null
   onSubmit: (name: string) => void
 }) {
-  const [name, setName] = useState(take.name)
+  const [name, setName] = useState(take.song ?? take.name)
   return (
     <div className="mt-4 flex flex-col gap-4">
       <span className="text-xs text-muted-foreground">The folder on disk is renamed too.</span>
@@ -200,7 +200,7 @@ function RenameTakeForm({
         size="compact"
         autoFocus
         value={name}
-        fallback={take.name}
+        fallback={take.song ?? take.name}
         choices={choices}
         onCommit={setName}
         onEnter={onSubmit}

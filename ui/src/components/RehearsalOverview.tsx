@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { MARKER_KINDS, markerStyle } from "@/lib/markers"
+import { TakeTitle } from "@/components/TakeTitle"
 import type { Marker, MarkerKind, Song, Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
@@ -313,7 +314,7 @@ function TakeRow({
                 unnamed && "text-muted-foreground"
               )}
             >
-              {take.name}
+              <TakeTitle take={take} />
             </span>
             {keep && (
               <span className="relative shrink-0 rounded-full border border-signal/50 px-1.5 text-[11px]">

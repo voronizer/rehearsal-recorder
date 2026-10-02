@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/Shell"
 import { cn } from "@/lib/utils"
 import { MARKER_KINDS } from "@/lib/markers"
 import { formatMMSS } from "@/lib/format"
+import { TakeTitle } from "@/components/TakeTitle"
 import type { Take } from "@/lib/api"
 
 /**
@@ -129,7 +130,9 @@ export function TakeStrip({
               <span className="tnum text-[11px] text-muted-foreground">
                 {String(take.take_number).padStart(2, "0")}
               </span>
-              <span className="max-w-40 truncate">{take.name}</span>
+              <span className="max-w-40 truncate">
+                <TakeTitle take={take} />
+              </span>
               {take.markers && take.markers.length > 0 && (
                 <span className="flex shrink-0 items-center gap-1">
                   {MARKER_KINDS.filter((k) =>

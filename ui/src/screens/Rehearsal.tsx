@@ -23,6 +23,7 @@ import {
   type Take,
 } from "@/lib/api"
 import { croppedButNotSwept, takesLabel } from "@/lib/format"
+import { goFor } from "@/lib/goes"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 import { canBePutBack, goPlural, takeCloudToo } from "@/lib/deletion"
@@ -38,7 +39,7 @@ export function Rehearsal({
   onChanged,
 }: {
   session: Extract<SessionState, { active: true }>
-  onStartTake: (takeNumber: number, takeName: string) => void
+  onStartTake: (takeNumber: number, takeName: string, takeGo: number | null) => void
   onFinished: (folder: string, takeCount: number) => void
   onChanged: () => void
 }) {
@@ -138,7 +139,7 @@ export function Rehearsal({
       setError(res.error ?? "Could not start the take")
       return
     }
-    onStartTake(res.take_number, nextNameRef.current)
+    onStartTake(res.take_number, nextNameRef.current, goFor(nextNameRef.current, nextChoices))
   }
 
   // With a take in hand, Space plays it back rather than starting a new one;

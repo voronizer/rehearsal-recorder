@@ -3,6 +3,7 @@ import { HardDrive, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FooterRow } from "@/components/FooterRow"
 import { Kbd, Shell } from "@/components/Shell"
+import { GoTitle } from "@/components/TakeTitle"
 import { TrackTile } from "@/components/TrackTile"
 import { RunningLine } from "@/components/RunningLine"
 import { useSpacebar } from "@/hooks/useSpacebar"
@@ -42,12 +43,14 @@ const CLOCK_SIZE = "clamp(4rem, 19vh, 9.5rem)"
 export function Recording({
   takeNumber,
   takeName,
+  takeGo,
   tracks,
   lastAttempt,
   onStopped,
 }: {
   takeNumber: number
   takeName: string
+  takeGo: number | null
   tracks: PlacedTrack[]
   /** The last go at this take's song, to measure this one against. */
   lastAttempt?: LastAttempt | null
@@ -247,7 +250,7 @@ export function Recording({
             className="max-w-full truncate pb-[0.08em] leading-none font-semibold tracking-tight"
             style={{ fontSize: `calc(${CLOCK_SIZE} / 2)` }}
           >
-            {takeName}
+            <GoTitle title={takeName} go={takeGo} />
           </h1>
           {/* Digits stand on the baseline, and the room a line keeps under
               it for "g" and "y" was empty space that the tiles needed back

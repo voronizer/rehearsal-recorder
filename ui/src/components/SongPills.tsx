@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react"
+import { GoTitle } from "@/components/TakeTitle"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { SongChoice, SongChoices } from "@/lib/api"
 import { pillsShown } from "@/lib/songPills"
@@ -12,10 +13,11 @@ const PILL =
 
 /**
  * The songs under a take's name, in two rows at most: what this rehearsal
- * played, as the next go at each ("Polyn 3", the number dimmed), then the
- * other rehearsals' songs, the latest played first, and All songs… last.
+ * played, then the other rehearsals' songs, the latest played first, and
+ * All songs… last. Each shows the go a take would be ("Polyn 3", the number
+ * dimmed); a click puts only the title in the field.
  *
- * A click puts the song's name in the field and takes no focus of its own;
+ * A click puts the song's title in the field and takes no focus of its own;
  * a field being typed in is then left (TakeNameField's `put`), so Space
  * records or saves. The one matching the field is lit where it stands:
  * nothing moves under the pointer. Typing narrows them over every song, not
@@ -38,13 +40,13 @@ export function SongPills({
 }) {
   const all = choices ? [...choices.here, ...choices.other] : []
   const typed = value.trim().toLocaleLowerCase()
-  const isChoice = (c: SongChoice) => c.name.toLocaleLowerCase() === typed
+  const isChoice = (c: SongChoice) => c.song.toLocaleLowerCase() === typed
   const narrowing = typed !== "" && value.trim() !== initial.trim() && !all.some(isChoice)
   const fits = (c: SongChoice) => !narrowing || c.song.toLocaleLowerCase().includes(typed)
   const here = (choices?.here ?? []).filter(fits)
   const other = (choices?.other ?? []).filter(fits)
   const candidates = [...here, ...other]
-  const key = candidates.map((c) => c.name).join("\n")
+  const key = candidates.map((c) => c.song).join("\n")
 
   const row = useRef<HTMLDivElement>(null)
   const measure = useRef<HTMLDivElement>(null)
@@ -61,13 +63,13 @@ export function SongPills({
     if (!rowEl || !m) return
     const lay = () => {
       const kids = [...m.children] as HTMLElement[]
-      const width = new Map(candidates.map((c, i) => [c.name, kids[i].getBoundingClientRect().width]))
+      const width = new Map(candidates.map((c, i) => [c.song, kids[i].getBoundingClientRect().width]))
       const last = kids[candidates.length]?.getBoundingClientRect().width ?? 0
-      const picked = pillsShown(here, other, (c) => width.get(c.name) ?? 0, last, rowEl.clientWidth, GAP)
+      const picked = pillsShown(here, other, (c) => width.get(c.song) ?? 0, last, rowEl.clientWidth, GAP)
       // Measuring and setting this before the row paints is the point of
       // doing it in a layout effect rather than the ResizeObserver alone.
       // eslint-disable-next-line react/set-state-in-effect
-      setShown(picked.map((c) => c.name))
+      setShown(picked.map((c) => c.song))
     }
     lay()
     const watch = new ResizeObserver(lay)
@@ -78,7 +80,7 @@ export function SongPills({
   }, [key])
 
   if (all.length === 0) return null
-  const byName = new Map(candidates.map((c) => [c.name, c]))
+  const byName = new Map(candidates.map((c) => [c.song, c]))
   const visible = shown.map((n) => byName.get(n)).filter((c): c is SongChoice => !!c)
 
   return (
@@ -86,15 +88,15 @@ export function SongPills({
       <div ref={row} className="flex flex-wrap gap-1.5">
         {visible.map((c) => (
           <button
-            key={c.name}
+            key={c.song}
             type="button"
-            data-song-choice={c.name}
+            data-song-choice={c.song}
             aria-current={isChoice(c) ? "true" : undefined}
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onPick(c.name)}
+            onClick={() => onPick(c.song)}
             className={cn(PILL, isChoice(c) && "border-primary bg-primary/15 hover:bg-primary/20")}
           >
-            <SongName choice={c} />
+            <GoTitle title={c.song} go={c.go} />
           </button>
         ))}
         <AllSongsPill choices={all} value={value} onPick={onPick} className={PILL} />
@@ -107,25 +109,13 @@ export function SongPills({
         className="pointer-events-none invisible absolute top-0 left-0 flex w-max gap-1.5"
       >
         {candidates.map((c) => (
-          <span key={c.name} className={PILL}>
-            <SongName choice={c} />
+          <span key={c.song} className={PILL}>
+            <GoTitle title={c.song} go={c.go} />
           </span>
         ))}
         <span className={PILL}>All songs…</span>
       </div>
     </div>
-  )
-}
-
-/** "Polyn 3", the number dimmed: the song, and which go at it this is. */
-export function SongName({ choice: c }: { choice: SongChoice }) {
-  return (
-    <>
-      {c.song}
-      {c.name !== c.song && (
-        <span className="text-muted-foreground">{c.name.slice(c.song.length)}</span>
-      )}
-    </>
   )
 }
 
@@ -185,13 +175,13 @@ function AllSongsPill({
         <div className="mt-2 columns-[9rem] gap-4">
           {sorted.map((c) => (
             <button
-              key={c.name}
+              key={c.song}
               type="button"
-              data-song-choice={c.name}
-              aria-current={c.name.toLocaleLowerCase() === typed ? "true" : undefined}
+              data-song-choice={c.song}
+              aria-current={c.song.toLocaleLowerCase() === typed ? "true" : undefined}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
-                onPick(c.name)
+                onPick(c.song)
                 setOpen(false)
               }}
               // The ring and the focus outline are drawn inside the song's
@@ -200,10 +190,10 @@ function AllSongsPill({
               className={cn(
                 "block w-full truncate rounded-md px-1.5 py-0.5 text-left text-sm break-inside-avoid hover:bg-accent",
                 "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-                c.name.toLocaleLowerCase() === typed && "bg-primary/15 ring-1 ring-primary ring-inset"
+                c.song.toLocaleLowerCase() === typed && "bg-primary/15 ring-1 ring-primary ring-inset"
               )}
             >
-              <SongName choice={c} />
+              <GoTitle title={c.song} go={c.go} />
             </button>
           ))}
         </div>

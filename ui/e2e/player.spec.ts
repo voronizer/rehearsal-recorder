@@ -175,7 +175,7 @@ test.describe("the review screen", () => {
 
   test("the next take takes the last one's name, numbered", async ({ page }) => {
     await secondTake(page)
-    await expect(page.locator("#take-name")).toHaveValue("Polyn 2")
+    await expect(page.locator("#take-name")).toHaveValue("Polyn")
   })
 
   test("Escape asks before dropping a take, and a second Escape answers nothing", async ({
@@ -190,7 +190,7 @@ test.describe("the review screen", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByText("Discard this take?")).toHaveCount(0)
     expect(await callCount(page, "discard_take")).toBe(0)
-    await expect(page.locator("#take-name")).toHaveValue("Polyn 2")
+    await expect(page.locator("#take-name")).toHaveValue("Polyn")
   })
 
   test("a mark made before saving goes with the take when it is saved", async ({ page }) => {

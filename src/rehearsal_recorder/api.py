@@ -1457,9 +1457,7 @@ class Api:
                 return own["go"]
             return nexts.get(song, 1)
 
-        # "name" holds the title too, for the interface until it shows the go
-        # beside the field (songs in the store, Task 3 of its plan).
-        here = [{"song": s["name"], "name": s["name"], "go": go_for(s["name"]),
+        here = [{"song": s["name"], "go": go_for(s["name"]),
                  "last_take": max(s["take_numbers"])}
                 for s in _songs_of(takes)]
         seen = {c["song"].casefold() for c in here}

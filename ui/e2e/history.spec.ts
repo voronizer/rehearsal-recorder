@@ -80,7 +80,7 @@ test.describe("History", () => {
     // Chosen already, and on screen next to the list: no row to open first.
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
     await expect(list.locator("[aria-current='true']")).toContainText("Tuesday jam")
-    await page.getByRole("button", { name: "Take 1 Polyn", exact: true }).click()
+    await page.getByRole("button", { name: "Take 1 Polyn 1", exact: true }).click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     // A ten-minute take gets a clock in minutes.
     await expect(page.getByRole("group", { name: "Timeline clock" })).toContainText("2:00")
@@ -89,7 +89,7 @@ test.describe("History", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByRole("group", { name: "Take timeline" })).toHaveCount(0)
     await expect(list).toBeVisible()
-    await expect(page.getByRole("button", { name: "Take 1 Polyn", exact: true })).toHaveCount(1)
+    await expect(page.getByRole("button", { name: "Take 1 Polyn 1", exact: true })).toHaveCount(1)
     // The list is history itself, so the next rung is the setup screen.
     await page.keyboard.press("Escape")
     await expect(startButton(page)).toBeVisible()
@@ -314,7 +314,7 @@ test("a take plays from its row, and on in the player and back", async ({ page }
 test("a row's own buttons work on its take without opening it", async ({ page }) => {
   const overview = await openEvening(page)
   await page.hover("[data-take='1']")
-  await page.getByRole("button", { name: "Rename take Polyn", exact: true }).click()
+  await page.getByRole("button", { name: "Rename take Polyn 1", exact: true }).click()
   await expect(page.getByText("Rename take")).toBeVisible()
   await expect(page.locator("[aria-label='Take timeline']")).toHaveCount(0)
   await page.keyboard.press("Escape")
@@ -442,7 +442,7 @@ test.describe("last time, on the setup screen", () => {
   test("checking the signal stops what was playing", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const panel = lastTime(page)
-    await panel.getByRole("button", { name: "Play Vesna, the last go at Vesna" }).click()
+    await panel.getByRole("button", { name: "Play Vesna 1, the last go at Vesna" }).click()
     await expect(panel.getByRole("button", { name: /^Pause Vesna/ })).toBeVisible()
     await page.getByRole("button", { name: "Check signal" }).click()
     await expect(panel.getByRole("button", { name: /^Pause/ })).toHaveCount(0)
