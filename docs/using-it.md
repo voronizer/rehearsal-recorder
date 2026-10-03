@@ -251,20 +251,25 @@ stops following until the playhead comes back into view.
 
 ## Names and songs
 
-A new take gets the name of the previous take with the next number. After
-"Verse riff" come "Verse riff 2" and "Verse riff 3". So you only need to name
-the first take of each song.
+Each take is a go at a song. You name it with the song's title, and the app
+counts the goes: the number beside the name, "Polyn 1", "Polyn 2", goes on
+from one rehearsal to the next, so "Polyn 17" is one take wherever it was
+played. A new take is another go at the song before it, so you only name a
+take when the band moves on to another song.
 
-The app uses these names to show what a rehearsal was spent on: "Verse riff
-3" counts as the third go at "Verse riff". Takes you never named keep names
-like "Take 4" and are not counted as a song.
+Type the title only; the number is the app's. Typing "Polyn 5" names the
+take Polyn, at whatever go is next. A song is spelled one way everywhere:
+typing "polyn" gives "Polyn" when that song is there. A title can end in a
+number, like "Opus 5", as long as no song is called "Opus". A take nobody
+named is called by its number, "Take 4", is not counted as a song, and so is
+a recovered take you did not name.
 
 Wherever you name a take, the songs you have already played are listed under
-the name, so you do not have to type them again. A song played in this
-rehearsal comes with the next number: with "Polyn" and "Polyn 2" already
-recorded, it gives "Polyn 3". Typing narrows the list to the songs that match,
-and clicking one then takes you out of the field, so the next Space records
-or saves. In the Rename take dialog you stay in the field, and Enter renames.
+the name, so you do not have to type them again. Each song comes with the go
+it would be, dimmed beside it; a click puts only the title in the field.
+Typing narrows the list to the songs that match, and clicking one then takes
+you out of the field, so the next Space records or saves. In the Rename take
+dialog you stay in the field, and Enter renames.
 
 To rename a take or a rehearsal later, use the pencil button on the rehearsal
 screen or in History. The folder on disk is renamed too, and a rehearsal

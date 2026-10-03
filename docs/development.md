@@ -140,10 +140,18 @@ editing the models.
 
 3. Read the file Alembic just wrote — autogenerate gets the shape right and
    the judgement wrong:
-   - SQLite can barely `ALTER` a table, so every change needs batch mode
-     (`with op.batch_alter_table(...) as batch:`), which rebuilds the table
-     instead. `env.py` already renders migrations that way; check the
-     generated file uses it.
+   - SQLite can barely `ALTER` a table. Adding a column, or dropping one
+     that is in no index or constraint, works in place (`ALTER TABLE … ADD
+     COLUMN` / `DROP COLUMN`, SQLite 3.35 and later), and that is what to use
+     on `rehearsal` and `take`. Anything more needs batch mode (`with
+     op.batch_alter_table(...) as batch:`), which rebuilds the table: a copy,
+     `DROP TABLE`, and a rename. With foreign keys on — and the app always
+     turns them on — that `DROP TABLE` deletes the rows of every table that
+     points at it with `ON DELETE CASCADE`: rebuilding `take` this way empties
+     `take_file`, `marker` and `cloud_copy`. Batch mode is safe only on a
+     table nothing cascades from. `env.py` renders migrations in batch mode,
+     so check what the generated file does to those two tables; migration
+     0002 shows the in-place way.
    - A new column that is `NOT NULL` needs a `server_default` — the existing
      rows have no value to put there otherwise, and the `ALTER` fails against
      real data even though it succeeds against an empty test database.

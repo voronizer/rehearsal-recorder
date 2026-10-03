@@ -270,10 +270,30 @@ once, from a device index to a name and audio system, and that was handled in
 code (`saved_device`) without needing a migration; there has been nothing
 here that a schema would have bought.
 
-**Songs are still not stored.** They are derived from take names by
-`_songs_of` — "Verse riff 3" counts as a third go at "Verse riff" — and that
-is a rule, not a fact. Storing its output would just be a second copy that
-could disagree with the names themselves.
+**Songs are stored, and a take's name is not.** For a long time a song was
+worked out from take names — "Verse riff 3" a third go at "Verse riff" — on
+the grounds that a stored copy of a rule would drift from the names. That
+held while a song was only a way of grouping takes. Once a song had data of
+its own to carry (the one best take, a page of its own, a plan for the
+evening) and was picked with a click rather than typed, the song became the
+fact and the name the derived thing: `song` is a table, a take points at one
+with its go, and `store/names.py` writes the name from the two.
+
+**The go is a number of its own, never typed.** In a name, a number was
+trouble: "Song 2" could be a title or a second go, a pill had to offer
+"Polyn 3" rather than Polyn, and a typed "Polyn 7" meant nothing anyone
+intended. So the name field holds a title, and the go is shown beside it.
+
+**Goes run across the library, and are stored.** A song's goes are numbered
+from its first ever, so "Polyn 17" is one take wherever it was played.
+Counting them from the takes on every read would renumber them when one is
+deleted, and rename its folder and cloud copy for no reason: a stored go is
+given once and kept.
+
+**Names are put right in the background.** A take's folder and cloud copy
+are named after it, so when its name changes without them — migration 0002
+numbering every old go afresh — `names_pass.py` renames them on the next
+open, a take at a time, waiting while anything records, copies or crops.
 
 **Import runs on every open, not once.** A rehearsal folder copied in from a
 machine still on an older version brings its `session.json` with it, and

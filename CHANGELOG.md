@@ -7,6 +7,19 @@ opening.
 
 ## Unreleased
 
+- **A take is a go at a song, and the go is a number of its own.** The name
+  field holds the song's title, with the go it will be dimmed beside it, and
+  the songs under it put only the title in. The go is counted across every
+  rehearsal — yesterday's Polyn 2 is followed by today's Polyn 3 — and shown
+  from 1, beside the title, wherever a take is. A typed number does not
+  change which go a take is; a song is spelled one way everywhere; a title
+  can end in a number ("Opus 5") when no song is called "Opus"; and a
+  recovered take nobody named is "Take 5", like any other. Older takes move
+  over the first time this version opens the recordings folder (a copy of
+  the history is kept beside it, as `library.sqlite.bak-0001`), their goes
+  numbered afresh in the order played, and their folders and cloud copies
+  are renamed to match in the background, as *Putting names right*. This is
+  what the song pages and the one best take will stand on (#12).
 - **The songs under the name fill two rows**, tonight's first and then the
   ones played at earlier rehearsals, and **All songs…** at the end opens
   every song you have played, alphabetically, in columns. When tonight
