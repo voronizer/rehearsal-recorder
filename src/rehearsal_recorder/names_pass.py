@@ -55,26 +55,36 @@ class NamesPass:
             return 0
         entry = self._journal.begin("names", TITLE)
         renamed, failed = 0, []
-        for i, (folder, take_number, name) in enumerate(todo):
-            while self._busy() and not self._stop.is_set():
-                self._stop.wait(self._wait)
-            if self._stop.is_set():
+        try:
+            for i, (folder, take_number, name) in enumerate(todo):
+                while self._busy() and not self._stop.is_set():
+                    self._stop.wait(self._wait)
+                if self._stop.is_set():
+                    entry.discard()
+                    entry = None
+                    return renamed
+                entry.progress(i / len(todo), f"“{name}”")
+                try:
+                    result = self._fix(folder, take_number)
+                except Exception as e:
+                    # One take's trouble is that take's: the rest go on.
+                    result = {"renamed": False, "error": str(e) or type(e).__name__}
+                if result.get("error"):
+                    failed.append(f"“{name}”: {result['error']}")
+                elif result.get("renamed"):
+                    renamed += 1
+            if failed:
+                entry.fail(_failures(failed))
+            elif renamed:
+                entry.done("1 take renamed" if renamed == 1 else f"{renamed} takes renamed")
+            else:
+                # Everything it found was left for later (open in the player):
+                # nothing happened worth a line.
                 entry.discard()
-                return renamed
-            entry.progress(i / len(todo), f"“{name}”")
-            result = self._fix(folder, take_number)
-            if result.get("error"):
-                failed.append(f"“{name}”: {result['error']}")
-            elif result.get("renamed"):
-                renamed += 1
-        if failed:
-            entry.fail(_failures(failed))
-        elif renamed:
-            entry.done("1 take renamed" if renamed == 1 else f"{renamed} takes renamed")
-        else:
-            # Everything it found was left for later (open in the player):
-            # nothing happened worth a line.
-            entry.discard()
+            entry = None
+        finally:
+            if entry is not None:  # something outside a take went wrong
+                entry.fail("Putting names right stopped unexpectedly")
         return renamed
 
     def request(self):

@@ -480,8 +480,14 @@ class Api:
         self._cloud_queue.stop()
         self._names_pass.stop()
         self._updates.stop()
-        if self._library is not None:
-            self._library.close()
+        # A rename the pass had under way finishes before the library closes.
+        held = self._files_lock.acquire(timeout=10)
+        try:
+            if self._library is not None:
+                self._library.close()
+        finally:
+            if held:
+                self._files_lock.release()
 
     # ---------- the database ----------
 
@@ -2117,6 +2123,10 @@ class Api:
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
+        with self._files_lock:
+            return self._rename_rehearsal_locked(folder, new_name)
+
+    def _rename_rehearsal_locked(self, folder, new_name):
         r = self._lib.rehearsal(folder)
         if r is None:
             return {"ok": False, "error": "Rehearsal not found"}
@@ -2691,15 +2701,16 @@ class Api:
             return {"ok": False, "error": "Rehearsal folder not found"}
         if self._session is not None and Path(self._session["folder"]) == folder:
             return {"ok": False, "error": "Cannot delete the rehearsal in progress"}
-        self._release_player_in(folder)
-        result = move_to_trash(folder, self._recordings_dir)
-        if result.get("ok"):
-            # And its copies in the cloud, take by take — only what the app
-            # put there, then the folder they were in once nothing is left.
-            for take in (self._lib.rehearsal(folder) or {}).get("takes", []):
-                self._remove_shared(take)
-            self._lib.forget_rehearsal(folder)
-        return result
+        with self._files_lock:
+            self._release_player_in(folder)
+            result = move_to_trash(folder, self._recordings_dir)
+            if result.get("ok"):
+                # And its copies in the cloud, take by take — only what the app
+                # put there, then the folder they were in once nothing is left.
+                for take in (self._lib.rehearsal(folder) or {}).get("takes", []):
+                    self._remove_shared(take)
+                self._lib.forget_rehearsal(folder)
+            return result
 
     # ---------- a rehearsal whose folder went missing ----------
 
@@ -3301,37 +3312,46 @@ class Api:
         return (f"{int(take_number):02d} - "
                 f"{_safe_name(take.get('name', '') or f'Take {take_number}')}")
 
-    def _rename_take_copies(self, folder, take_number, take):
+    def _rename_take_copies(self, folder, take_number, take, requeue=True):
         """
         After a take is renamed: its copies in the cloud are renamed to match,
         where they are, rather than mixed again — however they got there, and
         whether or not sending on its own is on. `take` is its record as it
         now is. Copies that cannot be moved (not where the record says, or
         one being made right now) are made again under the new name instead.
+
+        With requeue=False (putting names right in the background) nothing is
+        ever queued: what cannot be moved is left for the next open. Returns
+        (renamed, error): whether a copy was renamed, and why one could not
+        be (an OSError, with the parts already moved put back).
         """
         cloud = self._cloud_dir
         if cloud is None:
             # With no cloud folder there is nothing to move and no telling
             # what was sent; asking for a copy is what records why there is
             # none, and what sends it once the folder is back.
-            self._enqueue_publish(folder, take_number, take=take)
-            return
+            if requeue:
+                self._enqueue_publish(folder, take_number, take=take)
+            return False, None
         shared = dict(take.get("cloud") or {})
         shape = _shape_of(shared)
         if shape is None:
-            return
+            return False, None
         base = self._cloud_base(take_number, take)
         parts = {k: Path(shared[k]) for k in ("mix", "tracks") if shared.get(k)}
         goes_to = {k: p.with_name(base + (p.suffix if k == "mix" else ""))
                    for k, p in parts.items()}
         if (self._copy_busy(folder, take_number)
                 or not all(p.exists() and _is_inside(p, cloud) for p in parts.values())):
-            self._queue_copy(folder, take_number, shape, take)
-            return
+            if requeue:
+                self._queue_copy(folder, take_number, shape, take)
+            return False, None
         moved = []
         try:
             for k, p in parts.items():
-                if goes_to[k] != p:
+                # Plain strings: Path compares case-blind on Windows, and a
+                # case-only rename is still a rename.
+                if str(goes_to[k]) != str(p):
                     p.rename(goes_to[k])
                     moved.append((goes_to[k], p))
         except OSError as e:
@@ -3341,14 +3361,17 @@ class Api:
                     new.rename(old)
                 except OSError:
                     pass
-            self._queue_copy(folder, take_number, shape, take)
-            return
+            if requeue:
+                self._queue_copy(folder, take_number, shape, take)
+                return False, None
+            return False, str(e)
         shared.update({k: str(p) for k, p in goes_to.items()})
         # Only the name changed. The rest of what the copy was made from —
         # the balance, the format — is still what it was made with.
         shared["source"] = {**(shared.get("source") or {}),
                             "name": take.get("name", "")}
         self._lib.set_cloud_copy(folder, take_number, shared, cloud)
+        return bool(moved), None
 
     def _move_rehearsal_copies(self, old_folder, new_folder):
         """
@@ -3415,13 +3438,15 @@ class Api:
             d = next(iter(dirs))
             if d.is_dir() and not _carries(d.name, _take_dir_name(take["take_number"], take["name"])):
                 wrong.add("disk")
+        # The cloud part counts only when every recorded copy is where its
+        # record says (a folder not mounted, a copy the band deleted: left,
+        # and looked at again next open) and one of them has another name.
         shared = take.get("cloud") or {}
         base = self._cloud_base(take["take_number"], take)
-        for key in ("mix", "tracks"):
-            if shared.get(key):
-                path = Path(shared[key])
-                if (path.stem if key == "mix" else path.name) != base:
-                    wrong.add("cloud")
+        recorded = [(key, Path(shared[key])) for key in ("mix", "tracks") if shared.get(key)]
+        if recorded and all(p.exists() for _, p in recorded) and any(
+                (p.stem if key == "mix" else p.name) != base for key, p in recorded):
+            wrong.add("cloud")
         return wrong
 
     def _names_out_of_line(self):
@@ -3457,33 +3482,50 @@ class Api:
     def _put_name_right(self, folder, take_number):
         """
         One take's folder and cloud copies renamed to carry its name, as
-        rename_take would. A take open in the player is left for the next
-        open, rather than closed under whoever is listening.
+        rename_take would, but never queuing a copy: what cannot be renamed
+        now is left for the next open. A take open in the player is left too,
+        rather than closed under whoever is listening.
         """
         folder = Path(folder)
+        renamed = False
         with self._files_lock:
             take = self._lib.take(folder, take_number)
             wrong = self._out_of_line(take) if take is not None else set()
             if not wrong:
                 return {"renamed": False, "error": None}
             if "disk" in wrong:
-                if self._playing_from(take):
-                    return {"renamed": False, "error": None}
-                moved, tracks, error = self._move_take_dir(
-                    folder, take_number, take, take["name"])
+                # The player's lock is held from the check to the move, so
+                # the take cannot be opened in between.
+                with self._player_lock:
+                    if self._playing_from(take):
+                        return {"renamed": False, "error": None}
+                    moved, tracks, error = self._move_take_dir(
+                        folder, take_number, take, take["name"])
                 if error is not None:
                     return {"renamed": False, "error": error}
-                try:
-                    updated = self._lib.update_take(folder, take_number, tracks=tracks)
-                except Exception as e:
-                    if moved:
-                        moved[1].rename(moved[0])
-                    return {"renamed": False, "error": str(e)}
-                if updated is None:
-                    if moved:
-                        moved[1].rename(moved[0])
-                    return {"renamed": False, "error": None}
-                take = updated
+                if moved:
+                    try:
+                        updated = self._lib.update_take(folder, take_number, tracks=tracks)
+                    except Exception as e:
+                        return self._undo_move(moved, str(e))
+                    if updated is None:
+                        return self._undo_move(moved, None)
+                    take, renamed = updated, True
             if "cloud" in wrong and self._cloud_dir is not None:
-                self._rename_take_copies(folder, take_number, take)
-            return {"renamed": True, "error": None}
+                did, error = self._rename_take_copies(
+                    folder, take_number, take, requeue=False)
+                if error is not None:
+                    return {"renamed": renamed, "error": error}
+                renamed = renamed or did
+            return {"renamed": renamed, "error": None}
+
+    def _undo_move(self, moved, error):
+        """A take's folder put back after its record could not follow. When
+        that fails too, the error says where the folder is now."""
+        try:
+            moved[1].rename(moved[0])
+        except OSError as e:
+            return {"renamed": False, "error": (
+                f"the folder is now at {moved[1]} and its record could not be "
+                f"updated ({error or 'the take was deleted'}; putting it back: {e})")}
+        return {"renamed": False, "error": error}

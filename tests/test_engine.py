@@ -5719,6 +5719,22 @@ def main():
        entry53["kind"] == "names" and entry53["title"] == "Putting names right"
        and entry53["state"] == "failed"
        and "“Vesna 1”: it is open elsewhere" in entry53["error"])
+    boom_journal53 = Journal()
+    boomed53 = []
+
+    def boom53(folder, number):
+        boomed53.append(number)
+        if number == 1:
+            raise RuntimeError("the database is locked")
+        return {"renamed": True, "error": None}
+
+    boom_loop53 = NamesPass(find=lambda: [("/r", 1, "Polyn 1"), ("/r", 2, "Vesna 1")],
+                            fix=boom53, busy=lambda: False, journal=boom_journal53)
+    boom_count53 = boom_loop53.run()
+    boom_entry53 = boom_journal53.snapshot()[0]
+    ok("a take that raises is that take's failure: the pass carries on and ends failed",
+       boom_count53 == 1 and boomed53 == [1, 2] and boom_entry53["state"] == "failed"
+       and "“Polyn 1”: the database is locked" in boom_entry53["error"])
     quiet53 = Journal()
     ok("with nothing to put right it shows nothing",
        NamesPass(find=lambda: [], fix=fix53, busy=lambda: False, journal=quiet53).run() == 0
@@ -5833,6 +5849,26 @@ def main():
     ok("and while a take is being cropped", p53._names_must_wait())
     crop53.done()
     ok("and not otherwise", not p53._names_must_wait())
+
+    # Copies in the cloud: renamed if they are there, never made again if not.
+    cloud_rec53 = dict(p53.get_rehearsal(str(jam53))["takes"][1]["cloud"])
+    stale53 = cloud53 / jam53.name / "02 - old.wav"
+    Path(cloud_rec53["mix"]).rename(stale53)
+    p53._lib.set_cloud_copy(jam53, 2, {**cloud_rec53, "mix": str(stale53)}, cloud53)
+    away53 = tmp53 / "Drive-away"
+    cloud53.rename(away53)
+    cloud_entries53 = sum(e["kind"] == "cloud" for e in p53.activity()["entries"])
+    ok("a cloud folder that is not there: nothing is queued, nothing reported renamed",
+       p53._names_pass.run() == 0 and p53._cloud_queue.states(str(jam53)) == {}
+       and sum(e["kind"] == "cloud" for e in p53.activity()["entries"]) == cloud_entries53)
+    away53.rename(cloud53)
+    stale53.unlink()
+    ok("a copy the band deleted: nothing is queued, nothing reported renamed",
+       p53._names_pass.run() == 0 and p53._cloud_queue.states(str(jam53)) == {}
+       and sum(e["kind"] == "cloud" for e in p53.activity()["entries"]) == cloud_entries53)
+    stale53.write_bytes(b"RIFF")
+    ok("and once it is there, it is renamed, case or not",
+       p53._names_pass.run() == 1 and (cloud53 / jam53.name / "02 - Polyn 2.wav").exists())
 
     print("\n" + "=" * 60)
     if problems:
