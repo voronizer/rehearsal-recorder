@@ -135,6 +135,11 @@ class PublishQueue:
                 out[self._active[1]] = "working"
         return out
 
+    def busy(self):
+        """Whether a copy is being made right now."""
+        with self._lock:
+            return self._active is not None
+
     def run_next(self):
         """One job. False when there was nothing to do, or not now."""
         if self._paused():

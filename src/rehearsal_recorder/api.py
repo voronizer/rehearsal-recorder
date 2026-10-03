@@ -71,6 +71,7 @@ from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
 from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder import cloud as cloudmod
+from rehearsal_recorder.names_pass import NamesPass
 from rehearsal_recorder import layouts
 from rehearsal_recorder import updates
 from rehearsal_recorder.mediaserver import AppServer
@@ -186,6 +187,17 @@ def _unique_path(path):
 def _take_dir_name(take_number, name):
     """What a take's folder is called: "03 - Polyn 3"."""
     return f"{int(take_number):02d} - {_safe_name(name)}"
+
+
+def _carries(dir_name, expected):
+    """
+    Whether a folder named `dir_name` carries the name `expected`: it is
+    that name, or that name with " (2)" after it, which _unique_path gives a
+    take whose name was taken. Renaming such a folder would only land on
+    " (2)" again, on every open.
+    """
+    return (dir_name == expected
+            or re.fullmatch(re.escape(expected) + r" \(\d+\)", dir_name) is not None)
 
 
 def _songs_of(takes):
@@ -392,6 +404,15 @@ class Api:
         self._cloud_entries = {}
         self._cloud_lock = threading.Lock()
         self._window = None
+        # Renaming a take's files and putting names right do not run over
+        # each other's folders.
+        self._files_lock = threading.RLock()
+        # Takes whose folder or cloud copy no longer carries their name are
+        # renamed in the background — see names_pass.py.
+        self._names_pass = NamesPass(
+            find=self._names_out_of_line, fix=self._put_name_right,
+            busy=self._names_must_wait, journal=self._journal,
+        )
 
         self._config = self._read_config()
         # Whether a newer version is out — see updates.py. Asked only once the
@@ -433,6 +454,7 @@ class Api:
         # Only the real app runs the worker. The suites drive run_next
         # themselves, so nothing races them.
         self._cloud_queue.start()
+        self._names_pass.start()
         self._sweep_empty_cloud_dirs_later()
 
     def shutdown(self):
@@ -456,6 +478,7 @@ class Api:
         self.stop_monitor()
         self.player_close()
         self._cloud_queue.stop()
+        self._names_pass.stop()
         self._updates.stop()
         if self._library is not None:
             self._library.close()
@@ -821,6 +844,7 @@ class Api:
         # The server hands files to the player, so it has to look at the new
         # folder right away, without restarting the app.
         self._server.set_media_root(folder)
+        self._names_pass.request()
         return {"ok": True, "recordings_dir": str(folder)}
 
     def choose_recordings_dir(self):
@@ -1998,6 +2022,48 @@ class Api:
 
     # ---------- renaming ----------
 
+    def _move_take_dir(self, folder, take_number, take, name):
+        """
+        A take's folder renamed to carry `name`, so the names still make
+        sense browsing the disk. Returns (moved, tracks, error): the (old,
+        new) folders when it moved, the take's files at their new paths
+        (None when nothing moved), and why it could not be moved.
+        """
+        old_dirs = {Path(t["file"]).parent for t in take["tracks"] if t.get("file")}
+        if len(old_dirs) != 1:
+            return None, None, None
+        old_dir = old_dirs.pop()
+        target = folder / _take_dir_name(take_number, name)
+        # Path itself compares case-insensitively on Windows, so whether
+        # the spelling actually changed is asked of plain strings.
+        same_spelling = str(target) == str(old_dir)
+        same_folder = same_spelling or (
+            target.exists() and old_dir.exists() and target.samefile(old_dir)
+        )
+        if same_folder:
+            # The name is unchanged, or changes only in case (a case-blind
+            # file system sees the same folder either way). A case-only
+            # rename is still a real change to show, so it is made in place;
+            # otherwise nothing moves — chasing `_unique_path` here would
+            # only push the take into its own "(2)" folder.
+            new_dir = old_dir if same_spelling else target
+        else:
+            new_dir = _unique_path(target)
+        if not old_dir.exists() or str(old_dir) == str(new_dir):
+            return None, None, None
+        # Windows will not rename a folder holding a file the player has
+        # mapped, and the rehearsal screen is usually playing the very take
+        # it offers to rename. The interface reopens the take from its new
+        # path afterwards.
+        self._release_player_in(old_dir)
+        try:
+            old_dir.rename(new_dir)
+        except OSError as e:
+            return None, None, str(e)
+        return ((old_dir, new_dir),
+                [{**t, "file": str(new_dir / Path(t["file"]).name)} for t in take["tracks"]],
+                None)
+
     def rename_take(self, folder, take_number, new_name):
         """Renames a take and its folder on disk, keeping paths in sync."""
         folder = Path(folder)
@@ -2008,77 +2074,41 @@ class Api:
         if not display_name:
             return {"ok": False, "error": "Name cannot be empty"}
 
-        take = self._lib.take(folder, take_number)
-        if take is None:
-            if not self._lib.has(folder):
-                return {"ok": False, "error": "Rehearsal not found"}
-            return {"ok": False, "error": "Take not found"}
+        with self._files_lock:
+            take = self._lib.take(folder, take_number)
+            if take is None:
+                if not self._lib.has(folder):
+                    return {"ok": False, "error": "Rehearsal not found"}
+                return {"ok": False, "error": "Take not found"}
 
-        # The folder carries the name the take ends up with, which can differ
-        # from what was typed: renamed to its own song, a take keeps its go.
-        named = self._lib.resolve_name(folder, display_name, take_number)
+            # The folder carries the name the take ends up with, which can
+            # differ from what was typed: renamed to its own song, a take
+            # keeps its go.
+            named = self._lib.resolve_name(folder, display_name, take_number)
+            moved, new_tracks, error = self._move_take_dir(
+                folder, take_number, take, named["name"])
+            if error is not None:
+                print(f"[rename] take folder: {error}")
 
-        # The take's own folder is named after it, so rename that too — the
-        # names should still make sense when browsing the disk directly.
-        old_dirs = {
-            Path(t["file"]).parent for t in take["tracks"] if t.get("file")
-        }
-        moved = None
-        new_tracks = None
-        if len(old_dirs) == 1:
-            old_dir = old_dirs.pop()
-            target = folder / _take_dir_name(take_number, named["name"])
-            # Path itself compares case-insensitively on Windows, so whether
-            # the spelling actually changed is asked of plain strings.
-            same_spelling = str(target) == str(old_dir)
-            same_folder = same_spelling or (
-                target.exists() and old_dir.exists() and target.samefile(old_dir)
-            )
-            if same_folder:
-                # The name is unchanged, or changes only in case (a
-                # case-blind file system sees the same folder either way).
-                # A case-only rename is still a real change to show, so it
-                # is made in place; otherwise nothing moves — chasing
-                # `_unique_path` here would only push the take into its own
-                # "(2)" folder.
-                new_dir = old_dir if same_spelling else target
-            else:
-                new_dir = _unique_path(target)
-            if old_dir.exists() and str(old_dir) != str(new_dir):
-                # Windows will not rename a folder holding a file the
-                # player has mapped, and the rehearsal screen is usually
-                # playing the very take it offers to rename. The interface
-                # reopens the take from its new path afterwards.
-                self._release_player_in(old_dir)
-                try:
-                    old_dir.rename(new_dir)
-                    moved = (old_dir, new_dir)
-                    new_tracks = [
-                        {**t, "file": str(new_dir / Path(t["file"]).name)}
-                        for t in take["tracks"]
-                    ]
-                except OSError as e:
-                    print(f"[rename] take folder: {e}")
+            try:
+                updated = self._lib.update_take(
+                    folder, take_number, name=display_name, tracks=new_tracks
+                )
+            except Exception:
+                # The folder must not stay renamed under a record that still
+                # points at the old one: the take would stop opening.
+                if moved:
+                    moved[1].rename(moved[0])
+                raise
+            if updated is None:
+                # Deleted while the folder was being renamed.
+                if moved:
+                    moved[1].rename(moved[0])
+                return {"ok": False, "error": "Take not found"}
 
-        try:
-            updated = self._lib.update_take(
-                folder, take_number, name=display_name, tracks=new_tracks
-            )
-        except Exception:
-            # The folder must not stay renamed under a record that still
-            # points at the old one: the take would stop opening.
-            if moved:
-                moved[1].rename(moved[0])
-            raise
-        if updated is None:
-            # Deleted while the folder was being renamed.
-            if moved:
-                moved[1].rename(moved[0])
-            return {"ok": False, "error": "Take not found"}
-
-        # The copies in the cloud folder are named after the take.
-        self._rename_take_copies(folder, take_number, updated)
-        return {"ok": True, "take": updated}
+            # The copies in the cloud folder are named after the take.
+            self._rename_take_copies(folder, take_number, updated)
+            return {"ok": True, "take": updated}
 
     def rename_rehearsal(self, folder, new_name):
         """Renames a rehearsal and its folder. Its takes' files are kept
@@ -2626,31 +2656,32 @@ class Api:
         if not self._inside_recordings(folder):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
-        target = self._lib.take(folder, take_number)
-        if target is None:
-            if not self._lib.has(folder):
-                return {"ok": False, "error": "Rehearsal not found"}
-            return {"ok": False, "error": "Take not found"}
+        with self._files_lock:
+            target = self._lib.take(folder, take_number)
+            if target is None:
+                if not self._lib.has(folder):
+                    return {"ok": False, "error": "Rehearsal not found"}
+                return {"ok": False, "error": "Take not found"}
 
-        # Find the take folder from its files rather than its name: the name
-        # could have been changed by hand.
-        take_dirs = {
-            str(Path(t["file"]).parent)
-            for t in target["tracks"]
-            if t.get("file")
-        }
-        result = {"ok": True, "trashed": False, "location": None}
-        for d in take_dirs:
-            if Path(d).exists() and self._inside_recordings(d):
-                self._release_player_in(d)
-                result = move_to_trash(d, self._recordings_dir)
+            # Find the take folder from its files rather than its name: the name
+            # could have been changed by hand.
+            take_dirs = {
+                str(Path(t["file"]).parent)
+                for t in target["tracks"]
+                if t.get("file")
+            }
+            result = {"ok": True, "trashed": False, "location": None}
+            for d in take_dirs:
+                if Path(d).exists() and self._inside_recordings(d):
+                    self._release_player_in(d)
+                    result = move_to_trash(d, self._recordings_dir)
 
-        # Its copy in the cloud goes the same way: a take deleted here must
-        # not stay in the band's folder looking like one worth keeping. A copy
-        # still being made cleans up after itself when it finds the take gone.
-        self._remove_shared(target)
-        left = self._lib.delete_take(folder, take_number)
-        return {**result, "takes_left": left}
+            # Its copy in the cloud goes the same way: a take deleted here must
+            # not stay in the band's folder looking like one worth keeping. A copy
+            # still being made cleans up after itself when it finds the take gone.
+            self._remove_shared(target)
+            left = self._lib.delete_take(folder, take_number)
+            return {**result, "takes_left": left}
 
     def delete_rehearsal(self, folder):
         folder = Path(folder)
@@ -3369,3 +3400,90 @@ class Api:
                     shared[k] = str(goes_to / Path(shared[k]).name)
             shared["source"] = {**(shared.get("source") or {}), "dir": target}
             self._lib.set_cloud_copy(new_folder, t["take_number"], shared, cloud)
+
+    # ---------- putting names right ----------
+
+    def _out_of_line(self, take):
+        """
+        What of a take does not carry its name: a subset of {"disk",
+        "cloud"}. Only what can be renamed counts: a take whose files are in
+        more than one folder, or are not on disk, has no folder to rename.
+        """
+        wrong = set()
+        dirs = {Path(t["file"]).parent for t in take["tracks"] if t.get("file")}
+        if len(dirs) == 1:
+            d = next(iter(dirs))
+            if d.is_dir() and not _carries(d.name, _take_dir_name(take["take_number"], take["name"])):
+                wrong.add("disk")
+        shared = take.get("cloud") or {}
+        base = self._cloud_base(take["take_number"], take)
+        for key in ("mix", "tracks"):
+            if shared.get(key):
+                path = Path(shared[key])
+                if (path.stem if key == "mix" else path.name) != base:
+                    wrong.add("cloud")
+        return wrong
+
+    def _names_out_of_line(self):
+        """Every take on disk whose folder or cloud copy does not carry its
+        name, as (folder, take_number, name). The database, plus one
+        is_dir() per take."""
+        if self._library is None:
+            return []
+        todo = []
+        for r in self._lib.rehearsals():
+            if r["missing"]:
+                continue
+            for t in r["takes"]:
+                if self._out_of_line(t):
+                    todo.append((r["folder"], t["take_number"], t["name"]))
+        return todo
+
+    def _names_must_wait(self):
+        """Files in use: a take recording, a copy being made, or a take being
+        saved, cropped or recovered. The pass waits for them."""
+        if self._recorder is not None or self._cloud_queue.busy():
+            return True
+        return any(e["state"] == "running" and e["kind"] in ("stop", "crop", "recover")
+                   for e in self._journal.snapshot())
+
+    def _playing_from(self, take):
+        """Whether the player has this take's files open."""
+        with self._player_lock:
+            open_tracks = self._open_tracks or []
+            return any(_is_inside(o["file"], Path(t["file"]).parent)
+                       for o in open_tracks for t in take["tracks"] if t.get("file"))
+
+    def _put_name_right(self, folder, take_number):
+        """
+        One take's folder and cloud copies renamed to carry its name, as
+        rename_take would. A take open in the player is left for the next
+        open, rather than closed under whoever is listening.
+        """
+        folder = Path(folder)
+        with self._files_lock:
+            take = self._lib.take(folder, take_number)
+            wrong = self._out_of_line(take) if take is not None else set()
+            if not wrong:
+                return {"renamed": False, "error": None}
+            if "disk" in wrong:
+                if self._playing_from(take):
+                    return {"renamed": False, "error": None}
+                moved, tracks, error = self._move_take_dir(
+                    folder, take_number, take, take["name"])
+                if error is not None:
+                    return {"renamed": False, "error": error}
+                try:
+                    updated = self._lib.update_take(folder, take_number, tracks=tracks)
+                except Exception as e:
+                    if moved:
+                        moved[1].rename(moved[0])
+                    return {"renamed": False, "error": str(e)}
+                if updated is None:
+                    if moved:
+                        moved[1].rename(moved[0])
+                    return {"renamed": False, "error": None}
+                take = updated
+            if "cloud" in wrong and self._cloud_dir is not None:
+                self._rename_take_copies(folder, take_number, take)
+            return {"renamed": True, "error": None}

@@ -340,7 +340,7 @@ export type DiskEstimate = {
 /** One piece of long work — see activity.py. */
 export type ActivityEntry = {
   id: number
-  kind: "cloud" | "crop" | "stop" | "recover"
+  kind: "cloud" | "crop" | "stop" | "recover" | "names"
   title: string
   folder: string | null
   take_number: number | null

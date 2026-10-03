@@ -5692,6 +5692,148 @@ def main():
        got52["ok"] and got52["take"]["name"] == "Take 4"
        and folder_of(got52["take"]) == "04 - Take 4")
 
+    print("\n[53] Putting names right")
+    import shutil
+    from sqlalchemy import text as sql_text
+    from rehearsal_recorder.activity import Journal
+    from rehearsal_recorder.names_pass import NamesPass
+    from rehearsal_recorder.store import db as dbmod
+
+    # The loop: waits while files are busy, renames take by take, one entry.
+    journal53 = Journal()
+    fixed53 = []
+    waits53 = iter([True, True, False, False])
+
+    def fix53(folder, number):
+        fixed53.append(number)
+        if number == 1:
+            return {"renamed": True, "error": None}
+        return {"renamed": False, "error": "it is open elsewhere"}
+
+    loop53 = NamesPass(find=lambda: [("/r", 1, "Polyn 1"), ("/r", 2, "Vesna 1")], fix=fix53,
+                       busy=lambda: next(waits53, False), journal=journal53, wait=0.001)
+    ok("it waits while files are in use, then renames take by take",
+       loop53.run() == 1 and fixed53 == [1, 2])
+    entry53 = journal53.snapshot()[0]
+    ok("one entry for the whole pass, saying which take was left and why",
+       entry53["kind"] == "names" and entry53["title"] == "Putting names right"
+       and entry53["state"] == "failed"
+       and "“Vesna 1”: it is open elsewhere" in entry53["error"])
+    quiet53 = Journal()
+    ok("with nothing to put right it shows nothing",
+       NamesPass(find=lambda: [], fix=fix53, busy=lambda: False, journal=quiet53).run() == 0
+       and quiet53.snapshot() == [])
+    stopped53 = Journal()
+    halted53 = NamesPass(find=lambda: [("/r", 3, "Ogon 1")], fix=fix53, busy=lambda: True,
+                         journal=stopped53, wait=0.001)
+    halted53.stop()
+    ok("stopped while it waits, it renames nothing and leaves nothing behind",
+       halted53.run() == 0 and 3 not in fixed53 and stopped53.snapshot() == [])
+
+    # The real thing: a library from before songs, opened by this version.
+    tmp53 = Path(tempfile.mkdtemp())
+    rec53, cloud53 = tmp53 / "Rec", tmp53 / "Drive"
+    jam53 = rec53 / "Jam - 2026-01-10 19-00"
+    later53 = rec53 / "Later - 2026-01-17 19-00"
+    upto53 = tmp53 / "migrations"
+    shutil.copytree(dbmod.MIGRATIONS, upto53, ignore=shutil.ignore_patterns("__pycache__"))
+    for f in (upto53 / "versions").glob("*.py"):
+        if f.name[:4] > "0001":
+            f.unlink()
+    rec53.mkdir(parents=True)
+    dbmod.open_engine(rec53, upto53).dispose()
+    engine53 = dbmod.make_engine(dbmod.database_path(rec53))
+    with engine53.begin() as c:
+        for folder53, created53, names53 in (
+                (jam53, "2026-01-10T19:00:00", ["Polyn", "polyn 2", "Recovered take 3", "polyn 4"]),
+                (later53, "2026-01-17T19:00:00", ["Polyn"])):
+            rid = c.execute(sql_text(
+                "INSERT INTO rehearsal (folder, name, created_at, samplerate, bit_depth) "
+                "VALUES (:f, :f, :c, 48000, 16)"), {"f": folder53.name, "c": created53}).lastrowid
+            for n, old in enumerate(names53, start=1):
+                take_dir = folder53 / f"{n:02d} - {old}"
+                write_wav(take_dir / "Gtr.wav", 100, seconds=0.5)
+                tid = c.execute(sql_text(
+                    "INSERT INTO take (rehearsal_id, take_number, name, duration_sec, "
+                    "cloud_skip, cloud_send) VALUES (:r, :n, :name, 0.5, 0, 0)"),
+                    {"r": rid, "n": n, "name": old}).lastrowid
+                c.execute(sql_text("INSERT INTO take_file (take_id, position, name, file) "
+                                   "VALUES (:t, 0, 'Gtr', :f)"),
+                          {"t": tid, "f": f"{take_dir.name}/Gtr.wav"})
+                if folder53 == jam53 and n == 2:
+                    mix = cloud53 / jam53.name / f"{n:02d} - {old}.wav"
+                    mix.parent.mkdir(parents=True)
+                    mix.write_bytes(b"RIFF")
+                    c.execute(sql_text("INSERT INTO cloud_copy (take_id, mix, mix_format, source) "
+                                       "VALUES (:t, :m, 'wav', '{}')"),
+                              {"t": tid, "m": f"{jam53.name}/{mix.name}"})
+    engine53.dispose()
+    (tmp53 / "config.json").write_text(json.dumps(
+        {"recordings_dir": str(rec53), "cloud_dir": str(cloud53)}), encoding="utf-8")
+    _, p53 = fresh_api(tmp53)
+
+    def dirs53(folder=jam53):
+        return sorted(p.name for p in folder.iterdir() if p.is_dir())
+
+    real_move53 = p53._move_take_dir
+
+    def refuse_take_4(folder, number, take, name):
+        if number == 4:
+            return None, None, "the folder is open in another program"
+        return real_move53(folder, number, take, name)
+
+    p53._move_take_dir = refuse_take_4
+    try:
+        renamed53 = p53._names_pass.run()
+    finally:
+        p53._move_take_dir = real_move53
+    takes53 = {t["take_number"]: t for t in p53.get_rehearsal(str(jam53))["takes"]}
+    ok("old names are put right on disk: the first go gains its number, a case-only "
+       "rename is made, and a recovered take is Take N",
+       renamed53 == 4
+       and dirs53() == ["01 - Polyn 1", "02 - Polyn 2", "03 - Take 3", "04 - polyn 4"]
+       and Path(takes53[2]["tracks"][0]["file"]).exists())
+    ok("goes are numbered across the library on disk too",
+       dirs53(later53) == ["01 - Polyn 4"])
+    ok("and in the cloud folder",
+       Path(takes53[2]["cloud"]["mix"]).name == "02 - Polyn 2.wav"
+       and sorted(p.name for p in (cloud53 / jam53.name).iterdir()) == ["02 - Polyn 2.wav"])
+    names_entry53 = next(e for e in p53.activity()["entries"] if e["kind"] == "names")
+    ok("a take that could not be renamed is left, and the background work says which and why",
+       names_entry53["state"] == "failed" and "“Polyn 3”" in names_entry53["error"]
+       and "open in another program" in names_entry53["error"])
+    ok("the next pass picks it up",
+       p53._names_pass.run() == 1 and "04 - Polyn 3" in dirs53())
+    entries53 = len(p53.activity()["entries"])
+    ok("once every name matches, a pass renames nothing and says nothing",
+       p53._names_pass.run() == 0 and len(p53.activity()["entries"]) == entries53)
+
+    takes53 = {t["take_number"]: t for t in p53.get_rehearsal(str(jam53))["takes"]}
+    taken53 = jam53 / "03 - Take 3 (2)"
+    Path(takes53[3]["tracks"][0]["file"]).parent.rename(taken53)
+    p53._lib.update_take(jam53, 3, tracks=[{"name": "Gtr", "file": str(taken53 / "Gtr.wav")}])
+    ok("a folder that took “(2)” because the name was taken counts as carrying it",
+       all(n != 3 for _, n, _ in p53._names_out_of_line()))
+
+    lower53 = jam53 / "01 - polyn 1"
+    Path(takes53[1]["tracks"][0]["file"]).parent.rename(lower53)
+    p53._lib.update_take(jam53, 1, tracks=[{"name": "Gtr", "file": str(lower53 / "Gtr.wav")}])
+    p53.player_open([{"name": "Gtr", "file": str(lower53 / "Gtr.wav")}])
+    ok("a take open in the player is left for next time, not closed under the listener",
+       p53._names_pass.run() == 0 and "01 - polyn 1" in dirs53()
+       and p53._open_tracks is not None)
+    p53.player_close()
+    ok("and is renamed once the player lets go",
+       p53._names_pass.run() == 1 and "01 - Polyn 1" in dirs53())
+
+    p53._recorder = object()
+    ok("it waits while a take records", p53._names_must_wait())
+    p53._recorder = None
+    crop53 = p53._journal.begin("crop", "Cropping")
+    ok("and while a take is being cropped", p53._names_must_wait())
+    crop53.done()
+    ok("and not otherwise", not p53._names_must_wait())
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
