@@ -114,3 +114,48 @@ test("every starred pill carries ★, not only the open one", async ({ page }) =
   await expect(strip.getByRole("button", { name: /^Take 1 Polyn 1, starred/ })).toBeVisible()
   await expect(strip.getByRole("button", { name: /^Take 3 Take 3, starred/ })).toBeVisible()
 })
+
+const lastTime = (page: Page) => page.getByRole("complementary", { name: "Last time" })
+
+test("Last time's ▶ plays a song's newest ★ go, and says which", async ({ page }) => {
+  await openApp(page, {
+    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#1'];",
+  })
+  const polyn = lastTime(page).locator("[data-song='Polyn']")
+  await expect(polyn.locator("[data-plays]")).toHaveText("★ Polyn 1 · Thu 10 Sep")
+  await polyn.getByRole("button", { name: "Play Polyn 1, the starred go at Polyn" }).click()
+  expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
+    { name: "Guitar", file: "/rec/old/p1.wav" },
+  ])
+  await expect(polyn.locator("[data-starred]")).toHaveCount(1)
+  // Vesna has no ★: its last go, as before, and nothing more said.
+  const vesna = lastTime(page).locator("[data-song='Vesna']")
+  await expect(vesna.locator("[data-plays]")).toHaveCount(0)
+  await expect(
+    vesna.getByRole("button", { name: "Play Vesna 1, the last go at Vesna" })
+  ).toBeVisible()
+})
+
+test("a ★ on last time's last go plays it and says nothing more", async ({ page }) => {
+  await openApp(page, {
+    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#2'];",
+  })
+  const polyn = lastTime(page).locator("[data-song='Polyn']")
+  await expect(polyn.locator("[data-plays]")).toHaveCount(0)
+  await expect(
+    polyn.getByRole("button", { name: "Play Polyn 2, the starred go at Polyn" })
+  ).toBeVisible()
+  await expect(polyn.locator("[data-starred]")).toHaveCount(1)
+})
+
+test("a song not played last time plays its ★ go too", async ({ page }) => {
+  await openApp(page, {
+    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/older#1'];",
+  })
+  const leftOut = lastTime(page).getByRole("region", { name: "Not played last time" })
+  await expect(leftOut).toContainText("★ Doroga 1 · ")
+  await leftOut.getByRole("button", { name: "Play Doroga 1, the starred go at Doroga" }).click()
+  expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
+    { name: "Guitar", file: "/rec/older/d1.wav" },
+  ])
+})

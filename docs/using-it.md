@@ -69,12 +69,14 @@ recording quality into account.
 
 Left of the tracks, or under them in a narrow window, is the rehearsal before
 this one, song by song: how many goes each song got and how long they ran,
-with the notes you left while listening. ▶ on a song plays its last go,
-which is usually the version you settled on. Listen to where you left off
-before you start.
+with the notes you left while listening. ▶ on a song plays its newest
+starred take (★), wherever you played it, and says which and when if it is
+not last time's last go. A song with no star plays its last go, which is
+usually the version you settled on. Listen to where you left off before you
+start.
 
 Under it are the songs you did not play last time, each with the day it was
-last played and its last go to listen to, and the rehearsals before that.
+last played and its newest starred take, or its last go, to listen to, and the rehearsals before that.
 **Open**, or a rehearsal in the list, opens it in History, and **History**
 under the list opens the newest, as the button at the top does. A soundcheck with
 no named takes is skipped: last time is the last rehearsal that played a
@@ -225,6 +227,20 @@ Press Esc to close the take. If it is playing, it goes on playing in the
 list of takes; press Esc again to stop it. While a take is open or playing,
 Space plays and pauses it instead of starting a new recording.
 
+### Starring a take
+
+A star (★) marks a take worth coming back to: the version you settled on,
+or the one where it finally worked. Click the star on a take's row in the
+list of takes, where it shows under the mouse, or beside the open take in
+the strip. Click it again to take it off. A song can have several starred
+takes, and a take with no song can have one too.
+
+A starred take is the green one, in the list of takes and in the evening
+strip, and its button in the strip carries a ★. A *keep this* mark is
+about a moment, and stays a dot on the take's bar. ▶ on a song, rather than
+on a take, plays its newest starred take. The star stays with its take when
+you rename it or crop it, and goes when you delete it.
+
 ### Zooming in
 
 ![Zoomed in to a few seconds, where every drum hit shows](screenshots/zoom.png)
@@ -284,7 +300,7 @@ that is open in the player, it starts again from the beginning.
 chosen one beside the list. It opens on the newest. Each rehearsal in the
 list shows when it was, how long you played and how many takes there are,
 with the evening drawn as a strip: a bar for each take, as long as the take,
-grouped by song, and green for a take marked *keep this*. You can see at a
+grouped by song, and green for a starred take. You can see at a
 glance how many songs you played and how many goes each one got.
 
 Click a rehearsal to show it, or go through them with ↑ and ↓. Its takes

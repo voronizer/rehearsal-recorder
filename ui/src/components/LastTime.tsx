@@ -12,7 +12,7 @@ import {
   takesLabel,
 } from "@/lib/format"
 import { markerStyle } from "@/lib/markers"
-import type { LastTime as LastTimeData, Take } from "@/lib/api"
+import type { LastTime as LastTimeData, SongPlays, Take } from "@/lib/api"
 
 /** What is playing from here, and where it has got to. */
 export type LastTimePlayback = {
@@ -33,11 +33,12 @@ const LEFT_OUT_SHOWN = 5
  * so the band can hear where they left off before they start.
  *
  * Built on what every take has — its song, how many goes it got, how long
- * each ran — and not on marks, which are few: a song's row plays its last
- * go, which is usually the one they settled on. The notes left while
- * listening are added under their song where there are any. Under it, the
- * songs that were not played last time, each with its own last go, and the
- * other rehearsals, which open in history.
+ * each ran — and not on marks, which are few: a song's row plays its newest
+ * ★ go, wherever it was played, or with none its last go, which is usually
+ * the one they settled on. The notes left while listening are added under
+ * their song where there are any. Under it, the songs that were not played
+ * last time, each with its own newest ★ go or last go, and the other
+ * rehearsals, which open in history.
  */
 export function LastTime({
   data,
@@ -62,6 +63,7 @@ export function LastTime({
   const songs = last.songs
     .map((s) => ({
       name: s.name,
+      plays: s.plays,
       takes: (s.take_numbers ?? [])
         .map((n) => byNumber.get(n))
         .filter((t): t is Take => t !== undefined),
@@ -117,6 +119,8 @@ export function LastTime({
               key={s.name}
               name={s.name}
               takes={s.takes}
+              plays={s.plays}
+              folder={last.folder}
               longest={longest}
               playback={playback}
               onPlay={onPlay}
@@ -127,6 +131,8 @@ export function LastTime({
               name="Not named"
               unnamed
               takes={unnamed}
+              plays={null}
+              folder={last.folder}
               longest={longest}
               playback={playback}
               onPlay={onPlay}
@@ -141,8 +147,16 @@ export function LastTime({
             Not played last time
           </h2>
           {leftOut.map((s) => {
-            const here = playback?.take === s.take ? playback : null
+            const target = s.plays.take
+            const starred = target.starred ?? false
+            const here = playback?.take === target ? playback : null
             const ago = longAgo(s.created_at)
+            // A ★ go from another rehearsal than the one listed says its day.
+            const star = starred
+              ? `★ ${target.name}${
+                  s.plays.folder !== s.folder ? ` (${formatDay(s.plays.created_at)})` : ""
+                } · `
+              : ""
             return (
               <div
                 key={s.name}
@@ -150,17 +164,17 @@ export function LastTime({
                 className="grid grid-cols-[1.75rem_minmax(0,1fr)] items-center gap-x-3 px-1 py-1"
               >
                 <PlayButton
-                  take={s.take}
+                  take={target}
                   here={here}
-                  label={`${s.take.name}, the last go at ${s.name}`}
+                  label={`${target.name}, the ${starred ? "starred" : "last"} go at ${s.name}`}
                   onPlay={onPlay}
                 />
                 <div className="flex min-w-0 items-baseline gap-2">
                   <span className="truncate text-[13px] font-semibold">{s.name}</span>
                   <span className="tnum truncate text-xs text-muted-foreground">
                     {here
-                      ? `${formatMMSS(here.position)} / ${formatMMSS(s.take.duration_sec)}`
-                      : `${formatDay(s.created_at)}${ago ? `, ${ago}` : ""} · ${goesLabel(s.goes)}`}
+                      ? `${formatMMSS(here.position)} / ${formatMMSS(target.duration_sec)}`
+                      : `${star}${formatDay(s.created_at)}${ago ? `, ${ago}` : ""} · ${goesLabel(s.goes)}`}
                   </span>
                 </div>
               </div>
@@ -229,12 +243,14 @@ export function LastTime({
 }
 
 /**
- * One song of last time: its goes as bars as tall as they ran, the last one
- * lit, since that is the one its button plays.
+ * One song of last time: its goes as bars as tall as they ran, the starred
+ * ones green, and the one its button plays lit when it is one of them.
  */
 function SongRow({
   name,
   takes,
+  plays,
+  folder,
   longest,
   unnamed = false,
   playback,
@@ -242,13 +258,23 @@ function SongRow({
 }: {
   name: string
   takes: Take[]
+  /** What ▶ plays: the song's newest ★ go, or its last go here. null for
+   *  the takes nobody named, which have no song and play their last take. */
+  plays: SongPlays | null
+  /** Last time's folder, to tell its own takes from another rehearsal's. */
+  folder: string
   longest: number
   unnamed?: boolean
   playback: LastTimePlayback | null
   onPlay: (take: Take) => void
 }) {
   const lastGo = takes[takes.length - 1]
-  const here = playback?.take === lastGo ? playback : null
+  const target = plays?.take ?? lastGo
+  const isTarget = (t: Take) =>
+    plays ? plays.folder === folder && plays.take.take_number === t.take_number : t === lastGo
+  // Said in words only when ▶ plays something the bars do not end on.
+  const elsewhere = plays !== null && !isTarget(lastGo)
+  const here = playback?.take === target ? playback : null
   const total = takes.reduce((sum, t) => sum + (t.duration_sec || 0), 0)
   const notes = takes.flatMap((t) =>
     (t.markers ?? [])
@@ -262,9 +288,11 @@ function SongRow({
       className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-x-3 border-t py-2"
     >
       <PlayButton
-        take={lastGo}
+        take={target}
         here={here}
-        label={unnamed ? lastGo.name : `${lastGo.name}, the last go at ${name}`}
+        label={
+          unnamed ? target.name : `${target.name}, the ${target.starred ? "starred" : "last"} go at ${name}`
+        }
         onPlay={onPlay}
       />
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -279,10 +307,15 @@ function SongRow({
           </span>
           <span className="tnum shrink-0 text-xs text-muted-foreground">
             {here
-              ? `${formatMMSS(here.position)} / ${formatMMSS(lastGo.duration_sec)}`
+              ? `${formatMMSS(here.position)} / ${formatMMSS(target.duration_sec)}`
               : `${unnamed ? takesLabel(takes.length) : goesLabel(takes.length)} · ${formatMMSS(total)}`}
           </span>
         </div>
+        {elsewhere && plays && (
+          <span data-plays className="truncate text-xs text-muted-foreground">
+            ★ {plays.take.name} · {formatDay(plays.created_at)}
+          </span>
+        )}
         {notes.slice(0, NOTES_SHOWN).map(({ take, marker }) => {
           const style = markerStyle(marker.kind)
           return (
@@ -311,11 +344,12 @@ function SongRow({
         {takes.map((t) => (
           <span
             key={t.take_number}
+            data-starred={t.starred || undefined}
             className={cn(
               "w-1.5 rounded-[2px]",
-              t.markers?.some((m) => m.kind === "good")
+              t.starred
                 ? "bg-signal"
-                : t === lastGo
+                : isTarget(t)
                   ? "bg-muted-foreground"
                   : "bg-muted-foreground/35"
             )}
