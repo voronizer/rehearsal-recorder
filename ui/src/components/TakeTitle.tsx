@@ -22,7 +22,7 @@ export function GoTitle({
 }) {
   const number =
     go != null ? (
-      <span className={cn("tnum text-muted-foreground", cut && "shrink-0")}>
+      <span data-go className={cn("tnum text-muted-foreground", cut && "shrink-0 whitespace-pre")}>
         {" "}
         {go}
       </span>
@@ -36,7 +36,7 @@ export function GoTitle({
     )
   return (
     <span className="flex max-w-full min-w-0">
-      <span className="truncate">{title}</span>
+      <span data-go-title className="truncate">{title}</span>
       {number}
     </span>
   )

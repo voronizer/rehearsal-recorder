@@ -661,3 +661,21 @@ test("until the songs are in, the go beside the field is Python's, never a guess
   await expect(page.getByRole("heading", { level: 1, name: "Polyn 3" })).toBeVisible()
   await page.evaluate(() => (window as unknown as { __RELEASE_song_choices: () => void }).__RELEASE_song_choices())
 })
+
+test("the go sits apart from the title, not run into it", async ({ page }) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await recordTake(page)
+  await saveAs(page, "Polyn")
+  const take = page.getByRole("button", { name: /^Take 1 Polyn 1/ })
+  const title = await take.locator("[data-go-title]").boundingBox()
+  // The go's box starts with its space, so measure where its digit is drawn.
+  const digitX = await take.locator("[data-go]").evaluate((el) => {
+    const text = el.lastChild as Text
+    const range = document.createRange()
+    range.setStart(text, 0)
+    range.setEnd(text, text.length)
+    return range.getBoundingClientRect().x
+  })
+  expect(digitX - (title!.x + title!.width)).toBeGreaterThan(2)
+})
