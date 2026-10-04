@@ -16,7 +16,7 @@ rehearsal, and the app cannot answer it there.
 This puts the song's earlier goes on the rehearsal screen, for the song the
 next take is named for, and lets the recording screen's bar use them. It
 stands on [songs in the store](2026-10-02-songs-in-the-store-design.md) and
-[the one](2026-10-02-the-one-take-design.md).
+[stars](2026-10-02-stars-design.md).
 
 ## Decisions
 
@@ -24,10 +24,10 @@ stands on [songs in the store](2026-10-02-songs-in-the-store-design.md) and
   next take is named for, the one the band is about to play. Pick another
   song under the field and the panel changes with it. A take named "Take N"
   has no panel.
-- **D2. A few goes, not the song's whole history.** The one, and the last
-  go at each of the song's last three rehearsals before tonight, deduplicated
-  when the one is among them. The panel is a glance before playing, and the
-  full list is on the song's page.
+- **D2. A few goes, not the song's whole history.** Its newest ★ go, and
+  the last go at each of the song's last three rehearsals before tonight,
+  deduplicated when the ★ go is among them. The panel is a glance before
+  playing, and the full list is on the song's page.
 - **D3. It plays in place, without leaving the rehearsal.** ▶ plays a go
   right in the panel, as Last time does on the setup screen; nothing opens.
   Recording puts it away.
@@ -40,7 +40,7 @@ stands on [songs in the store](2026-10-02-songs-in-the-store-design.md) and
     rehearsals, and not while a take is open in the player.
   - Each go is a row:
     - ▶;
-    - the go's name and ★ when it is the one;
+    - the go's name, and ★ when it has one;
     - the rehearsal's date ("28 Sep");
     - its length;
     - a bar to scale.
@@ -61,16 +61,16 @@ stands on [songs in the store](2026-10-02-songs-in-the-store-design.md) and
 ## The recording screen
 
 - **R1. "Took X last time" falls back to earlier rehearsals.** When
-  tonight has no go at the song yet, `last_attempt` is the one, or the last
-  go of the song's latest earlier rehearsal. The line then names the day:
+  tonight has no go at the song yet, `last_attempt` is the song's newest ★
+  go, or the last go of the song's latest earlier rehearsal. The line then names the day:
   "Took 3:05 on 28 Sep". With a go tonight it stays tonight's, "Took 2:21
   last time", as now.
 
 ## Python
 
 - **A1.** `earlier_goes(song_id, limit_rehearsals=3)`:
-  - D2's takes as `[{folder, rehearsal, created_at, take, best}]`, newest
-    first;
+  - D2's takes as `[{folder, rehearsal, created_at, take}]`, newest first,
+    each `take` with its `starred`;
   - the rehearsal in progress is left out.
 - **A2.** `session_state`'s `last_attempt` gains `created_at`, set when the
   go came from an earlier rehearsal (R1).
@@ -82,8 +82,8 @@ stands on [songs in the store](2026-10-02-songs-in-the-store-design.md) and
 Tests come before the code, and each is seen failing first.
 
 - **Python:**
-  - A1's choice of goes: the one, the last go of each of three rehearsals,
-    the duplicate dropped;
+  - A1's choice of goes: the newest ★ go, the last go of each of three
+    rehearsals, the duplicate dropped;
   - tonight left out;
   - R1's fallback, and tonight's go taking over once there is one.
 - **Playwright:**

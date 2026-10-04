@@ -13,7 +13,7 @@ rehearsal — and makes it reachable from anywhere a song's name is shown. It
 is #12, widened from "a Songs view in History" to "a song is something you
 can open". It stands on
 [songs in the store](2026-10-02-songs-in-the-store-design.md) and
-[the one](2026-10-02-the-one-take-design.md).
+[stars](2026-10-02-stars-design.md).
 
 ## What the app has
 
@@ -56,7 +56,7 @@ can open". It stands on
 - **H2. Songs view, left:** every song, D2's order, one row each:
   - the title, big;
   - small, under it: "7 goes · 4 rehearsals · last 28 Sep";
-  - ★ when the song has one.
+  - ★ and how many, when the song has ★ goes ("★ 2").
 
   ↑ and ↓ go through them, as they go through rehearsals.
 - **H3. The last row is *Takes with no song*.** Its page lists those takes
@@ -69,10 +69,10 @@ can open". It stands on
 - **P1. The head:**
   - the title;
   - "12 goes in 5 rehearsals · first 2 Aug · last 30 Sep";
-  - a big ▶ that plays the one, or the last go without one (as everywhere,
-    per the one's D4).
-- **P2. The one, first, on its own:** its row with ★, its rehearsal and
-  date. Shown only when the song has one.
+  - a big ▶ that plays the newest ★ go, or the last go with none (as
+    everywhere, per stars' D4).
+- **P2. The ★ goes, first, on their own:** newest first, each row with ★,
+  its rehearsal and date. Shown only when the song has any.
 - **P3. Every go, D3's order.**
   - A heading per rehearsal: its name and date, which opens that rehearsal
     in the Rehearsals view.
@@ -112,13 +112,15 @@ can open". It stands on
 
 - **A1.** `list_songs()`:
   - every song as `{id, title, goes, rehearsals, first_played, last_played,
-    best}`;
-  - `best` is the one's `{folder, take_number}` or null;
+    starred}`;
+  - `starred` is how many of its goes have ★;
   - one query, no files read.
 - **A2.** `get_song(song_id)`:
-  - `{id, title, best, goes: [{folder, rehearsal, created_at, take}]}`,
+  - `{id, title, plays, goes: [{folder, rehearsal, created_at, take}]}`,
     newest first;
-  - `take` is the same take dict the rehearsal overview gets.
+  - `take` is the same take dict the rehearsal overview gets, `starred`
+    included;
+  - `plays` is the `{folder, take_number}` the head's ▶ plays (stars, D4).
 - **A3.** `get_song(None)` is H3's takes with no song, in the same shape.
 - **A4. Measure before deciding on paging.** Build a library of 300
   rehearsals × 20 takes and time A1 and A2. Paging is added only if A2 for
@@ -129,7 +131,8 @@ can open". It stands on
 Tests come before the code, and each is seen failing first.
 
 - **Python:**
-  - A1 and A2 on a small library: counts, dates, order, the one;
+  - A1 and A2 on a small library: counts, dates, order, the ★ count and
+    what ▶ plays;
   - A3;
   - a song renamed or merged shows under its new title.
 - **Playwright:**
@@ -137,7 +140,7 @@ Tests come before the code, and each is seen failing first.
   - the songs alphabetical, Cyrillic and Latin mixed, case-blind;
   - ↑ and ↓ through the songs;
   - a song's page with goes from three rehearsals, newest first;
-  - ▶ on the head plays the one;
+  - ▶ on the head plays the newest ★ go;
   - a go opened in the player, and Escape back to the same song;
   - a song title on the setup screen opening its page;
   - *Takes with no song*.

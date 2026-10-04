@@ -20,7 +20,7 @@ opening.
   the history is kept beside it, as `library.sqlite.bak-0001`), their goes
   numbered afresh in the order played, and their folders and cloud copies
   are renamed to match in the background, as *Putting names right*. This is
-  what the song pages and the one best take will stand on (#12).
+  what the song pages and starred takes will stand on (#12).
 - **The songs under the name fill two rows**, tonight's first and then the
   ones played at earlier rehearsals, and **All songs…** at the end opens
   every song you have played, alphabetically, in columns. When tonight

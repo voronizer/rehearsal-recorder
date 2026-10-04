@@ -1,7 +1,7 @@
-# Sort the evening: the finished screen as the place to pick the ones
+# Sort the evening: the finished screen as the place to star the good goes
 
 The moment a rehearsal finishes is the moment the band best remembers which
-go was the good one. The app lets that moment pass.
+goes were the good ones. The app lets that moment pass.
 
 - **The finished screen is a take count and a folder path**
   (`ui/src/screens/Finished.tsx`), with New rehearsal and History under it.
@@ -19,7 +19,7 @@ This makes the finished screen the place to sort the evening, while it is
 fresh. Nothing on it is required: New rehearsal and History stay where they
 are. It stands on
 [songs in the store](2026-10-02-songs-in-the-store-design.md) and
-[the one](2026-10-02-the-one-take-design.md).
+[stars](2026-10-02-stars-design.md).
 
 ## Decisions
 
@@ -38,8 +38,8 @@ are. It stands on
 
 - **S1. The head:** "Rehearsal finished", and under it the overview's
   figures: time played, takes, songs.
-- **S2. The evening, as the overview draws it,** with ★ on every row of a
-  song (the one's P1). ▶ plays a go in place. A click on a row opens it in
+- **S2. The evening, as the overview draws it,** with ★ on every row
+  (stars, P1). ▶ plays a go in place. A click on a row opens it in
   History, at this rehearsal, with the take open in the player.
 - **S3. *Not named*, with the song pills under each take.**
   - The row is the overview's, and under it the pills that the name field
@@ -50,14 +50,15 @@ are. It stands on
   - Typing is not offered here. A title nobody has played yet is given in
     the Rename dialog, as anywhere else.
 - **S4. Two actions over the evening, under it:**
-  - **Send the ones.** Sends tonight's ★ takes the way the app sends takes:
+  - **Send starred.** Sends tonight's ★ takes the way the app sends takes:
     the cloud folder today, the band's chat once that step lands. Disabled,
     with the reason in a tooltip, when nothing tonight has ★ or there is
     nowhere to send. A take already sent is not sent again.
   - **Clear out the rest…** Asks first: "Move 9 other goes of Polyn, Vesna
-    and Ogon to the Trash? 3.2 GB." That covers the goes, other than the one,
-    of every song whose one is tonight's. Songs with no ★, and takes with no
-    song, are left alone. Disabled when there is nothing to clear.
+    and Ogon to the Trash? 3.2 GB." That covers tonight's goes without ★ of
+    every song with a ★ go tonight. Songs with no ★ tonight, and takes with
+    no song, are left alone, starred or not. Disabled when there is nothing
+    to clear.
 - **S5. The footer is as it is now:** History, and New rehearsal with Space.
 
 ## Python
@@ -79,9 +80,10 @@ Tests come before the code, and each is seen failing first.
   - the finished screen draws the evening;
   - ★ on a row;
   - a pill under an unnamed take names it and moves it into its song;
-  - *Send the ones* sends only ★ takes, and is disabled with none;
+  - *Send starred* sends only ★ takes, and is disabled with none;
   - *Clear out the rest* asks first, with the count and size, deletes only
-    the other goes of songs with a ★ tonight, and leaves unnamed takes;
+    tonight's goes without ★ of songs with a ★ tonight, and leaves unnamed
+    takes;
   - Space still starts a new rehearsal;
   - a row opening History at this take.
 - **Python:**

@@ -24,7 +24,7 @@ each take as audio. Its caption carries the song as a hashtag, which finds
 every take of that song in one tap, plus the date, ★, and the take's notes
 as timestamps that seek. The cloud folder stays, for the original tracks.
 It stands on [songs in the store](2026-10-02-songs-in-the-store-design.md)
-and [the one](2026-10-02-the-one-take-design.md).
+and [stars](2026-10-02-stars-design.md).
 
 ## What Telegram gives (checked against the Bot API, 2026-10-02)
 
@@ -33,7 +33,7 @@ and [the one](2026-10-02-the-one-take-design.md).
   - Bots can send files of up to **50 MB**.
   - A caption holds up to 1024 characters.
 - **`editMessageCaption` and `editMessageMedia`** work on the bot's own
-  messages with no time limit. That covers a rename, a crop and ★ moving.
+  messages with no time limit. That covers a rename, a crop and ★.
 - **`deleteMessage`** says a message can only be deleted within 48 hours,
   except that a bot that is an administrator "can delete any message
   there". Older messages need checking on a real group (Step 1).
@@ -58,7 +58,7 @@ and [the one](2026-10-02-the-one-take-design.md).
 - **D2. The chat gets the mix, as MP3, always.** It is what a phone plays,
   and the music player needs MP3 or M4A, whatever format the cloud folder
   is set to. The original tracks go only to the cloud folder.
-- **D3. The chat mirrors the app.** A rename, a crop, ★ moving and a delete
+- **D3. The chat mirrors the app.** A rename, a crop, ★ and a delete
   in the app change the message, as they change the cloud copy today.
 - **D4. Setting up is the one place a key is pasted.** Everything after is
   mouse.
@@ -81,7 +81,7 @@ and [the one](2026-10-02-the-one-take-design.md).
       characters a hashtag cannot hold are dropped);
     - the go;
     - the rehearsal's day;
-    - ★ when it is the one.
+    - ★ when it has one.
   - **Under it, the take's marks, in order:** the time, the kind and the
     note.
   - A take with no song is tagged `#jam`.
@@ -95,10 +95,11 @@ and [the one](2026-10-02-the-one-take-design.md).
     is about 70 minutes.
   - Longer still, it is not sent to the chat, and the take says so: "Too
     long for Telegram".
-- **M4. *The ones*, a pinned message** the bot keeps up to date: every song
-  that has a one, alphabetically, each with its date. In a supergroup each
-  line links to its message; in a basic group, which has no message links,
-  it lists them without.
+- **M4. *Starred*, a pinned message** the bot keeps up to date: every song
+  with a ★ go, alphabetically, each with its newest ★ go (the one its ▶
+  plays in the app, stars D4) and that go's date. In a supergroup each line
+  links to its message; in a basic group, which has no message links, it
+  lists them without. ★ jams are not in it: `#jam` finds them.
 
 ## Keeping the chat in step (D3)
 
@@ -107,8 +108,8 @@ and [the one](2026-10-02-the-one-take-design.md).
   file and new `title`.
 - **K2. Crop:** the audio is replaced (`editMessageMedia`, new file), and
   the caption kept.
-- **K3. ★ moved:** both takes' captions are edited, and *The ones* is
-  updated.
+- **K3. ★ put on or taken off:** that take's caption is edited, and
+  *Starred* is updated.
 - **K4. Delete, or *Remove from the cloud*:** the message is deleted. If
   Telegram refuses, the caption is edited to start "Deleted in the app", so
   nobody takes it for a current take.
@@ -176,8 +177,8 @@ and [the one](2026-10-02-the-one-take-design.md).
 
 | Table | Change |
 |---|---|
-| `chat_post` | new: `take_id` PK → `take` ON DELETE CASCADE, `chat_id` TEXT, `message_id` INT, `source` JSON (what it was made from: name, song, go, best, marks, length, as `cloud.source_of` fingerprints a copy), `error` TEXT nullable. |
-| `chat_pin` | new: one row per group, `chat_id` TEXT PK, `message_id` INT (*The ones*). |
+| `chat_post` | new: `take_id` PK → `take` ON DELETE CASCADE, `chat_id` TEXT, `message_id` INT, `source` JSON (what it was made from: name, song, go, starred, marks, length, as `cloud.source_of` fingerprints a copy), `error` TEXT nullable. |
+| `chat_pin` | new: one row per group, `chat_id` TEXT PK, `message_id` INT (*Starred*). |
 
 ## Python
 
@@ -227,7 +228,7 @@ Tests come before the code, and each is seen failing first.
 2. The *Sending* group, setting up (S1–S4), and posting a take (D1, D2,
    M1–M3, Q1–Q4).
 3. Keeping in step (K1–K5).
-4. *The ones* (M4) and posting what was sent before (S5).
+4. *Starred* (M4) and posting what was sent before (S5).
 
 ## Docs
 

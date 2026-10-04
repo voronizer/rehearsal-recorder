@@ -274,8 +274,8 @@ here that a schema would have bought.
 worked out from take names — "Verse riff 3" a third go at "Verse riff" — on
 the grounds that a stored copy of a rule would drift from the names. That
 held while a song was only a way of grouping takes. Once a song had data of
-its own to carry (the one best take, a page of its own, a plan for the
-evening) and was picked with a click rather than typed, the song became the
+its own to carry (a page of its own, a plan for the evening, the go its ▶
+plays) and was picked with a click rather than typed, the song became the
 fact and the name the derived thing: `song` is a table, a take points at one
 with its go, and `store/names.py` writes the name from the two.
 

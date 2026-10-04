@@ -9,14 +9,14 @@ the real one.
   dialogs.
 - **Two spellings are two songs.** Grouping is case-blind but no more, so
   "Polin" and "Polyn" each get their own row in Last time, their own pills,
-  and later their own page and their own ★.
+  and later their own page and their own newest ★ go.
 
 With songs stored, a song's title is one row, and its takes point at it.
 This renames a song, or merges it into another, from its page. Every take's
 folder on disk and its copy in the cloud follow, as was decided: renamed
 everywhere. It stands on
 [songs in the store](2026-10-02-songs-in-the-store-design.md),
-[the one](2026-10-02-the-one-take-design.md) and
+[stars](2026-10-02-stars-design.md) and
 [a song's page](2026-10-02-song-page-design.md).
 
 ## Decisions
@@ -34,8 +34,9 @@ everywhere. It stands on
   (songs in the store, D4–D5), so Polyn's goes keep theirs. Polyn 1–10 and
   Polin 1–3 become Polyn 1–13, Polin 1 being Polyn 11. Without new numbers
   two takes would carry the same name.
-- **D4. ★ after a merge.** If the song merged into has a one, it stays the
-  one. If only the song merged away had one, that take becomes the one.
+- **D4. ★ after a merge.** Stars belong to takes (stars, D1), so a merge
+  moves none: every ★ go of both songs keeps its ★. The merged song's ▶
+  plays the newest of them, whichever song it was played as.
 - **D5. A merge cannot be undone as one step.** It asks first, saying how
   many goes in how many rehearsals will be renamed. Splitting a song back is
   renaming takes one by one, as today.
@@ -67,8 +68,8 @@ everywhere. It stands on
 - **A2.** `merge_songs(from_id, into_id)`:
   - points `from_id`'s takes at `into_id` and numbers them per D3, in one
     transaction;
-  - applies D4, deletes `from_id`, then starts the pass for the takes whose
-    names changed;
+  - deletes `from_id`, then starts the pass for the takes whose names
+    changed; ★ stays on its takes (D4);
   - returns the counts R3 quotes; a dry run, `merge_songs(…, dry_run=True)`,
     returns them without changing anything, for the question.
 - **A3.** The pass takes a set of takes to look at, not only "everything on
@@ -83,7 +84,8 @@ Tests come before the code, and each is seen failing first.
   - A1, including a case-only respelling and a clash refused;
   - A2 numbering the moved goes after the song's own, in the order played,
     with the song's own goes unchanged;
-  - D4 in both cases;
+  - D4: the ★ goes of both songs still starred after a merge, and the
+    merged song's ▶ playing the newest of them;
   - the dry run's counts;
   - the pass renaming folders and cloud copies afterwards, and a second run
     renaming nothing.
