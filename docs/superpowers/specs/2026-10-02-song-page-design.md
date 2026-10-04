@@ -84,9 +84,11 @@ can open". It stands on
   - All bars share one scale: the song's longest go. A go that ran long or
     stopped short across a month of rehearsals shows without reading a
     number.
-- **P4. *To work on*,** under the head when there are any: the *Went wrong*
-  and *Do again* notes of the song's latest rehearsal. Each opens its take
-  at the spot.
+- **P4. *From last time*,** under the head when there are any: every mark
+  on the song's goes at its latest rehearsal, in order, each in its label's
+  colour with its comment, or its label's name when it has none. No label
+  is picked out over another ([labels](2026-10-04-labels-design.md), D1).
+  Each opens its take at the spot.
 - **P5. Opening a go** opens it in the full-window player, with its
   rehearsal's take strip, as opening it from a rehearsal does. Escape comes
   back to this song's page, scrolled where it was. A rename, a crop or a

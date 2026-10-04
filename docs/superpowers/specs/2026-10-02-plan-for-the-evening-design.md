@@ -70,7 +70,7 @@ the next song lit, each ticked off once played. It stands on
   planned and not played, under the songs: "Planned, not played: Zima,
   Ogon". Each opens its song's page.
 
-## Schema (migration 0004)
+## Schema (migration 0005)
 
 | Table | Change |
 |---|---|
@@ -108,7 +108,7 @@ Tests come before the code, and each is seen failing first.
   - Y1;
   - Y2's order and the `next` song;
   - Y3;
-  - migration 0004.
+  - migration 0005.
 
 ## Docs
 

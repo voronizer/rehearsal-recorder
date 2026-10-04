@@ -82,11 +82,9 @@ and [stars](2026-10-02-stars-design.md).
     - the go;
     - the rehearsal's day;
     - ★ when it has one.
-  - **Under it, the take's marks, in order:** the time, the kind and the
-    note.
+  - **Under it, the take's marks, in order:** the time, the label's name
+    and the comment.
   - A take with no song is tagged `#jam`.
-  - A take with an *Idea* mark ([the ideas shelf](2026-10-02-ideas-shelf-design.md))
-    also carries `#idea`.
   - A caption over 1024 characters keeps the first line and as many marks
     as fit, then "and 6 more in the app".
 - **M3. Size.**
@@ -137,7 +135,7 @@ and [stars](2026-10-02-stars-design.md).
 ## Setting up
 
 - **S1. Settings gets a *Sending* group** for the two places takes go,
-  between *Folders* and *Appearance*. Today the cloud folder is the lower
+  between *Folders* and *Marks*. Today the cloud folder is the lower
   half of *Folders*, under the recordings folder
   (`ui/src/screens/Settings.tsx`). With a second place beside it, that
   corner is too small, and sending has nothing to do with where takes are
@@ -173,7 +171,7 @@ and [stars](2026-10-02-stars-design.md).
   before, it offers: "Post the 23 takes already sent? Oldest first, so the
   chat reads in order." Posting them is background work like any other.
 
-## Schema (migration 0005)
+## Schema (migration 0006)
 
 | Table | Change |
 |---|---|

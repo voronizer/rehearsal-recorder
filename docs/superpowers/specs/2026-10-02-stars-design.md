@@ -141,5 +141,6 @@ Tests come before the code, and each is seen failing first.
 - A ★ toggle on the review screen, beside Save take. Right after saving,
   the take is in the overview, one click from ★; and whether a go was a
   good one is usually known after the next go, not while saving this one.
-- Marker kinds of the band's own: a spec of its own, next. With the
-  whole-take verdict on ★, *Keep this* is one marker kind among others.
+- Marks named and coloured by the band:
+  [labels](2026-10-04-labels-design.md), next. With the whole-take verdict
+  on ★, *Keep this* becomes one label among others.
