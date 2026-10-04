@@ -2156,14 +2156,14 @@ def main():
     ok("history gets the evening as runs of goes at a song, in the order played",
        [(r["song"], len(r["takes"])) for r in runs["Tuesday jam"]]
        == [("Polyn", 2), ("Vesna", 1), (None, 1), ("Polyn", 1)])
-    ok("each go with its length, and whether it was marked to keep",
+    ok("each go with its length, and whether it is starred; a good mark stars nothing",
        runs["Tuesday jam"][0]["takes"]
-       == [{"duration_sec": 185, "keep": False}, {"duration_sec": 198, "keep": True}])
+       == [{"duration_sec": 185, "starred": False}, {"duration_sec": 198, "starred": False}])
     ok("a song spelled another way is still the one the song list names",
        runs["Tuesday jam"][-1]["song"] == "Polyn")
     ok("and takes nobody named are one run with no song",
        runs["Soundcheck"] == [{"song": None, "takes": [
-           {"duration_sec": 140, "keep": False}, {"duration_sec": 165, "keep": False}]}])
+           {"duration_sec": 140, "starred": False}, {"duration_sec": 165, "starred": False}]}])
 
     lt = e.last_time()
     ok("last time is the newest rehearsal that played a song, past a soundcheck",
@@ -5869,6 +5869,125 @@ def main():
     stale53.write_bytes(b"RIFF")
     ok("and once it is there, it is renamed, case or not",
        p53._names_pass.run() == 1 and (cloud53 / jam53.name / "02 - Polyn 2.wav").exists())
+
+    print("\n[54] Stars: ★ on a take, and the go a song's ▶ plays")
+    tmp54 = Path(tempfile.mkdtemp())
+    _, s54 = fresh_api(tmp54)
+
+    def rehearsal54(name, created_at, names):
+        """A rehearsal from an old session.json, its takes 100 s each."""
+        folder = tmp54 / "Rec" / f"{name} - {created_at[:10]} {created_at[11:13]}-00"
+        folder.mkdir(parents=True)
+        (folder / "session.json").write_text(json.dumps({
+            "name": name, "created_at": created_at, "samplerate": SR,
+            "tracks": [{"name": "Gtr", "channel": 1}],
+            "takes": [{"take_number": i + 1, "name": n, "duration_sec": 100,
+                       "tracks": [], "markers": []} for i, n in enumerate(names)],
+        }))
+        import_all(s54._lib, s54._cloud_dir)
+        return str(folder)
+
+    # Polyn 1, Polyn 2, Doroga 1, Doroga 2.
+    first54 = rehearsal54("First", "2026-08-25T19:00:00",
+                          ["Polyn", "Polyn 2", "Doroga", "Doroga 2"])
+    # Polyn 3, Vesna 1.
+    mid54 = rehearsal54("Middle", "2026-09-10T19:00:00", ["Polyn", "Vesna"])
+    # Polyn 4, Vesna 2, Polyn 5, Take 4.
+    last54 = rehearsal54("Tuesday", "2026-09-22T19:00:00",
+                         ["Polyn", "Vesna", "Polyn 2", "Take 4"])
+
+    def plays54(name):
+        """(folder, take_number) of what the song's ▶ plays in last_time."""
+        lt = s54.last_time()
+        for s in lt["last"]["songs"] + lt["not_played"]:
+            if s["name"] == name:
+                return (s["plays"]["folder"], s["plays"]["take"]["take_number"])
+        return None
+
+    ok("with no ★, a song's ▶ plays its last go, as before",
+       plays54("Polyn") == (last54, 3) and plays54("Vesna") == (last54, 2))
+    ok("and a song not played last time plays its last go then, which it still lists",
+       plays54("Doroga") == (first54, 4)
+       and s54.last_time()["not_played"][0]["take"]["take_number"] == 4)
+
+    jam54 = s54.set_take_star(last54, 4, True)
+    ok("★ goes on a take with no song", jam54["ok"] and jam54["take"]["starred"]
+       and jam54["take"]["song"] is None)
+    ok("and history's strip draws it",
+       [t["starred"] for r in next(x for x in s54.list_rehearsals()
+                                   if x["name"] == "Tuesday")["runs"] for t in r["takes"]]
+       == [False, False, False, True])
+
+    s54.set_take_star(first54, 2, True)
+    s54.set_take_star(mid54, 1, True)
+    ok("a song's ▶ plays its newest ★ go, from whichever rehearsal it was played at",
+       plays54("Polyn") == (mid54, 1))
+    polyn54 = next(s for s in s54.last_time()["last"]["songs"] if s["name"] == "Polyn")
+    ok("with that rehearsal's name and day, to say so",
+       polyn54["plays"]["rehearsal"] == "Middle"
+       and polyn54["plays"]["created_at"] == "2026-09-10T19:00:00"
+       and polyn54["plays"]["take"]["name"] == "Polyn 3")
+    s54.set_take_star(last54, 1, True)
+    ok("last time's own ★ go is newer than any before it",
+       plays54("Polyn") == (last54, 1))
+    s54.set_take_star(last54, 3, True)
+    ok("two ★ goes in one evening: the later one is the newest",
+       plays54("Polyn") == (last54, 3))
+    s54.set_take_star(last54, 1, False)
+    s54.set_take_star(last54, 3, False)
+    ok("taken off again, the newest ★ go is the older rehearsal's",
+       plays54("Polyn") == (mid54, 1))
+    s54.set_take_star(first54, 3, True)
+    ok("a song not played last time plays its ★ go too",
+       plays54("Doroga") == (first54, 3)
+       and s54.last_time()["not_played"][0]["take"]["take_number"] == 4)
+
+    import shutil as _shutil54
+    _shutil54.move(mid54, str(tmp54 / "elsewhere"))
+    ok("a ★ go in a rehearsal not on disk is passed over for one that is",
+       plays54("Polyn") == (first54, 2))
+
+    ok("a folder outside the recordings is refused",
+       s54.set_take_star(str(tmp54 / "nowhere"), 1, True)
+       == {"ok": False, "error": "Folder is outside the recordings directory"})
+    ok("a rehearsal that is not there is said so",
+       s54.set_take_star(str(tmp54 / "Rec" / "Gone"), 1, True)
+       == {"ok": False, "error": "Rehearsal not found"})
+    ok("and a take that is not there",
+       s54.set_take_star(last54, 9, True) == {"ok": False, "error": "Take not found"})
+
+    # The live side: a saved take, renamed, cropped and deleted.
+    _, l54 = fresh_api(Path(tempfile.mkdtemp()))
+    l54.start_rehearsal("Live", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+    live54 = Path(l54._session["folder"])
+
+    def keep54(number, name):
+        draft = live54 / "_drafts" / f"take {number}"
+        write_wav(draft / "Gtr.wav", 100, seconds=3.0)
+        l54._session["take_counter"] = number
+        return l54.keep_take(number, str(draft), name, 3.0,
+                             [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])["take"]
+
+    saved54 = keep54(1, "Ogon")
+    keep54(2, "Ogon")
+    ok("a take is saved without ★", saved54["starred"] is False)
+    l54.set_take_star(str(live54), 1, True)
+    renamed54 = l54.rename_take(str(live54), 1, "Sonce")
+    ok("★ stays with its take renamed to another song",
+       renamed54["ok"] and renamed54["take"]["song"] == "Sonce" and renamed54["take"]["starred"])
+    unnamed54 = l54.rename_take(str(live54), 1, "Take 1")
+    ok("and renamed to no song at all",
+       unnamed54["ok"] and unnamed54["take"]["song"] is None and unnamed54["take"]["starred"])
+    cropped54 = l54.crop_take(str(live54), 1, 0.5, 2.5)
+    ok("and cropped", cropped54["ok"] and cropped54["take"]["starred"])
+    queued54 = dict(l54._cloud_queue.states(str(live54)))
+    l54.set_take_star(str(live54), 2, True)
+    ok("★ queues no copy for the cloud, and renames nothing on disk",
+       dict(l54._cloud_queue.states(str(live54))) == queued54
+       and Path(l54._lib.take(live54, 2)["tracks"][0]["file"]).exists())
+    l54.delete_take(str(live54), 1)
+    ok("a deleted take is not there to star",
+       l54.set_take_star(str(live54), 1, True) == {"ok": False, "error": "Take not found"})
 
     print("\n" + "=" * 60)
     if problems:

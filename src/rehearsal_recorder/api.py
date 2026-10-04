@@ -231,20 +231,27 @@ def _runs_of(takes):
     """
     The evening as it was played, for the strip history draws of a
     rehearsal: the takes in order, in runs of goes at the same song, as
-    [{"song", "takes": [{"duration_sec", "keep"}]}]. A song played, left and
+    [{"song", "takes": [{"duration_sec", "starred"}]}]. A song played, left and
     come back to is two runs, since that is how the evening went. "song" is
-    None for takes nobody named; "keep" is a take somebody marked to keep.
+    None for takes nobody named; "starred" is a take somebody starred.
     """
     runs = []
     for take in takes:
         song = take.get("song")
         go = {"duration_sec": take.get("duration_sec") or 0,
-              "keep": any(m.get("kind") == "good" for m in take.get("markers") or [])}
+              "starred": bool(take.get("starred"))}
         if runs and runs[-1]["song"] == song:
             runs[-1]["takes"].append(go)
         else:
             runs.append({"song": song, "takes": [go]})
     return runs
+
+
+def _go_at(rehearsal, take):
+    """A take with the rehearsal it was played at, for playing it from a
+    screen that is not that rehearsal's."""
+    return {"folder": rehearsal["folder"], "rehearsal": rehearsal["name"],
+            "created_at": rehearsal["created_at"], "take": take}
 
 
 def _last_attempt(takes, song):
@@ -1973,6 +1980,13 @@ class Api:
         "earlier" is the three rehearsals after "last" in the list, as
         history lists them, and "count" how many there are in all.
 
+        Every song, in "last"'s "songs" and in "not_played", says what its
+        ▶ plays, as "plays": its newest ★ go in a rehearsal on disk, from
+        whichever rehearsal it was played at, or with none, its last go at
+        the rehearsal it is listed under. "Newest" is the rehearsal's date,
+        then the later take in the evening, never the go number, which a take
+        renamed into the song gets afresh.
+
         Read from the database alone. Nothing here walks a folder for its
         size, which is what makes history's list slow to fill.
         """
@@ -1980,6 +1994,25 @@ class Api:
         on_disk = [r for r in rehearsals if not r["missing"] and r["takes"]]
         named = [r for r in on_disk if _songs_of(r["takes"])]
         last = (named or on_disk or [None])[0]
+
+        # Each song's newest ★ go on disk: the rehearsals come newest first,
+        # and within one, the later takes are the newer.
+        starred = {}
+        for r in on_disk:
+            for take in reversed(r["takes"]):
+                song = take.get("song")
+                if song is not None and take.get("starred") and song not in starred:
+                    starred[song] = _go_at(r, take)
+
+        def plays(song, r, goes):
+            """What a song's ▶ plays: its newest ★ go, or its last go at r."""
+            return starred.get(song) or _go_at(r, goes[-1])
+
+        songs = []
+        if last is not None:
+            for song in _songs_of(last["takes"]):
+                goes = [t for t in last["takes"] if t["take_number"] in song["take_numbers"]]
+                songs.append({**song, "plays": plays(song["name"], last, goes)})
 
         played = set()
         not_played = []
@@ -2000,6 +2033,7 @@ class Api:
                         "created_at": r["created_at"],
                         "goes": len(goes),
                         "take": goes[-1],
+                        "plays": plays(song["name"], r, goes),
                     })
 
         earlier = [r for r in rehearsals if r is not last][:3]
@@ -2009,7 +2043,7 @@ class Api:
                 "name": last["name"],
                 "created_at": last["created_at"],
                 "takes": last["takes"],
-                "songs": _songs_of(last["takes"]),
+                "songs": songs,
                 "runs": _runs_of(last["takes"]),
                 "in_cloud": sum(1 for t in last["takes"] if _shape_of(t.get("cloud"))),
             },
@@ -2181,6 +2215,27 @@ class Api:
             "name": display_name,
             "takes": self._lib.rehearsal(folder)["takes"],
         }
+
+    # ---------- stars ----------
+
+    def set_take_star(self, folder, take_number, starred):
+        """
+        Puts ★ on a take, or takes it off. It is the take's own verdict on
+        itself, so it changes no other take: a song can have several, and a
+        take with no song can have one. Set, not toggled, so a second click
+        that lands before the first one's answer asks for the same thing
+        again instead of undoing it. Nothing on disk or in the cloud folder
+        follows a star.
+        """
+        folder = Path(folder)
+        if not self._inside_recordings(folder):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+        if not self._lib.has(folder):
+            return {"ok": False, "error": "Rehearsal not found"}
+        take = self._lib.set_starred(folder, int(take_number), bool(starred))
+        if take is None:
+            return {"ok": False, "error": "Take not found"}
+        return {"ok": True, "take": take}
 
     # ---------- markers ----------
     #
