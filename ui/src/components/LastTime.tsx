@@ -244,7 +244,8 @@ export function LastTime({
 
 /**
  * One song of last time: its goes as bars as tall as they ran, the starred
- * ones green, and the one its button plays lit when it is one of them.
+ * ones green, and the one its button plays at full strength while the
+ * others are dimmed, when it is one of them.
  */
 function SongRow({
   name,
@@ -345,12 +346,15 @@ function SongRow({
           <span
             key={t.take_number}
             data-starred={t.starred || undefined}
+            data-lit={isTarget(t) || undefined}
             className={cn(
               "w-1.5 rounded-[2px]",
-              t.starred
-                ? "bg-signal"
-                : isTarget(t)
-                  ? "bg-muted-foreground"
+              isTarget(t)
+                ? t.starred
+                  ? "bg-signal"
+                  : "bg-muted-foreground"
+                : t.starred
+                  ? "bg-signal/45"
                   : "bg-muted-foreground/35"
             )}
             style={{ height: `${Math.max(4, ((t.duration_sec || 0) / longest) * 24)}px` }}

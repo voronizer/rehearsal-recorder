@@ -159,3 +159,22 @@ test("a song not played last time plays its ★ go too", async ({ page }) => {
     { name: "Guitar", file: "/rec/older/d1.wav" },
   ])
 })
+
+test("the bar of the go ▶ plays is lit, starred or not", async ({ page }) => {
+  await openApp(page, {
+    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#1'];",
+  })
+  const bars = lastTime(page).locator("[data-song='Polyn'] [aria-hidden] > span")
+  await expect(bars.locator("xpath=self::*[@data-lit]")).toHaveCount(1)
+  await expect(bars.first()).toHaveAttribute("data-lit", "true")
+  await expect(bars.first()).toHaveAttribute("data-starred", "true")
+})
+
+test("with no ★ the lit bar is the song's last go", async ({ page }) => {
+  await openApp(page, {
+    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = [];",
+  })
+  const bars = lastTime(page).locator("[data-song='Polyn'] [aria-hidden] > span")
+  await expect(bars.locator("xpath=self::*[@data-lit]")).toHaveCount(1)
+  await expect(bars.last()).toHaveAttribute("data-lit", "true")
+})
