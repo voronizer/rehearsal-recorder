@@ -81,10 +81,15 @@ first step of the songs work in #12, and the one every other step stands on.
   rehearsal. If yesterday ended at Polyn 2, today's first go is Polyn 3. A go
   number then names one take of a song wherever it was played: "Polyn 17 was
   the one" needs no date.
-- **D5. A go number is given once and kept.** It is stored, not counted from
-  the takes:
+- **D5. A go number is given once, kept, and never given again.** It is
+  stored, not counted from the takes:
   - deleting Polyn 2 does not turn Polyn 3 into Polyn 2, so it does not
     rename the take's files;
+  - each song keeps a count of the goes it has given, and the next go is one
+    past it: deleting Polyn 5, the latest, still makes the next take Polyn 6;
+  - a song is kept when its last take goes, with its count, so a take named
+    after it later carries on from there. A song with no takes shows nowhere:
+    what is offered and listed is built from takes;
   - a take that becomes a go at a song later (named, renamed) gets that
     song's next number then, whenever it was played. Numbers follow the order
     takes became goes, which is nearly always the order they were played.
@@ -100,7 +105,7 @@ first step of the songs work in #12, and the one every other step stands on.
 
 | Table | Change |
 |---|---|
-| `song` | new: `id` PK, `title` TEXT NOT NULL, spelled as shown. Unique case-blind. An index on `lower(title)` cannot fold Cyrillic in SQLite, so Python enforces it: a title is looked up with `casefold()` before a song is made. |
+| `song` | new: `id` PK, `title` TEXT NOT NULL, spelled as shown. Unique case-blind. An index on `lower(title)` cannot fold Cyrillic in SQLite, so Python enforces it: a title is looked up with `casefold()` before a song is made. `last_go` INT NOT NULL, default 0: the highest go it has ever given (D5). |
 | `take` | `song_id` → `song` ON DELETE SET NULL, nullable, indexed. `go` INT, nullable; null exactly when `song_id` is. `name` is dropped. |
 
 The migration alters `take` in place (`ALTER TABLE … ADD COLUMN` / `DROP
@@ -108,8 +113,8 @@ COLUMN`), not in Alembic's batch mode. Batch mode rebuilds the table with a
 `DROP TABLE`, which, with foreign keys on, deletes every marker, track file
 and cloud copy through their `ON DELETE CASCADE`.
 
-A song with no takes left is deleted with its last take, by the code that
-deletes or renames takes, not by a trigger.
+A song is never deleted with its takes: one with none keeps its title and
+its count (D5).
 
 ## Naming a take
 
@@ -126,8 +131,8 @@ Python turns the string into a song and a go.
   4. anything else is a new song with exactly that title. "Опус 5" is a
      title of its own unless a song called "Опус" exists.
 - **N2. The go is the app's.** A take gets the next go at its song: one past
-  the highest go at it anywhere in the library (D4). A take renamed to the
-  song it already has keeps its go.
+  the song's count of goes given (D4, D5), which moves on with it. A take
+  renamed to the song it already has keeps its go.
 - **N3. The next take** is the previous take's song, at its next go: the
   field shows the title, and the go beside it. After a take with no song, it
   is "Take N".
@@ -192,12 +197,12 @@ Python turns the string into a song and a go.
   rehearsal has its own Polyn 1. So Polyn, Polyn 2 on 28 Sep and Polyn,
   Polyn 2, Polyn 3 on 30 Sep become goes 1–2 and 3–5. Gaps left by deleted
   takes close, and two takes with one name in a rehearsal get a number
-  each.
+  each. Each song's count starts at its highest go.
 - **M3. The importer** (`store/importer.py`) gives the takes of a
   `session.json` a song and a go by the same rule, through the same function
   as M1, so the two cannot differ. A song already in the library keeps its
   title. A new one is spelled the way that rehearsal first spells it. Its
-  goes get their songs' next numbers in take order (D5), even when the
+  goes go on from their songs' counts in take order (D5), even when the
   rehearsal is older than ones already in the library.
 - **M4. The migration touches only the database.** It renames nothing on
   disk or in the cloud folder, so a failure leaves every file where it was,
@@ -255,7 +260,9 @@ Tests come before the code, and each is seen failing first.
   `set_next_take_name`, `rename_take`, `recover_draft`, `song_choices` and
   `session_state`. This includes the next go after yesterday's, a new title
   ending in a number, a number typed out of habit, and folders named
-  `NN - Title G`.
+  `NN - Title G`; and, in the store, that deleting the latest go does not
+  give its number again, and that a song whose takes are all gone keeps its
+  count.
 - **Python, the pass:**
   - `01 - Polyn` becomes `01 - Polyn 1`, `03 - Polyn 2` of a later
     rehearsal becomes `03 - Polyn 4`, and `03 - polyn 2` becomes

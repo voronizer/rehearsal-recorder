@@ -2453,3 +2453,215 @@ Look at the app and check:
 - `cat "$CHECK/app.log"` has no traceback.
 
 Report what was seen. Do not point the app at the real recordings folder; the user decides when.
+
+---
+
+## Added after the final review (2026-10-04)
+
+The user decided that a go number is never given again, even after its take
+is deleted (spec D5 as amended), and the final review left one visible
+defect: the go runs into the title in the `cut` layout. Tasks 6 and 7 do
+these. The Global Constraints above still bind; a change to an existing test
+is allowed only where D5 (Task 6) or the restored space (Task 7) explains it,
+listed in the commit message.
+
+### Task 6: A go number is never given again
+
+**Files:**
+- Modify: `src/rehearsal_recorder/store/models.py`, `src/rehearsal_recorder/store/migrations/versions/0002_songs.py`, `src/rehearsal_recorder/store/library.py`
+- Modify: `docs/design-notes.md`, `docs/using-it.md`, `CHANGELOG.md`
+- Test: `tests/test_store.py` ([9], [10])
+
+**Interfaces:**
+- Produces: `Song.last_go: int` (the highest go the song has ever given); `Library.next_goes()` covers every song, also those with no takes left.
+- Library no longer deletes a song when its last take goes (`_drop_songless` is removed).
+
+- [ ] **Step 1: Write the failing tests**
+
+In `tests/test_store.py` [9], just before that section's `lib.close()` (after the "what the rule cannot know stays as it reads" check), add:
+
+```python
+    ok("each song's count starts at its highest go",
+       lib.next_goes() == {"Polyn": 5, "Song": 3, "Опус": 2, "Полынь": 3})
+```
+
+In [10], replace the block from `ok("a song left with no takes is gone", …` to `ok("forgetting rehearsals forgets the songs only they had", song_titles() == [])` with:
+
+```python
+    ok("a song left with no takes keeps its count: its next go is not 1 again",
+       rename(9, "Take 9") == ("Take 9", None, None)
+       and lib.resolve_name(jam, "vesna", 20) == {"song": "Vesna", "go": 2, "name": "Vesna 2"})
+    lib.delete_take(jam, 2)
+    ok("deleting a go does not renumber the rest", lib.take(jam, 3)["name"] == "Polyn 3")
+    lib.delete_take(jam, 4)
+    ok("deleting the latest go does not give its number out again",
+       lib.resolve_name(jam, "Polyn", 20)["go"] == 6)
+    lib.delete_take(jam, 8)
+    ok("a song whose takes are all gone is kept, and carries on from its count",
+       "ПОЛЫНЬ" in song_titles() and lib.resolve_name(jam, "полынь", 20)["go"] == 3)
+    lib.forget_rehearsal(jam)
+    lib.forget_rehearsal(other)
+    ok("forgetting rehearsals keeps every song and its count",
+       song_titles() == ["Polyn", "Song 2", "Vesna", "ПОЛЫНЬ"]
+       and lib.next_goes() == {"Polyn": 6, "Song 2": 3, "Vesna": 2, "ПОЛЫНЬ": 3})
+```
+
+and change the import check after it (Polyn's count is 5, so the Kept take is Polyn 6 and the imported goes carry on from there):
+
+```python
+    ok("an imported rehearsal is read by the old rule, its goes carrying on from "
+       "each song's count, even though it is older",
+       [(t["name"], t["song"], t["go"]) for t in lib.rehearsal(old_jam)["takes"]] == [
+           ("Polyn 7", "Polyn", 7), ("Polyn 8", "Polyn", 8), ("Take 3", None, None),
+           ("zima 1", "zima", 1), ("zima 2", "zima", 2), ("Опус 1", "Опус", 1)])
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `venv/bin/python tests/test_store.py`
+Expected: FAIL on "each song's count starts at its highest go" (or an error: `Song` has no `last_go`), and on the changed [10] checks.
+
+- [ ] **Step 3: The count**
+
+`models.py`, in `Song` after `title`:
+
+```python
+    # The highest go this song has ever given. The next go is one past it,
+    # so a number is never given twice, even after its take is deleted; and
+    # a song is kept when its last take goes, so its count is kept too.
+    last_go: Mapped[int] = mapped_column(Integer, default=0)
+```
+
+`0002_songs.py`: the `song` table gains `sa.Column("last_go", sa.Integer(), nullable=False, server_default="0"),` after `title`; the insert becomes
+
+```python
+    ids = {
+        key: bind.execute(
+            sa.text("INSERT INTO song (title, last_go) VALUES (:title, :last_go)"),
+            {"title": title, "last_go": counted[key]}).lastrowid
+        for key, (_, title) in titles.items()
+    }
+```
+
+and its docstring gains, after "…in the order they were played…": "Each song's count of goes given starts at its highest."
+
+`library.py`:
+- In the `# ---------- songs ----------` comment, replace the last sentence ("A song with no takes left goes with its last one, …") with: "A song is never deleted with its takes: one with none keeps its title and its count of goes given (Song.last_go), so a number is never given twice."
+- `_resolve`: replace the last two lines (`highest = …` and its `return`) with `return song, title, (song.last_go or 0) + 1`, and in its docstring replace "one past the highest go at the song anywhere in the library" with "one past the song's count of goes given (Song.last_go), so a number is never given twice, even after its take is deleted".
+- `_song_row` becomes:
+
+```python
+    @staticmethod
+    def _song_row(db, song, title, go):
+        """The Song a take resolved to (_resolve): made if it is new,
+        respelled if _resolve said so, and its count moved on to `go`. None
+        for no song."""
+        if title is None:
+            return None
+        if song is None:
+            song = Song(title=title, last_go=0)
+            db.add(song)
+        elif song.title != title:
+            song.title = title
+        song.last_go = max(song.last_go or 0, go)
+        return song
+```
+
+  and both callers pass `go`: `self._song_row(db, song, title, go)` in `add_take` and `update_take`.
+- Delete `_drop_songless` and every call to it:
+  - `update_take`: drop `was = row.song_id` and `self._drop_songless(db, [was])`;
+  - `delete_take`: the body after the `None` check becomes `rehearsal_id = row.rehearsal_id`, `db.delete(row)`, `db.flush()`, `return len(db.scalars(select(Take.id).where(Take.rehearsal_id == rehearsal_id)).all())`;
+  - `forget_rehearsal`: drop the `song_ids = …` line and the call, leaving `db.delete(row)` and `return True`.
+
+  Drop `delete` from the `sqlalchemy` import if nothing else uses it.
+- `next_goes`:
+
+```python
+    def next_goes(self):
+        """{title: the go the next take of that song would be}, for every
+        song: one past its count of goes given, as _resolve counts it. One
+        query, for the songs offered under a take's name."""
+        with self._session() as db:
+            rows = db.execute(select(Song.title, Song.last_go)).all()
+        return {title: (last or 0) + 1 for title, last in rows}
+```
+
+- `import_rehearsal`: delete the `highest = dict(…)` query; in `go_at`, replace `counted[key] = highest.get(songs[key].id) or 0` with `counted[key] = songs[key].last_go or 0`, make a new song `Song(title=title, last_go=0)`, and after `counted[key] += 1` add `songs[key].last_go = counted[key]`. Its comment's "its goes go on from its highest" becomes "its goes go on from its count".
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `venv/bin/python tests/test_store.py`, then `venv/bin/python tests/test_engine.py`.
+Expected: all pass. If a test_engine check fails, change it only if D5 (numbers never given again; songs kept with no takes) explains the difference, and list it in the commit message; otherwise stop and report.
+
+- [ ] **Step 5: Docs**
+
+- `docs/design-notes.md`, in "**Goes run across the library, and are stored.**", after "a stored go is given once and kept." add: "Each song keeps a count of the goes it has given, and a song is kept when its last take goes, so deleting the latest go does not give its number out again."
+- `docs/using-it.md`, "Names and songs": after "so "Polyn 17" is one take wherever it was played." add "Deleting a take does not free its number."
+- `CHANGELOG.md`, in the first Unreleased item, after "and shown from 1, beside the title, wherever a take is." add "A number is never given twice: deleting the latest go does not free it."
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/rehearsal_recorder/store tests/test_store.py tests/test_engine.py docs/design-notes.md docs/using-it.md CHANGELOG.md
+git commit -m "A go number is never given twice, even after its take is deleted
+
+Each song keeps a count of the goes it has given (song.last_go); the next
+go is one past it, and a song is kept when its last take goes, so its
+count is kept too.
+
+Tests changed (spec D5 as amended): test_store [10] — a song with no takes
+is kept with its count; deleting the latest go does not free its number;
+the imported goes carry on from the count. <any test_engine changes>
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task 7: The go sits apart from the title
+
+**Files:**
+- Modify: `ui/src/components/TakeTitle.tsx`
+- Test: `ui/e2e/naming.spec.ts`
+
+The final re-review found that in `GoTitle`'s `cut` layout the go's span is a flex item, so its leading space is the start of a line and collapses: the strip, History's rows and the recording heading would show "Polyn3". The text in the DOM still has the space, so text checks do not see it.
+
+- [ ] **Step 1: Write the failing test**
+
+In `ui/e2e/naming.spec.ts`, add:
+
+```ts
+test("the go sits apart from the title, not run into it", async ({ page }) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await recordTake(page)
+  await saveAs(page, "Polyn")
+  const take = page.getByRole("button", { name: /^Take 1 Polyn 1/ })
+  const title = await take.locator("[data-go-title]").boundingBox()
+  const go = await take.locator("[data-go]").boundingBox()
+  expect(go!.x - (title!.x + title!.width)).toBeGreaterThan(2)
+})
+```
+
+and in `TakeTitle.tsx`'s `cut` branch give the title span `data-go-title` and the go span `data-go` (the attributes only; no style change yet).
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `cd ui && npm run build && npx playwright test e2e/naming.spec.ts -g "apart from the title" --reporter=line`
+Expected: FAIL, the gap is 0 (or under 2 px). If it passes, the space is not lost: stop, say so in the report, and make no style change.
+
+- [ ] **Step 3: Keep the space**
+
+In `GoTitle`, give the go's span `whitespace-pre` when `cut` (so its leading space survives the start of the flex item's line): `cn("tnum text-muted-foreground", cut && "shrink-0 whitespace-pre")`. Keep the `{" "}` so the text is still "Polyn 3".
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `cd ui && npm run build && npx playwright test e2e/naming.spec.ts e2e/player.spec.ts e2e/recording.spec.ts --reporter=line`, then `npm test` and `npm run lint` (20 warnings at most, no errors).
+Expected: all pass.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add ui/src/components/TakeTitle.tsx ui/e2e/naming.spec.ts
+git commit -m "The go sits apart from the title when the title is cut short
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
