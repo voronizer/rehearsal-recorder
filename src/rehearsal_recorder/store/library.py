@@ -155,6 +155,7 @@ class Library:
             "name": take_name(title, take.go, take.take_number),
             "song": title,
             "go": take.go if title is not None else None,
+            "starred": take.starred,
             "duration_sec": take.duration_sec,
             "tracks": [
                 {"name": f.name, "file": str(folder / Path(f.file))} for f in take.files
@@ -506,6 +507,20 @@ class Library:
             kept = sorted((as_marker(m) for m in fn(current)), key=lambda m: m["at"])
             row.markers = [Marker(**m) for m in kept]
             return kept
+
+    def set_starred(self, folder, take_number, starred):
+        """Puts ★ on the take, or takes it off. Returns the take, or None
+        without it. Nothing else about the take changes."""
+        folder = Path(folder)
+        with self._session.begin() as db:
+            row = self._find_take(db, folder, take_number)
+            if row is None:
+                return None
+            row.starred = bool(starred)
+            db.flush()
+            db.refresh(row)
+            data = self._take_data(folder, row)
+        return self._take_out(data, self._cloud_dir())
 
     def delete_take(self, folder, take_number):
         """Returns how many takes the rehearsal has left, or None."""

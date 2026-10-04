@@ -596,6 +596,76 @@ def main():
            ("zima 1", "zima", 1), ("zima 2", "zima", 2), ("Опус 1", "Опус", 1)])
     lib.close()
 
+    print("\n[11] Stars (migration 0003)")
+    rec11 = tmp / "Stars"
+    rec11.mkdir()
+    db.open_engine(rec11, migrations_up_to(tmp, "0002")).dispose()
+    engine = db.make_engine(db.database_path(rec11))
+    with engine.begin() as c:
+        rid = c.execute(text(
+            "INSERT INTO rehearsal (folder, name, created_at, samplerate, bit_depth) "
+            "VALUES ('Jam', 'Jam', '2026-09-01T19:00:00', 48000, 24)")).lastrowid
+        sid = c.execute(text(
+            "INSERT INTO song (title, last_go) VALUES ('Polyn', 2)")).lastrowid
+        for number, go in ((1, 1), (2, 2), (3, None)):
+            tid = c.execute(text(
+                "INSERT INTO take (rehearsal_id, take_number, song_id, go, duration_sec, "
+                "cloud_skip, cloud_send) VALUES (:r, :n, :s, :g, 1.0, 0, 0)"),
+                {"r": rid, "n": number, "s": sid if go else None, "g": go}).lastrowid
+            c.execute(text("INSERT INTO take_file (take_id, position, name, file) "
+                           "VALUES (:t, 0, 'Gtr', :f)"),
+                      {"t": tid, "f": f"{number:02d}/Gtr.wav"})
+            c.execute(text("INSERT INTO marker (take_id, at, kind, note) "
+                           "VALUES (:t, 1.0, 'good', '')"), {"t": tid})
+            c.execute(text("INSERT INTO cloud_copy (take_id, mix, source) "
+                           "VALUES (:t, :m, '{}')"), {"t": tid, "m": f"Jam/{number:02d}.wav"})
+    engine.dispose()
+
+    engine = db.open_engine(rec11)
+    ok("a database at 0002 is moved on to the newest migration",
+       db.current_revision(engine) == HEAD)
+    ok("after it was copied aside", (rec11 / "library.sqlite.bak-0002").exists())
+    with engine.connect() as c:
+        drift = compare_metadata(MigrationContext.configure(c), Base.metadata)
+        counts = {t: c.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
+                  for t in ("take", "take_file", "marker", "cloud_copy")}
+        starred = c.execute(text(
+            "SELECT starred FROM take ORDER BY take_number")).scalars().all()
+    engine.dispose()
+    ok("and it is then what models.py describes", drift == [])
+    ok("every take keeps its files, its marks and its cloud copy",
+       counts == {"take": 3, "take_file": 3, "marker": 3, "cloud_copy": 3})
+    ok("nothing is starred for it, good marks or not", starred == [0, 0, 0])
+
+    lib = Library(rec11)
+    jam = rec11 / "Jam"
+
+    def stars(folder):
+        return [t["starred"] for t in lib.rehearsal(folder)["takes"]]
+
+    ok("every take says whether it is starred", stars(jam) == [False, False, False])
+    one = lib.set_starred(jam, 1, True)
+    two = lib.set_starred(jam, 2, True)
+    ok("★ goes on a take, and a song can have several",
+       one["starred"] and two["starred"] and stars(jam) == [True, True, False])
+    ok("a take with no song can have one", lib.set_starred(jam, 3, True)["starred"])
+    ok("and it comes off, touching no other take",
+       lib.set_starred(jam, 2, False)["starred"] is False
+       and stars(jam) == [True, False, True])
+    ok("set twice is still set, not toggled back",
+       lib.set_starred(jam, 1, True)["starred"] and stars(jam)[0] is True)
+    ok("a take that is not there is None", lib.set_starred(jam, 9, True) is None)
+    renamed = lib.update_take(jam, 1, name="Take 1")
+    ok("★ stays with its take through a rename, to no song at all",
+       renamed["song"] is None and renamed["starred"])
+    ok("and the take keeps its marks",
+       lib.take(jam, 1)["markers"] == [{"at": 1.0, "kind": "good", "note": ""}])
+    lib.delete_take(jam, 3)
+    ok("a deleted take takes its ★ with it",
+       [(t["take_number"], t["starred"]) for t in lib.rehearsal(jam)["takes"]]
+       == [(1, True), (2, False)])
+    lib.close()
+
     print()
     if problems:
         print(f"{len(problems)} problem(s):")

@@ -106,6 +106,10 @@ class Take(Base):
     cloud_send: Mapped[bool] = mapped_column(Boolean, default=False)
     # Why the last copy to the cloud folder failed, until one succeeds.
     cloud_error: Mapped[str | None] = mapped_column(String, nullable=True)
+    # ★: somebody marked this take as one worth coming back to. The take's
+    # own verdict on itself, so a song can have several and a take with no
+    # song can have one. Added in place by migration 0003, like song_id.
+    starred: Mapped[bool] = mapped_column(Boolean, default=False)
 
     rehearsal: Mapped[Rehearsal] = relationship(back_populates="takes")
     song: Mapped["Song | None"] = relationship()
