@@ -401,6 +401,7 @@ window.__MAKE_API__ = () => ({
   // api.song_choices: the songs of the rehearsal (the live one with no
   // folder), each as the next go at it, and the rest of the repertoire.
   song_choices: track('song_choices', async (folder, n) => {
+    await held('song_choices');
     const takes = !folder || (session && folder === session.folder)
       ? (session ? session.takes : []) : pastRehearsal(folder).takes;
     const here = songsOf(takes).map(s => ({song:s.name, go:goAt(s.name, takes, n),

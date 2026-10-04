@@ -20,6 +20,9 @@ def _run(connection):
         connection=connection,
         target_metadata=Base.metadata,
         # SQLite can hardly ALTER a table; batch mode rebuilds it instead.
+        # Not for `take` and `rehearsal`: its DROP TABLE cascades away their
+        # children with foreign keys on, so those change in place (see
+        # docs/development.md and migration 0002).
         render_as_batch=True,
     )
     with context.begin_transaction():

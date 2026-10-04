@@ -130,8 +130,8 @@ export function TakeStrip({
               <span className="tnum text-[11px] text-muted-foreground">
                 {String(take.take_number).padStart(2, "0")}
               </span>
-              <span className="max-w-40 truncate">
-                <TakeTitle take={take} />
+              <span className="flex max-w-40 min-w-0">
+                <TakeTitle take={take} cut />
               </span>
               {take.markers && take.markers.length > 0 && (
                 <span className="flex shrink-0 items-center gap-1">

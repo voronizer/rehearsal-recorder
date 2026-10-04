@@ -35,6 +35,7 @@ export function TakeNameField({
   value,
   fallback,
   choices,
+  knownGo,
   onCommit,
   onEnter,
   size = "big",
@@ -45,6 +46,9 @@ export function TakeNameField({
   value: string
   fallback: string
   choices: SongChoices | null
+  /** The go Python has for `value`, drawn until `choices` arrive; not while
+   *  the field is being typed in, when it no longer says anything. */
+  knownGo?: number | null
   onCommit: (name: string) => void
   onEnter?: (name: string) => void
   size?: "big" | "compact"
@@ -66,7 +70,10 @@ export function TakeNameField({
   const input = useRef<HTMLInputElement>(null)
   const songsArea = useRef<HTMLDivElement>(null)
   const shown = draft ?? value
-  const go = goFor(shown, choices)
+  const go =
+    choices === null && draft === null && knownGo !== undefined
+      ? knownGo
+      : goFor(shown, choices)
   const named = (text: string) => text.trim() || fallback
   const edit = (text: string | null) => {
     typed.current = text

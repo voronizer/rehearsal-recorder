@@ -310,11 +310,11 @@ function TakeRow({
             </span>
             <span
               className={cn(
-                "relative truncate text-[13px]",
+                "relative flex min-w-0 text-[13px]",
                 unnamed && "text-muted-foreground"
               )}
             >
-              <TakeTitle take={take} />
+              <TakeTitle take={take} cut />
             </span>
             {keep && (
               <span className="relative shrink-0 rounded-full border border-signal/50 px-1.5 text-[11px]">

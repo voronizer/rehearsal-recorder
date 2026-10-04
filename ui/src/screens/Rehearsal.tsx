@@ -102,6 +102,13 @@ export function Rehearsal({
   useEffect(() => {
     nextNameRef.current = nextName
   }, [nextName])
+  // The go Python has for the name the field shows, while that is the name
+  // it answered for; undefined for a pick it has not answered yet.
+  const knownGo = nextName === session.next_take_name ? session.next_take_go : undefined
+  const knownGoRef = useRef(knownGo)
+  useEffect(() => {
+    knownGoRef.current = knownGo
+  }, [knownGo])
 
   const nameNextTake = (name: string) => {
     // The name it would have anyway goes as "", so it goes on following
@@ -139,7 +146,9 @@ export function Rehearsal({
       setError(res.error ?? "Could not start the take")
       return
     }
-    onStartTake(res.take_number, nextNameRef.current, goFor(nextNameRef.current, nextChoices))
+    const name = nextNameRef.current
+    const known = knownGoRef.current
+    onStartTake(res.take_number, name, known !== undefined ? known : goFor(name, nextChoices))
   }
 
   // With a take in hand, Space plays it back rather than starting a new one;
@@ -303,6 +312,7 @@ export function Rehearsal({
               value={nextName}
               fallback={fallback}
               choices={nextChoices}
+              knownGo={knownGo}
               onCommit={nameNextTake}
             />
           }

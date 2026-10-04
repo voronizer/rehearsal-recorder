@@ -176,6 +176,9 @@ test.describe("the review screen", () => {
   test("the next take takes the last one's name, numbered", async ({ page }) => {
     await secondTake(page)
     await expect(page.locator("#take-name")).toHaveValue("Polyn")
+    await expect(
+      page.getByRole("group", { name: "Take name" }).locator("[data-take-go]")
+    ).toHaveText("2")
   })
 
   test("Escape asks before dropping a take, and a second Escape answers nothing", async ({

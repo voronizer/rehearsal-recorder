@@ -247,10 +247,10 @@ export function Recording({
             a long name never pushes the clock or the tiles about. */}
         <div className="flex max-w-full flex-col items-center gap-1">
           <h1
-            className="max-w-full truncate pb-[0.08em] leading-none font-semibold tracking-tight"
+            className="flex max-w-full pb-[0.08em] leading-none font-semibold tracking-tight"
             style={{ fontSize: `calc(${CLOCK_SIZE} / 2)` }}
           >
-            <GoTitle title={takeName} go={takeGo} />
+            <GoTitle title={takeName} go={takeGo} cut />
           </h1>
           {/* Digits stand on the baseline, and the room a line keeps under
               it for "g" and "y" was empty space that the tiles needed back

@@ -1500,8 +1500,7 @@ class Api:
                 key = s["name"].casefold()
                 if key not in seen:
                     seen.add(key)
-                    other.append({"song": s["name"], "name": s["name"],
-                                  "go": go_for(s["name"])})
+                    other.append({"song": s["name"], "go": go_for(s["name"])})
         return {"here": here, "other": other}
 
     def finish_rehearsal(self):

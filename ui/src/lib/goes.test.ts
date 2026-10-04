@@ -18,6 +18,10 @@ describe("goFor", () => {
     expect(goFor("Vesna", choices)).toBe(1)
     expect(goFor("Opus 5", choices)).toBe(1)
   })
+  it("is nothing while the choices have not arrived, rather than a guess", () => {
+    expect(goFor("Polyn", null)).toBeNull()
+    expect(goFor("Vesna", null)).toBeNull()
+  })
   it("is nothing for a take nobody named", () => {
     expect(goFor("Take 4", choices)).toBeNull()
     expect(goFor("  ", choices)).toBeNull()

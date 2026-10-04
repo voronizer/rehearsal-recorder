@@ -285,6 +285,9 @@ test.describe("the next take", () => {
     await page.getByRole("button", { name: /Save take/ }).click()
     // Kept, it is used up, and the next one follows on from it.
     await expect(field(page)).toHaveValue("Vesna")
+    await expect(
+      page.getByRole("group", { name: "Next take" }).locator("[data-take-go]")
+    ).toHaveText("2")
   })
 
   test("a name typed is the one recorded, however the field is left", async ({ page }) => {
@@ -627,4 +630,34 @@ test("a take is shown as its song with the go beside it, from 1", async ({ page 
   await expect(page.getByRole("button", { name: /^Take 1 Polyn 1/ })).toContainText("Polyn 1")
   await page.keyboard.press("Space")
   await expect(page.getByRole("heading", { name: "Polyn 2" })).toBeVisible()
+})
+
+test("until the songs are in, the go beside the field is Python's, never a guess of 1", async ({
+  page,
+}) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await recordTake(page)
+  await saveAs(page, "Polyn")
+  await expect(page.getByRole("button", { name: /^Take 1 Polyn 1/ })).toBeVisible()
+  await recordTake(page, 2)
+  // song_choices is held from here: the next Rehearsal mounts without it.
+  await page.evaluate(() => {
+    const w = window as unknown as Record<string, unknown> & {
+      __HOLD__?: Record<string, Promise<void>>
+    }
+    w.__HOLD__ = w.__HOLD__ || {}
+    w.__HOLD__.song_choices = new Promise((r) => {
+      w.__RELEASE_song_choices = r
+    })
+  })
+  await page.getByRole("button", { name: /Save take/ }).click()
+  const next = page.getByRole("textbox", { name: "Next take" })
+  await expect(next).toHaveValue("Polyn")
+  const go = page.getByRole("group", { name: "Next take" }).locator("[data-take-go]")
+  // Polyn has been gone at twice: this is the third.
+  await expect(go).toHaveText("3")
+  await page.keyboard.press("Space")
+  await expect(page.getByRole("heading", { level: 1, name: "Polyn 3" })).toBeVisible()
+  await page.evaluate(() => (window as unknown as { __RELEASE_song_choices: () => void }).__RELEASE_song_choices())
 })

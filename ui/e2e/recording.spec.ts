@@ -163,13 +163,25 @@ test("a long name is cut short on one line, and moves nothing", async ({ page })
   await secondGo(page, "A very long name for a song about spring, summer and a little autumn")
   const name = takeName(page)
   await expect(name).toHaveText(/^A very long name .* 2$/)
-  const cut = await name.evaluate((el) => ({
-    short: el.scrollWidth > el.clientWidth,
-    oneLine: el.getBoundingClientRect().height < parseFloat(getComputedStyle(el).fontSize) * 1.5,
-    inside: el.getBoundingClientRect().right <= window.innerWidth,
-    ellipsis: getComputedStyle(el).textOverflow,
-  }))
-  expect(cut).toEqual({ short: true, oneLine: true, inside: true, ellipsis: "ellipsis" })
+  // The title is what is cut; the go beside it stays whole.
+  const cut = await name.evaluate((el) => {
+    const title = el.querySelector("span.truncate")!
+    const go = title.nextElementSibling!.getBoundingClientRect()
+    return {
+      short: title.scrollWidth > title.clientWidth,
+      oneLine: el.getBoundingClientRect().height < parseFloat(getComputedStyle(el).fontSize) * 1.5,
+      inside: el.getBoundingClientRect().right <= window.innerWidth,
+      ellipsis: getComputedStyle(title).textOverflow,
+      goWhole: go.width > 0 && go.right <= window.innerWidth,
+    }
+  })
+  expect(cut).toEqual({
+    short: true,
+    oneLine: true,
+    inside: true,
+    ellipsis: "ellipsis",
+    goWhole: true,
+  })
 })
 
 test("clips are counted, on the tile that clipped, and kept to the end of the take", async ({

@@ -453,8 +453,13 @@ def main():
         counts = {t: c.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
                   for t in ("take", "take_file", "marker", "cloud_copy")}
         titles = sorted(c.execute(text("SELECT title FROM song")).scalars().all())
+        song_ref = [fk for fk in c.execute(text("PRAGMA foreign_key_list(take)")).mappings()
+                    if fk["table"] == "song"]
     engine.dispose()
     ok("and it is then what models.py describes", drift == [])
+    # models.py cannot say it (reflection does not see ON DELETE), so look.
+    ok("a take whose song goes is left without one, not deleted (ON DELETE SET NULL)",
+       len(song_ref) == 1 and song_ref[0]["on_delete"] == "SET NULL")
     ok("a take's name is not stored any more",
        "name" not in columns and {"song_id", "go"} <= columns)
     ok("every take keeps its files, its marks and its cloud copy",
