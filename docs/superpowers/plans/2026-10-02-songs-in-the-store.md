@@ -1,5 +1,7 @@
 # Songs in the Store Implementation Plan
 
+**Status:** done — every task implemented, reviewed and merged on 2026-10-04.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Store songs in the history database. A take becomes a go at a song (or at nothing), with a go number of its own. Go numbers run across the whole library and are shown beside the song's title. Every existing take moves over, and old folders and cloud copies are renamed to match in the background.

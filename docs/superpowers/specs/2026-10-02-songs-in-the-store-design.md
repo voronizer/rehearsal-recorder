@@ -1,5 +1,7 @@
 # Songs in the store: a take is a go at a song
 
+**Status:** done — implemented and merged on 2026-10-04 (plan: [2026-10-02-songs-in-the-store.md](../plans/2026-10-02-songs-in-the-store.md)).
+
 A song is not stored anywhere. Every time one is needed it is worked out from
 take names, "Polyn 3" being a go at "Polyn", and `docs/design-notes.md` says
 why: *a song is a rule, not a fact, and a stored copy of it would drift from
