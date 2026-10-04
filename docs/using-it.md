@@ -76,11 +76,11 @@ usually the version you settled on. Listen to where you left off before you
 start.
 
 Under it are the songs you did not play last time, each with the day it was
-last played and its newest starred take, or its last go, to listen to, and the rehearsals before that.
-**Open**, or a rehearsal in the list, opens it in History, and **History**
-under the list opens the newest, as the button at the top does. A soundcheck with
-no named takes is skipped: last time is the last rehearsal that played a
-song.
+last played and its newest starred take, or its last go, to listen to, and
+the rehearsals before that. **Open**, or a rehearsal in the list, opens it in
+History, and **History** under the list opens the newest, as the button at
+the top does. A soundcheck with no named takes is skipped: last time is the
+last rehearsal that played a song.
 
 While something plays from here, Space pauses it and Esc stops it; then
 Space starts the rehearsal again. **Check signal** stops it.
@@ -101,7 +101,8 @@ stopped short stands out before you read anything.
 - Click anywhere on a take's row, the bar or past it, to open the take in
   the player. If it is playing, it goes on playing from the same place.
 - Click a note to open its take at that spot.
-- Point at a row to rename the take, send it to the cloud or delete it.
+- Point at a row to star the take (★, see *Starring a take*), rename it, send
+  it to the cloud or delete it. The ★ stays in view on a starred take.
 
 Press **Record take**, or Space, to start recording. **Finish** ends the
 rehearsal.

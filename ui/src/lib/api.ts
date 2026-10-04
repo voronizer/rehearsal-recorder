@@ -175,8 +175,8 @@ export type Song = {
 
 /**
  * A stretch of an evening spent on one song, as history draws a rehearsal:
- * its goes in the order played, each as its length and whether it is starred. Python cuts the evening into
- * these, by the same rule as `songs`.
+ * its goes in the order played, each as its length and whether it is starred.
+ * Python cuts the evening into these, by the same rule as `songs`.
  */
 export type Run = {
   /** null for takes the app named itself. */

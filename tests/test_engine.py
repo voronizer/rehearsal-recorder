@@ -5960,6 +5960,9 @@ def main():
     _, l54 = fresh_api(Path(tempfile.mkdtemp()))
     l54.start_rehearsal("Live", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
     live54 = Path(l54._session["folder"])
+    cloud54 = Path(tempfile.mkdtemp()) / "Cloud"
+    l54.set_cloud_dir(str(cloud54))
+    l54.set_auto_publish(True)
 
     def keep54(number, name):
         draft = live54 / "_drafts" / f"take {number}"
@@ -5982,6 +5985,8 @@ def main():
     ok("and cropped", cropped54["ok"] and cropped54["take"]["starred"])
     queued54 = dict(l54._cloud_queue.states(str(live54)))
     l54.set_take_star(str(live54), 2, True)
+    ok("the kept takes are queued for the cloud, to compare against",
+       len(queued54) > 0)
     ok("★ queues no copy for the cloud, and renames nothing on disk",
        dict(l54._cloud_queue.states(str(live54))) == queued54
        and Path(l54._lib.take(live54, 2)["tracks"][0]["file"]).exists())

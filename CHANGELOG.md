@@ -7,15 +7,14 @@ opening.
 
 ## Unreleased
 
-- **★ marks a take worth coming back to.** A click on a take's row, or
-  beside the open take in the player, puts a star on it or takes it off. A
-  song can have several, and a take with no song can have one. A starred
-  take is the green one, in the list of takes and in the evening strip; a
-  *keep this* mark is about a moment again, and no longer turns its whole
-  take green. On the setup screen, ▶ on a song plays its newest starred
-  take, wherever it was played, and says which. The history moves on by
-  itself the first time this version opens it, with a copy kept beside it
-  as `library.sqlite.bak-0002`; nothing is starred for you (#12).
+- **★ marks a take worth coming back to.** A click on the ★ on a take's
+  row, or beside the open take in the player, puts a star on it or takes it
+  off. A song can have several, and a take with no song can have one. A
+  starred take is the green one, in the list of takes and in the evening
+  strip; a *keep this* mark is about a moment again, and no longer turns its
+  whole take green. On the setup screen, ▶ on a song plays its newest starred
+  take, wherever it was played, and says which. Nothing is starred for you
+  (#12).
 - **A take is a go at a song, and the go is a number of its own.** The name
   field holds the song's title, with the go it will be dimmed beside it, and
   the songs under it put only the title in. The go is counted across every
