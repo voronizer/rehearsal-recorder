@@ -3,8 +3,8 @@ import type { Run } from "@/lib/api"
 
 /**
  * An evening drawn small: a bar per take, as long as the take, in the order
- * played, with a gap where the band moved on to another song. A take marked
- * to keep is green.
+ * played, with a gap where the band moved on to another song. A starred take
+ * is green.
  *
  * Marks are few in practice, so it has to say something without them, and
  * it does: how many songs, how many goes at each, which ran long. Hidden from
@@ -23,10 +23,10 @@ export function EveningStrip({ runs, className }: { runs: Run[]; className?: str
           {run.takes.map((take, j) => (
             <span
               key={j}
-              data-keep={take.keep || undefined}
+              data-starred={take.starred || undefined}
               className={cn(
                 "h-full min-w-0.5 rounded-[2px]",
-                take.keep ? "bg-signal/80" : "bg-muted-foreground/40"
+                take.starred ? "bg-signal/80" : "bg-muted-foreground/40"
               )}
               style={{ flex: `${Math.max(1, take.duration_sec)} 1 0` }}
             />

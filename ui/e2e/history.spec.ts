@@ -109,11 +109,11 @@ test.describe("History", () => {
     await expect(jam).toContainText("Thu 10 Sep, 19:00")
     await expect(jam).toContainText("42 min")
     await expect(jam).toContainText("9 takes")
-    // One run per song, one bar per go, and the go marked to keep in green.
+    // One run per song, one bar per go, and the starred go in green.
     const strip = jam.locator("[data-strip]")
     await expect(strip.locator(":scope > div")).toHaveCount(6)
     await expect(strip.locator("span")).toHaveCount(9)
-    await expect(strip.locator("[data-keep]")).toHaveCount(1)
+    await expect(strip.locator("[data-starred]")).toHaveCount(1)
     // Takes nobody named are one run, still drawn.
     const quiet = list.getByRole("button", { name: /^Wednesday jam/ })
     await expect(quiet.locator("[data-strip] > div")).toHaveCount(1)

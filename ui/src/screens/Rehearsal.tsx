@@ -275,6 +275,11 @@ export function Rehearsal({
     onChanged()
   }
 
+  const starTake = async (take: Take, starred: boolean) => {
+    await api().set_take_star(session.folder, take.take_number, starred)
+    onChanged()
+  }
+
   const removeMarker = async (take: Take, seconds: number) => {
     await api().remove_take_marker(session.folder, take.take_number, seconds)
     onChanged()
@@ -397,6 +402,7 @@ export function Rehearsal({
               onOpen={select}
               onOpenAt={openAt}
               onRename={setToRename}
+              onStar={starTake}
               onShare={setToShare}
               onDelete={setToDelete}
               cloudStates={session.cloud_queue}

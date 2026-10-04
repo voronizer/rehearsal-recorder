@@ -64,6 +64,9 @@ export type Take = {
   /** Which go at the song this is, counted across the library; null with no
    *  song. */
   go?: number | null
+  /** ★: somebody starred this take as one worth coming back to. A song can
+   *  have several, and a take with no song can have one. */
+  starred?: boolean
   duration_sec: number
   tracks: TrackFile[]
   /** Spots marked while listening back, in order. */
@@ -172,13 +175,13 @@ export type Song = {
 
 /**
  * A stretch of an evening spent on one song, as history draws a rehearsal:
- * its goes in the order played, each as its length and whether it was marked
- * to keep. Python cuts the evening into these, by the same rule as `songs`.
+ * its goes in the order played, each as its length and whether it is starred. Python cuts the evening into
+ * these, by the same rule as `songs`.
  */
 export type Run = {
   /** null for takes the app named itself. */
   song: string | null
-  takes: { duration_sec: number; keep: boolean }[]
+  takes: { duration_sec: number; starred: boolean }[]
 }
 
 export type RehearsalSummary = {
@@ -227,6 +230,16 @@ export type SongChoice = {
  *  rehearsal played, in order, and every other, the most recent first. */
 export type SongChoices = { here: SongChoice[]; other: SongChoice[] }
 
+/** What a song's ▶ plays (api.last_time): its newest ★ go, from whichever
+ *  rehearsal it was played at, or with none its last go at the rehearsal it
+ *  is listed under. */
+export type SongPlays = {
+  folder: string
+  rehearsal: string
+  created_at: string
+  take: Take
+}
+
 /**
  * What the setup screen says about the rehearsals before this one
  * (api.last_time): the last one song by song, the songs it left out, and
@@ -240,7 +253,7 @@ export type LastTime = {
     name: string
     created_at: string
     takes: Take[]
-    songs: Song[]
+    songs: (Song & { plays: SongPlays })[]
     runs: Run[]
     in_cloud: number
   } | null
@@ -254,6 +267,8 @@ export type LastTime = {
     created_at: string
     goes: number
     take: Take
+    /** What its ▶ plays. */
+    plays: SongPlays
   }[]
   earlier: {
     folder: string
@@ -591,6 +606,12 @@ type PyApi = {
     folder: string,
     takeNumber: number,
     newName: string
+  ): Promise<Ok<{ take?: Take }>>
+  /** Puts ★ on a take, or takes it off. Set, not toggled. */
+  set_take_star(
+    folder: string,
+    takeNumber: number,
+    starred: boolean
   ): Promise<Ok<{ take?: Take }>>
   rename_rehearsal(
     folder: string,

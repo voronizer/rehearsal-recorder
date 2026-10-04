@@ -115,6 +115,15 @@ function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = c
 // is one take long unless a page asks for a fuller evening; the others are
 // what the setup screen's last time needs: one with nothing named, and an
 // older one with a song Tuesday jam did not play.
+// Takes starred in the rehearsals before this one, as "folder#take_number".
+// A page can star some with window.__STARRED__; set_take_star adds and
+// removes. The live session's takes carry their own `starred`.
+const stars = new Set(window.__STARRED__ || []);
+function withStars(r) {
+  for (const t of r.takes) t.starred = stars.has(`${r.folder}#${t.take_number}`);
+  return r;
+}
+
 function pastRehearsal(folder) {
   if (folder === '/rec/quiet') {
     const takes = [
@@ -122,7 +131,7 @@ function pastRehearsal(folder) {
        tracks:[{name:'Guitar', file:'/rec/quiet/t1.wav'}]},
       {take_number:2, name:'Take 2', duration_sec:300, markers:[],
        tracks:[{name:'Guitar', file:'/rec/quiet/t2.wav'}]}];
-    return {folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)};
+    return withStars({folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)});
   }
   if (folder === '/rec/older') {
     const takes = [
@@ -130,7 +139,7 @@ function pastRehearsal(folder) {
        tracks:[{name:'Guitar', file:'/rec/older/d1.wav'}]},
       {take_number:2, name:'Doroga 2', duration_sec:240, markers:[],
        tracks:[{name:'Guitar', file:'/rec/older/d2.wav'}]}];
-    return {folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)};
+    return withStars({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)});
   }
   // Its own path, distinct from the live session's /rec/g.wav — two takes
   // sharing a dummy path would let one's mocked length leak onto the other.
@@ -152,7 +161,7 @@ function pastRehearsal(folder) {
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
         tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
-  return {folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)};
+  return withStars({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)});
 }
 
 // The rest of the band's repertoire, as other rehearsals in the library
@@ -172,17 +181,27 @@ function songsOf(takes) {
 }
 
 // And api._runs_of: the evening in order, in runs of goes at one song, each
-// go as its length and whether it was marked to keep.
+// go as its length and whether it is starred.
 function runsOf(takes) {
   const runs = [];
   for (const t of takes) {
     const song = t.song || null;
     const go = {duration_sec: t.duration_sec,
-                keep: (t.markers || []).some(m => m.kind === 'good')};
+                starred: Boolean(t.starred)};
     if (runs.length && runs[runs.length - 1].song === song) runs[runs.length - 1].takes.push(go);
     else runs.push({song, takes: [go]});
   }
   return runs;
+}
+
+// And api.last_time's "plays": a song's newest ★ go across the rehearsals
+// given, newest first, or with none its last go at `r`.
+function playsOf(song, r, goes, rehearsals) {
+  for (const x of rehearsals)
+    for (const t of [...x.takes].reverse())
+      if (t.starred && t.song === song)
+        return {folder:x.folder, rehearsal:x.name, created_at:x.created_at, take:t};
+  return {folder:r.folder, rehearsal:r.name, created_at:r.created_at, take:goes[goes.length - 1]};
 }
 
 // And api._last_attempt: how long the latest go at the next take's song ran.
@@ -548,6 +567,18 @@ window.__MAKE_API__ = () => ({
     // never allows.
     return JSON.parse(JSON.stringify({ok:true, take}));
   }),
+  set_take_star: track('set_take_star', async (folder, n, on) => {
+    const live = session && folder === session.folder
+      ? session.takes.find(t => t.take_number === n) : null;
+    if (live) live.starred = Boolean(on);
+    else if (on) stars.add(`${folder}#${n}`);
+    else stars.delete(`${folder}#${n}`);
+    const take = live || pastRehearsal(folder).takes.find(t => t.take_number === n);
+    if (!take) return {ok:false, error:'Take not found'};
+    // A copy, as everywhere here: the real bridge's JSON round-trip never
+    // hands out the mock's own state.
+    return JSON.parse(JSON.stringify({ok:true, take}));
+  }),
   rename_rehearsal: track('rename_rehearsal', async (folder, name) => {
     if (session) session.name = name;
     return {ok:true, folder:'/rec/' + name, name,
@@ -572,13 +603,13 @@ window.__MAKE_API__ = () => ({
      take_count:9, total_duration_sec:2520, disk_bytes:1200000000, in_cloud:3,
      songs:[{name:'Polyn', takes:3}, {name:'Vesna', takes:2}, {name:'Ogon', takes:1},
             {name:'Sonce', takes:1}, {name:'Dym', takes:1}, {name:'Ptaha', takes:1}],
-     runs:[{song:'Polyn', takes:[{duration_sec:300, keep:false}, {duration_sec:280, keep:false},
-                                 {duration_sec:290, keep:true}]},
-           {song:'Vesna', takes:[{duration_sec:260, keep:false}, {duration_sec:250, keep:false}]},
-           {song:'Ogon', takes:[{duration_sec:330, keep:false}]},
-           {song:'Sonce', takes:[{duration_sec:240, keep:false}]},
-           {song:'Dym', takes:[{duration_sec:270, keep:false}]},
-           {song:'Ptaha', takes:[{duration_sec:300, keep:false}]}]},
+     runs:[{song:'Polyn', takes:[{duration_sec:300, starred:false}, {duration_sec:280, starred:false},
+                                 {duration_sec:290, starred:true}]},
+           {song:'Vesna', takes:[{duration_sec:260, starred:false}, {duration_sec:250, starred:false}]},
+           {song:'Ogon', takes:[{duration_sec:330, starred:false}]},
+           {song:'Sonce', takes:[{duration_sec:240, starred:false}]},
+           {song:'Dym', takes:[{duration_sec:270, starred:false}]},
+           {song:'Ptaha', takes:[{duration_sec:300, starred:false}]}]},
     {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
      take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[],
      runs:runsOf(pastRehearsal('/rec/quiet').takes)},
@@ -612,6 +643,9 @@ window.__MAKE_API__ = () => ({
     for (const r of [last, older])
       for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
     const inCloud = last.takes.filter(t => t.cloud && (t.cloud.mix || t.cloud.tracks)).length;
+    const both = [last, older];
+    const songs = songsOf(last.takes).map(s => ({...s, plays: playsOf(s.name, last,
+      last.takes.filter(t => s.take_numbers.includes(t.take_number)), both)}));
     const earlier = [
       {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
        take_count:2, total_duration_sec:600, missing:false},
@@ -621,9 +655,10 @@ window.__MAKE_API__ = () => ({
         created_at:missingRehearsal.created_at, take_count:5, total_duration_sec:1200,
         missing:true}] : [])];
     return JSON.parse(JSON.stringify({
-      last: {...last, songs:songsOf(last.takes), runs:runsOf(last.takes), in_cloud:inCloud},
+      last: {...last, songs, runs:runsOf(last.takes), in_cloud:inCloud},
       not_played: [{name:'Doroga', folder:'/rec/older', rehearsal:'First rehearsal',
-                    created_at:'2026-08-25T19:00:00', goes:2, take:older.takes[1]}],
+                    created_at:'2026-08-25T19:00:00', goes:2, take:older.takes[1],
+                    plays: playsOf('Doroga', older, older.takes, both)}],
       earlier,
       count: earlier.length + 1}));
   }),

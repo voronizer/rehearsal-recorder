@@ -7,6 +7,7 @@ import {
   Play,
   Trash2,
 } from "lucide-react"
+import { StarButton } from "@/components/StarButton"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
@@ -62,8 +63,9 @@ function legendLabel(kind: MarkerKind, n: number): string {
  * Play on a row plays the take right here, with no player on screen: the bar
  * fills as it goes. The bar, or anywhere else on its row, opens the take in
  * the player, and a take that is playing carries on there from where it was. A note opens its take at the
- * spot it was left. Rename, the cloud and Delete show on the row under the
- * mouse, the same three the strip offers for an open take.
+ * spot it was left. ★, Rename, the cloud and Delete show on the row under the
+ * mouse, ★ staying in view on a starred take; Rename, the cloud and Delete
+ * are the same three the strip offers for an open take.
  *
  * It also stands in for the take strip while nothing is open, so a take
  * still waiting for the cloud says so here, as its pill did.
@@ -77,6 +79,7 @@ export function RehearsalOverview({
   onOpen,
   onOpenAt,
   onRename,
+  onStar,
   onShare,
   onDelete,
 }: {
@@ -89,6 +92,7 @@ export function RehearsalOverview({
   onOpen: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
   onRename?: (take: Take) => void
+  onStar?: (take: Take, starred: boolean) => void
   onShare?: (take: Take) => void
   onDelete?: (take: Take) => void
 }) {
@@ -178,6 +182,7 @@ export function RehearsalOverview({
                 onOpen={onOpen}
                 onOpenAt={onOpenAt}
                 onRename={onRename}
+                onStar={onStar}
                 onShare={onShare}
                 onDelete={onDelete}
               />
@@ -208,6 +213,7 @@ function TakeRow({
   onOpen,
   onOpenAt,
   onRename,
+  onStar,
   onShare,
   onDelete,
 }: {
@@ -220,12 +226,13 @@ function TakeRow({
   onOpen: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
   onRename?: (take: Take) => void
+  onStar?: (take: Take, starred: boolean) => void
   onShare?: (take: Take) => void
   onDelete?: (take: Take) => void
 }) {
   const status = takeCloudStatus(take, cloudState)
   const shared = inCloud(take)
-  const keep = take.markers?.some((m) => m.kind === "good") ?? false
+  const starred = take.starred ?? false
   const length = take.duration_sec || here?.duration || 0
   const along = (at: number) =>
     length > 0 ? Math.min(98.5, Math.max(1, (at / length) * 100)) : 0
@@ -276,9 +283,10 @@ function TakeRow({
             aria-label={takeButtonLabel(take, status)}
             title="Open it in the player"
             onClick={() => onOpen(take)}
+            data-starred={starred || undefined}
             className={cn(
               "relative flex h-8 min-w-24 shrink items-center gap-2 overflow-hidden rounded-lg border px-2.5 text-left whitespace-nowrap transition-colors",
-              keep
+              starred
                 ? "border-signal/50 bg-signal/10 hover:bg-signal/15"
                 : "bg-muted hover:bg-accent"
             )}
@@ -316,11 +324,6 @@ function TakeRow({
             >
               <TakeTitle take={take} cut />
             </span>
-            {keep && (
-              <span className="relative shrink-0 rounded-full border border-signal/50 px-1.5 text-[11px]">
-                keep
-              </span>
-            )}
             {played !== null && (
               <span
                 aria-hidden
@@ -359,45 +362,59 @@ function TakeRow({
           )}
         </div>
 
-        {/* On the row under the mouse, or reached with Tab. Hidden, they
-            still hold their place, so the rows do not shift as it moves. */}
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-          {onShare && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={
-                shared ? `Cloud copies of ${take.name}` : `Copy ${take.name} to the cloud`
-              }
-              title={shared ? "In the cloud folder" : "Copy this take to the cloud folder"}
-              onClick={() => onShare(take)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <CloudUpload />
-            </Button>
+        <div className="flex items-center gap-1">
+          {/* ★ stays in view on a starred take, so which ones they are reads
+              down the list; on the others it shows with the rest. */}
+          {onStar && (
+            <StarButton
+              take={take}
+              onStar={onStar}
+              className={cn(
+                !starred &&
+                  "opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+              )}
+            />
           )}
-          {onRename && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Rename take ${take.name}`}
-              onClick={() => onRename(take)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <Pencil />
-            </Button>
-          )}
-          {onDelete && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Delete take ${take.name}`}
-              onClick={() => onDelete(take)}
-              className="text-muted-foreground hover:text-destructive"
-            >
-              <Trash2 />
-            </Button>
-          )}
+          {/* On the row under the mouse, or reached with Tab. Hidden, they
+              still hold their place, so the rows do not shift as it moves. */}
+          <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+            {onShare && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={
+                  shared ? `Cloud copies of ${take.name}` : `Copy ${take.name} to the cloud`
+                }
+                title={shared ? "In the cloud folder" : "Copy this take to the cloud folder"}
+                onClick={() => onShare(take)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <CloudUpload />
+              </Button>
+            )}
+            {onRename && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Rename take ${take.name}`}
+                onClick={() => onRename(take)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Pencil />
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Delete take ${take.name}`}
+                onClick={() => onDelete(take)}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 

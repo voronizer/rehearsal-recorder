@@ -372,6 +372,13 @@ export function HistoryScreen({
     void refresh()
   }
 
+  const starTake = async (take: Take, starred: boolean) => {
+    if (!opened) return
+    await api().set_take_star(opened.folder, take.take_number, starred)
+    await reopen(opened.folder)
+    void refresh()
+  }
+
   const removeMarker = async (take: Take, seconds: number) => {
     if (!opened) return
     await api().remove_take_marker(opened.folder, take.take_number, seconds)
@@ -598,6 +605,7 @@ export function HistoryScreen({
                   onOpen={select}
                   onOpenAt={openAt}
                   onRename={setTakeToRename}
+                  onStar={starTake}
                   onShare={setTakeToShare}
                   onDelete={setTakeToDelete}
                 />
