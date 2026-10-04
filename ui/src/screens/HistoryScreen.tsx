@@ -451,6 +451,7 @@ export function HistoryScreen({
             onRename={setTakeToRename}
             onShare={setTakeToShare}
             onDelete={setTakeToDelete}
+            onStar={starTake}
             emptyHint="Nothing was kept from this rehearsal, or every take since got deleted."
           />
           <TakePlayer

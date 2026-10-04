@@ -367,6 +367,7 @@ export function Rehearsal({
           onRename={setToRename}
           onShare={setToShare}
           onDelete={setToDelete}
+          onStar={starTake}
           cloudStates={session.cloud_queue}
           emptyHint="Hit Record or press Space — takes show up here and can be played straight away."
         />

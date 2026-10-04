@@ -93,3 +93,24 @@ test("a take just saved is starred from the rehearsal's own overview", async ({ 
   await expect(button).toHaveAttribute("aria-pressed", "true")
   expect((await calls(page, "set_take_star")).at(-1)?.args.slice(1)).toEqual([1, true])
 })
+
+test("in the player, ★ is beside the open take, and its pill carries it", async ({ page }) => {
+  const overview = await openEvening(page)
+  await overview.getByRole("button", { name: "Take 2 Polyn 2" }).click()
+  const strip = page.getByRole("group", { name: "Take strip" })
+  await expect(star(strip, "Polyn 2")).toHaveAttribute("aria-pressed", "false")
+  await star(strip, "Polyn 2").click()
+  await expect(star(strip, "Polyn 2")).toHaveAttribute("aria-pressed", "true")
+  expect((await calls(page, "set_take_star")).at(-1)?.args).toEqual(["/rec/old", 2, true])
+  await expect(strip.getByRole("button", { name: /^Take 2 Polyn 2, starred/ })).toBeVisible()
+  await expect(strip.locator("[aria-current='true'] [data-starred]")).toHaveCount(1)
+})
+
+test("every starred pill carries ★, not only the open one", async ({ page }) => {
+  const overview = await openEvening(page, "window.__STARRED__ = ['/rec/old#1', '/rec/old#3'];")
+  await overview.getByRole("button", { name: "Take 4 Vesna 1" }).click()
+  const strip = page.getByRole("group", { name: "Take strip" })
+  await expect(strip.locator("[data-starred]")).toHaveCount(2)
+  await expect(strip.getByRole("button", { name: /^Take 1 Polyn 1, starred/ })).toBeVisible()
+  await expect(strip.getByRole("button", { name: /^Take 3 Take 3, starred/ })).toBeVisible()
+})

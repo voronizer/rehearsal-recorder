@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react"
-import { Cloud, CloudCheck, Music2, Pencil, Trash2 } from "lucide-react"
+import { Cloud, CloudCheck, Music2, Pencil, Star, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/Shell"
 import { cn } from "@/lib/utils"
 import { MARKER_KINDS } from "@/lib/markers"
 import { formatMMSS } from "@/lib/format"
 import { TakeTitle } from "@/components/TakeTitle"
+import { StarButton } from "@/components/StarButton"
 import type { Take } from "@/lib/api"
 
 /**
@@ -43,11 +44,11 @@ export function takeCloudStatus(
   return take.cloud_error ? "Not in the cloud" : null
 }
 
-/** "Take 2 Polyn 2", then the status if there is one. The status has to come
- *  after the "Take N name" the tests and screen readers both key off, not
- *  replace it. */
+/** "Take 2 Polyn 2", ", starred" when it is, then the status if there is one.
+ *  The status has to come after the "Take N name" the tests and screen
+ *  readers both key off, not replace it. */
 export function takeButtonLabel(take: Take, status: string | null): string {
-  const base = `Take ${take.take_number} ${take.name}`
+  const base = `Take ${take.take_number} ${take.name}${take.starred ? ", starred" : ""}`
   return status ? `${base} — ${status}` : base
 }
 
@@ -58,6 +59,7 @@ export function TakeStrip({
   onRename,
   onShare,
   onDelete,
+  onStar,
   cloudStates,
   emptyHint,
 }: {
@@ -67,6 +69,7 @@ export function TakeStrip({
   onRename?: (take: Take) => void
   onShare?: (take: Take) => void
   onDelete?: (take: Take) => void
+  onStar?: (take: Take, starred: boolean) => void
   cloudStates?: Record<number, "queued" | "working">
   emptyHint?: string
 }) {
@@ -133,6 +136,13 @@ export function TakeStrip({
               <span className="flex max-w-40 min-w-0">
                 <TakeTitle take={take} cut />
               </span>
+              {take.starred && (
+                <Star
+                  aria-hidden
+                  data-starred
+                  className="size-3 shrink-0 fill-current text-signal"
+                />
+              )}
               {take.markers && take.markers.length > 0 && (
                 <span className="flex shrink-0 items-center gap-1">
                   {MARKER_KINDS.filter((k) =>
@@ -170,6 +180,7 @@ export function TakeStrip({
 
       {live && (
         <div className="flex shrink-0 items-center gap-1">
+          {onStar && <StarButton take={live} onStar={onStar} />}
           {onRename && (
             <Button
               variant="ghost"
