@@ -254,7 +254,7 @@ stops following until the playhead comes back into view.
 Each take is a go at a song. You name it with the song's title, and the app
 counts the goes: the number beside the name, "Polyn 1", "Polyn 2", goes on
 from one rehearsal to the next, so "Polyn 17" is one take wherever it was
-played. A new take is another go at the song before it, so you only name a
+played. Deleting a take does not free its number. A new take is another go at the song before it, so you only name a
 take when the band moves on to another song.
 
 Type the title only; the number is the app's. Typing "Polyn 5" names the

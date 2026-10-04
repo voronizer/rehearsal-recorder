@@ -54,6 +54,10 @@ class Song(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String)
+    # The highest go this song has ever given. The next go is one past it,
+    # so a number is never given twice, even after its take is deleted; and
+    # a song is kept when its last take goes, so its count is kept too.
+    last_go: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Track(Base):

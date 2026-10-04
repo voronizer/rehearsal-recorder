@@ -488,6 +488,8 @@ def main():
        names_of("Old")[4] == ("Song 1", "Song", 1) and names_of("Mid")[2] == ("Song 2", "Song", 2))
     ok("even with no such song anywhere: what the rule cannot know stays as it reads",
        names_of("Old")[6] == ("Опус 1", "Опус", 1))
+    ok("each song's count starts at its highest go",
+       lib.next_goes() == {"Polyn": 5, "Song": 3, "Опус": 2, "Полынь": 3})
     lib.close()
 
     try:
@@ -558,15 +560,22 @@ def main():
        rename(8, "ПОЛЫНЬ") == ("ПОЛЫНЬ 1", "ПОЛЫНЬ", 1))
     ok("but not a song that other takes are goes at",
        rename(1, "POLYN") == ("Polyn 1", "Polyn", 1))
-    ok("a song left with no takes is gone",
-       rename(9, "Take 9") == ("Take 9", None, None) and "Vesna" not in song_titles())
+    ok("a song left with no takes keeps its count: its next go is not 1 again",
+       rename(9, "Take 9") == ("Take 9", None, None)
+       and lib.resolve_name(jam, "vesna", 20) == {"song": "Vesna", "go": 2, "name": "Vesna 2"})
     lib.delete_take(jam, 2)
     ok("deleting a go does not renumber the rest", lib.take(jam, 3)["name"] == "Polyn 3")
+    lib.delete_take(jam, 4)
+    ok("deleting the latest go does not give its number out again",
+       lib.resolve_name(jam, "Polyn", 20)["go"] == 6)
     lib.delete_take(jam, 8)
-    ok("deleting a song's last take deletes the song", "ПОЛЫНЬ" not in song_titles())
+    ok("a song whose takes are all gone is kept, and carries on from its count",
+       "ПОЛЫНЬ" in song_titles() and lib.resolve_name(jam, "полынь", 20)["go"] == 3)
     lib.forget_rehearsal(jam)
     lib.forget_rehearsal(other)
-    ok("forgetting rehearsals forgets the songs only they had", song_titles() == [])
+    ok("forgetting rehearsals keeps every song and its count",
+       song_titles() == ["Polyn", "Song 2", "Vesna", "ПОЛЫНЬ"]
+       and lib.next_goes() == {"Polyn": 6, "Song 2": 3, "Vesna": 2, "ПОЛЫНЬ": 3})
 
     lib.create_rehearsal(rec10 / "Kept", "Kept", "2026-10-03T19:00:00", 48000, 24, [])
     add(1, "Polyn", rec10 / "Kept")
@@ -580,10 +589,10 @@ def main():
                 ["polyn", "Polyn 3", "Recovered take 3", "zima", "Zima 2", "Опус 5"], start=1)],
     }), encoding="utf-8")
     import_all(lib, None)
-    ok("an imported rehearsal is read by the old rule, its goes numbered after the "
-       "ones already there, even though it is older",
+    ok("an imported rehearsal is read by the old rule, its goes carrying on from "
+       "each song's count, even though it is older",
        [(t["name"], t["song"], t["go"]) for t in lib.rehearsal(old_jam)["takes"]] == [
-           ("Polyn 2", "Polyn", 2), ("Polyn 3", "Polyn", 3), ("Take 3", None, None),
+           ("Polyn 7", "Polyn", 7), ("Polyn 8", "Polyn", 8), ("Take 3", None, None),
            ("zima 1", "zima", 1), ("zima 2", "zima", 2), ("Опус 1", "Опус", 1)])
     lib.close()
 

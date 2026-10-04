@@ -288,7 +288,9 @@ intended. So the name field holds a title, and the go is shown beside it.
 from its first ever, so "Polyn 17" is one take wherever it was played.
 Counting them from the takes on every read would renumber them when one is
 deleted, and rename its folder and cloud copy for no reason: a stored go is
-given once and kept.
+given once and kept. Each song keeps a count of the goes it has given, and a
+song is kept when its last take goes, so deleting the latest go does not give
+its number out again.
 
 **Names are put right in the background.** A take's folder and cloud copy
 are named after it, so when its name changes without them — migration 0002

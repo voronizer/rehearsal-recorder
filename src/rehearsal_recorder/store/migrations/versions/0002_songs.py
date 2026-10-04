@@ -8,8 +8,8 @@ Songs were worked out from take names on every read. They are stored now; a
 take points at its song with a go number, and its name follows from the two.
 This reads the old names by the rule they were written under
 (names.legacy_song), numbers the goes of each song afresh across the library
-in the order they were played (every rehearsal had its own "Polyn 1"), and
-drops the column. Only the database changes: folders and cloud copies whose
+in the order they were played (every rehearsal had its own "Polyn 1"). Each
+song's count of goes given starts at its highest. Then it drops the column. Only the database changes: folders and cloud copies whose
 names come out differently are renamed afterwards, in the background
 (names_pass.py), so a failure here leaves every file where it was.
 
@@ -42,6 +42,7 @@ def upgrade() -> None:
         "song",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("title", sa.String(), nullable=False),
+        sa.Column("last_go", sa.Integer(), nullable=False, server_default="0"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.execute("ALTER TABLE take ADD COLUMN song_id INTEGER "
@@ -71,8 +72,9 @@ def upgrade() -> None:
         counted[key] = counted.get(key, 0) + 1
         goes.append({"id": take_id, "key": key, "go": counted[key]})
     ids = {
-        key: bind.execute(sa.text("INSERT INTO song (title) VALUES (:title)"),
-                          {"title": title}).lastrowid
+        key: bind.execute(
+            sa.text("INSERT INTO song (title, last_go) VALUES (:title, :last_go)"),
+            {"title": title, "last_go": counted[key]}).lastrowid
         for key, (_, title) in titles.items()
     }
     if goes:

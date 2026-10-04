@@ -14,7 +14,7 @@ see models.py for why.
 
 from pathlib import Path
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload, sessionmaker
 
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
@@ -209,8 +209,9 @@ class Library:
     # go here, in the transaction that writes the take, by _resolve. Titles
     # are unique case-blind, which SQLite cannot enforce for Cyrillic (its
     # lower() folds only ASCII), so it is enforced here: a title is looked up
-    # casefolded before a song is made. A song with no takes left goes with
-    # its last one, in the methods that delete or rename takes.
+    # casefolded before a song is made. A song is never deleted with its
+    # takes: one with none keeps its title and its count of goes given
+    # (Song.last_go), so a number is never given twice.
 
     @staticmethod
     def _songs_by_key(db):
@@ -237,8 +238,9 @@ class Library:
         4. Anything else is a new song with exactly that title — "Opus 5" is
            a title of its own unless a song called "Opus" exists.
 
-        The go is the app's: one past the highest go at the song anywhere in
-        the library. A take already a go at the song keeps its go ("Polyn 2"
+        The go is the app's: one past the song's count of goes given
+        (Song.last_go), so a number is never given twice, even after its take
+        is deleted. A take already a go at the song keeps its go ("Polyn 2"
         renamed to Polyn stays Polyn 2); and when it is the song's only take,
         a name differing from the title only in case respells the song.
         """
@@ -264,29 +266,22 @@ class Library:
                     and not self._has_other_takes(db, song.id, current.id)):
                 title = name
             return song, title, current.go
-        highest = db.scalar(select(func.max(Take.go)).where(Take.song_id == song.id))
-        return song, title, (highest or 0) + 1
+        return song, title, (song.last_go or 0) + 1
 
     @staticmethod
-    def _song_row(db, song, title):
-        """The Song a take resolved to (_resolve): made if it is new, and
-        respelled if _resolve said so. None for no song."""
+    def _song_row(db, song, title, go):
+        """The Song a take resolved to (_resolve): made if it is new,
+        respelled if _resolve said so, and its count moved on to `go`. None
+        for no song."""
         if title is None:
             return None
         if song is None:
-            song = Song(title=title)
+            song = Song(title=title, last_go=0)
             db.add(song)
         elif song.title != title:
             song.title = title
+        song.last_go = max(song.last_go or 0, go)
         return song
-
-    @staticmethod
-    def _drop_songless(db, song_ids):
-        """Deletes those of `song_ids` that no take is a go at any more."""
-        db.flush()
-        for song_id in {i for i in song_ids if i is not None}:
-            if db.scalars(select(Take.id).where(Take.song_id == song_id).limit(1)).first() is None:
-                db.execute(delete(Song).where(Song.id == song_id))
 
     def resolve_name(self, folder, name, take_number):
         """
@@ -306,15 +301,11 @@ class Library:
 
     def next_goes(self):
         """{title: the go the next take of that song would be}, for every
-        song: one past its highest go anywhere in the library, as _resolve
-        counts it. One query, for the songs offered under a take's name."""
+        song: one past its count of goes given, as _resolve counts it. One
+        query, for the songs offered under a take's name."""
         with self._session() as db:
-            rows = db.execute(
-                select(Song.title, func.max(Take.go))
-                .join(Take, Take.song_id == Song.id)
-                .group_by(Song.id)
-            ).all()
-        return {title: (highest or 0) + 1 for title, highest in rows}
+            rows = db.execute(select(Song.title, Song.last_go)).all()
+        return {title: (last or 0) + 1 for title, last in rows}
 
     # ---------- rehearsals ----------
 
@@ -364,16 +355,12 @@ class Library:
         folder = Path(folder)
         with self._session.begin() as db:
             songs = self._songs_by_key(db)
-            highest = dict(db.execute(
-                select(Take.song_id, func.max(Take.go))
-                .where(Take.song_id.is_not(None)).group_by(Take.song_id)
-            ).all())
             counted = {}
 
             def go_at(name):
                 # Old names by the old rule, as migration 0002 read the
                 # database's own. A song already in the library keeps its
-                # title, and its goes go on from its highest, however old
+                # title, and its goes go on from its count, however old
                 # this rehearsal is: a number, once given, is kept. A new
                 # song is spelled as this rehearsal first spells it.
                 title = legacy_song(name)
@@ -381,10 +368,11 @@ class Library:
                     return None, None
                 key = title.casefold()
                 if key not in songs:
-                    songs[key] = Song(title=title)
+                    songs[key] = Song(title=title, last_go=0)
                 if key not in counted:
-                    counted[key] = highest.get(songs[key].id) or 0
+                    counted[key] = songs[key].last_go or 0
                 counted[key] += 1
+                songs[key].last_go = counted[key]
                 return songs[key], counted[key]
 
             placed = {int(t["take_number"]): go_at(t.get("name"))
@@ -435,9 +423,7 @@ class Library:
             row = self._find(db, folder)
             if row is None:
                 return False
-            song_ids = db.scalars(select(Take.song_id).where(Take.rehearsal_id == row.id)).all()
             db.delete(row)
-            self._drop_songless(db, song_ids)
             return True
 
     # ---------- takes ----------
@@ -468,7 +454,7 @@ class Library:
             row = Take(
                 rehearsal_id=rehearsal.id,
                 take_number=number,
-                song=self._song_row(db, song, title),
+                song=self._song_row(db, song, title, go),
                 go=go,
                 duration_sec=float(take.get("duration_sec") or 0.0),
                 cloud_skip=bool(take.get("cloud_skip")),
@@ -494,11 +480,9 @@ class Library:
             if row is None:
                 return None
             if name is not None:
-                was = row.song_id
                 song, title, go = self._resolve(db, row.rehearsal_id, name, take_number)
-                row.song = self._song_row(db, song, title)
+                row.song = self._song_row(db, song, title, go)
                 row.go = go
-                self._drop_songless(db, [was])
             if duration_sec is not None:
                 row.duration_sec = float(duration_sec)
             if tracks is not None:
@@ -529,9 +513,9 @@ class Library:
             row = self._find_take(db, folder, take_number)
             if row is None:
                 return None
-            rehearsal_id, song_id = row.rehearsal_id, row.song_id
+            rehearsal_id = row.rehearsal_id
             db.delete(row)
-            self._drop_songless(db, [song_id])
+            db.flush()
             return len(db.scalars(select(Take.id).where(Take.rehearsal_id == rehearsal_id)).all())
 
     # ---------- the cloud ----------
