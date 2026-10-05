@@ -191,6 +191,37 @@ test("a label picked up and put back where it was is not moved", async ({ page }
   expect(await callCount(page, "move_label")).toBe(0)
 })
 
+// Escape while a label is in hand puts it back where it was. It is the
+// drag's: Settings stays open.
+
+const order = (page: Page) =>
+  page.locator("[data-label]").evaluateAll((els) => els.map((e) => e.getAttribute("data-label")))
+
+test("Escape puts a label moved with the keys back, and Settings stays", async ({ page }) => {
+  const list = await openMarks(page)
+  await page.getByRole("button", { name: "Move Keep this" }).focus()
+  await page.keyboard.press("Space")
+  await page.keyboard.press("ArrowDown")
+  await page.keyboard.press("Escape")
+  await expect(list).toBeVisible()
+  await expect.poll(() => order(page)).toEqual(["Note", "Keep this", "Went wrong", "Do again"])
+  expect(await callCount(page, "move_label")).toBe(0)
+})
+
+test("Escape puts a label being dragged back, and Settings stays", async ({ page }) => {
+  const list = await openMarks(page)
+  const handle = page.getByRole("button", { name: "Move Keep this" })
+  const box = (await handle.boundingBox())!
+  await handle.hover()
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2, box.y + 60, { steps: 6 })
+  await page.keyboard.press("Escape")
+  await page.mouse.up()
+  await expect(list).toBeVisible()
+  await expect.poll(() => order(page)).toEqual(["Note", "Keep this", "Went wrong", "Do again"])
+  expect(await callCount(page, "move_label")).toBe(0)
+})
+
 test("a label no mark has is deleted at once", async ({ page }) => {
   await openMarks(page)
   await row(page, "Do again").hover()

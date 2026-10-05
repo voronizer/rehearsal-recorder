@@ -204,9 +204,14 @@ export function useEscape(handler: () => void, enabled = true) {
         keyIsClaimed(document.activeElement)
     }
 
+    // Taken on the way, too: whatever handled this Escape between the two
+    // phases and said so with preventDefault. A label being dragged in
+    // Settings › Marks is put back where it was on Escape, and dnd-kit, which
+    // drags it, says so that way and stops nothing — so Escape put the label
+    // back and left Settings as well.
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
-      if (claimed) return
+      if (claimed || e.defaultPrevented) return
       handlerRef.current()
     }
 
