@@ -77,6 +77,22 @@ def _cloud(record, cloud_dir):
     return {**record, "source": source}
 
 
+# What migration 0004 made of the four kinds a mark had before labels, by the
+# ids it gave them. A session.json from before the database still says a
+# mark's kind (or nothing, for the earliest, which stored a bare number); a
+# kind it does not know was a plain note. Used for these files and nothing
+# else. When the label has been deleted since, the library gives the mark the
+# first label, and ids are never given twice, so a label made since cannot
+# take one of these.
+_KIND_LABELS = {"note": 1, "good": 2, "issue": 3, "redo": 4}
+
+
+def _marker(value):
+    if isinstance(value, dict):
+        return as_marker({**value, "label_id": _KIND_LABELS.get(value.get("kind"), 1)})
+    return as_marker({"at": value, "label_id": 1, "note": ""})
+
+
 def _take(folder, take):
     return {
         "take_number": int(take.get("take_number", 0)),
@@ -87,7 +103,7 @@ def _take(folder, take):
             for t in take.get("tracks", [])
             if t.get("file")
         ],
-        "markers": [as_marker(m) for m in take.get("markers", [])],
+        "markers": [_marker(m) for m in take.get("markers", [])],
         "cloud_skip": bool(take.get("cloud_skip")),
         "cloud_send": bool(take.get("cloud_send")),
     }

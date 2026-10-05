@@ -14,34 +14,45 @@ see models.py for why.
 
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import selectinload, sessionmaker
 
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
-    CloudCopy, Marker, Rehearsal, Song, Take, TakeFile, Track,
+    CloudCopy, Label, Marker, Rehearsal, Song, Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
 
-MARKER_KINDS = ("note", "good", "issue", "redo")
+# The colours a label can have, by name, in the order Settings offers them.
+# What each looks like is a CSS variable per theme (--label-grey … in
+# ui/src/index.css); LABEL_COLOURS in ui/src/lib/labels.ts is this same list.
+LABEL_COLOURS = ("grey", "red", "amber", "green", "teal", "blue", "violet", "pink")
+LABEL_NAME_MAX = 40
+
+
+class LabelRefused(ValueError):
+    """A change to the labels that cannot be made. The message says why, to
+    the person, as it is."""
 
 
 def as_marker(value):
     """
-    A marker as it is kept: a spot rounded to 0.01 s, one of MARKER_KINDS,
-    and a note of at most 200 characters. The earliest versions stored a bare
+    A marker as it is kept: a spot rounded to 0.01 s, its label's id, and a
+    note of at most 200 characters. The id is None when none came with it;
+    the library gives such a mark the first label, as it does one whose label
+    is not there (Library._labelled). The earliest versions stored a bare
     number, which still comes in through old session.json files.
     """
     if isinstance(value, dict):
         at = round(float(value.get("at", 0.0)), 2)
-        kind = value.get("kind", "note")
+        label_id = value.get("label_id")
         note = str(value.get("note", "")).strip()[:200]
     else:
         at = round(float(value), 2)
-        kind, note = "note", ""
-    if kind not in MARKER_KINDS:
-        kind = "note"
-    return {"at": at, "kind": kind, "note": note}
+        label_id, note = None, ""
+    if isinstance(label_id, bool) or not isinstance(label_id, int):
+        label_id = None
+    return {"at": at, "label_id": label_id, "note": note}
 
 
 def _relative(path, root):
@@ -161,7 +172,7 @@ class Library:
                 {"name": f.name, "file": str(folder / Path(f.file))} for f in take.files
             ],
             "markers": [
-                {"at": m.at, "kind": m.kind, "note": m.note} for m in take.markers
+                {"at": m.at, "label_id": m.label_id, "note": m.note} for m in take.markers
             ],
             "cloud": self._copy_data(take.cloud_copy),
             "cloud_skip": take.cloud_skip,
@@ -202,6 +213,19 @@ class Library:
             TakeFile(position=i, name=t["name"], file=_relative(t["file"], folder))
             for i, t in enumerate(tracks)
         ]
+
+    @staticmethod
+    def _labelled(db, markers):
+        """Markers as kept (as_marker), each on a label there is. One that came
+        with none, or whose label is gone, gets the first: a mark always has
+        a label (spec D4)."""
+        ids = db.scalars(select(Label.id).order_by(Label.position, Label.id)).all()
+        known = set(ids)
+        kept = [as_marker(m) for m in markers]
+        for m in kept:
+            if m["label_id"] not in known:
+                m["label_id"] = ids[0]
+        return kept
 
     # ---------- songs ----------
     #
@@ -398,7 +422,7 @@ class Library:
                         cloud_send=bool(t.get("cloud_send")),
                         cloud_error=cloud_errors.get(int(t["take_number"])),
                         files=self._files(folder, t.get("tracks", [])),
-                        markers=[Marker(**as_marker(m)) for m in t.get("markers", [])],
+                        markers=[Marker(**m) for m in self._labelled(db, t.get("markers", []))],
                         cloud_copy=self._cloud_row(cloud.get(int(t["take_number"])), cloud_dir),
                     )
                     for t in takes
@@ -461,7 +485,7 @@ class Library:
                 cloud_skip=bool(take.get("cloud_skip")),
                 cloud_send=bool(take.get("cloud_send")),
                 files=self._files(folder, take.get("tracks", [])),
-                markers=[Marker(**as_marker(m)) for m in take.get("markers", [])],
+                markers=[Marker(**m) for m in self._labelled(db, take.get("markers", []))],
             )
             db.add(row)
             db.flush()
@@ -489,7 +513,7 @@ class Library:
             if tracks is not None:
                 row.files = self._files(folder, tracks)
             if markers is not None:
-                row.markers = [Marker(**as_marker(m)) for m in markers]
+                row.markers = [Marker(**m) for m in self._labelled(db, markers)]
             db.flush()
             db.refresh(row)
             data = self._take_data(folder, row)
@@ -503,8 +527,9 @@ class Library:
             row = self._find_take(db, folder, take_number, selectinload(Take.markers))
             if row is None:
                 return None
-            current = [{"at": m.at, "kind": m.kind, "note": m.note} for m in row.markers]
-            kept = sorted((as_marker(m) for m in fn(current)), key=lambda m: m["at"])
+            current = [{"at": m.at, "label_id": m.label_id, "note": m.note}
+                       for m in row.markers]
+            kept = sorted(self._labelled(db, fn(current)), key=lambda m: m["at"])
             row.markers = [Marker(**m) for m in kept]
             return kept
 
@@ -575,3 +600,118 @@ class Library:
                 return False
             row.cloud_error = message
             return True
+
+    # ---------- labels ----------
+    #
+    # What a mark can be called: a name and a colour each, in an order the
+    # band sets in Settings. Places run from 0 with no gaps; the first label
+    # is what a mark gets when it has none. Each change is one transaction
+    # and returns every label as labels() gives them.
+
+    def labels(self):
+        """[{"id", "name", "colour", "marks"}] in their order; marks: how many
+        marks have the label, in every rehearsal."""
+        with self._session() as db:
+            rows = db.execute(
+                select(Label, func.count(Marker.id))
+                .outerjoin(Marker, Marker.label_id == Label.id)
+                .group_by(Label.id)
+                .order_by(Label.position, Label.id)
+            ).all()
+            return [{"id": label.id, "name": label.name, "colour": label.colour,
+                     "marks": marks} for label, marks in rows]
+
+    @staticmethod
+    def _ordered_labels(db):
+        return list(db.scalars(select(Label).order_by(Label.position, Label.id)))
+
+    @staticmethod
+    def _label_in(labels, label_id):
+        label = next((lb for lb in labels if lb.id == label_id), None)
+        if label is None:
+            raise LabelRefused("Label not found")
+        return label
+
+    @staticmethod
+    def _label_name(labels, name, label_id=None):
+        """`name` as a label is called: trimmed and cut at LABEL_NAME_MAX.
+        Refused empty, or when another label has it, compared by casefold as
+        song titles are — SQLite's lower() folds only ASCII."""
+        name = str(name or "").strip()[:LABEL_NAME_MAX].strip()
+        if not name:
+            raise LabelRefused("A label needs a name")
+        for other in labels:
+            if other.id != label_id and other.name.casefold() == name.casefold():
+                raise LabelRefused(f"There is already a label called {other.name}")
+        return name
+
+    @staticmethod
+    def _label_colour(colour):
+        if colour not in LABEL_COLOURS:
+            raise LabelRefused("Pick a colour from the palette")
+        return colour
+
+    @staticmethod
+    def _renumber(labels):
+        for position, label in enumerate(labels):
+            label.position = position
+
+    def add_label(self, name, colour):
+        """A new label at the end of the list."""
+        with self._session.begin() as db:
+            labels = self._ordered_labels(db)
+            db.add(Label(name=self._label_name(labels, name),
+                         colour=self._label_colour(colour),
+                         position=len(labels)))
+        return self.labels()
+
+    def rename_label(self, label_id, name):
+        with self._session.begin() as db:
+            labels = self._ordered_labels(db)
+            label = self._label_in(labels, label_id)
+            label.name = self._label_name(labels, name, label.id)
+        return self.labels()
+
+    def recolour_label(self, label_id, colour):
+        with self._session.begin() as db:
+            label = self._label_in(self._ordered_labels(db), label_id)
+            label.colour = self._label_colour(colour)
+        return self.labels()
+
+    def move_label(self, label_id, position):
+        """Puts the label at `position` in the list, the rest closing up
+        around it; a place past the end is the end."""
+        with self._session.begin() as db:
+            labels = self._ordered_labels(db)
+            label = self._label_in(labels, label_id)
+            labels.remove(label)
+            labels.insert(max(0, min(int(position), len(labels))), label)
+            self._renumber(labels)
+        return self.labels()
+
+    def delete_label(self, label_id, marks_to=None):
+        """
+        Deletes the label. Its marks, if it has any, get label `marks_to`
+        first, in the same transaction, so a failure part way moves none of
+        them. Refused for the last label, and for one in use with no other
+        label named for its marks.
+        """
+        with self._session.begin() as db:
+            labels = self._ordered_labels(db)
+            label = self._label_in(labels, label_id)
+            if len(labels) == 1:
+                raise LabelRefused("The last label cannot be deleted: every mark needs one")
+            used = db.scalar(select(func.count(Marker.id)).where(Marker.label_id == label.id))
+            if used:
+                if marks_to is None:
+                    raise LabelRefused(f"Say which label the marks of {label.name} get")
+                target = next((lb for lb in labels
+                               if lb.id == marks_to and lb.id != label.id), None)
+                if target is None:
+                    raise LabelRefused("Their marks need another label to go to")
+                db.execute(update(Marker).where(Marker.label_id == label.id)
+                           .values(label_id=target.id))
+            labels.remove(label)
+            db.delete(label)
+            self._renumber(labels)
+        return self.labels()

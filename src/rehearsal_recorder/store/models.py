@@ -144,6 +144,30 @@ class TakeFile(Base):
     take: Mapped[Take] = relationship(back_populates="files")
 
 
+class Label(Base):
+    """
+    What a mark is called and the colour it is drawn in, made by the band in
+    Settings (docs/superpowers/specs/2026-10-04-labels-design.md). It does
+    nothing else: no code knows a label by its name or its place in the list.
+    Names are unique case-blind, which library.py enforces, as SQLite's
+    lower() folds only ASCII. An id is never given twice (AUTOINCREMENT, see
+    migration 0004).
+    """
+
+    __tablename__ = "label"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    # By name, one of library.LABEL_COLOURS. What it looks like is the
+    # theme's (--label-red in ui/src/index.css), so a theme can change it
+    # without touching the library.
+    colour: Mapped[str] = mapped_column(String)
+    # From 0, with no gaps: the order of the marker dialog's buttons, and
+    # the first is what a new mark gets.
+    position: Mapped[int] = mapped_column(Integer)
+
+
 class Marker(Base):
     __tablename__ = "marker"
 
@@ -153,7 +177,13 @@ class Marker(Base):
     )
     # Seconds into the take, rounded to 0.01 — see library.as_marker.
     at: Mapped[float] = mapped_column(Float)
-    kind: Mapped[str] = mapped_column(String, default="note")
+    # Its label. Nullable only because a column added in place cannot be NOT
+    # NULL without a default (migration 0004): the code never writes a mark
+    # without one (Library._labelled). No ON DELETE: a label with marks is
+    # deleted only after they have moved to another, in the same transaction.
+    label_id: Mapped[int | None] = mapped_column(
+        ForeignKey("label.id"), index=True, nullable=True
+    )
     note: Mapped[str] = mapped_column(String, default="")
 
     take: Mapped[Take] = relationship(back_populates="markers")

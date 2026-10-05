@@ -38,7 +38,7 @@ from sqlalchemy import inspect, text  # noqa: E402
 
 from rehearsal_recorder.store import db  # noqa: E402
 from rehearsal_recorder.store.importer import import_all  # noqa: E402
-from rehearsal_recorder.store.library import Library  # noqa: E402
+from rehearsal_recorder.store.library import LabelRefused, Library  # noqa: E402
 from rehearsal_recorder.store.models import Base  # noqa: E402
 from rehearsal_recorder.store.names import legacy_song, split_go, take_name  # noqa: E402
 
@@ -221,14 +221,14 @@ def main():
     take = lib.add_take(jam, {
         "take_number": 1, "name": "Полынь", "duration_sec": 3.5,
         "tracks": [{"name": "Gtr", "file": str(jam / "01 - Полынь" / "Gtr.wav")}],
-        "markers": [{"at": 1.234, "kind": "nonsense", "note": " hi "}, 0.5],
+        "markers": [{"at": 1.234, "label_id": 99, "note": " hi "}, 0.5],
         "cloud_skip": True,
     })
     ok("a take comes back with absolute paths",
        take["tracks"] == [{"name": "Gtr", "file": str(jam / "01 - Полынь" / "Gtr.wav")}])
-    ok("markers come back normalised and in order",
-       take["markers"] == [{"at": 0.5, "kind": "note", "note": ""},
-                           {"at": 1.23, "kind": "note", "note": "hi"}])
+    ok("markers come back normalised and in order, on a label that is there",
+       take["markers"] == [{"at": 0.5, "label_id": 1, "note": ""},
+                           {"at": 1.23, "label_id": 1, "note": "hi"}])
     ok("its own cloud answer is kept", take["cloud_skip"] is True and take["cloud_send"] is False)
     ok("nothing is in the cloud yet", take["cloud"] == {} and "cloud_error" not in take)
     try:
@@ -266,7 +266,7 @@ def main():
     cloud_setting["dir"] = cloud
     ok("and it is back when the folder is", bool(lib.take(jam, 1)["cloud"]))
 
-    kept = lib.edit_markers(jam, 1, lambda ms: ms + [{"at": 2.0, "kind": "good", "note": ""}])
+    kept = lib.edit_markers(jam, 1, lambda ms: ms + [{"at": 2.0, "label_id": 2, "note": ""}])
     ok("markers are edited in one step", [m["at"] for m in kept] == [0.5, 1.23, 2.0])
     renamed = lib.update_take(jam, 1, name="Polyn", tracks=[
         {"name": "Gtr", "file": str(jam / "01 - Polyn" / "Gtr.wav")}])
@@ -362,7 +362,7 @@ def main():
     ok("a path inside the folder is kept",
        second["tracks"][0]["file"] == str(cafe / "02 - Take 2" / "Gtr.wav"))
     ok("a bare-number marker becomes a marker",
-       first["markers"] == [{"at": 3.14, "kind": "note", "note": ""}])
+       first["markers"] == [{"at": 3.14, "label_id": 1, "note": ""}])
     ok("the cloud copy comes along, relative to the cloud folder",
        first["cloud"]["mix"] == str(cloud / cafe.name / "01 - Café.wav"))
     ok("its destination is the rehearsal's subfolder now",
@@ -662,11 +662,198 @@ def main():
     ok("the star stays with its take through a rename, to no song at all",
        renamed["song"] is None and renamed["starred"])
     ok("and the take keeps its marks",
-       lib.take(jam, 1)["markers"] == [{"at": 1.0, "kind": "good", "note": ""}])
+       lib.take(jam, 1)["markers"] == [{"at": 1.0, "label_id": 2, "note": ""}])
     lib.delete_take(jam, 3)
     ok("a deleted take takes its star with it",
        [(t["take_number"], t["starred"]) for t in lib.rehearsal(jam)["takes"]]
        == [(1, True), (2, False)])
+    lib.close()
+
+    print("\n[12] Labels (migration 0004)")
+    rec12 = tmp / "Labels"
+    rec12.mkdir()
+    db.open_engine(rec12, migrations_up_to(tmp, "0003")).dispose()
+    engine = db.make_engine(db.database_path(rec12))
+    with engine.begin() as c:
+        rid = c.execute(text(
+            "INSERT INTO rehearsal (folder, name, created_at, samplerate, bit_depth) "
+            "VALUES ('Jam', 'Jam', '2026-09-01T19:00:00', 48000, 24)")).lastrowid
+        for number, kind in ((1, "note"), (2, "good"), (3, "issue"), (4, "redo")):
+            tid = c.execute(text(
+                "INSERT INTO take (rehearsal_id, take_number, duration_sec, cloud_skip, "
+                "cloud_send, starred) VALUES (:r, :n, 10.0, 0, 0, 0)"),
+                {"r": rid, "n": number}).lastrowid
+            c.execute(text("INSERT INTO take_file (take_id, position, name, file) "
+                           "VALUES (:t, 0, 'Gtr', :f)"),
+                      {"t": tid, "f": f"{number:02d}/Gtr.wav"})
+            c.execute(text("INSERT INTO marker (take_id, at, kind, note) "
+                           "VALUES (:t, 1.0, :k, :n)"),
+                      {"t": tid, "k": kind, "n": f"a {kind} mark"})
+            c.execute(text("INSERT INTO cloud_copy (take_id, mix, source) "
+                           "VALUES (:t, :m, '{}')"), {"t": tid, "m": f"Jam/{number:02d}.wav"})
+    engine.dispose()
+
+    engine = db.open_engine(rec12)
+    ok("a database at 0003 is moved on to the newest migration",
+       db.current_revision(engine) == HEAD)
+    ok("after it was copied aside", (rec12 / "library.sqlite.bak-0003").exists())
+    with engine.connect() as c:
+        drift = compare_metadata(MigrationContext.configure(c), Base.metadata)
+        counts = {t: c.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
+                  for t in ("take", "take_file", "marker", "cloud_copy")}
+        labels12 = [tuple(r) for r in c.execute(text(
+            "SELECT id, name, colour, position FROM label ORDER BY position"))]
+        marks12 = [tuple(r) for r in c.execute(text(
+            "SELECT take.take_number, marker.label_id, marker.note FROM marker "
+            "JOIN take ON take.id = marker.take_id ORDER BY take.take_number"))]
+        columns = [col["name"] for col in inspect(c).get_columns("marker")]
+    engine.dispose()
+    ok("and it is then what models.py describes", drift == [])
+    ok("every take keeps its files, its marks and its cloud copy",
+       counts == {"take": 4, "take_file": 4, "marker": 4, "cloud_copy": 4})
+    ok("the four kinds are the first four labels, in their order and colours",
+       labels12 == [(1, "Note", "grey", 0), (2, "Keep this", "green", 1),
+                    (3, "Went wrong", "red", 2), (4, "Do again", "amber", 3)])
+    ok("every mark is on its kind's label, its comment kept",
+       marks12 == [(1, 1, "a note mark"), (2, 2, "a good mark"),
+                   (3, 3, "a issue mark"), (4, 4, "a redo mark")])
+    ok("and the kind column is gone", "kind" not in columns and "label_id" in columns)
+
+    lib = Library(rec12)
+    jam = rec12 / "Jam"
+
+    def order12():
+        return [lb["id"] for lb in lib.labels()]
+
+    def positions12():
+        with lib._engine.connect() as c:
+            return c.execute(text("SELECT position FROM label ORDER BY position")).scalars().all()
+
+    def refused(fn, *args):
+        try:
+            fn(*args)
+        except LabelRefused as e:
+            return str(e)
+        return None
+
+    ok("the labels come in order, each with how many marks have it",
+       [(lb["id"], lb["name"], lb["colour"], lb["marks"]) for lb in lib.labels()]
+       == [(1, "Note", "grey", 1), (2, "Keep this", "green", 1),
+           (3, "Went wrong", "red", 1), (4, "Do again", "amber", 1)])
+    ok("a take's marks carry their label",
+       lib.take(jam, 2)["markers"] == [{"at": 1.0, "label_id": 2, "note": "a good mark"}])
+
+    added = lib.add_label("Solo", "violet")
+    ok("a label is added at the end, with no marks yet",
+       [lb["name"] for lb in added] == ["Note", "Keep this", "Went wrong", "Do again", "Solo"]
+       and added[-1]["colour"] == "violet" and added[-1]["marks"] == 0)
+    solo = added[-1]["id"]
+    long12 = lib.add_label("  " + "x" * 50 + "  ", "blue")[-1]
+    ok("a name is trimmed and cut at 40 characters", long12["name"] == "x" * 40)
+    ok("a label no mark has is deleted at once",
+       long12["id"] not in [lb["id"] for lb in lib.delete_label(long12["id"])])
+
+    ok("an empty name is refused",
+       refused(lib.add_label, "   ", "grey") == "A label needs a name")
+    ok("a name another label has is refused, whatever its case",
+       refused(lib.add_label, "keep THIS", "grey") == "There is already a label called Keep this")
+    russian = lib.add_label("Соло", "pink")[-1]["id"]
+    ok("Cyrillic included",
+       refused(lib.add_label, "соло", "grey") == "There is already a label called Соло")
+    ok("a colour not in the palette is refused",
+       refused(lib.add_label, "Tempo", "orange") == "Pick a colour from the palette")
+
+    ok("a label is renamed",
+       next(lb for lb in lib.rename_label(solo, "Riff") if lb["id"] == solo)["name"] == "Riff")
+    ok("into another case of its own name too",
+       next(lb for lb in lib.rename_label(solo, "RIFF") if lb["id"] == solo)["name"] == "RIFF")
+    ok("but not into another label's name",
+       refused(lib.rename_label, solo, "note") == "There is already a label called Note")
+    ok("nor into nothing", refused(lib.rename_label, solo, " ") == "A label needs a name")
+    ok("a label that is not there is not found",
+       refused(lib.rename_label, 99, "X") == "Label not found")
+    lib.rename_label(3, "Wrong")
+    ok("a rename leaves the marks where they are",
+       lib.take(jam, 3)["markers"] == [{"at": 1.0, "label_id": 3, "note": "a issue mark"}])
+
+    ok("a label is recoloured, and two may share a colour",
+       [lb["colour"] for lb in lib.recolour_label(3, "pink") if lb["id"] in (3, russian)]
+       == ["pink", "pink"])
+    ok("only into the palette's colours",
+       refused(lib.recolour_label, 3, "#ff0000") == "Pick a colour from the palette")
+
+    lib.move_label(4, 0)
+    ok("a label moves to another place, the rest closing up",
+       order12() == [4, 1, 2, 3, solo, russian])
+    lib.move_label(4, 99)
+    ok("a place past the end is the end", order12() == [1, 2, 3, solo, russian, 4])
+    lib.move_label(2, 0)
+    ok("and the places stay 0, 1, 2 with no gaps",
+       order12() == [2, 1, 3, solo, russian, 4] and positions12() == [0, 1, 2, 3, 4, 5])
+
+    ok("a label in use is not deleted without saying where its marks go",
+       refused(lib.delete_label, 4) == "Say which label the marks of Do again get")
+    ok("nor onto itself",
+       refused(lib.delete_label, 4, 4) == "Their marks need another label to go to")
+    ok("nor onto a label that is not there",
+       refused(lib.delete_label, 4, 99) == "Their marks need another label to go to")
+    after12 = lib.delete_label(4, 3)
+    ok("deleted, its marks go to the label chosen",
+       4 not in [lb["id"] for lb in after12]
+       and lib.take(jam, 4)["markers"] == [{"at": 1.0, "label_id": 3, "note": "a redo mark"}]
+       and next(lb for lb in after12 if lb["id"] == 3)["marks"] == 2
+       and positions12() == [0, 1, 2, 3, 4])
+
+    # A delete that fails after its marks were moved must move none of them.
+    with lib._engine.begin() as c:
+        c.execute(text("CREATE TRIGGER keep_labels BEFORE DELETE ON label "
+                       "BEGIN SELECT RAISE(ABORT, 'kept'); END"))
+    try:
+        lib.delete_label(3, 1)
+        failed12 = False
+    except Exception:
+        failed12 = True
+    with lib._engine.begin() as c:
+        c.execute(text("DROP TRIGGER keep_labels"))
+    ok("moving the marks and deleting the label are one transaction",
+       failed12 and 3 in order12()
+       and lib.take(jam, 3)["markers"][0]["label_id"] == 3
+       and lib.take(jam, 4)["markers"][0]["label_id"] == 3)
+
+    lib.delete_label(russian)
+    tempo = lib.add_label("Tempo", "blue")[-1]["id"]
+    ok("an id is never given to a second label", tempo > russian)
+
+    kept12 = lib.edit_markers(jam, 1, lambda ms: ms + [
+        {"at": 2.0, "note": "no label"}, {"at": 3.0, "label_id": 99, "note": ""}])
+    ok("a mark with no label, or one that is not there, gets the first label",
+       [m["label_id"] for m in kept12] == [1, 2, 2])
+
+    old12 = rec12 / "Old - 2026-08-01 19-00"
+    old12.mkdir()
+    (old12 / "session.json").write_text(json.dumps({
+        "name": "Old", "created_at": "2026-08-01T19:00:00", "samplerate": 48000,
+        "tracks": [{"name": "Gtr", "channel": 1}],
+        "takes": [{"take_number": 1, "name": "Take 1", "duration_sec": 10.0, "tracks": [],
+                   "markers": [{"at": 1.0, "kind": "issue", "note": "late"},
+                               {"at": 2.0, "note": "plain"}, 3.0,
+                               {"at": 4.0, "kind": "redo", "note": "again"},
+                               {"at": 5.0, "kind": "nonsense", "note": ""}]}],
+    }), encoding="utf-8")
+    import_all(lib, None)
+    ok("an old session.json's marks get the label their kind became, or the plain one",
+       [(m["at"], m["label_id"]) for m in lib.take(old12, 1)["markers"]]
+       == [(1.0, 3), (2.0, 1), (3.0, 1), (4.0, 2), (5.0, 1)])
+    ok("and a kind whose label is gone gets the first label, not one made since",
+       lib.take(old12, 1)["markers"][3]["label_id"] != tempo)
+
+    first12 = order12()[0]
+    for lb in lib.labels()[1:]:
+        lib.delete_label(lb["id"], first12)
+    ok("the last label is not deleted",
+       refused(lib.delete_label, first12)
+       == "The last label cannot be deleted: every mark needs one"
+       and order12() == [first12])
     lib.close()
 
     print()
