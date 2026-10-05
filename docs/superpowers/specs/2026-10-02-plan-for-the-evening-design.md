@@ -36,7 +36,8 @@ the next song lit, each ticked off once played. It stands on
   - Each song has ✕ to take it out.
   - A song can be dragged to another place in the list; this is the one
     drag in the feature, and the order is right without it for most
-    evenings.
+    evenings. It is the `SortableList` that Settings › *Marks* drags labels
+    with ([labels](2026-10-04-labels-design.md)).
   - Empty, the card says "Click songs below to plan tonight", with *All
     songs…* to pick from the whole repertoire.
 - **P2. Last time's and the not-played rows each get a + button,** "Add

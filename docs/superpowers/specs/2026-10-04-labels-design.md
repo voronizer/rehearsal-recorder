@@ -94,7 +94,8 @@ verdict off *Keep this*.
   in a take can be marked with".
 - **S2. One row per label, in order:**
   - a handle to drag it up or down. The order is the order of the marker
-    dialog's buttons;
+    dialog's buttons. The dragging is `@dnd-kit/react`'s, behind a
+    `SortableList` of the app's own that the evening's plan reuses;
   - a dot in its colour. A click opens the palette, and a click there
     recolours it;
   - its name. A click makes it a field: Enter renames, Escape leaves it as
