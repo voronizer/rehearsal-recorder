@@ -146,6 +146,14 @@ function labelRefusal(name, colour, id) {
   return null;
 }
 
+// Another recordings folder is another library, with labels of its own: a
+// page can give them (window.__OTHER_FOLDER_LABELS__ = [{id, name, colour}, …]).
+function toOtherFolder() {
+  if (!window.__OTHER_FOLDER_LABELS__) return;
+  labels = window.__OTHER_FOLDER_LABELS__.map(l => ({...l}));
+  nextLabelId = Math.max(0, ...labels.map(l => l.id)) + 1;
+}
+
 // Where the marks of a deleted label went: the past rehearsals are built
 // afresh on every call, so their marks are moved as they are sent.
 const movedMarks = {};
@@ -900,10 +908,15 @@ window.__MAKE_API__ = () => ({
     version:'0.2.0'}),
   // A folder under /nope cannot be written to. Its message carries the
   // whole path, so a long one shows what a long message does to a notice.
-  set_recordings_dir: async (p) => (p.startsWith('/nope')
-    ? {ok:false, error:'Cannot write to ' + p}
-    : {ok:true, recordings_dir:p}),
-  choose_recordings_dir: track('choose_recordings_dir', async () => ({ok:true, recordings_dir:'/Users/alex/Dropbox/Band'})),
+  set_recordings_dir: async (p) => {
+    if (p.startsWith('/nope')) return {ok:false, error:'Cannot write to ' + p};
+    toOtherFolder();
+    return {ok:true, recordings_dir:p};
+  },
+  choose_recordings_dir: track('choose_recordings_dir', async () => {
+    toOtherFolder();
+    return {ok:true, recordings_dir:'/Users/alex/Dropbox/Band'};
+  }),
   save_mix: track('save_mix', async () => ({ok:true})),
   save_master_volume: track('save_master_volume', async (v) => {
     writeCfg({...readCfg(), master_volume:v});

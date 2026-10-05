@@ -263,3 +263,24 @@ test("another recordings folder brings its own labels", async ({ page }) => {
   await page.getByRole("button", { name: "Choose recordings folder" }).click()
   await expect.poll(() => callCount(page, "list_labels")).toBeGreaterThan(before)
 })
+
+test("a folder typed in brings its library's labels to the marker dialog", async ({ page }) => {
+  await openApp(page, {
+    before:
+      "window.__OTHER_FOLDER_LABELS__ = [{id:1, name:'Riff', colour:'blue'}, {id:2, name:'Tempo', colour:'pink'}];",
+  })
+  await page.getByRole("button", { name: "Settings" }).click()
+  await page.getByRole("button", { name: "Folders", exact: true }).first().click()
+  const before = await callCount(page, "list_labels")
+  await page.locator("#recordings-dir").fill("/Users/alex/Band")
+  // Saved on leaving the field.
+  await page.keyboard.press("Tab")
+  await expect.poll(() => callCount(page, "list_labels")).toBeGreaterThan(before)
+  await page.keyboard.press("Escape")
+  await startRehearsal(page)
+  await recordTake(page)
+  await page.getByRole("button", { name: "Add marker" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByText("Marker at")).toBeVisible()
+  expect(await dialog.locator("button[aria-pressed]").allInnerTexts()).toEqual(["Riff", "Tempo"])
+})
