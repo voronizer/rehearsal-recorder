@@ -886,14 +886,14 @@ def main():
     with_marks = a.keep_take(
         9, str(d), "Marked on review", 1.0,
         [{"name": "Gtr", "file": str(d / "Gtr.wav")}],
-        [{"at": 0.5, "note": "the good bit", "kind": "good"},
-         {"at": 2.25, "note": "", "kind": "note"}],
+        [{"at": 0.5, "note": "the good bit", "label_id": 2},
+         {"at": 2.25, "note": "", "label_id": 1}],
     )
     ok("saved with its marks", with_marks["ok"])
     marks = with_marks["take"]["markers"]
     ok("both are there, in order", [m["at"] for m in marks] == [0.5, 2.25])
     ok("with their notes", marks[0]["note"] == "the good bit")
-    ok("and their kinds", marks[0]["kind"] == "good" and marks[1]["kind"] == "note")
+    ok("and their labels", marks[0]["label_id"] == 2 and marks[1]["label_id"] == 1)
     ok("and they survive a read from disk",
        [m["at"] for m in a.get_rehearsal(str(folder))["takes"][-1]["markers"]]
        == [0.5, 2.25])
@@ -1016,22 +1016,22 @@ def main():
     new_folder = Path(moved["folder"])
 
     print("\n[10] Listening markers")
-    a.add_take_marker(str(new_folder), 1, 12.5, "bridge falls apart", "issue")
+    a.add_take_marker(str(new_folder), 1, 12.5, "bridge falls apart", 3)
     a.add_take_marker(str(new_folder), 1, 3.25)
     markers = a.get_rehearsal(str(new_folder))["takes"][0]["markers"]
     ok("markers stored in order", [m["at"] for m in markers] == [3.25, 12.5])
     ok("the note is kept", markers[1]["note"] == "bridge falls apart")
-    ok("the kind is kept", markers[1]["kind"] == "issue")
-    ok("a bare marker gets the plain kind",
-       markers[0]["kind"] == "note" and markers[0]["note"] == "")
+    ok("the label is kept", markers[1]["label_id"] == 3)
+    ok("a bare marker gets the first label",
+       markers[0]["label_id"] == 1 and markers[0]["note"] == "")
 
-    a.update_take_marker(str(new_folder), 1, 3.25, "nice ending", "good")
+    a.update_take_marker(str(new_folder), 1, 3.25, "nice ending", 2)
     edited = a.get_rehearsal(str(new_folder))["takes"][0]["markers"][0]
     ok("editing a marker keeps its position", edited["at"] == 3.25)
-    ok("and applies the new note and kind",
-       edited["note"] == "nice ending" and edited["kind"] == "good")
+    ok("and applies the new note and label",
+       edited["note"] == "nice ending" and edited["label_id"] == 2)
 
-    a.add_take_marker(str(new_folder), 1, 3.25, "changed my mind", "redo")
+    a.add_take_marker(str(new_folder), 1, 3.25, "changed my mind", 4)
     same_spot = a.get_rehearsal(str(new_folder))["takes"][0]["markers"]
     ok("marking the same spot replaces, not duplicates", len(same_spot) == 2)
     ok("with the newer note", same_spot[0]["note"] == "changed my mind")
@@ -1056,7 +1056,7 @@ def main():
     ok("old numeric markers still load",
        [m["at"] for m in upgraded] == [1.25, 7.5])
     ok("and come back as proper markers",
-       all(m["kind"] == "note" and m["note"] == "" for m in upgraded))
+       all(m["label_id"] == 1 and m["note"] == "" for m in upgraded))
     a._lib.forget_rehearsal(old_markers)
     old_markers.rmdir()
 
@@ -2323,9 +2323,9 @@ def main():
         1, str(draft), "Polyn", 4.0,
         [{"name": "Gtr", "file": str(draft / "Gtr.wav")},
          {"name": "Bass", "file": str(draft / "Bass.wav")}],
-        [{"at": 0.5, "note": "count-in", "kind": "note"},
-         {"at": 2.0, "note": "here", "kind": "good"},
-         {"at": 3.8, "note": "stopped", "kind": "bad"}],
+        [{"at": 0.5, "note": "count-in", "label_id": 1},
+         {"at": 2.0, "note": "here", "label_id": 2},
+         {"at": 3.8, "note": "stopped", "label_id": 3}],
     )
     folder = str(c._session["folder"])
     take_dir = Path(saved["take"]["tracks"][0]["file"]).parent
@@ -2914,13 +2914,13 @@ def main():
     g._session["take_counter"] = 1
     g.keep_take(1, str(draft), "Polyn", 2.0,
                 [{"name": "Gtr", "file": str(draft / "Gtr.wav")}],
-                [{"at": 0.3, "note": "", "kind": "note"},
-                 {"at": 1.0, "note": "", "kind": "good"}])
+                [{"at": 0.3, "note": "", "label_id": 1},
+                 {"at": 1.0, "note": "", "label_id": 2}])
     real_crop = g._crop_tracks
 
     def crop_with_a_marker(*args, **kwargs):
         result = real_crop(*args, **kwargs)
-        g.add_take_marker(str(cf), 1, 1.2, "while cropping", "issue")
+        g.add_take_marker(str(cf), 1, 1.2, "while cropping", 3)
         return result
 
     g._crop_tracks = crop_with_a_marker
@@ -5996,6 +5996,71 @@ def main():
     l54.delete_take(str(live54), 1)
     ok("a deleted take is not there to star",
        l54.set_take_star(str(live54), 1, True) == {"ok": False, "error": "Take not found"})
+
+    print("\n[55] Labels: made, named, coloured, ordered and deleted, and a mark's own")
+    tmp55 = Path(tempfile.mkdtemp())
+    _, l55 = fresh_api(tmp55)
+    ok("a library starts with the four labels marks always had",
+       [(lb["id"], lb["name"], lb["colour"], lb["marks"]) for lb in l55.list_labels()]
+       == [(1, "Note", "grey", 0), (2, "Keep this", "green", 0),
+           (3, "Went wrong", "red", 0), (4, "Do again", "amber", 0)])
+
+    solo55 = l55.add_label("Solo", "violet")
+    ok("a change answers with every label",
+       solo55["ok"] and [lb["name"] for lb in solo55["labels"]][-1] == "Solo")
+    solo_id = solo55["labels"][-1]["id"]
+    ok("a refused one answers why",
+       l55.add_label("solo", "grey") == {"ok": False,
+                                         "error": "There is already a label called Solo"})
+    ok("renamed", l55.rename_label(solo_id, "Riff")["labels"][-1]["name"] == "Riff")
+    ok("recoloured", l55.recolour_label(solo_id, "teal")["labels"][-1]["colour"] == "teal")
+    ok("moved", [lb["id"] for lb in l55.move_label(solo_id, 0)["labels"]][0] == solo_id)
+    ok("a colour not in the palette is refused",
+       l55.recolour_label(solo_id, "orange")
+       == {"ok": False, "error": "Pick a colour from the palette"})
+
+    l55.start_rehearsal("Labels", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    f55 = Path(l55._session["folder"])
+    d55 = f55 / "_drafts" / "take 1"
+    write_wav(d55 / "Gtr.wav", 1000, seconds=4.0)
+    l55._session["take_counter"] = 1
+    kept55 = l55.keep_take(1, str(d55), "Polyn", 4.0,
+                           [{"name": "Gtr", "file": str(d55 / "Gtr.wav")}],
+                           [{"at": 0.5, "note": "no label"},
+                            {"at": 1.0, "note": "", "label_id": 99}])
+    ok("marks saved with a take and no label there get the first label",
+       [m["label_id"] for m in kept55["take"]["markers"]] == [solo_id, solo_id])
+    added55 = l55.add_take_marker(str(f55), 1, 2.0)
+    ok("a mark dropped with no label gets the first one",
+       [m["label_id"] for m in added55["markers"] if m["at"] == 2.0] == [solo_id])
+    l55.update_take_marker(str(f55), 1, 2.0, "the riff", 3)
+    l55.update_take_marker(str(f55), 1, 2.0, "the riff, again")
+    m55 = next(m for m in l55._lib.take(f55, 1)["markers"] if m["at"] == 2.0)
+    ok("editing only its comment leaves its label",
+       m55["label_id"] == 3 and m55["note"] == "the riff, again")
+    l55.add_label("Gone", "pink")
+    gone55 = l55.list_labels()[-1]["id"]
+    l55.delete_label(gone55)
+    l55.update_take_marker(str(f55), 1, 2.0, None, gone55)
+    ok("a label deleted meanwhile is not kept on a mark: it gets the first",
+       next(m for m in l55._lib.take(f55, 1)["markers"] if m["at"] == 2.0)["label_id"]
+       == solo_id)
+
+    ok("the count of a label's marks is the library's",
+       next(lb for lb in l55.list_labels() if lb["id"] == solo_id)["marks"] == 3)
+    ok("a label in use is not deleted without saying where its marks go",
+       l55.delete_label(solo_id)
+       == {"ok": False, "error": "Say which label the marks of Riff get"})
+    moved55 = l55.delete_label(solo_id, 1)
+    ok("and with it, they go there",
+       moved55["ok"] and solo_id not in [lb["id"] for lb in moved55["labels"]]
+       and all(m["label_id"] == 1 for m in l55._lib.take(f55, 1)["markers"]))
+
+    saved55 = l55._library
+    l55._library = None
+    ok("with no database open there are no labels, and no second error about it",
+       l55.list_labels() == [])
+    l55._library = saved55
 
     print("\n" + "=" * 60)
     if problems:

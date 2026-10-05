@@ -75,10 +75,9 @@ from rehearsal_recorder.names_pass import NamesPass
 from rehearsal_recorder import layouts
 from rehearsal_recorder import updates
 from rehearsal_recorder.mediaserver import AppServer
-from rehearsal_recorder.store import library as librarymod
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
-from rehearsal_recorder.store.library import Library, as_marker
+from rehearsal_recorder.store.library import LabelRefused, Library, as_marker
 from rehearsal_recorder.store.db import DB_NAME
 from rehearsal_recorder import diagnostics
 from rehearsal_recorder.audio.probe import InterfaceCheck, plan_for, tracks_for
@@ -2237,18 +2236,55 @@ class Api:
             return {"ok": False, "error": "Take not found"}
         return {"ok": True, "take": take}
 
+    # ---------- labels ----------
+    #
+    # What a mark can be called, made by the band in Settings › Marks. A
+    # change answers with every label, so the interface has the new list in
+    # the same round trip.
+
+    def list_labels(self):
+        """[{id, name, colour, marks}] in order; [] while the recordings
+        database cannot be opened: that is said once at start, and with no
+        database there is nothing to mark."""
+        if self._library is None:
+            return []
+        return self._lib.labels()
+
+    def _labels_changed(self, change):
+        try:
+            return {"ok": True, "labels": change()}
+        except LabelRefused as e:
+            return {"ok": False, "error": str(e)}
+
+    def add_label(self, name, colour):
+        return self._labels_changed(lambda: self._lib.add_label(name, colour))
+
+    def rename_label(self, label_id, name):
+        return self._labels_changed(lambda: self._lib.rename_label(label_id, name))
+
+    def recolour_label(self, label_id, colour):
+        return self._labels_changed(lambda: self._lib.recolour_label(label_id, colour))
+
+    def move_label(self, label_id, position):
+        return self._labels_changed(lambda: self._lib.move_label(label_id, position))
+
+    def delete_label(self, label_id, marks_to=None):
+        """A label in use needs `marks_to`, the label its marks get."""
+        return self._labels_changed(lambda: self._lib.delete_label(label_id, marks_to))
+
     # ---------- markers ----------
     #
-    # A marker is a spot in a take plus what you wanted to say about it. What
-    # one is kept as is the store's rule (library.as_marker); early versions
-    # stored a bare number, which the importer turns into a proper marker.
+    # A marker is a spot in a take, its label, and what you wanted to say
+    # about it. What one is kept as is the store's rule (library.as_marker,
+    # Library._labelled); early versions stored a bare number, which the
+    # importer turns into a proper marker.
 
-    MARKER_KINDS = librarymod.MARKER_KINDS
     _as_marker = staticmethod(as_marker)
 
-    def add_take_marker(self, folder, take_number, seconds, note="", kind="note"):
-        """Markers are placed while listening back: 'this bit worked'."""
-        fresh = self._as_marker({"at": seconds, "note": note, "kind": kind})
+    def add_take_marker(self, folder, take_number, seconds, note="", label_id=None):
+        """Markers are placed while listening back: 'this bit worked'. With
+        no label, the mark gets the first one."""
+        fresh = self._as_marker({"at": seconds, "note": note, "label_id": label_id})
 
         def add(markers):
             kept = [m for m in markers if abs(m["at"] - fresh["at"]) > 0.01]
@@ -2256,8 +2292,9 @@ class Api:
 
         return self._update_markers(folder, take_number, add)
 
-    def update_take_marker(self, folder, take_number, seconds, note=None, kind=None):
-        """Edits the marker at this position: its note, its kind, or both."""
+    def update_take_marker(self, folder, take_number, seconds, note=None, label_id=None):
+        """Edits the marker at this position: its note, its label, or both.
+        None leaves that part as it is."""
         target = round(float(seconds), 2)
 
         def edit(markers):
@@ -2265,8 +2302,8 @@ class Api:
                 if abs(m["at"] - target) <= 0.01:
                     if note is not None:
                         m["note"] = str(note).strip()[:200]
-                    if kind is not None and kind in Api.MARKER_KINDS:
-                        m["kind"] = kind
+                    if label_id is not None:
+                        m["label_id"] = label_id
             return markers
 
         return self._update_markers(folder, take_number, edit)
