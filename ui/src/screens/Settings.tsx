@@ -8,11 +8,13 @@ import {
   RefreshCw,
   RotateCcw,
   Sliders,
+  Tags,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DevicePicker } from "@/components/DevicePicker"
+import { MarksSettings } from "@/components/MarksSettings"
 import { OutputChannels } from "@/components/OutputChannels"
 import { NewDot } from "@/components/NewDot"
 import { UnderTheHood } from "@/components/UnderTheHood"
@@ -23,6 +25,7 @@ import { useUpdate } from "@/lib/update"
 import { SCALE_OPTIONS, THEME_LABELS, type Theme } from "@/lib/appearance"
 import { describeRescan, notConnected } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
+import { loadLabels } from "@/lib/labels"
 import {
   api,
   type CloudFormat,
@@ -38,7 +41,7 @@ const SAID = "settings"
 // after "Found …" has gone, and after leaving Settings.
 const PLAYBACK = "playback"
 
-type TabId = "audio" | "folders" | "appearance" | "about"
+type TabId = "audio" | "folders" | "marks" | "appearance" | "about"
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[] = [
   {
@@ -52,6 +55,12 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[]
     label: "Folders",
     icon: <FolderOpen className="size-4" />,
     blurb: "Where rehearsals are kept and what goes to the cloud",
+  },
+  {
+    id: "marks",
+    label: "Marks",
+    icon: <Tags className="size-4" />,
+    blurb: "What a moment in a take can be marked with",
   },
   {
     id: "appearance",
@@ -221,6 +230,8 @@ export function Settings({
       return
     }
     setDir(res.recordings_dir ?? path)
+    // Another library: other labels.
+    void loadLabels()
     notify({ key: SAID, kind: "done", text: "Folder saved" })
   }
 
@@ -266,6 +277,8 @@ export function Settings({
       return
     }
     setDir(res.recordings_dir ?? dir)
+    // Another library: other labels.
+    void loadLabels()
     notify({ key: SAID, kind: "done", text: "Folder saved" })
   }
 
@@ -282,7 +295,7 @@ export function Settings({
   return (
     <Shell title="Settings" onBack={onBack} backKey>
       <div className="mx-auto flex w-full max-w-4xl gap-8">
-        {/* The section list. Four groups is few enough to show at once, so
+        {/* The section list. Five groups is few enough to show at once, so
             nothing is hidden behind a menu. */}
         <nav className="hidden w-52 shrink-0 flex-col gap-1 sm:flex">
           {TABS.map((t) => (
@@ -379,6 +392,8 @@ export function Settings({
           </div>
         </section>
         )}
+
+        {tab === "marks" && <MarksSettings />}
 
         {tab === "audio" && (<>
 

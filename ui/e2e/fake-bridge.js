@@ -133,6 +133,19 @@ let labels = (window.__LABELS__ || [
   {id:3, name:'Went wrong', colour:'red'},
   {id:4, name:'Do again', colour:'amber'},
 ]).map(l => ({...l}));
+const LABEL_COLOURS = ['grey', 'red', 'amber', 'green', 'teal', 'blue', 'violet', 'pink'];
+// Ids are never given twice, as in Python (AUTOINCREMENT).
+let nextLabelId = Math.max(0, ...labels.map(l => l.id)) + 1;
+
+function labelRefusal(name, colour, id) {
+  const trimmed = String(name || '').trim().slice(0, 40).trim();
+  if (!trimmed) return 'A label needs a name';
+  const other = labels.find(l => l.id !== id && l.name.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
+  if (other) return `There is already a label called ${other.name}`;
+  if (!LABEL_COLOURS.includes(colour)) return 'Pick a colour from the palette';
+  return null;
+}
+
 // Where the marks of a deleted label went: the past rehearsals are built
 // afresh on every call, so their marks are moved as they are sent.
 const movedMarks = {};
@@ -590,6 +603,53 @@ window.__MAKE_API__ = () => ({
     return {ok:true, markers: take ? take.markers : []};
   }),
   list_labels: track('list_labels', async () => JSON.parse(JSON.stringify(labelsAsSent()))),
+  // The same rules and the same words as Python's (store/library.py).
+  add_label: track('add_label', async (name, colour) => {
+    const refusal = labelRefusal(name, colour);
+    if (refusal) return {ok:false, error:refusal};
+    labels.push({id: nextLabelId++, name: name.trim().slice(0, 40).trim(), colour});
+    return {ok:true, labels: labelsAsSent()};
+  }),
+  rename_label: track('rename_label', async (id, name) => {
+    const label = labels.find(l => l.id === id);
+    if (!label) return {ok:false, error:'Label not found'};
+    const refusal = labelRefusal(name, label.colour, id);
+    if (refusal) return {ok:false, error:refusal};
+    label.name = name.trim().slice(0, 40).trim();
+    return {ok:true, labels: labelsAsSent()};
+  }),
+  recolour_label: track('recolour_label', async (id, colour) => {
+    const label = labels.find(l => l.id === id);
+    if (!label) return {ok:false, error:'Label not found'};
+    if (!LABEL_COLOURS.includes(colour)) return {ok:false, error:'Pick a colour from the palette'};
+    label.colour = colour;
+    return {ok:true, labels: labelsAsSent()};
+  }),
+  move_label: track('move_label', async (id, position) => {
+    const label = labels.find(l => l.id === id);
+    if (!label) return {ok:false, error:'Label not found'};
+    labels = labels.filter(l => l.id !== id);
+    labels.splice(Math.max(0, Math.min(position, labels.length)), 0, label);
+    return {ok:true, labels: labelsAsSent()};
+  }),
+  delete_label: track('delete_label', async (id, marksTo) => {
+    const label = labels.find(l => l.id === id);
+    if (!label) return {ok:false, error:'Label not found'};
+    if (labels.length === 1)
+      return {ok:false, error:'The last label cannot be deleted: every mark needs one'};
+    const used = labelsAsSent().find(l => l.id === id).marks;
+    if (used) {
+      if (marksTo === null || marksTo === undefined)
+        return {ok:false, error:`Say which label the marks of ${label.name} get`};
+      if (marksTo === id || !labels.some(l => l.id === marksTo))
+        return {ok:false, error:'Their marks need another label to go to'};
+      movedMarks[id] = marksTo;
+      for (const t of session ? session.takes : [])
+        for (const m of t.markers || []) if (m.label_id === id) m.label_id = marksTo;
+    }
+    labels = labels.filter(l => l.id !== id);
+    return {ok:true, labels: labelsAsSent()};
+  }),
 
   rename_take: track('rename_take', async (folder, n, name) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
