@@ -7,6 +7,16 @@ opening.
 
 ## Unreleased
 
+- **Marks have labels you make.** A mark's label is a name and a colour, and
+  **Settings → Marks** is where the band makes them, renames and recolours
+  them, drags them into order and deletes them; a label with marks asks
+  which label they move to first. *Note*, *Keep this*, *Went wrong* and *Do
+  again* are where every library starts, and every mark keeps its look. The
+  marker dialog offers the labels in their order, with the first chosen.
+  Every mark is listed under its take now, by its label's name and its
+  comment — a plain mark with nothing written included — and a *Note*'s tick
+  shows on the waveform, which it never did. Older histories move over the
+  first time this version opens them (#12).
 - **★ marks a take worth coming back to.** A click on the ★ on a take's
   row, or beside the open take in the player, puts a star on it or takes it
   off. A song can have several, and a take with no song can have one. A

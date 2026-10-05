@@ -197,11 +197,12 @@ on one timeline, so they always stay in sync.
   shows the whole mix, and turns red when the tracks together are too loud.
   The speaker at the top of the window is the same control, there on every
   screen a take can be played from, even with no take open.
-- **Mark a moment** with **Mark**, or the M key, while the take plays. Type a
-  short note and pick a kind: a plain note, *keep this*, *went wrong* or *do
-  again*. Each kind has its own colour, and the take's button in the strip
-  shows those colours too, so you can see which takes have problems without
-  opening them. Click a marker to jump to it.
+- **Mark a moment** with **Mark**, or the M key, while the take plays. Pick
+  its label and type a short comment if you like. A new mark has the first
+  label in the list (see [Marks and their labels](#marks-and-their-labels)).
+  A mark is drawn in its label's colour on the waveform, and the take's
+  button in the strip shows those colours too, so you can see which takes
+  were marked what without opening them. Click a marker to jump to it.
 - **Loop a part:** drag across the tracks to select it, then turn on
   **Repeat**, next to the time, or the loop button beside the selection's
   times. Drag the edges on the ruler to adjust the selection. The cross
@@ -237,8 +238,8 @@ the strip. Click it again to take it off. A song can have several starred
 takes, and a take with no song can have one too.
 
 A starred take is the green one, in the list of takes and in the evening
-strip, and its button in the strip carries a ★. A *keep this* mark is
-about a moment, and stays a dot on the take's bar. ▶ on a song, rather than
+strip, and its button in the strip carries a ★. A mark is about a moment,
+whatever its label, and stays a dot on the take's bar. ▶ on a song, rather than
 on a take, plays its newest starred take. The star stays with its take when
 you rename it or crop it, and goes when you delete it.
 
@@ -598,6 +599,27 @@ first, then move the whole folder.
 If you go back to an older version of the app after this one has opened the
 recordings folder, the older version may show an empty history, or refuse to
 open the folder. Your recordings are not affected.
+
+## Marks and their labels
+
+A mark's label is a name and a colour: *Note*, *Keep this*, *Went wrong*
+and *Do again* to start with. In **Settings → Marks** you can make your own
+(*Solo*, *Tempo*, *Lyrics*, whatever the band marks), rename them, give them
+another colour from the palette of eight, drag them into another order and
+delete them.
+
+- The order is the order of the buttons when you mark a moment, and a new
+  mark gets the first label.
+- Renaming or recolouring a label changes every mark that has it, in every
+  rehearsal.
+- Each label says how many marks have it. One with none is deleted at once.
+  For one in use, the app asks which label its marks get instead.
+- The last label cannot be deleted: every mark needs one.
+- Under a take, every mark is listed, by its label's name and then its
+  comment, if it has one.
+
+A label does nothing else: it changes how its marks look and what they are
+called.
 
 ## Appearance
 
