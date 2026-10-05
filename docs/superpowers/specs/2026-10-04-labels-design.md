@@ -1,5 +1,7 @@
 # Labels: the band's own names and colours for marks
 
+**Status:** done — implemented and merged on 2026-10-05 (plan: [2026-10-05-labels.md](../plans/2026-10-05-labels.md)).
+
 A mark drops a moment in a take, with a word about it. What it can be called
 is fixed in the code.
 
