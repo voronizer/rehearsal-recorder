@@ -62,9 +62,9 @@ shares one timeline, so where two of them parted company is something you can
 point at rather than guess. Drag across it to set the repeat region, and zoom
 into it with the wheel when the spot needs finding exactly.
 
-**Markers say what happened, not just where.** A note and a kind — keep this,
-went wrong, do again — coloured on the timeline and on the take's pill, so a
-glance at the strip says which take has red in it.
+**Markers say what happened, not just where.** A label and a comment — Keep
+this, Went wrong, or one of the band's own — coloured on the timeline and on
+the take's pill, so a glance at the strip says which take has red in it.
 
 **Tells you what a rehearsal was.** Months later a date and a take count are
 not how anyone recognises an evening, so each one says what was played in it,

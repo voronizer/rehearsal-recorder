@@ -72,5 +72,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     raise NotImplementedError(
         "Labels the band made have no kind to go back to. The copy made "
-        "before migrating, library.sqlite.bak-0003, is the history before them."
+        "before migrating, library.sqlite.bak-<the revision it was at>, is "
+        "the history before them."
     )

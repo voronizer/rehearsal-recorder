@@ -805,18 +805,20 @@ def main():
        and positions12() == [0, 1, 2, 3, 4])
 
     # A delete that fails after its marks were moved must move none of them.
+    # It is the trigger's own error that must stop it: a refusal before the
+    # marks were touched would leave them in place too, and prove nothing.
     with lib._engine.begin() as c:
         c.execute(text("CREATE TRIGGER keep_labels BEFORE DELETE ON label "
                        "BEGIN SELECT RAISE(ABORT, 'kept'); END"))
     try:
         lib.delete_label(3, 1)
-        failed12 = False
-    except Exception:
-        failed12 = True
+        failed12 = None
+    except Exception as e:
+        failed12 = str(getattr(e, "orig", e))
     with lib._engine.begin() as c:
         c.execute(text("DROP TRIGGER keep_labels"))
     ok("moving the marks and deleting the label are one transaction",
-       failed12 and 3 in order12()
+       failed12 == "kept" and 3 in order12()
        and lib.take(jam, 3)["markers"][0]["label_id"] == 3
        and lib.take(jam, 4)["markers"][0]["label_id"] == 3)
 
