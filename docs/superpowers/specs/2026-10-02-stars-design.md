@@ -1,5 +1,7 @@
 # Stars: the goes worth coming back to, marked with one click
 
+**Status:** done — implemented and merged on 2026-10-05 (plan: [2026-10-04-stars.md](../plans/2026-10-04-stars.md)).
+
 When somebody comes back for a song, they almost always want a good take:
 the version the band settled on, or the one where it finally worked. Today
 nothing says which takes those are.
