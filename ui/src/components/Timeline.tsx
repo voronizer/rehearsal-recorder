@@ -5,7 +5,7 @@ import { TakeMap } from "@/components/TakeMap"
 import { Waveform } from "@/components/Waveform"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
-import { markerStyle } from "@/lib/markers"
+import { labelLook, labelOf, useLabels } from "@/lib/labels"
 import { MIN_VIEW_SEC, tickTimes } from "@/lib/timeline"
 import type { Marker } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
@@ -48,6 +48,7 @@ export function Timeline({
   /** Crop, offered under the region's times, where the take can be cut. */
   crop?: RegionCrop
 }) {
+  const labels = useLabels()
   const surfaceId = useId()
   const { media, duration, position, region } = player
   const from = player.view?.from ?? 0
@@ -390,28 +391,24 @@ export function Timeline({
 
             {markers
               .filter((m) => m.at >= from && m.at <= to)
-              .map((m) => (
-                <Fragment key={m.at}>
-                  <span
-                    className="pointer-events-none absolute w-0.5 opacity-60"
-                    style={{
-                      left: `${pct(m.at)}%`,
-                      top: RULER_PX,
-                      bottom: 0,
-                      background: `var(${markerStyle(m.kind).cssVar})`,
-                    }}
-                  />
-                  <span
-                    data-marker-at={m.at}
-                    className="pointer-events-none absolute size-2.5 -translate-x-1 rotate-45 rounded-[2px]"
-                    style={{
-                      left: `${pct(m.at)}%`,
-                      top: RULER_PX - 13,
-                      background: `var(${markerStyle(m.kind).cssVar})`,
-                    }}
-                  />
-                </Fragment>
-              ))}
+              .map((m) => {
+                const label = labelOf(labels, m.label_id)
+                const colour = `var(${labelLook(label.colour).cssVar})`
+                return (
+                  <Fragment key={m.at}>
+                    <span
+                      className="pointer-events-none absolute w-0.5 opacity-60"
+                      style={{ left: `${pct(m.at)}%`, top: RULER_PX, bottom: 0, background: colour }}
+                    />
+                    <span
+                      data-marker-at={m.at}
+                      data-colour={label.colour}
+                      className="pointer-events-none absolute size-2.5 -translate-x-1 rotate-45 rounded-[2px]"
+                      style={{ left: `${pct(m.at)}%`, top: RULER_PX - 13, background: colour }}
+                    />
+                  </Fragment>
+                )
+              })}
 
             {/* The grab target lives entirely inside the ruler band, not down
                 the whole lane height — a press anywhere on the tracks always

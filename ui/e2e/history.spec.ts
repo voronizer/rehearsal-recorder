@@ -194,16 +194,18 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
     "Polyn",
     "2 goes",
     "Vesna",
-    "1 keep this",
-    "1 went wrong",
+    "1 Keep this",
+    "1 Went wrong",
+    "1 Note",
     "Not named",
     "this one is the take",
     "guitar drifts here",
   ]) {
     expect(said).toContain(part)
   }
-  // A plain mark with nothing written is not a note.
-  await expect(overview.locator("[data-note]")).toHaveCount(2)
+  // Every mark has its line, a plain one with nothing written included: by
+  // its label's name.
+  await expect(overview.locator("[data-note]")).toHaveCount(3)
   await expect(page.getByText("Pick a take")).toHaveCount(0)
   // Only the take already in the cloud folder says so on its row.
   await expect(page.locator("[data-take='2'] [data-in-cloud]")).toHaveCount(1)
@@ -387,11 +389,11 @@ test.describe("last time, on the setup screen", () => {
     await expect(panel.locator("[data-song='Polyn']")).toContainText("2 goes · 6:10")
     await expect(panel.locator("[data-song='Vesna']")).toContainText("1 go · 4:10")
     await expect(panel.locator("[data-song='Not named']")).toContainText("1 take · 1:30")
-    // The notes, under their song where there are any; a mark with nothing
-    // written is not one.
+    // The marks, under their song, each by its label and its comment.
     await expect(panel.locator("[data-song='Polyn'] [data-note]")).toContainText("this one is the take")
     await expect(panel.locator("[data-song='Vesna'] [data-note]")).toContainText("guitar drifts here")
-    await expect(panel.locator("[data-note]")).toHaveCount(2)
+    await expect(panel.locator("[data-song='Not named'] [data-note]")).toContainText("Note")
+    await expect(panel.locator("[data-note]")).toHaveCount(3)
     // What was not played last time, from before it.
     const leftOut = panel.getByRole("region", { name: "Not played last time" })
     await expect(leftOut).toContainText("Doroga")

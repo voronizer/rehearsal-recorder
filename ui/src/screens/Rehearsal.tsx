@@ -18,7 +18,6 @@ import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
   type Marker,
-  type MarkerKind,
   type SessionState,
   type Take,
 } from "@/lib/api"
@@ -269,9 +268,9 @@ export function Rehearsal({
     take: Take,
     at: number,
     note: string,
-    kind: MarkerKind
+    labelId: number
   ) => {
-    await api().update_take_marker(session.folder, take.take_number, at, note, kind)
+    await api().update_take_marker(session.folder, take.take_number, at, note, labelId)
     onChanged()
   }
 
@@ -450,8 +449,8 @@ export function Rehearsal({
       <MarkerDialog
         marker={markerEdit?.marker ?? null}
         onOpenChange={(open) => !open && setMarkerEdit(null)}
-        onSave={(at, note, kind) => {
-          if (markerEdit) void saveMarker(markerEdit.take, at, note, kind)
+        onSave={(at, note, labelId) => {
+          if (markerEdit) void saveMarker(markerEdit.take, at, note, labelId)
         }}
         onDelete={(at) => {
           if (markerEdit) void removeMarker(markerEdit.take, at)

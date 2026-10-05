@@ -11,9 +11,9 @@ import { StarButton } from "@/components/StarButton"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
-import { MARKER_KINDS, markerStyle } from "@/lib/markers"
+import { labelCounts, labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import { TakeTitle } from "@/components/TakeTitle"
-import type { Marker, MarkerKind, Song, Take } from "@/lib/api"
+import type { Song, Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 const NOT_NAMED = "Not named"
@@ -32,22 +32,8 @@ export type OverviewPlayback = {
   duration: number
 }
 
-// A plain mark with nothing written says only "here"; it stays on its take's
-// bar and waveform but is no note to read in a list.
-function listable(take: Take): Marker[] {
-  return (take.markers ?? []).filter(
-    (m) => m.note.trim() !== "" || m.kind !== "note"
-  )
-}
-
 function inCloud(take: Take): boolean {
   return Boolean(take.cloud?.mix || take.cloud?.tracks)
-}
-
-/** "2 keep this", "3 went wrong", "1 note" — the legend above the songs. */
-function legendLabel(kind: MarkerKind, n: number): string {
-  if (kind === "note") return n === 1 ? "1 note" : `${n} notes`
-  return `${n} ${markerStyle(kind).label.toLowerCase()}`
 }
 
 /**
@@ -57,7 +43,8 @@ function legendLabel(kind: MarkerKind, n: number): string {
  * It used to be a line of small chips per song and a list of notes under
  * them. Each go is now a row: a bar drawn to scale — so the go that ran long
  * or stopped short is plain before anything is read — with its marks where
- * they fell, and its notes under it. The notes are usually why the rehearsal
+ * they fell, and every one of them listed under it: its label's name, then
+ * its comment when it has one. The comments are usually why the rehearsal
  * was opened again at all: "this one is the take", "guitar drifts here".
  *
  * Play on a row plays the take right here, with no player on screen: the bar
@@ -96,6 +83,7 @@ export function RehearsalOverview({
   onShare?: (take: Take) => void
   onDelete?: (take: Take) => void
 }) {
+  const labels = useLabels()
   const byNumber = new Map(takes.map((t) => [t.take_number, t]))
   const rows = songs
     .map((s) => ({
@@ -113,10 +101,8 @@ export function RehearsalOverview({
   const total = takes.reduce((sum, t) => sum + (t.duration_sec || 0), 0)
   const longest = Math.max(1, ...takes.map((t) => t.duration_sec || 0))
   const shared = takes.filter(inCloud).length
-  const counts = new Map<MarkerKind, number>()
-  for (const t of takes) {
-    for (const m of listable(t)) counts.set(m.kind, (counts.get(m.kind) ?? 0) + 1)
-  }
+  // Every mark counts, a plain one with nothing written included (spec D2).
+  const counts = labelCounts(labels, takes.flatMap((t) => t.markers ?? []))
 
   return (
     <section aria-label="Rehearsal overview" className="flex flex-col gap-3.5">
@@ -129,12 +115,12 @@ export function RehearsalOverview({
         {shared > 0 && (
           <Stat value={`${shared} of ${takes.length}`} label="in the cloud" />
         )}
-        {counts.size > 0 && (
+        {counts.length > 0 && (
           <div className="ml-auto flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-muted-foreground">
-            {MARKER_KINDS.filter((k) => counts.has(k.kind)).map((k) => (
-              <span key={k.kind} className="flex items-center gap-1.5">
-                <span className={cn("size-2 rounded-full", k.dot)} />
-                {legendLabel(k.kind, counts.get(k.kind) ?? 0)}
+            {counts.map(({ label, n }) => (
+              <span key={label.id} className="flex items-center gap-1.5">
+                <span className={cn("size-2 rounded-full", labelLook(label.colour).dot)} />
+                {n} {label.name}
               </span>
             ))}
           </div>
@@ -230,6 +216,7 @@ function TakeRow({
   onShare?: (take: Take) => void
   onDelete?: (take: Take) => void
 }) {
+  const labels = useLabels()
   const status = takeCloudStatus(take, cloudState)
   const shared = inCloud(take)
   const starred = take.starred ?? false
@@ -302,17 +289,18 @@ function TakeRow({
             {/* Under the number and the name, which are drawn after them: a
                 mark in a take's first seconds otherwise struck its number
                 out. The playhead, last, stays over everything. */}
-            {(take.markers ?? []).map((m) => (
-              <span
-                key={m.at}
-                aria-hidden
-                className={cn(
-                  "absolute inset-y-[5px] w-[3px] rounded-sm",
-                  markerStyle(m.kind).dot
-                )}
-                style={{ left: `${along(m.at)}%` }}
-              />
-            ))}
+            {(take.markers ?? []).map((m) => {
+              const label = labelOf(labels, m.label_id)
+              return (
+                <span
+                  key={m.at}
+                  aria-hidden
+                  data-mark-colour={label.colour}
+                  className={cn("absolute inset-y-[5px] w-[3px] rounded-sm", labelLook(label.colour).dot)}
+                  style={{ left: `${along(m.at)}%` }}
+                />
+              )
+            })}
             <span className="tnum relative text-[11px] text-muted-foreground">
               {String(take.take_number).padStart(2, "0")}
             </span>
@@ -418,8 +406,10 @@ function TakeRow({
         </div>
       </div>
 
-      {listable(take).map((m) => {
-        const style = markerStyle(m.kind)
+      {/* Every mark has its line, a plain one with nothing written included
+          (spec D2): its label's name, then its comment. */}
+      {(take.markers ?? []).map((m) => {
+        const label = labelOf(labels, m.label_id)
         return (
           <button
             key={m.at}
@@ -428,11 +418,9 @@ function TakeRow({
             onClick={() => onOpenAt(take, m.at)}
             className="ml-11 flex max-w-[calc(100%-2.75rem)] items-center gap-2.5 self-start rounded-md px-1.5 py-0.5 text-left text-[13px] transition-colors hover:bg-accent/50"
           >
-            <span className={cn("size-[7px] shrink-0 rounded-full", style.dot)} />
-            <span className="tnum text-xs text-muted-foreground">
-              {formatMMSS(m.at)}
-            </span>
-            <span className="truncate">{m.note || style.label}</span>
+            <span className={cn("size-[7px] shrink-0 rounded-full", labelLook(label.colour).dot)} />
+            <span className="tnum text-xs text-muted-foreground">{formatMMSS(m.at)}</span>
+            <span className="truncate">{markText(label, m.note)}</span>
           </button>
         )
       })}

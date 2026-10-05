@@ -77,16 +77,38 @@ export type Take = {
   cloud_error?: string
 }
 
+/** A label's colour, by name. What it looks like is the theme's:
+ *  --label-<name> in index.css. */
+export type LabelColour =
+  | "grey"
+  | "red"
+  | "amber"
+  | "green"
+  | "teal"
+  | "blue"
+  | "violet"
+  | "pink"
+
 /**
- * What a marker is for. The colour follows from it, so a glance at the
- * waveform says whether a take needs work or is the one to keep.
+ * What a mark can be called: a name and a colour the band made in Settings ›
+ * Marks. It means nothing else to the app.
  */
-export type MarkerKind = "note" | "good" | "issue" | "redo"
+export type Label = {
+  id: number
+  name: string
+  colour: LabelColour
+  /** How many marks have it, in every rehearsal. */
+  marks: number
+}
+
+/** What a change to the labels answers: all of them, as they are now. */
+export type LabelsAnswer = Ok<{ labels?: Label[] }>
 
 export type Marker = {
   /** Position in the take, in seconds. */
   at: number
-  kind: MarkerKind
+  /** Its label, one of list_labels()'s. */
+  label_id: number
   note: string
 }
 
@@ -660,20 +682,30 @@ type PyApi = {
     takeNumber: number,
     seconds: number,
     note?: string,
-    kind?: MarkerKind
+    /** None gives the first label. */
+    labelId?: number | null
   ): Promise<Ok<{ markers?: Marker[] }>>
   update_take_marker(
     folder: string,
     takeNumber: number,
     seconds: number,
     note?: string | null,
-    kind?: MarkerKind | null
+    labelId?: number | null
   ): Promise<Ok<{ markers?: Marker[] }>>
   remove_take_marker(
     folder: string,
     takeNumber: number,
     seconds: number
   ): Promise<Ok<{ markers?: Marker[] }>>
+  /** Every label, in order, with how many marks each has. */
+  list_labels(): Promise<Label[]>
+  add_label(name: string, colour: LabelColour): Promise<LabelsAnswer>
+  rename_label(labelId: number, name: string): Promise<LabelsAnswer>
+  recolour_label(labelId: number, colour: LabelColour): Promise<LabelsAnswer>
+  /** To `position` in the list, from 0. */
+  move_label(labelId: number, position: number): Promise<LabelsAnswer>
+  /** A label in use needs `marksTo`: the label its marks get. */
+  delete_label(labelId: number, marksTo?: number | null): Promise<LabelsAnswer>
 
   list_drafts(): Promise<Draft[]>
   recover_draft(draftDir: string, name?: string): Promise<Ok<{ take?: Take }>>
@@ -834,6 +866,7 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "recording_health",
   "list_rehearsals",
   "list_drafts",
+  "list_labels",
   "get_settings",
   "startup_problems",
 ])

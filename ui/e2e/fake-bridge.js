@@ -124,6 +124,33 @@ function withStars(r) {
   return r;
 }
 
+// The library's labels, in their order, as list_labels gives them: the four
+// every library starts with (migration 0004), or a page's own
+// (window.__LABELS__ = [{id, name, colour}, …]).
+let labels = (window.__LABELS__ || [
+  {id:1, name:'Note', colour:'grey'},
+  {id:2, name:'Keep this', colour:'green'},
+  {id:3, name:'Went wrong', colour:'red'},
+  {id:4, name:'Do again', colour:'amber'},
+]).map(l => ({...l}));
+// Where the marks of a deleted label went: the past rehearsals are built
+// afresh on every call, so their marks are moved as they are sent.
+const movedMarks = {};
+
+// A mark's label as Python keeps it: one there is, or the first.
+function labelIdOf(id) {
+  while (movedMarks[id] !== undefined) id = movedMarks[id];
+  return labels.some(l => l.id === id) ? id : labels[0].id;
+}
+
+// The labels with how many marks each has, in the live rehearsal and the
+// fuller evening's.
+function labelsAsSent() {
+  const takes = [...(session ? session.takes : []), ...pastRehearsal('/rec/old').takes];
+  const marks = takes.flatMap(t => t.markers || []);
+  return labels.map(l => ({...l, marks: marks.filter(m => labelIdOf(m.label_id) === l.id).length}));
+}
+
 function pastRehearsal(folder) {
   if (folder === '/rec/quiet') {
     const takes = [
@@ -150,14 +177,14 @@ function pastRehearsal(folder) {
     {take_number:1, name:'Polyn', duration_sec:192, markers:[],
      tracks:[{name:'Guitar', file:'/rec/old/p1.wav'}]},
     {take_number:2, name:'Polyn 2', duration_sec:178,
-     markers:[{at:72, note:'this one is the take', kind:'good'}],
+     markers:[{at:72, note:'this one is the take', label_id:2}],
      cloud:{mix:'/cloud/Tuesday jam/02 - Polyn 2.mp3', mix_format:'mp3'},
      tracks:[{name:'Guitar', file:'/rec/old/p2.wav'}]},
     {take_number:3, name:'Take 3', duration_sec:90,
-     markers:[{at:5, note:'', kind:'note'}],
+     markers:[{at:5, note:'', label_id:1}],
      tracks:[{name:'Guitar', file:'/rec/old/t3.wav'}]},
     {take_number:4, name:'Vesna', duration_sec:250,
-     markers:[{at:40, note:'guitar drifts here', kind:'issue'}],
+     markers:[{at:40, note:'guitar drifts here', label_id:3}],
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
         tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
@@ -243,7 +270,10 @@ function resolved(text, takes, n) {
 // sends.
 function asSent(takes) {
   const out = [];
-  for (const t of takes) out.push({...t, ...resolved(t.name, out, t.take_number)});
+  for (const t of takes) out.push({
+    ...t, ...resolved(t.name, out, t.take_number),
+    markers: (t.markers || []).map(m => ({...m, label_id: labelIdOf(m.label_id)})),
+  });
   return out;
 }
 
@@ -440,7 +470,8 @@ window.__MAKE_API__ = () => ({
     duration_sec:TAKE, suggested_name:suggestName(takeCounter), default_name:suggestName(takeCounter, false),
     tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]})),
   keep_take: track('keep_take', async (n, _t, name, dur, tracks, markers) => {
-    const take = {take_number:n, ...resolved(name, session.takes, n), duration_sec:dur, tracks, markers: markers || []};
+    const take = {take_number:n, ...resolved(name, session.takes, n), duration_sec:dur, tracks,
+                  markers: (markers || []).map(m => ({...m, label_id: labelIdOf(m.label_id)}))};
     session.takes.push(take);
     if (n === takeCounter) nextName = null;
     cloudQueue = {...cloudQueue, [n]: 'queued'};
@@ -530,12 +561,12 @@ window.__MAKE_API__ = () => ({
   }),
   player_set_solo: track('player_set_solo', async (n) => { if (P) P.soloed = n; return {ok:true, ...playerState()}; }),
 
-  add_take_marker: track('add_take_marker', async (folder, n, sec, note, kind) => {
+  add_take_marker: track('add_take_marker', async (folder, n, sec, note, labelId) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     const at = Math.round(sec * 100) / 100;
     if (take) {
       const kept = (take.markers || []).filter(m => Math.abs(m.at - at) > 0.01);
-      take.markers = [...kept, {at, note: note || '', kind: kind || 'note'}]
+      take.markers = [...kept, {at, note: note || '', label_id: labelIdOf(labelId ?? -1)}]
         .sort((a, b) => a.at - b.at);
     }
     // Same reason as session_state/get_rehearsal: a live handle here would
@@ -543,12 +574,12 @@ window.__MAKE_API__ = () => ({
     // bridge's JSON round-trip never allows.
     return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
-  update_take_marker: track('update_take_marker', async (folder, n, sec, note, kind) => {
+  update_take_marker: track('update_take_marker', async (folder, n, sec, note, labelId) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     if (take) for (const m of take.markers || []) {
       if (Math.abs(m.at - sec) <= 0.01) {
         if (note !== null && note !== undefined) m.note = note;
-        if (kind !== null && kind !== undefined) m.kind = kind;
+        if (labelId !== null && labelId !== undefined) m.label_id = labelIdOf(labelId);
       }
     }
     return {ok:true, markers: take ? take.markers : []};
@@ -558,6 +589,7 @@ window.__MAKE_API__ = () => ({
     if (take) take.markers = (take.markers || []).filter(m => Math.abs(m.at - sec) > 0.01);
     return {ok:true, markers: take ? take.markers : []};
   }),
+  list_labels: track('list_labels', async () => JSON.parse(JSON.stringify(labelsAsSent()))),
 
   rename_take: track('rename_take', async (folder, n, name) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);

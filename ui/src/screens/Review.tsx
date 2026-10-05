@@ -15,13 +15,13 @@ import { canBePutBack, goesTo } from "@/lib/deletion"
 import {
   api,
   type Marker,
-  type MarkerKind,
   type PendingTake,
   type ShareWhat,
 } from "@/lib/api"
 import { croppedButNotSwept, formatMMSS } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
 import { useRunning, watching } from "@/lib/activity"
+import { useLabels } from "@/lib/labels"
 
 /**
  * Right after stopping: listen and decide the take's fate. Until it is saved
@@ -62,6 +62,7 @@ export function Review({
   // folder yet, so there is nowhere on disk to put them. They travel with
   // keep_take, and go away with the take if it is discarded.
   const [markers, setMarkers] = useState<Marker[]>([])
+  const labels = useLabels()
 
   // Whether this take goes to the cloud folder, said before it is saved and
   // turnable for this one take: a false start kept anyway need not go up,
@@ -107,7 +108,9 @@ export function Review({
 
   const addMarker = (at: number) => {
     const rounded = Math.round(at * 100) / 100
-    const fresh: Marker = { at: rounded, kind: "note", note: "" }
+    // Python gives the first label too, but this take has no folder yet and
+    // its marks are held here until Save take.
+    const fresh: Marker = { at: rounded, label_id: labels[0]?.id ?? 0, note: "" }
     setMarkers((prev) =>
       [...prev.filter((m) => Math.abs(m.at - rounded) > 0.01), fresh].sort(
         (a, b) => a.at - b.at
@@ -116,9 +119,9 @@ export function Review({
     setEditing(fresh)
   }
 
-  const saveMarker = (at: number, note: string, kind: MarkerKind) => {
+  const saveMarker = (at: number, note: string, labelId: number) => {
     setMarkers((prev) =>
-      prev.map((m) => (Math.abs(m.at - at) <= 0.01 ? { ...m, note, kind } : m))
+      prev.map((m) => (Math.abs(m.at - at) <= 0.01 ? { ...m, note, label_id: labelId } : m))
     )
   }
 

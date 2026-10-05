@@ -16,7 +16,6 @@ import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpaceb
 import {
   api,
   type Marker,
-  type MarkerKind,
   type RehearsalDetail,
   type RehearsalSummary,
   type Take,
@@ -364,10 +363,10 @@ export function HistoryScreen({
     take: Take,
     at: number,
     note: string,
-    kind: MarkerKind
+    labelId: number
   ) => {
     if (!opened) return
-    await api().update_take_marker(opened.folder, take.take_number, at, note, kind)
+    await api().update_take_marker(opened.folder, take.take_number, at, note, labelId)
     await reopen(opened.folder)
     void refresh()
   }
@@ -413,8 +412,8 @@ export function HistoryScreen({
       <MarkerDialog
         marker={markerEdit?.marker ?? null}
         onOpenChange={(open) => !open && setMarkerEdit(null)}
-        onSave={(at, note, kind) => {
-          if (markerEdit) void saveMarker(markerEdit.take, at, note, kind)
+        onSave={(at, note, labelId) => {
+          if (markerEdit) void saveMarker(markerEdit.take, at, note, labelId)
         }}
         onDelete={(at) => {
           if (markerEdit) void removeMarker(markerEdit.take, at)

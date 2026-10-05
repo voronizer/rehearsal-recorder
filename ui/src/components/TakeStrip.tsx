@@ -3,7 +3,7 @@ import { Cloud, CloudCheck, Music2, Pencil, Star, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/Shell"
 import { cn } from "@/lib/utils"
-import { MARKER_KINDS } from "@/lib/markers"
+import { labelLook, labelOf, useLabels } from "@/lib/labels"
 import { formatMMSS } from "@/lib/format"
 import { TakeTitle } from "@/components/TakeTitle"
 import { StarButton } from "@/components/StarButton"
@@ -73,6 +73,7 @@ export function TakeStrip({
   cloudStates?: Record<number, "queued" | "working">
   emptyHint?: string
 }) {
+  const labels = useLabels()
   const openPillRef = useRef<HTMLButtonElement | null>(null)
 
   // The strip doesn't wrap (see the note below), so on a rehearsal with many
@@ -145,15 +146,17 @@ export function TakeStrip({
               )}
               {take.markers && take.markers.length > 0 && (
                 <span className="flex shrink-0 items-center gap-1">
-                  {MARKER_KINDS.filter((k) =>
-                    take.markers?.some((m) => m.kind === k.kind)
-                  ).map((k) => (
-                    <span
-                      key={k.kind}
-                      title={k.label}
-                      className={cn("size-1.5 shrink-0 rounded-full", k.dot)}
-                    />
-                  ))}
+                  {labels
+                    .filter((l) =>
+                      take.markers?.some((m) => labelOf(labels, m.label_id).id === l.id)
+                    )
+                    .map((l) => (
+                      <span
+                        key={l.id}
+                        title={l.name}
+                        className={cn("size-1.5 shrink-0 rounded-full", labelLook(l.colour).dot)}
+                      />
+                    ))}
                   <span className="tnum text-[11px] text-muted-foreground">
                     {take.markers.length}
                   </span>

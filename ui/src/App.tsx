@@ -19,6 +19,7 @@ import {
 import { useDialogFocusKeys } from "@/hooks/useSpacebar"
 import { reportBridgeError } from "@/lib/bridgeErrors"
 import { loadDeletionKind } from "@/lib/deletion"
+import { loadLabels } from "@/lib/labels"
 import {
   applyAppearance,
   readCachedAppearance,
@@ -93,6 +94,9 @@ export function App() {
       // What deleting does differs by system, and a confirmation must not
       // promise a Trash this machine has not got.
       await loadDeletionKind()
+      // What a mark can be called is the library's, and every mark drawn
+      // anywhere needs it.
+      await loadLabels()
 
       // The source of truth for appearance is the Python config; localStorage
       // was only a fast cache to avoid flashing on startup.

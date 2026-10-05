@@ -11,7 +11,7 @@ import {
   longAgo,
   takesLabel,
 } from "@/lib/format"
-import { markerStyle } from "@/lib/markers"
+import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import type { LastTime as LastTimeData, SongPlays, Take } from "@/lib/api"
 
 /** What is playing from here, and where it has got to. */
@@ -269,6 +269,7 @@ function SongRow({
   playback: LastTimePlayback | null
   onPlay: (take: Take) => void
 }) {
+  const labels = useLabels()
   const lastGo = takes[takes.length - 1]
   const target = plays?.take ?? lastGo
   const isTarget = (t: Take) =>
@@ -277,11 +278,8 @@ function SongRow({
   const elsewhere = plays !== null && !isTarget(lastGo)
   const here = playback?.take === target ? playback : null
   const total = takes.reduce((sum, t) => sum + (t.duration_sec || 0), 0)
-  const notes = takes.flatMap((t) =>
-    (t.markers ?? [])
-      .filter((m) => m.note.trim() !== "" || m.kind !== "note")
-      .map((m) => ({ take: t, marker: m }))
-  )
+  // Every mark is listed, a plain one with nothing written included (spec D2).
+  const notes = takes.flatMap((t) => (t.markers ?? []).map((m) => ({ take: t, marker: m })))
 
   return (
     <div
@@ -318,19 +316,19 @@ function SongRow({
           </span>
         )}
         {notes.slice(0, NOTES_SHOWN).map(({ take, marker }) => {
-          const style = markerStyle(marker.kind)
+          const label = labelOf(labels, marker.label_id)
           return (
             <span
               key={`${take.take_number}-${marker.at}`}
               data-note
               className="flex min-w-0 items-center gap-2 text-xs"
             >
-              <span className={cn("size-[7px] shrink-0 rounded-full", style.dot)} />
+              <span className={cn("size-[7px] shrink-0 rounded-full", labelLook(label.colour).dot)} />
               <span className="truncate">
                 <span className="text-muted-foreground">
                   {take.name} · <span className="tnum">{formatMMSS(marker.at)}</span> ·{" "}
                 </span>
-                {marker.note || style.label}
+                {markText(label, marker.note)}
               </span>
             </span>
           )

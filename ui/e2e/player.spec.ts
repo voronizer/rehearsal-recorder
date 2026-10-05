@@ -208,9 +208,9 @@ test.describe("the review screen", () => {
     await page.getByRole("button", { name: /Save take/ }).click()
     await expect(page.getByRole("button", { name: /Record take 3/ })).toBeVisible()
     const kept = (await calls(page, "keep_take")).at(-1)!.args
-    const marks = kept[5] as { note: string; kind: string }[]
+    const marks = kept[5] as { note: string; label_id: number }[]
     expect(marks[0].note).toBe("this one is the take")
-    expect(marks[0].kind).toBe("good")
+    expect(marks[0].label_id).toBe(2)
   })
 })
 
@@ -272,7 +272,7 @@ test.describe("a saved take", () => {
     await page.getByRole("button", { name: "Save", exact: true }).click()
     await expect
       .poll(async () => (await calls(page, "update_take_marker")).at(-1)?.args.slice(3))
-      .toEqual(["guitar drifts here", "issue"])
+      .toEqual(["guitar drifts here", 3])
     // On the chip without ever going away from the take and back.
     await expect(page.getByText("guitar drifts here").first()).toBeVisible()
 

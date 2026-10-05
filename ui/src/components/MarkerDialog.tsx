@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
-import { MARKER_KINDS } from "@/lib/markers"
-import type { Marker, MarkerKind } from "@/lib/api"
+import { labelLook, labelOf, useLabels } from "@/lib/labels"
+import type { Marker } from "@/lib/api"
 
 const overlayClass =
   "fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
@@ -29,21 +29,25 @@ export function MarkerDialog({
 }: {
   marker: Marker | null
   onOpenChange: (open: boolean) => void
-  onSave: (at: number, note: string, kind: MarkerKind) => void
+  onSave: (at: number, note: string, labelId: number) => void
   onDelete: (at: number) => void
 }) {
+  const labels = useLabels()
   const [note, setNote] = useState("")
-  const [kind, setKind] = useState<MarkerKind>("note")
+  const [labelId, setLabelId] = useState(0)
+  // The label chosen, as one there is: a mark whose label is not in the list
+  // reads as the first, which is what Python would give it.
+  const chosen = labelOf(labels, labelId).id
 
   useEffect(() => {
     if (!marker) return
     setNote(marker.note)
-    setKind(marker.kind)
+    setLabelId(marker.label_id)
   }, [marker])
 
   const save = () => {
     if (!marker) return
-    onSave(marker.at, note.trim(), kind)
+    onSave(marker.at, note.trim(), chosen)
     onOpenChange(false)
   }
 
@@ -63,17 +67,17 @@ export function MarkerDialog({
           </DialogPrimitive.Description>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            {MARKER_KINDS.map((k) => (
+            {labels.map((l) => (
               <Button
-                key={k.kind}
-                variant={kind === k.kind ? "default" : "outline"}
+                key={l.id}
+                variant={chosen === l.id ? "default" : "outline"}
                 size="sm"
-                aria-pressed={kind === k.kind}
-                aria-label={k.label}
-                onClick={() => setKind(k.kind)}
+                aria-pressed={chosen === l.id}
+                aria-label={l.name}
+                onClick={() => setLabelId(l.id)}
               >
-                <span className={cn("size-2 rounded-full", k.dot)} />
-                {k.label}
+                <span className={cn("size-2 rounded-full", labelLook(l.colour).dot)} />
+                {l.name}
               </Button>
             ))}
           </div>

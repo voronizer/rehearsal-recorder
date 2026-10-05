@@ -19,7 +19,7 @@ import { useKey } from "@/hooks/useSpacebar"
 import { canBePutBack, goesTo } from "@/lib/deletion"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
-import { markerStyle } from "@/lib/markers"
+import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import type { Marker } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 
@@ -65,6 +65,7 @@ export function TakePlayer({
    *  the take instead, and Play must not claim it. */
   spaceKey?: boolean
 }) {
+  const labels = useLabels()
   const [cropping, setCropping] = useState(false)
   // The same rule the timeline draws by: one end set reaches to the take's
   // own start or end.
@@ -137,16 +138,17 @@ export function TakePlayer({
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">Markers</span>
           {markers.map((m) => {
-            const style = markerStyle(m.kind)
+            const label = labelOf(labels, m.label_id)
+            const look = labelLook(label.colour)
             return (
               <span
                 key={m.at}
                 className={cn(
                   "inline-flex max-w-full items-center gap-1.5 rounded-full border bg-card py-0.5 pr-1 pl-2.5",
-                  style.chip
+                  look.chip
                 )}
               >
-                <span className={cn("size-1.5 shrink-0 rounded-full", style.dot)} />
+                <span className={cn("size-1.5 shrink-0 rounded-full", look.dot)} />
                 <button
                   type="button"
                   onClick={() => player.seek(m.at)}
@@ -155,16 +157,14 @@ export function TakePlayer({
                 >
                   {formatMMSS(m.at)}
                 </button>
-                {m.note && (
-                  <button
-                    type="button"
-                    onClick={() => onEditMarker?.(m)}
-                    className="truncate text-xs text-muted-foreground hover:text-foreground"
-                    title={m.note}
-                  >
-                    {m.note}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => onEditMarker?.(m)}
+                  className="truncate text-xs text-muted-foreground hover:text-foreground"
+                  title={markText(label, m.note)}
+                >
+                  {markText(label, m.note)}
+                </button>
                 {onEditMarker && (
                   <button
                     type="button"

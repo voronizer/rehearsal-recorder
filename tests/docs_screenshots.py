@@ -172,11 +172,11 @@ const SECTION = name => {
   for (const [kind, bars] of FORM) { if (kind === name) return at; at += bars * BAR; }
 };
 const EARLIER = [
-  takeOf(1, 'Polyn', 58, 51, [{at: 50, note: 'lost the count', kind: 'issue'}]),
+  takeOf(1, 'Polyn', 58, 51, [{at: 50, note: 'lost the count', label_id: 3}]),
   takeOf(2, 'Polyn 2', Math.round(SONG_END + 4), SONG_END, [
-    {at: 50.5, note: 'chorus came in early', kind: 'issue'},
-    {at: 112, note: 'bridge — try it slower', kind: 'redo'},
-    {at: 131, note: 'this one is the take', kind: 'good'}]),
+    {at: 50.5, note: 'chorus came in early', label_id: 3},
+    {at: 112, note: 'bridge — try it slower', label_id: 4},
+    {at: 131, note: 'this one is the take', label_id: 2}]),
   takeOf(3, 'Vesna', 141, 137, []),
 ];
 // For the script driving the page: where things are in the song.
@@ -273,18 +273,18 @@ api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
 // marks, as in life. Their files are never played in the pictures.
 const PAST = {
   '/rec/tue': ['Tuesday jam', '2026-09-22T19:00:00', 1560000000, [
-    ['Polyn', 185, [{at: 111, note: 'came in late after the break', kind: 'issue'}]],
-    ['Polyn 2', 192, [{at: 58, note: 'chorus came in early', kind: 'issue'},
-                      {at: 134, note: 'bridge — try it slower', kind: 'redo'}]],
+    ['Polyn', 185, [{at: 111, note: 'came in late after the break', label_id: 3}]],
+    ['Polyn 2', 192, [{at: 58, note: 'chorus came in early', label_id: 3},
+                      {at: 134, note: 'bridge — try it slower', label_id: 4}]],
     ['Polyn 3', 200, []],
-    ['Polyn 4', 198, [{at: 158, note: 'this one is the take', kind: 'good'}]],
-    ['Vesna', 250, [{at: 100, note: 'guitar drifts here', kind: 'issue'}]],
+    ['Polyn 4', 198, [{at: 158, note: 'this one is the take', label_id: 2}]],
+    ['Vesna', 250, [{at: 100, note: 'guitar drifts here', label_id: 3}]],
     ['Vesna 2', 265, []], ['Vesna 3', 252, []],
-    ['Ogon', 340, [{at: 187, note: 'solo too long, cut to 8 bars', kind: 'redo'}]],
+    ['Ogon', 340, [{at: 187, note: 'solo too long, cut to 8 bars', label_id: 4}]],
     ['Ogon 2', 302, []], ['Sonce', 390, []], ['Take 11', 130, []]]],
   '/rec/sat': ['New songs', '2026-09-19T15:00:00', 1070000000, [
     ['Dym', 280, []], ['Dym 2', 275, []], ['Dym 3', 290, []],
-    ['Dym 4', 270, [{at: 200, note: 'keep this ending', kind: 'good'}]],
+    ['Dym 4', 270, [{at: 200, note: 'keep this ending', label_id: 2}]],
     ['Ptaha', 245, []], ['Ptaha 2', 260, []], ['Ptaha 3', 255, []]]],
   '/rec/tue-before': ['Tuesday jam', '2026-09-15T19:00:00', 1310000000, [
     ['Polyn', 210, []], ['Polyn 2', 195, []], ['Polyn 3', 202, []],
