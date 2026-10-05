@@ -103,6 +103,9 @@ problems = []
 
 
 def ok(label, cond):
+    # Labels stay in what a Windows console's code page (cp1252) can
+    # print: CI runs these there, and print() fails on anything else,
+    # such as "★" or "▶", taking the whole suite down with it.
     print(("  ok   " if cond else "  FAIL ") + label)
     if not cond:
         problems.append(label)
@@ -5870,7 +5873,7 @@ def main():
     ok("and once it is there, it is renamed, case or not",
        p53._names_pass.run() == 1 and (cloud53 / jam53.name / "02 - Polyn 2.wav").exists())
 
-    print("\n[54] Stars: ★ on a take, and the go a song's ▶ plays")
+    print("\n[54] Stars: a star on a take, and the go a song's play button plays")
     tmp54 = Path(tempfile.mkdtemp())
     _, s54 = fresh_api(tmp54)
 
@@ -5904,14 +5907,14 @@ def main():
                 return (s["plays"]["folder"], s["plays"]["take"]["take_number"])
         return None
 
-    ok("with no ★, a song's ▶ plays its last go, as before",
+    ok("with no star, a song's play button plays its last go, as before",
        plays54("Polyn") == (last54, 3) and plays54("Vesna") == (last54, 2))
     ok("and a song not played last time plays its last go then, which it still lists",
        plays54("Doroga") == (first54, 4)
        and s54.last_time()["not_played"][0]["take"]["take_number"] == 4)
 
     jam54 = s54.set_take_star(last54, 4, True)
-    ok("★ goes on a take with no song", jam54["ok"] and jam54["take"]["starred"]
+    ok("a star goes on a take with no song", jam54["ok"] and jam54["take"]["starred"]
        and jam54["take"]["song"] is None)
     ok("and history's strip draws it",
        [t["starred"] for r in next(x for x in s54.list_rehearsals()
@@ -5920,7 +5923,7 @@ def main():
 
     s54.set_take_star(first54, 2, True)
     s54.set_take_star(mid54, 1, True)
-    ok("a song's ▶ plays its newest ★ go, from whichever rehearsal it was played at",
+    ok("a song's play button plays its newest starred go, from whichever rehearsal it was played at",
        plays54("Polyn") == (mid54, 1))
     polyn54 = next(s for s in s54.last_time()["last"]["songs"] if s["name"] == "Polyn")
     ok("with that rehearsal's name and day, to say so",
@@ -5928,23 +5931,23 @@ def main():
        and polyn54["plays"]["created_at"] == "2026-09-10T19:00:00"
        and polyn54["plays"]["take"]["name"] == "Polyn 3")
     s54.set_take_star(last54, 1, True)
-    ok("last time's own ★ go is newer than any before it",
+    ok("last time's own starred go is newer than any before it",
        plays54("Polyn") == (last54, 1))
     s54.set_take_star(last54, 3, True)
-    ok("two ★ goes in one evening: the later one is the newest",
+    ok("two starred goes in one evening: the later one is the newest",
        plays54("Polyn") == (last54, 3))
     s54.set_take_star(last54, 1, False)
     s54.set_take_star(last54, 3, False)
-    ok("taken off again, the newest ★ go is the older rehearsal's",
+    ok("taken off again, the newest starred go is the older rehearsal's",
        plays54("Polyn") == (mid54, 1))
     s54.set_take_star(first54, 3, True)
-    ok("a song not played last time plays its ★ go too",
+    ok("a song not played last time plays its starred go too",
        plays54("Doroga") == (first54, 3)
        and s54.last_time()["not_played"][0]["take"]["take_number"] == 4)
 
     import shutil as _shutil54
     _shutil54.move(mid54, str(tmp54 / "elsewhere"))
-    ok("a ★ go in a rehearsal not on disk is passed over for one that is",
+    ok("a starred go in a rehearsal not on disk is passed over for one that is",
        plays54("Polyn") == (first54, 2))
 
     ok("a folder outside the recordings is refused",
@@ -5973,10 +5976,10 @@ def main():
 
     saved54 = keep54(1, "Ogon")
     keep54(2, "Ogon")
-    ok("a take is saved without ★", saved54["starred"] is False)
+    ok("a take is saved without a star", saved54["starred"] is False)
     l54.set_take_star(str(live54), 1, True)
     renamed54 = l54.rename_take(str(live54), 1, "Sonce")
-    ok("★ stays with its take renamed to another song",
+    ok("the star stays with its take renamed to another song",
        renamed54["ok"] and renamed54["take"]["song"] == "Sonce" and renamed54["take"]["starred"])
     unnamed54 = l54.rename_take(str(live54), 1, "Take 1")
     ok("and renamed to no song at all",
@@ -5987,7 +5990,7 @@ def main():
     l54.set_take_star(str(live54), 2, True)
     ok("the kept takes are queued for the cloud, to compare against",
        len(queued54) > 0)
-    ok("★ queues no copy for the cloud, and renames nothing on disk",
+    ok("a star queues no copy for the cloud, and renames nothing on disk",
        dict(l54._cloud_queue.states(str(live54))) == queued54
        and Path(l54._lib.take(live54, 2)["tracks"][0]["file"]).exists())
     l54.delete_take(str(live54), 1)

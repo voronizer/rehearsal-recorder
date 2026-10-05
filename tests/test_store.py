@@ -50,6 +50,9 @@ problems = []
 
 
 def ok(label, cond):
+    # Labels stay in what a Windows console's code page (cp1252) can
+    # print: CI runs these there, and print() fails on anything else,
+    # such as "★" or "▶", taking the whole suite down with it.
     print(("  ok   " if cond else "  FAIL ") + label)
     if not cond:
         problems.append(label)
@@ -646,7 +649,7 @@ def main():
     ok("every take says whether it is starred", stars(jam) == [False, False, False])
     one = lib.set_starred(jam, 1, True)
     two = lib.set_starred(jam, 2, True)
-    ok("★ goes on a take, and a song can have several",
+    ok("a star goes on a take, and a song can have several",
        one["starred"] and two["starred"] and stars(jam) == [True, True, False])
     ok("a take with no song can have one", lib.set_starred(jam, 3, True)["starred"])
     ok("and it comes off, touching no other take",
@@ -656,12 +659,12 @@ def main():
        lib.set_starred(jam, 1, True)["starred"] and stars(jam)[0] is True)
     ok("a take that is not there is None", lib.set_starred(jam, 9, True) is None)
     renamed = lib.update_take(jam, 1, name="Take 1")
-    ok("★ stays with its take through a rename, to no song at all",
+    ok("the star stays with its take through a rename, to no song at all",
        renamed["song"] is None and renamed["starred"])
     ok("and the take keeps its marks",
        lib.take(jam, 1)["markers"] == [{"at": 1.0, "kind": "good", "note": ""}])
     lib.delete_take(jam, 3)
-    ok("a deleted take takes its ★ with it",
+    ok("a deleted take takes its star with it",
        [(t["take_number"], t["starred"]) for t in lib.rehearsal(jam)["takes"]]
        == [(1, True), (2, False)])
     lib.close()
