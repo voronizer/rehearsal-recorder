@@ -837,6 +837,8 @@ window.__MAKE_API__ = () => ({
     return {ok:true, trashed:true, takes_left:0};
   }),
   // History's Songs view (api.list_songs, api.get_song), from library().
+  // The list is read when it is asked for; a test can hold the answer on its
+  // way back (held), to have it arrive after one asked for later.
   list_songs: track('list_songs', async () => {
     const all = await libraryNow();
     const ids = songIds(all);
@@ -857,8 +859,10 @@ window.__MAKE_API__ = () => ({
     }
     const songs = [...bySong.values()].map(s => ({...s, rehearsals:s.rehearsals.size}))
       .sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
-    return JSON.parse(JSON.stringify({songs,
+    const answer = JSON.parse(JSON.stringify({songs,
       not_named: notNamed && {...notNamed, rehearsals:notNamed.rehearsals.size}}));
+    await held('list_songs');
+    return answer;
   }),
   get_song: track('get_song', async (id) => {
     const all = await libraryNow();

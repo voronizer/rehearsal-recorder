@@ -155,9 +155,15 @@ export function HistoryScreen({
   const [songsRead, setSongsRead] = useState(0)
   const songsShown = useRef(false)
   const songsBefore = useRef<SongIndex | null>(null)
+  // As with a song's page, an answer that comes back after one asked for
+  // later is older news: it still names the songs for whoever asked, but is
+  // not shown.
+  const askedSongs = useRef(0)
   const loadSongs = async () => {
     songsShown.current = true
+    const ticket = ++askedSongs.current
     const index = await api().list_songs()
+    if (ticket !== askedSongs.current) return index
     // A song chosen that is no longer there — its last go deleted, or
     // renamed to another song — gives way to the one after it in the list,
     // or before it when it was the last, as a rehearsal deleted does.

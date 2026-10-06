@@ -276,6 +276,40 @@ test.describe("Songs in History", () => {
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
   })
 
+  test("an answer about the songs that comes back after a later one is dropped", async ({
+    page,
+  }) => {
+    type Held = { __HOLD__?: Record<string, Promise<void>>; __RELEASE_LIST__?: () => void }
+    await openApp(page, { before: `window.__EXTRA_SONGS__ = ["Opus"];` })
+    await openSongs(page)
+    await chooseSong(page, "Opus")
+    const opus = rows(page).and(page.locator("[data-song='Opus']"))
+    const row = rungGroup(page, "/rec/older").locator("[data-take='3']")
+    // A star, and the list read again with Opus in it: that answer held on
+    // its way back.
+    await page.evaluate(() => {
+      const w = window as unknown as Held
+      w.__HOLD__ = { ...w.__HOLD__, list_songs: new Promise((r) => (w.__RELEASE_LIST__ = r)) }
+    })
+    const asked = (await calls(page, "list_songs")).length
+    await row.hover()
+    await row.getByRole("button", { name: "Star Opus 1" }).click()
+    await expect.poll(async () => (await calls(page, "list_songs")).length).toBe(asked + 1)
+    await page.evaluate(() => delete (window as unknown as Held).__HOLD__?.list_songs)
+    // Opus's only go deleted: the list read after it has no Opus.
+    await row.hover()
+    await row.getByRole("button", { name: "Delete take Opus 1" }).click()
+    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
+    await expect(opus).toHaveCount(0)
+    // The held answer arrives last, and is older news than what is shown:
+    // still no Opus a moment later. Waiting for the row to go cannot see it
+    // come back.
+    await page.evaluate(() => (window as unknown as Held).__RELEASE_LIST__?.())
+    await page.waitForTimeout(300)
+    await expect(opus).toHaveCount(0)
+    await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+  })
+
   test("starring a go on the ladder", async ({ page }) => {
     await openApp(page)
     await openSongs(page)
