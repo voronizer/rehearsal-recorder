@@ -387,7 +387,9 @@ def main():
     ok("and the full one, for where the window shows it large",
        logo.exists() and logo.read_bytes() == (packaging / "icon.svg").read_bytes())
 
-    print("\n[name] РЭХА where it says its name, Reha on disk")
+    # Said in Latin letters: Windows writes this into the build's log in its
+    # code page, and cp1252 has no Cyrillic.
+    print("\n[name] The app's own name where it says it, Reha on disk")
     # A Cyrillic file name is one more thing to go wrong unpacking a zip or
     # in a build script, so the file is Latin. The zips keep their old
     # names, which is what every copy already out there asks GitHub for.
