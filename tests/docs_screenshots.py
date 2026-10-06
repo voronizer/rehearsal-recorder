@@ -53,6 +53,17 @@ VIEWPORT = {"width": 1180, "height": 820}
 # are replaced on the bridge MOCK made.
 BAND = (PROJECT / "ui" / "e2e" / "band.js").read_text(encoding="utf-8")
 
+# Settings › Marks counts every mark in the library; the fake counts the
+# marks of its own history, which the band's replaces. So the counts are the
+# band's: the marks on its rehearsals.
+COUNTED = """
+const labelsOf = api.list_labels;
+api.list_labels = async () => {
+  const marks = Object.keys(PAST).flatMap(f => pastTakes(f)).flatMap(t => t.markers);
+  return (await labelsOf()).map(l => ({...l, marks: marks.filter(m => m.label_id === l.id).length}));
+};
+"""
+
 # An unsaved take waiting at startup: set before MOCK, which reads it once.
 DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 5', name:'take 5',
   tracks:['Drums','Bass','Guitar','Vocals'], duration_sec:214,
@@ -63,7 +74,7 @@ DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 5', name:'take 5',
 # How tall the window is for each picture: tall enough for all four tracks
 # where there is a player, and no taller than the screen needs elsewhere,
 # so a picture is not half empty.
-HEIGHT = {"unsaved-takes": 420, "setup": 910, "settings": 760, "rehearsal": 770,
+HEIGHT = {"unsaved-takes": 420, "setup": 910, "settings": 760, "marks": 420, "rehearsal": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
           "history": 820}
 
@@ -105,14 +116,14 @@ def main():
         browser = p.chromium.launch()
 
         page = browser.new_page(viewport=VIEWPORT)
-        page.add_init_script(DRAFTS + MOCK + BAND)
+        page.add_init_script(DRAFTS + MOCK + BAND + COUNTED)
         page.goto(server.base_url, wait_until="networkidle")
         page.wait_for_selector("text=Unsaved takes found")
         shoot(page, "unsaved-takes")
         page.close()
 
         page = browser.new_page(viewport=VIEWPORT)
-        page.add_init_script(MOCK + BAND)
+        page.add_init_script(MOCK + BAND + COUNTED)
         page.goto(server.base_url, wait_until="networkidle")
         page.wait_for_selector("text=Start rehearsal")
         page.fill("#rehearsal-name", "Tuesday jam")
@@ -125,6 +136,10 @@ def main():
         page.wait_for_selector("text=Playback output")
         page.wait_for_timeout(500)
         shoot(page, "settings")
+        page.get_by_role("button", name="Marks", exact=True).first.click()
+        page.wait_for_selector("text=What a moment in a take can be marked with")
+        page.wait_for_timeout(400)
+        shoot(page, "marks")
         page.keyboard.press("Escape")
         page.wait_for_selector("text=Start rehearsal")
         # The setup screen starts again from the date when it comes back.
@@ -174,7 +189,7 @@ def main():
         page.close()
 
         page = browser.new_page(viewport=VIEWPORT)
-        page.add_init_script(MOCK + BAND)
+        page.add_init_script(MOCK + BAND + COUNTED)
         page.goto(server.base_url, wait_until="networkidle")
         page.wait_for_selector("text=Start rehearsal")
         page.click("text=History")

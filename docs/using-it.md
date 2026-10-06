@@ -608,6 +608,8 @@ and *Do again* to start with. In **Settings → Marks** you can make your own
 another colour from the palette of eight, drag them into another order and
 delete them.
 
+![Settings → Marks: the four labels a library starts with, each with its colour and how many marks have it](screenshots/marks.png)
+
 - The order is the order of the buttons when you mark a moment, and a new
   mark gets the first label.
 - Renaming or recolouring a label changes every mark that has it, in every
