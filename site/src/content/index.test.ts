@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import changelog from "../../../CHANGELOG.md?raw"
 import { content, readContent } from "./index"
-import { latestVersion, newsLead } from "./changelog"
+import { displayVersion, latestVersion, newsLead } from "./changelog"
 
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
@@ -36,11 +36,10 @@ describe("the site's content", () => {
   })
 
   it("takes its version and news from CHANGELOG.md", () => {
-    const version = latestVersion(changelog)
-    expect(content.version).toBe(version)
-    expect(content.tag).toBe(version)
-    expect(newsLead(changelog, version)).not.toBeNull()
-    expect(content.news).toBe(newsLead(changelog, version))
+    const tag = import.meta.env.VITE_SITE_VERSION || latestVersion(changelog)
+    expect(content.tag).toBe(tag)
+    expect(content.version).toBe(displayVersion(tag))
+    expect(content.news).toBe(newsLead(changelog, content.version))
   })
 
   it("shows a release tagged with a v without it, and links the tag as it is", () => {

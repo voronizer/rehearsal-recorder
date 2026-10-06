@@ -77,6 +77,8 @@ jobs:
           fi
           echo "The site is for $tag, built from $(git rev-parse --short HEAD)."
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # For the build, and for the tests, which check the page against it.
+          echo "VITE_SITE_VERSION=$tag" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v7
         with:
@@ -100,8 +102,6 @@ jobs:
       # In a pull request the version is the newest one in CHANGELOG.md.
       - name: Build
         working-directory: site
-        env:
-          VITE_SITE_VERSION: ${{ steps.release.outputs.tag }}
         run: npm run build
 
       - name: Install the browser
@@ -158,6 +158,6 @@ jobs:
             echo "::error::Deploying needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID."
             exit 1
           fi
-          url=$(npx --yes vercel@latest deploy --prebuilt --prod --token "$VERCEL_TOKEN")
+          url=$(npx --yes vercel@62.4.0 deploy --prebuilt --prod --token "$VERCEL_TOKEN")
           echo "Deployed $TAG to $url"
           echo "The site for $TAG is at $url" >> "$GITHUB_STEP_SUMMARY"

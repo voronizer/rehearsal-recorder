@@ -1,9 +1,13 @@
 import type { Page } from "@playwright/test"
 import { readFileSync } from "node:fs"
+import { displayVersion, latestVersion, newsLead } from "../src/content/changelog.ts"
 import { test, expect } from "./fixtures.ts"
 
 const CHANGELOG = readFileSync(new URL("../../CHANGELOG.md", import.meta.url), "utf-8")
-const VERSION = /^## (\d\S*)\s*$/m.exec(CHANGELOG)![1]
+// What the build was given: a release's tag, or none for CHANGELOG's newest.
+const TAG = process.env.VITE_SITE_VERSION || latestVersion(CHANGELOG)
+const VERSION = displayVersion(TAG)
+const NEWS = newsLead(CHANGELOG, VERSION)
 const FEATURES = readFileSync(new URL("../content/features.md", import.meta.url), "utf-8")
 const TILE_HEADINGS = [...FEATURES.matchAll(/^## (.+?) \{#\w+\}$/gm)].map((m) => m[1])
 const RELEASES = "https://github.com/voronizer/rehearsal-recorder/releases"
@@ -30,15 +34,13 @@ test("the page has its heading", async ({ page }) => {
 
 test("the news line is the version's first change, with its notes", async ({ page }) => {
   await page.goto("/")
-  const lead = new RegExp(`^## ${VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n+- \\*\\*(.+?)\\*\\*`, "m").exec(
-    CHANGELOG
-  )![1]
   const ribbon = page.locator(".ribbon")
-  await expect(ribbon).toContainText(`New in ${VERSION}.`)
-  await expect(ribbon).toContainText(lead)
+  await expect(ribbon).toHaveText(
+    NEWS ? `New in ${VERSION}. ${NEWS} Release notes` : `New in ${VERSION}. Release notes`
+  )
   await expect(ribbon.getByRole("link", { name: "Release notes" })).toHaveAttribute(
     "href",
-    `${RELEASES}/tag/${VERSION}`
+    `${RELEASES}/tag/${TAG}`
   )
 })
 
