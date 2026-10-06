@@ -46,6 +46,9 @@ export function parseDoc(md: string): Doc {
 const escape = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 
+/** Where a link may go: a web page, mail, or a place on the site. */
+const LINKABLE = /^(https?:|mailto:|#|\/)/i
+
 /** One paragraph of Markdown as HTML: **bold**, *em*, `code`, [text](url). */
 export function inline(md: string): string {
   const out: string[] = []
@@ -56,7 +59,8 @@ export function inline(md: string): string {
     if (m[1] !== undefined) out.push(`<code>${escape(m[1])}</code>`)
     else if (m[2] !== undefined) out.push(`<strong>${inline(m[2])}</strong>`)
     else if (m[3] !== undefined) out.push(`<em>${inline(m[3])}</em>`)
-    else out.push(`<a href="${escape(m[5])}" rel="noopener">${inline(m[4])}</a>`)
+    else if (LINKABLE.test(m[5])) out.push(`<a href="${escape(m[5])}" rel="noopener">${inline(m[4])}</a>`)
+    else out.push(inline(m[4]))
     at = m.index + m[0].length
   }
   out.push(escape(md.slice(at)))
@@ -77,7 +81,7 @@ const where = (file: string) => `site/content/${file}`
 /**
  * The sections of a file whose ids must be exactly `ids`, in that order: the
  * page puts a piece of the app beside each, by id, so a section misspelt or
- * moved is an error at build time, not a tile left blank.
+ * moved fails the tests (index.test.ts), not a tile left blank.
  */
 export function sectionsByIds(file: string, doc: Doc, ids: string[]): Section[] {
   const found = doc.sections.map((s) => s.id)

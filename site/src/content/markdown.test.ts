@@ -37,6 +37,14 @@ describe("inline", () => {
     )
     expect(inline("*so* `a & b`")).toBe("<em>so</em> <code>a &amp; b</code>")
   })
+
+  it("links only to web pages, mail, and places on the site", () => {
+    expect(inline("[a](mailto:x@e.x) [b](#faq) [c](/stage.html)")).toBe(
+      '<a href="mailto:x@e.x" rel="noopener">a</a> <a href="#faq" rel="noopener">b</a> <a href="/stage.html" rel="noopener">c</a>'
+    )
+    expect(inline("[x](javascript:void0)")).toBe("x")
+    expect(inline("[x](data:text/html,hi)")).toBe("x")
+  })
 })
 
 describe("sections of a file", () => {

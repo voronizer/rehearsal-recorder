@@ -46,6 +46,25 @@ function fakeWindow() {
 }
 
 describe("createHold", () => {
+  it("lets the rest go on when a timeout let go of throws, and still reports it", () => {
+    const { win, advance } = fakeWindow()
+    const hold = createHold(win)
+    let runs = 0
+    let frames = 0
+    win.setTimeout(() => {
+      throw new Error("boom")
+    }, 10)
+    win.setTimeout(() => runs++, 10)
+    win.requestAnimationFrame(() => frames++)
+    hold.hold(true)
+    advance(50)
+    expect(() => hold.hold(false)).not.toThrow()
+    expect(runs).toBe(1)
+    expect(() => advance(1)).toThrow("boom")
+    advance(50)
+    expect(frames).toBe(1)
+  })
+
   it("runs a timeout that came due while held when it is let go, once", () => {
     const { win, advance } = fakeWindow()
     const hold = createHold(win)

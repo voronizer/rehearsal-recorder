@@ -10,7 +10,7 @@ import { Recording } from "@/screens/Recording"
 import { Review } from "@/screens/Review"
 import { HistoryScreen } from "@/screens/HistoryScreen"
 import { api, type LastAttempt, type PendingTake, type PlacedTrack } from "@/lib/api"
-import { demoApi } from "./demo"
+import { CLIPS, demoApi } from "./demo"
 import { button, fill, hasText, press, waitFor } from "./drive"
 
 export const STORY = ["setup", "record", "review", "history"] as const
@@ -41,8 +41,9 @@ const subscribe = (l: () => void) => {
 }
 
 const NAME = "Tuesday jam"
-/** The least a take runs before it is stopped, so a tile has clipped. */
-const LEAST_TAKE_MS = 2_500
+/** The least a take runs before it is stopped: past the guitar's last clip,
+ *  so whoever moves on quickly has still seen it clip all three times. */
+const LEAST_TAKE_MS = (Math.max(...CLIPS) + 0.3) * 1000
 let takeStarted = 0
 let rehearsalName = NAME
 

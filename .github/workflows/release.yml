@@ -119,10 +119,12 @@ jobs:
           files: RehearsalRecorder-${{ matrix.label }}.zip
 
   # The website, for this release, once both of its zips are attached. Only
-  # for a published release: a rehearsal by hand deploys nothing.
+  # for a published release, and not a pre-release: the page's buttons
+  # download the latest release, which a pre-release is not. A rehearsal by
+  # hand deploys nothing.
   site:
     needs: build
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' && !github.event.release.prerelease
     permissions:
       contents: read
     uses: ./.github/workflows/site.yml

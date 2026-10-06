@@ -4,6 +4,10 @@ import type { ToStage } from "../frame"
 import { LiveFrame } from "./LiveFrame"
 import { Paragraphs } from "./Md"
 
+/** Smooth, unless whoever is reading has asked for less motion. */
+const scrolling = (): ScrollBehavior =>
+  matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
+
 /**
  * The four steps on the left, and on the right the app going through them:
  * the step in the middle of the screen is the one it shows. The rail under
@@ -68,14 +72,14 @@ export function Story() {
       <div className="story">
         <div className="stage">
           <LiveFrame scene="story" title="Rehearsal Recorder, following the steps on this page" lazy onReady={onReady} />
-          <div className="rail" aria-label="Steps">
+          <div className="rail" role="group" aria-label="Steps">
             {story.steps.map((s, i) => (
               <button
                 key={s.id}
                 type="button"
                 className={i === active ? "on" : undefined}
                 aria-current={i === active ? "step" : undefined}
-                onClick={() => steps.current[i]?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                onClick={() => steps.current[i]?.scrollIntoView({ behavior: scrolling(), block: "center" })}
               >
                 <i ref={(el) => void (rail.current[i] = el)} />
                 {s.title.replace(/\.$/, "")}

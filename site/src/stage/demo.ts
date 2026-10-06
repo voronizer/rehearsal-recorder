@@ -13,7 +13,7 @@ export const demoApi = () =>
   (window as unknown as { pywebview: { api: DemoApi } }).pywebview.api
 
 /** When the guitarist leans in during a take, in seconds from its start. */
-const CLIPS = [1.2, 2.2, 3.4]
+export const CLIPS = [1.2, 2.2, 3.4]
 
 /**
  * Whether the guitar is at full scale on a poll at `t`: each clip on the

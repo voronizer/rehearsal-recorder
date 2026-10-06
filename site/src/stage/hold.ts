@@ -98,7 +98,17 @@ export function createHold(win: HoldWindow, fps = 24): Hold {
       dueTimeouts.clear()
       const frames = [...waiting]
       waiting.clear()
-      for (const run of timeouts) run()
+      // One that throws must not leave the rest held for good; its error
+      // comes out on its own, as it would have from its own timer.
+      for (const run of timeouts) {
+        try {
+          run()
+        } catch (error) {
+          real.setTimeout(() => {
+            throw error
+          }, 0)
+        }
+      }
       for (const [id, cb] of frames) ask(id, cb)
     },
     held: () => held,

@@ -1,11 +1,12 @@
 /// <reference types="vitest/config" />
 import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { defineConfig, type Plugin } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { changelogHead } from "./src/content/changelog.ts"
 
-const ui = (path: string) => new URL(`../ui/${path}`, import.meta.url).pathname
+const ui = (path: string) => fileURLToPath(new URL(`../ui/${path}`, import.meta.url))
 
 /**
  * `virtual:changelog`: the section of CHANGELOG.md for the version the page
@@ -14,7 +15,7 @@ const ui = (path: string) => new URL(`../ui/${path}`, import.meta.url).pathname
  */
 function changelog(): Plugin {
   const id = "\0virtual:changelog"
-  const file = new URL("../CHANGELOG.md", import.meta.url).pathname
+  const file = fileURLToPath(new URL("../CHANGELOG.md", import.meta.url))
   return {
     name: "site-changelog",
     resolveId: (source) => (source === "virtual:changelog" ? id : null),
@@ -52,8 +53,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        index: new URL("./index.html", import.meta.url).pathname,
-        stage: new URL("./stage.html", import.meta.url).pathname,
+        index: fileURLToPath(new URL("./index.html", import.meta.url)),
+        stage: fileURLToPath(new URL("./stage.html", import.meta.url)),
       },
     },
   },

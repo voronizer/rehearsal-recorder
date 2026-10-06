@@ -1,7 +1,7 @@
 // Everything the page says, read at build time: site/content/*.md for its
 // words, and CHANGELOG.md for its version and news (only that version's
 // section: see vite.config.ts). A file that does not have what the page
-// needs stops the build, naming the file.
+// needs fails `npm test`, naming the file, and so the site's CI.
 import changelog from "virtual:changelog"
 import { displayVersion, latestVersion, newsLead } from "./changelog"
 import { parseDoc, sectionsByIds, sectionsByTitles, type Doc, type Section } from "./markdown"
