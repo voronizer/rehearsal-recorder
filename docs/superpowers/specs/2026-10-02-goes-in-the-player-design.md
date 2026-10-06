@@ -23,7 +23,7 @@ the window's header. It stands on
 [a song's page](2026-10-02-song-page-design.md).
 
 Everything below was settled with Alex on 2026-10-06, on the mockup at
-https://claude.ai/artifact/9bKQrsbKWb9gjUy53WqC8e (version 11). Where a
+https://claude.ai/artifact/9bKQrsbKWb9gjUy53WqC8e (version 12). Where a
 point was Claude's own call, it says so.
 
 ## Decisions
@@ -59,12 +59,18 @@ point was Claude's own call, it says so.
   "Take 11" (Alex, 22:32Z).
 - **S2. The tabs are large, in two lines, and the names easy to read**
   (Alex, 22:19Z and 22:26Z): the name at 16 px in the text colour, and
-  under it, small:
-  - on the open tab, the open go's number, then its length, ★ and the
-    colours of its marks, and its cloud status if it has one ("Copying to
-    the cloud", "Not in the cloud"). A take with no song has no number;
-  - on another tab, how many goes it has ("3 goes"), and ★ when one of them
-    is starred. A take with no song shows its length instead.
+  under it, small, a go's number, its length, ★ and the colours of its
+  marks, and its cloud status if it has one ("Copying to the cloud", "Not
+  in the cloud"). A take with no song has no number.
+  - **Every tab says the same kind of thing, open or not** (Alex, 23:01Z:
+    the open tab's lines changing made it jump). On the open tab it is the
+    go in the player; on another tab, the go a click on it opens (D3).
+  - **A tab keeps its size** when it is opened and while its goes are gone
+    through: it is as wide as the widest of its goes' lines, and its name
+    as wide as it is in the open tab's weight. The open tab is picked out
+    by its colour and the bar under it only.
+  - The open go's number is a button: it opens and closes the columns
+    (S3). On the other tabs it is plain text.
 - **S3. The tabs open down into columns** (Alex, 22:39Z). "Songs ▾" at the
   start of the strip, or the open go's number, opens them; ▴ on either
   closes them. Each tab gets a column of its goes, a row each: the go's
@@ -151,7 +157,8 @@ Tests come before the code, and each is seen failing first.
   `session_state` has `disk_bytes`.
 - **Playwright, with the fake bridge:**
   - the tabs and their two lines; a click on another song's tab opens its
-    last go from the start;
+    last go from the start; a tab is as wide open as shut, and stays so
+    going through its goes;
   - the columns open and close from "Songs" and from the number, close on
     Esc before the take does, and are closed again when a take is opened
     from the overview;
