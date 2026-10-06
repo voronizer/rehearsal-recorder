@@ -819,7 +819,7 @@ window.__MAKE_API__ = () => ({
     server_url:'http://127.0.0.1:1234',
     releases_url:'https://github.com/voronizer/rehearsal-recorder/releases'})),
   bug_report: track('bug_report', async () => ({ok:true,
-    text:'Rehearsal Recorder 0.2.0, run from source\nWindows 11 Pro 10.0.26200, x64\n'})),
+    text:'РЭХА 0.2.0, run from source\nWindows 11 Pro 10.0.26200, x64\n'})),
   show_file: track('show_file', async () => ({ok:true})),
   open_releases: track('open_releases', async (_latest) => ({ok:true})),
   // What updates.py found: __LATEST__ is the newer release a test says is

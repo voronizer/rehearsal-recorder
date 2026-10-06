@@ -1,4 +1,4 @@
-# Using Rehearsal Recorder
+# Using РЭХА
 
 This guide follows a rehearsal from start to finish: setting up, recording
 takes, listening back and sharing the good ones. The last sections cover what
@@ -523,7 +523,7 @@ app, which can test another interface too — add its number from the list it
 prints:
 
 ```
-RehearsalRecorder.exe --audio-probe
+Reha.exe --audio-probe
 ```
 
 ### The interface goes away during a take

@@ -89,12 +89,12 @@ def selftest():
 
     So the built thing is asked, without needing a screen:
 
-        ./RehearsalRecorder --selftest
+        ./Reha --selftest
 
     which is exactly what the build runs after packaging, on each system.
     """
     from rehearsal_recorder import __version__
-    from rehearsal_recorder.platform_support import app_root, trash_kind
+    from rehearsal_recorder.platform_support import APP_NAME, app_root, trash_kind
 
     # In UTF-8 wherever it goes. Into a pipe, which is how the build reads it,
     # Windows wrote the code page: cp1252 has "—" as a byte the build's log
@@ -116,7 +116,7 @@ def selftest():
             return
         print(f"  ok   {label}" + (f" — {detail}" if detail else ""))
 
-    print(f"Rehearsal Recorder {__version__} self-test on {sys.platform}")
+    print(f"{APP_NAME} {__version__} self-test on {sys.platform}")
     print(f"  bundle root: {app_root()}")
     print(f"  frozen: {getattr(sys, 'frozen', False)}")
 
@@ -267,7 +267,7 @@ def main():
     import webview
 
     from rehearsal_recorder.api import Api
-    from rehearsal_recorder.platform_support import claim_taskbar_identity, window_icon
+    from rehearsal_recorder.platform_support import APP_NAME, claim_taskbar_identity, window_icon
 
     # Before the window exists: the taskbar decides whose icon to show when
     # the window first appears, and the Dock takes the app's name when Cocoa
@@ -295,7 +295,7 @@ def main():
             return 1
 
     window = webview.create_window(
-        "Rehearsal Recorder" + (" (dev)" if dev else ""),
+        APP_NAME + (" (dev)" if dev else ""),
         url,
         js_api=api,
         width=1180,

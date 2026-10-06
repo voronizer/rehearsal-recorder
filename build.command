@@ -23,7 +23,7 @@ on_failure() {
 }
 trap on_failure ERR
 
-echo "Building Rehearsal Recorder"
+echo "Building РЭХА (Reha.app)"
 echo "This takes a few minutes the first time, less after that."
 echo
 
@@ -63,12 +63,12 @@ pip install -e . pyinstaller --quiet
 echo "==> Packaging"
 pyinstaller packaging/rehearsal-recorder.spec --noconfirm --log-level WARN
 
-APP="dist/RehearsalRecorder.app"
-BIN="$APP/Contents/MacOS/RehearsalRecorder"
+APP="dist/Reha.app"
+BIN="$APP/Contents/MacOS/Reha"
 if [ ! -x "$BIN" ]; then
   # Not a Mac, or the bundle step did not run: the plain folder build.
-  APP="dist/RehearsalRecorder"
-  BIN="$APP/RehearsalRecorder"
+  APP="dist/Reha"
+  BIN="$APP/Reha"
 fi
 
 echo

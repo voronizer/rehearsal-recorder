@@ -524,7 +524,7 @@ def run(device_index=None):
     """
     Print a report for the saved recording device, or the one named.
 
-        RehearsalRecorder --audio-probe [index]
+        Reha --audio-probe [index]
 
     Returns 0 when the card opened with the settings in force and sound
     arrived, 1 otherwise — so it can be run from a script as well as read.

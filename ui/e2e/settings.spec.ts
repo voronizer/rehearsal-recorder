@@ -153,7 +153,7 @@ test.describe("Under the hood", () => {
     await expect(page.locator("button", { hasText: "Copied" })).toBeVisible()
     expect(await callCount(page, "bug_report")).toBe(1)
     expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(
-      /^Rehearsal Recorder 0\.2\.0/
+      /^РЭХА 0\.2\.0/
     )
 
     await page.getByRole("button", { name: "Show the crash log" }).click()

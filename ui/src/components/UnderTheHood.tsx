@@ -281,7 +281,7 @@ export function UnderTheHood() {
       >
         <img src="./logo.svg" alt="" className="size-12 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="text-base font-semibold">Rehearsal Recorder</div>
+          <div className="text-base font-semibold">РЭХА</div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span className="tnum break-all">{hood.version}</span>
             {hood.running_as !== "built" && (

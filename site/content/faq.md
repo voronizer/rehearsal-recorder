@@ -1,5 +1,9 @@
 # Questions.
 
+## What does the name mean?
+
+РЭХА is Belarusian for “echo”, and it sounds a little like “rehearsal”.
+
 ## Is it free?
 
 Yes. It is open source under the MIT license, with no account and no

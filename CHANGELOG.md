@@ -7,6 +7,12 @@ opening.
 
 ## Unreleased
 
+- **The app is called РЭХА now.** РЭХА is Belarusian for “echo”, and it
+  sounds a little like “rehearsal”. The window, the Dock and About, Under
+  the hood and the report for a bug say so; the app itself is the file
+  Reha: Reha.app on a Mac, Reha.exe in the Reha folder on Windows. The
+  downloads keep their names, so older copies find this version as before,
+  and the settings and the recordings stay where they were.
 - **Marks have labels you make.** A mark's label is a name and a colour, and
   **Settings → Marks** is where the band makes them, renames and recolours
   them, drags them into order and deletes them; a label with marks asks

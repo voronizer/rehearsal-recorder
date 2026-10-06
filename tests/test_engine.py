@@ -5186,7 +5186,7 @@ def main():
 
     report46 = h46.bug_report()["text"]
     ok("the report for a bug starts with the version and the system",
-       report46.splitlines()[0].startswith(f"Rehearsal Recorder {rehearsal_recorder.__version__}")
+       report46.splitlines()[0].startswith(f"РЭХА {rehearsal_recorder.__version__}")
        and diag.system_line() in report46)
     ok("and says what it records with, and the band on its inputs",
        "Recording with: Interface — CoreAudio, 8 inputs, 48000 Hz, 24 bit" in report46
@@ -5485,8 +5485,8 @@ def main():
     # it is whole, as well as its size and its digest.
     made = _io.BytesIO()
     with zipfile.ZipFile(made, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("RehearsalRecorder/RehearsalRecorder.exe", b"MZ" + b"x" * 5000)
-        z.writestr("RehearsalRecorder/_internal/python312.dll", b"y" * 9000)
+        z.writestr("Reha/Reha.exe", b"MZ" + b"x" * 5000)
+        z.writestr("Reha/_internal/python312.dll", b"y" * 9000)
     archive = made.getvalue()
     digest = hashlib.sha256(archive).hexdigest()
 

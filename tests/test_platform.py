@@ -365,7 +365,7 @@ def main():
     info = dict(python_info)
     ps.claim_taskbar_identity("darwin", frozen=False, info=info, version="1.2.3")
     ok("from source on macOS the Dock and the menu bar are given the app's name",
-       info["CFBundleName"] == ps.APP_NAME == "Rehearsal Recorder")
+       info["CFBundleName"] == ps.APP_NAME == "РЭХА")
     ok("and About its version and copyright, with no Python build in brackets",
        info["CFBundleShortVersionString"] == "1.2.3"
        and info["NSHumanReadableCopyright"] == ps.COPYRIGHT
@@ -386,6 +386,24 @@ def main():
     logo = PROJECT / "ui" / "public" / "logo.svg"
     ok("and the full one, for where the window shows it large",
        logo.exists() and logo.read_bytes() == (packaging / "icon.svg").read_bytes())
+
+    print("\n[name] РЭХА where it says its name, Reha on disk")
+    # A Cyrillic file name is one more thing to go wrong unpacking a zip or
+    # in a build script, so the file is Latin. The zips keep their old
+    # names, which is what every copy already out there asks GitHub for.
+    import re
+    from rehearsal_recorder import updates
+    release = (PROJECT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    built = re.search(r'^NAME = "([^"]+)"', spec, re.M)
+    ok("the built app is the file Reha", built is not None and built.group(1) == "Reha")
+    ok("and the release builds and self-tests it there",
+       "dist/Reha.app/Contents/MacOS/Reha" in release and "dist/Reha/Reha.exe" in release)
+    ok("while the zips keep the names older copies ask for",
+       set(updates.ASSETS.values())
+       == {"RehearsalRecorder-macos.zip", "RehearsalRecorder-windows.zip"}
+       and "RehearsalRecorder-${{ matrix.label }}.zip" in release)
+    ok("and the Mac asks for the microphone by the app's name",
+       'f"{APP_NAME} records your band' in spec.split('"NSMicrophoneUsageDescription"')[1])
 
     print("\n[version] The built app's file says which version it is")
     # The .app said 0.0.0 and the .exe nothing, since the build was never
@@ -409,7 +427,7 @@ def main():
         print("  --   the .exe's version structure: PyInstaller cannot build one here")
     if versioninfo is not None:
         resource = windows_version.version_resource(
-            "0.7.13", ps.APP_NAME, ps.COPYRIGHT, "RehearsalRecorder.exe")
+            "0.7.13", ps.APP_NAME, ps.COPYRIGHT, "Reha.exe")
         read = versioninfo.VSVersionInfo()
         read.fromRaw(resource.toRaw())
         strings = {s.name: s.val for s in read.kids[0].kids[0].kids}
@@ -424,14 +442,14 @@ def main():
     ok("from source there is no file of the app's own to read",
        ps.version_on_the_file("darwin", frozen=False) is None
        and ps.version_on_the_file("win32", frozen=False) is None)
-    contents = tmp / "RehearsalRecorder.app" / "Contents"
+    contents = tmp / "Reha.app" / "Contents"
     (contents / "MacOS").mkdir(parents=True)
     import plistlib
     with open(contents / "Info.plist", "wb") as f:
         plistlib.dump({"CFBundleShortVersionString": "0.7.13"}, f)
     ok("a built .app's is read from its Info.plist",
        ps.version_on_the_file(
-           "darwin", executable=contents / "MacOS" / "RehearsalRecorder", frozen=True
+           "darwin", executable=contents / "MacOS" / "Reha", frozen=True
        ) == "0.7.13")
     ok("and on Linux there is none",
        ps.version_on_the_file("linux", frozen=True) is None)
@@ -468,6 +486,8 @@ def main():
         said = None
     ok("what it says reads as UTF-8, whatever the code page",
        said is not None and " — " in said)
+    ok("the app's name included, which is Cyrillic",
+       said is not None and said.startswith("РЭХА "))
 
     print("\n[downloads] A new version goes where a browser would put it")
     # Windows lets the Downloads folder be moved anywhere, so it is asked of

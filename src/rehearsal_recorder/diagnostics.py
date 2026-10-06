@@ -11,6 +11,7 @@ machine from the one in trouble.
 import platform as _platform
 
 from rehearsal_recorder.audio.probe import SIGNAL_PEAK
+from rehearsal_recorder.platform_support import APP_NAME
 
 # Windows' own names for its editions, as its About box says them.
 _EDITIONS = {"Professional": "Pro", "Core": "Home", "CoreSingleLanguage": "Home"}
@@ -109,7 +110,7 @@ def report_text(hood, tracks, cloud, check):
     rec = audio.get("recording")
     running = "the built app" if hood["running_as"] == "built" else "run from source"
     lines = [
-        f"Rehearsal Recorder {hood['version']}, {running}",
+        f"{APP_NAME} {hood['version']}, {running}",
         hood["system"],
         "",
     ]
