@@ -2,9 +2,10 @@
 #
 # A pull request that could change it builds it and runs its tests, so an
 # interface change that breaks the page shows up before a release, not on
-# the day of one. The site is deployed only when a release is out, and only
-# once the Release workflow has attached the zips, so the page's download
-# links work from the moment it is up and it shows the version people get.
+# the day of one. The site is deployed only when a release is out: the
+# Release workflow calls this once it has attached the zips, so the page's
+# download links work from the moment it is up and it shows the version
+# people get.
 #
 # Vercel never builds anything itself: the project there has no Git
 # connection, and this uploads the build it made (vercel deploy --prebuilt).
@@ -20,11 +21,20 @@ on:
       - "ui/**"
       - "CHANGELOG.md"
       - ".github/workflows/site.yml"
-  # After the Release workflow. It also runs by hand to rehearse a release,
-  # and that deploys nothing: see the `if` below.
-  workflow_run:
-    workflows: [Release]
-    types: [completed]
+  # From release.yml, on the release's own commit, after its zips are up.
+  workflow_call:
+    inputs:
+      tag:
+        description: The release's tag
+        type: string
+        required: true
+    secrets:
+      VERCEL_TOKEN:
+        required: false
+      VERCEL_ORG_ID:
+        required: false
+      VERCEL_PROJECT_ID:
+        required: false
   # By hand: deploy the latest release again, for the first deploy and when
   # setting up the domain.
   workflow_dispatch:
@@ -40,22 +50,14 @@ concurrency:
 jobs:
   site:
     name: site
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'release')
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release.outputs.tag }}
     steps:
-      # After a release, the commit it was cut from.
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || '' }}
-          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && 0 || 1 }}
 
-      # The release the site is for, and its tag for the page: the release
-      # that just finished, or by hand the latest one. By hand, the site is
+      # The release the site is for, and its tag for the page: the one
+      # release.yml says, or by hand the latest one. By hand, the site is
       # built as it was at that release when the release has one (0.9.0 and
       # earlier do not), and otherwise as on the branch this was run from.
       - name: Which release
@@ -63,13 +65,12 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT: ${{ github.event_name }}
-          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+          TAG: ${{ inputs.tag }}
         run: |
-          if [ "$EVENT" = workflow_run ]; then
-            tag="$RUN_TAG"
-          else
+          tag="$TAG"
+          if [ -z "$tag" ]; then
             tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+            git fetch --quiet --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
             if git cat-file -e "refs/tags/$tag:site/package.json" 2>/dev/null; then
               git checkout --quiet "refs/tags/$tag"
             fi
@@ -153,6 +154,10 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           TAG: ${{ needs.site.outputs.tag }}
         run: |
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
+            echo "::error::Deploying needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID."
+            exit 1
+          fi
           url=$(npx --yes vercel@latest deploy --prebuilt --prod --token "$VERCEL_TOKEN")
           echo "Deployed $TAG to $url"
           echo "The site for $TAG is at $url" >> "$GITHUB_STEP_SUMMARY"
