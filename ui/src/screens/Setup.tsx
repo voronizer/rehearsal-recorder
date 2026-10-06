@@ -59,8 +59,9 @@ export function Setup({
   onOpenHistory: () => void
   /** History, with that rehearsal chosen. */
   onOpenRehearsal: (folder: string) => void
-  /** A song's page in History, from Last time; null is Not named's. */
-  onOpenSong: (title: string | null) => void
+  /** A song's page in History, from Last time; null is Not named's. The
+   *  site's demo has no History to open, and leaves it out. */
+  onOpenSong?: (title: string | null) => void
   onOpenSettings: () => void
 }) {
   const [devices, setDevices] = useState<Device[]>([])

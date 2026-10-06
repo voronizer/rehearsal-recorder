@@ -1,4 +1,4 @@
-// stage.html#story: the app going through the four steps the page tells,
+// stage.html#story: the app going through the five steps the page tells,
 // one screen at a time, each with the props App would give it, after the
 // fake has been brought to where the app would have it.
 //
@@ -13,7 +13,7 @@ import { api, type LastAttempt, type PendingTake, type PlacedTrack } from "@/lib
 import { CLIPS, demoApi } from "./demo"
 import { button, fill, hasText, press, waitFor } from "./drive"
 
-export const STORY = ["setup", "record", "review", "history"] as const
+export const STORY = ["setup", "record", "review", "history", "song"] as const
 
 type Scene =
   | { step: "setup" }
@@ -128,6 +128,12 @@ const FORWARD: Record<(typeof STORY)[number], () => Promise<void>> = {
   async history() {
     await press("Save take")
     await waitFor(() => hasText("New songs"))
+  },
+  // The same History, switched to its Songs view, on the band's Pałyn.
+  async song() {
+    await press("Songs", { exact: true })
+    ;(await waitFor(() => document.querySelector<HTMLElement>('[data-song="Pałyn"]'))).click()
+    await waitFor(() => document.querySelector('[data-rung][aria-expanded="true"]'))
   },
 }
 
