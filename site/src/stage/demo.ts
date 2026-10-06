@@ -46,13 +46,15 @@ export function installDemo(): void {
     return realFetch(input, init)
   }
 
-  // The page around the app is what scrolls: a field the app focuses, or a
-  // row it brings into view, must not drag the site along with it.
-  const realFocus = HTMLElement.prototype.focus
-  HTMLElement.prototype.focus = function (options?: FocusOptions) {
-    realFocus.call(this, { ...options, preventScroll: true })
+  // In a frame, the page around the app is what scrolls: a field the app
+  // focuses, or a row it brings into view, must not drag the site along.
+  if (window.parent !== window) {
+    const realFocus = HTMLElement.prototype.focus
+    HTMLElement.prototype.focus = function (options?: FocusOptions) {
+      realFocus.call(this, { ...options, preventScroll: true })
+    }
+    Element.prototype.scrollIntoView = function () {}
   }
-  if (window.parent !== window) Element.prototype.scrollIntoView = function () {}
 
   // A drag the site makes has no real pointer to capture.
   for (const name of ["setPointerCapture", "releasePointerCapture"] as const) {
