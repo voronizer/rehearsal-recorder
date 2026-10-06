@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Shell, EmptyState } from "@/components/Shell"
 import { RehearsalList } from "@/components/RehearsalList"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { HistorySwitch } from "@/components/HistorySwitch"
 import { SongList } from "@/components/SongList"
@@ -669,12 +670,15 @@ export function HistoryScreen({
         subtitle={formatDateHuman(opened.created_at)}
         title={opened.name}
         onBack={back}
+        facts={
+          <EveningFacts
+            takes={opened.takes}
+            bytes={rehearsals?.find((r) => r.folder === opened.folder)?.disk_bytes ?? null}
+            folder={opened.folder}
+          />
+        }
       >
         <div className="flex w-full flex-col gap-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <FolderOpen className="size-3.5 shrink-0" />
-            <span className="truncate font-mono">{opened.folder}</span>
-          </div>
           <TakeStrip
             takes={opened.takes}
             selected={selected}

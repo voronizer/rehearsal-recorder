@@ -287,3 +287,59 @@ test("the place is not carried by a tab", async ({ page }) => {
   expect((await since(page, "player_seek", after)).filter((c) => (c.args[0] as number) > 0)).toEqual([])
   await expect(page.locator("[data-region-span]")).toHaveCount(0)
 })
+
+// The evening in the window's header: what there is to know about it, and
+// a button to its folder.
+
+const facts = (page: Page) => page.getByRole("group", { name: "About this rehearsal" })
+const fact = (page: Page, label: string) =>
+  facts(page).locator("div", { has: page.locator("dt", { hasText: label }) }).locator("dd")
+
+test("the player's header says what the evening was, and opens its folder", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 })
+  await openGo(page)
+  await expect(fact(page, "Length")).toHaveText("12 min")
+  await expect(fact(page, "Takes")).toHaveText("4, 2 songs")
+  await expect(fact(page, "In the cloud")).toHaveText("1 of 4")
+  await expect(fact(page, "On disk")).toHaveText("1.2 GB")
+  // The path is not shown: the button is enough.
+  await expect(page.getByText("/rec/old")).toHaveCount(0)
+  await facts(page).getByRole("button", { name: "Open folder" }).click()
+  await expect.poll(async () => (await calls(page, "show_rehearsal_folder")).at(-1)?.args).toEqual([
+    "/rec/old",
+  ])
+})
+
+test("the rehearsal screen has the same header", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 })
+  await openApp(page)
+  await startRehearsal(page)
+  await recordTake(page, 1)
+  await page.fill("#take-name", "Pałyn")
+  await page.getByRole("button", { name: /Save take/ }).click()
+  await recordTake(page, 2)
+  await page.getByRole("button", { name: /Save take/ }).click()
+  await expect(page.getByRole("button", { name: /Record take 3/ })).toBeVisible()
+  await expect(fact(page, "Takes")).toHaveText("2, 1 song")
+  await expect(fact(page, "On disk")).toHaveText("96 MB")
+  await expect(page.getByText("2 takes", { exact: true })).toHaveCount(0)
+  await expect(page.getByText(/^\/rec\//)).toHaveCount(0)
+  await facts(page).getByRole("button", { name: "Open folder" }).click()
+  await expect.poll(async () => (await calls(page, "show_rehearsal_folder")).length).toBe(1)
+})
+
+test("on Windows the button says Explorer", async ({ page }) => {
+  await page.addInitScript("Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});")
+  await openGo(page)
+  await expect(facts(page).getByRole("button", { name: "Show in Explorer" })).toBeVisible()
+})
+
+test("a narrow window keeps the length, the takes and the button", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 760 })
+  await openGo(page)
+  await expect(fact(page, "Length")).toBeVisible()
+  await expect(fact(page, "Takes")).toBeVisible()
+  await expect(facts(page).getByRole("button", { name: "Open folder" })).toBeVisible()
+  await expect(fact(page, "In the cloud")).toBeHidden()
+  await expect(fact(page, "On disk")).toBeHidden()
+})

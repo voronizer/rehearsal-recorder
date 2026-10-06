@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react"
-import { Circle, FolderOpen, Pencil } from "lucide-react"
+import { Circle, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { FooterRow } from "@/components/FooterRow"
 import { Kbd, Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
@@ -306,8 +306,12 @@ export function Rehearsal({
           </Button>
         </span>
       }
-      headerAction={
-        <Badge variant="outline">{takesLabel(session.takes.length)}</Badge>
+      facts={
+        <EveningFacts
+          takes={session.takes}
+          bytes={session.disk_bytes ?? null}
+          folder={session.folder}
+        />
       }
       footer={
         <FooterRow
@@ -354,11 +358,6 @@ export function Rehearsal({
       }
     >
       <div className="flex w-full flex-col gap-4">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <FolderOpen className="size-3.5 shrink-0" />
-          <span className="truncate font-mono">{session.folder}</span>
-        </div>
-
         {/* While no take is open the overview below is the way in, and the
             pills beside it would only repeat it. With none recorded yet the
             strip stays, for its "hit Record" hint. */}
