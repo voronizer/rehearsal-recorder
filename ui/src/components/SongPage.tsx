@@ -1,7 +1,7 @@
 import { Loader2, Pause, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SongDetail } from "@/lib/api"
-import { formatDay, formatMMSS } from "@/lib/format"
+import { formatDayIn, formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import {
   fromLastTime,
@@ -118,10 +118,10 @@ export function SongPage({
             ) : plays.take.starred ? (
               <>
                 ▶ plays <span className="text-signal">★</span> {plays.take.name} ·{" "}
-                {formatDay(plays.created_at)}
+                {formatDayIn(plays.created_at)}
               </>
             ) : (
-              `▶ plays the last go, ${plays.take.name} · ${formatDay(plays.created_at)}`
+              `▶ plays the last go, ${plays.take.name} · ${formatDayIn(plays.created_at)}`
             )}
           </p>
         </div>
@@ -139,7 +139,7 @@ export function SongPage({
               unnamed={false}
               longest={longest}
               missing={go.missing}
-              where={`${go.rehearsal} · ${formatDay(go.created_at)}`}
+              where={`${go.rehearsal} · ${formatDayIn(go.created_at)}`}
               here={hereFor(playback, go.folder, go.take)}
               onPlay={(t) => onPlay(placed(go.folder, t))}
               onOpen={(t) => onOpen(placed(go.folder, t))}
@@ -155,7 +155,7 @@ export function SongPage({
 
       {marks.length > 0 && (
         <section aria-label="From last time" className="flex flex-col gap-px">
-          <h3 className={EYEBROW}>From last time · {formatDay(marks[0].go.created_at)}</h3>
+          <h3 className={EYEBROW}>From last time · {formatDayIn(marks[0].go.created_at)}</h3>
           {marks.map(({ go, marker }) => {
             const label = labelOf(labels, marker.label_id)
             return (

@@ -93,6 +93,13 @@ describe("songRefFor", () => {
   it("is Not named for no title", () => {
     expect(songRefFor(index, null)).toBe("not_named")
   })
+  it("is the song spelled so, when another differs only by an accent", () => {
+    // Python keeps titles apart by case only: Palyn and Pałyn are two songs.
+    const both: SongIndex = { songs: [song(1, "Palyn"), song(2, "Pałyn")], not_named: null }
+    expect(songRefFor(both, "Pałyn")).toBe(2)
+    expect(songRefFor(both, "PAŁYN")).toBe(2)
+    expect(songRefFor(both, "palyn")).toBe(1)
+  })
   it("is nothing for a title with no goes", () => {
     expect(songRefFor(index, "Dym")).toBeNull()
     expect(songRefFor({ ...index, not_named: null }, null)).toBeNull()
@@ -171,6 +178,11 @@ describe("the lines under a song", () => {
     const goes = [go("/b", 1, "2026-01-08T19:00:00"), go("/a", 1, "2025-12-30T19:00:00")]
     expect(pageLine(goes, false, NOW)).toBe(
       "2 goes in 2 rehearsals · first 30 Dec 2025 · last 8 Jan"
+    )
+  })
+  it("says the year of Not named's last day before this one", () => {
+    expect(pageLine([go("/a", 2, "2025-12-30T19:00:00")], true, NOW)).toBe(
+      "1 take in 1 rehearsal · last Tue 30 Dec 2025"
     )
   })
   it("counts takes, not goes, for Not named", () => {

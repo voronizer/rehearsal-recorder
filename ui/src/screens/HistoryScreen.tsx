@@ -145,25 +145,6 @@ export function HistoryScreen({
     (e) => e.folder === selected?.folder && e.take_number === selected?.take_number
   )
 
-  /**
-   * Reads the list again, and keeps the chosen rehearsal chosen — or `want`,
-   * after a rename moved it or a delete took it away. One no longer there
-   * gives way to the newest.
-   */
-  const refresh = async (want?: string | null) => {
-    const list = await api().list_rehearsals()
-    setRehearsals(list)
-    setCurrent((c) => {
-      const pick = want !== undefined ? want : c
-      return pick && list.some((r) => r.folder === pick) ? pick : (list[0]?.folder ?? null)
-    })
-    return list
-  }
-
-  useEffect(() => {
-    void refresh()
-  }, [])
-
   // The Songs view: every song, the one chosen, and its page. A song chosen
   // stays chosen across the switch, as the rehearsal chosen does.
   const [songIndex, setSongIndex] = useState<SongIndex | null>(null)
@@ -195,14 +176,43 @@ export function HistoryScreen({
     return index
   }
 
+  /**
+   * Reads the list again, and keeps the chosen rehearsal chosen — or `want`,
+   * after a rename moved it or a delete took it away. One no longer there
+   * gives way to the newest.
+   */
+  const refresh = async (want?: string | null) => {
+    const list = await api().list_rehearsals()
+    setRehearsals(list)
+    setCurrent((c) => {
+      const pick = want !== undefined ? want : c
+      return pick && list.some((r) => r.folder === pick) ? pick : (list[0]?.folder ?? null)
+    })
+    // A rehearsal renamed, deleted or found again changes the songs too.
+    if (songsShown.current) void loadSongs()
+    return list
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [])
+
   // Which view History is on: the one used last, as Python kept it. Until
   // it has said, neither is drawn — the Rehearsals view flashing up before
   // the Songs view would be a screen that changes under the mouse.
   const [view, setView] = useState<HistoryView | null>(null)
   // Read once, when History opens: what it was sent here for.
   const sentFor = useRef(initialSong)
+  const sentForRehearsal = useRef(initialFolder !== undefined)
   useEffect(() => {
     void (async () => {
+      // Sent here for a rehearsal: the Rehearsals view, whatever was used
+      // last, or the rehearsal asked for would not be on screen.
+      if (sentForRehearsal.current) {
+        setView("rehearsals")
+        void api().save_history_view("rehearsals")
+        return
+      }
       // Sent here for a song: the Songs view, at that song.
       if (sentFor.current !== undefined) {
         const index = await loadSongs()
@@ -311,7 +321,6 @@ export function HistoryScreen({
   const changed = async (folder: string) => {
     await reopen(folder)
     void refresh()
-    if (songsShown.current) void loadSongs()
   }
 
   // The chosen one in the list stays in view as ↑ and ↓ go past the edge.
@@ -548,6 +557,8 @@ export function HistoryScreen({
   const addMarker = async (take: PlacedTake, seconds: number) => {
     const res = await api().add_take_marker(take.folder, take.take_number, seconds)
     await reopen(take.folder)
+    // A note may never be written: the mark is on the song's page anyway.
+    if (songsShown.current) void loadSongs()
     const fresh = res.markers?.find((m) => Math.abs(m.at - seconds) < 0.02)
     setMarkerEdit(fresh ? { take, marker: fresh } : null)
   }

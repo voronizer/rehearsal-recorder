@@ -305,7 +305,7 @@ that is open in the player, it starts again from the beginning.
 
 **History** has two views, switched at the top of its list: **Rehearsals**,
 evening by evening, and **Songs**, song by song. It opens on the one you used
-last.
+last, or on the rehearsal or song you opened from the setup screen.
 
 **Rehearsals** lists your past rehearsals down the left, by month, and shows
 the chosen one beside the list. It opens on the newest. Each rehearsal in the

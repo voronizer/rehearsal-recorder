@@ -247,8 +247,10 @@ let library = async () => [
   ...(missingRehearsal ? [{folder:missingRehearsal.folder, name:missingRehearsal.name,
     created_at:missingRehearsal.created_at, takes:goneTakes(), missing:true}] : []),
 ];
+// Rehearsals deleted, by folder: gone from the library too.
+const deletedRehearsals = new Set();
 async function libraryNow() {
-  const all = (await library()).map(r => ({...r, missing: Boolean(r.missing),
+  const all = (await library()).filter(r => !deletedRehearsals.has(r.folder)).map(r => ({...r, missing: Boolean(r.missing),
     takes: r.takes.filter(t => !deleted.has(`${r.folder}#${t.take_number}`))}));
   return all.sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
@@ -867,7 +869,10 @@ window.__MAKE_API__ = () => ({
     writeCfg({...readCfg(), history_view: view});
     return {ok:true};
   }),
-  delete_rehearsal: track('delete_rehearsal', async () => ({ok:true, trashed:true})),
+  delete_rehearsal: track('delete_rehearsal', async (folder) => {
+    deletedRehearsals.add(folder);
+    return {ok:true, trashed:true};
+  }),
 
   set_cloud_dir: track('set_cloud_dir', async (p) => { cloudDir = p; return {ok:true, cloud_dir:p}; }),
   choose_cloud_dir: track('choose_cloud_dir', async () => {

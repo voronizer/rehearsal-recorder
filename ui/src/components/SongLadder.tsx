@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Take } from "@/lib/api"
-import { formatDay, formatMMSS, goesLabel, takesLabel } from "@/lib/format"
+import { formatDayIn, formatMMSS, goesLabel, takesLabel } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
 import { hereFor, placed, type PlacedPlayback, type PlacedTake, type Rung } from "@/lib/songs"
 import { TakeRow } from "@/components/RehearsalOverview"
@@ -69,7 +69,7 @@ export function SongLadder({
 
       {rungs.map((rung) => {
         const isOpen = open.has(rung.folder)
-        const day = formatDay(rung.created_at)
+        const day = formatDayIn(rung.created_at)
         const at = (take: Take) => placed(rung.folder, take)
         return (
           <div key={rung.folder} data-rung-group={rung.folder} className="flex flex-col">
@@ -104,7 +104,7 @@ export function SongLadder({
                   )}
                 </span>
               </span>
-              <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+              <span data-bars className="flex min-w-0 items-center gap-1 overflow-hidden">
                 {rung.goes.map((take) => {
                   const length = take.duration_sec || 0
                   return (
@@ -112,8 +112,11 @@ export function SongLadder({
                       key={take.take_number}
                       data-starred={take.starred || undefined}
                       title={`${take.name} · ${formatMMSS(length)}`}
+                      // An evening with more goes than the line holds draws
+                      // them all a little narrower, rather than hide some:
+                      // each gives way by its own length, so they keep scale.
                       className={cn(
-                        "relative flex h-6 shrink-0 items-center overflow-hidden rounded-[5px] border",
+                        "relative flex h-6 min-w-0 shrink items-center overflow-hidden rounded-[5px] border",
                         rung.missing
                           ? "border-dashed border-muted-foreground/45"
                           : take.starred

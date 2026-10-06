@@ -449,4 +449,83 @@ test.describe("Songs in History", () => {
     await expect(page.locator("#take-name")).toHaveValue("Ahoń")
     expect(await calls(page, "list_songs")).toHaveLength(0)
   })
+
+  test("a rehearsal opened from the setup screen shows in Rehearsals, whatever view was used last", async ({
+    page,
+  }) => {
+    await openApp(page)
+    await openSongs(page)
+    await page.keyboard.press("Escape")
+    await lastTime(page)
+      .getByRole("region", { name: "Earlier" })
+      .getByRole("button", { name: /First rehearsal/ })
+      .click()
+    await expect(page.getByRole("navigation", { name: "Rehearsals" })).toBeVisible()
+    await expect(page.getByRole("region", { name: "First rehearsal" })).toBeVisible()
+  })
+
+  test("deleting a rehearsal takes its songs off the Songs view", async ({ page }) => {
+    // Opus is played at First rehearsal only; Daroha there and at Missing jam.
+    await openApp(page, { before: `window.__EXTRA_SONGS__ = ["Opus"];` })
+    await openSongs(page)
+    await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(1)
+    await page.getByRole("button", { name: "Rehearsals", exact: true }).click()
+    await page
+      .getByRole("navigation", { name: "Rehearsals" })
+      .getByRole("button", { name: /^First rehearsal/ })
+      .click()
+    await page.getByRole("button", { name: "Delete rehearsal First rehearsal" }).click()
+    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await page.getByRole("button", { name: "Songs", exact: true }).click()
+    await expect(rows(page).and(page.locator("[data-song='Pałyn']"))).toHaveCount(1)
+    await expect(rows(page).and(page.locator("[data-song='Opus']"))).toHaveCount(0)
+    await expect(rows(page).and(page.locator("[data-song='Daroha']"))).toContainText(
+      "2 goes · 1 rehearsal"
+    )
+  })
+
+  test("a mark dropped in a go's player is on the song's page after Escape", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    await openSongs(page)
+    await chooseSong(page, "Pałyn")
+    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
+    await page.keyboard.press("m")
+    await expect.poll(async () => (await calls(page, "add_take_marker")).length).toBe(1)
+    // The fake keeps no marks on past takes, so no note dialog opens here; in
+    // the app it does, and is shut without a note.
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    // The page is read again after the mark, so its ticks and From last time have it.
+    await expect
+      .poll(async () => {
+        const all = await page.evaluate(
+          () => (window as unknown as { __CALLS__: { name: string }[] }).__CALLS__
+        )
+        const marked = all.findIndex((c) => c.name === "add_take_marker")
+        return marked >= 0 && all.slice(marked + 1).some((c) => c.name === "get_song")
+      })
+      .toBe(true)
+  })
+
+  test("every go of an evening shows on its rung, however many", async ({ page }) => {
+    await openApp(page, {
+      before: `window.__EXTRA_SONGS__ = Array(9).fill("Daroha");`,
+    })
+    await openSongs(page)
+    const bars = rung(page, "/rec/older").locator("[data-bars] > span")
+    await expect(bars).toHaveCount(11)
+    const fit = await rung(page, "/rec/older")
+      .locator("[data-bars]")
+      .evaluate((row) => {
+        const edge = row.getBoundingClientRect().right
+        return [...row.children].every((bar) => {
+          const box = bar.getBoundingClientRect()
+          return box.width > 0 && box.right <= edge + 0.5
+        })
+      })
+    expect(fit).toBe(true)
+  })
 })

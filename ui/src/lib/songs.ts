@@ -1,5 +1,5 @@
 import type { Marker, NotNamedSummary, SongGo, SongIndex, SongSummary, Take } from "@/lib/api"
-import { formatDate, formatDay, goesLabel, takesLabel } from "@/lib/format"
+import { formatDate, formatDayIn, goesLabel, takesLabel } from "@/lib/format"
 
 /** Song titles in the order a person looks for them: alphabetical, any
  *  script, capitals or not. The All songs panel and History's Songs view
@@ -57,12 +57,20 @@ export function inSongOrder(index: SongIndex): SongRef[] {
   return rows
 }
 
-/** The row of the Songs view a song's title names, as a title shown
- *  elsewhere is spelled — capitals aside — or Not named's for null. Nothing
- *  when there is no such row. */
+// Capitals aside, and nothing else: Python keeps titles apart by case only,
+// so "Palyn" and "Pałyn" are two songs.
+const CASE_BLIND = new Intl.Collator(undefined, { sensitivity: "accent" })
+
+/** The row of the Songs view a song's title names, or Not named's for null.
+ *  A title shown elsewhere comes from Python spelled as kept, so it is
+ *  matched as spelled first, and capitals aside only after. Nothing when
+ *  there is no such row. */
 export function songRefFor(index: SongIndex, title: string | null): SongRef | null {
   if (title === null) return index.not_named ? "not_named" : null
-  return index.songs.find((s) => ALPHABETICAL.compare(s.title, title) === 0)?.id ?? null
+  const song =
+    index.songs.find((s) => s.title === title) ??
+    index.songs.find((s) => CASE_BLIND.compare(s.title, title) === 0)
+  return song?.id ?? null
 }
 
 /** One rehearsal's goes at a song: a rung of the ladder on its page. */
@@ -132,6 +140,6 @@ export function pageLine(goes: SongGo[], unnamed: boolean, now: Date = new Date(
   const newest = rungs[0].created_at
   const oldest = rungs[rungs.length - 1].created_at
   if (unnamed)
-    return `${takesLabel(goes.length)} in ${rehearsalsLabel(rungs.length)} · last ${formatDay(newest)}`
+    return `${takesLabel(goes.length)} in ${rehearsalsLabel(rungs.length)} · last ${formatDayIn(newest, now)}`
   return `${goesLabel(goes.length)} in ${rehearsalsLabel(rungs.length)} · first ${formatDate(oldest, now)} · last ${formatDate(newest, now)}`
 }

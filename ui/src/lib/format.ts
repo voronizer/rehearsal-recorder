@@ -74,6 +74,14 @@ export function formatDate(iso: string, now: Date = new Date()): string {
   return y === now.getFullYear() ? date : `${date} ${y}`
 }
 
+/** "Tue 22 Sep", and "Tue 30 Dec 2025" for a day in another year: where
+ *  days of more than one year are listed together, as a song's goes are. */
+export function formatDayIn(iso: string, now: Date = new Date()): string {
+  const day = formatDay(iso)
+  const y = Number(iso.slice(0, 4))
+  return day && y !== now.getFullYear() ? `${day} ${y}` : day
+}
+
 /** "2026-09-22T19:00:00" -> "September 2026", over a month of history. */
 export function formatMonth(iso: string): string {
   const [y, m] = (iso.split("T")[0] ?? "").split("-").map(Number)
