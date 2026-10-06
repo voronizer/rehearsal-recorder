@@ -50,6 +50,21 @@ things in here were only really fixed once a test reproduced them: the
 player's open/close race, for instance, was confirmed by putting the old code
 back and watching the new test catch it.
 
+## The website
+
+reha.stream is `site/`: one page, built from the interface's own components
+running on the same fake Python side as the interface's tests. Its words are
+Markdown in `site/content/`; its version and the news line come from the
+release's tag and that version's section of `CHANGELOG.md`. A pull request
+that touches `site/`, `ui/` or `CHANGELOG.md` builds it and runs its tests,
+so a change to the interface can break it.
+
+```bash
+cd ui && npm ci && cd ../site && npm ci
+npm run dev                                 # to work on it
+npm test && npm run build && npm run test:e2e
+```
+
 ## What the code tries to be
 
 **Comments say why, not what.** The diff shows what. A comment earns its
@@ -85,6 +100,10 @@ is the first-time part. After that:
 3. `.github/workflows/release.yml` builds on a real Mac and a real Windows
    machine, runs every suite plus `--selftest` on the built app, and attaches
    the zips to the release.
+4. Then it puts the website up for that release (`site.yml`), unless it is
+   a pre-release. The page's news line is the bold start of the first item
+   in that version's section of `CHANGELOG.md`; without one it just says
+   which version is new.
 
 There is no version number to bump anywhere: the tag is the version.
 setuptools-scm reads it at build time and writes it into the package, which
