@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react"
-import { HardDrive, Square } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { FooterRow } from "@/components/FooterRow"
-import { Kbd, Shell } from "@/components/Shell"
+import { HealthLine } from "@/components/HealthLine"
+import { Shell } from "@/components/Shell"
+import { StopTake } from "@/components/StopTake"
 import { GoTitle } from "@/components/TakeTitle"
 import { TrackTile } from "@/components/TrackTile"
-import { RunningLine } from "@/components/RunningLine"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
@@ -15,11 +14,10 @@ import {
   type RecordingHealth,
   type PlacedTrack,
 } from "@/lib/api"
-import { aboutDuration, formatClock, formatMMSS } from "@/lib/format"
+import { formatClock, formatMMSS } from "@/lib/format"
 import { isSilent, watchStep, type TrackWatch } from "@/lib/levels"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
-import { cn } from "@/lib/utils"
 
 // The capture block is ~21 ms, so the meters can update often; Python returns
 // the peak accumulated since the last poll, so spikes are not lost.
@@ -178,21 +176,7 @@ export function Recording({
       activity={false}
       footer={
         <FooterRow error={error}>
-          <Button
-            size="xl"
-            onClick={stop}
-            disabled={stopping}
-            aria-keyshortcuts="Space"
-          >
-            <Square className="fill-current" />
-            Stop
-            <Kbd>Space</Kbd>
-          </Button>
-          {stopping ? (
-            <RunningLine entry={saving} label="Saving the take" active />
-          ) : (
-            <p className="text-xs text-muted-foreground">autosaved every 30 s</p>
-          )}
+          <StopTake onStop={stop} stopping={stopping} saving={saving} />
         </FooterRow>
       }
     >
@@ -209,35 +193,7 @@ export function Recording({
             {named && <span className="text-muted-foreground">Take {takeNumber}</span>}
           </div>
 
-          {/* Always there, not only when something is wrong: you should be
-              able to see at a glance that the recording is healthy. */}
-          <div
-            className={cn(
-              "flex items-center gap-2 text-xs",
-              health?.error
-                ? "text-destructive"
-                : health?.low_space
-                  ? "text-warn"
-                  : "text-muted-foreground"
-            )}
-          >
-            <HardDrive className="size-3.5 shrink-0" />
-            {health?.error ? (
-              <span>{health.error}</span>
-            ) : health === null ? (
-              <span>Checking free space…</span>
-            ) : health.low_space ? (
-              <span>
-                Running out of space: {aboutDuration(health.minutes_left ?? 0)}{" "}
-                left. Free some up or finish the rehearsal.
-              </span>
-            ) : (
-              <span>
-                Interface connected · room for{" "}
-                {aboutDuration(health.minutes_left ?? 0)} more
-              </span>
-            )}
-          </div>
+          <HealthLine health={health} />
         </div>
 
         {/* The name was the smallest thing here, grey in the corner, and it
