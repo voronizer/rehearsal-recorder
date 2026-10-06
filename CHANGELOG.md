@@ -7,6 +7,12 @@ opening.
 
 ## Unreleased
 
+- **The app is called РЭХА now.** РЭХА is Belarusian for “echo”, and it
+  sounds a little like “rehearsal”. The window, the Dock and About, Under
+  the hood and the report for a bug say so; the app itself is the file
+  Reha: Reha.app on a Mac, Reha.exe in the Reha folder on Windows. The
+  downloads keep their names, so older copies find this version as before,
+  and the settings and the recordings stay where they were.
 - **Marks have labels you make.** A mark's label is a name and a colour, and
   **Settings → Marks** is where the band makes them, renames and recolours
   them, drags them into order and deletes them; a label with marks asks
@@ -28,7 +34,7 @@ opening.
 - **A take is a go at a song, and the go is a number of its own.** The name
   field holds the song's title, with the go it will be dimmed beside it, and
   the songs under it put only the title in. The go is counted across every
-  rehearsal — yesterday's Polyn 2 is followed by today's Polyn 3 — and shown
+  rehearsal — yesterday's Pałyn 2 is followed by today's Pałyn 3 — and shown
   from 1, beside the title, wherever a take is. A number is never given twice: deleting the latest go
   does not free it. A typed number does not
   change which go a take is; a song is spelled one way everywhere; a title

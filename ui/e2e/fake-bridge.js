@@ -183,9 +183,9 @@ function pastRehearsal(folder) {
   }
   if (folder === '/rec/older') {
     const takes = [
-      {take_number:1, name:'Doroga', duration_sec:230, markers:[],
+      {take_number:1, name:'Daroha', duration_sec:230, markers:[],
        tracks:[{name:'Guitar', file:'/rec/older/d1.wav'}]},
-      {take_number:2, name:'Doroga 2', duration_sec:240, markers:[],
+      {take_number:2, name:'Daroha 2', duration_sec:240, markers:[],
        tracks:[{name:'Guitar', file:'/rec/older/d2.wav'}]}];
     return withStars({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)});
   }
@@ -195,26 +195,26 @@ function pastRehearsal(folder) {
   const oldLength = window.__OLD_LENGTH_SEC__ || 600;
   // A page can ask for a fuller evening, for the rehearsal overview.
   const takes = window.__FULL_EVENING__ ? [
-    {take_number:1, name:'Polyn', duration_sec:192, markers:[],
+    {take_number:1, name:'Pałyn', duration_sec:192, markers:[],
      tracks:[{name:'Guitar', file:'/rec/old/p1.wav'}]},
-    {take_number:2, name:'Polyn 2', duration_sec:178,
+    {take_number:2, name:'Pałyn 2', duration_sec:178,
      markers:[{at:72, note:'this one is the take', label_id:2}],
-     cloud:{mix:'/cloud/Tuesday jam/02 - Polyn 2.mp3', mix_format:'mp3'},
+     cloud:{mix:'/cloud/Tuesday jam/02 - Pałyn 2.mp3', mix_format:'mp3'},
      tracks:[{name:'Guitar', file:'/rec/old/p2.wav'}]},
     {take_number:3, name:'Take 3', duration_sec:90,
      markers:[{at:5, note:'', label_id:1}],
      tracks:[{name:'Guitar', file:'/rec/old/t3.wav'}]},
-    {take_number:4, name:'Vesna', duration_sec:250,
+    {take_number:4, name:'Viasna', duration_sec:250,
      markers:[{at:40, note:'guitar drifts here', label_id:3}],
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
-  ] : [{take_number:1, name:'Polyn', duration_sec:oldLength, markers:[],
+  ] : [{take_number:1, name:'Pałyn', duration_sec:oldLength, markers:[],
         tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
   return withStars({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)});
 }
 
 // The rest of the band's repertoire, as other rehearsals in the library
 // played it, the latest first.
-const REPERTOIRE = ['Polyn', 'Vesna', 'Ogon', 'Sonce', 'Dym', 'Ptaha', 'Doroga'];
+const REPERTOIRE = ['Pałyn', 'Viasna', 'Ahoń', 'Sonca', 'Dym', 'Ptuška', 'Daroha'];
 
 // Python groups takes by the song each is a go at (api._songs_of) and hands
 // the result over; the mock does the same.
@@ -701,20 +701,20 @@ window.__MAKE_API__ = () => ({
   list_rehearsals: track('list_rehearsals', async () => ([
     {folder:'/rec/old', name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
      take_count:9, total_duration_sec:2520, disk_bytes:1200000000, in_cloud:3,
-     songs:[{name:'Polyn', takes:3}, {name:'Vesna', takes:2}, {name:'Ogon', takes:1},
-            {name:'Sonce', takes:1}, {name:'Dym', takes:1}, {name:'Ptaha', takes:1}],
-     runs:[{song:'Polyn', takes:[{duration_sec:300, starred:false}, {duration_sec:280, starred:false},
+     songs:[{name:'Pałyn', takes:3}, {name:'Viasna', takes:2}, {name:'Ahoń', takes:1},
+            {name:'Sonca', takes:1}, {name:'Dym', takes:1}, {name:'Ptuška', takes:1}],
+     runs:[{song:'Pałyn', takes:[{duration_sec:300, starred:false}, {duration_sec:280, starred:false},
                                  {duration_sec:290, starred:true}]},
-           {song:'Vesna', takes:[{duration_sec:260, starred:false}, {duration_sec:250, starred:false}]},
-           {song:'Ogon', takes:[{duration_sec:330, starred:false}]},
-           {song:'Sonce', takes:[{duration_sec:240, starred:false}]},
+           {song:'Viasna', takes:[{duration_sec:260, starred:false}, {duration_sec:250, starred:false}]},
+           {song:'Ahoń', takes:[{duration_sec:330, starred:false}]},
+           {song:'Sonca', takes:[{duration_sec:240, starred:false}]},
            {song:'Dym', takes:[{duration_sec:270, starred:false}]},
-           {song:'Ptaha', takes:[{duration_sec:300, starred:false}]}]},
+           {song:'Ptuška', takes:[{duration_sec:300, starred:false}]}]},
     {folder:'/rec/quiet', name:'Wednesday jam', created_at:'2026-09-03T19:00:00',
      take_count:2, total_duration_sec:600, disk_bytes:340000000, songs:[],
      runs:runsOf(pastRehearsal('/rec/quiet').takes)},
     {folder:'/rec/older', name:'First rehearsal', created_at:'2026-08-25T19:00:00',
-     take_count:2, total_duration_sec:470, disk_bytes:160000000, songs:[{name:'Doroga', takes:2}],
+     take_count:2, total_duration_sec:470, disk_bytes:160000000, songs:[{name:'Daroha', takes:2}],
      runs:runsOf(pastRehearsal('/rec/older').takes)},
     ...(missingRehearsal ? [missingRehearsal] : [])])),
   forget_rehearsal: track('forget_rehearsal', async (folder) => {
@@ -734,7 +734,7 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes)}));
   }),
   // The setup screen's last time (api.last_time): Tuesday jam song by song,
-  // Doroga from the rehearsal before it, and the others in history's order.
+  // Daroha from the rehearsal before it, and the others in history's order.
   // A page with window.__NO_HISTORY__ has none of it.
   last_time: track('last_time', async () => {
     if (window.__NO_HISTORY__) return {last:null, not_played:[], earlier:[], count:0};
@@ -756,9 +756,9 @@ window.__MAKE_API__ = () => ({
         missing:true}] : [])];
     return JSON.parse(JSON.stringify({
       last: {...last, songs, runs:runsOf(last.takes), in_cloud:inCloud},
-      not_played: [{name:'Doroga', folder:'/rec/older', rehearsal:'First rehearsal',
+      not_played: [{name:'Daroha', folder:'/rec/older', rehearsal:'First rehearsal',
                     created_at:'2026-08-25T19:00:00', goes:2, take:older.takes[1],
-                    plays: playsOf('Doroga', older, older.takes, both)}],
+                    plays: playsOf('Daroha', older, older.takes, both)}],
       earlier,
       count: earlier.length + 1}));
   }),
@@ -819,7 +819,7 @@ window.__MAKE_API__ = () => ({
     server_url:'http://127.0.0.1:1234',
     releases_url:'https://github.com/voronizer/rehearsal-recorder/releases'})),
   bug_report: track('bug_report', async () => ({ok:true,
-    text:'Rehearsal Recorder 0.2.0, run from source\nWindows 11 Pro 10.0.26200, x64\n'})),
+    text:'РЭХА 0.2.0, run from source\nWindows 11 Pro 10.0.26200, x64\n'})),
   show_file: track('show_file', async () => ({ok:true})),
   open_releases: track('open_releases', async (_latest) => ({ok:true})),
   // What updates.py found: __LATEST__ is the newer release a test says is

@@ -20,9 +20,9 @@ test("finishing a rehearsal with takes in it asks, and is answered from the keyb
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page, 1)
-  await page.fill("#take-name", "Polyn")
+  await page.fill("#take-name", "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await page.locator("button[aria-label^='Take 1 Polyn']").click()
+  await page.locator("button[aria-label^='Take 1 Pałyn']").click()
   const timeline = page.getByRole("group", { name: "Take timeline" })
   await expect(timeline).toBeVisible()
   await page.keyboard.press("Escape")
@@ -80,7 +80,7 @@ test.describe("History", () => {
     // Chosen already, and on screen next to the list: no row to open first.
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
     await expect(list.locator("[aria-current='true']")).toContainText("Tuesday jam")
-    await page.getByRole("button", { name: "Take 1 Polyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     // A ten-minute take gets a clock in minutes.
     await expect(page.getByRole("group", { name: "Timeline clock" })).toContainText("2:00")
@@ -89,7 +89,7 @@ test.describe("History", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByRole("group", { name: "Take timeline" })).toHaveCount(0)
     await expect(list).toBeVisible()
-    await expect(page.getByRole("button", { name: "Take 1 Polyn 1", exact: true })).toHaveCount(1)
+    await expect(page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true })).toHaveCount(1)
     // The list is history itself, so the next rung is the setup screen.
     await page.keyboard.press("Escape")
     await expect(startButton(page)).toBeVisible()
@@ -126,15 +126,15 @@ test.describe("History", () => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const list = await openHistory(page)
     const overview = page.locator("[aria-label='Rehearsal overview']")
-    await overview.getByRole("button", { name: "Play Vesna" }).click()
-    await expect(page.getByRole("button", { name: "Pause Vesna" })).toBeVisible()
+    await overview.getByRole("button", { name: "Play Viasna" }).click()
+    await expect(page.getByRole("button", { name: "Pause Viasna" })).toBeVisible()
     const closes = await callCount(page, "player_close")
 
     await page.keyboard.press("ArrowDown")
     await expect(page.getByRole("heading", { name: "Wednesday jam" })).toBeVisible()
     await expect(list.locator("[aria-current='true']")).toContainText("Wednesday jam")
     await expect(overview).toContainText("Not named")
-    // Vesna belonged to the rehearsal that was left.
+    // Viasna belonged to the rehearsal that was left.
     await expect(page.getByRole("button", { name: /Pause/ })).toHaveCount(0)
     expect(await callCount(page, "player_close")).toBeGreaterThan(closes)
 
@@ -145,7 +145,7 @@ test.describe("History", () => {
     // And by the mouse.
     await list.getByRole("button", { name: /^First rehearsal/ }).click()
     await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
-    await expect(overview).toContainText("Doroga")
+    await expect(overview).toContainText("Daroha")
     await expect(overview).toContainText("2 goes")
   })
 
@@ -191,9 +191,9 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
     "4\ntakes",
     "2\nsongs",
     "1 of 4\nin the cloud",
-    "Polyn",
+    "Pałyn",
     "2 goes",
-    "Vesna",
+    "Viasna",
     "1 Keep this",
     "1 Went wrong",
     "1 Note",
@@ -210,7 +210,7 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
   // Only the take already in the cloud folder says so on its row.
   await expect(page.locator("[data-take='2'] [data-in-cloud]")).toHaveCount(1)
   await expect(overview.locator("[data-in-cloud]")).toHaveCount(1)
-  // Every go on one scale: the four-minute Vesna is the longest bar.
+  // Every go on one scale: the four-minute Viasna is the longest bar.
   const widths = await page.evaluate(() =>
     Object.fromEntries(
       [...document.querySelectorAll<HTMLElement>("[data-take]")].map((r) => [
@@ -229,7 +229,7 @@ test("a note opens its take at the spot it was left", async ({ page }) => {
   const overview = await openEvening(page)
   await overview.getByText("guitar drifts here").click()
   await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
-  await expect(current(page)).toContainText("Vesna")
+  await expect(current(page)).toContainText("Viasna")
   await expect
     .poll(async () => (await calls(page, "player_seek")).at(-1)?.args[0] as number)
     .toBeCloseTo(40, 0)
@@ -243,10 +243,10 @@ test("a take opened from the overview can be deleted, and says its cloud copy go
   page,
 }) => {
   const overview = await openEvening(page)
-  await overview.getByRole("button", { name: "Take 2 Polyn 2" }).click()
+  await overview.getByRole("button", { name: "Take 2 Pałyn 2" }).click()
   await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
-  await expect(current(page)).toContainText("Polyn 2")
-  await page.getByRole("button", { name: "Delete take Polyn 2" }).click()
+  await expect(current(page)).toContainText("Pałyn 2")
+  await page.getByRole("button", { name: "Delete take Pałyn 2" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog).toContainText("go to the Trash")
   await expect(dialog).toContainText("Its copy in the cloud folder goes too.")
@@ -281,8 +281,8 @@ test("the whole of a take's row opens it, not only its bar", async ({ page }) =>
 test("a take plays from its row, and on in the player and back", async ({ page }) => {
   const overview = await openEvening(page)
   const opens = await callCount(page, "player_open")
-  await overview.getByRole("button", { name: "Play Vesna" }).click()
-  await expect(page.getByRole("button", { name: "Pause Vesna" })).toBeVisible()
+  await overview.getByRole("button", { name: "Play Viasna" }).click()
+  await expect(page.getByRole("button", { name: "Pause Viasna" })).toBeVisible()
   // Right there, with no player on screen, and how far it has got beside
   // its bar.
   expect(await callCount(page, "player_open")).toBe(opens + 1)
@@ -291,13 +291,13 @@ test("a take plays from its row, and on in the player and back", async ({ page }
 
   // Space pauses it, though the mouse pressed Play.
   await page.keyboard.press("Space")
-  await expect(page.getByRole("button", { name: "Play Vesna" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Play Viasna" })).toBeVisible()
   await page.keyboard.press("Space")
-  await expect(page.getByRole("button", { name: "Pause Vesna" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Pause Viasna" })).toBeVisible()
 
   // Its bar opens it in the player without opening it again, and it carries
   // on playing there.
-  await overview.getByRole("button", { name: "Take 4 Vesna" }).click()
+  await overview.getByRole("button", { name: "Take 4 Viasna" }).click()
   await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
   expect(await callCount(page, "player_open")).toBe(opens + 1)
   await expect(page.getByRole("button", { name: "Pause", exact: true })).toHaveCount(1)
@@ -305,10 +305,10 @@ test("a take plays from its row, and on in the player and back", async ({ page }
   // Back in the overview it plays on, and Escape stops it and puts it away.
   await page.keyboard.press("Escape")
   await expect(overview).toBeVisible()
-  await expect(page.getByRole("button", { name: "Pause Vesna" })).toHaveCount(1)
+  await expect(page.getByRole("button", { name: "Pause Viasna" })).toHaveCount(1)
   const closes = await callCount(page, "player_close")
   await page.keyboard.press("Escape")
-  await expect(page.getByRole("button", { name: "Play Vesna" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Play Viasna" })).toBeVisible()
   expect(await callCount(page, "player_close")).toBeGreaterThan(closes)
   await expect(overview).toHaveCount(1)
 })
@@ -316,7 +316,7 @@ test("a take plays from its row, and on in the player and back", async ({ page }
 test("a row's own buttons work on its take without opening it", async ({ page }) => {
   const overview = await openEvening(page)
   await page.hover("[data-take='1']")
-  await page.getByRole("button", { name: "Rename take Polyn 1", exact: true }).click()
+  await page.getByRole("button", { name: "Rename take Pałyn 1", exact: true }).click()
   await expect(page.getByText("Rename take")).toBeVisible()
   await expect(page.locator("[aria-label='Take timeline']")).toHaveCount(0)
   await page.keyboard.press("Escape")
@@ -386,17 +386,17 @@ test.describe("last time, on the setup screen", () => {
     await expect(panel).toContainText("Tuesday jam")
     await expect(panel).toContainText("12 min · 4 takes · 1 in the cloud")
     // Each song with how many goes it got and how long they ran in all.
-    await expect(panel.locator("[data-song='Polyn']")).toContainText("2 goes · 6:10")
-    await expect(panel.locator("[data-song='Vesna']")).toContainText("1 go · 4:10")
+    await expect(panel.locator("[data-song='Pałyn']")).toContainText("2 goes · 6:10")
+    await expect(panel.locator("[data-song='Viasna']")).toContainText("1 go · 4:10")
     await expect(panel.locator("[data-song='Not named']")).toContainText("1 take · 1:30")
     // The marks, under their song, each by its label and its comment.
-    await expect(panel.locator("[data-song='Polyn'] [data-note]")).toContainText("this one is the take")
-    await expect(panel.locator("[data-song='Vesna'] [data-note]")).toContainText("guitar drifts here")
+    await expect(panel.locator("[data-song='Pałyn'] [data-note]")).toContainText("this one is the take")
+    await expect(panel.locator("[data-song='Viasna'] [data-note]")).toContainText("guitar drifts here")
     await expect(panel.locator("[data-song='Not named'] [data-note]")).toContainText("Note")
     await expect(panel.locator("[data-note]")).toHaveCount(3)
     // What was not played last time, from before it.
     const leftOut = panel.getByRole("region", { name: "Not played last time" })
-    await expect(leftOut).toContainText("Doroga")
+    await expect(leftOut).toContainText("Daroha")
     await expect(leftOut).toContainText(/Tue 25 Aug.* · 2 goes/)
     // And the rest of history.
     const earlier = panel.getByRole("region", { name: "Earlier" })
@@ -412,24 +412,24 @@ test.describe("last time, on the setup screen", () => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const panel = lastTime(page)
     await expect(keyOn(startButton(page))).resolves.toBe("Space")
-    await panel.getByRole("button", { name: "Play Polyn 2, the last go at Polyn" }).click()
-    await expect(panel.getByRole("button", { name: "Pause Polyn 2, the last go at Polyn" })).toBeVisible()
+    await panel.getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" }).click()
+    await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })).toBeVisible()
     expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
       { name: "Guitar", file: "/rec/old/p2.wav" },
     ])
-    await expect(panel.locator("[data-song='Polyn']")).toContainText("/ 2:58")
+    await expect(panel.locator("[data-song='Pałyn']")).toContainText("/ 2:58")
     // Space is the take's now, not Start's.
     expect(await keyOn(startButton(page))).toBeNull()
     await page.keyboard.press("Space")
-    await expect(panel.getByRole("button", { name: "Play Polyn 2, the last go at Polyn" })).toBeVisible()
+    await expect(panel.getByRole("button", { name: "Play Pałyn 2, the last go at Pałyn" })).toBeVisible()
     await expect(page.getByRole("button", { name: /Record take/ })).toHaveCount(0)
     await page.keyboard.press("Space")
-    await expect(panel.getByRole("button", { name: "Pause Polyn 2, the last go at Polyn" })).toBeVisible()
+    await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last go at Pałyn" })).toBeVisible()
 
     // Take 2 of another rehearsal is another take, not this one again.
     const opens = await callCount(page, "player_open")
-    await panel.getByRole("button", { name: "Play Doroga 2, the last go at Doroga" }).click()
-    await expect(panel.getByRole("button", { name: "Pause Doroga 2, the last go at Doroga" })).toBeVisible()
+    await panel.getByRole("button", { name: "Play Daroha 2, the last go at Daroha" }).click()
+    await expect(panel.getByRole("button", { name: "Pause Daroha 2, the last go at Daroha" })).toBeVisible()
     expect(await callCount(page, "player_open")).toBe(opens + 1)
     expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
       { name: "Guitar", file: "/rec/older/d2.wav" },
@@ -444,8 +444,8 @@ test.describe("last time, on the setup screen", () => {
   test("checking the signal stops what was playing", async ({ page }) => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     const panel = lastTime(page)
-    await panel.getByRole("button", { name: "Play Vesna 1, the last go at Vesna" }).click()
-    await expect(panel.getByRole("button", { name: /^Pause Vesna/ })).toBeVisible()
+    await panel.getByRole("button", { name: "Play Viasna 1, the last go at Viasna" }).click()
+    await expect(panel.getByRole("button", { name: /^Pause Viasna/ })).toBeVisible()
     await page.getByRole("button", { name: "Check signal" }).click()
     await expect(panel.getByRole("button", { name: /^Pause/ })).toHaveCount(0)
     await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()

@@ -111,8 +111,8 @@ const PARTS = [{name: 'Drums', channel: 1, icon: 'drums'},
 // seed makes each take a little different; end is where the song stopped,
 // a take that broke down stopping early.
 const KIND = {};
-// What a take is a go at, from its name, as the library would say: "Polyn 2"
-// is the second go at Polyn, "Take 11" a go at nothing.
+// What a take is a go at, from its name, as the library would say: "Pałyn 2"
+// is the second go at Pałyn, "Take 11" a go at nothing.
 function goOfName(name) {
   if (/^Take \d+$/.test(name)) return {song: null, go: null};
   const m = /^(.*?)(?: (\d+))?$/.exec(name);
@@ -134,12 +134,12 @@ const SECTION = name => {
   for (const [kind, bars] of FORM) { if (kind === name) return at; at += bars * BAR; }
 };
 const EARLIER = [
-  takeOf(1, 'Polyn', 58, 51, [{at: 50, note: 'lost the count', label_id: 3}]),
-  takeOf(2, 'Polyn 2', Math.round(SONG_END + 4), SONG_END, [
+  takeOf(1, 'Pałyn', 58, 51, [{at: 50, note: 'lost the count', label_id: 3}]),
+  takeOf(2, 'Pałyn 2', Math.round(SONG_END + 4), SONG_END, [
     {at: 50.5, note: 'chorus came in early', label_id: 3},
     {at: 112, note: 'bridge — try it slower', label_id: 4},
     {at: 131, note: 'this one is the take', label_id: 2}]),
-  takeOf(3, 'Vesna', 141, 137, []),
+  takeOf(3, 'Viasna', 141, 137, []),
 ];
 // For the script driving the page: where things are in the song.
 window.__SONG__ = {length: n => fileDurations[`/rec/tue/${n}/Drums.wav`],
@@ -235,23 +235,23 @@ api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
 // marks, as in life. Their files are never played in the pictures.
 const PAST = {
   '/rec/tue': ['Tuesday jam', '2026-09-22T19:00:00', 1560000000, [
-    ['Polyn', 185, [{at: 111, note: 'came in late after the break', label_id: 3}]],
-    ['Polyn 2', 192, [{at: 58, note: 'chorus came in early', label_id: 3},
+    ['Pałyn', 185, [{at: 111, note: 'came in late after the break', label_id: 3}]],
+    ['Pałyn 2', 192, [{at: 58, note: 'chorus came in early', label_id: 3},
                       {at: 134, note: 'bridge — try it slower', label_id: 4}]],
-    ['Polyn 3', 200, []],
-    ['Polyn 4', 198, [{at: 158, note: 'this one is the take', label_id: 2}]],
-    ['Vesna', 250, [{at: 100, note: 'guitar drifts here', label_id: 3}]],
-    ['Vesna 2', 265, []], ['Vesna 3', 252, []],
-    ['Ogon', 340, [{at: 187, note: 'solo too long, cut to 8 bars', label_id: 4}]],
-    ['Ogon 2', 302, []], ['Sonce', 390, []], ['Take 11', 130, []]]],
+    ['Pałyn 3', 200, []],
+    ['Pałyn 4', 198, [{at: 158, note: 'this one is the take', label_id: 2}]],
+    ['Viasna', 250, [{at: 100, note: 'guitar drifts here', label_id: 3}]],
+    ['Viasna 2', 265, []], ['Viasna 3', 252, []],
+    ['Ahoń', 340, [{at: 187, note: 'solo too long, cut to 8 bars', label_id: 4}]],
+    ['Ahoń 2', 302, []], ['Sonca', 390, []], ['Take 11', 130, []]]],
   '/rec/sat': ['New songs', '2026-09-19T15:00:00', 1070000000, [
     ['Dym', 280, []], ['Dym 2', 275, []], ['Dym 3', 290, []],
     ['Dym 4', 270, [{at: 200, note: 'keep this ending', label_id: 2}]],
-    ['Ptaha', 245, []], ['Ptaha 2', 260, []], ['Ptaha 3', 255, []]]],
+    ['Ptuška', 245, []], ['Ptuška 2', 260, []], ['Ptuška 3', 255, []]]],
   '/rec/tue-before': ['Tuesday jam', '2026-09-15T19:00:00', 1310000000, [
-    ['Polyn', 210, []], ['Polyn 2', 195, []], ['Polyn 3', 202, []],
-    ['Vesna', 280, []], ['Vesna 2', 270, []], ['Ogon', 310, []], ['Ogon 2', 295, []],
-    ['Sonce', 305, []], ['Dym', 228, []]]],
+    ['Pałyn', 210, []], ['Pałyn 2', 195, []], ['Pałyn 3', 202, []],
+    ['Viasna', 280, []], ['Viasna 2', 270, []], ['Ahoń', 310, []], ['Ahoń 2', 295, []],
+    ['Sonca', 305, []], ['Dym', 228, []]]],
   '/rec/soundcheck': ['Soundcheck', '2026-09-12T18:30:00', 173000000, [
     ['Take 1', 140, []], ['Take 2', 165, []]]]};
 const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => ({
@@ -284,7 +284,7 @@ api.last_time = async () => {
       {name: 'Dym', folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00',
        goes: 4, take: sat[3],
        plays: {folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00', take: sat[3]}},
-      {name: 'Ptaha', folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00',
+      {name: 'Ptuška', folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00',
        goes: 3, take: sat[6],
        plays: {folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00', take: sat[6]}}],
     earlier: all.slice(1).map(r => ({folder: r.folder, name: r.name, created_at: r.created_at,

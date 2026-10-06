@@ -1,5 +1,7 @@
 import type { ReactNode } from "react"
 
+import { cn } from "@/lib/utils"
+
 /**
  * A screen's footer as one row: what the screen has to say on the left, its
  * buttons on the right, the main one rightmost, so that it is in the same
@@ -8,6 +10,13 @@ import type { ReactNode } from "react"
  *
  * `rule` draws a line between the two halves, where the left one holds a
  * field. An error goes over the buttons it is about.
+ *
+ * With a field, the buttons get the same room on every screen that has one,
+ * so the take's name stays where it was from recording to after Stop. Its
+ * songs wrap under it by the room they have, and Finish with Record take 1
+ * is wider than Discard with Save take: songs that took two rows while
+ * recording fitted in one after Stop, and the field dropped a row. 26rem
+ * holds Record take 100 in the tests' browser.
  */
 export function FooterRow({
   left,
@@ -25,7 +34,10 @@ export function FooterRow({
     <div className="mx-auto flex w-full max-w-7xl items-center gap-7">
       <div className="min-w-0 flex-1">{left}</div>
       {rule && <div data-footer-rule aria-hidden className="w-px self-stretch bg-border" />}
-      <div data-footer-actions className="flex shrink-0 flex-col items-end gap-2">
+      <div
+        data-footer-actions
+        className={cn("flex shrink-0 flex-col items-end gap-2", rule && "min-w-[26rem]")}
+      >
         {error && <p className="max-w-md text-right text-sm text-destructive">{error}</p>}
         {children}
       </div>

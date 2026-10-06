@@ -3,8 +3,8 @@ import type { Page } from "@playwright/test"
 
 // A mark's label is a name and a colour, the library's own (spec
 // 2026-10-04-labels-design.md). The fuller evening at /rec/old has a Keep
-// this mark on Polyn 2, a plain Note with nothing written on Take 3, and a
-// Went wrong one on Vesna 1.
+// this mark on Pałyn 2, a plain Note with nothing written on Take 3, and a
+// Went wrong one on Viasna 1.
 
 async function openEvening(page: Page, before = "") {
   await openApp(page, { before: `window.__FULL_EVENING__ = true; ${before}` })

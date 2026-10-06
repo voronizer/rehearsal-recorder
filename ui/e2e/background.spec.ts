@@ -9,7 +9,7 @@ type Entry = Record<string, unknown>
 const entry = (over: Entry = {}): Entry => ({
   id: 1,
   kind: "cloud",
-  title: "“Polyn” → cloud",
+  title: "“Pałyn” → cloud",
   folder: "/rec/X",
   take_number: 1,
   state: "running",
@@ -231,10 +231,10 @@ test.describe("long work shows its progress where it runs", () => {
     await expect(page.getByText("Cropping…")).toHaveCount(0)
 
     // Saved, and cropped again from the rehearsal screen.
-    await page.fill("#take-name", "Polyn")
+    await page.fill("#take-name", "Pałyn")
     await page.getByRole("button", { name: /Save take/ }).click()
     await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-    await page.locator("button[aria-label^='Take 1 Polyn']").click()
+    await page.locator("button[aria-label^='Take 1 Pałyn']").click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     await hold(page, "crop_take")
     await drag(page, 0.25, 0.75)

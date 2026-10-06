@@ -33,12 +33,12 @@ jobs:
         include:
           - os: macos-latest
             label: macos
-            built: dist/RehearsalRecorder.app
-            selftest: dist/RehearsalRecorder.app/Contents/MacOS/RehearsalRecorder
+            built: dist/Reha.app
+            selftest: dist/Reha.app/Contents/MacOS/Reha
           - os: windows-latest
             label: windows
-            built: dist/RehearsalRecorder
-            selftest: dist/RehearsalRecorder/RehearsalRecorder.exe
+            built: dist/Reha
+            selftest: dist/Reha/Reha.exe
 
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.os }}
@@ -87,13 +87,15 @@ jobs:
         run: ${{ matrix.selftest }} --selftest
 
       # Windows runners don't have `zip` on PATH (even under the bash shell),
-      # so that leg uses PowerShell's Compress-Archive instead.
+      # so that leg uses PowerShell's Compress-Archive instead. The app inside
+      # is Reha; the zip keeps its old name, which every copy already out
+      # there asks GitHub for when it looks for a newer version (updates.py).
       - name: Zip it
         if: runner.os != 'Windows'
         shell: bash
         run: |
           cd dist
-          zip -qry ../RehearsalRecorder-${{ matrix.label }}.zip RehearsalRecorder.app
+          zip -qry ../RehearsalRecorder-${{ matrix.label }}.zip Reha.app
           cd ..
           ls -lh RehearsalRecorder-${{ matrix.label }}.zip
 
@@ -101,7 +103,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/RehearsalRecorder -DestinationPath RehearsalRecorder-${{ matrix.label }}.zip
+          Compress-Archive -Path dist/Reha -DestinationPath RehearsalRecorder-${{ matrix.label }}.zip
           Get-Item RehearsalRecorder-${{ matrix.label }}.zip | Format-List Name, Length
 
       # Kept whether or not there is a release to attach to, so

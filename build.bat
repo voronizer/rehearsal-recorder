@@ -7,7 +7,7 @@ rem system wide and nothing you already have is touched.
 
 cd /d "%~dp0"
 
-echo Building Rehearsal Recorder
+echo Building Reha
 echo This takes a few minutes the first time, less after that.
 echo.
 
@@ -52,12 +52,12 @@ if errorlevel 1 goto failed
 
 echo.
 echo ==^> Checking the build has everything
-dist\RehearsalRecorder\RehearsalRecorder.exe --selftest
+dist\Reha\Reha.exe --selftest
 if errorlevel 1 goto failed
 
 echo.
 echo Done. The app is here:
-echo     %cd%\dist\RehearsalRecorder\RehearsalRecorder.exe
+echo     %cd%\dist\Reha\Reha.exe
 echo.
 echo Make a shortcut to it wherever you like. Keep the folder together —
 echo the .exe needs the files beside it.

@@ -30,8 +30,9 @@ describe("the site's content", () => {
     expect(content.hero.phoneCaption).toContain("Try it on a computer.")
   })
 
-  it("has six questions, each with an answer", () => {
-    expect(content.faq.questions).toHaveLength(6)
+  it("has seven questions, each with an answer, the name's first", () => {
+    expect(content.faq.questions).toHaveLength(7)
+    expect(content.faq.questions[0].body).toContain("Belarusian for “echo”")
     for (const q of content.faq.questions) expect(q.body).not.toBe("")
   })
 

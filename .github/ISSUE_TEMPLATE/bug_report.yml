@@ -56,5 +56,5 @@ body:
       label: Self-test output
       description: |
         Only if the app will not start. On macOS, in Terminal:
-        `/Applications/RehearsalRecorder.app/Contents/MacOS/RehearsalRecorder --selftest`
+        `/Applications/Reha.app/Contents/MacOS/Reha --selftest`
       render: text

@@ -20,9 +20,9 @@ export function Logo() {
 export function Nav({ repo }: { repo: string }) {
   return (
     <header className="nav">
-      <a className="brand" href="#top" aria-label="Rehearsal Recorder">
+      <a className="brand" href="#top" aria-label="РЭХА">
         <Logo />
-        <span>Rehearsal Recorder</span>
+        <span>РЭХА</span>
       </a>
       <nav className="menu">
         <a href="#how">How it works</a>

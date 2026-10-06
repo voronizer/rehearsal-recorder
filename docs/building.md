@@ -6,7 +6,7 @@ release builds work.
 
     pip install pyinstaller
     pyinstaller packaging/rehearsal-recorder.spec
-    dist/RehearsalRecorder/RehearsalRecorder --selftest
+    dist/Reha/Reha --selftest
 
 One folder you open, with everything inside: Python, numpy, PortAudio through
 sounddevice, libsndfile through soundfile, the window toolkit and the built
@@ -40,9 +40,9 @@ starts, and then the first time it reaches for the sound card it turns out a
 native library was never bundled. Nothing in the source can catch that — only
 the built thing knows. So the built thing is asked:
 
-    $ dist/RehearsalRecorder/RehearsalRecorder --selftest
-    Rehearsal Recorder self-test on linux
-      bundle root: .../dist/RehearsalRecorder/_internal
+    $ dist/Reha/Reha --selftest
+    РЭХА self-test on linux
+      bundle root: .../dist/Reha/_internal
       frozen: True
       ok   audio engine — PortAudio up, 18 devices, 3 with inputs
       ok   sample formats — soundfile, libsndfile 1.2.2

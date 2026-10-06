@@ -28,9 +28,9 @@ export async function startHeroRehearsal(): Promise<SessionState> {
   return session
 }
 
-/** Opens Polyn 2, draws its bridge as a region, and plays it on repeat. */
+/** Opens Pałyn 2, draws its bridge as a region, and plays it on repeat. */
 export async function playTheBridge(): Promise<void> {
-  ;(await waitFor(() => document.querySelector<HTMLButtonElement>("button[aria-label^='Take 2 Polyn 2']"))).click()
+  ;(await waitFor(() => document.querySelector<HTMLButtonElement>("button[aria-label^='Take 2 Pałyn 2']"))).click()
   await waitFor(() => document.querySelector('[aria-label="Take timeline"]'))
   await sleep(700)
   const song = (window as unknown as { __SONG__: Song }).__SONG__

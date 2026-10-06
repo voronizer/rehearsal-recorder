@@ -40,13 +40,13 @@ test("a take is copied to the cloud from its row, and taken back out again", asy
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page, 1)
-  await page.fill("#take-name", "Polyn")
+  await page.fill("#take-name", "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-  await page.locator("button[aria-label^='Take 1 Polyn']").click()
+  await page.locator("button[aria-label^='Take 1 Pałyn']").click()
   await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
 
-  await page.getByRole("button", { name: "Copy Polyn 1 to the cloud" }).click()
+  await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
   // There is nowhere to copy to yet, and it says so.
   await expect(page.getByText("No cloud folder chosen yet")).toBeVisible()
   await expect(page.getByRole("button", { name: "The mix", exact: true })).toBeDisabled()
@@ -58,17 +58,17 @@ test("a take is copied to the cloud from its row, and taken back out again", asy
   const shared = await calls(page, "share_take")
   expect(shared).toHaveLength(1)
   expect(shared[0].args[2]).toBe("both")
-  await expect(page.getByRole("button", { name: "Cloud copies of Polyn 1" })).toHaveCount(1)
+  await expect(page.getByRole("button", { name: "Cloud copies of Pałyn 1" })).toHaveCount(1)
 
   // Deleting a take takes its copy out of the cloud folder too, which is the
   // band's: somebody else may be listening to it. So it says so.
-  await page.getByRole("button", { name: "Delete take Polyn 1" }).click()
+  await page.getByRole("button", { name: "Delete take Pałyn 1" }).click()
   await expect(page.getByRole("dialog")).toContainText("Its copy in the cloud folder goes too.")
   await page.getByRole("button", { name: "Cancel" }).click()
 
-  await page.getByRole("button", { name: "Cloud copies of Polyn 1" }).click()
+  await page.getByRole("button", { name: "Cloud copies of Pałyn 1" }).click()
   await expect(page.getByRole("dialog")).toContainText("already there")
   await page.getByText("Remove from the cloud").click()
   await expect.poll(() => callCount(page, "unshare_take")).toBe(1)
-  await expect(page.getByRole("button", { name: "Copy Polyn 1 to the cloud" })).toHaveCount(1)
+  await expect(page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" })).toHaveCount(1)
 })

@@ -377,7 +377,7 @@ export function Setup({
       title={
         <span className="flex items-center gap-2.5">
           <img src="./favicon.svg" alt="" className="size-6 shrink-0" />
-          Rehearsal Recorder
+          РЭХА
         </span>
       }
       headerAction={

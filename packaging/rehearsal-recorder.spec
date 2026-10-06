@@ -4,7 +4,7 @@ Packaging: one file you double-click, nothing to install.
 
     pip install pyinstaller
     pyinstaller packaging/rehearsal-recorder.spec
-    dist/RehearsalRecorder --selftest      # or the .app / .exe
+    dist/Reha/Reha --selftest      # or the .app / .exe
 
 Run it from the repository root, not from this folder: dist/ and build/ are
 written next to where pyinstaller is invoked, and the paths below are
@@ -34,7 +34,10 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 # This file lives in packaging/, so the repository is one level up.
 ROOT = Path(SPECPATH).parent
-NAME = "RehearsalRecorder"
+# The file the app is, which Finder and Explorer show. Latin, though the app
+# calls itself РЭХА everywhere else (APP_NAME): a Cyrillic file name is one
+# more thing to go wrong unpacking a zip or in a build script.
+NAME = "Reha"
 
 # What the file says it is, which Finder's Get Info and About read from the
 # .app's Info.plist and Explorer from the .exe: without a version PyInstaller
@@ -145,8 +148,7 @@ if sys.platform == "darwin":
             # Without this the app is killed on its first take, with no
             # message anyone could act on.
             "NSMicrophoneUsageDescription":
-                "Rehearsal Recorder records your band through your audio "
-                "interface.",
+                f"{APP_NAME} records your band through your audio interface.",
             "CFBundleName": APP_NAME,
             "CFBundleDisplayName": APP_NAME,
             "NSHumanReadableCopyright": COPYRIGHT,

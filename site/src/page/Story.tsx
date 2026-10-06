@@ -71,7 +71,7 @@ export function Story() {
       </div>
       <div className="story">
         <div className="stage">
-          <LiveFrame scene="story" title="Rehearsal Recorder, following the steps on this page" lazy onReady={onReady} />
+          <LiveFrame scene="story" title="РЭХА, following the steps on this page" lazy onReady={onReady} />
           <div className="rail" role="group" aria-label="Steps">
             {story.steps.map((s, i) => (
               <button

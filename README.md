@@ -1,8 +1,10 @@
-# Rehearsal Recorder
+# РЭХА
 
 Multitrack recording for band rehearsals. One track per musician, written to
 disk as you play, a take you can listen back to the second you stop, and a
 history of every rehearsal you have ever had.
+
+РЭХА is Belarusian for “echo”, and it sounds a little like “rehearsal”.
 
 Built for the situation it is actually used in: nobody is watching the screen
 while the band plays, nobody is riding the gain, the laptop might get kicked,
@@ -13,7 +15,7 @@ and there may be no internet in the room.
 ## Get it
 
 Download the build for your system from
-[Releases](../../releases), unzip, open. Nothing to install — Python, the
+[Releases](../../releases), unzip, open Reha. Nothing to install — Python, the
 audio libraries and the interface are all inside.
 
 The app tells you when a newer version is out, with a dot on the gear on

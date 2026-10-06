@@ -58,7 +58,7 @@ def app_root():
 APP_ID = "Voronizer.RehearsalRecorder"
 # And who it is to macOS, in the Dock, the menu bar and About, when it is not
 # an .app of its own. The build writes the same into the .app's Info.plist.
-APP_NAME = "Rehearsal Recorder"
+APP_NAME = "РЭХА"
 COPYRIGHT = "© 2026 Aliaksandr Varanishcha"
 
 
@@ -151,7 +151,7 @@ def version_on_the_file(system=sys.platform, executable=None, frozen=None):
     if system == "darwin":
         import plistlib
 
-        # RehearsalRecorder.app/Contents/MacOS/RehearsalRecorder
+        # Reha.app/Contents/MacOS/Reha
         with open(executable.parents[1] / "Info.plist", "rb") as f:
             return plistlib.load(f)["CFBundleShortVersionString"]
     if system == "win32":

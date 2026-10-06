@@ -23,7 +23,7 @@ test("says the app's name with its logo, and fills the band in from the template
     await page.evaluate(() => {
       const h = document.querySelector("header h1")
       const img = h?.querySelector<HTMLImageElement>('img[src$="favicon.svg"]')
-      return !!img && img.complete && img.naturalWidth > 0 && h!.textContent!.trim() === "Rehearsal Recorder"
+      return !!img && img.complete && img.naturalWidth > 0 && h!.textContent!.trim() === "РЭХА"
     })
   ).toBe(true)
   await expect(page.locator("input[aria-label='Track 1 name']")).toHaveValue("Guitar")
