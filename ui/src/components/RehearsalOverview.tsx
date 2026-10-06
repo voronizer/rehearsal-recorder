@@ -377,7 +377,13 @@ export function TakeRow({
               {status}
             </span>
           )}
-          {where && <span className="truncate text-xs text-muted-foreground">{where}</span>}
+          {/* Its rehearsal is what tells it from the others here, so the
+              bar gives way to it rather than it to the bar. */}
+          {where && (
+            <span className="max-w-1/2 shrink-0 truncate text-xs text-muted-foreground">
+              {where}
+            </span>
+          )}
           {missing && (
             <span className="shrink-0 text-[11px] text-destructive">Not found on disk</span>
           )}
