@@ -30,7 +30,7 @@ export type SiteContent = {
 }
 
 export const TILES = ["health", "track", "rehearsals", "marks", "cloud", "formats", "trash"] as const
-export const STEPS = ["setup", "record", "review", "history", "song"] as const
+export const STEPS = ["setup", "record", "review", "history", "song", "compare"] as const
 
 const files = import.meta.glob<string>("../../content/*.md", {
   query: "?raw",
