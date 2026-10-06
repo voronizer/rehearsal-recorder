@@ -30,7 +30,7 @@ test("the page has its heading", async ({ page }) => {
 
 test("the news line is the version's first change, with its notes", async ({ page }) => {
   await page.goto("/")
-  const lead = new RegExp(`^## ${VERSION.replace(/\./g, "\\.")}\\s*\\n+- \\*\\*(.+?)\\*\\*`, "m").exec(
+  const lead = new RegExp(`^## ${VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\n+- \\*\\*(.+?)\\*\\*`, "m").exec(
     CHANGELOG
   )![1]
   const ribbon = page.locator(".ribbon")

@@ -6,13 +6,23 @@
 export type Section = { title: string; id: string | null; body: string }
 export type Doc = { title: string | null; intro: string; sections: Section[] }
 
+/** The text without its <!-- comments -->, however they nest. */
+function withoutComments(text: string): string {
+  let before
+  do {
+    before = text
+    text = text.replace(/<!--[\s\S]*?-->/g, "")
+  } while (text !== before)
+  return text
+}
+
 export function parseDoc(md: string): Doc {
   let title: string | null = null
   const intro: string[] = []
   const heads: Omit<Section, "body">[] = []
   const bodies: string[][] = []
   let lines = intro
-  const text = md.replace(/\r\n/g, "\n").replace(/<!--[\s\S]*?-->/g, "")
+  const text = withoutComments(md.replace(/\r\n/g, "\n"))
   for (const line of text.split("\n")) {
     const h1 = /^# (.+)$/.exec(line)
     const h2 = /^## (.+?)(?:\s+\{#([\w-]+)\})?\s*$/.exec(line)

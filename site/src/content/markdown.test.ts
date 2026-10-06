@@ -21,6 +21,10 @@ describe("parseDoc", () => {
     })
   })
 
+  it("leaves out a comment that taking out another one would make", () => {
+    expect(parseDoc("Intro <!-<!-- -->- note --> end.").intro).toBe("Intro  end.")
+  })
+
   it("keeps a section's paragraphs", () => {
     expect(parseDoc("## Q\nOne.\n\nTwo.\n").sections[0].body).toBe("One.\n\nTwo.")
   })
