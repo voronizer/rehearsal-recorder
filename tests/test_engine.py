@@ -6169,6 +6169,23 @@ def main():
     ok("the list of songs is one query",
        len(statements56) == 1)
 
+    ok("History opens on its Rehearsals view until another is chosen",
+       s56.get_settings()["history_view"] == "rehearsals")
+    ok("choosing the Songs view is kept",
+       s56.save_history_view("songs") == {"ok": True})
+    _, again56 = fresh_api(tmp56)
+    ok("and is still the view after a restart",
+       again56.get_settings()["history_view"] == "songs")
+    ok("a view History has not got is refused",
+       again56.save_history_view("albums") == {"ok": False, "error": "Unknown view"}
+       and again56.get_settings()["history_view"] == "songs")
+    cfg56 = json.loads((tmp56 / "config.json").read_text())
+    cfg56["history_view"] = 3
+    (tmp56 / "config.json").write_text(json.dumps(cfg56))
+    _, odd56 = fresh_api(tmp56)
+    ok("and one written by hand that makes no sense reads as Rehearsals",
+       odd56.get_settings()["history_view"] == "rehearsals")
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

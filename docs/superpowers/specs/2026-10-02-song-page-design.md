@@ -163,6 +163,17 @@ can open". It stands on
   rehearsals × 20 takes and time A1 and A2. Paging is added only if A2 for
   the biggest song takes more than 100 ms.
 
+  Measured 2026-10-06 on a 4-core 2.1 GHz Xeon (a cloud machine, likely
+  slower than a band's laptop), 300 rehearsals × 20 takes, 4 tracks and 2
+  marks a take, best of 5:
+  - songs spread evenly over 40 titles (the biggest 165 goes in 130
+    rehearsals): A1 4.7 ms, A2 23 ms;
+  - one song played at nearly every rehearsal (1242 goes in 299
+    rehearsals): A2 158 ms;
+  - *Not named*, 600 takes: A2 71–79 ms;
+  - for scale, reading the whole library as History's list and Last time
+    already do (`Library.rehearsals()`): about 1 s.
+
 ## Testing
 
 Tests come before the code, and each is seen failing first.

@@ -253,6 +253,10 @@ def _go_at(rehearsal, take):
             "created_at": rehearsal["created_at"], "take": take}
 
 
+# History's two views (save_history_view).
+HISTORY_VIEWS = ("rehearsals", "songs")
+
+
 def _plays_of(goes):
     """
     What the play button on a song's page plays, from its goes as
@@ -623,6 +627,10 @@ class Api:
             "master_volume": self._config.get("master_volume", 1.0),
             "theme": self._config.get("theme", "dark"),
             "ui_scale": self._config.get("ui_scale", 1),
+            # Which of History's two views it opens on: the one used last.
+            "history_view": (self._config.get("history_view")
+                             if self._config.get("history_view") in HISTORY_VIEWS
+                             else "rehearsals"),
             "output_device_index": saved_device(
                 self._config, "output_device", False
             ),
@@ -917,6 +925,16 @@ class Api:
         Unlike save_mix, nothing is queued for the cloud: the cloud mix is
         made from the faders alone, and this is only the listening level."""
         self._config["master_volume"] = float(min(1.0, max(0.0, volume)))
+        self._write_config()
+        return {"ok": True}
+
+    def save_history_view(self, view):
+        """History's view, Rehearsals or Songs, kept for the next time it
+        opens, after a restart too. In the config rather than the window's
+        localStorage: pywebview forgets that when the app closes."""
+        if view not in HISTORY_VIEWS:
+            return {"ok": False, "error": "Unknown view"}
+        self._config["history_view"] = view
         self._write_config()
         return {"ok": True}
 
