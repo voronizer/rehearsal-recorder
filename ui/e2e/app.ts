@@ -1,4 +1,5 @@
 import { test as base, expect, type Locator, type Page } from "@playwright/test"
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 
 export { expect }
@@ -7,6 +8,7 @@ export { expect }
 export const TAKE_SECONDS = 6
 
 const FAKE = fileURLToPath(new URL("./fake-bridge.js", import.meta.url))
+const BAND = fileURLToPath(new URL("./band.js", import.meta.url))
 
 /**
  * Every test fails on an error in the page: an exception, or anything the
@@ -72,6 +74,19 @@ export async function openApp(
   await page.addInitScript({ path: FAKE })
   if (after) await page.addInitScript(after)
   await page.goto("/", { waitUntil })
+}
+
+/**
+ * Opens the app with the band laid over the fake: four musicians, their
+ * song and their past rehearsals, as the docs' pictures and the site show
+ * them. See band.js.
+ */
+export async function openBandApp(page: Page) {
+  // One script, not two: the band sets the fake's top-level `let`s, which a
+  // second init script would not see.
+  const source = [FAKE, BAND].map((f) => readFileSync(f, "utf-8")).join("\n")
+  await page.addInitScript(source)
+  await page.goto("/")
 }
 
 type Call = { name: string; args: unknown[] }
