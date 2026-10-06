@@ -27,10 +27,12 @@ export function byFiles(a: Take, b: Take): boolean {
  * different one, so handing it a fresh copy of the same take would stop the
  * music and start it again from nothing.
  */
-export function useTakeStripPlayer(same: (a: Take, b: Take) => boolean = byNumber) {
-  const sameTake = (a: Take | null, b: Take | null) => a !== null && b !== null && same(a, b)
-  const [selected, setSelected] = useState<Take | null>(null)
-  const [cued, setCued] = useState<Take | null>(null)
+export function useTakeStripPlayer<T extends Take = Take>(
+  same: (a: T, b: T) => boolean = byNumber
+) {
+  const sameTake = (a: T | null, b: T | null) => a !== null && b !== null && same(a, b)
+  const [selected, setSelected] = useState<T | null>(null)
+  const [cued, setCued] = useState<T | null>(null)
   const loaded = selected ?? cued
   const player = useMultitrackPlayer(
     loaded?.tracks ?? null,
@@ -44,7 +46,7 @@ export function useTakeStripPlayer(same: (a: Take, b: Take) => boolean = byNumbe
   // where it is. Going back to the overview keeps a take that is playing
   // playing there, and puts away one that is not — the overview is where the
   // rest of the takes are, not a place to leave a paused one hanging.
-  const select = (take: Take | null) => {
+  const select = (take: T | null) => {
     if (take === null) {
       setCued(player.playing ? selected : null)
       setSelected(null)
@@ -66,16 +68,18 @@ export function useTakeStripPlayer(same: (a: Take, b: Take) => boolean = byNumbe
   // After a rename or a crop, the take in hand is pointed at its fresh copy:
   // its folder moved, or its files were rewritten. That is a new `tracks`
   // identity on purpose, and the player opens it again from zero. Only the
-  // take it is about is touched.
-  const reselect = (fresh: Take) => {
-    setSelected((s) => (sameTake(s, fresh) ? fresh : s))
-    setCued((c) => (sameTake(c, fresh) ? fresh : c))
+  // take it is about is touched: the one that is `was`, which is the fresh
+  // copy itself unless the take changed what makes it the same (a
+  // rehearsal renamed under a take that knows its rehearsal's folder).
+  const reselect = (fresh: T, was: T = fresh) => {
+    setSelected((s) => (sameTake(s, was) ? fresh : s))
+    setCued((c) => (sameTake(c, was) ? fresh : c))
   }
 
   /** A deleted take is let go of, wherever it was. */
-  const forget = (takeNumber: number) => {
-    setSelected((s) => (s?.take_number === takeNumber ? null : s))
-    setCued((c) => (c?.take_number === takeNumber ? null : c))
+  const forget = (take: T) => {
+    setSelected((s) => (sameTake(s, take) ? null : s))
+    setCued((c) => (sameTake(c, take) ? null : c))
   }
 
   // What to do once the take being opened is open: seek to a note in it, or
@@ -107,7 +111,7 @@ export function useTakeStripPlayer(same: (a: Take, b: Take) => boolean = byNumbe
   }
 
   /** Opening a take at a spot — a note in the rehearsal overview. */
-  const openAt = (take: Take, at: number) => {
+  const openAt = (take: T, at: number) => {
     if (sameTake(take, loaded)) {
       select(take)
       seek(at)
@@ -118,7 +122,7 @@ export function useTakeStripPlayer(same: (a: Take, b: Take) => boolean = byNumbe
   }
 
   /** Play or pause a take from its row in the overview, without opening it. */
-  const playInOverview = (take: Take) => {
+  const playInOverview = (take: T) => {
     if (sameTake(take, loaded)) {
       player.toggle()
       return

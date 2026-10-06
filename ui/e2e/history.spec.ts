@@ -165,6 +165,26 @@ test.describe("History", () => {
     await page.getByRole("dialog").locator("button", { hasText: "Delete" }).last().click()
     await expect.poll(() => callCount(page, "delete_rehearsal")).toBe(1)
   })
+
+  test("a take playing in one rehearsal is not taken for the same take number in another", async ({
+    page,
+  }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    const list = await openHistory(page, "Tuesday jam")
+    const overview = page.locator("[aria-label='Rehearsal overview']")
+    await overview.getByRole("button", { name: "Play Pałyn 1" }).click()
+    await expect(overview.getByRole("button", { name: "Pause Pałyn 1" })).toBeVisible()
+    const toggles = await callCount(page, "player_toggle")
+
+    // Daroha 1 is First rehearsal's take 1, as Pałyn 1 is Tuesday jam's.
+    await list.getByRole("button", { name: /^First rehearsal/ }).click()
+    await overview.getByRole("button", { name: "Play Daroha 1" }).click()
+    await expect(overview.getByRole("button", { name: "Pause Daroha 1" })).toBeVisible()
+    expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
+      { name: "Guitar", file: "/rec/older/d1.wav" },
+    ])
+    expect(await callCount(page, "player_toggle")).toBe(toggles)
+  })
 })
 
 // History, and an open rehearsal with no take picked: the evening at a

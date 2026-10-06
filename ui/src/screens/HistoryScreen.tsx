@@ -38,6 +38,7 @@ import {
 } from "@/lib/deletion"
 import { useCloudSettled, useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
+import { byPlace, placed, type PlacedTake } from "@/lib/songs"
 
 /** "9 takes, 1.2 GB" — what deleting a rehearsal takes away and gives back. */
 function takesAndSize(r: RehearsalSummary | null): string {
@@ -87,16 +88,18 @@ export function HistoryScreen({
   // Something slow enough to click twice by mistake is running. So far that
   // is only a crop, which rewrites every track of the take.
   const [busy, setBusy] = useState(false)
-  const [takeToDelete, setTakeToDelete] = useState<Take | null>(null)
-  const [takeToRename, setTakeToRename] = useState<Take | null>(null)
+  // Every take here is held with its rehearsal's folder: what an action on
+  // it acts on is the take's rehearsal, not whichever is chosen in the list.
+  const [takeToDelete, setTakeToDelete] = useState<PlacedTake | null>(null)
+  const [takeToRename, setTakeToRename] = useState<PlacedTake | null>(null)
   const renameChoices = useSongChoices(
     takeToRename !== null,
-    opened?.folder,
+    takeToRename?.folder,
     takeToRename?.take_number
   )
-  const [takeToShare, setTakeToShare] = useState<Take | null>(null)
+  const [takeToShare, setTakeToShare] = useState<PlacedTake | null>(null)
   const [markerEdit, setMarkerEdit] = useState<{
-    take: Take
+    take: PlacedTake
     marker: Marker
   } | null>(null)
   const [rehearsalToDelete, setRehearsalToDelete] =
@@ -116,10 +119,10 @@ export function HistoryScreen({
     openAt,
     playInOverview,
     player,
-  } = useTakeStripPlayer()
+  } = useTakeStripPlayer<PlacedTake>(byPlace)
   const cropping = useRunning(
     "crop",
-    (e) => e.folder === opened?.folder && e.take_number === selected?.take_number
+    (e) => e.folder === selected?.folder && e.take_number === selected?.take_number
   )
 
   /**
@@ -176,6 +179,13 @@ export function HistoryScreen({
     if (fresh.ok && folder === currentRef.current) setOpened(fresh)
   }
 
+  /** After a take of `folder` changed: its rehearsal read again, and the
+   *  list, whose counts and strips may have moved. */
+  const changed = async (folder: string) => {
+    await reopen(folder)
+    void refresh()
+  }
+
   // The chosen one in the list stays in view as ↑ and ↓ go past the edge.
   useEffect(() => {
     if (!current) return
@@ -225,24 +235,21 @@ export function HistoryScreen({
   // button climbs, one rung per press.
   useEscape(() => (selected ? select(null) : cued ? uncue() : back()))
 
-  const deleteTake = async (take: Take) => {
-    if (!opened) return
+  const deleteTake = async (take: PlacedTake) => {
     dismiss(SAID)
     player.pause()
-    const res = await api().delete_take(opened.folder, take.take_number)
+    const res = await api().delete_take(take.folder, take.take_number)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not delete the take" })
       return
     }
-    forget(take.take_number)
-    await reopen(opened.folder)
-    void refresh()
+    forget(take)
+    await changed(take.folder)
   }
 
-  const renameTake = async (take: Take, name: string) => {
-    if (!opened) return
+  const renameTake = async (take: PlacedTake, name: string) => {
     dismiss(SAID)
-    const res = await api().rename_take(opened.folder, take.take_number, name)
+    const res = await api().rename_take(take.folder, take.take_number, name)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not rename the take" })
       return
@@ -251,29 +258,27 @@ export function HistoryScreen({
     // paths. That is a new `tracks` identity, so the open effect underneath
     // tears down and reopens from zero — the take stays selected and on
     // screen, but playback and the A–B region do not survive this.
-    if (res.take) reselect(res.take)
-    await reopen(opened.folder)
-    void refresh()
+    if (res.take) reselect(placed(take.folder, res.take))
+    await changed(take.folder)
   }
 
   // Python let go of the files before rewriting them, so the take has to be
   // opened again; the fresh `tracks` array is what tells the player that.
   // Rewriting eight long tracks takes real seconds, so the screen is busy
   // while it runs: a second Crop would cut the take the first one made.
-  const cropTake = async (take: Take, from: number, to: number) => {
-    if (!opened || busy) return
+  const cropTake = async (take: PlacedTake, from: number, to: number) => {
+    if (busy) return
     setBusy(true)
     dismiss(SAID)
     player.pause()
-    const res = await watching(api().crop_take(opened.folder, take.take_number, from, to))
+    const res = await watching(api().crop_take(take.folder, take.take_number, from, to))
     setBusy(false)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not crop the take" })
       return
     }
-    if (res.take) reselect(res.take)
-    await reopen(opened.folder)
-    void refresh()
+    if (res.take) reselect(placed(take.folder, res.take))
+    await changed(take.folder)
     // The crop itself went through — only the sweep of the original is what
     // failed — so this adds to the success path rather than standing in for it.
     if (res.error) {
@@ -295,9 +300,10 @@ export function HistoryScreen({
       return
     }
     const held = selected ?? cued
-    if (held && res.takes) {
+    if (held && held.folder === folder && res.takes) {
       const fresh = res.takes.find((t) => t.take_number === held.take_number)
-      if (fresh) reselect(fresh)
+      // The take's rehearsal is now where the rename moved it.
+      if (fresh) reselect(placed(res.folder ?? folder, fresh), held)
     }
     await refresh(folder === current ? (res.folder ?? folder) : undefined)
   }
@@ -351,41 +357,34 @@ export function HistoryScreen({
 
   // Dropping a marker opens its note straight away: the thought about what
   // just went wrong lasts about five seconds. Playback carries on.
-  const addMarker = async (take: Take, seconds: number) => {
-    if (!opened) return
-    const res = await api().add_take_marker(opened.folder, take.take_number, seconds)
-    await reopen(opened.folder)
+  const addMarker = async (take: PlacedTake, seconds: number) => {
+    const res = await api().add_take_marker(take.folder, take.take_number, seconds)
+    await reopen(take.folder)
     const fresh = res.markers?.find((m) => Math.abs(m.at - seconds) < 0.02)
     setMarkerEdit(fresh ? { take, marker: fresh } : null)
   }
 
   const saveMarker = async (
-    take: Take,
+    take: PlacedTake,
     at: number,
     note: string,
     labelId: number
   ) => {
-    if (!opened) return
-    await api().update_take_marker(opened.folder, take.take_number, at, note, labelId)
-    await reopen(opened.folder)
-    void refresh()
+    await api().update_take_marker(take.folder, take.take_number, at, note, labelId)
+    await changed(take.folder)
   }
 
-  const starTake = async (take: Take, starred: boolean) => {
-    if (!opened) return
-    await api().set_take_star(opened.folder, take.take_number, starred)
-    await reopen(opened.folder)
-    void refresh()
+  const starTake = async (take: PlacedTake, starred: boolean) => {
+    await api().set_take_star(take.folder, take.take_number, starred)
+    await changed(take.folder)
   }
 
-  const removeMarker = async (take: Take, seconds: number) => {
-    if (!opened) return
-    await api().remove_take_marker(opened.folder, take.take_number, seconds)
-    await reopen(opened.folder)
-    void refresh()
+  const removeMarker = async (take: PlacedTake, seconds: number) => {
+    await api().remove_take_marker(take.folder, take.take_number, seconds)
+    await changed(take.folder)
   }
 
-  const takeDialogs = opened && (
+  const takeDialogs = (
     <>
       <ConfirmDialog
         open={takeToDelete !== null}
@@ -422,15 +421,19 @@ export function HistoryScreen({
 
       <ShareDialog
         take={takeToShare}
-        folder={opened.folder}
+        folder={takeToShare?.folder ?? ""}
         onOpenChange={(open) => !open && setTakeToShare(null)}
-        onDone={() => void reopen(opened.folder)}
+        onDone={() => {
+          if (takeToShare) void reopen(takeToShare.folder)
+        }}
       />
     </>
   )
 
   // A take open in the player: the whole window, the way it always had it.
   if (opened && selected) {
+    // What the strip and its buttons hand on is a take of this rehearsal.
+    const here = (take: Take) => placed(opened.folder, take)
     return (
       <Shell
         playback
@@ -446,11 +449,11 @@ export function HistoryScreen({
           <TakeStrip
             takes={opened.takes}
             selected={selected}
-            onSelect={select}
-            onRename={setTakeToRename}
-            onShare={setTakeToShare}
-            onDelete={setTakeToDelete}
-            onStar={starTake}
+            onSelect={(take) => select(here(take))}
+            onRename={(take) => setTakeToRename(here(take))}
+            onShare={(take) => setTakeToShare(here(take))}
+            onDelete={(take) => setTakeToDelete(here(take))}
+            onStar={(take, starred) => void starTake(here(take), starred)}
             emptyHint="Nothing was kept from this rehearsal, or every take since got deleted."
           />
           <TakePlayer
@@ -593,21 +596,25 @@ export function HistoryScreen({
                   takes={opened.takes}
                   songs={opened.songs ?? []}
                   playback={
-                    cued && {
-                      take: cued.take_number,
-                      playing: player.playing,
-                      loading: player.loading,
-                      position: player.position,
-                      duration: player.duration,
-                    }
+                    // Only a take of this rehearsal plays here: take 1 of
+                    // another is not this one's take 1.
+                    cued && cued.folder === opened.folder
+                      ? {
+                          take: cued.take_number,
+                          playing: player.playing,
+                          loading: player.loading,
+                          position: player.position,
+                          duration: player.duration,
+                        }
+                      : null
                   }
-                  onPlay={playInOverview}
-                  onOpen={select}
-                  onOpenAt={openAt}
-                  onRename={setTakeToRename}
-                  onStar={starTake}
-                  onShare={setTakeToShare}
-                  onDelete={setTakeToDelete}
+                  onPlay={(take) => playInOverview(placed(opened.folder, take))}
+                  onOpen={(take) => select(placed(opened.folder, take))}
+                  onOpenAt={(take, at) => openAt(placed(opened.folder, take), at)}
+                  onRename={(take) => setTakeToRename(placed(opened.folder, take))}
+                  onStar={(take, starred) => void starTake(placed(opened.folder, take), starred)}
+                  onShare={(take) => setTakeToShare(placed(opened.folder, take))}
+                  onDelete={(take) => setTakeToDelete(placed(opened.folder, take))}
                 />
               ) : (
                 <EmptyState

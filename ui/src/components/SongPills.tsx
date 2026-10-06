@@ -3,6 +3,7 @@ import { GoTitle } from "@/components/TakeTitle"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { SongChoice, SongChoices } from "@/lib/api"
 import { pillsShown } from "@/lib/songPills"
+import { ALPHABETICAL } from "@/lib/songs"
 import { cn } from "@/lib/utils"
 
 /** The gap between pills, as `gap-1.5` draws it. */
@@ -118,10 +119,6 @@ export function SongPills({
     </div>
   )
 }
-
-/** Song titles in the order a person looks for them: alphabetical, any
- *  script, capitals or not. History's list of songs (#12) uses the same. */
-const ALPHABETICAL = new Intl.Collator(undefined, { sensitivity: "base" })
 
 /**
  * The last pill, and the whole repertoire behind it, over the field: in

@@ -64,6 +64,16 @@ export function formatDay(iso: string): string {
   return `${WEEKDAYS[date.getUTCDay()]} ${date.getUTCDate()} ${MONTHS[date.getUTCMonth()].slice(0, 3)}`
 }
 
+/** "2026-09-22T19:00:00" -> "22 Sep", and "22 Sep 2025" before `now`'s
+ *  year: a band's history runs past New Year, and a song last played two
+ *  Septembers ago is not last played this one. */
+export function formatDate(iso: string, now: Date = new Date()): string {
+  const [y, m, d] = (iso.split("T")[0] ?? "").split("-").map(Number)
+  if (!y || !m || !d) return ""
+  const date = `${d} ${MONTHS[m - 1].slice(0, 3)}`
+  return y === now.getFullYear() ? date : `${date} ${y}`
+}
+
 /** "2026-09-22T19:00:00" -> "September 2026", over a month of history. */
 export function formatMonth(iso: string): string {
   const [y, m] = (iso.split("T")[0] ?? "").split("-").map(Number)

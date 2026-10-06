@@ -6,6 +6,7 @@ import {
   describeRescan,
   formatBytes,
   formatClock,
+  formatDate,
   formatDateHuman,
   formatDay,
   formatDuration,
@@ -111,5 +112,18 @@ describe("what the interface says about cards and takes", () => {
     expect(croppedButNotSwept("disk full")).toBe(
       "The take was cropped, but the original could not be moved out of the way (disk full)."
     )
+  })
+})
+
+describe("formatDate", () => {
+  const now = new Date("2026-10-06T12:00:00")
+  it("is the day and month in this year", () => {
+    expect(formatDate("2026-09-22T19:00:00", now)).toBe("22 Sep")
+  })
+  it("adds the year before this one", () => {
+    expect(formatDate("2025-09-22T19:00:00", now)).toBe("22 Sep 2025")
+  })
+  it("is nothing for what it cannot read", () => {
+    expect(formatDate("", now)).toBe("")
   })
 })
