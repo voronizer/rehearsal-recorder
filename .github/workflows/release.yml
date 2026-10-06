@@ -5,6 +5,8 @@
 #   2. On GitHub: Releases -> Draft a new release -> new tag (v0.1.0) ->
 #      Publish.
 #   3. This runs. When it finishes the zips are attached to that release.
+#   4. Once it has finished well, site.yml puts the website (reha.stream) up
+#      for that release, with download links to those zips.
 #
 # Nothing is built from a Linux machine and hoped for: a Mac build is made on
 # a Mac and a Windows build on Windows, because that is the only way either
