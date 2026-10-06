@@ -47,6 +47,45 @@ async function chooseSong(page: Page, title: string) {
   await expect(head(page).getByRole("heading", { name: title })).toBeVisible()
 }
 
+// Pałyn has two goes in First rehearsal too, after its Daroha 1 and 2.
+const EVERY_PALYN = `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = ["Pałyn", "Pałyn"];`
+
+const lastOpened = async (page: Page) =>
+  ((await calls(page, "player_open")).at(-1)?.args[0] as { file: string }[])[0].file
+
+/**
+ * Pałyn 2 of Tuesday jam opened from Pałyn's page, scrolled 200 px down,
+ * and at 0:30; then ↑ twice, to Pałyn 1 and on to the last go at Pałyn in
+ * First rehearsal, the rehearsal before. Returns where 0:30 was sought to.
+ */
+async function toFirstRehearsal(page: Page): Promise<number> {
+  await openApp(page, { before: EVERY_PALYN })
+  await openSongs(page)
+  await chooseSong(page, "Pałyn")
+  await rung(page, "/rec/older").click()
+  await rung(page, "/rec/gone").click()
+  const songPage = page.getByRole("region", { name: "Pałyn", exact: true })
+  await songPage.evaluate((el) => (el.scrollTop = 200))
+  await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+  const timeline = page.getByRole("group", { name: "Take timeline" })
+  await expect(timeline).toBeVisible()
+  const box = (await timeline.boundingBox())!
+  const seeks = (await calls(page, "player_seek")).length
+  await page.mouse.click(box.x + box.width * (30 / 178), box.y + box.height / 2)
+  await expect.poll(async () => (await calls(page, "player_seek")).length).toBe(seeks + 1)
+  const at = (await calls(page, "player_seek")).at(-1)!.args[0] as number
+
+  await page.keyboard.press("ArrowUp")
+  await expect.poll(() => lastOpened(page)).toBe("/rec/old/p1.wav")
+  await page.keyboard.press("ArrowUp")
+  await expect.poll(async () => (await calls(page, "get_rehearsal")).at(-1)?.args[0]).toBe("/rec/older")
+  await expect.poll(() => lastOpened(page)).toBe("/rec/older/x4.wav")
+  await expect
+    .poll(async () => (await calls(page, "player_seek")).at(-1)!.args[0] as number)
+    .toBeCloseTo(at, 0)
+  return at
+}
+
 test.describe("Songs in History", () => {
   test("the switch shows the songs, and history opens on the view used last", async ({
     page,
@@ -355,6 +394,56 @@ test.describe("Songs in History", () => {
       .poll(() => songPage.evaluate((el) => el.scrollTop))
       .toBeGreaterThanOrEqual(196)
     expect(await songPage.evaluate((el) => el.scrollTop)).toBeLessThanOrEqual(204)
+  })
+
+  test("from a song's page, the column has every go by time, with its days", async ({
+    page,
+  }) => {
+    await openApp(page, { before: EVERY_PALYN })
+    await openSongs(page)
+    await chooseSong(page, "Pałyn")
+    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    const strip = page.getByRole("group", { name: "Take strip" })
+    await strip.getByRole("button", { name: "Songs", exact: true }).click()
+    const column = strip.locator("[data-column='Pałyn']")
+    // First rehearsal, 25 Aug, then Tuesday jam, 10 Sep; Missing jam's are
+    // not on disk.
+    await expect(column.locator("[data-day]")).toHaveText(["Tue 25 Aug", "Thu 10 Sep"])
+    await expect(column.locator("button[data-go-row]")).toHaveCount(4)
+    await expect(column.getByRole("button", { name: /Pałyn [89]/ })).toHaveCount(0)
+    await expect(column.locator("button[aria-current='true']")).toHaveAccessibleName(
+      /^Take 2 Pałyn 2/
+    )
+  })
+
+  test("↑ goes on into the rehearsal before, with the place kept", async ({ page }) => {
+    await page.setViewportSize({ width: 1180, height: 600 })
+    await toFirstRehearsal(page)
+    await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
+    const strip = page.getByRole("group", { name: "Take strip" })
+    expect(
+      await strip
+        .locator("[data-tab]")
+        .evaluateAll((els) => els.map((el) => el.getAttribute("data-tab")))
+    ).toEqual(["Daroha", "Pałyn"])
+    await expect(strip.locator("[data-tab][aria-current='true']")).toHaveAttribute("data-tab", "Pałyn")
+
+    await page.keyboard.press("Escape")
+    await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    const songPage = page.getByRole("region", { name: "Pałyn", exact: true })
+    await expect.poll(() => songPage.evaluate((el) => el.scrollTop)).toBeGreaterThanOrEqual(196)
+    expect(await songPage.evaluate((el) => el.scrollTop)).toBeLessThanOrEqual(204)
+  })
+
+  test("another song picked there goes through that evening's goes only", async ({ page }) => {
+    await toFirstRehearsal(page)
+    const strip = page.getByRole("group", { name: "Take strip" })
+    await strip.getByRole("button", { name: /^Daroha, go 2/ }).click()
+    await expect(strip.locator("[data-tab][aria-current='true']")).toHaveAttribute("data-tab", "Daroha")
+    await strip.getByRole("button", { name: "Songs", exact: true }).click()
+    const column = strip.locator("[data-column='Daroha']")
+    await expect(column.locator("[data-day]")).toHaveCount(0)
+    await expect(column.locator("button[data-go-row]")).toHaveCount(2)
   })
 
   test("a go of another rehearsal than the one chosen opens with its own rehearsal's takes", async ({

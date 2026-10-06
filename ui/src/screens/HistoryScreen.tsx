@@ -16,6 +16,7 @@ import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
+import { goesByTime } from "@/lib/songTabs"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
@@ -357,10 +358,12 @@ export function HistoryScreen({
 
   // A go opened from a song's page: the player has its rehearsal's takes,
   // whichever rehearsal Rehearsals has chosen, and Escape comes back to the
-  // page scrolled where it was.
+  // page scrolled where it was. "keep" is another go at the song from inside
+  // the player, in another rehearsal: it opens at the same place, and the
+  // page's scroll, kept when the player was opened, is left as it is.
   const songSection = useRef<HTMLElement | null>(null)
   const songScroll = useRef<number | null>(null)
-  const openGo = async (take: PlacedTake, at?: number) => {
+  const openGo = async (take: PlacedTake, at?: number | "keep") => {
     const scrolled = songSection.current?.scrollTop ?? 0
     const res = await api().get_rehearsal(take.folder)
     if (!res.ok) {
@@ -368,6 +371,11 @@ export function HistoryScreen({
       return
     }
     setGoRehearsal(res)
+    if (at === "keep") {
+      const fresh = res.takes.find((t) => t.take_number === take.take_number)
+      move(fresh ? placed(take.folder, fresh) : take)
+      return
+    }
     songScroll.current = scrolled
     if (at === undefined) select(take)
     else openAt(take, at)
@@ -664,6 +672,13 @@ export function HistoryScreen({
     const opened = inPlayer
     // What the strip and its buttons hand on is a take of this rehearsal.
     const here = (take: Take) => placed(opened.folder, take)
+    // Opened from a song's page, the song's goes are every go at it, by
+    // time; another song picked on the strip has this evening's.
+    const playedSong = liveTake(opened.takes, selected)?.song
+    const across =
+      view === "songs" && pageShown && playedSong && pageShown.title === playedSong
+        ? goesByTime(pageShown.goes ?? [])
+        : undefined
     return (
       <Shell
         playback
@@ -683,10 +698,15 @@ export function HistoryScreen({
             takes={opened.takes}
             selected={selected}
             folder={opened.folder}
+            across={across}
             expanded={expanded}
             onExpandedChange={setExpanded}
             onSelect={(take) => select(here(take))}
-            onGo={(take) => move(here(take))}
+            onGo={(take, folder) =>
+              folder === undefined || folder === opened.folder
+                ? move(here(take))
+                : void openGo(placed(folder, take), "keep")
+            }
             onRename={(take) => setTakeToRename(here(take))}
             onShare={(take) => setTakeToShare(here(take))}
             onDelete={(take) => setTakeToDelete(here(take))}
