@@ -607,6 +607,7 @@ window.__MAKE_API__ = () => ({
   })),
 
   player_open: track('player_open', async (tracks) => {
+    await held('player_open');
     const dur = tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
     P = {playing:false, position:0, t0:clock(), duration:dur, loop:null, muted:[], soloed:null,
          volumes:Object.fromEntries(tracks.map(t => [t.name, 1])),
@@ -634,7 +635,7 @@ window.__MAKE_API__ = () => ({
     }
     return {ok:true, ...playerState(), ...(reopened ? {reopened:true} : {})};
   }),
-  player_play: async () => { if (P) { P.playing = true; P.t0 = clock(); } return {ok:true, ...playerState()}; },
+  player_play: track('player_play', async () => { if (P) { P.playing = true; P.t0 = clock(); } return {ok:true, ...playerState()}; }),
   player_pause: async () => { if (P) { moveTo(position()); P.playing = false; } return {ok:true, ...playerState()}; },
   player_seek: track('player_seek', async (s) => { if (P) moveTo(s); return {ok:true, ...playerState()}; }),
   player_set_loop: track('player_set_loop', async (a, b) => {

@@ -52,6 +52,7 @@ export function Rehearsal({
     reselect,
     forget,
     openAt,
+    move,
     playInOverview,
     player,
   } = useTakeStripPlayer()
@@ -368,7 +369,7 @@ export function Rehearsal({
           expanded={expanded}
           onExpandedChange={setExpanded}
           onSelect={select}
-          onGo={select}
+          onGo={move}
           onRename={setToRename}
           onShare={setToShare}
           onDelete={setToDelete}
@@ -389,6 +390,7 @@ export function Rehearsal({
             canCrop={!busy}
             status={<RunningLine entry={cropping} label="Cropping" />}
             spaceKey
+            goKeys
           />
         ) : (
           session.takes.length > 0 && (

@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils"
 import { formatDayIn } from "@/lib/format"
 import { StarButton } from "@/components/StarButton"
 import { SongTab, type TabGo } from "@/components/SongTab"
-import { lastPlayed, songTabs, type SongTab as Tab } from "@/lib/songTabs"
+import { useKey } from "@/hooks/useSpacebar"
+import { lastPlayed, neighbour, songTabs, type SongTab as Tab } from "@/lib/songTabs"
 import type { SongGo, Take } from "@/lib/api"
 
 /**
@@ -92,27 +93,6 @@ export function TakeStrip({
   cloudStates?: Record<number, "queued" | "working">
   emptyHint?: string
 }) {
-  const openTabRef = useRef<HTMLDivElement | null>(null)
-
-  // The strip doesn't wrap (see the note below), so on a rehearsal with many
-  // songs the one just picked can land outside the visible row: this keeps
-  // the vertical budget fixed without also hiding the tab. The hook has to
-  // run before the empty-state return below, or the count of hooks called
-  // would change between an empty and a non-empty rehearsal.
-  useEffect(() => {
-    openTabRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" })
-  }, [selected?.take_number, folder])
-
-  if (takes.length === 0) {
-    return (
-      <EmptyState
-        icon={<Music2 className="size-6" />}
-        title="No takes yet"
-        hint={emptyHint}
-      />
-    )
-  }
-
   const live = liveTake(takes, selected)
   const isShared = Boolean(live?.cloud?.mix || live?.cloud?.tracks)
   const tabs = songTabs(takes)
@@ -135,6 +115,39 @@ export function TakeStrip({
       folder: g.folder,
       day: several ? formatDayIn(g.created_at) : undefined,
     }))
+  }
+
+  const openTab = live && tabs.find((t) => t.takes.some((x) => x.take_number === live.take_number))
+  // ↑ and ↓: the previous and next go at the open song, in the order its
+  // column lists them. Nothing at either end, nor on a take with no song.
+  const step = (dir: -1 | 1) => {
+    if (!openTab?.song) return
+    const goes = goesOf(openTab, true)
+    const go = neighbour(goes, goes.findIndex(isOpenGo), dir)
+    if (go) onGo(go.take, go.folder)
+  }
+  useKey("ArrowUp", () => step(-1), live !== null)
+  useKey("ArrowDown", () => step(1), live !== null)
+
+  const openTabRef = useRef<HTMLDivElement | null>(null)
+
+  // The strip doesn't wrap (see the note below), so on a rehearsal with many
+  // songs the one just picked can land outside the visible row: this keeps
+  // the vertical budget fixed without also hiding the tab. The hook has to
+  // run before the empty-state return below, or the count of hooks called
+  // would change between an empty and a non-empty rehearsal.
+  useEffect(() => {
+    openTabRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [selected?.take_number, folder])
+
+  if (takes.length === 0) {
+    return (
+      <EmptyState
+        icon={<Music2 className="size-6" />}
+        title="No takes yet"
+        hint={emptyHint}
+      />
+    )
   }
 
   return (
@@ -167,7 +180,7 @@ export function TakeStrip({
         )}
       >
         {tabs.map((tab) => {
-          const open = live !== null && tab.takes.some((t) => t.take_number === live.take_number)
+          const open = tab === openTab
           const goes = goesOf(tab, open)
           const shown = open
             ? (goes.find(isOpenGo) ?? { take: live! })

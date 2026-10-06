@@ -139,6 +139,7 @@ export function HistoryScreen({
     reselect,
     forget,
     openAt,
+    move,
     playInOverview,
     player,
   } = useTakeStripPlayer<PlacedTake>(byPlace)
@@ -681,7 +682,7 @@ export function HistoryScreen({
             expanded={expanded}
             onExpandedChange={setExpanded}
             onSelect={(take) => select(here(take))}
-            onGo={(take) => select(here(take))}
+            onGo={(take) => move(here(take))}
             onRename={(take) => setTakeToRename(here(take))}
             onShare={(take) => setTakeToShare(here(take))}
             onDelete={(take) => setTakeToDelete(here(take))}
@@ -696,6 +697,7 @@ export function HistoryScreen({
             onRemoveMarker={(sec) => removeMarker(selected, sec)}
             onCrop={(from, to) => void cropTake(selected, from, to)}
             spaceKey
+            goKeys
             canCrop={!busy}
             status={<RunningLine entry={cropping} label="Cropping" />}
           />

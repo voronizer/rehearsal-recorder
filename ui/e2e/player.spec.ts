@@ -857,11 +857,13 @@ test.describe("zooming the timeline", () => {
     await expect(page.locator("[data-region-span]")).toHaveCount(1)
     await zoomAt(page, 0.98, -900)
     await expect(page.locator("[data-region-span]")).toHaveCount(0)
-    // And picking another take starts from the whole of it.
+    // Another go at the song keeps the zoom and the region (goes in the
+    // player, D2), so the chip stays away there too.
     await page.getByRole("button", { name: "Songs", exact: true }).click()
     await page.locator("button[aria-label^='Take 1 Pałyn']").click()
     await expect(page.locator("button[aria-label^='Take 1 Pałyn']")).toHaveAttribute("aria-current", "true")
-    await expect(whole(page)).toHaveCount(0)
+    await expect(whole(page)).toHaveCount(1)
+    await expect(page.locator("[data-region-span]")).toHaveCount(0)
   })
 
   test("fetches the waveform again for the part on screen, once the wheel settles", async ({
