@@ -172,6 +172,8 @@ export type SessionState =
       recording: boolean
       /** Takes the app is copying to the cloud folder right now. */
       cloud_queue?: Record<number, "queued" | "working">
+      /** How much of the disk the rehearsal's folder uses, for the header. */
+      disk_bytes?: number
     }
 
 /**
@@ -768,6 +770,8 @@ type PyApi = {
   bug_report(): Promise<Ok<{ text?: string }>>
   /** The folder one of the app's own files is in, with the file picked out. */
   show_file(which: OwnFile["key"]): Promise<Ok>
+  /** A rehearsal's folder, opened in Finder, Explorer or the desktop's own. */
+  show_rehearsal_folder(folder: string): Promise<Ok>
   /** The releases page, or with `latest` the newest release's own page. */
   open_releases(latest?: boolean): Promise<Ok>
   /** Whether a newer version is out, as far as the last check knows. */

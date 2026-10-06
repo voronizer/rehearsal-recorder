@@ -390,16 +390,27 @@ def reveal_in_file_manager(path, system=sys.platform, run=None):
         return {"ok": False, "error": str(e)}
 
 
-def open_in_file_manager(path):
-    """Shows a folder in Finder, Explorer or whatever the desktop uses."""
+def open_in_file_manager(path, system=sys.platform, run=None):
+    """
+    Opens a folder in Finder, Explorer or whatever the desktop uses.
+
+    The command is a list, so the path reaches the opener as one argument and
+    no shell ever reads it: a rehearsal's folder is named after what a person
+    typed, and a quote or a $( ) in that must stay part of the name.
+
+    `run` takes the command; by default it is started and not waited for.
+    """
+    import subprocess
+
     path = str(path)
+    if system == "win32":
+        command = ["explorer", path]
+    elif system == "darwin":
+        command = ["open", path]
+    else:
+        command = ["xdg-open", path]
     try:
-        if MACOS:
-            os.system(f'open "{path}"')
-        elif WINDOWS:
-            os.startfile(path)  # noqa: S606 - the platform's own opener
-        else:
-            os.system(f'xdg-open "{path}"')
+        (run or subprocess.Popen)(command)
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}

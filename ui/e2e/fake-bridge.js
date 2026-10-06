@@ -524,7 +524,7 @@ window.__MAKE_API__ = () => ({
        next_take_name:suggestName(), next_take_go:nextTake().go,
        next_take_default:suggestName(undefined, false),
        last_attempt:lastAttempt(session.takes, nextTake().song),
-       recording:false, cloud_queue:cq}));
+       recording:false, cloud_queue:cq, disk_bytes:48000000 * session.takes.length}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
@@ -943,6 +943,7 @@ window.__MAKE_API__ = () => ({
   bug_report: track('bug_report', async () => ({ok:true,
     text:'РЭХА 0.2.0, run from source\nWindows 11 Pro 10.0.26200, x64\n'})),
   show_file: track('show_file', async () => ({ok:true})),
+  show_rehearsal_folder: track('show_rehearsal_folder', async () => ({ok:true})),
   open_releases: track('open_releases', async (_latest) => ({ok:true})),
   // What updates.py found: __LATEST__ is the newer release a test says is
   // out, and nothing is said while checking is switched off.

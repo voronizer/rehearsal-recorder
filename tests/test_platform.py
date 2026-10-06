@@ -266,6 +266,25 @@ def main():
     ok("a file manager that will not start is said, not raised",
        ps.reveal_in_file_manager("/x", system="linux", run=refuses)["ok"] is False)
 
+    print("\n[open] A folder opens in the system's file manager")
+    # The player's header has a button to the rehearsal's folder, whose name
+    # a person typed: it must reach the opener as one argument, never as part
+    # of a line a shell reads.
+    ran = []
+    ps.open_in_file_manager("/Users/a/Rec/Jam", system="darwin", run=ran.append)
+    ok("on a Mac, open with the folder", ran[-1:] == [["open", "/Users/a/Rec/Jam"]])
+    ps.open_in_file_manager("/home/a/Rec/Jam", system="linux", run=ran.append)
+    ok("elsewhere, xdg-open with the folder",
+       ran[-1:] == [["xdg-open", "/home/a/Rec/Jam"]])
+    ps.open_in_file_manager(r"C:\Rec\Jam", system="win32", run=ran.append)
+    ok("on Windows, Explorer with the folder", ran[-1:] == [["explorer", r"C:\Rec\Jam"]])
+    odd = '/Users/a/Rec/Jam "x" $(touch y); z'
+    ps.open_in_file_manager(odd, system="darwin", run=ran.append)
+    ok("a name with quotes and $( ) in it is one argument, as it is",
+       ran[-1:] == [["open", odd]])
+    ok("an opener that will not start is said, not raised",
+       ps.open_in_file_manager("/x", system="linux", run=refuses)["ok"] is False)
+
     print("\n[icon] The app has its own icon on both systems")
     # Without one, PyInstaller gives the app its own default, and the taskbar
     # shows a Python logo for an app about recording a band. The icon is

@@ -6186,6 +6186,54 @@ def main():
     ok("and one written by hand that makes no sense reads as Rehearsals",
        odd56.get_settings()["history_view"] == "rehearsals")
 
+    print("\n[57] A rehearsal's folder, shown; the session's size on disk")
+    # The player's header has a button to the rehearsal's folder. The window
+    # names the folder, so only one the library knows is ever opened.
+    tmp57 = Path(tempfile.mkdtemp())
+    api57mod, s57 = fresh_api(tmp57)
+    opened57 = []
+    real_open57 = api57mod.open_in_file_manager
+    api57mod.open_in_file_manager = lambda path: opened57.append(str(path)) or {"ok": True}
+    try:
+        old57 = tmp57 / "Rec" / "Jam - 2026-09-22 19-00"
+        old57.mkdir(parents=True)
+        (old57 / "session.json").write_text(json.dumps({
+            "name": "Jam", "created_at": "2026-09-22T19:00:00", "samplerate": SR,
+            "tracks": [{"name": "Gtr", "channel": 1}],
+            "takes": [{"take_number": 1, "name": "Polyn", "duration_sec": 100,
+                       "tracks": [], "markers": []}],
+        }))
+        import_all(s57._lib, s57._cloud_dir)
+        ok("a rehearsal the library knows has its folder opened",
+           s57.show_rehearsal_folder(str(old57)) == {"ok": True}
+           and opened57 == [str(old57)])
+        stranger57 = tmp57 / "Elsewhere"
+        stranger57.mkdir()
+        ok("a folder the library does not know is refused, and nothing opened",
+           s57.show_rehearsal_folder(str(stranger57))["ok"] is False
+           and len(opened57) == 1)
+        shutil.move(str(old57), str(tmp57 / "moved"))
+        ok("a known rehearsal whose folder is gone is refused",
+           s57.show_rehearsal_folder(str(old57))
+           == {"ok": False, "error": "The rehearsal's folder is not on disk"}
+           and len(opened57) == 1)
+        shutil.move(str(tmp57 / "moved"), str(old57))
+
+        s57.start_rehearsal("Live", 0, SR, [{"name": "Gtr", "channel": 1}])
+        live57 = Path(s57._session["folder"])
+        ok("the rehearsal being recorded has its folder opened too",
+           s57.show_rehearsal_folder(str(live57)) == {"ok": True}
+           and opened57[-1] == str(live57))
+        write_wav(live57 / "_drafts" / "take 1" / "Gtr.wav", 100, seconds=1.0)
+        state57 = s57.session_state()
+        ok("the session says how much of the disk its folder uses",
+           isinstance(state57.get("disk_bytes"), int)
+           and state57["disk_bytes"] == api57mod._folder_bytes(live57)
+           and state57["disk_bytes"] > 0)
+        s57.finish_rehearsal()
+    finally:
+        api57mod.open_in_file_manager = real_open57
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
