@@ -5,6 +5,16 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Every song has a page.** History has two views, *Rehearsals* and
+  *Songs*, and opens on the one used last. A song's page has every go at
+  it, from every rehearsal, one line an evening with its goes drawn to
+  scale; a click opens an evening's goes to play, open, star, rename or
+  delete. Its ★ goes come first, and the marks from the last time it was
+  played under them. A song's title on the setup screen, or in a
+  rehearsal's overview, opens its page.
+
 ## 0.10.0
 
 - **The app is called РЭХА now.** РЭХА is Belarusian for “echo”, and it
