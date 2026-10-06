@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.10.0
 
 - **The app is called РЭХА now.** РЭХА is Belarusian for “echo”, and it
   sounds a little like “rehearsal”. The window, the Dock and About, Under
