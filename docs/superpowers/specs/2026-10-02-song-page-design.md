@@ -193,6 +193,9 @@ Tests come before the code, and each is seen failing first.
 - `CHANGELOG.md`.
 - The History screenshot in `tests/docs_screenshots.py` gains the Songs
   view.
+- reha.stream gets a fifth step in "How a rehearsal goes", *Find a song*,
+  after *Find it later*: History switches to *Songs* and opens a song's
+  ladder (decided 2026-10-06).
 
 ## Not part of this
 
