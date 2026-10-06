@@ -1,4 +1,4 @@
-import { Fragment, type Ref } from "react"
+import { Fragment, useLayoutEffect, useRef, type Ref } from "react"
 import { Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
@@ -247,17 +247,33 @@ function Column({
   onRow: (go: TabGo) => void
   ghost: boolean
 }) {
+  // From a song's page the open song's column has every go at it, which can
+  // be dozens: it scrolls in its place, with the open go in view, rather
+  // than push the player off the window. Its scrollbar's room is kept in the
+  // unseen copy too, so the tab is as wide either way.
+  const ref = useRef<HTMLDivElement | null>(null)
+  const openAt = goes.findIndex(isOpenGo)
+  useLayoutEffect(() => {
+    const col = ref.current
+    const row = col?.querySelector<HTMLElement>("[aria-current='true']")
+    if (ghost || !col || !row) return
+    const top = row.offsetTop
+    if (top < col.scrollTop || top + row.offsetHeight > col.scrollTop + col.clientHeight) {
+      col.scrollTop = top - (col.clientHeight - row.offsetHeight) / 2
+    }
+  }, [ghost, openAt])
   return (
     <div
+      ref={ref}
       data-column={ghost ? undefined : tabKey}
       aria-hidden={ghost || undefined}
       className={cn(
-        "flex flex-col gap-0.5 px-1.5 [[data-tab]+[data-tab]>&]:border-l [[data-tab]+[data-tab]>&]:border-l-border/60",
+        "relative flex flex-col gap-0.5 px-1.5 [scrollbar-gutter:stable] [[data-tab]+[data-tab]>&]:border-l [[data-tab]+[data-tab]>&]:border-l-border/60",
         // Not flex-1 while unseen: a flex basis would give it its rows'
         // height back.
         ghost
           ? "pointer-events-none invisible h-0 flex-none overflow-hidden"
-          : "flex-1 border-t pt-1.5 pb-2.5"
+          : "max-h-[min(40vh,20rem)] flex-1 overflow-y-auto border-t pt-1.5 pb-2.5"
       )}
     >
       {goes.map((go, i) => {

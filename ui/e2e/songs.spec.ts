@@ -416,6 +416,25 @@ test.describe("Songs in History", () => {
     )
   })
 
+  test("a song with many goes keeps its column short, and the player in view", async ({
+    page,
+  }) => {
+    // Every go at a song from its page can be dozens: the column scrolls in
+    // its place rather than pushing the player off the window.
+    await openApp(page, {
+      before: `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = Array(24).fill("Pałyn");`,
+    })
+    await openSongs(page)
+    await chooseSong(page, "Pałyn")
+    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    const strip = page.getByRole("group", { name: "Take strip" })
+    await strip.getByRole("button", { name: "Songs", exact: true }).click()
+    const column = strip.locator("[data-column='Pałyn']")
+    await expect(column.locator("button[data-go-row]")).toHaveCount(26)
+    await expect(column.locator("button[aria-current='true']")).toBeInViewport()
+    await expect(page.getByRole("toolbar", { name: "Transport" })).toBeInViewport()
+  })
+
   test("↑ goes on into the rehearsal before, with the place kept", async ({ page }) => {
     await page.setViewportSize({ width: 1180, height: 600 })
     await toFirstRehearsal(page)
