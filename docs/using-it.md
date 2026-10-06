@@ -107,6 +107,13 @@ stopped short stands out before you read anything.
 Press **Record take**, or Space, to start recording. **Finish** ends the
 rehearsal.
 
+The top of the window says what there is so far, beside the rehearsal's
+name: how long its takes run, how many takes there are and of how many
+songs, how many are in the cloud, and how much of the disk the rehearsal
+uses. **Show in Finder** (**Show in Explorer** on Windows) opens its folder.
+In a narrow window only the length, the takes and the button fit. The player
+in History has the same header.
+
 Left of the button is **Next take**: the name the next take will get, in a
 field of its own, and under it, in two rows, the songs you could play
 instead: tonight's first, as the next go at each ("Pałyn 3"), then the
@@ -180,8 +187,23 @@ markers are saved with the take.
 
 ![A take open in the player, with part of it selected to repeat](screenshots/player.png)
 
-Click a take in the strip at the top to open it. All its tracks play together
-on one timeline, so they always stay in sync.
+The strip at the top has a tab for each song of the evening, in the order
+they were first played, and one for each take with no song. Under a song's
+name is its go that is open, or on another tab the go a click on it opens:
+the song's last go that evening. **Songs** at the start of the strip, or the
+open go's number, opens the tabs out into a column of goes each. Click a go
+in a column to open it. All a take's tracks play together on one timeline,
+so they always stay in sync.
+
+Another go at the same song opens at the same place: the same second, the
+same selection, Repeat on or off, the same zoom, and playing if the last
+one was. Loop the chorus of one go, then open the next to hear the same
+bars. The goes don't line up exactly, but close enough to find a chorus by
+ear. ↑ and ↓ go to the previous and next go at the song the same way.
+Another song's go opens from its start. Opened from a song's page in
+History, the song's column has every go at it from every rehearsal, the
+oldest first, under each rehearsal's day, and ↑ and ↓ go on from one
+rehearsal into the next.
 
 - **Play and pause** with the big button or Space. The arrow keys jump 10
   seconds back and forward, and Home goes back to the start. Click anywhere
@@ -200,9 +222,9 @@ on one timeline, so they always stay in sync.
 - **Mark a moment** with **Mark**, or the M key, while the take plays. Pick
   its label and type a short comment if you like. A new mark has the first
   label in the list (see [Marks and their labels](#marks-and-their-labels)).
-  A mark is drawn in its label's colour on the waveform, and the take's
-  button in the strip shows those colours too, so you can see which takes
-  were marked what without opening them. Click a marker to jump to it.
+  A mark is drawn in its label's colour on the waveform, and the go's line
+  in the strip shows those colours too, so you can see which takes were
+  marked what without opening them. Click a marker to jump to it.
 - **Loop a part:** drag across the tracks to select it, then turn on
   **Repeat**, next to the time, or the loop button beside the selection's
   times. Drag the edges on the ruler to adjust the selection. The cross
@@ -225,8 +247,9 @@ A few things about cropping:
   still shows the shorter length, and the markers stay where the crop moved
   them.
 
-Press Esc to close the take. If it is playing, it goes on playing in the
-list of takes; press Esc again to stop it. While a take is open or playing,
+Press Esc to close the take. With the strip's columns open, the first Esc
+closes them. If the take is playing, it goes on playing in the list of
+takes; press Esc again to stop it. While a take is open or playing,
 Space plays and pauses it instead of starting a new recording.
 
 ### Starring a take
@@ -238,7 +261,7 @@ the strip. Click it again to take it off. A song can have several starred
 takes, and a take with no song can have one too.
 
 A starred take is the green one, in the list of takes and in the evening
-strip, and its button in the strip carries a ★. A mark is about a moment,
+strip, and its line in the player's strip carries a ★. A mark is about a moment,
 whatever its label, and stays a dot on the take's bar. ▶ on a song, rather than
 on a take, plays its newest starred take. The star stays with its take when
 you rename it or crop it, and goes when you delete it.
@@ -500,15 +523,17 @@ While listening:
 |---|---|
 | ← and → | jump 10 seconds back or forward |
 | Home | go back to the start |
+| ↑ and ↓ | the previous or next go at the open song, at the same place |
 | M | add a marker |
 | R | turn Repeat on or off |
 | ? | show the keys |
 
-In History, ↑ and ↓ go through the rehearsals, or the songs in the Songs
-view.
+In History, with no take open, ↑ and ↓ go through the rehearsals, or the
+songs in the Songs view.
 
-Esc goes one step back. It closes a dialog first, then the open take, then a
-take playing in the list of takes, then the screen. On the rehearsal screen it finishes the rehearsal, and asks first
+Esc goes one step back. It closes a dialog first, then the strip's columns,
+then the open take, then a take playing in the list of takes, then the
+screen. On the rehearsal screen it finishes the rehearsal, and asks first
 if there are takes in it. After a take, it asks before discarding the take.
 Esc never stops a recording; press **Stop** for that.
 

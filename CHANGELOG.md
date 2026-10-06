@@ -14,6 +14,18 @@ opening.
   delete. Its ★ goes come first, and the marks from the last time it was
   played under them. A song's title on the setup screen, or in a
   rehearsal's overview, opens its page.
+- **Compare goes at the same bar.** The strip over the player has a tab for
+  each song of the evening, and a take with no song has its own; **Songs**
+  opens them out into columns of goes. Another go at the same song opens at
+  the same place, with the same loop, Repeat, zoom and playing, so the
+  chorus of Pałyn 2 and of Pałyn 4 are one click apart; ↑ and ↓ do it too.
+  Opened from a song's page, the song's column has every go at it, the
+  oldest first, from every rehearsal.
+- **The evening at the top of the window.** The player and the rehearsal
+  screen say how long the takes run, how many takes of how many songs, how
+  many are in the cloud and how much of the disk the rehearsal uses, with
+  **Show in Finder** (**Show in Explorer** on Windows) to open its folder,
+  in place of the folder's path.
 
 ## 0.10.0
 
