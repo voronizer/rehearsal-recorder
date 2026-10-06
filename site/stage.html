@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rehearsal Recorder</title>
+    <script>
+      // The app in a frame of the site. The site is light, so the app is too,
+      // from the first paint: these are what the app's own index.html reads.
+      try {
+        localStorage.setItem("rr-theme", "light")
+        localStorage.setItem("rr-scale", "1")
+      } catch (e) {}
+      document.documentElement.style.fontSize = "16px"
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/stage/main.tsx"></script>
+  </body>
+</html>
