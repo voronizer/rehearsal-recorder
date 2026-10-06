@@ -14,7 +14,22 @@ export const demoApi = () =>
 
 /** When the guitarist leans in during a take, in seconds from its start. */
 const CLIPS = [1.2, 2.2, 3.4]
-const CLIP_LENGTH = 0.2
+
+/**
+ * Whether the guitar is at full scale on a poll at `t`: each clip on the
+ * first poll at or after its time, and never on two polls running, since the
+ * app counts a clip where the level rises to the top. A window of time would
+ * be missed by polls that come late, on a busy machine.
+ */
+export function clipSchedule(times: number[]): (t: number) => boolean {
+  let next = 0
+  let last = false
+  return (t) => {
+    last = !last && next < times.length && t >= times[next]
+    if (last) next++
+    return last
+  }
+}
 
 export function installDemo(): void {
   // One classic script, as tests/docs_screenshots.py does it: the band sets
@@ -71,10 +86,14 @@ export function installDemo(): void {
   // The guitarist leans in three times during a take, so the story's "a tile
   // that clips turns red" has a red tile to point at.
   let takeStarted: number | null = null
+  let clipping = clipSchedule(CLIPS)
   const startTake = api.start_take
   api.start_take = async (...args) => {
     const res = await startTake(...args)
-    if (res?.ok) takeStarted = performance.now()
+    if (res?.ok) {
+      takeStarted = performance.now()
+      clipping = clipSchedule(CLIPS)
+    }
     return res
   }
   const stopTake = api.stop_take
@@ -86,9 +105,7 @@ export function installDemo(): void {
   api.get_levels = async (...args) => {
     const out = await levelsOf(...args)
     if (takeStarted === null || !Array.isArray(out?.Guitar)) return out
-    const t = (performance.now() - takeStarted) / 1000
-    if (CLIPS.some((c) => t >= c && t < c + CLIP_LENGTH))
-      out.Guitar = out.Guitar.map(() => 1)
+    if (clipping((performance.now() - takeStarted) / 1000)) out.Guitar = out.Guitar.map(() => 1)
     return out
   }
 }
