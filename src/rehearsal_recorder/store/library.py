@@ -14,7 +14,7 @@ see models.py for why.
 
 from pathlib import Path
 
-from sqlalchemy import func, select, update
+from sqlalchemy import Integer, cast, func, select, update
 from sqlalchemy.orm import selectinload, sessionmaker
 
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
@@ -331,6 +331,84 @@ class Library:
         with self._session() as db:
             rows = db.execute(select(Song.title, Song.last_go)).all()
         return {title: (last or 0) + 1 for title, last in rows}
+
+    def songs(self):
+        """
+        Every song with a go, for History's Songs view, and the takes with no
+        song as one more row: {"songs": [{"id", "title", "goes",
+        "rehearsals", "first_played", "last_played", "starred"}],
+        "not_named": {"takes", "rehearsals", "last_played"} or None}.
+
+        One query, grouped by song, and no folder looked at: a rehearsal on a
+        drive that is not plugged in is counted like any other. A song whose
+        every go was deleted has no takes to group, so it is not listed.
+        """
+        with self._session() as db:
+            rows = db.execute(
+                select(
+                    Take.song_id,
+                    Song.title,
+                    func.count(Take.id),
+                    func.count(Take.rehearsal_id.distinct()),
+                    func.min(Rehearsal.created_at),
+                    func.max(Rehearsal.created_at),
+                    func.sum(cast(Take.starred, Integer)),
+                )
+                .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+                .outerjoin(Song, Take.song_id == Song.id)
+                .group_by(Take.song_id)
+            ).all()
+        songs, not_named = [], None
+        for song_id, title, goes, rehearsals, first, last, starred in rows:
+            if song_id is None:
+                not_named = {"takes": goes, "rehearsals": rehearsals, "last_played": last}
+                continue
+            songs.append({"id": song_id, "title": title, "goes": goes,
+                          "rehearsals": rehearsals, "first_played": first,
+                          "last_played": last, "starred": starred or 0})
+        songs.sort(key=lambda s: (s["title"].casefold(), s["id"]))
+        return {"songs": songs, "not_named": not_named}
+
+    def goes_of(self, song_id):
+        """
+        A song's goes, from every rehearsal, for its page: {"id", "title",
+        "goes": [{"folder", "rehearsal", "created_at", "missing", "take"}]},
+        the newest rehearsal first and the order played within one. None for
+        an id no song has. `song_id` None is the takes with no song.
+
+        "missing" is the rehearsal's folder not being on disk; the go is
+        still listed, and History greys it out.
+        """
+        with self._session() as db:
+            song = None if song_id is None else db.get(Song, song_id)
+            if song_id is not None and song is None:
+                return None
+            title = None if song is None else song.title
+            takes = db.scalars(
+                select(Take)
+                .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+                .where(Take.song_id.is_(None) if song_id is None else Take.song_id == song_id)
+                .options(
+                    selectinload(Take.rehearsal), selectinload(Take.song),
+                    selectinload(Take.files), selectinload(Take.markers),
+                    selectinload(Take.cloud_copy),
+                )
+                .order_by(Rehearsal.created_at.desc(), Rehearsal.id, Take.take_number)
+            ).all()
+            goes = []
+            for take in takes:
+                folder = self._folder(take.rehearsal.folder)
+                goes.append({"folder": str(folder), "rehearsal": take.rehearsal.name,
+                             "created_at": take.rehearsal.created_at,
+                             "take": self._take_data(folder, take)})
+        cloud = self._cloud_dir()
+        there = {}
+        for go in goes:
+            self._take_out(go["take"], cloud)
+            if go["folder"] not in there:
+                there[go["folder"]] = Path(go["folder"]).is_dir()
+            go["missing"] = not there[go["folder"]]
+        return {"id": song_id, "title": title, "goes": goes}
 
     # ---------- rehearsals ----------
 

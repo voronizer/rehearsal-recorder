@@ -253,6 +253,28 @@ def _go_at(rehearsal, take):
             "created_at": rehearsal["created_at"], "take": take}
 
 
+def _plays_of(goes):
+    """
+    What the play button on a song's page plays, from its goes as
+    Library.goes_of gives them (newest rehearsal first, the order played
+    within one): the newest ★ go, or with none the last go at the newest
+    rehearsal. Only rehearsals on disk count, as for last_time's "plays";
+    with none, None. In _go_at's shape.
+    """
+    on_disk = [g for g in goes if not g["missing"]]
+    if not on_disk:
+        return None
+    pick = next((g for g in on_disk if g["take"].get("starred")), None)
+    if pick is not None:
+        # The newest rehearsal with a ★, and its later ★ go in the evening.
+        pick = [g for g in on_disk
+                if g["folder"] == pick["folder"] and g["take"].get("starred")][-1]
+    else:
+        pick = [g for g in on_disk if g["folder"] == on_disk[0]["folder"]][-1]
+    return {"folder": pick["folder"], "rehearsal": pick["rehearsal"],
+            "created_at": pick["created_at"], "take": pick["take"]}
+
+
 def _last_attempt(takes, song):
     """
     How long the latest go at `song` among `takes` ran, as {"song",
@@ -2057,6 +2079,23 @@ class Api:
             } for r in earlier],
             "count": len(rehearsals),
         }
+
+    def list_songs(self):
+        """Every song with a go, and the takes with no song as one row, for
+        History's Songs view (Library.songs). From the database alone."""
+        return self._lib.songs()
+
+    def get_song(self, song_id=None):
+        """
+        A song's page: {"ok", "id", "title", "plays", "goes"}, its goes from
+        every rehearsal as Library.goes_of gives them, and "plays" what its
+        play button plays (_plays_of). `song_id` None is the takes with no
+        song.
+        """
+        found = self._lib.goes_of(song_id)
+        if found is None:
+            return {"ok": False, "error": "Song not found"}
+        return {"ok": True, **found, "plays": _plays_of(found["goes"])}
 
     # ---------- renaming ----------
 
