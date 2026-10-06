@@ -50,6 +50,7 @@ import {
   inSongOrder,
   placed,
   rungsOf,
+  songRefFor,
   type PlacedTake,
   type SongRef,
 } from "@/lib/songs"
@@ -87,14 +88,17 @@ const SAID = "history"
  * the player needs it, and Escape brings the list back.
  *
  * `initialFolder` is the rehearsal to show first, when the setup screen sent
- * somebody here for one; otherwise it is the newest.
+ * somebody here for one; otherwise it is the newest. `initialSong` is a song
+ * to show first, by its title, in the Songs view; null is Not named.
  */
 export function HistoryScreen({
   onBack,
   initialFolder,
+  initialSong,
 }: {
   onBack: () => void
   initialFolder?: string
+  initialSong?: string | null
 }) {
   const [rehearsals, setRehearsals] = useState<RehearsalSummary[] | null>(null)
   const [current, setCurrent] = useState<string | null>(initialFolder ?? null)
@@ -195,8 +199,18 @@ export function HistoryScreen({
   // it has said, neither is drawn — the Rehearsals view flashing up before
   // the Songs view would be a screen that changes under the mouse.
   const [view, setView] = useState<HistoryView | null>(null)
+  // Read once, when History opens: what it was sent here for.
+  const sentFor = useRef(initialSong)
   useEffect(() => {
     void (async () => {
+      // Sent here for a song: the Songs view, at that song.
+      if (sentFor.current !== undefined) {
+        const index = await loadSongs()
+        setSong(songRefFor(index, sentFor.current))
+        setView("songs")
+        void api().save_history_view("songs")
+        return
+      }
       try {
         const saved = await api().get_settings()
         const first = saved.history_view === "songs" ? "songs" : "rehearsals"
@@ -344,6 +358,16 @@ export function HistoryScreen({
     songSection.current.scrollTop = songScroll.current
     songScroll.current = null
   }, [selected])
+
+  /** A song's page, from a rehearsal's overview. The rehearsal stays
+   *  chosen, for when the Rehearsals view is back. */
+  const openSong = async (title: string | null) => {
+    const index = await loadSongs()
+    const ref = songRefFor(index, title)
+    if (ref !== null) setSong(ref)
+    setView("songs")
+    void api().save_history_view("songs")
+  }
 
   /** A rehearsal from a song's page, in the Rehearsals view. */
   const openRehearsal = (folder: string) => {
@@ -838,6 +862,7 @@ export function HistoryScreen({
                     onStar={(take, starred) => void starTake(placed(opened.folder, take), starred)}
                     onShare={(take) => setTakeToShare(placed(opened.folder, take))}
                     onDelete={(take) => setTakeToDelete(placed(opened.folder, take))}
+                    onOpenSong={(title) => void openSong(title)}
                   />
                 ) : (
                   <EmptyState

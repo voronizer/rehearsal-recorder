@@ -1,4 +1,13 @@
-import { calls, expect, openApp, openHistory, test } from "./app.ts"
+import {
+  calls,
+  expect,
+  openApp,
+  openHistory,
+  recordTake,
+  startButton,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // History's Songs view, against the fake's library: Tuesday jam (Pałyn),
@@ -27,6 +36,9 @@ const rung = (page: Page, folder: string) => page.locator(`[data-rung="${folder}
 /** The same rung with the goes listed under it while it is open. */
 const rungGroup = (page: Page, folder: string) =>
   page.locator(`[data-rung-group="${folder}"]`)
+
+/** Last time, beside the setup. */
+const lastTime = (page: Page) => page.getByRole("complementary", { name: "Last time" })
 
 /** A song in the list, chosen. */
 async function chooseSong(page: Page, title: string) {
@@ -364,5 +376,77 @@ test.describe("Songs in History", () => {
       "songs",
       "rehearsals",
     ])
+  })
+
+  test("a song on the setup screen opens its page, and Escape goes back to setup", async ({
+    page,
+  }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    await lastTime(page).getByRole("button", { name: "Open the song Pałyn" }).click()
+    await expect(page.getByRole("navigation", { name: "Songs" })).toBeVisible()
+    await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(startButton(page)).toBeVisible()
+  })
+
+  test("a not-played song on the setup screen opens its page", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    await lastTime(page)
+      .getByRole("region", { name: "Not played last time" })
+      .getByRole("button", { name: "Open the song Daroha" })
+      .click()
+    await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
+  })
+
+  test("a song heading in a rehearsal's overview opens its page, and the rehearsal stays chosen", async ({
+    page,
+  }) => {
+    await openApp(page)
+    await openHistory(page, "First rehearsal")
+    await expect(page.getByRole("region", { name: "First rehearsal" })).toBeVisible()
+    await page
+      .getByRole("region", { name: "Rehearsal overview" })
+      .getByRole("button", { name: "Open the song Daroha" })
+      .click()
+    await expect(page.getByRole("navigation", { name: "Songs" })).toBeVisible()
+    await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
+    await page.getByRole("button", { name: "Rehearsals", exact: true }).click()
+    await expect(page.getByRole("region", { name: "First rehearsal" })).toBeVisible()
+  })
+
+  test("Not named opens its page, from the setup screen and from History", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    await lastTime(page).getByRole("button", { name: "Open Not named" }).click()
+    await expect(
+      page.getByRole("navigation", { name: "Songs" }).locator("[aria-current='true']")
+    ).toHaveAttribute("data-song", "Not named")
+    await expect(head(page)).toContainText("Takes nobody named. Rename one to give it a song.")
+
+    await page.keyboard.press("Escape")
+    // History comes back on the view used last, Songs.
+    await page.getByRole("button", { name: "History", exact: true }).click()
+    await page.getByRole("button", { name: "Rehearsals", exact: true }).click()
+    await page
+      .getByRole("navigation", { name: "Rehearsals" })
+      .getByRole("button", { name: /^Tuesday jam/ })
+      .click()
+    await page
+      .getByRole("region", { name: "Rehearsal overview" })
+      .getByRole("button", { name: "Open Not named" })
+      .click()
+    await expect(
+      page.getByRole("navigation", { name: "Songs" }).locator("[aria-current='true']")
+    ).toHaveAttribute("data-song", "Not named")
+    await expect(head(page)).toContainText("Takes nobody named. Rename one to give it a song.")
+  })
+
+  test("the name field's songs still only name the take", async ({ page }) => {
+    await openApp(page)
+    await startRehearsal(page)
+    await recordTake(page)
+    const pills = page.getByRole("group", { name: "Take name" }).locator("[data-song-choice]")
+    await pills.filter({ hasText: /^Ahoń 1$/ }).click()
+    await expect(page.locator("#take-name")).toHaveValue("Ahoń")
+    expect(await calls(page, "list_songs")).toHaveLength(0)
   })
 })

@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { labelCounts, labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import { TakeTitle } from "@/components/TakeTitle"
+import { SongName } from "@/components/SongName"
 import type { Song, Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
@@ -69,6 +70,7 @@ export function RehearsalOverview({
   onStar,
   onShare,
   onDelete,
+  onOpenSong,
 }: {
   takes: Take[]
   songs: Song[]
@@ -82,6 +84,8 @@ export function RehearsalOverview({
   onStar?: (take: Take, starred: boolean) => void
   onShare?: (take: Take) => void
   onDelete?: (take: Take) => void
+  /** Opens a song's page in History's Songs view; null is Not named's. */
+  onOpenSong?: (title: string | null) => void
 }) {
   const labels = useLabels()
   const byNumber = new Map(takes.map((t) => [t.take_number, t]))
@@ -146,7 +150,7 @@ export function RehearsalOverview({
                   isUnnamed ? "text-muted-foreground" : "font-semibold"
                 )}
               >
-                {row.name}
+                <SongName title={isUnnamed ? null : row.name} onOpen={onOpenSong} />
               </h3>
               <span className="text-xs text-muted-foreground">
                 {isUnnamed

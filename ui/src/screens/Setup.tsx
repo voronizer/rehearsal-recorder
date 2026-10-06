@@ -52,12 +52,15 @@ export function Setup({
   onStarted,
   onOpenHistory,
   onOpenRehearsal,
+  onOpenSong,
   onOpenSettings,
 }: {
   onStarted: () => void
   onOpenHistory: () => void
   /** History, with that rehearsal chosen. */
   onOpenRehearsal: (folder: string) => void
+  /** A song's page in History, from Last time; null is Not named's. */
+  onOpenSong: (title: string | null) => void
   onOpenSettings: () => void
 }) {
   const [devices, setDevices] = useState<Device[]>([])
@@ -777,6 +780,7 @@ export function Setup({
               onPlay={playLastTime}
               onOpen={onOpenRehearsal}
               onAll={onOpenHistory}
+              onOpenSong={onOpenSong}
             />
           </div>
         </div>

@@ -57,6 +57,14 @@ export function inSongOrder(index: SongIndex): SongRef[] {
   return rows
 }
 
+/** The row of the Songs view a song's title names, as a title shown
+ *  elsewhere is spelled — capitals aside — or Not named's for null. Nothing
+ *  when there is no such row. */
+export function songRefFor(index: SongIndex, title: string | null): SongRef | null {
+  if (title === null) return index.not_named ? "not_named" : null
+  return index.songs.find((s) => ALPHABETICAL.compare(s.title, title) === 0)?.id ?? null
+}
+
 /** One rehearsal's goes at a song: a rung of the ladder on its page. */
 export type Rung = {
   folder: string

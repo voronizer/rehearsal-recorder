@@ -33,7 +33,7 @@ type Screen =
   | { name: "rehearsal" }
   | { name: "recording"; takeNumber: number; takeName: string; takeGo: number | null }
   | { name: "review"; take: PendingTake }
-  | { name: "history"; folder?: string }
+  | { name: "history"; folder?: string; song?: string | null }
   | { name: "settings" }
   | { name: "finished"; folder: string; takeCount: number }
 
@@ -187,6 +187,7 @@ export function App() {
       }}
       onOpenHistory={() => setScreen({ name: "history" })}
       onOpenRehearsal={(folder) => setScreen({ name: "history", folder })}
+      onOpenSong={(song) => setScreen({ name: "history", song })}
       onOpenSettings={() => setScreen({ name: "settings" })}
     />
   )
@@ -197,6 +198,7 @@ export function App() {
     return (
       <HistoryScreen
         initialFolder={screen.folder}
+        initialSong={screen.song}
         onBack={() => setScreen({ name: "setup" })}
       />
     )

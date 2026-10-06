@@ -10,6 +10,7 @@ import {
   placed,
   rungsOf,
   songLine,
+  songRefFor,
 } from "@/lib/songs"
 
 const NOW = new Date("2026-10-06T12:00:00")
@@ -78,6 +79,23 @@ describe("inSongOrder", () => {
   })
   it("has no Not named row when every take has a song", () => {
     expect(inSongOrder({ songs: [song(1, "Dym")], not_named: null })).toEqual([1])
+  })
+})
+
+describe("songRefFor", () => {
+  const index: SongIndex = {
+    songs: [song(1, "Pałyn"), song(2, "Viasna")],
+    not_named: { takes: 1, rehearsals: 1, last_played: "2026-09-01T19:00:00" },
+  }
+  it("is the song of that title, capitals or not", () => {
+    expect(songRefFor(index, "viasna")).toBe(2)
+  })
+  it("is Not named for no title", () => {
+    expect(songRefFor(index, null)).toBe("not_named")
+  })
+  it("is nothing for a title with no goes", () => {
+    expect(songRefFor(index, "Dym")).toBeNull()
+    expect(songRefFor({ ...index, not_named: null }, null)).toBeNull()
   })
 })
 
