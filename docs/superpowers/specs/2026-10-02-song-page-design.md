@@ -127,8 +127,9 @@ can open". It stands on
   - Last time's song rows;
   - the not-played rows.
 
-  The song pills and the All songs panel under the name field do not: a
-  click there names a take, and must keep doing only that.
+  *Not named* there opens *Not named*'s page the same way (decided
+  2026-10-06). The song pills and the All songs panel under the name
+  field do not: a click there names a take, and must keep doing only that.
 - **O2.** Opened from the setup screen, History opens in its Songs view at
   that song, and Escape goes back to the setup screen. Opened from History's
   own Rehearsals view, it switches view and keeps the place in the other.
