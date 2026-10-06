@@ -55,7 +55,7 @@ test.describe("Playback volume in the header", () => {
     await openApp(page)
     await openHistory(page)
     await expect(headerVolume(page)).toBeVisible()
-    await page.getByRole("button", { name: "Take 1 Polyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     await expect(headerVolume(page)).toBeVisible()
   })
@@ -78,14 +78,14 @@ test.describe("Playback volume in the header", () => {
 
     await page.keyboard.press("Escape")
     await openHistory(page)
-    await page.getByRole("button", { name: "Take 1 Polyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
     await expect(page.getByRole("slider", { name: "Master volume" })).toHaveValue(String(kept))
   })
 
   test("is the same level as the master fader under a take, both ways", async ({ page }) => {
     await openApp(page)
     await openHistory(page)
-    await page.getByRole("button", { name: "Take 1 Polyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
     const fader = page.getByRole("slider", { name: "Master volume" })
     await expect(fader).toHaveValue("1")
 
@@ -108,7 +108,7 @@ test.describe("Playback volume in the header", () => {
   test("leaves Space with the screen once it is shut, whichever way", async ({ page }) => {
     await openApp(page)
     await openHistory(page)
-    await page.getByRole("button", { name: "Take 1 Polyn 1", exact: true }).click()
+    await page.getByRole("button", { name: "Take 1 Pałyn 1", exact: true }).click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     const panel = page.getByRole("dialog", { name: "Playback volume" })
 
@@ -146,12 +146,12 @@ test.describe("Playback volume in the header", () => {
     await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
     await openHistory(page)
     const overview = page.locator("[aria-label='Rehearsal overview']")
-    await overview.getByRole("button", { name: "Play Vesna" }).click()
-    await expect(page.getByRole("button", { name: "Pause Vesna" })).toBeVisible()
+    await overview.getByRole("button", { name: "Play Viasna" }).click()
+    await expect(page.getByRole("button", { name: "Pause Viasna" })).toBeVisible()
 
     await turn(page, await openVolume(page), 0.2)
     await expect.poll(() => lastArg(page, "player_set_master")).toBeLessThan(0.5)
-    await expect(page.getByRole("button", { name: "Pause Vesna" })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Pause Viasna" })).toBeVisible()
   })
 
   test("on the review screen too, with the take just recorded", async ({ page }) => {

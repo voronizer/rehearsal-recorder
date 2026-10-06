@@ -147,7 +147,7 @@ def main():
         page.get_by_role("button", name="Save take").click()
         page.wait_for_selector("text=Record take 5")
 
-        page.click("button[aria-label^='Take 2 Polyn 2']")
+        page.click("button[aria-label^='Take 2 Pałyn 2']")
         page.wait_for_selector("[aria-label='Take timeline']")
         page.wait_for_timeout(800)
         song = page.evaluate(

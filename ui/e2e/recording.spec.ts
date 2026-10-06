@@ -8,8 +8,8 @@ import type { Page } from "@playwright/test"
 // moment it happened. The page's clock is a fake one, so time can pass
 // without waiting for it.
 
-/** The second go at "Vesna", recording, both tracks at half scale. */
-async function secondGo(page: Page, song = "Vesna") {
+/** The second go at "Viasna", recording, both tracks at half scale. */
+async function secondGo(page: Page, song = "Viasna") {
   await page.clock.install()
   await openApp(page, { before: "window.__LEVELS__ = {'Guitar': [0.5], 'Vocals': [0.5]};" })
   await startRehearsal(page)
@@ -131,7 +131,7 @@ test("a second go at a song is measured against the first, under the take's name
   await secondGo(page)
   // The name, big over the clock, half its size and centred over it, so it
   // reads from as far away. The number goes up beside RECORDING.
-  await expect(takeName(page)).toHaveText("Vesna 2")
+  await expect(takeName(page)).toHaveText("Viasna 2")
   await expect(topLine(page)).toHaveText(/^Recording\s*Take 2$/)
   const shape = await page.evaluate(() => {
     const name = document.querySelector("h1")!

@@ -76,7 +76,7 @@ test("the tiles show the app's own pieces", async ({ page }) => {
   await expect(tiles.getByText("Tuesday jam")).toHaveCount(2)
   await expect(tiles.getByText("New songs")).toBeVisible()
   await expect(tiles.getByText("Soundcheck")).toBeVisible()
-  await expect(tiles.getByText("Polyn").first()).toBeVisible()
+  await expect(tiles.getByText("Pałyn").first()).toBeVisible()
   await expect(tiles.getByRole("img", { name: /in the cloud/ }).getByText("1 of 1")).toBeVisible()
 })
 

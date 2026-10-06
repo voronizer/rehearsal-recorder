@@ -109,7 +109,7 @@ rehearsal.
 
 Left of the button is **Next take**: the name the next take will get, in a
 field of its own, and under it, in two rows, the songs you could play
-instead: tonight's first, as the next go at each ("Polyn 3"), then the
+instead: tonight's first, as the next go at each ("Pałyn 3"), then the
 songs of earlier rehearsals, the latest first. **All songs…** at the end
 lists every song you have ever played, in alphabetical order. Typing in
 the field narrows the songs to the ones that match. When you move on to
@@ -165,8 +165,8 @@ A discarded take goes to the Trash. Pressing Esc also discards it, but asks
 first. If you are typing the name, the first Esc only leaves the name
 field.
 
-The name is filled in for you. After a take called "Polyn", the next one is
-called "Polyn 2". Under the name are the songs you have played: this
+The name is filled in for you. After a take called "Pałyn", the next one is
+called "Pałyn 2". Under the name are the songs you have played: this
 rehearsal's first, then the others, most recent first. Click one to name the
 take after it, then press Space to save. See [Names and songs](#names-and-songs).
 
@@ -270,14 +270,14 @@ stops following until the playhead comes back into view.
 ## Names and songs
 
 Each take is a go at a song. You name it with the song's title, and the app
-counts the goes: the number beside the name, "Polyn 1", "Polyn 2", goes on
-from one rehearsal to the next, so "Polyn 17" is one take wherever it was
+counts the goes: the number beside the name, "Pałyn 1", "Pałyn 2", goes on
+from one rehearsal to the next, so "Pałyn 17" is one take wherever it was
 played. Deleting a take does not free its number. A new take is another go at the song before it, so you only name a
 take when the band moves on to another song.
 
-Type the title only; the number is the app's. Typing "Polyn 5" names the
-take Polyn, at whatever go is next. A song is spelled one way everywhere:
-typing "polyn" gives "Polyn" when that song is there. A title can end in a
+Type the title only; the number is the app's. Typing "Pałyn 5" names the
+take Pałyn, at whatever go is next. A song is spelled one way everywhere:
+typing "pałyn" gives "Pałyn" when that song is there. A title can end in a
 number, like "Opus 5", as long as no song is called "Opus". A take nobody
 named is called by its number, "Take 4", is not counted as a song, and so is
 a recovered take you did not name.

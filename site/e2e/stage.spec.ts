@@ -18,7 +18,7 @@ async function clock(page: Page): Promise<number> {
   return m * 60 + s
 }
 
-test("the hero plays the bridge of Polyn 2 on repeat", async ({ page }) => {
+test("the hero plays the bridge of Pałyn 2 on repeat", async ({ page }) => {
   await page.goto("/stage.html#hero")
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("hero")
   await expect(page.getByRole("button", { name: "Pause" })).toBeVisible()
@@ -56,7 +56,7 @@ test("the story goes through its four steps", async ({ page }) => {
 
   await step(page, 1)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("record")
-  await expect(page.locator("h1")).toContainText(/Vesna\s*2/)
+  await expect(page.locator("h1")).toContainText(/Viasna\s*2/)
   await expect(page.getByText("clipped 3×")).toBeVisible({ timeout: 6_000 })
 
   await step(page, 2)

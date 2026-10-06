@@ -103,8 +103,8 @@ export function shots({ rehearsals, last }: PieceData): Record<(typeof TILES)[nu
     marks: {
       left: true,
       pieces: (
-        <Piece wide label="Four goes at the song Polyn, with their marks and comments">
-          <Goes last={last} song="Polyn" />
+        <Piece wide label="Four goes at the song Pałyn, with their marks and comments">
+          <Goes last={last} song="Pałyn" />
         </Piece>
       ),
     },

@@ -21,4 +21,4 @@ discard it.
 ## Find it later. {#history}
 
 Every rehearsal, song by song, with the marks you left. Months later you still
-know which Polyn was the one.
+know which Pałyn was the one.
