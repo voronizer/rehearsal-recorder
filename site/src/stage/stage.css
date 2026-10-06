@@ -1,0 +1,4 @@
+/* The app's own styles, as in the app; Tailwind is told where its classes
+   are, since this file is not in ui/. */
+@import "../../../ui/src/index.css";
+@source "../../../ui/src";

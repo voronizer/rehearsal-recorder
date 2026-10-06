@@ -5,6 +5,8 @@
 #   2. On GitHub: Releases -> Draft a new release -> new tag (v0.1.0) ->
 #      Publish.
 #   3. This runs. When it finishes the zips are attached to that release.
+#   4. Once both zips are attached, the `site` job below puts the website
+#      (reha.stream) up for that release: site.yml.
 #
 # Nothing is built from a Linux machine and hoped for: a Mac build is made on
 # a Mac and a Windows build on Windows, because that is the only way either
@@ -115,3 +117,20 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: RehearsalRecorder-${{ matrix.label }}.zip
+
+  # The website, for this release, once both of its zips are attached. Only
+  # for a published release, and not a pre-release: the page's buttons
+  # download the latest release, which a pre-release is not. A rehearsal by
+  # hand deploys nothing.
+  site:
+    needs: build
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    permissions:
+      contents: read
+    uses: ./.github/workflows/site.yml
+    with:
+      tag: ${{ github.event.release.tag_name }}
+    secrets:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
