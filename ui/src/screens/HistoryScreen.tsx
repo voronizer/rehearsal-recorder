@@ -46,8 +46,10 @@ import { useCloudSettled, useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 import {
   byPlace,
+  firstOpen,
   inSongOrder,
   placed,
+  rungsOf,
   type PlacedTake,
   type SongRef,
 } from "@/lib/songs"
@@ -165,9 +167,23 @@ export function HistoryScreen({
   // change to a take changes both.
   const [songsRead, setSongsRead] = useState(0)
   const songsShown = useRef(false)
+  const songsBefore = useRef<SongIndex | null>(null)
   const loadSongs = async () => {
     songsShown.current = true
     const index = await api().list_songs()
+    // A song chosen that is no longer there — its last go deleted, or
+    // renamed to another song — gives way to the one after it in the list,
+    // or before it when it was the last, as a rehearsal deleted does.
+    const was = songsBefore.current ? inSongOrder(songsBefore.current) : []
+    const now = inSongOrder(index)
+    songsBefore.current = index
+    setSong((s) => {
+      if (s === null || now.includes(s)) return s
+      const at = was.indexOf(s)
+      const after = was.slice(at + 1).find((r) => now.includes(r))
+      const before = was.slice(0, Math.max(at, 0)).reverse().find((r) => now.includes(r))
+      return after ?? before ?? null
+    })
     setSongIndex(index)
     setSongsRead((n) => n + 1)
     return index
@@ -221,6 +237,21 @@ export function HistoryScreen({
     songPage.id === (chosenSong === "not_named" ? null : chosenSong)
       ? songPage
       : null
+
+  // The rungs open on each song's page, for as long as History is open. A
+  // song not seen yet has its newest rehearsal on disk open.
+  const [openRungs, setOpenRungs] = useState<Map<SongRef, Set<string>>>(new Map())
+  const firstRung = pageShown ? firstOpen(rungsOf(pageShown.goes ?? [])) : null
+  const rungsOpen: ReadonlySet<string> =
+    (chosenSong !== null ? openRungs.get(chosenSong) : undefined) ??
+    new Set(firstRung ? [firstRung] : [])
+  const toggleRung = (folder: string) => {
+    if (chosenSong === null) return
+    const next = new Set(rungsOpen)
+    if (next.has(folder)) next.delete(folder)
+    else next.add(folder)
+    setOpenRungs((m) => new Map(m).set(chosenSong, next))
+  }
 
   const summary = rehearsals?.find((r) => r.folder === current) ?? null
   // Whether the chosen one can be read: not until the list says it is there.
@@ -314,6 +345,7 @@ export function HistoryScreen({
   // this rehearsal's finishes, its take says so without anyone reopening it.
   useCloudSettled((e) => {
     if (opened && e.folder === opened.folder) void reopen(opened.folder)
+    if (view === "songs" && pageShown?.goes?.some((g) => g.folder === e.folder)) void loadSongs()
   })
 
   // A take playing in the overview has the keys as much as an open one.
@@ -524,6 +556,7 @@ export function HistoryScreen({
         onOpenChange={(open) => !open && setTakeToShare(null)}
         onDone={() => {
           if (takeToShare) void reopen(takeToShare.folder)
+          if (songsShown.current) void loadSongs()
         }}
       />
     </>
@@ -650,7 +683,16 @@ export function HistoryScreen({
                         }
                       : null
                   }
+                  open={rungsOpen}
+                  onToggle={toggleRung}
                   onPlay={playInOverview}
+                  onOpen={select}
+                  onOpenAt={openAt}
+                  onRename={setTakeToRename}
+                  onStar={(take, starred) => void starTake(take, starred)}
+                  onShare={setTakeToShare}
+                  onDelete={setTakeToDelete}
+                  onOpenRehearsal={() => {}}
                 />
               )}
             </section>
