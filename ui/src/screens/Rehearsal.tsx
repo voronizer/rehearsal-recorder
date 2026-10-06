@@ -45,6 +45,8 @@ export function Rehearsal({
   const {
     selected,
     cued,
+    expanded,
+    setExpanded,
     select,
     uncue,
     reselect,
@@ -154,14 +156,15 @@ export function Rehearsal({
   // Escape below is what points Space at recording again.
   useSpacebar(inHand ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, inHand)
-  // Escape climbs the same ladder here as everywhere: the open take first,
-  // then a take playing in the overview, and then the rehearsal itself,
-  // because finishing is the only way up from this screen. It asks once
-  // there are takes in the rehearsal — ending it by accident would leave the
-  // rest of the evening in a second folder — but an empty one has nothing to
-  // protect, and Python takes its folder with it.
+  // Escape climbs the same ladder here as everywhere: the strip's columns,
+  // the open take, then a take playing in the overview, and then the
+  // rehearsal itself, because finishing is the only way up from this screen.
+  // It asks once there are takes in the rehearsal — ending it by accident
+  // would leave the rest of the evening in a second folder — but an empty
+  // one has nothing to protect, and Python takes its folder with it.
   useEscape(() => {
-    if (selected) select(null)
+    if (selected && expanded) setExpanded(false)
+    else if (selected) select(null)
     else if (cued) uncue()
     else if (session.takes.length === 0) void finish()
     else setFinishing(true)
@@ -362,7 +365,10 @@ export function Rehearsal({
         <TakeStrip
           takes={session.takes}
           selected={selected}
+          expanded={expanded}
+          onExpandedChange={setExpanded}
           onSelect={select}
+          onGo={select}
           onRename={setToRename}
           onShare={setToShare}
           onDelete={setToDelete}

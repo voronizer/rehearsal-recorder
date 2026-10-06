@@ -344,7 +344,9 @@ test.describe("Songs in History", () => {
     await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
-    await expect(page.locator("button[aria-current='true']")).toContainText("Pałyn 2")
+    await expect(
+      page.locator("[data-tab='Pałyn'][aria-current='true'] [data-tab-line]")
+    ).toHaveText(/^2/)
 
     await page.keyboard.press("Escape")
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
@@ -365,11 +367,14 @@ test.describe("Songs in History", () => {
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
     const strip = page.getByRole("group", { name: "Take strip" })
+    await expect(strip.locator("[data-tab='Daroha']")).toHaveAttribute("aria-current", "true")
+    await strip.getByRole("button", { name: "Songs", exact: true }).click()
     await expect(strip.getByRole("button", { name: /^Take 2 Daroha 2/ })).toBeVisible()
     await expect(strip.getByRole("button", { name: /Pałyn/ })).toHaveCount(0)
     expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
       { name: "Guitar", file: "/rec/older/d1.wav" },
     ])
+    await strip.getByRole("button", { name: "Songs", exact: true }).click()
     await page.keyboard.press("Escape")
     await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
   })

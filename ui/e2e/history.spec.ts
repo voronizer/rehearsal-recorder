@@ -198,7 +198,7 @@ async function openEvening(page: Page) {
   return overview
 }
 
-const current = (page: Page) => page.locator("button[aria-current='true']")
+const current = (page: Page) => page.locator("[data-tab][aria-current='true']")
 
 test("an open rehearsal with no take picked shows the evening", async ({ page }) => {
   // It used to be one lonely "Pick a take" under the strip. What was played,

@@ -33,6 +33,10 @@ export function useTakeStripPlayer<T extends Take = Take>(
   const sameTake = (a: T | null, b: T | null) => a !== null && b !== null && same(a, b)
   const [selected, setSelected] = useState<T | null>(null)
   const [cued, setCued] = useState<T | null>(null)
+  // Whether the strip's tabs are opened out into columns. They start shut
+  // each time a take is opened from outside the player, and stay as they
+  // are while goes are gone through inside it.
+  const [expanded, setExpanded] = useState(false)
   const loaded = selected ?? cued
   const player = useMultitrackPlayer(
     loaded?.tracks ?? null,
@@ -50,8 +54,10 @@ export function useTakeStripPlayer<T extends Take = Take>(
     if (take === null) {
       setCued(player.playing ? selected : null)
       setSelected(null)
+      setExpanded(false)
       return
     }
+    if (selected === null) setExpanded(false)
     setSelected(sameTake(take, loaded) ? loaded : take)
     setCued(null)
   }
@@ -60,6 +66,7 @@ export function useTakeStripPlayer<T extends Take = Take>(
   const close = () => {
     setSelected(null)
     setCued(null)
+    setExpanded(false)
   }
 
   /** The take playing in the overview is stopped and put away. */
@@ -134,6 +141,8 @@ export function useTakeStripPlayer<T extends Take = Take>(
   return {
     selected,
     cued,
+    expanded,
+    setExpanded,
     select,
     close,
     uncue,

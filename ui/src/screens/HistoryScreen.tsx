@@ -131,6 +131,8 @@ export function HistoryScreen({
   const {
     selected,
     cued,
+    expanded,
+    setExpanded,
     select,
     close,
     uncue,
@@ -435,10 +437,18 @@ export function HistoryScreen({
     player.pause()
     onBack()
   }
-  // Escape peels one layer at a time: the open take first, then a take
-  // playing in the overview, then history itself — the same ladder the back
-  // button climbs, one rung per press.
-  useEscape(() => (selected ? select(null) : cued ? uncue() : back()))
+  // Escape peels one layer at a time: the strip's columns, the open take,
+  // then a take playing in the overview, then history itself — the same
+  // ladder the back button climbs, one rung per press.
+  useEscape(() =>
+    selected && expanded
+      ? setExpanded(false)
+      : selected
+        ? select(null)
+        : cued
+          ? uncue()
+          : back()
+  )
 
   const deleteTake = async (take: PlacedTake) => {
     dismiss(SAID)
@@ -667,7 +677,11 @@ export function HistoryScreen({
           <TakeStrip
             takes={opened.takes}
             selected={selected}
+            folder={opened.folder}
+            expanded={expanded}
+            onExpandedChange={setExpanded}
             onSelect={(take) => select(here(take))}
+            onGo={(take) => select(here(take))}
             onRename={(take) => setTakeToRename(here(take))}
             onShare={(take) => setTakeToShare(here(take))}
             onDelete={(take) => setTakeToDelete(here(take))}

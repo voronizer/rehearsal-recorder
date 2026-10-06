@@ -241,10 +241,10 @@ test.describe("a saved take", () => {
   }) => {
     await savedTake(page)
     await expect(timeline(page)).toHaveCount(1)
-    await expect(page.locator("button[aria-label^='Take 2 Pałyn 2']")).toHaveAttribute(
-      "aria-current",
-      "true"
-    )
+    const strip = page.getByRole("group", { name: "Take strip" })
+    await expect(
+      strip.locator("[data-tab='Pałyn'][aria-current='true'] [data-tab-line]")
+    ).toContainText("2")
     // Same take, same marker, one player.
     await expect(page.getByText("this one is the take")).toHaveCount(1)
     // Space plays here, and says so; Record and Finish give their keys up.
@@ -294,6 +294,7 @@ test.describe("a saved take", () => {
   }) => {
     // A saved device index goes stale the moment the interface is unplugged.
     await savedTake(page)
+    await page.getByRole("button", { name: "Songs", exact: true }).click()
     await page.locator("button[aria-label^='Take 1 Pałyn']").click()
     await expect(page.locator("button[aria-label^='Take 1 Pałyn']")).toHaveAttribute(
       "aria-current",
@@ -576,6 +577,7 @@ test.describe("the mix", () => {
 
     // And another take opens at the volume the last one was left at.
     const left = await master.inputValue()
+    await page.getByRole("button", { name: "Songs", exact: true }).click()
     await page.locator("button[aria-label^='Take 1 Pałyn']").click()
     await expect(page.locator("button[aria-label^='Take 1 Pałyn']")).toHaveAttribute("aria-current", "true")
     await expect(master).toHaveValue(left)
@@ -856,6 +858,7 @@ test.describe("zooming the timeline", () => {
     await zoomAt(page, 0.98, -900)
     await expect(page.locator("[data-region-span]")).toHaveCount(0)
     // And picking another take starts from the whole of it.
+    await page.getByRole("button", { name: "Songs", exact: true }).click()
     await page.locator("button[aria-label^='Take 1 Pałyn']").click()
     await expect(page.locator("button[aria-label^='Take 1 Pałyn']")).toHaveAttribute("aria-current", "true")
     await expect(whole(page)).toHaveCount(0)
