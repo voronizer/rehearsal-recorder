@@ -408,9 +408,11 @@ export function HistoryScreen({
   useKey("ArrowDown", () => step(1), selected === null)
 
   // A copy to the cloud started here runs in the background now; when one of
-  // this rehearsal's finishes, its take says so without anyone reopening it.
+  // this rehearsal's finishes, its take says so without anyone reopening it —
+  // a go's from a song's page as much as the one chosen in Rehearsals.
   useCloudSettled((e) => {
     if (opened && e.folder === opened.folder) void reopen(opened.folder)
+    else if (goRehearsal && e.folder === goRehearsal.folder) void reopen(goRehearsal.folder)
     if (view === "songs" && pageShown?.goes?.some((g) => g.folder === e.folder)) void loadSongs()
   })
 

@@ -123,6 +123,15 @@ function withStars(r) {
   for (const t of r.takes) t.starred = stars.has(`${r.folder}#${t.take_number}`);
   return r;
 }
+// Takes in the cloud folder, in the rehearsals before this one, as
+// "folder#take_number". Python records a copy once it is made, not when it is
+// asked for, so a page sets window.__SHARED__ as its scripted copy finishes.
+function withCloud(r) {
+  for (const t of r.takes)
+    if ((window.__SHARED__ || []).includes(`${r.folder}#${t.take_number}`))
+      t.cloud = {mix:`/cloud/${r.name}/${t.name}.mp3`, mix_format:'mp3'};
+  return r;
+}
 
 // The library's labels, in their order, as list_labels gives them: the four
 // every library starts with (migration 0004), or a page's own
@@ -179,7 +188,7 @@ function pastRehearsal(folder) {
        tracks:[{name:'Guitar', file:'/rec/quiet/t1.wav'}]},
       {take_number:2, name:'Take 2', duration_sec:300, markers:[],
        tracks:[{name:'Guitar', file:'/rec/quiet/t2.wav'}]}];
-    return withStars({folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)});
+    return withCloud(withStars({folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)}));
   }
   if (folder === '/rec/older') {
     const takes = [
@@ -187,7 +196,7 @@ function pastRehearsal(folder) {
        tracks:[{name:'Guitar', file:'/rec/older/d1.wav'}]},
       {take_number:2, name:'Daroha 2', duration_sec:240, markers:[],
        tracks:[{name:'Guitar', file:'/rec/older/d2.wav'}]}];
-    return withStars({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)});
+    return withCloud(withStars({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)}));
   }
   // Its own path, distinct from the live session's /rec/g.wav — two takes
   // sharing a dummy path would let one's mocked length leak onto the other.
@@ -209,7 +218,7 @@ function pastRehearsal(folder) {
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Pałyn', duration_sec:oldLength, markers:[],
         tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
-  return withStars({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)});
+  return withCloud(withStars({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)}));
 }
 
 // The whole library, as History's Songs view reads it (api.list_songs and

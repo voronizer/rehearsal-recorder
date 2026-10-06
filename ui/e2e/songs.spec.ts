@@ -4,6 +4,7 @@ import {
   openApp,
   openHistory,
   recordTake,
+  setFake,
   startButton,
   startRehearsal,
   test,
@@ -362,6 +363,43 @@ test.describe("Songs in History", () => {
         return all.slice(renamed + 1).some((c) => c.name === "get_song" && c.args[0] === id)
       })
       .toBe(true)
+  })
+
+  test("a go open in the player from a song's page shows its cloud copy once it is made", async ({
+    page,
+  }) => {
+    await openApp(page, { before: "window.__ACTIVITY__ = [];" })
+    await openSongs(page)
+    await chooseSong(page, "Daroha")
+    // First rehearsal's, while Rehearsals has Tuesday jam chosen.
+    await rungGroup(page, "/rec/older").getByRole("button", { name: "Take 1 Daroha 1" }).click()
+    await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
+    await expect(page.getByRole("button", { name: "Copy Daroha 1 to the cloud" })).toBeVisible()
+    // Past the first answer about background work, which is old news.
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { __ACTIVITY_POLLS__?: number }).__ACTIVITY_POLLS__ ?? 0)
+      )
+      .toBeGreaterThanOrEqual(2)
+    // The copy, made in the background: Python records it as it finishes.
+    await setFake(page, "__SHARED__", ["/rec/older#1"])
+    await setFake(page, "__ACTIVITY__", [
+      {
+        id: 1,
+        kind: "cloud",
+        title: "“Daroha 1” → cloud",
+        folder: "/rec/older",
+        take_number: 1,
+        state: "done",
+        fraction: 1,
+        step: null,
+        error: null,
+        detail: null,
+        retry: null,
+        seen: false,
+      },
+    ])
+    await expect(page.getByRole("button", { name: "Cloud copies of Daroha 1" })).toBeVisible()
   })
 
   test("open the rehearsal in Rehearsals", async ({ page }) => {
