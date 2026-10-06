@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { FolderOpen, Library, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Shell, EmptyState } from "@/components/Shell"
@@ -99,6 +99,8 @@ export function HistoryScreen({
   const [rehearsals, setRehearsals] = useState<RehearsalSummary[] | null>(null)
   const [current, setCurrent] = useState<string | null>(initialFolder ?? null)
   const [opened, setOpened] = useState<RehearsalDetail | null>(null)
+  // The rehearsal of a go opened from a song's page, for the player.
+  const [goRehearsal, setGoRehearsal] = useState<RehearsalDetail | null>(null)
   // Something slow enough to click twice by mistake is running. So far that
   // is only a crop, which rewrites every track of the take.
   const [busy, setBusy] = useState(false)
@@ -285,7 +287,9 @@ export function HistoryScreen({
   }, [current])
   const reopen = async (folder: string) => {
     const fresh = await api().get_rehearsal(folder)
-    if (fresh.ok && folder === currentRef.current) setOpened(fresh)
+    if (!fresh.ok) return
+    if (folder === currentRef.current) setOpened(fresh)
+    setGoRehearsal((g) => (g && g.folder === folder ? fresh : g))
   }
 
   /** After a take of `folder` changed: its rehearsal read again, and the
@@ -316,6 +320,35 @@ export function HistoryScreen({
     close()
     setOpened(null)
     setCurrent(folder)
+  }
+
+  // A go opened from a song's page: the player has its rehearsal's takes,
+  // whichever rehearsal Rehearsals has chosen, and Escape comes back to the
+  // page scrolled where it was.
+  const songSection = useRef<HTMLElement | null>(null)
+  const songScroll = useRef<number | null>(null)
+  const openGo = async (take: PlacedTake, at?: number) => {
+    const scrolled = songSection.current?.scrollTop ?? 0
+    const res = await api().get_rehearsal(take.folder)
+    if (!res.ok) {
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the rehearsal" })
+      return
+    }
+    setGoRehearsal(res)
+    songScroll.current = scrolled
+    if (at === undefined) select(take)
+    else openAt(take, at)
+  }
+  useLayoutEffect(() => {
+    if (selected !== null || songScroll.current === null || !songSection.current) return
+    songSection.current.scrollTop = songScroll.current
+    songScroll.current = null
+  }, [selected])
+
+  /** A rehearsal from a song's page, in the Rehearsals view. */
+  const openRehearsal = (folder: string) => {
+    showView("rehearsals")
+    choose(folder)
   }
 
   /** Another song, from the list. What was playing stops, as it does for
@@ -563,7 +596,17 @@ export function HistoryScreen({
   )
 
   // A take open in the player: the whole window, the way it always had it.
-  if (opened && selected) {
+  // Its rehearsal is the one chosen in Rehearsals, or a go's from a song.
+  const inPlayer =
+    selected === null
+      ? null
+      : opened?.folder === selected.folder
+        ? opened
+        : goRehearsal?.folder === selected.folder
+          ? goRehearsal
+          : null
+  if (inPlayer && selected) {
+    const opened = inPlayer
     // What the strip and its buttons hand on is a take of this rehearsal.
     const here = (take: Take) => placed(opened.folder, take)
     return (
@@ -660,6 +703,7 @@ export function HistoryScreen({
 
           {view === "songs" ? (
             <section
+              ref={songSection}
               aria-label={pageShown ? (pageShown.title ?? "Not named") : "Song"}
               className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
             >
@@ -686,13 +730,13 @@ export function HistoryScreen({
                   open={rungsOpen}
                   onToggle={toggleRung}
                   onPlay={playInOverview}
-                  onOpen={select}
-                  onOpenAt={openAt}
+                  onOpen={(take) => void openGo(take)}
+                  onOpenAt={(take, at) => void openGo(take, at)}
                   onRename={setTakeToRename}
                   onStar={(take, starred) => void starTake(take, starred)}
                   onShare={setTakeToShare}
                   onDelete={setTakeToDelete}
-                  onOpenRehearsal={() => {}}
+                  onOpenRehearsal={openRehearsal}
                 />
               )}
             </section>

@@ -278,4 +278,91 @@ test.describe("Songs in History", () => {
     )
     await expect(rung(page, "/rec/older").locator("[data-starred]")).toHaveCount(1)
   })
+
+  test("a go opened from a song's page, and Escape back to the same song where it was", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1180, height: 600 })
+    await openApp(page, {
+      before: `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = ["Pałyn", "Pałyn", "Pałyn"];`,
+    })
+    await openSongs(page)
+    await chooseSong(page, "Pałyn")
+    await rung(page, "/rec/older").click()
+    await rung(page, "/rec/gone").click()
+    const songPage = page.getByRole("region", { name: "Pałyn", exact: true })
+    await songPage.evaluate((el) => (el.scrollTop = 200))
+    expect(await songPage.evaluate((el) => el.scrollTop)).toBe(200)
+
+    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
+    await expect(page.locator("button[aria-current='true']")).toContainText("Pałyn 2")
+
+    await page.keyboard.press("Escape")
+    await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    await expect(rung(page, "/rec/old")).toHaveAttribute("aria-expanded", "true")
+    await expect
+      .poll(() => songPage.evaluate((el) => el.scrollTop))
+      .toBeGreaterThanOrEqual(196)
+    expect(await songPage.evaluate((el) => el.scrollTop)).toBeLessThanOrEqual(204)
+  })
+
+  test("a go of another rehearsal than the one chosen opens with its own rehearsal's takes", async ({
+    page,
+  }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    await openSongs(page)
+    // Rehearsals has Tuesday jam chosen; Daroha's goes are First rehearsal's.
+    await rungGroup(page, "/rec/older").getByRole("button", { name: "Take 1 Daroha 1" }).click()
+    await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
+    const strip = page.getByRole("group", { name: "Take strip" })
+    await expect(strip.getByRole("button", { name: /^Take 2 Daroha 2/ })).toBeVisible()
+    await expect(strip.getByRole("button", { name: /Pałyn/ })).toHaveCount(0)
+    expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
+      { name: "Guitar", file: "/rec/older/d1.wav" },
+    ])
+    await page.keyboard.press("Escape")
+    await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
+  })
+
+  test("a rename in the player is read again on the song's page", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+    await openSongs(page)
+    await chooseSong(page, "Pałyn")
+    await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+    await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
+    const id = (await calls(page, "get_song")).at(-1)?.args[0]
+    await page.getByRole("button", { name: "Rename take Pałyn 2" }).click()
+    await page.getByRole("dialog").locator("input").fill("Viasna")
+    await page.getByRole("dialog").getByRole("button", { name: "Rename" }).click()
+    await expect.poll(async () => (await calls(page, "rename_take")).length).toBe(1)
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    await expect
+      .poll(async () => {
+        const all = await page.evaluate(
+          () => (window as unknown as { __CALLS__: { name: string; args: unknown[] }[] }).__CALLS__
+        )
+        const renamed = all.findIndex((c) => c.name === "rename_take")
+        return all.slice(renamed + 1).some((c) => c.name === "get_song" && c.args[0] === id)
+      })
+      .toBe(true)
+  })
+
+  test("open the rehearsal in Rehearsals", async ({ page }) => {
+    await openApp(page)
+    await openSongs(page)
+    await rungGroup(page, "/rec/older")
+      .getByRole("button", { name: "Open First rehearsal, Tue 25 Aug in Rehearsals" })
+      .click()
+    await expect(page.getByRole("navigation", { name: "Rehearsals" })).toBeVisible()
+    await expect(page.getByRole("region", { name: "First rehearsal" })).toBeVisible()
+    expect((await calls(page, "save_history_view")).map((c) => c.args[0])).toEqual([
+      "songs",
+      "rehearsals",
+    ])
+  })
 })
