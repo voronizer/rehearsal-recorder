@@ -76,7 +76,7 @@ DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 5', name:'take 5',
 # so a picture is not half empty.
 HEIGHT = {"unsaved-takes": 420, "setup": 910, "settings": 760, "marks": 420, "rehearsal": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
-          "history": 820}
+          "history": 820, "history-songs": 940}
 
 
 def shoot(page, name):
@@ -196,6 +196,11 @@ def main():
         page.wait_for_selector("text=New songs")
         page.wait_for_timeout(400)
         shoot(page, "history")
+        page.get_by_role("button", name="Songs", exact=True).click()
+        page.click('[data-song="Pałyn"]')
+        page.wait_for_selector('[data-rung][aria-expanded="true"]')
+        page.wait_for_timeout(400)
+        shoot(page, "history-songs")
         page.close()
 
         browser.close()

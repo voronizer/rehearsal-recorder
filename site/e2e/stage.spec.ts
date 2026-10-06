@@ -48,7 +48,7 @@ test("held, the hero stands still, and goes on when let go", async ({ page }) =>
   await expect.poll(() => clock(page), { timeout: 2_000 }).not.toBe(at)
 })
 
-test("the story goes through its four steps", async ({ page }) => {
+test("the story goes through its five steps", async ({ page }) => {
   await page.goto("/stage.html#story")
   await step(page, 0)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("setup")
@@ -66,21 +66,28 @@ test("the story goes through its four steps", async ({ page }) => {
   await step(page, 3)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("history")
   await expect(page.getByText("New songs").first()).toBeVisible()
+
+  await step(page, 4)
+  await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("song")
+  await expect(page.locator("[data-song-head] h2")).toHaveText("Pałyn")
+  await expect(
+    page.locator("[data-rung-group]").filter({ has: page.locator("[aria-expanded='true']") })
+  ).toContainText("Pałyn 7")
 })
 
 test("a jump from the first step to the last ends on the last", async ({ page }) => {
   await page.goto("/stage.html#story")
   await step(page, 0)
-  await step(page, 3)
-  await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("history")
+  await step(page, 4)
+  await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("song")
   await page.waitForTimeout(1_500)
-  expect(await scene(page)).toBe("history")
+  expect(await scene(page)).toBe("song")
 })
 
 test("a step back starts the story again", async ({ page }) => {
   await page.goto("/stage.html#story")
-  await step(page, 3)
-  await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("history")
+  await step(page, 4)
+  await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("song")
   await step(page, 0)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("setup")
   await expect(page.getByRole("button", { name: /Stop checking/ })).toBeVisible()

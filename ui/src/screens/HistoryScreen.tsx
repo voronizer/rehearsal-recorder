@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { FolderOpen, Library, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Shell, EmptyState } from "@/components/Shell"
 import { RehearsalList } from "@/components/RehearsalList"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
+import { HistorySwitch } from "@/components/HistorySwitch"
+import { SongList } from "@/components/SongList"
+import { SongPage } from "@/components/SongPage"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/ConfirmDialog"
@@ -15,9 +18,12 @@ import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
+  type HistoryView,
   type Marker,
   type RehearsalDetail,
   type RehearsalSummary,
+  type SongDetail,
+  type SongIndex,
   type Take,
 } from "@/lib/api"
 import {
@@ -38,6 +44,16 @@ import {
 } from "@/lib/deletion"
 import { useCloudSettled, useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
+import {
+  byPlace,
+  firstOpen,
+  inSongOrder,
+  placed,
+  rungsOf,
+  songRefFor,
+  type PlacedTake,
+  type SongRef,
+} from "@/lib/songs"
 
 /** "9 takes, 1.2 GB" — what deleting a rehearsal takes away and gives back. */
 function takesAndSize(r: RehearsalSummary | null): string {
@@ -72,31 +88,38 @@ const SAID = "history"
  * the player needs it, and Escape brings the list back.
  *
  * `initialFolder` is the rehearsal to show first, when the setup screen sent
- * somebody here for one; otherwise it is the newest.
+ * somebody here for one; otherwise it is the newest. `initialSong` is a song
+ * to show first, by its title, in the Songs view; null is Not named.
  */
 export function HistoryScreen({
   onBack,
   initialFolder,
+  initialSong,
 }: {
   onBack: () => void
   initialFolder?: string
+  initialSong?: string | null
 }) {
   const [rehearsals, setRehearsals] = useState<RehearsalSummary[] | null>(null)
   const [current, setCurrent] = useState<string | null>(initialFolder ?? null)
   const [opened, setOpened] = useState<RehearsalDetail | null>(null)
+  // The rehearsal of a go opened from a song's page, for the player.
+  const [goRehearsal, setGoRehearsal] = useState<RehearsalDetail | null>(null)
   // Something slow enough to click twice by mistake is running. So far that
   // is only a crop, which rewrites every track of the take.
   const [busy, setBusy] = useState(false)
-  const [takeToDelete, setTakeToDelete] = useState<Take | null>(null)
-  const [takeToRename, setTakeToRename] = useState<Take | null>(null)
+  // Every take here is held with its rehearsal's folder: what an action on
+  // it acts on is the take's rehearsal, not whichever is chosen in the list.
+  const [takeToDelete, setTakeToDelete] = useState<PlacedTake | null>(null)
+  const [takeToRename, setTakeToRename] = useState<PlacedTake | null>(null)
   const renameChoices = useSongChoices(
     takeToRename !== null,
-    opened?.folder,
+    takeToRename?.folder,
     takeToRename?.take_number
   )
-  const [takeToShare, setTakeToShare] = useState<Take | null>(null)
+  const [takeToShare, setTakeToShare] = useState<PlacedTake | null>(null)
   const [markerEdit, setMarkerEdit] = useState<{
-    take: Take
+    take: PlacedTake
     marker: Marker
   } | null>(null)
   const [rehearsalToDelete, setRehearsalToDelete] =
@@ -116,11 +139,48 @@ export function HistoryScreen({
     openAt,
     playInOverview,
     player,
-  } = useTakeStripPlayer()
+  } = useTakeStripPlayer<PlacedTake>(byPlace)
   const cropping = useRunning(
     "crop",
-    (e) => e.folder === opened?.folder && e.take_number === selected?.take_number
+    (e) => e.folder === selected?.folder && e.take_number === selected?.take_number
   )
+
+  // The Songs view: every song, the one chosen, and its page. A song chosen
+  // stays chosen across the switch, as the rehearsal chosen does.
+  const [songIndex, setSongIndex] = useState<SongIndex | null>(null)
+  const [song, setSong] = useState<SongRef | null>(null)
+  const [songPage, setSongPage] = useState<SongDetail | null>(null)
+  // Each reading of the list, counted: the page is read again with it, as a
+  // change to a take changes both.
+  const [songsRead, setSongsRead] = useState(0)
+  const songsShown = useRef(false)
+  const songsBefore = useRef<SongIndex | null>(null)
+  // As with a song's page, an answer that comes back after one asked for
+  // later is older news: it still names the songs for whoever asked, but is
+  // not shown.
+  const askedSongs = useRef(0)
+  const loadSongs = async () => {
+    songsShown.current = true
+    const ticket = ++askedSongs.current
+    const index = await api().list_songs()
+    if (ticket !== askedSongs.current) return index
+    // A song chosen that is no longer there — its last go deleted, or
+    // renamed to another song — gives way to the one after it in the list,
+    // or before it when it was the last, as a rehearsal deleted does.
+    const was = songsBefore.current ? inSongOrder(songsBefore.current) : []
+    const now = inSongOrder(index)
+    songsBefore.current = index
+    setSong((s) => {
+      if (s === null || now.includes(s)) return s
+      const at = was.indexOf(s)
+      const after = was.slice(at + 1).find((r) => now.includes(r))
+      const before = was.slice(0, Math.max(at, 0)).reverse().find((r) => now.includes(r))
+      return after ?? before ?? null
+    })
+    setSongIndex(index)
+    setSongsRead((n) => n + 1)
+    return index
+  }
 
   /**
    * Reads the list again, and keeps the chosen rehearsal chosen — or `want`,
@@ -134,12 +194,96 @@ export function HistoryScreen({
       const pick = want !== undefined ? want : c
       return pick && list.some((r) => r.folder === pick) ? pick : (list[0]?.folder ?? null)
     })
+    // A rehearsal renamed, deleted or found again changes the songs too.
+    if (songsShown.current) void loadSongs()
     return list
   }
 
   useEffect(() => {
     void refresh()
   }, [])
+
+  // Which view History is on: the one used last, as Python kept it. Until
+  // it has said, neither is drawn — the Rehearsals view flashing up before
+  // the Songs view would be a screen that changes under the mouse.
+  const [view, setView] = useState<HistoryView | null>(null)
+  // Read once, when History opens: what it was sent here for.
+  const sentFor = useRef(initialSong)
+  const sentForRehearsal = useRef(initialFolder !== undefined)
+  useEffect(() => {
+    void (async () => {
+      // Sent here for a rehearsal: the Rehearsals view, whatever was used
+      // last, or the rehearsal asked for would not be on screen.
+      if (sentForRehearsal.current) {
+        setView("rehearsals")
+        void api().save_history_view("rehearsals")
+        return
+      }
+      // Sent here for a song: the Songs view, at that song.
+      if (sentFor.current !== undefined) {
+        const index = await loadSongs()
+        setSong(songRefFor(index, sentFor.current))
+        setView("songs")
+        void api().save_history_view("songs")
+        return
+      }
+      try {
+        const saved = await api().get_settings()
+        const first = saved.history_view === "songs" ? "songs" : "rehearsals"
+        setView(first)
+        if (first === "songs") void loadSongs()
+      } catch {
+        setView("rehearsals")
+      }
+    })()
+  }, [])
+  const showView = (next: HistoryView) => {
+    setView(next)
+    void api().save_history_view(next)
+    if (next === "songs" && !songsShown.current) void loadSongs()
+  }
+
+  const songOrder = songIndex ? inSongOrder(songIndex) : []
+  const chosenSong: SongRef | null =
+    song !== null && songOrder.includes(song) ? song : (songOrder[0] ?? null)
+
+  // The chosen song's page. As with rehearsals, an answer about a song
+  // chosen before is dropped.
+  const askedSong = useRef(0)
+  useEffect(() => {
+    const ticket = ++askedSong.current
+    if (view !== "songs" || chosenSong === null) return
+    void (async () => {
+      const res = await api().get_song(chosenSong === "not_named" ? null : chosenSong)
+      if (ticket !== askedSong.current) return
+      if (!res.ok) {
+        notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the song" })
+        return
+      }
+      setSongPage(res)
+    })()
+  }, [view, chosenSong, songsRead])
+  const pageShown =
+    songPage !== null &&
+    chosenSong !== null &&
+    songPage.id === (chosenSong === "not_named" ? null : chosenSong)
+      ? songPage
+      : null
+
+  // The rungs open on each song's page, for as long as History is open. A
+  // song not seen yet has its newest rehearsal on disk open.
+  const [openRungs, setOpenRungs] = useState<Map<SongRef, Set<string>>>(new Map())
+  const firstRung = pageShown ? firstOpen(rungsOf(pageShown.goes ?? [])) : null
+  const rungsOpen: ReadonlySet<string> =
+    (chosenSong !== null ? openRungs.get(chosenSong) : undefined) ??
+    new Set(firstRung ? [firstRung] : [])
+  const toggleRung = (folder: string) => {
+    if (chosenSong === null) return
+    const next = new Set(rungsOpen)
+    if (next.has(folder)) next.delete(folder)
+    else next.add(folder)
+    setOpenRungs((m) => new Map(m).set(chosenSong, next))
+  }
 
   const summary = rehearsals?.find((r) => r.folder === current) ?? null
   // Whether the chosen one can be read: not until the list says it is there.
@@ -173,7 +317,16 @@ export function HistoryScreen({
   }, [current])
   const reopen = async (folder: string) => {
     const fresh = await api().get_rehearsal(folder)
-    if (fresh.ok && folder === currentRef.current) setOpened(fresh)
+    if (!fresh.ok) return
+    if (folder === currentRef.current) setOpened(fresh)
+    setGoRehearsal((g) => (g && g.folder === folder ? fresh : g))
+  }
+
+  /** After a take of `folder` changed: its rehearsal read again, and the
+   *  list, whose counts and strips may have moved. */
+  const changed = async (folder: string) => {
+    await reopen(folder)
+    void refresh()
   }
 
   // The chosen one in the list stays in view as ↑ and ↓ go past the edge.
@@ -182,6 +335,12 @@ export function HistoryScreen({
     const item = document.querySelector(`[data-rehearsal="${CSS.escape(current)}"]`)
     item?.scrollIntoView({ block: "nearest" })
   }, [current])
+
+  useEffect(() => {
+    if (view !== "songs" || chosenSong === null) return
+    const item = document.querySelector(`[data-song-ref="${chosenSong}"]`)
+    item?.scrollIntoView({ block: "nearest" })
+  }, [view, chosenSong])
 
   /** Another rehearsal, from the list. What was playing stops: it belongs
    *  to the one being left. */
@@ -192,7 +351,60 @@ export function HistoryScreen({
     setCurrent(folder)
   }
 
+  // A go opened from a song's page: the player has its rehearsal's takes,
+  // whichever rehearsal Rehearsals has chosen, and Escape comes back to the
+  // page scrolled where it was.
+  const songSection = useRef<HTMLElement | null>(null)
+  const songScroll = useRef<number | null>(null)
+  const openGo = async (take: PlacedTake, at?: number) => {
+    const scrolled = songSection.current?.scrollTop ?? 0
+    const res = await api().get_rehearsal(take.folder)
+    if (!res.ok) {
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the rehearsal" })
+      return
+    }
+    setGoRehearsal(res)
+    songScroll.current = scrolled
+    if (at === undefined) select(take)
+    else openAt(take, at)
+  }
+  useLayoutEffect(() => {
+    if (selected !== null || songScroll.current === null || !songSection.current) return
+    songSection.current.scrollTop = songScroll.current
+    songScroll.current = null
+  }, [selected])
+
+  /** A song's page, from a rehearsal's overview. The rehearsal stays
+   *  chosen, for when the Rehearsals view is back. */
+  const openSong = async (title: string | null) => {
+    const index = await loadSongs()
+    const ref = songRefFor(index, title)
+    if (ref !== null) setSong(ref)
+    setView("songs")
+    void api().save_history_view("songs")
+  }
+
+  /** A rehearsal from a song's page, in the Rehearsals view. */
+  const openRehearsal = (folder: string) => {
+    showView("rehearsals")
+    choose(folder)
+  }
+
+  /** Another song, from the list. What was playing stops, as it does for
+   *  another rehearsal. */
+  const chooseSong = (ref: SongRef) => {
+    if (ref === chosenSong) return
+    close()
+    setSong(ref)
+  }
+
   const step = (delta: number) => {
+    if (view === "songs") {
+      if (!songOrder.length) return
+      const at = chosenSong === null ? 0 : songOrder.indexOf(chosenSong)
+      chooseSong(songOrder[Math.min(songOrder.length - 1, Math.max(0, at + delta))])
+      return
+    }
     if (!rehearsals?.length) return
     const at = rehearsals.findIndex((r) => r.folder === current)
     const next = rehearsals[Math.min(rehearsals.length - 1, Math.max(0, at + delta))]
@@ -202,9 +414,12 @@ export function HistoryScreen({
   useKey("ArrowDown", () => step(1), selected === null)
 
   // A copy to the cloud started here runs in the background now; when one of
-  // this rehearsal's finishes, its take says so without anyone reopening it.
+  // this rehearsal's finishes, its take says so without anyone reopening it —
+  // a go's from a song's page as much as the one chosen in Rehearsals.
   useCloudSettled((e) => {
     if (opened && e.folder === opened.folder) void reopen(opened.folder)
+    else if (goRehearsal && e.folder === goRehearsal.folder) void reopen(goRehearsal.folder)
+    if (view === "songs" && pageShown?.goes?.some((g) => g.folder === e.folder)) void loadSongs()
   })
 
   // A take playing in the overview has the keys as much as an open one.
@@ -225,24 +440,21 @@ export function HistoryScreen({
   // button climbs, one rung per press.
   useEscape(() => (selected ? select(null) : cued ? uncue() : back()))
 
-  const deleteTake = async (take: Take) => {
-    if (!opened) return
+  const deleteTake = async (take: PlacedTake) => {
     dismiss(SAID)
     player.pause()
-    const res = await api().delete_take(opened.folder, take.take_number)
+    const res = await api().delete_take(take.folder, take.take_number)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not delete the take" })
       return
     }
-    forget(take.take_number)
-    await reopen(opened.folder)
-    void refresh()
+    forget(take)
+    await changed(take.folder)
   }
 
-  const renameTake = async (take: Take, name: string) => {
-    if (!opened) return
+  const renameTake = async (take: PlacedTake, name: string) => {
     dismiss(SAID)
-    const res = await api().rename_take(opened.folder, take.take_number, name)
+    const res = await api().rename_take(take.folder, take.take_number, name)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not rename the take" })
       return
@@ -251,29 +463,27 @@ export function HistoryScreen({
     // paths. That is a new `tracks` identity, so the open effect underneath
     // tears down and reopens from zero — the take stays selected and on
     // screen, but playback and the A–B region do not survive this.
-    if (res.take) reselect(res.take)
-    await reopen(opened.folder)
-    void refresh()
+    if (res.take) reselect(placed(take.folder, res.take))
+    await changed(take.folder)
   }
 
   // Python let go of the files before rewriting them, so the take has to be
   // opened again; the fresh `tracks` array is what tells the player that.
   // Rewriting eight long tracks takes real seconds, so the screen is busy
   // while it runs: a second Crop would cut the take the first one made.
-  const cropTake = async (take: Take, from: number, to: number) => {
-    if (!opened || busy) return
+  const cropTake = async (take: PlacedTake, from: number, to: number) => {
+    if (busy) return
     setBusy(true)
     dismiss(SAID)
     player.pause()
-    const res = await watching(api().crop_take(opened.folder, take.take_number, from, to))
+    const res = await watching(api().crop_take(take.folder, take.take_number, from, to))
     setBusy(false)
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not crop the take" })
       return
     }
-    if (res.take) reselect(res.take)
-    await reopen(opened.folder)
-    void refresh()
+    if (res.take) reselect(placed(take.folder, res.take))
+    await changed(take.folder)
     // The crop itself went through — only the sweep of the original is what
     // failed — so this adds to the success path rather than standing in for it.
     if (res.error) {
@@ -295,9 +505,10 @@ export function HistoryScreen({
       return
     }
     const held = selected ?? cued
-    if (held && res.takes) {
+    if (held && held.folder === folder && res.takes) {
       const fresh = res.takes.find((t) => t.take_number === held.take_number)
-      if (fresh) reselect(fresh)
+      // The take's rehearsal is now where the rename moved it.
+      if (fresh) reselect(placed(res.folder ?? folder, fresh), held)
     }
     await refresh(folder === current ? (res.folder ?? folder) : undefined)
   }
@@ -351,41 +562,36 @@ export function HistoryScreen({
 
   // Dropping a marker opens its note straight away: the thought about what
   // just went wrong lasts about five seconds. Playback carries on.
-  const addMarker = async (take: Take, seconds: number) => {
-    if (!opened) return
-    const res = await api().add_take_marker(opened.folder, take.take_number, seconds)
-    await reopen(opened.folder)
+  const addMarker = async (take: PlacedTake, seconds: number) => {
+    const res = await api().add_take_marker(take.folder, take.take_number, seconds)
+    await reopen(take.folder)
+    // A note may never be written: the mark is on the song's page anyway.
+    if (songsShown.current) void loadSongs()
     const fresh = res.markers?.find((m) => Math.abs(m.at - seconds) < 0.02)
     setMarkerEdit(fresh ? { take, marker: fresh } : null)
   }
 
   const saveMarker = async (
-    take: Take,
+    take: PlacedTake,
     at: number,
     note: string,
     labelId: number
   ) => {
-    if (!opened) return
-    await api().update_take_marker(opened.folder, take.take_number, at, note, labelId)
-    await reopen(opened.folder)
-    void refresh()
+    await api().update_take_marker(take.folder, take.take_number, at, note, labelId)
+    await changed(take.folder)
   }
 
-  const starTake = async (take: Take, starred: boolean) => {
-    if (!opened) return
-    await api().set_take_star(opened.folder, take.take_number, starred)
-    await reopen(opened.folder)
-    void refresh()
+  const starTake = async (take: PlacedTake, starred: boolean) => {
+    await api().set_take_star(take.folder, take.take_number, starred)
+    await changed(take.folder)
   }
 
-  const removeMarker = async (take: Take, seconds: number) => {
-    if (!opened) return
-    await api().remove_take_marker(opened.folder, take.take_number, seconds)
-    await reopen(opened.folder)
-    void refresh()
+  const removeMarker = async (take: PlacedTake, seconds: number) => {
+    await api().remove_take_marker(take.folder, take.take_number, seconds)
+    await changed(take.folder)
   }
 
-  const takeDialogs = opened && (
+  const takeDialogs = (
     <>
       <ConfirmDialog
         open={takeToDelete !== null}
@@ -422,15 +628,30 @@ export function HistoryScreen({
 
       <ShareDialog
         take={takeToShare}
-        folder={opened.folder}
+        folder={takeToShare?.folder ?? ""}
         onOpenChange={(open) => !open && setTakeToShare(null)}
-        onDone={() => void reopen(opened.folder)}
+        onDone={() => {
+          if (takeToShare) void reopen(takeToShare.folder)
+          if (songsShown.current) void loadSongs()
+        }}
       />
     </>
   )
 
   // A take open in the player: the whole window, the way it always had it.
-  if (opened && selected) {
+  // Its rehearsal is the one chosen in Rehearsals, or a go's from a song.
+  const inPlayer =
+    selected === null
+      ? null
+      : opened?.folder === selected.folder
+        ? opened
+        : goRehearsal?.folder === selected.folder
+          ? goRehearsal
+          : null
+  if (inPlayer && selected) {
+    const opened = inPlayer
+    // What the strip and its buttons hand on is a take of this rehearsal.
+    const here = (take: Take) => placed(opened.folder, take)
     return (
       <Shell
         playback
@@ -446,11 +667,11 @@ export function HistoryScreen({
           <TakeStrip
             takes={opened.takes}
             selected={selected}
-            onSelect={select}
-            onRename={setTakeToRename}
-            onShare={setTakeToShare}
-            onDelete={setTakeToDelete}
-            onStar={starTake}
+            onSelect={(take) => select(here(take))}
+            onRename={(take) => setTakeToRename(here(take))}
+            onShare={(take) => setTakeToShare(here(take))}
+            onDelete={(take) => setTakeToDelete(here(take))}
+            onStar={(take, starred) => void starTake(here(take), starred)}
             emptyHint="Nothing was kept from this rehearsal, or every take since got deleted."
           />
           <TakePlayer
@@ -471,6 +692,9 @@ export function HistoryScreen({
   }
 
   const empty = rehearsals?.length === 0
+  // Neither view is drawn until History knows which it is on.
+  const reading = rehearsals === null || view === null
+  const noSongs = songIndex !== null && songOrder.length === 0
 
   return (
     <Shell
@@ -485,11 +709,9 @@ export function HistoryScreen({
           </span>
         ) : undefined
       }
-      className={empty || rehearsals === null ? undefined : "flex overflow-hidden p-0"}
+      className={empty || reading ? undefined : "flex overflow-hidden p-0"}
     >
-      {rehearsals === null && (
-        <p className="text-sm text-muted-foreground">Reading the folder…</p>
-      )}
+      {reading && <p className="text-sm text-muted-foreground">Reading the folder…</p>}
 
       {empty && (
         <div className="mx-auto max-w-3xl">
@@ -501,13 +723,20 @@ export function HistoryScreen({
         </div>
       )}
 
-      {rehearsals && rehearsals.length > 0 && (
+      {rehearsals && rehearsals.length > 0 && view !== null && (
         <>
           <nav
-            aria-label="Rehearsals"
+            aria-label={view === "songs" ? "Songs" : "Rehearsals"}
             className="flex w-64 shrink-0 flex-col gap-3 overflow-y-auto border-r px-3 py-4 xl:w-80"
           >
-            <RehearsalList rehearsals={rehearsals} current={current} onChoose={choose} />
+            <HistorySwitch view={view} onChange={showView} />
+            {view === "songs" ? (
+              songIndex && (
+                <SongList index={songIndex} current={chosenSong} onChoose={chooseSong} />
+              )
+            ) : (
+              <RehearsalList rehearsals={rehearsals} current={current} onChoose={choose} />
+            )}
             <p className="mt-auto flex items-center gap-1.5 px-3 pt-2 text-xs text-muted-foreground">
               <kbd className="rounded border border-current/30 px-1 font-mono text-[10px]">↑</kbd>
               <kbd className="rounded border border-current/30 px-1 font-mono text-[10px]">↓</kbd>
@@ -515,108 +744,154 @@ export function HistoryScreen({
             </p>
           </nav>
 
-          <section
-            aria-label={summary?.name ?? "Rehearsal"}
-            className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
-          >
-            {summary && (
-              <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1">
-                    <h2 className="truncate text-xl leading-tight font-semibold">
-                      {summary.name}
-                    </h2>
-                    {!summary.missing && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Rename rehearsal ${summary.name}`}
-                        onClick={() => setRehearsalToRename(summary)}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        <Pencil />
-                      </Button>
-                    )}
-                  </div>
-                  <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                    <span className="shrink-0">
-                      {formatDay(summary.created_at).split(" ")[0]}{" "}
-                      {formatDateHuman(summary.created_at)}
-                    </span>
-                    <span aria-hidden>·</span>
-                    <FolderOpen className="size-3.5 shrink-0" />
-                    <span className="truncate font-mono">{summary.folder}</span>
-                  </div>
-                </div>
-                {!summary.missing && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Delete rehearsal ${summary.name}`}
-                    onClick={() => setRehearsalToDelete(summary)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 />
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {summary?.missing && (
-              <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed px-5 py-4">
-                <p className="text-sm">
-                  <span className="font-medium">Not found on disk.</span>{" "}
-                  <span className="text-muted-foreground">
-                    Its folder was deleted, renamed outside the app, or is on a
-                    drive that is not plugged in. Recorded {formatWhen(summary.created_at)}.
-                  </span>
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => void locateRehearsal(summary)}>
-                    Locate folder…
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setRehearsalToForget(summary)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    Remove from history
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {readable && opened?.folder === current && (
-              opened.takes.length > 0 ? (
-                <RehearsalOverview
-                  takes={opened.takes}
-                  songs={opened.songs ?? []}
+          {view === "songs" ? (
+            <section
+              ref={songSection}
+              aria-label={pageShown ? (pageShown.title ?? "Not named") : "Song"}
+              className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
+            >
+              {noSongs && (
+                <EmptyState
+                  title="No songs yet"
+                  hint="A take named after a song shows up here."
+                />
+              )}
+              {pageShown && (
+                <SongPage
+                  page={pageShown}
                   playback={
-                    cued && {
-                      take: cued.take_number,
-                      playing: player.playing,
-                      loading: player.loading,
-                      position: player.position,
-                      duration: player.duration,
-                    }
+                    cued
+                      ? {
+                          take: cued,
+                          playing: player.playing,
+                          loading: player.loading,
+                          position: player.position,
+                          duration: player.duration,
+                        }
+                      : null
                   }
+                  open={rungsOpen}
+                  onToggle={toggleRung}
                   onPlay={playInOverview}
-                  onOpen={select}
-                  onOpenAt={openAt}
+                  onOpen={(take) => void openGo(take)}
+                  onOpenAt={(take, at) => void openGo(take, at)}
                   onRename={setTakeToRename}
-                  onStar={starTake}
+                  onStar={(take, starred) => void starTake(take, starred)}
                   onShare={setTakeToShare}
                   onDelete={setTakeToDelete}
+                  onOpenRehearsal={openRehearsal}
                 />
-              ) : (
-                <EmptyState
-                  title="No takes"
-                  hint="Nothing was kept from this rehearsal, or every take since got deleted."
-                />
-              )
-            )}
-          </section>
+              )}
+            </section>
+          ) : (
+            <section
+              aria-label={summary?.name ?? "Rehearsal"}
+              className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
+            >
+              {summary && (
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1">
+                      <h2 className="truncate text-xl leading-tight font-semibold">
+                        {summary.name}
+                      </h2>
+                      {!summary.missing && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Rename rehearsal ${summary.name}`}
+                          onClick={() => setRehearsalToRename(summary)}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          <Pencil />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                      <span className="shrink-0">
+                        {formatDay(summary.created_at).split(" ")[0]}{" "}
+                        {formatDateHuman(summary.created_at)}
+                      </span>
+                      <span aria-hidden>·</span>
+                      <FolderOpen className="size-3.5 shrink-0" />
+                      <span className="truncate font-mono">{summary.folder}</span>
+                    </div>
+                  </div>
+                  {!summary.missing && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Delete rehearsal ${summary.name}`}
+                      onClick={() => setRehearsalToDelete(summary)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 />
+                    </Button>
+                  )}
+                </div>
+              )}
+  
+              {summary?.missing && (
+                <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed px-5 py-4">
+                  <p className="text-sm">
+                    <span className="font-medium">Not found on disk.</span>{" "}
+                    <span className="text-muted-foreground">
+                      Its folder was deleted, renamed outside the app, or is on a
+                      drive that is not plugged in. Recorded {formatWhen(summary.created_at)}.
+                    </span>
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => void locateRehearsal(summary)}>
+                      Locate folder…
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setRehearsalToForget(summary)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      Remove from history
+                    </Button>
+                  </div>
+                </div>
+              )}
+  
+              {readable && opened?.folder === current && (
+                opened.takes.length > 0 ? (
+                  <RehearsalOverview
+                    takes={opened.takes}
+                    songs={opened.songs ?? []}
+                    playback={
+                      // Only a take of this rehearsal plays here: take 1 of
+                      // another is not this one's take 1.
+                      cued && cued.folder === opened.folder
+                        ? {
+                            take: cued.take_number,
+                            playing: player.playing,
+                            loading: player.loading,
+                            position: player.position,
+                            duration: player.duration,
+                          }
+                        : null
+                    }
+                    onPlay={(take) => playInOverview(placed(opened.folder, take))}
+                    onOpen={(take) => select(placed(opened.folder, take))}
+                    onOpenAt={(take, at) => openAt(placed(opened.folder, take), at)}
+                    onRename={(take) => setTakeToRename(placed(opened.folder, take))}
+                    onStar={(take, starred) => void starTake(placed(opened.folder, take), starred)}
+                    onShare={(take) => setTakeToShare(placed(opened.folder, take))}
+                    onDelete={(take) => setTakeToDelete(placed(opened.folder, take))}
+                    onOpenSong={(title) => void openSong(title)}
+                  />
+                ) : (
+                  <EmptyState
+                    title="No takes"
+                    hint="Nothing was kept from this rehearsal, or every take since got deleted."
+                  />
+                )
+              )}
+            </section>
+          )}
         </>
       )}
 

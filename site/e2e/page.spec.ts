@@ -83,7 +83,7 @@ test("the tiles show the app's own pieces", async ({ page }) => {
 test("the story follows the scroll, and the rail goes back", async ({ page }) => {
   await page.goto("/")
   const steps = page.locator(".step")
-  const scenes = ["setup", "record", "review", "history"]
+  const scenes = ["setup", "record", "review", "history", "song"]
   for (let i = 0; i < scenes.length; i++) {
     await steps.nth(i).evaluate((el) => el.scrollIntoView({ block: "center" }))
     await expect.poll(() => sceneIn(page, "story"), { timeout: 20_000 }).toBe(scenes[i])

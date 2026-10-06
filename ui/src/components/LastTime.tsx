@@ -1,6 +1,7 @@
 import { ChevronRight, History, Loader2, Pause, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EveningStrip } from "@/components/EveningStrip"
+import { SongName } from "@/components/SongName"
 import { cn } from "@/lib/utils"
 import {
   daysAgo,
@@ -47,6 +48,7 @@ export function LastTime({
   onPlay,
   onOpen,
   onAll,
+  onOpenSong,
 }: {
   data: LastTimeData
   playback: LastTimePlayback | null
@@ -55,6 +57,8 @@ export function LastTime({
   onPlay: (take: Take) => void
   onOpen: (folder: string) => void
   onAll: () => void
+  /** Opens a song's page in History's Songs view; null is Not named's. */
+  onOpenSong?: (title: string | null) => void
 }) {
   const last = data.last
   if (!last) return null
@@ -124,6 +128,7 @@ export function LastTime({
               longest={longest}
               playback={playback}
               onPlay={onPlay}
+              onOpenSong={onOpenSong}
             />
           ))}
           {unnamed.length > 0 && (
@@ -136,6 +141,7 @@ export function LastTime({
               longest={longest}
               playback={playback}
               onPlay={onPlay}
+              onOpenSong={onOpenSong}
             />
           )}
         </div>
@@ -170,7 +176,11 @@ export function LastTime({
                   onPlay={onPlay}
                 />
                 <div className="flex min-w-0 items-baseline gap-2">
-                  <span className="truncate text-[13px] font-semibold">{s.name}</span>
+                  <SongName
+                    title={s.name}
+                    onOpen={onOpenSong}
+                    className="truncate text-[13px] font-semibold"
+                  />
                   <span className="tnum truncate text-xs text-muted-foreground">
                     {here
                       ? `${formatMMSS(here.position)} / ${formatMMSS(target.duration_sec)}`
@@ -256,6 +266,7 @@ function SongRow({
   unnamed = false,
   playback,
   onPlay,
+  onOpenSong,
 }: {
   name: string
   takes: Take[]
@@ -268,6 +279,7 @@ function SongRow({
   unnamed?: boolean
   playback: LastTimePlayback | null
   onPlay: (take: Take) => void
+  onOpenSong?: (title: string | null) => void
 }) {
   const labels = useLabels()
   const lastGo = takes[takes.length - 1]
@@ -296,14 +308,14 @@ function SongRow({
       />
       <div className="flex min-w-0 flex-col gap-0.5">
         <div className="flex min-w-0 items-baseline gap-2">
-          <span
+          <SongName
+            title={unnamed ? null : name}
+            onOpen={onOpenSong}
             className={cn(
               "truncate text-[13px]",
               unnamed ? "text-muted-foreground" : "font-semibold"
             )}
-          >
-            {name}
-          </span>
+          />
           <span className="tnum shrink-0 text-xs text-muted-foreground">
             {here
               ? `${formatMMSS(here.position)} / ${formatMMSS(target.duration_sec)}`

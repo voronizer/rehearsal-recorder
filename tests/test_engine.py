@@ -6062,6 +6062,130 @@ def main():
        l55.list_labels() == [])
     l55._library = saved55
 
+    print("\n[56] Songs: every song with its goes, and a song's goes by rehearsal")
+    tmp56 = Path(tempfile.mkdtemp())
+    _, s56 = fresh_api(tmp56)
+
+    def rehearsal56(name, created_at, names):
+        """A rehearsal from an old session.json, its takes 100 s each."""
+        folder = tmp56 / "Rec" / f"{name} - {created_at[:10]} {created_at[11:13]}-00"
+        folder.mkdir(parents=True)
+        (folder / "session.json").write_text(json.dumps({
+            "name": name, "created_at": created_at, "samplerate": SR,
+            "tracks": [{"name": "Gtr", "channel": 1}],
+            "takes": [{"take_number": i + 1, "name": n, "duration_sec": 100,
+                       "tracks": [], "markers": []} for i, n in enumerate(names)],
+        }))
+        import_all(s56._lib, s56._cloud_dir)
+        return str(folder)
+
+    # Polyn 1, Polyn 2, Doroga 1, Take 4.
+    first56 = rehearsal56("First", "2026-08-25T19:00:00",
+                          ["Polyn", "Polyn 2", "Doroga", "Take 4"])
+    # Polyn 3, Vesna 1.
+    mid56 = rehearsal56("Middle", "2026-09-10T19:00:00", ["Polyn", "Vesna"])
+    # Vesna 2, Polyn 4, Polyn 5, Take 4.
+    last56 = rehearsal56("Tuesday", "2026-09-22T19:00:00",
+                         ["Vesna", "Polyn", "Polyn 2", "Take 4"])
+
+    def song56(title):
+        return next((s for s in s56.list_songs()["songs"] if s["title"] == title), None)
+
+    def goes56(song_id):
+        return [(g["folder"], g["take"]["take_number"]) for g in s56.get_song(song_id)["goes"]]
+
+    def plays56(song_id):
+        p = s56.get_song(song_id)["plays"]
+        return None if p is None else (p["folder"], p["take"]["take_number"])
+
+    listed56 = s56.list_songs()
+    ok("every song is listed with how many goes and rehearsals it has",
+       [(s["title"], s["goes"], s["rehearsals"]) for s in listed56["songs"]]
+       == [("Doroga", 1, 1), ("Polyn", 5, 3), ("Vesna", 2, 2)])
+    polyn56 = song56("Polyn")
+    ok("and when it was first and last played",
+       polyn56["first_played"] == "2026-08-25T19:00:00"
+       and polyn56["last_played"] == "2026-09-22T19:00:00")
+    ok("the takes with no song are counted apart",
+       listed56["not_named"] == {"takes": 2, "rehearsals": 2,
+                                 "last_played": "2026-09-22T19:00:00"})
+    page56 = s56.get_song(polyn56["id"])
+    ok("a song's goes come newest rehearsal first, in the order played within one",
+       page56["ok"] and page56["title"] == "Polyn"
+       and goes56(polyn56["id"]) == [(last56, 2), (last56, 3), (mid56, 1),
+                                     (first56, 1), (first56, 2)])
+    ok("each go is the take as a rehearsal gives it, and on disk",
+       page56["goes"][0]["take"]["name"] == "Polyn 4"
+       and page56["goes"][0]["rehearsal"] == "Tuesday"
+       and not any(g["missing"] for g in page56["goes"]))
+    ok("with no star, the play button plays the last go at the newest rehearsal",
+       plays56(polyn56["id"]) == (last56, 3))
+
+    s56.set_take_star(first56, 1, True)
+    s56.set_take_star(last56, 2, True)
+    ok("a song counts its starred goes",
+       song56("Polyn")["starred"] == 2)
+    ok("and plays its newest starred go, not the highest go number",
+       plays56(polyn56["id"]) == (last56, 2))
+
+    unnamed56 = s56.get_song(None)
+    ok("the takes with no song have a page of their own, newest first",
+       unnamed56["ok"] and unnamed56["title"] is None
+       and goes56(None) == [(last56, 4), (first56, 4)])
+    ok("a song nobody has is not found",
+       s56.get_song(9999) == {"ok": False, "error": "Song not found"})
+
+    shutil.move(last56, str(tmp56 / "elsewhere"))
+    gone56 = s56.get_song(polyn56["id"])
+    ok("a rehearsal not on disk is still counted",
+       (song56("Polyn")["goes"], song56("Polyn")["rehearsals"]) == (5, 3))
+    ok("its goes are listed as missing, and only its",
+       [g["missing"] for g in gone56["goes"]] == [True, True, False, False, False])
+    ok("and the play button passes over them, to the starred go on disk",
+       plays56(polyn56["id"]) == (first56, 1))
+    shutil.move(str(tmp56 / "elsewhere"), last56)
+
+    s56._lib.delete_take(first56, 3)
+    ok("a song with no goes left is not listed",
+       song56("Doroga") is None)
+
+    spelling56 = rehearsal56("Spelling", "2026-09-25T19:00:00", ["opus"])
+    s56._lib.update_take(spelling56, 1, name="Opus")
+    ok("a song respelled is listed under its new title",
+       song56("Opus") is not None and song56("opus") is None)
+
+    from sqlalchemy import event as sa_event
+    statements56 = []
+
+    def count56(_conn, _cursor, statement, *_):
+        # Every session opens with a BEGIN IMMEDIATE of its own (store/db.py);
+        # what is counted is what is asked of the tables.
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements56.append(statement)
+
+    sa_event.listen(s56._lib._engine, "before_cursor_execute", count56)
+    s56.list_songs()
+    sa_event.remove(s56._lib._engine, "before_cursor_execute", count56)
+    ok("the list of songs is one query",
+       len(statements56) == 1)
+
+    ok("History opens on its Rehearsals view until another is chosen",
+       s56.get_settings()["history_view"] == "rehearsals")
+    ok("choosing the Songs view is kept",
+       s56.save_history_view("songs") == {"ok": True})
+    _, again56 = fresh_api(tmp56)
+    ok("and is still the view after a restart",
+       again56.get_settings()["history_view"] == "songs")
+    ok("a view History has not got is refused",
+       again56.save_history_view("albums") == {"ok": False, "error": "Unknown view"}
+       and again56.get_settings()["history_view"] == "songs")
+    cfg56 = json.loads((tmp56 / "config.json").read_text())
+    cfg56["history_view"] = 3
+    (tmp56 / "config.json").write_text(json.dumps(cfg56))
+    _, odd56 = fresh_api(tmp56)
+    ok("and one written by hand that makes no sense reads as Rehearsals",
+       odd56.get_settings()["history_view"] == "rehearsals")
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

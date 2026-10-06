@@ -289,6 +289,11 @@ Typing narrows the list to the songs that match, and clicking one then takes
 you out of the field, so the next Space records or saves. In the Rename take
 dialog you stay in the field, and Enter renames.
 
+Elsewhere a song's title opens the song's page in History: in Last time on
+the setup screen, and as a song's heading in a rehearsal's overview. **Not
+named** opens the page of the takes nobody named. The songs listed under a
+name field are the exception: they only fill the field.
+
 To rename a take or a rehearsal later, use the pencil button on the rehearsal
 screen or in History. The folder on disk is renamed too, and a rehearsal
 folder keeps its date: `Tuesday jam - 2026-09-18 19-00`. If you rename a take
@@ -298,8 +303,12 @@ that is open in the player, it starts again from the beginning.
 
 ![Past rehearsals down the left, the chosen one beside them](screenshots/history.png)
 
-**History** lists your past rehearsals down the left, by month, and shows the
-chosen one beside the list. It opens on the newest. Each rehearsal in the
+**History** has two views, switched at the top of its list: **Rehearsals**,
+evening by evening, and **Songs**, song by song. It opens on the one you used
+last, or on the rehearsal or song you opened from the setup screen.
+
+**Rehearsals** lists your past rehearsals down the left, by month, and shows
+the chosen one beside the list. It opens on the newest. Each rehearsal in the
 list shows when it was, how long you played and how many takes there are,
 with the evening drawn as a strip: a bar for each take, as long as the take,
 grouped by song, and green for a starred take. You can see at a
@@ -320,6 +329,32 @@ If a rehearsal's folder was moved or renamed outside the app, or is on a
 drive that is not plugged in, the rehearsal is marked **Not found on disk**.
 **Locate folder…** lets you show the app where the folder is now.
 **Remove from history** takes it off the list without touching any files.
+
+![History's Songs view: Pałyn's goes, one line a rehearsal](screenshots/history-songs.png)
+
+**Songs** lists every song you have played, alphabetically, with how many
+goes and rehearsals it had, when it was last played and how many of its goes
+are starred. The takes nobody named come last, as **Not named**. Click a
+song, or go through them with ↑ and ↓.
+
+A song's page starts with a big **▶**, which plays its newest ★ go, or its
+last go when none is starred. Its ★ goes come next, then the marks left on it
+the last time it was played; a mark opens its take at that spot. Then every
+go at the song, one line a rehearsal, newest first: the rehearsal's day and
+name, and its goes as bars side by side, all drawn to the song's longest go.
+A go that ran long or stopped short shows without reading a number; a ★ go is
+green, and a mark is a tick in its label's colour.
+
+Click a line to open it to its goes, and again to close it. The newest
+rehearsal is open to begin with, and the lines you open stay open while
+History is. The goes in an open line play, open in the player, take a star,
+are renamed or deleted, as they are anywhere else, and **Open … in
+Rehearsals** under them shows the whole evening. Esc from the player comes
+back to the song, scrolled where you were.
+
+A rehearsal whose folder is not on disk stays on a song's page, greyed and
+marked **not on disk**. Its goes are counted, but they cannot be played or
+opened until the drive is back.
 
 ## Sending takes to the cloud
 
@@ -469,7 +504,8 @@ While listening:
 | R | turn Repeat on or off |
 | ? | show the keys |
 
-In History, ↑ and ↓ go through the rehearsals.
+In History, ↑ and ↓ go through the rehearsals, or the songs in the Songs
+view.
 
 Esc goes one step back. It closes a dialog first, then the open take, then a
 take playing in the list of takes, then the screen. On the rehearsal screen it finishes the rehearsal, and asks first

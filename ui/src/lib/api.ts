@@ -262,6 +262,50 @@ export type SongPlays = {
   take: Take
 }
 
+/** History's two views (api.save_history_view). */
+export type HistoryView = "rehearsals" | "songs"
+
+/** A song in History's Songs view (api.list_songs): how many goes it got,
+ *  at how many rehearsals, when, and how many of them have ★. Rehearsals
+ *  whose folder is not on disk are counted too. */
+export type SongSummary = {
+  id: number
+  title: string
+  goes: number
+  rehearsals: number
+  first_played: string
+  last_played: string
+  starred: number
+}
+
+/** The takes nobody named, as the last row of the Songs view. */
+export type NotNamedSummary = { takes: number; rehearsals: number; last_played: string }
+
+/** Every song with a go, and the takes with no song (api.list_songs). */
+export type SongIndex = { songs: SongSummary[]; not_named: NotNamedSummary | null }
+
+/** One go at a song, with the rehearsal it was played at (api.get_song).
+ *  `missing` is that rehearsal's folder not being on disk. */
+export type SongGo = {
+  folder: string
+  rehearsal: string
+  created_at: string
+  missing: boolean
+  take: Take
+}
+
+/** A song's page (api.get_song): its goes from every rehearsal, the newest
+ *  rehearsal first and the order played within one, and what its ▶ plays.
+ *  `id` and `title` are null for the takes nobody named. */
+export type SongDetail = {
+  ok: boolean
+  error?: string
+  id?: number | null
+  title?: string | null
+  plays?: SongPlays | null
+  goes?: SongGo[]
+}
+
 /**
  * What the setup screen says about the rehearsals before this one
  * (api.last_time): the last one song by song, the songs it left out, and
@@ -494,6 +538,8 @@ export type Settings = {
   /** 0..1, how loud takes play back: lib/listening.ts. */
   master_volume: number
   theme: "dark" | "light" | "system"
+  /** Which of History's views it opens on: the one used last. */
+  history_view?: HistoryView
   ui_scale: number
   output_device_index: number | null
   /** Outputs of that card the mix comes out of, from 1: [3, 4] or [5]. */
@@ -613,6 +659,10 @@ type PyApi = {
   list_rehearsals(): Promise<RehearsalSummary[]>
   get_rehearsal(folder: string): Promise<RehearsalDetail>
   last_time(): Promise<LastTime>
+  list_songs(): Promise<SongIndex>
+  /** A song's page; null is the takes nobody named. */
+  get_song(songId: number | null): Promise<SongDetail>
+  save_history_view(view: HistoryView): Promise<Ok>
   /** The songs a take of `folder` can be named after, `takeNumber` being
    *  the take named, which does not count as a go. With no folder, the
    *  rehearsal in progress. */
@@ -865,6 +915,7 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "activity",
   "recording_health",
   "list_rehearsals",
+  "list_songs",
   "list_drafts",
   "list_labels",
   "get_settings",

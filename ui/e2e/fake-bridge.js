@@ -123,6 +123,15 @@ function withStars(r) {
   for (const t of r.takes) t.starred = stars.has(`${r.folder}#${t.take_number}`);
   return r;
 }
+// Takes in the cloud folder, in the rehearsals before this one, as
+// "folder#take_number". Python records a copy once it is made, not when it is
+// asked for, so a page sets window.__SHARED__ as its scripted copy finishes.
+function withCloud(r) {
+  for (const t of r.takes)
+    if ((window.__SHARED__ || []).includes(`${r.folder}#${t.take_number}`))
+      t.cloud = {mix:`/cloud/${r.name}/${t.name}.mp3`, mix_format:'mp3'};
+  return r;
+}
 
 // The library's labels, in their order, as list_labels gives them: the four
 // every library starts with (migration 0004), or a page's own
@@ -179,7 +188,7 @@ function pastRehearsal(folder) {
        tracks:[{name:'Guitar', file:'/rec/quiet/t1.wav'}]},
       {take_number:2, name:'Take 2', duration_sec:300, markers:[],
        tracks:[{name:'Guitar', file:'/rec/quiet/t2.wav'}]}];
-    return withStars({folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)});
+    return withCloud(withStars({folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)}));
   }
   if (folder === '/rec/older') {
     const takes = [
@@ -187,7 +196,7 @@ function pastRehearsal(folder) {
        tracks:[{name:'Guitar', file:'/rec/older/d1.wav'}]},
       {take_number:2, name:'Daroha 2', duration_sec:240, markers:[],
        tracks:[{name:'Guitar', file:'/rec/older/d2.wav'}]}];
-    return withStars({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)});
+    return withCloud(withStars({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)}));
   }
   // Its own path, distinct from the live session's /rec/g.wav — two takes
   // sharing a dummy path would let one's mocked length leak onto the other.
@@ -209,7 +218,68 @@ function pastRehearsal(folder) {
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Pałyn', duration_sec:oldLength, markers:[],
         tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
-  return withStars({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)});
+  return withCloud(withStars({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)}));
+}
+
+// The whole library, as History's Songs view reads it (api.list_songs and
+// api.get_song): every rehearsal with its takes, and whether its folder is on
+// disk. Missing jam's takes are only here: the Rehearsals view never reads
+// them, since its folder is gone. The band sets its own.
+//
+// A page can add songs with window.__EXTRA_SONGS__ = ['Opus', …]: takes of
+// First rehearsal after its two, 200 s each, read by this alone.
+function goneTakes() {
+  const take = (n, name, song, go, length) => ({take_number:n, name, song, go,
+    duration_sec:length, markers:[], starred: stars.has(`/rec/gone#${n}`),
+    tracks:[{name:'Guitar', file:`/rec/gone/t${n}.wav`}]});
+  // Numbered apart from the other rehearsals' goes, so a test naming one
+  // names one take.
+  return [take(1, 'Pałyn 8', 'Pałyn', 8, 240), take(2, 'Pałyn 9', 'Pałyn', 9, 250),
+          take(3, 'Daroha 8', 'Daroha', 8, 230), take(4, 'Daroha 9', 'Daroha', 9, 240),
+          take(5, 'Take 5', null, null, 240)];
+}
+function withExtraSongs(r) {
+  const takes = [...r.takes];
+  for (const name of window.__EXTRA_SONGS__ || []) {
+    const n = takes.length + 1;
+    takes.push({take_number:n, duration_sec:200, markers:[],
+      tracks:[{name:'Guitar', file:`${r.folder}/x${n}.wav`}],
+      ...resolved(name, takes, n), starred: stars.has(`${r.folder}#${n}`)});
+  }
+  return {...r, takes};
+}
+// Takes deleted from the rehearsals before this one, as "folder#take_number":
+// gone from the library the Songs view reads.
+const deleted = new Set();
+let library = async () => [
+  pastRehearsal('/rec/old'), pastRehearsal('/rec/quiet'), withExtraSongs(pastRehearsal('/rec/older')),
+  ...(missingRehearsal ? [{folder:missingRehearsal.folder, name:missingRehearsal.name,
+    created_at:missingRehearsal.created_at, takes:goneTakes(), missing:true}] : []),
+];
+// Rehearsals deleted, by folder: gone from the library too.
+const deletedRehearsals = new Set();
+async function libraryNow() {
+  const all = (await library()).filter(r => !deletedRehearsals.has(r.folder)).map(r => ({...r, missing: Boolean(r.missing),
+    takes: r.takes.filter(t => !deleted.has(`${r.folder}#${t.take_number}`))}));
+  return all.sort((a, b) => b.created_at.localeCompare(a.created_at));
+}
+// Python numbers songs as they are made; here, in the order they were first
+// played, oldest first.
+function songIds(all) {
+  const ids = new Map();
+  for (const r of [...all].reverse())
+    for (const t of r.takes) if (t.song && !ids.has(t.song)) ids.set(t.song, ids.size + 1);
+  return ids;
+}
+// api._plays_of: the newest ★ go on disk, else the last go at the newest
+// rehearsal on disk.
+function songPlays(goes) {
+  const onDisk = goes.filter(g => !g.missing);
+  if (!onDisk.length) return null;
+  const star = onDisk.find(g => g.take.starred);
+  const folder = star ? star.folder : onDisk[0].folder;
+  const pick = onDisk.filter(g => g.folder === folder && (!star || g.take.starred)).at(-1);
+  return {folder:pick.folder, rehearsal:pick.rehearsal, created_at:pick.created_at, take:pick.take};
 }
 
 // The rest of the band's repertoire, as other rehearsals in the library
@@ -762,8 +832,60 @@ window.__MAKE_API__ = () => ({
       earlier,
       count: earlier.length + 1}));
   }),
-  delete_take: track('delete_take', async () => ({ok:true, trashed:true, takes_left:0})),
-  delete_rehearsal: track('delete_rehearsal', async () => ({ok:true, trashed:true})),
+  delete_take: track('delete_take', async (folder, n) => {
+    deleted.add(`${folder}#${n}`);
+    return {ok:true, trashed:true, takes_left:0};
+  }),
+  // History's Songs view (api.list_songs, api.get_song), from library().
+  // The list is read when it is asked for; a test can hold the answer on its
+  // way back (held), to have it arrive after one asked for later.
+  list_songs: track('list_songs', async () => {
+    const all = await libraryNow();
+    const ids = songIds(all);
+    const bySong = new Map();
+    let notNamed = null;
+    for (const r of all) for (const t of r.takes) {
+      if (!t.song) {
+        notNamed = notNamed || {takes:0, rehearsals:new Set(), last_played:r.created_at};
+        notNamed.takes++; notNamed.rehearsals.add(r.folder);
+        continue;
+      }
+      const s = bySong.get(t.song) || {id:ids.get(t.song), title:t.song, goes:0,
+        rehearsals:new Set(), first_played:r.created_at, last_played:r.created_at, starred:0};
+      s.goes++; s.rehearsals.add(r.folder); s.starred += t.starred ? 1 : 0;
+      if (r.created_at < s.first_played) s.first_played = r.created_at;
+      if (r.created_at > s.last_played) s.last_played = r.created_at;
+      bySong.set(t.song, s);
+    }
+    const songs = [...bySong.values()].map(s => ({...s, rehearsals:s.rehearsals.size}))
+      .sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
+    const answer = JSON.parse(JSON.stringify({songs,
+      not_named: notNamed && {...notNamed, rehearsals:notNamed.rehearsals.size}}));
+    await held('list_songs');
+    return answer;
+  }),
+  get_song: track('get_song', async (id) => {
+    const all = await libraryNow();
+    const title = id === null ? null : [...songIds(all)].find(([, i]) => i === id)?.[0];
+    if (title === undefined) return {ok:false, error:'Song not found'};
+    const goes = [];
+    for (const r of all) for (const t of r.takes)
+      if ((t.song || null) === title) {
+        fileDurations[t.tracks[0].file] = t.duration_sec;
+        goes.push({folder:r.folder, rehearsal:r.name, created_at:r.created_at,
+                   missing:r.missing, take:t});
+      }
+    return JSON.parse(JSON.stringify({ok:true, id, title, plays:songPlays(goes), goes}));
+  }),
+  save_history_view: track('save_history_view', async (view) => {
+    if (view !== 'rehearsals' && view !== 'songs') return {ok:false, error:'Unknown view'};
+    writeCfg({...readCfg(), history_view: view});
+    return {ok:true};
+  }),
+  delete_rehearsal: track('delete_rehearsal', async (folder) => {
+    deletedRehearsals.add(folder);
+    return {ok:true, trashed:true};
+  }),
 
   set_cloud_dir: track('set_cloud_dir', async (p) => { cloudDir = p; return {ok:true, cloud_dir:p}; }),
   choose_cloud_dir: track('choose_cloud_dir', async () => {
@@ -887,6 +1009,7 @@ window.__MAKE_API__ = () => ({
     samplerate: recording.samplerate,
     bit_depth: recording.bit_depth, supported_bit_depths:[16, 24],
     tracks:[], volumes:{}, master_volume: readCfg().master_volume ?? 1,
+    history_view: readCfg().history_view ?? 'rehearsals',
     output_device_index: outputDevice.index,
     output_channels: outputDevice.channels || [1, 2],
     cloud_format: cloudFormat,

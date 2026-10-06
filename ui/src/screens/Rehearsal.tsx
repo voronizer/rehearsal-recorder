@@ -193,7 +193,7 @@ export function Rehearsal({
       setError(res.error ?? "Could not delete the take")
       return
     }
-    forget(take.take_number)
+    forget(take)
     onChanged()
   }
 

@@ -46,9 +46,17 @@ export function installDemo(): void {
   const api = demoApi()
 
   // The site is light, so the app is too, and changing it saves nothing.
+  // History opens on Rehearsals every time, as the story's fourth step
+  // expects: a step back starts the frame again, and finds it there.
   const settingsOf = api.get_settings
-  api.get_settings = async () => ({ ...(await settingsOf()), theme: "light", ui_scale: 1 })
+  api.get_settings = async () => ({
+    ...(await settingsOf()),
+    theme: "light",
+    ui_scale: 1,
+    history_view: "rehearsals",
+  })
   api.save_appearance = async () => ({ ok: true })
+  api.save_history_view = async () => ({ ok: true })
 
   // There is no app server behind the site: the interface's polling, which
   // tries /api/ first, goes over the (fake) bridge, as in the tests, and

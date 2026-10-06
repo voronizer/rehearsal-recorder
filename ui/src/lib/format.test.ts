@@ -6,8 +6,10 @@ import {
   describeRescan,
   formatBytes,
   formatClock,
+  formatDate,
   formatDateHuman,
   formatDay,
+  formatDayIn,
   formatDuration,
   formatMMSS,
   formatMonth,
@@ -111,5 +113,28 @@ describe("what the interface says about cards and takes", () => {
     expect(croppedButNotSwept("disk full")).toBe(
       "The take was cropped, but the original could not be moved out of the way (disk full)."
     )
+  })
+})
+
+describe("formatDayIn", () => {
+  const now = new Date("2026-10-06T12:00:00")
+  it("is the weekday, day and month in this year", () => {
+    expect(formatDayIn("2026-09-22T19:00:00", now)).toBe("Tue 22 Sep")
+  })
+  it("says the year of a day in another", () => {
+    expect(formatDayIn("2025-12-30T19:00:00", now)).toBe("Tue 30 Dec 2025")
+  })
+})
+
+describe("formatDate", () => {
+  const now = new Date("2026-10-06T12:00:00")
+  it("is the day and month in this year", () => {
+    expect(formatDate("2026-09-22T19:00:00", now)).toBe("22 Sep")
+  })
+  it("adds the year before this one", () => {
+    expect(formatDate("2025-09-22T19:00:00", now)).toBe("22 Sep 2025")
+  })
+  it("is nothing for what it cannot read", () => {
+    expect(formatDate("", now)).toBe("")
   })
 })

@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { labelCounts, labelLook, labelOf, markText, useLabels } from "@/lib/labels"
 import { TakeTitle } from "@/components/TakeTitle"
+import { SongName } from "@/components/SongName"
 import type { Song, Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
@@ -69,6 +70,7 @@ export function RehearsalOverview({
   onStar,
   onShare,
   onDelete,
+  onOpenSong,
 }: {
   takes: Take[]
   songs: Song[]
@@ -82,6 +84,8 @@ export function RehearsalOverview({
   onStar?: (take: Take, starred: boolean) => void
   onShare?: (take: Take) => void
   onDelete?: (take: Take) => void
+  /** Opens a song's page in History's Songs view; null is Not named's. */
+  onOpenSong?: (title: string | null) => void
 }) {
   const labels = useLabels()
   const byNumber = new Map(takes.map((t) => [t.take_number, t]))
@@ -146,7 +150,7 @@ export function RehearsalOverview({
                   isUnnamed ? "text-muted-foreground" : "font-semibold"
                 )}
               >
-                {row.name}
+                <SongName title={isUnnamed ? null : row.name} onOpen={onOpenSong} />
               </h3>
               <span className="text-xs text-muted-foreground">
                 {isUnnamed
@@ -189,12 +193,23 @@ function Stat({ value, label }: { value: string; label: string }) {
   )
 }
 
-function TakeRow({
+/**
+ * One take as a row: ▶, its bar to scale with its marks, its length, and the
+ * buttons for it, with every mark's line under it. The rehearsal overview
+ * draws one per take; a song's page, one per go.
+ *
+ * On a song's page a row can be of a rehearsal whose folder is not on disk
+ * (`missing`): it says so, and has nothing to play, open or change. `where`
+ * names its rehearsal and day, for a row away from its rehearsal's rung.
+ */
+export function TakeRow({
   take,
   unnamed,
   longest,
   cloudState,
   here,
+  missing = false,
+  where,
   onPlay,
   onOpen,
   onOpenAt,
@@ -208,6 +223,8 @@ function TakeRow({
   longest: number
   cloudState?: "queued" | "working"
   here: OverviewPlayback | null
+  missing?: boolean
+  where?: string
   onPlay: (take: Take) => void
   onOpen: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
@@ -235,47 +252,59 @@ function TakeRow({
           stays the one to reach with Tab. */}
       <div
         onClick={(e) => {
-          if (!(e.target as HTMLElement).closest("button")) onOpen(take)
+          if (!missing && !(e.target as HTMLElement).closest("button")) onOpen(take)
         }}
         className={cn(
-          "group -mx-2 grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1 transition-colors",
-          "hover:bg-accent/60 focus-within:bg-accent/60",
+          "group -mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1 transition-colors",
+          missing
+            ? "opacity-55"
+            : "cursor-pointer hover:bg-accent/60 focus-within:bg-accent/60",
           here && "bg-accent/60"
         )}
       >
-        <button
-          type="button"
-          onClick={() => onPlay(take)}
-          aria-label={`${playing ? "Pause" : "Play"} ${take.name}`}
-          aria-keyshortcuts={here ? "Space" : undefined}
-          className={cn(
-            "flex size-8 items-center justify-center rounded-full border transition-colors",
-            here
-              ? "border-primary bg-primary text-primary-foreground"
-              : "hover:bg-accent"
-          )}
-        >
-          {here?.loading ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : playing ? (
-            <Pause className="size-3.5 fill-current" />
-          ) : (
-            <Play className="size-3.5 fill-current" />
-          )}
-        </button>
+        {missing ? (
+          <span
+            title="Not found on disk"
+            className="size-8 rounded-full border border-dashed"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => onPlay(take)}
+            aria-label={`${playing ? "Pause" : "Play"} ${take.name}`}
+            aria-keyshortcuts={here ? "Space" : undefined}
+            className={cn(
+              "flex size-8 items-center justify-center rounded-full border transition-colors",
+              here
+                ? "border-primary bg-primary text-primary-foreground"
+                : "hover:bg-accent"
+            )}
+          >
+            {here?.loading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : playing ? (
+              <Pause className="size-3.5 fill-current" />
+            ) : (
+              <Play className="size-3.5 fill-current" />
+            )}
+          </button>
+        )}
 
         <div className="flex min-w-0 items-center gap-2.5">
           <button
             type="button"
             aria-label={takeButtonLabel(take, status)}
-            title="Open it in the player"
+            title={missing ? "Not found on disk" : "Open it in the player"}
             onClick={() => onOpen(take)}
+            disabled={missing}
             data-starred={starred || undefined}
             className={cn(
               "relative flex h-8 min-w-24 shrink items-center gap-2 overflow-hidden rounded-lg border px-2.5 text-left whitespace-nowrap transition-colors",
-              starred
-                ? "border-signal/50 bg-signal/10 hover:bg-signal/15"
-                : "bg-muted hover:bg-accent"
+              missing
+                ? "border-dashed border-muted-foreground/45 bg-transparent"
+                : starred
+                  ? "border-signal/50 bg-signal/10 hover:bg-signal/15"
+                  : "bg-muted hover:bg-accent"
             )}
             style={{ width: `${(take.duration_sec / longest) * BAR_SHARE}%` }}
           >
@@ -337,7 +366,7 @@ function TakeRow({
               className="size-3.5 shrink-0 text-signal"
             />
           )}
-          {status && (
+          {status && !missing && (
             <span
               className={cn(
                 "truncate text-[11px]",
@@ -348,67 +377,81 @@ function TakeRow({
               {status}
             </span>
           )}
+          {/* Its rehearsal is what tells it from the others here, so the
+              bar gives way to it rather than it to the bar. */}
+          {where && (
+            <span className="max-w-1/2 shrink-0 truncate text-xs text-muted-foreground">
+              {where}
+            </span>
+          )}
+          {missing && (
+            <span className="shrink-0 text-[11px] text-destructive">Not found on disk</span>
+          )}
         </div>
 
-        <div className="flex items-center gap-1">
-          {/* ★ stays in view on a starred take, so which ones they are reads
-              down the list; on the others it shows with the rest. */}
-          {onStar && (
-            <StarButton
-              take={take}
-              onStar={onStar}
-              className={cn(
-                !starred &&
-                  "opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+        {missing ? (
+          <div />
+        ) : (
+          <div className="flex items-center gap-1">
+            {/* ★ stays in view on a starred take, so which ones they are reads
+                down the list; on the others it shows with the rest. */}
+            {onStar && (
+              <StarButton
+                take={take}
+                onStar={onStar}
+                className={cn(
+                  !starred &&
+                    "opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+                )}
+              />
+            )}
+            {/* On the row under the mouse, or reached with Tab. Hidden, they
+                still hold their place, so the rows do not shift as it moves. */}
+            <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+              {onShare && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={
+                    shared ? `Cloud copies of ${take.name}` : `Copy ${take.name} to the cloud`
+                  }
+                  title={shared ? "In the cloud folder" : "Copy this take to the cloud folder"}
+                  onClick={() => onShare(take)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <CloudUpload />
+                </Button>
               )}
-            />
-          )}
-          {/* On the row under the mouse, or reached with Tab. Hidden, they
-              still hold their place, so the rows do not shift as it moves. */}
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-            {onShare && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={
-                  shared ? `Cloud copies of ${take.name}` : `Copy ${take.name} to the cloud`
-                }
-                title={shared ? "In the cloud folder" : "Copy this take to the cloud folder"}
-                onClick={() => onShare(take)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <CloudUpload />
-              </Button>
-            )}
-            {onRename && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Rename take ${take.name}`}
-                onClick={() => onRename(take)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Pencil />
-              </Button>
-            )}
-            {onDelete && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Delete take ${take.name}`}
-                onClick={() => onDelete(take)}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 />
-              </Button>
-            )}
+              {onRename && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Rename take ${take.name}`}
+                  onClick={() => onRename(take)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Pencil />
+                </Button>
+              )}
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Delete take ${take.name}`}
+                  onClick={() => onDelete(take)}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 />
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Every mark has its line, a plain one with nothing written included
           (spec D2): its label's name, then its comment. */}
-      {(take.markers ?? []).map((m) => {
+      {!missing && (take.markers ?? []).map((m) => {
         const label = labelOf(labels, m.label_id)
         return (
           <button

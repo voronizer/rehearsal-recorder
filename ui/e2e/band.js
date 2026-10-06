@@ -232,21 +232,23 @@ api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
 
 // ---- History ----------------------------------------------------------
 // The evenings before this one, take by take: [name, seconds, marks]. Few
-// marks, as in life. Their files are never played in the pictures.
+// marks, as in life. Their files are never played in the pictures. Goes are
+// numbered across them, oldest first, as Python numbers them: a song's page
+// lists Pałyn 1 to 7, not two Pałyn 2s.
 const PAST = {
   '/rec/tue': ['Tuesday jam', '2026-09-22T19:00:00', 1560000000, [
-    ['Pałyn', 185, [{at: 111, note: 'came in late after the break', label_id: 3}]],
-    ['Pałyn 2', 192, [{at: 58, note: 'chorus came in early', label_id: 3},
+    ['Pałyn 4', 185, [{at: 111, note: 'came in late after the break', label_id: 3}]],
+    ['Pałyn 5', 192, [{at: 58, note: 'chorus came in early', label_id: 3},
                       {at: 134, note: 'bridge — try it slower', label_id: 4}]],
-    ['Pałyn 3', 200, []],
-    ['Pałyn 4', 198, [{at: 158, note: 'this one is the take', label_id: 2}]],
-    ['Viasna', 250, [{at: 100, note: 'guitar drifts here', label_id: 3}]],
-    ['Viasna 2', 265, []], ['Viasna 3', 252, []],
-    ['Ahoń', 340, [{at: 187, note: 'solo too long, cut to 8 bars', label_id: 4}]],
-    ['Ahoń 2', 302, []], ['Sonca', 390, []], ['Take 11', 130, []]]],
+    ['Pałyn 6', 200, []],
+    ['Pałyn 7', 198, [{at: 158, note: 'this one is the take', label_id: 2}]],
+    ['Viasna 3', 250, [{at: 100, note: 'guitar drifts here', label_id: 3}]],
+    ['Viasna 4', 265, []], ['Viasna 5', 252, []],
+    ['Ahoń 3', 340, [{at: 187, note: 'solo too long, cut to 8 bars', label_id: 4}]],
+    ['Ahoń 4', 302, []], ['Sonca 2', 390, []], ['Take 11', 130, []]]],
   '/rec/sat': ['New songs', '2026-09-19T15:00:00', 1070000000, [
-    ['Dym', 280, []], ['Dym 2', 275, []], ['Dym 3', 290, []],
-    ['Dym 4', 270, [{at: 200, note: 'keep this ending', label_id: 2}]],
+    ['Dym 2', 280, []], ['Dym 3', 275, []], ['Dym 4', 290, []],
+    ['Dym 5', 270, [{at: 200, note: 'keep this ending', label_id: 2}]],
     ['Ptuška', 245, []], ['Ptuška 2', 260, []], ['Ptuška 3', 255, []]]],
   '/rec/tue-before': ['Tuesday jam', '2026-09-15T19:00:00', 1310000000, [
     ['Pałyn', 210, []], ['Pałyn 2', 195, []], ['Pałyn 3', 202, []],
@@ -291,6 +293,10 @@ api.last_time = async () => {
       take_count: r.take_count, total_duration_sec: r.total_duration_sec, missing: false})),
     count: all.length};
 };
+
+// History's Songs view reads the same evenings.
+library = async () => Promise.all(Object.keys(PAST).map(async folder => (
+  {...(await api.get_rehearsal(folder)), missing: false})));
 
 const settings = api.get_settings;
 api.get_settings = async () => ({...(await settings()),

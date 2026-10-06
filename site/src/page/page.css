@@ -131,7 +131,7 @@ body {
 .step h3 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; }
 .step p { color: var(--page-muted); max-width: 26rem; margin: 0; }
 .stage { position: sticky; top: 16px; z-index: 1; display: grid; gap: 14px; }
-.rail { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.rail { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
 .rail button { all: unset; cursor: pointer; display: grid; gap: 7px; font-size: 0.8rem; color: var(--page-muted); }
 .rail button i { display: block; height: 2px; border-radius: 2px; background: var(--page-line); overflow: hidden; }
 .rail button i::after { content: ""; display: block; height: 100%; background: var(--page-fg); transform: scaleX(var(--p, 0)); transform-origin: left; }

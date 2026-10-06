@@ -1,6 +1,6 @@
 # From soundcheck to the take you keep.
 
-<!-- The app beside these steps goes through the same four, by id: see
+<!-- The app beside these steps goes through the same five, by id: see
      site/src/stage/Story.tsx. Keep the ids and their order. -->
 
 ## Set up the tracks. {#setup}
@@ -22,3 +22,8 @@ discard it.
 
 Every rehearsal, song by song, with the marks you left. Months later you still
 know which Pałyn was the one.
+
+## Find a song. {#song}
+
+Every go at it, from every rehearsal, one line an evening. ▶ plays the ★
+one.
