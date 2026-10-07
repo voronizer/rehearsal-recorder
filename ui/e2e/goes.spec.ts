@@ -553,3 +553,178 @@ test("from a song's page, its tab is as wide shut as open", async ({ page }) => 
   await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Viasna")
   expect(await places(page)).toEqual(open)
 })
+
+// Long names and many songs on the strip.
+
+const LONG = "Pieśnia pra doŭhuju darohu dadomu praz uvieś horad"
+
+/** A rehearsal kept with `names`, the `open`-th of them open in the player. */
+async function openOf(page: Page, names: string[], open = 1) {
+  await startWith(page, names)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await expect(overview.getByText("Waiting for the cloud")).toHaveCount(0)
+  await overview.getByRole("button", { name: new RegExp(`^Take ${open} `) }).click()
+  await expect(timeline(page)).toBeVisible()
+}
+
+test("a long song name is cut to 224 px and shown whole on hover", async ({ page }) => {
+  await openOf(page, ["Pałyn", LONG])
+  const long = strip(page).locator(`[data-tab='${LONG}']`)
+  const name = long.locator("[data-tab-name]")
+  await expect(name).toHaveText(LONG)
+  expect((await name.boundingBox())!.width).toBeLessThanOrEqual(224)
+  const button = long.getByRole("button", { name: new RegExp(`^${LONG}, go 1`) })
+  await expect(button).toHaveAttribute("title", LONG)
+  await expect(openTab(strip(page)).locator("[title]")).toHaveCount(0)
+  await expect(openTab(strip(page))).not.toHaveAttribute("title")
+  await button.click()
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", LONG)
+  await expect(openTab(strip(page)).locator(`[title='${LONG}']`)).toHaveCount(1)
+})
+
+const TWENTY = ["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym", "Ptuška", "Daroha", "Rečka",
+  "Vieter", "Zorka", "Kvietka", "Rassvet", "Lieta", "Zima", "Vosień", "Bierah", "Rečyšča",
+  "Ranica", "Viečar", "Noč"]
+const tabRow = (page: Page) => strip(page).locator("[data-tab]").first().locator("..")
+const scrolled = (page: Page) => tabRow(page).evaluate((el) => el.scrollLeft)
+/** Where the row is once a smooth move has come to rest. */
+async function rested(page: Page) {
+  let at = -1
+  await expect
+    .poll(async () => {
+      const was = at
+      at = await scrolled(page)
+      return at === was
+    })
+    .toBe(true)
+  return at
+}
+const earlier = (page: Page) => strip(page).getByRole("button", { name: "Earlier songs" })
+const later = (page: Page) => strip(page).getByRole("button", { name: "Later songs" })
+
+test("a few songs show no arrows", async ({ page }) => {
+  await openGo(page)
+  await expect(openTab(strip(page))).toBeVisible()
+  await expect(earlier(page)).toHaveCount(0)
+  await expect(later(page)).toHaveCount(0)
+  expect(await tabRow(page).evaluate((el) => getComputedStyle(el).maskImage)).toBe("none")
+})
+
+/** How far the window's own content is scrolled down. */
+const down = (page: Page) => page.locator("main").evaluate((el) => el.scrollTop)
+
+test("the mouse wheel moves the songs sideways", async ({ page }) => {
+  // Short enough for the window's content to scroll, so a wheel turn that
+  // went to it would show.
+  await page.setViewportSize({ width: 1180, height: 700 })
+  await openOf(page, TWENTY)
+  expect(await page.locator("main").evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+  await strip(page).locator("[data-tab='Viasna']").hover()
+  await page.mouse.wheel(0, 300)
+  await expect.poll(() => scrolled(page)).toBeGreaterThan(0)
+  expect(await down(page)).toBe(0)
+})
+
+test("a sideways wheel moves the songs once", async ({ page }) => {
+  await openOf(page, TWENTY)
+  await strip(page).locator("[data-tab='Viasna']").hover()
+  await page.mouse.wheel(120, 0)
+  await expect.poll(() => scrolled(page)).toBe(120)
+})
+
+test("a wheel turn the page cannot cancel does not move the songs", async ({ page }) => {
+  // A trackpad's later events in a swipe the page did not cancel at first.
+  await openOf(page, TWENTY)
+  await strip(page)
+    .locator("[data-tab='Viasna']")
+    .evaluate((el) =>
+      el.dispatchEvent(new WheelEvent("wheel", { deltaY: 200, bubbles: true, cancelable: false }))
+    )
+  await page.waitForTimeout(200)
+  expect(await scrolled(page)).toBe(0)
+})
+
+test("the wheel over a column too short to scroll moves the songs", async ({ page }) => {
+  await openOf(page, TWENTY)
+  await songs(page).click()
+  const column = strip(page).locator("[data-column='Viasna']")
+  await expect(column).toBeVisible()
+  await column.hover()
+  await page.mouse.wheel(0, 200)
+  await expect.poll(() => scrolled(page)).toBeGreaterThan(0)
+})
+
+test("the songs stay where they were moved when the strip gets a little narrower", async ({
+  page,
+}) => {
+  // As when the window's scrollbar comes in on opening the strip out.
+  await openOf(page, TWENTY)
+  await strip(page).locator("[data-tab='Viasna']").hover()
+  await page.mouse.wheel(0, 800)
+  const at = await rested(page)
+  expect(at).toBeGreaterThan(300)
+  await page.locator("main").evaluate((el) => {
+    el.style.paddingRight = `${parseFloat(getComputedStyle(el).paddingRight) + 15}px`
+  })
+  await page.waitForTimeout(300)
+  expect(await scrolled(page)).toBe(at)
+})
+
+test("an arrow at a side with more songs moves the row a screenful", async ({ page }) => {
+  await openOf(page, TWENTY)
+  await expect(later(page)).toBeVisible()
+  await expect(earlier(page)).toHaveCount(0)
+  expect(await tabRow(page).evaluate((el) => getComputedStyle(el).maskImage)).not.toBe("none")
+  const width = await tabRow(page).evaluate((el) => el.clientWidth)
+  await later(page).click()
+  expect(await rested(page)).toBeGreaterThanOrEqual(width - 96 - 1)
+  await expect(earlier(page)).toBeVisible()
+  // It gives up focus, so Space still plays.
+  expect(await page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).not.toBe(
+    "Later songs"
+  )
+  for (let i = 0; i < 5 && (await earlier(page).count()); i++) {
+    const at = await scrolled(page)
+    await earlier(page).click()
+    expect(await rested(page)).toBeLessThan(at)
+  }
+  expect(await scrolled(page)).toBe(0)
+  await expect(earlier(page)).toHaveCount(0)
+})
+
+test("the wheel over an open column scrolls the column, not the songs", async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 760 })
+  await openOf(page, [...Array(12).fill("Alpha"), ...TWENTY.slice(0, 12)])
+  await songs(page).click()
+  const column = strip(page).locator("[data-column='Alpha']")
+  await expect(column).toBeVisible()
+  expect(await column.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+  await column.hover()
+  await page.mouse.wheel(0, 200)
+  await expect.poll(() => column.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  expect(await scrolled(page)).toBe(0)
+})
+
+/** Whether the open tab is whole in the row, and clear of a fade at an end
+ *  that has more songs past it. */
+function inView(page: Page) {
+  return openTab(strip(page)).evaluate((el) => {
+    const row = el.parentElement!
+    const r = row.getBoundingClientRect()
+    const t = el.getBoundingClientRect()
+    const from = r.left + (row.hasAttribute("data-before") ? 48 : 0)
+    const to = r.right - (row.hasAttribute("data-after") ? 48 : 0)
+    return t.left >= from - 1 && t.right <= to + 1
+  })
+}
+
+test("the open tab comes back into view when the window narrows", async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 820 })
+  await openOf(page, TWENTY.slice(0, 7), 7)
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Daroha")
+  await expect.poll(() => inView(page)).toBe(true)
+  await page.setViewportSize({ width: 900, height: 820 })
+  await expect(later(page)).toHaveCount(0)
+  await expect(earlier(page)).toBeVisible()
+  await expect.poll(() => inView(page)).toBe(true)
+})

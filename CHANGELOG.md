@@ -20,7 +20,9 @@ opening.
   the same place, with the same loop, Repeat, zoom and playing, so the
   chorus of Pałyn 2 and of Pałyn 4 are one click apart; ↑ and ↓ do it too.
   Opened from a song's page, the song's column has every go at it, the
-  oldest first, from every rehearsal.
+  oldest first, from every rehearsal. A long name is cut short, whole on
+  hover; with more songs than fit, the mouse wheel moves the strip
+  sideways, and ‹ › at an edge show there are more.
 - **The evening at the top of the window.** The player and the rehearsal
   screen say how long the takes run, how many takes of how many songs, how
   many are in the cloud and how much of the disk the rehearsal uses, with
