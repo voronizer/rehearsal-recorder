@@ -257,6 +257,12 @@ def _go_at(rehearsal, take):
 # History's two views (save_history_view).
 HISTORY_VIEWS = ("rehearsals", "songs")
 
+# A take shorter than this, with no ★ and no marks, is a false start on the
+# rehearsal screen; Settings moves it within these bounds (set_false_start).
+FALSE_START_SEC = 30
+FALSE_START_MIN = 5
+FALSE_START_MAX = 120
+
 
 def _plays_of(goes):
     """
@@ -681,6 +687,8 @@ class Api:
             "cloud_formats": CLOUD_FORMATS_INFO,
             "auto_publish": bool(self._config.get("auto_publish", False)),
             "auto_publish_what": self._config.get("auto_publish_what") or "mix",
+            # How short a take is to count as a false start (issue #12 step 7).
+            "false_start_sec": self._false_start_sec(),
             "check_updates": bool(self._config.get("check_updates", True)),
             "encoder": encoder_available(),
             "encoder_hint": (
@@ -2917,6 +2925,19 @@ class Api:
             left = self._lib.delete_take(folder, take_number)
             return {**result, "takes_left": left}
 
+    def delete_takes(self, folder, take_numbers):
+        """Several takes at once, each as delete_take deletes one: Clear
+        false starts. The ones that could not be deleted are said, and the
+        rest are deleted all the same."""
+        deleted, failed = [], []
+        for n in take_numbers:
+            res = self.delete_take(folder, n)
+            if res.get("ok"):
+                deleted.append(n)
+            else:
+                failed.append({"take_number": n, "error": res.get("error")})
+        return {"ok": True, "deleted": deleted, "failed": failed}
+
     def delete_rehearsal(self, folder):
         folder = Path(folder)
         if not self._inside_recordings(folder):
@@ -3112,6 +3133,25 @@ class Api:
             "auto_publish_what": self._config.get("auto_publish_what") or "mix",
         }
 
+    def _false_start_sec(self):
+        value = self._config.get("false_start_sec")
+        return value if isinstance(value, int) else FALSE_START_SEC
+
+    def set_false_start(self, seconds):
+        """
+        How short a take is to be marked a false start on the rehearsal
+        screen, when it has no ★ and no marks either: whole seconds, from 5
+        to 120.
+        """
+        try:
+            value = int(seconds)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "Not a number of seconds"}
+        value = min(FALSE_START_MAX, max(FALSE_START_MIN, value))
+        self._config["false_start_sec"] = value
+        self._write_config()
+        return {"ok": True, "false_start_sec": value}
+
     def clear_cloud_dir(self):
         # Publishing on its own needs somewhere to publish to. Left on, every
         # take saved afterwards is queued, refused and marked "No cloud folder
@@ -3293,6 +3333,32 @@ class Api:
             return {"ok": False, "error": "The take has no files left on disk"}
         self._queue_copy(folder, take_number, what, take)
         return {"ok": True, "queued": True, "take": take}
+
+    def send_starred(self, folder):
+        """
+        Send starred: every ★ take of a rehearsal with nothing of it in the
+        cloud folder and no copy waiting, queued as What gets published says.
+        A take already there is not sent again, even if the setting has
+        changed since; its share dialog is there for that.
+        """
+        if self._cloud_dir is None:
+            return {"ok": False, "error": "No cloud folder chosen", "needs_dir": True}
+        folder = Path(folder)
+        if not self._inside_recordings(folder):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+        rehearsal = self._lib.rehearsal(folder)
+        if rehearsal is None:
+            return {"ok": False, "error": "Rehearsal not found"}
+        what = self._config.get("auto_publish_what") or "mix"
+        waiting = self._cloud_queue.states(folder)
+        queued = []
+        for take in rehearsal["takes"]:
+            n = take["take_number"]
+            if not take.get("starred") or n in waiting or _shape_of(take.get("cloud")):
+                continue
+            if self.share_take(folder, n, what).get("ok"):
+                queued.append(n)
+        return {"ok": True, "queued": queued}
 
     def retry_cloud(self, entry_id):
         """A failed copy, queued again as the one it was."""

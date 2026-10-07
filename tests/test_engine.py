@@ -6384,6 +6384,69 @@ def main():
         s58._lib.goes_before = goes_before58
     s58.finish_rehearsal()
 
+    print("\n[59] Sorting the evening")
+    # On the rehearsal screen and in History: the ★ takes sent with one
+    # button, the false starts cleared with another, and how short a false
+    # start is, which is a setting.
+    tmp59 = Path(tempfile.mkdtemp())
+    _, s59 = fresh_api(tmp59)
+    ok("a false start is shorter than 30 s unless set",
+       s59.get_settings()["false_start_sec"] == 30)
+    r59 = s59.set_false_start(45)
+    ok("the limit is saved", r59.get("ok") is True and r59.get("false_start_sec") == 45
+       and s59.get_settings()["false_start_sec"] == 45
+       and s59._config.get("false_start_sec") == 45)
+    ok("no shorter than 5 s", s59.set_false_start(2).get("false_start_sec") == 5)
+    ok("no longer than 120 s", s59.set_false_start(500).get("false_start_sec") == 120)
+    ok("a limit that is not a number is refused",
+       s59.set_false_start("x").get("ok") is False
+       and s59.get_settings()["false_start_sec"] == 120)
+
+    s59.start_rehearsal("Evening", None, SR, [{"name": "A", "channel": 1}], 16)
+    live59 = s59._session["folder"]
+
+    def keep59(number, name):
+        d = tmp59 / "takes" / str(number)
+        write_wav(d / "A.wav", 300 + number, seconds=1.0)
+        s59._session["take_counter"] = number
+        return s59.keep_take(number, str(d), name, 1.0,
+                             [{"name": "A", "file": str(d / "A.wav")}], [])
+
+    for n59, name59 in ((1, "Polyn"), (2, "Polyn"), (3, "Vesna"), (4, "Take 4")):
+        keep59(n59, name59)
+    s59.set_take_star(live59, 1, True)
+    s59.set_take_star(live59, 3, True)
+
+    ok("with no cloud folder nothing is sent",
+       s59.send_starred(live59) == {"ok": False, "error": "No cloud folder chosen",
+                                    "needs_dir": True}
+       and s59._cloud_queue._jobs == [])
+
+    cloud59 = tmp59 / "Drive"
+    s59.set_cloud_dir(str(cloud59))
+    s59.set_auto_publish(False, "both")
+    s59._lib.set_cloud_copy(live59, 3, {"mix": str(cloud59 / "x" / "03 - Vesna.wav")},
+                            str(cloud59))
+    sent59 = s59.send_starred(live59)
+    ok("the ★ takes not in the cloud folder are sent",
+       sent59 == {"ok": True, "queued": [1]})
+    ok("as Settings' What gets published says",
+       [j[1:] for j in s59._cloud_queue._jobs] == [[1, "both"]])
+    ok("a take already waiting is not sent again",
+       s59.send_starred(live59) == {"ok": True, "queued": []}
+       and len(s59._cloud_queue._jobs) == 1)
+
+    take4_dir59 = Path(s59._lib.take(live59, 4)["tracks"][0]["file"]).parent
+    gone59 = s59.delete_takes(live59, [2, 4, 99])
+    ok("several takes are deleted",
+       gone59.get("ok") is True and gone59.get("deleted") == [2, 4])
+    ok("and the one that could not be is said",
+       gone59.get("failed") == [{"take_number": 99, "error": "Take not found"}])
+    ok("their folders are gone and the rest stay",
+       not take4_dir59.exists()
+       and [t["take_number"] for t in s59.get_rehearsal(live59)["takes"]] == [1, 3])
+    s59.finish_rehearsal()
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
