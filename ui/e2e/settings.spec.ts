@@ -79,12 +79,12 @@ test("what cloud copies are written as, and nothing about copies without a folde
   await page.getByText("The original tracks").click()
   await expect.poll(async () => (await calls(page, "set_auto_publish")).at(-1)?.args[1]).toBe("tracks")
 
-  // Turning sending off does not take the question with it: a block that
-  // vanishes moves everything under it from beneath the pointer. Greyed
-  // out, with its reason.
+  // Turning sending off does not take the question with it: it also says
+  // what Send starred sends, so it stays live, and its answer says what goes.
   await page.getByText("Send saved takes automatically").click()
   await expect(page.getByText("What gets published")).toHaveCount(1)
-  await expect(page.getByText("Not while sending is off")).toHaveCount(1)
+  await expect(page.getByRole("button", { name: "The mix" })).toBeEnabled()
+  await expect(page.getByText("Every track as recorded")).toHaveCount(1)
 
   // The cloud folder is the gate. Without one none of the questions about a
   // copy have a subject: they are not greyed out but gone, and the folder
@@ -468,4 +468,43 @@ test.describe("a newer version", () => {
       await expect(page.getByRole("checkbox", { name: "Check for new versions" })).toBeChecked()
     })
   }
+})
+
+test("what gets published is chosen with sending off, and leaves it off", async ({ page }) => {
+  // Send starred sends what it says, so it is a choice even while nothing
+  // goes on its own; choosing must not switch automatic sending on.
+  await openSettings(page, "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';")
+  await group(page, "Folders").click()
+  await expect(page.locator("#auto-publish")).not.toBeChecked()
+  const tracks = page.getByRole("button", { name: "The original tracks" })
+  await expect(tracks).toBeEnabled()
+  await tracks.click()
+  await expect
+    .poll(async () => (await calls(page, "set_auto_publish")).at(-1)?.args)
+    .toEqual([false, "tracks"])
+  await expect(tracks).toHaveAttribute("aria-pressed", "true")
+  await expect(page.locator("#auto-publish")).not.toBeChecked()
+  await expect(page.getByText("Every track as recorded")).toHaveCount(1)
+})
+
+test("the false-start limit is on the Folders page, saved when the field is left", async ({
+  page,
+}) => {
+  await openSettings(page)
+  await group(page, "Folders").click()
+  const field = page.locator("#false-start")
+  await expect(field).toHaveValue("30")
+  await field.fill("45")
+  await field.press("Tab")
+  await expect.poll(async () => (await calls(page, "set_false_start")).at(-1)?.args).toEqual([45])
+  // Kept within 5 to 120 by Python, and the field says what was kept.
+  await field.fill("500")
+  await field.press("Enter")
+  await expect.poll(async () => (await calls(page, "set_false_start")).at(-1)?.args).toEqual([500])
+  await expect(field).toHaveValue("120")
+  // Emptied, it goes back to what it was.
+  await field.fill("")
+  await field.press("Tab")
+  await expect(field).toHaveValue("120")
+  expect(await callCount(page, "set_false_start")).toBe(2)
 })

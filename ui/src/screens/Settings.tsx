@@ -122,6 +122,7 @@ export function Settings({
   const [formatTrouble, setFormatTrouble] = useState(false)
   const [dir, setDir] = useState("")
   const [cloudDir, setCloudDir] = useState("")
+  const [falseStart, setFalseStart] = useState("")
   // Six sections in one column was a wall. They are grouped by what a person
   // came here to change, not by the order they happened to be written in.
   const [tab, setTab] = useState<TabId>("audio")
@@ -146,9 +147,34 @@ export function Settings({
       setSettings(s)
       setDir(s.recordings_dir)
       setCloudDir(s.cloud_dir ?? "")
+      setFalseStart(String(s.false_start_sec))
       await readDevices()
     })()
   }, [])
+
+  // Saved when the field is left. Python keeps it within 5 to 120, and the
+  // field then says what was kept; left empty or not a number, it goes back.
+  const applyFalseStart = async () => {
+    if (!settings) return
+    const seconds = Math.round(Number(falseStart))
+    if (falseStart.trim() === "" || !Number.isFinite(seconds)) {
+      setFalseStart(String(settings.false_start_sec))
+      return
+    }
+    if (seconds === settings.false_start_sec) {
+      setFalseStart(String(seconds))
+      return
+    }
+    dismiss(SAID)
+    const res = await api().set_false_start(seconds)
+    if (!res.ok || res.false_start_sec === undefined) {
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not save that" })
+      setFalseStart(String(settings.false_start_sec))
+      return
+    }
+    setFalseStart(String(res.false_start_sec))
+    setSettings({ ...settings, false_start_sec: res.false_start_sec })
+  }
 
   // PortAudio lists the interfaces once, when the app starts. One plugged in
   // later is found only by asking it to look again — see rescan_devices.
@@ -690,6 +716,35 @@ export function Settings({
 
         <section className="flex flex-col gap-3 border-t pt-6">
           <div>
+            <Label htmlFor="false-start">False starts</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              A take this short, with no ★ and no marks, is shown as a false
+              start on the rehearsal screen and in History, where Clear false
+              starts clears them all at once, after asking.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <span>Shorter than</span>
+            <Input
+              id="false-start"
+              type="number"
+              min={5}
+              max={120}
+              step={1}
+              value={falseStart}
+              onChange={(e) => setFalseStart(e.target.value)}
+              onBlur={() => void applyFalseStart()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void applyFalseStart()
+              }}
+              className="tnum w-20"
+            />
+            <span>seconds</span>
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-3 border-t pt-6">
+          <div>
             <Label htmlFor="cloud-dir">Cloud folder</Label>
             <p className="mt-1 text-xs text-muted-foreground">
               Where the takes you pick out are copied. Point it at a Drive or
@@ -866,15 +921,14 @@ export function Settings({
                     size="sm"
                     aria-label={o.label}
                     aria-pressed={settings?.auto_publish_what === o.id}
-                    // This says what automatic sending sends, so it is live
-                    // only while automatic sending is: without a cloud folder
-                    // it is the same mistake the checkbox above is greyed out
-                    // to prevent, and with sending switched off it would be a
-                    // choice about something that is not happening.
-                    disabled={!settings?.auto_publish}
+                    // What automatic sending sends, and what Send starred
+                    // sends: live whenever there is a cloud folder (with none
+                    // this is not drawn at all), and choosing it leaves
+                    // automatic sending as it was.
                     onClick={async () => {
+                      if (!settings) return
                       dismiss(SAID)
-                      const res = await api().set_auto_publish(true, o.id)
+                      const res = await api().set_auto_publish(settings.auto_publish, o.id)
                       if (!res.ok) {
                         notify({ key: SAID, kind: "error", text: res.error ?? "Could not save that" })
                         return
@@ -887,11 +941,7 @@ export function Settings({
                 ))}
               </div>
             <p className="text-xs text-muted-foreground">
-              {settings?.auto_publish
-                ? AUTO_PUBLISH_OPTIONS.find(
-                    (o) => o.id === settings?.auto_publish_what
-                  )?.hint
-                : "Not while sending is off — this is what would go."}
+              {AUTO_PUBLISH_OPTIONS.find((o) => o.id === settings?.auto_publish_what)?.hint}
             </p>
           </div>
 
