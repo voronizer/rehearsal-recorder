@@ -234,7 +234,7 @@ test.describe("long work shows its progress where it runs", () => {
     await page.fill("#take-name", "Pałyn")
     await page.getByRole("button", { name: /Save take/ }).click()
     await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
-    await page.locator("button[aria-label^='Take 1 Pałyn']").click()
+    await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toBeVisible()
     await hold(page, "crop_take")
     await drag(page, 0.25, 0.75)

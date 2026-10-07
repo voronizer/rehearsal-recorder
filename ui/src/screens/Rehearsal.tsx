@@ -13,6 +13,7 @@ import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { TakeNameField } from "@/components/TakeNameField"
+import { BeforeTonightCard } from "@/components/BeforeTonightCard"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
@@ -107,6 +108,12 @@ export function Rehearsal({
   // The go Python has for the name the field shows, while that is the name
   // it answered for; undefined for a pick it has not answered yet.
   const knownGo = nextName === session.next_take_name ? session.next_take_go : undefined
+  // The song the next take is named for, as Python has it: the card under
+  // the field is about it. A name with a go is a song's; "Take N" has none.
+  const nextSong = session.next_take_go != null ? session.next_take_name : null
+  const nextPlayedTonight =
+    nextSong !== null &&
+    (session.songs ?? []).some((s) => s.name.toLowerCase() === nextSong.toLowerCase())
   const knownGoRef = useRef(knownGo)
   useEffect(() => {
     knownGoRef.current = knownGo
@@ -332,6 +339,18 @@ export function Rehearsal({
             onCommit={nameNextTake}
             onPanel
           />
+          {/* Hidden while a take is open: the one player is its. */}
+          {!selected && (
+            <BeforeTonightCard
+              key={session.before_tonight?.song ?? nextSong ?? ""}
+              before={session.before_tonight ?? null}
+              song={nextSong}
+              playedTonight={nextPlayedTonight}
+              playback={null}
+              onPlay={() => {}}
+              onPlayAt={() => {}}
+            />
+          )}
         </aside>
       }
       footer={

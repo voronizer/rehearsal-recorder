@@ -22,7 +22,8 @@ test("finishing a rehearsal with takes in it asks, and is answered from the keyb
   await recordTake(page, 1)
   await page.fill("#take-name", "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
-  await page.locator("button[aria-label^='Take 1 Pałyn']").click()
+  // Tonight's, not Pałyn's take 1 from before tonight in the panel.
+  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
   const timeline = page.getByRole("group", { name: "Take timeline" })
   await expect(timeline).toBeVisible()
   await page.keyboard.press("Escape")

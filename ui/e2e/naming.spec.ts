@@ -620,12 +620,15 @@ test("a pill puts only the song's title in the field", async ({ page }) => {
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Viasna")
 })
 
+// Tonight's takes, apart from Pałyn's go from before tonight in the panel.
+const overview = (page: Page) => page.locator("[aria-label='Rehearsal overview']")
+
 test("a take is shown as its song with the go beside it, from 1", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
   await saveAs(page, "Pałyn")
-  await expect(page.getByRole("button", { name: /^Take 1 Pałyn 1/ })).toContainText("Pałyn 1")
+  await expect(overview(page).getByRole("button", { name: /^Take 1 Pałyn 1/ })).toContainText("Pałyn 1")
   await page.keyboard.press("Space")
   await expect(page.getByRole("heading", { name: "Pałyn 2" })).toBeVisible()
 })
@@ -637,7 +640,7 @@ test("until the songs are in, the go beside the field is Python's, never a guess
   await startRehearsal(page)
   await recordTake(page)
   await saveAs(page, "Pałyn")
-  await expect(page.getByRole("button", { name: /^Take 1 Pałyn 1/ })).toBeVisible()
+  await expect(overview(page).getByRole("button", { name: /^Take 1 Pałyn 1/ })).toBeVisible()
   await recordTake(page, 2)
   // song_choices is held from here: the next Rehearsal mounts without it.
   await page.evaluate(() => {
@@ -665,7 +668,7 @@ test("the go sits apart from the title, not run into it", async ({ page }) => {
   await startRehearsal(page)
   await recordTake(page)
   await saveAs(page, "Pałyn")
-  const take = page.getByRole("button", { name: /^Take 1 Pałyn 1/ })
+  const take = overview(page).getByRole("button", { name: /^Take 1 Pałyn 1/ })
   const title = await take.locator("[data-go-title]").boundingBox()
   // The go's box starts with its space, so measure where its digit is drawn.
   const digitX = await take.locator("[data-go]").evaluate((el) => {
