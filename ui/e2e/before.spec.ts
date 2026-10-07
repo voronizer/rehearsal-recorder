@@ -83,6 +83,8 @@ test.describe("the card", () => {
   })
 
   test("the newest starred go is shown, and more opens the rest under it", async ({ page }) => {
+    // The first row is measured: not while the card is still sliding in.
+    await page.emulateMedia({ reducedMotion: "reduce" })
     await openBandApp(page)
     await startRehearsal(page, 4)
     await pill(page, "Pałyn").click()
@@ -222,6 +224,20 @@ test.describe("playing an earlier go", () => {
     await palyn.locator("[data-note]").first().evaluate((n: HTMLElement) => n.click())
     await expect(palyn.getByRole("button", { name: "Pause Pałyn 2" })).toBeVisible()
     await expect.poll(async () => (await calls(page, "player_seek")).at(-1)?.args[0]).toBe(69)
+  })
+
+  test("an earlier go that cannot be opened says why", async ({ page }) => {
+    await withDaroha(page, {
+      after:
+        "const api = window.pywebview.api; const media = api.take_media;" +
+        "api.take_media = async (tracks, ...a) => tracks.some((t) => t.file === '/rec/older/d2.wav')" +
+        " ? tracks.map((t) => ({ name: t.name, url: null, error: 'Missing file: d2.wav' }))" +
+        " : media(tracks, ...a);",
+    })
+    const daroha = card(page, "Daroha")
+    await daroha.getByRole("button", { name: "Play Daroha 2" }).click()
+    await expect(daroha.getByRole("status")).toHaveText("Missing file: d2.wav")
+    expect(await playing(page)).toBe(false)
   })
 
   test("an earlier take 2 and tonight's take 2 are told apart", async ({ page }) => {

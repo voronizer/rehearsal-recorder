@@ -181,8 +181,8 @@ during a take. Press **Stop**, or Space, when the song is over.
 
 ![After stopping: name the take, then save or discard it](screenshots/review.png)
 
-After you stop, the take opens straight away so you can listen to it. Its
-name is in the same field, in the same place as before you recorded: check
+After you stop, the take opens straight away so you can listen to it. The
+name it was recorded under is in the name field at the bottom left: check
 it, then press **Save take** (Space) or **Discard**. ✕ there puts back
 the name the take would have had if none had been picked before recording.
 A discarded take goes to the Trash. Pressing Esc also discards it, but asks

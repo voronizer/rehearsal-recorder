@@ -371,6 +371,7 @@ export function Rehearsal({
                     }
                   : null
               }
+              problem={cuedEarlier ? player.loadError : null}
               onPlay={playInOverview}
               onPlayAt={(take, at) => cueAt(take, Math.max(0, at - 3))}
             />

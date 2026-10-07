@@ -1509,10 +1509,15 @@ class Api:
         no goes of yet."""
         if not title:
             return None
-        song_id = self._lib.song_id(title)
-        if song_id is None:
+        try:
+            song_id = self._lib.song_id(title)
+            if song_id is None:
+                return None
+            found = self._lib.goes_of(song_id)
+        except Exception:
+            # The library could not answer. The card is a look back, and the
+            # rehearsal screen it sits on must go on refreshing without it.
             return None
-        found = self._lib.goes_of(song_id)
         if found is None:
             return None
         return _before_tonight(found["title"], found["goes"], self._session["folder"])

@@ -6329,6 +6329,25 @@ def main():
     ok("Take N has none", st58["before_tonight"] is None and st58["last_attempt"] is None)
     s58.set_next_take_name("Nothing yet")
     ok("a new song has none", before58() is None)
+
+    # The library failing to answer for the card must not take the
+    # rehearsal screen down with it: the session is what it shows.
+    s58.set_next_take_name("Polyn")
+    goes_of58 = s58._lib.goes_of
+
+    def broken58(*_a, **_k):
+        raise RuntimeError("database is locked")
+
+    s58._lib.goes_of = broken58
+    try:
+        st58 = s58.session_state()
+        ok("a library that cannot answer leaves the session as it is",
+           st58.get("active") is True and st58["before_tonight"] is None
+           and st58["next_take_name"] == "Polyn")
+    except Exception as e:
+        ok(f"a library that cannot answer leaves the session as it is ({e!r})", False)
+    finally:
+        s58._lib.goes_of = goes_of58
     s58.finish_rehearsal()
 
     print("\n" + "=" * 60)

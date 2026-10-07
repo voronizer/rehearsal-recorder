@@ -17,7 +17,9 @@ import type { BeforeTonight } from "@/lib/api"
  * the last go of each of its three latest rehearsals under it. Every bar is
  * drawn to one scale, opened or not, so the first row stays where it is.
  * Its goes play right here: there is one player, and the take open in it
- * hides this card. With nothing to play, one grey line says why.
+ * hides this card. A go that will not open says why under them, as the
+ * setup screen's Last time does. With nothing to play, one grey line says
+ * why.
  *
  * Mount it keyed by the song: a new song folds "N more" back and slides the
  * card in, and a refresh of the same song does neither.
@@ -27,6 +29,7 @@ export function BeforeTonightCard({
   song,
   playedTonight,
   playback,
+  problem,
   onPlay,
   onPlayAt,
 }: {
@@ -37,6 +40,8 @@ export function BeforeTonightCard({
   playedTonight: boolean
   /** The earlier go playing here, if one is. */
   playback: PlacedPlayback | null
+  /** Why the go asked for here did not open, if it did not. */
+  problem?: string | null
   onPlay: (take: PlacedTake) => void
   /** Plays a go from a spot in it: a note under it. */
   onPlayAt: (take: PlacedTake, at: number) => void
@@ -95,6 +100,11 @@ export function BeforeTonightCard({
               onOpenAt={(t, at) => onPlayAt(placed(go.folder, t), at)}
             />
           ))}
+          {problem && (
+            <p role="status" className="mt-1 text-xs text-destructive">
+              {problem}
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-[13px] text-muted-foreground">
