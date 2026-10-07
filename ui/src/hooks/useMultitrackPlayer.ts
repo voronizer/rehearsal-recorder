@@ -58,6 +58,9 @@ export function useMultitrackPlayer(
   // much only when a render falls between the two, and none does when
   // Python answers at once.
   const [settled, setSettled] = useState<{ tracks: TrackFile[] } | null>(null)
+  // The same, the moment it happens: what an event handler asking for
+  // something once a take is open compares the settle to come against.
+  const settledRef = useRef<{ tracks: TrackFile[] } | null>(null)
   // Not a failure: the take plays, just not out of the chosen device.
   const [outputWarning, setOutputWarning] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -159,6 +162,11 @@ export function useMultitrackPlayer(
     // A level turned anywhere, the header's speaker included, goes to this
     // take from the moment it is open until it closes.
     let release = () => {}
+    const settle = () => {
+      const done = { tracks }
+      settledRef.current = done
+      setSettled(done)
+    }
     setLoading(true)
     ;(async () => {
       try {
@@ -178,12 +186,12 @@ export function useMultitrackPlayer(
         setOutputWarning(opened.warning ?? null)
         applyState(opened)
         setLoading(false)
-        setSettled({ tracks })
+        settle()
       } catch (e) {
         if (cancelled) return
         setLoadError(e instanceof Error ? e.message : String(e))
         setLoading(false)
-        setSettled({ tracks })
+        settle()
       }
     })()
 
@@ -368,11 +376,18 @@ export function useMultitrackPlayer(
     [duration, applyLoop, setView, seek, call]
   )
 
+  /** Whether the take is open in Python now, not as of the last render. */
+  const isOpen = useCallback(() => openedRef.current, [])
+  /** The latest open to have settled, now, not as of the last render. */
+  const lastSettled = useCallback(() => settledRef.current, [])
+
   return {
     media,
     loading,
     loadError,
     settled,
+    isOpen,
+    lastSettled,
     outputWarning,
     playing,
     position,

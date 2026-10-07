@@ -295,8 +295,8 @@ test.describe("a saved take", () => {
     // A saved device index goes stale the moment the interface is unplugged.
     await savedTake(page)
     await page.getByRole("button", { name: "Songs", exact: true }).click()
-    await page.locator("button[aria-label^='Take 1 Pałyn']").click()
-    await expect(page.locator("button[aria-label^='Take 1 Pałyn']")).toHaveAttribute(
+    await page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']").click()
+    await expect(page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']")).toHaveAttribute(
       "aria-current",
       "true"
     )
@@ -578,8 +578,8 @@ test.describe("the mix", () => {
     // And another take opens at the volume the last one was left at.
     const left = await master.inputValue()
     await page.getByRole("button", { name: "Songs", exact: true }).click()
-    await page.locator("button[aria-label^='Take 1 Pałyn']").click()
-    await expect(page.locator("button[aria-label^='Take 1 Pałyn']")).toHaveAttribute("aria-current", "true")
+    await page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']").click()
+    await expect(page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']")).toHaveAttribute("aria-current", "true")
     await expect(master).toHaveValue(left)
   })
 })
@@ -860,8 +860,8 @@ test.describe("zooming the timeline", () => {
     // Another go at the song keeps the zoom and the region (goes in the
     // player, D2), so the chip stays away there too.
     await page.getByRole("button", { name: "Songs", exact: true }).click()
-    await page.locator("button[aria-label^='Take 1 Pałyn']").click()
-    await expect(page.locator("button[aria-label^='Take 1 Pałyn']")).toHaveAttribute("aria-current", "true")
+    await page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']").click()
+    await expect(page.locator("[aria-label='Take strip'] button[aria-label^='Take 1 Pałyn']")).toHaveAttribute("aria-current", "true")
     await expect(whole(page)).toHaveCount(1)
     await expect(page.locator("[data-region-span]")).toHaveCount(0)
   })

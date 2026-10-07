@@ -287,12 +287,13 @@ def _before_tonight(title, goes, folder):
     it has no go before tonight.
 
     `goes` are the song's goes as Library.goes_of gives them, newest
-    rehearsal first; `folder` is the rehearsal in progress, whose goes are
-    tonight's and left out. So are rehearsals not on disk: their goes
-    cannot be played. "first" is the go shown, as _plays_of picks it: the
-    newest ★ go, or the last go of the latest rehearsal. "more" is what
-    "N more" adds under it: the last go of each of the three latest
-    rehearsals, less the one shown. Each in _go_at's shape.
+    rehearsal first, or the few of them Library.goes_before keeps; `folder`
+    is the rehearsal in progress, whose goes are tonight's and left out. So
+    are rehearsals not on disk: their goes cannot be played. "first" is the
+    go shown, as _plays_of picks it: the newest ★ go, or the last go of the
+    latest rehearsal. "more" is what "N more" adds under it: the last go of
+    each of the three latest rehearsals, less the one shown. Each in
+    _go_at's shape.
     """
     live = Path(folder)
     kept = [g for g in goes if not g["missing"] and Path(g["folder"]) != live]
@@ -1513,7 +1514,7 @@ class Api:
             song_id = self._lib.song_id(title)
             if song_id is None:
                 return None
-            found = self._lib.goes_of(song_id)
+            found = self._lib.goes_before(song_id, self._session["folder"])
         except Exception:
             # The library could not answer. The card is a look back, and the
             # rehearsal screen it sits on must go on refreshing without it.

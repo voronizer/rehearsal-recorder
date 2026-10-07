@@ -117,9 +117,10 @@ export function Rehearsal({
   // The song the next take is named for, as Python has it: the card under
   // the field is about it. A name with a go is a song's; "Take N" has none.
   const nextSong = session.next_take_go != null ? session.next_take_name : null
+  // Both are the song's title as the library keeps it: Python has matched a
+  // name typed in other capitals to its song already.
   const nextPlayedTonight =
-    nextSong !== null &&
-    (session.songs ?? []).some((s) => s.name.toLowerCase() === nextSong.toLowerCase())
+    nextSong !== null && (session.songs ?? []).some((s) => s.name === nextSong)
   const knownGoRef = useRef(knownGo)
   useEffect(() => {
     knownGoRef.current = knownGo
@@ -354,28 +355,27 @@ export function Rehearsal({
             onPanel
           />
           {/* Hidden while a take is open: the one player is its. */}
-          {!selected && (
-            <BeforeTonightCard
-              key={session.before_tonight?.song ?? nextSong ?? ""}
-              before={session.before_tonight ?? null}
-              song={nextSong}
-              playedTonight={nextPlayedTonight}
-              playback={
-                cuedEarlier
-                  ? {
-                      take: cued as PlacedTake,
-                      playing: player.playing,
-                      loading: player.loading,
-                      position: player.position,
-                      duration: player.duration,
-                    }
-                  : null
-              }
-              problem={cuedEarlier ? player.loadError : null}
-              onPlay={playInOverview}
-              onPlayAt={(take, at) => cueAt(take, Math.max(0, at - 3))}
-            />
-          )}
+          <BeforeTonightCard
+            key={session.before_tonight?.song ?? nextSong ?? ""}
+            hidden={selected !== null}
+            before={session.before_tonight ?? null}
+            song={nextSong}
+            playedTonight={nextPlayedTonight}
+            playback={
+              cuedEarlier
+                ? {
+                    take: cued as PlacedTake,
+                    playing: player.playing,
+                    loading: player.loading,
+                    position: player.position,
+                    duration: player.duration,
+                  }
+                : null
+            }
+            problem={cuedEarlier ? player.loadError : null}
+            onPlay={playInOverview}
+            onPlayAt={(take, at) => cueAt(take, Math.max(0, at - 3))}
+          />
         </aside>
       }
       footer={

@@ -47,21 +47,16 @@ export function useTakeStripPlayer<T extends Take = Take>(
   // start playing it from the overview, or put back the place kept from
   // another go at the song. Sent before, Python has no player to act on and
   // drops it. "Open" is the player settling an open of the take in hand
-  // after this was asked for: the settle there was on the render that asks
-  // is from before, even when it was this same take's.
+  // after this was asked for: the settle there was when it was asked is
+  // from before, even when it was this same take's, still opening then.
   type Pending = { at: number | null; play: boolean; spot?: Spot }
   const [pending, setPending] = useState<Pending | null>(null)
-  const settledBefore = useRef<typeof settled | undefined>(undefined)
+  const settledBefore = useRef<ReturnType<typeof player.lastSettled>>(null)
   const { settled, loadError, seek, play, restore } = player
   const tracks = loaded?.tracks ?? null
   useEffect(() => {
     if (pending === null) return
-    if (settledBefore.current === undefined) {
-      settledBefore.current = settled
-      return
-    }
     if (settled === settledBefore.current || settled?.tracks !== tracks) return
-    settledBefore.current = undefined
     if (!loadError) {
       if (pending.spot) void restore(pending.spot)
       if (pending.at !== null) seek(pending.at)
@@ -71,7 +66,7 @@ export function useTakeStripPlayer<T extends Take = Take>(
   }, [pending, settled, tracks, loadError, seek, play, restore])
 
   const whenOpen = (next: Pending | null) => {
-    settledBefore.current = undefined
+    settledBefore.current = player.lastSettled()
     setPending(next)
   }
   const drop = () => whenOpen(null)
@@ -133,7 +128,10 @@ export function useTakeStripPlayer<T extends Take = Take>(
   const openAt = (take: T, at: number) => {
     if (sameTake(take, loaded)) {
       select(take)
-      seek(at)
+      // One still opening goes there once it is open, and plays if it was
+      // opening to play in the overview.
+      if (player.isOpen()) seek(at)
+      else if (!loadError) whenOpen({ at, play: pending?.play ?? false })
       return
     }
     select(take)
@@ -170,12 +168,15 @@ export function useTakeStripPlayer<T extends Take = Take>(
   /**
    * Play a take where it is from a spot in it, without opening it: a note
    * under one of the rehearsal screen's earlier goes plays from just before
-   * it. The take already loaded is moved there; another is loaded first.
+   * it. The take already loaded is moved there, or once it is open if it
+   * is still opening; another is loaded first.
    */
   const cueAt = (take: T, at: number) => {
     if (sameTake(take, loaded)) {
-      seek(at)
-      play()
+      if (player.isOpen()) {
+        seek(at)
+        play()
+      } else if (!loadError) whenOpen({ at, play: true })
       return
     }
     whenOpen({ at, play: true })

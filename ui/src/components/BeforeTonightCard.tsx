@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { formatDate } from "@/lib/format"
 import { hereFor, placed, type PlacedPlayback, type PlacedTake } from "@/lib/songs"
 import type { BeforeTonight } from "@/lib/api"
+import { cn } from "@/lib/utils"
 
 /**
  * The song the next take is named for, as it went before tonight: a card
@@ -22,7 +23,9 @@ import type { BeforeTonight } from "@/lib/api"
  * why.
  *
  * Mount it keyed by the song: a new song folds "N more" back and slides the
- * card in, and a refresh of the same song does neither.
+ * card in, and a refresh of the same song does neither. While a take is open
+ * in the player it is `hidden`, not gone: put away, the take leaves it as it
+ * was, opened out or not, and it does not slide in again.
  */
 export function BeforeTonightCard({
   before,
@@ -30,6 +33,7 @@ export function BeforeTonightCard({
   playedTonight,
   playback,
   problem,
+  hidden = false,
   onPlay,
   onPlayAt,
 }: {
@@ -42,11 +46,16 @@ export function BeforeTonightCard({
   playback: PlacedPlayback | null
   /** Why the go asked for here did not open, if it did not. */
   problem?: string | null
+  /** Out of sight while a take is open in the player. */
+  hidden?: boolean
   onPlay: (take: PlacedTake) => void
   /** Plays a go from a spot in it: a note under it. */
   onPlayAt: (take: PlacedTake, at: number) => void
 }) {
   const [open, setOpen] = useState(false)
+  // Once in, the slide is taken off: shown again after being hidden, an
+  // animation would start over.
+  const [arrived, setArrived] = useState(false)
   const title = before?.song ?? song
   const all = before ? [before.first, ...before.more] : []
   const goes = open ? all : all.slice(0, 1)
@@ -55,7 +64,15 @@ export function BeforeTonightCard({
   return (
     <section
       aria-label={title ? `${title} before tonight` : "Before tonight"}
-      className="flex flex-col gap-2.5 rounded-xl border bg-card px-4 pt-3.5 pb-4 duration-200 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1"
+      hidden={hidden}
+      onAnimationEnd={(e) => {
+        if (e.target === e.currentTarget) setArrived(true)
+      }}
+      className={cn(
+        "flex flex-col gap-2.5 rounded-xl border bg-card px-4 pt-3.5 pb-4",
+        !arrived &&
+          "duration-200 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1"
+      )}
     >
       <div className="flex min-h-8 items-center gap-2">
         <h2 className="flex min-w-0 flex-1 items-baseline gap-1.5 text-[15px] font-semibold">

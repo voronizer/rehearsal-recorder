@@ -161,6 +161,27 @@ test.describe("the card", () => {
     await expect(card(page, "Pałyn")).toBeVisible()
   })
 
+  test("a take opened and put away leaves the card as it was", async ({ page }) => {
+    await openBandApp(page)
+    await startRehearsal(page, 4)
+    await pill(page, "Pałyn").click()
+    const palyn = card(page, "Pałyn")
+    await toggle(page).click()
+    await expect(toggle(page)).toHaveText(/^Fewer/)
+
+    await page
+      .locator("[aria-label='Rehearsal overview']")
+      .getByRole("button", { name: /^Take 1 / })
+      .click()
+    await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
+    await expect(palyn).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(palyn).toBeVisible()
+    // Still opened out, and not sliding in again: it never went away.
+    await expect(toggle(page)).toHaveText(/^Fewer/)
+    expect(await palyn.evaluate((el) => el.getAnimations().length)).toBe(0)
+  })
+
   test("a long title is cut short in the card's heading, whole on hover", async ({ page }) => {
     const long = "A very long song title that goes on and on past the panel"
     await openApp(page, { before: `window.__EXTRA_SONGS__ = ${JSON.stringify([long])}` })
@@ -178,6 +199,24 @@ test.describe("the card", () => {
     expect(await panel(page).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   })
 })
+
+/** Holds `name` in the fake until `letGo` is called. */
+async function hold(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__?: Record<string, Promise<void>>
+      __LET_GO__?: () => void
+    }
+    w.__HOLD__ = { [n]: new Promise<void>((r) => (w.__LET_GO__ = r)) }
+  }, name)
+}
+async function letGo(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __HOLD__?: object; __LET_GO__: () => void }
+    w.__HOLD__ = {}
+    w.__LET_GO__()
+  })
+}
 
 test.describe("playing an earlier go", () => {
   /** Whether the fake's one player is playing. */
@@ -222,6 +261,21 @@ test.describe("playing an earlier go", () => {
     await pill(page, "Pałyn").click()
     const palyn = card(page, "Pałyn")
     await palyn.locator("[data-note]").first().evaluate((n: HTMLElement) => n.click())
+    await expect(palyn.getByRole("button", { name: "Pause Pałyn 2" })).toBeVisible()
+    await expect.poll(async () => (await calls(page, "player_seek")).at(-1)?.args[0]).toBe(69)
+  })
+
+  test("a note clicked while its go is still opening plays from the note", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true" })
+    await startRehearsal(page)
+    await pill(page, "Pałyn").click()
+    const palyn = card(page, "Pałyn")
+    await hold(page, "player_open")
+    const opens = await callCount(page, "player_open")
+    await palyn.getByRole("button", { name: "Play Pałyn 2" }).click()
+    await expect.poll(() => callCount(page, "player_open")).toBe(opens + 1)
+    await palyn.locator("[data-note]").first().click()
+    await letGo(page)
     await expect(palyn.getByRole("button", { name: "Pause Pałyn 2" })).toBeVisible()
     await expect.poll(async () => (await calls(page, "player_seek")).at(-1)?.args[0]).toBe(69)
   })

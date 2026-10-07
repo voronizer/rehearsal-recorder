@@ -6298,6 +6298,8 @@ def main():
     s58.set_next_take_name("polyn")
     b58 = before58()
     ok("a title in another case finds its song", b58 is not None and b58["song"] == "Polyn")
+    ok("and the field names it as the library does",
+       s58.session_state()["next_take_name"] == "Polyn")
     la58 = s58.session_state()["last_attempt"]
     ok("the first go tonight is measured against the go shown",
        la58 is not None and la58["duration_sec"] == 270
@@ -6309,9 +6311,41 @@ def main():
     ok("tonight's go is never before tonight",
        b58 is not None and all(Path(g["folder"]) != live58 for g in [b58["first"], *b58["more"]])
        and pick58(b58["first"]) == (D58, 2))
+    ok("nor counted among the three rehearsals",
+       b58 is not None and [pick58(g) for g in b58["more"]] == [(C58, 2), (B58, 1)])
     ok("with a go tonight, last time is tonight's",
        st58["last_attempt"] is not None and "created_at" not in st58["last_attempt"]
        and st58["last_attempt"]["duration_sec"] == 1.0)
+
+    # The screen asks for its state after everything done on it: the card
+    # reads the few goes it can show, not every go at the song with its
+    # files and marks.
+    read58 = []
+    take_data58 = s58._lib._take_data
+
+    def counting58(folder, take):
+        read58.append(take.id)
+        return take_data58(folder, take)
+
+    s58._lib._take_data = counting58
+    try:
+        s58.set_next_take_name("Take 2")
+        s58.session_state()
+        without58 = len(read58)
+        s58.set_next_take_name("Polyn")
+        read58.clear()
+        s58.session_state()
+        n58 = len(read58) - without58
+        ok(f"the card reads only the goes it can show ({n58} read)", n58 <= 3)
+    finally:
+        s58._lib._take_data = take_data58
+
+    s58.set_take_star(A58, 1, True)
+    b58 = before58()
+    ok("a star older than the three rehearsals is still the go shown",
+       b58 is not None and pick58(b58["first"]) == (A58, 1)
+       and [pick58(g) for g in b58["more"]] == [(D58, 2), (C58, 2), (B58, 1)])
+    s58.set_take_star(A58, 1, False)
 
     shutil58.move(D58, str(tmp58 / "moved"))
     try:
@@ -6333,12 +6367,12 @@ def main():
     # The library failing to answer for the card must not take the
     # rehearsal screen down with it: the session is what it shows.
     s58.set_next_take_name("Polyn")
-    goes_of58 = s58._lib.goes_of
+    goes_before58 = s58._lib.goes_before
 
     def broken58(*_a, **_k):
         raise RuntimeError("database is locked")
 
-    s58._lib.goes_of = broken58
+    s58._lib.goes_before = broken58
     try:
         st58 = s58.session_state()
         ok("a library that cannot answer leaves the session as it is",
@@ -6347,7 +6381,7 @@ def main():
     except Exception as e:
         ok(f"a library that cannot answer leaves the session as it is ({e!r})", False)
     finally:
-        s58._lib.goes_of = goes_of58
+        s58._lib.goes_before = goes_before58
     s58.finish_rehearsal()
 
     print("\n" + "=" * 60)
