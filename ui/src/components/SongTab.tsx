@@ -149,6 +149,18 @@ export function SongTab({
     widest.current = el.offsetWidth
     el.style.minWidth = `${widest.current}px`
   })
+  // A long name is cut short so it does not take half the strip; the whole
+  // of it is a hover away, on the names that were cut and only on those.
+  // Whether it was cut is known only from the layout, so, like the width
+  // above, it is set on the element rather than rendered.
+  const text = useRef<HTMLSpanElement | null>(null)
+  const head = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const el = text.current
+    if (!el || !head.current) return
+    if (el.scrollWidth > el.clientWidth) head.current.title = title
+    else head.current.removeAttribute("title")
+  })
 
   const title = song ?? `Take ${shown.take.take_number}`
   const statusOf = (go: TabGo) =>
@@ -178,16 +190,19 @@ export function SongTab({
         ))}
     </span>
   )
-  // The name as wide as it is in the open tab's weight, open or not.
+  // The name as wide as it is in the open tab's weight, open or not, and
+  // never wider than 14rem.
   const name = (
     <span
       data-text={title}
       className={cn(
-        "inline-flex flex-col text-base after:invisible after:h-0 after:overflow-hidden after:font-[650] after:content-[attr(data-text)]",
+        "inline-flex max-w-56 flex-col text-base after:invisible after:h-0 after:overflow-hidden after:font-[650] after:content-[attr(data-text)]",
         open ? "font-[650]" : "font-medium"
       )}
     >
-      {title}
+      <span ref={text} data-tab-name className="truncate">
+        {title}
+      </span>
     </span>
   )
   const body = cn(
@@ -209,7 +224,7 @@ export function SongTab({
       className="flex shrink-0 flex-col"
     >
       {open ? (
-        <div className={body}>
+        <div ref={(el) => void (head.current = el)} className={body}>
           {name} {lines}
           {bar}
         </div>
@@ -217,6 +232,7 @@ export function SongTab({
         <button
           type="button"
           aria-label={tabLabel(song, shown.take, status)}
+          ref={(el) => void (head.current = el)}
           onClick={(e) => {
             onPick()
             e.currentTarget.blur()

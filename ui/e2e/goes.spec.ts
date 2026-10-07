@@ -553,3 +553,31 @@ test("from a song's page, its tab is as wide shut as open", async ({ page }) => 
   await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Viasna")
   expect(await places(page)).toEqual(open)
 })
+
+// Long names and many songs on the strip.
+
+const LONG = "Pieśnia pra doŭhuju darohu dadomu praz uvieś horad"
+
+/** A rehearsal kept with `names`, the `open`-th of them open in the player. */
+async function openOf(page: Page, names: string[], open = 1) {
+  await startWith(page, names)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await expect(overview.getByText("Waiting for the cloud")).toHaveCount(0)
+  await overview.getByRole("button", { name: new RegExp(`^Take ${open} `) }).click()
+  await expect(timeline(page)).toBeVisible()
+}
+
+test("a long song name is cut to 224 px and shown whole on hover", async ({ page }) => {
+  await openOf(page, ["Pałyn", LONG])
+  const long = strip(page).locator(`[data-tab='${LONG}']`)
+  const name = long.locator("[data-tab-name]")
+  await expect(name).toHaveText(LONG)
+  expect((await name.boundingBox())!.width).toBeLessThanOrEqual(224)
+  const button = long.getByRole("button", { name: new RegExp(`^${LONG}, go 1`) })
+  await expect(button).toHaveAttribute("title", LONG)
+  await expect(openTab(strip(page)).locator("[title]")).toHaveCount(0)
+  await expect(openTab(strip(page))).not.toHaveAttribute("title")
+  await button.click()
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", LONG)
+  await expect(openTab(strip(page)).locator(`[title='${LONG}']`)).toHaveCount(1)
+})
