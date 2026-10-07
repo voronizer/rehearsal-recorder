@@ -7,6 +7,15 @@ opening.
 
 ## Unreleased
 
+- **Sort the evening as it goes.** The rehearsal screen, and a rehearsal
+  in History, sort the evening while everyone remembers it. A take nobody
+  named has the songs under it, and one click names it. A take under 30
+  seconds with no ★ and no marks is drawn as a false start, and **Clear
+  false starts** moves them all to the Trash, after asking. **Send
+  starred** sends every ★ take not in the cloud folder yet, as *What gets
+  published* says; that choice in Settings no longer needs automatic
+  sending on. Settings also say how short a false start is. **Finish**
+  now goes straight back to the start screen.
 - **Hear last time before you play it.** The rehearsal screen keeps the
   next take's name and the songs in a panel on the right, and under them
   how the song in the field went before tonight: its newest ★ go, or the

@@ -89,7 +89,7 @@ Space starts the rehearsal again. **Check signal** stops it.
 
 ### The rehearsal screen
 
-![A rehearsal with three takes, grouped by song, and the notes left on them; on the right the next take's name, the songs, and how the song went before tonight](screenshots/rehearsal.png)
+![A rehearsal with five takes, grouped by song, a false start among them, and Send starred and Clear false starts over them; on the right the next take's name, the songs, and how the song went before tonight](screenshots/rehearsal.png)
 
 Press **Start rehearsal**, or Space. The rehearsal screen shows the takes
 recorded so far, grouped by song. Each take is a bar drawn to its length,
@@ -104,8 +104,31 @@ stopped short stands out before you read anything.
 - Point at a row to star the take (★, see *Starring a take*), rename it, send
   it to the cloud or delete it. The ★ stays in view on a starred take.
 
+The evening is sorted here, as it goes, while everyone still remembers
+which go was the good one. None of it has to be done:
+
+- A take nobody named has the songs under it, the same ones as under Next
+  take. Click one to name the take after that song: it becomes the song's
+  next go and moves into the song's group. For a song nobody has played
+  yet, use the pencil.
+- A take shorter than 30 seconds, with no ★ and no marks, is a false
+  start: a count-in, or a stop after eight bars. Its bar is dashed, its
+  name and length are grey, and it says **false start**. **Clear false
+  starts**, over the takes, moves them all to the Trash, after asking,
+  and their copies in the cloud go with them. How short a false start is
+  can be changed in **Settings → Folders**, from 5 to 120 seconds.
+- **Send starred**, beside it, sends every ★ take that is not in the
+  cloud folder yet, as **What gets published** in Settings says. See
+  [Sending takes to the cloud](#sending-takes-to-the-cloud).
+
+Each of the two buttons shows how many takes it would act on. With none
+it is greyed, and pointing at it says why. In a narrow window the buttons
+go on a line of their own under the figures.
+
 Press **Record take**, or Space, to start recording. **Finish** ends the
-rehearsal.
+rehearsal and goes back to the start screen, where Last time shows the
+evening just finished. Closing the app instead loses nothing: every take
+you saved is kept.
 
 The top of the window says what there is so far, beside the rehearsal's
 name: how long its takes run, how many takes there are and of how many
@@ -320,7 +343,8 @@ take Pałyn, at whatever go is next. A song is spelled one way everywhere:
 typing "pałyn" gives "Pałyn" when that song is there. A title can end in a
 number, like "Opus 5", as long as no song is called "Opus". A take nobody
 named is called by its number, "Take 4", is not counted as a song, and so is
-a recovered take you did not name.
+a recovered take you did not name. On the rehearsal screen and in History,
+the songs are listed under such a take, so one click names it.
 
 Wherever you name a take, the songs you have already played are listed under
 the name, so you do not have to type them again. Each song comes with the go
@@ -357,7 +381,9 @@ glance how many songs you played and how many goes each one got.
 Click a rehearsal to show it, or go through them with ↑ and ↓. Its takes
 work the same way as on the rehearsal screen: **Play** on a take plays it
 right there, and the take's bar opens it in the player, which then has the
-whole window. Esc brings the list back.
+whole window. Esc brings the list back. An evening is sorted here the same
+way too: the songs under a take nobody named, the false starts, **Send
+starred** and **Clear false starts**.
 
 You can rename and delete takes and whole rehearsals here. The pencil and
 the bin next to the rehearsal's name work on the rehearsal. Deleting asks
@@ -403,17 +429,23 @@ sync your whole recordings folder. Instead, set a cloud folder in
 **Settings → Folders**: a folder that Google Drive, Dropbox or a similar app
 already syncs. Only the takes you choose are copied there.
 
-There are two ways to send takes:
+There are three ways to send takes:
 
 - **By hand:** press the cloud button on a take and choose what to send. The
   copy is made in the background, so you can keep working.
+- **The starred ones:** **Send starred**, over the takes on the rehearsal
+  screen and in History, sends every ★ take of the evening that is not in
+  the cloud folder yet and not waiting to go. Its tooltip says why when
+  there is nothing to send.
 - **Automatically:** turn on **Send saved takes automatically** in Settings.
   Every take is then copied after you save it. Nothing is copied while a take
   is recording. This setting needs a cloud folder, and it turns off if you
   remove the folder.
 
 You can send one of three things. By hand you choose each time; for
-automatic sending you choose once in Settings.
+**Send starred** and for automatic sending you choose once in Settings,
+under **What gets published**. Choosing there does not turn automatic
+sending on.
 
 - **The mix:** one stereo file, mixed with the balance you set in the player.
   This is the one to send to the band. If the tracks together would clip, the
@@ -551,8 +583,9 @@ songs in the Songs view.
 Esc goes one step back. It closes a dialog first, then the strip's columns,
 then the open take, then a take playing in the list of takes, then the
 screen. On the rehearsal screen it finishes the rehearsal, and asks first
-if there are takes in it. After a take, it asks before discarding the take.
-Esc never stops a recording; press **Stop** for that.
+if there are takes in it; the start screen comes next. After a take, it
+asks before discarding the take. Esc never stops a recording; press
+**Stop** for that.
 
 While you are typing in a text field, the keys type. Press Esc to leave the
 field, and the keys work again.
