@@ -102,19 +102,23 @@ export function SongPills({
         ))}
         <AllSongsPill choices={all} value={value} onPick={onPick} className={PILL} />
       </div>
-      {/* The same pills, out of sight, to measure. */}
+      {/* The same pills, out of sight, to measure. In a box of no height
+          that clips them: in a panel that scrolls (the rehearsal screen's
+          Next take) all of them in one line would otherwise make it
+          scroll sideways too. */}
       <div
-        ref={measure}
         aria-hidden
         inert
-        className="pointer-events-none invisible absolute top-0 left-0 flex w-max gap-1.5"
+        className="pointer-events-none invisible absolute inset-x-0 top-0 h-0 overflow-hidden"
       >
-        {candidates.map((c) => (
-          <span key={c.song} className={PILL}>
-            <GoTitle title={c.song} go={c.go} />
-          </span>
-        ))}
-        <span className={PILL}>All songs…</span>
+        <div ref={measure} className="flex w-max gap-1.5">
+          {candidates.map((c) => (
+            <span key={c.song} className={PILL}>
+              <GoTitle title={c.song} go={c.go} />
+            </span>
+          ))}
+          <span className={PILL}>All songs…</span>
+        </div>
       </div>
     </div>
   )

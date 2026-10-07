@@ -19,6 +19,7 @@ export function Shell({
   headerAction,
   facts,
   footer,
+  aside,
   children,
   className,
   activity = true,
@@ -34,6 +35,9 @@ export function Shell({
    *  name (components/EveningFacts). */
   facts?: ReactNode
   footer?: ReactNode
+  /** A panel right of the scrollable middle, from the header down to the
+   *  footer, scrolling on its own: the rehearsal screen's Next take. */
+  aside?: ReactNode
   children: ReactNode
   className?: string
   /** Show long work (components/ActivityButton) on a screen with no header,
@@ -110,9 +114,18 @@ export function Shell({
         </header>
       )}
 
-      <main className={cn("min-h-0 flex-1 overflow-y-auto px-6 py-6", className)}>
-        {children}
-      </main>
+      {aside ? (
+        <div className="flex min-h-0 flex-1">
+          <main className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-6", className)}>
+            {children}
+          </main>
+          {aside}
+        </div>
+      ) : (
+        <main className={cn("min-h-0 flex-1 overflow-y-auto px-6 py-6", className)}>
+          {children}
+        </main>
+      )}
 
       {footer && (
         <footer ref={footerRef} className="shrink-0 border-t bg-card/40 px-6 py-5">

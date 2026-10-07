@@ -313,22 +313,29 @@ export function Rehearsal({
           folder={session.folder}
         />
       }
-      footer={
-        <FooterRow
-          error={error}
-          rule
-          left={
-            <TakeNameField
-              id="next-take-name"
-              label="Next take"
-              value={nextName}
-              fallback={fallback}
-              choices={nextChoices}
-              knownGo={knownGo}
-              onCommit={nameNextTake}
-            />
-          }
+      // The next take's name and its songs sit with what the song went
+      // like before tonight, in a panel of their own on the setup screen's
+      // panel colour (issue #12 step 6).
+      aside={
+        <aside
+          aria-label="Next take"
+          data-next-take-panel
+          className="flex w-[22.5rem] shrink-0 flex-col gap-5 overflow-y-auto border-l bg-panel px-5 py-6 min-[1100px]:w-[26rem]"
         >
+          <TakeNameField
+            id="next-take-name"
+            label="Next take"
+            value={nextName}
+            fallback={fallback}
+            choices={nextChoices}
+            knownGo={knownGo}
+            onCommit={nameNextTake}
+            onPanel
+          />
+        </aside>
+      }
+      footer={
+        <FooterRow error={error}>
           <div className="flex items-center gap-3">
             {/* Escape finishes only with no take in hand; with one, it puts
                 the take away — see useEscape above. */}

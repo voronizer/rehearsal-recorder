@@ -11,12 +11,12 @@ import { cn } from "@/lib/utils"
  * `rule` draws a line between the two halves, where the left one holds a
  * field. An error goes over the buttons it is about.
  *
- * With a field, the buttons get the same room on every screen that has one,
- * so the take's name stays where it was from recording to after Stop. Its
- * songs wrap under it by the room they have, and Finish with Record take 1
- * is wider than Discard with Save take: songs that took two rows while
- * recording fitted in one after Stop, and the field dropped a row. 26rem
- * holds Record take 100 in the tests' browser.
+ * With a field, the buttons get the same room on every screen that has one.
+ * Its songs wrap under it by the room they have, and buttons of different
+ * widths gave the songs different room: a list that took two rows on one
+ * screen fitted in one on the next, and the field dropped a row. 26rem
+ * holds Record take 100 in the tests' browser. (The rehearsal screen has
+ * its Next take field in a panel of its own since issue #12 step 6.)
  */
 export function FooterRow({
   left,

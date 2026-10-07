@@ -167,6 +167,9 @@ export type SessionState =
       next_take_go?: number | null
       /** What the next take would be called without a name picked for it. */
       next_take_default?: string
+      /** The song the next take is named for, as it went before tonight:
+       *  the card beside the Next take field. Null with no song, or none. */
+      before_tonight?: BeforeTonight | null
       /** The latest go at the song the next take is named for, if any. */
       last_attempt?: LastAttempt | null
       recording: boolean
@@ -183,6 +186,22 @@ export type SessionState =
 export type LastAttempt = {
   song: string
   duration_sec: number
+  /** The day of the rehearsal it was played at, when that was before
+   *  tonight: "Took 3:05 on 28 Sep". Left out for a go tonight. */
+  created_at?: string | null
+}
+
+/**
+ * A song as it went before tonight (api._before_tonight): the go shown
+ * beside the Next take field — its newest ★ go, else the last go of its
+ * latest rehearsal — and what "N more" adds under it, the last go of each of
+ * its three latest rehearsals less that one. Tonight's rehearsal and the
+ * ones not on disk are left out.
+ */
+export type BeforeTonight = {
+  song: string
+  first: SongPlays
+  more: SongPlays[]
 }
 
 /**

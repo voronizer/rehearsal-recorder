@@ -40,6 +40,7 @@ export function TakeNameField({
   onEnter,
   size = "big",
   autoFocus = false,
+  onPanel = false,
 }: {
   id: string
   label: string
@@ -53,6 +54,9 @@ export function TakeNameField({
   onEnter?: (name: string) => void
   size?: "big" | "compact"
   autoFocus?: boolean
+  /** Set on the rehearsal screen's panel colour, where the muted field
+   *  would sink into it: the field is drawn on the card colour instead. */
+  onPanel?: boolean
 }) {
   // What is typed, while the field has focus; null shows `value`.
   const [draft, setDraft] = useState<string | null>(null)
@@ -117,7 +121,8 @@ export function TakeNameField({
       </label>
       <div
         className={cn(
-          "relative w-full max-w-md rounded-lg border border-input bg-muted/45",
+          "relative w-full max-w-md rounded-lg border border-input",
+          onPanel ? "bg-card" : "bg-muted/45",
           "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50"
         )}
       >

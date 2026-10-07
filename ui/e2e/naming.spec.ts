@@ -458,7 +458,9 @@ test.describe("the next take", () => {
 })
 
 test.describe("after Stop", () => {
-  test("the name is in the same field, in the same place, and ✕ puts back the one it would have had", async ({
+  // The rehearsal screen has its name field in the panel on the right, and
+  // the save screen at the footer's left: Alex chose that for step 6.
+  test("the name carries over to the save screen's field, and ✕ puts back the one it would have had", async ({
     page,
   }) => {
     await openApp(page)
@@ -466,13 +468,9 @@ test.describe("after Stop", () => {
     const over = page.getByRole("textbox", { name: "Next take" })
     await over.fill("Viasna")
     await page.keyboard.press("Enter")
-    const before = (await over.boundingBox())!
     await page.getByRole("button", { name: /Record take 1/ }).click()
     await page.getByRole("button", { name: /^Stop/ }).click()
     await expect(nameField(page)).toHaveValue("Viasna")
-    const after = (await nameField(page).boundingBox())!
-    expect(Math.abs(after.x - before.x)).toBeLessThan(2)
-    expect(Math.abs(after.y - before.y)).toBeLessThan(2)
     // Over Save take, with a line between it and the buttons.
     await expect(page.locator("footer [data-footer-rule]")).toHaveCount(1)
 

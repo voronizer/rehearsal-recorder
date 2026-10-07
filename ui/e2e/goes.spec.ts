@@ -712,8 +712,10 @@ const down = (page: Page) => page.locator("main").evaluate((el) => el.scrollTop)
 
 test("the mouse wheel moves the songs sideways", async ({ page }) => {
   // Short enough for the window's content to scroll, so a wheel turn that
-  // went to it would show.
-  await page.setViewportSize({ width: 1180, height: 700 })
+  // went to it would show. Lower than the app's smallest window: with the
+  // Next take field in its side panel, the footer leaves the content more
+  // room than it had.
+  await page.setViewportSize({ width: 1180, height: 640 })
   await openOf(page, TWENTY)
   expect(await page.locator("main").evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
   await strip(page).locator("[data-tab='song:Viasna']").hover()
