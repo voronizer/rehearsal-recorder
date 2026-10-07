@@ -17,6 +17,7 @@ export function Shell({
   onBack,
   backKey = false,
   headerAction,
+  facts,
   footer,
   children,
   className,
@@ -29,6 +30,9 @@ export function Shell({
   /** Escape goes back right now, so the back button can say so. */
   backKey?: boolean
   headerAction?: ReactNode
+  /** What there is to know about the rehearsal on screen, right of its
+   *  name (components/EveningFacts). */
+  facts?: ReactNode
   footer?: ReactNode
   children: ReactNode
   className?: string
@@ -98,6 +102,8 @@ export function Shell({
               </h1>
             )}
           </div>
+          {facts}
+          {facts && <span aria-hidden className="ml-2 h-8 w-px shrink-0 bg-border" />}
           <ActivityButton />
           {playback && <ListeningVolume />}
           {headerAction}

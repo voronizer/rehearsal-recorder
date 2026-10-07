@@ -20,6 +20,23 @@ const STATE_POLL_MS = 120
  *  finished aiming yet. */
 const PEAKS_SETTLE_MS = 150
 
+/** The shortest loop kept when another go is shorter than the last: what
+ *  is left of it past the go's end is no loop to listen to. */
+const MIN_KEPT_REGION_SEC = 0.5
+
+/**
+ * Where a take was being listened to, in seconds from its start: what
+ * another go at the same song opens at. Goes do not line up exactly, but
+ * "about a minute in" finds the chorus by ear.
+ */
+export type Spot = {
+  position: number
+  region: { a: number; b: number } | null
+  looping: boolean
+  view: { from: number; to: number } | null
+  playing: boolean
+}
+
 /**
  * The take player. The audio itself is mixed in Python (audio/player.py) —
  * that is where the output-device choice and the absence of a memory ceiling
@@ -281,6 +298,19 @@ export function useMultitrackPlayer(
 
   const resetView = useCallback(() => setViewState(null), [])
 
+  /** Where this take is being listened to, to carry to another go. */
+  const spot = (): Spot => ({
+    position,
+    // One end set reaches to the take's own start or end, as drawn.
+    region:
+      region.a !== null || region.b !== null
+        ? { a: region.a ?? 0, b: region.b ?? duration }
+        : null,
+    looping,
+    view,
+    playing,
+  })
+
   const applyLoop = useCallback(
     (next: { a: number | null; b: number | null }, enabled: boolean) => {
       if (!enabled) {
@@ -290,6 +320,37 @@ export function useMultitrackPlayer(
       void call(() => api().player_set_loop(next.a ?? 0, next.b ?? duration))
     },
     [call, duration]
+  )
+
+  /**
+   * Puts a place kept from another go on the take just opened, clamped to
+   * its length. A loop left shorter than half a second is dropped, and
+   * Repeat with it. The loop goes to Python before the seek, and the seek
+   * before Play, so the first thing heard is the place.
+   */
+  const restore = useCallback(
+    (kept: Spot) => {
+      if (duration <= 0) return
+      const clamp = (t: number) => Math.max(0, Math.min(duration, t))
+      let at = clamp(kept.position)
+      const band = kept.region && { a: clamp(kept.region.a), b: clamp(kept.region.b) }
+      if (band && band.b - band.a >= MIN_KEPT_REGION_SEC) {
+        setRegionState(band)
+        if (kept.looping) {
+          setLooping(true)
+          applyLoop(band, true)
+          if (at < band.a || at >= band.b) at = band.a
+        }
+      } else if (!kept.region && kept.looping) {
+        // Repeat over the whole take.
+        setLooping(true)
+        applyLoop({ a: null, b: null }, true)
+      }
+      if (kept.view) setView(kept.view.from, kept.view.to)
+      seek(at)
+      if (kept.playing) void call(() => api().player_play())
+    },
+    [duration, applyLoop, setView, seek, call]
   )
 
   return {
@@ -315,6 +376,8 @@ export function useMultitrackPlayer(
     restart: () => seek(region.a !== null && looping ? region.a : 0),
     skip: (delta: number) => seek(position + delta),
     seek,
+    spot,
+    restore,
 
     toggleLoop: () => {
       const next = !looping

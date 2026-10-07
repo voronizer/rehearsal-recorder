@@ -44,6 +44,7 @@ export function TakePlayer({
   onCrop,
   canCrop = true,
   spaceKey = false,
+  goKeys = false,
   status,
 }: {
   player: MultitrackPlayer
@@ -64,6 +65,8 @@ export function TakePlayer({
   /** Space plays and pauses on this screen. On the review screen it saves
    *  the take instead, and Play must not claim it. */
   spaceKey?: boolean
+  /** ↑ and ↓ go to the song's other goes: the take strip is above. */
+  goKeys?: boolean
 }) {
   const labels = useLabels()
   const [cropping, setCropping] = useState(false)
@@ -86,6 +89,7 @@ export function TakePlayer({
       <Transport
         player={player}
         spaceKey={spaceKey}
+        goKeys={goKeys}
         markers={markers}
         onAddMarker={onAddMarker}
         onEditMarker={onEditMarker}
@@ -220,9 +224,11 @@ function Transport({
   onAddMarker,
   onEditMarker,
   spaceKey,
+  goKeys,
 }: {
   player: MultitrackPlayer
   spaceKey: boolean
+  goKeys: boolean
   markers: Marker[]
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
@@ -345,7 +351,7 @@ function Transport({
           </Button>
         )}
 
-        <PlayerKeys spaceKey={spaceKey} />
+        <PlayerKeys spaceKey={spaceKey} goKeys={goKeys} />
       </div>
     </div>
   )

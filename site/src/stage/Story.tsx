@@ -1,4 +1,4 @@
-// stage.html#story: the app going through the five steps the page tells,
+// stage.html#story: the app going through the six steps the page tells,
 // one screen at a time, each with the props App would give it, after the
 // fake has been brought to where the app would have it.
 //
@@ -11,9 +11,9 @@ import { Review } from "@/screens/Review"
 import { HistoryScreen } from "@/screens/HistoryScreen"
 import { api, type LastAttempt, type PendingTake, type PlacedTrack } from "@/lib/api"
 import { CLIPS, demoApi } from "./demo"
-import { button, fill, hasText, press, waitFor } from "./drive"
+import { button, dragTimeline, fill, hasText, press, sleep, waitFor } from "./drive"
 
-export const STORY = ["setup", "record", "review", "history", "song"] as const
+export const STORY = ["setup", "record", "review", "history", "song", "compare"] as const
 
 type Scene =
   | { step: "setup" }
@@ -134,6 +134,28 @@ const FORWARD: Record<(typeof STORY)[number], () => Promise<void>> = {
     await press("Songs", { exact: true })
     ;(await waitFor(() => document.querySelector<HTMLElement>('[data-song="Pałyn"]'))).click()
     await waitFor(() => document.querySelector('[data-rung][aria-expanded="true"]'))
+  },
+  // From the song's page, Pałyn 5 with its bridge on repeat, and on to the
+  // next go from its column: it starts at the same bar, still looping.
+  async compare() {
+    const go = (label: string) =>
+      waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`))
+    const exactly = (label: string) =>
+      waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`))
+    ;(await go("Take 2 Pałyn 5")).click()
+    await waitFor(() => document.querySelector('[aria-label="Take timeline"]'))
+    await sleep(700)
+    await dragTimeline(0.55, 0.7)
+    ;(await exactly("Repeat")).click()
+    ;(await exactly("Play")).click()
+    await waitFor(() => document.querySelector("button[aria-label='Pause']"))
+    await press("Songs", { exact: true })
+    ;(await go("Take 3 Pałyn 6")).click()
+    await waitFor(() =>
+      document
+        .querySelector("[data-tab][aria-current='true'] [data-tab-line]")
+        ?.textContent?.startsWith("6")
+    )
   },
 }
 

@@ -524,7 +524,7 @@ window.__MAKE_API__ = () => ({
        next_take_name:suggestName(), next_take_go:nextTake().go,
        next_take_default:suggestName(undefined, false),
        last_attempt:lastAttempt(session.takes, nextTake().song),
-       recording:false, cloud_queue:cq}));
+       recording:false, cloud_queue:cq, disk_bytes:48000000 * session.takes.length}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
@@ -607,6 +607,7 @@ window.__MAKE_API__ = () => ({
   })),
 
   player_open: track('player_open', async (tracks) => {
+    await held('player_open');
     const dur = tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
     P = {playing:false, position:0, t0:clock(), duration:dur, loop:null, muted:[], soloed:null,
          volumes:Object.fromEntries(tracks.map(t => [t.name, 1])),
@@ -634,7 +635,7 @@ window.__MAKE_API__ = () => ({
     }
     return {ok:true, ...playerState(), ...(reopened ? {reopened:true} : {})};
   }),
-  player_play: async () => { if (P) { P.playing = true; P.t0 = clock(); } return {ok:true, ...playerState()}; },
+  player_play: track('player_play', async () => { if (P) { P.playing = true; P.t0 = clock(); } return {ok:true, ...playerState()}; }),
   player_pause: async () => { if (P) { moveTo(position()); P.playing = false; } return {ok:true, ...playerState()}; },
   player_seek: track('player_seek', async (s) => { if (P) moveTo(s); return {ok:true, ...playerState()}; }),
   player_set_loop: track('player_set_loop', async (a, b) => {
@@ -797,9 +798,11 @@ window.__MAKE_API__ = () => ({
     return {ok:true, folder:'/rec/relocated'};
   }),
   get_rehearsal: track('get_rehearsal', async (folder) => {
+    await held('get_rehearsal');
     if (window.__REHEARSAL_UNREADABLE__)
       return {ok:false, error:'Could not read the rehearsal: session.json is damaged'};
-    const r = pastRehearsal(folder);
+    // First rehearsal has the songs a page added, as the library has them.
+    const r = folder === '/rec/older' ? withExtraSongs(pastRehearsal(folder)) : pastRehearsal(folder);
     for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
     return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes)}));
   }),
@@ -943,6 +946,7 @@ window.__MAKE_API__ = () => ({
   bug_report: track('bug_report', async () => ({ok:true,
     text:'РЭХА 0.2.0, run from source\nWindows 11 Pro 10.0.26200, x64\n'})),
   show_file: track('show_file', async () => ({ok:true})),
+  show_rehearsal_folder: track('show_rehearsal_folder', async () => ({ok:true})),
   open_releases: track('open_releases', async (_latest) => ({ok:true})),
   // What updates.py found: __LATEST__ is the newer release a test says is
   // out, and nothing is said while checking is switched off.

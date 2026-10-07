@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react"
-import { Circle, FolderOpen, Pencil } from "lucide-react"
+import { Circle, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { FooterRow } from "@/components/FooterRow"
 import { Kbd, Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
@@ -45,11 +45,14 @@ export function Rehearsal({
   const {
     selected,
     cued,
+    expanded,
+    setExpanded,
     select,
     uncue,
     reselect,
     forget,
     openAt,
+    move,
     playInOverview,
     player,
   } = useTakeStripPlayer()
@@ -154,14 +157,15 @@ export function Rehearsal({
   // Escape below is what points Space at recording again.
   useSpacebar(inHand ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, inHand)
-  // Escape climbs the same ladder here as everywhere: the open take first,
-  // then a take playing in the overview, and then the rehearsal itself,
-  // because finishing is the only way up from this screen. It asks once
-  // there are takes in the rehearsal — ending it by accident would leave the
-  // rest of the evening in a second folder — but an empty one has nothing to
-  // protect, and Python takes its folder with it.
+  // Escape climbs the same ladder here as everywhere: the strip's columns,
+  // the open take, then a take playing in the overview, and then the
+  // rehearsal itself, because finishing is the only way up from this screen.
+  // It asks once there are takes in the rehearsal — ending it by accident
+  // would leave the rest of the evening in a second folder — but an empty
+  // one has nothing to protect, and Python takes its folder with it.
   useEscape(() => {
-    if (selected) select(null)
+    if (selected && expanded) setExpanded(false)
+    else if (selected) select(null)
     else if (cued) uncue()
     else if (session.takes.length === 0) void finish()
     else setFinishing(true)
@@ -302,8 +306,12 @@ export function Rehearsal({
           </Button>
         </span>
       }
-      headerAction={
-        <Badge variant="outline">{takesLabel(session.takes.length)}</Badge>
+      facts={
+        <EveningFacts
+          takes={session.takes}
+          bytes={session.disk_bytes ?? null}
+          folder={session.folder}
+        />
       }
       footer={
         <FooterRow
@@ -350,11 +358,6 @@ export function Rehearsal({
       }
     >
       <div className="flex w-full flex-col gap-4">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <FolderOpen className="size-3.5 shrink-0" />
-          <span className="truncate font-mono">{session.folder}</span>
-        </div>
-
         {/* While no take is open the overview below is the way in, and the
             pills beside it would only repeat it. With none recorded yet the
             strip stays, for its "hit Record" hint. */}
@@ -362,7 +365,10 @@ export function Rehearsal({
         <TakeStrip
           takes={session.takes}
           selected={selected}
+          expanded={expanded}
+          onExpandedChange={setExpanded}
           onSelect={select}
+          onGo={move}
           onRename={setToRename}
           onShare={setToShare}
           onDelete={setToDelete}
@@ -383,6 +389,7 @@ export function Rehearsal({
             canCrop={!busy}
             status={<RunningLine entry={cropping} label="Cropping" />}
             spaceKey
+            goKeys
           />
         ) : (
           session.takes.length > 0 && (

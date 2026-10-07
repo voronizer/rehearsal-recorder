@@ -1,13 +1,14 @@
 import { useEffect, useRef } from "react"
-import { Cloud, CloudCheck, Music2, Pencil, Star, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronUp, Cloud, CloudCheck, Music2, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/Shell"
 import { cn } from "@/lib/utils"
-import { labelLook, labelOf, useLabels } from "@/lib/labels"
-import { formatMMSS } from "@/lib/format"
-import { TakeTitle } from "@/components/TakeTitle"
+import { formatDayIn } from "@/lib/format"
 import { StarButton } from "@/components/StarButton"
-import type { Take } from "@/lib/api"
+import { SongTab, type TabGo } from "@/components/SongTab"
+import { useKey } from "@/hooks/useSpacebar"
+import { lastPlayed, neighbour, songTabs, type SongTab as Tab } from "@/lib/songTabs"
+import type { SongGo, Take } from "@/lib/api"
 
 /**
  * `selected` is the take object captured at click time, kept only so the
@@ -23,11 +24,6 @@ export function liveTake(takes: Take[], selected: Take | null): Take | null {
   return takes.find((t) => t.take_number === selected.take_number) ?? selected
 }
 
-/**
- * The takes of a rehearsal as one scrolling row. It does not wrap: a
- * rehearsal with thirty takes would otherwise push the player off the screen,
- * and the player is the thing you came for.
- */
 /**
  * A pending upload or an error, in words — something to notice at a glance,
  * not something you have to open the take to find out. Shared by the pills
@@ -52,10 +48,21 @@ export function takeButtonLabel(take: Take, status: string | null): string {
   return status ? `${base} — ${status}` : base
 }
 
+/**
+ * The evening's songs as one scrolling row of tabs, a take with no song a
+ * tab of its own, opening out into a column of goes under each. It does not
+ * wrap: a rehearsal with thirty songs would otherwise push the player off
+ * the screen, and the player is the thing you came for.
+ */
 export function TakeStrip({
   takes,
   selected,
+  folder,
+  across,
+  expanded,
+  onExpandedChange,
   onSelect,
+  onGo,
   onRename,
   onShare,
   onDelete,
@@ -65,7 +72,20 @@ export function TakeStrip({
 }: {
   takes: Take[]
   selected: Take | null
+  /** The rehearsal the open go is in, when `across` brings goes from
+   *  others. */
+  folder?: string
+  /** Every go at the open song, by time, when the player was opened from
+   *  the song's page; otherwise the song's goes are this evening's. */
+  across?: SongGo[]
+  /** Whether the tabs are opened out into columns of their goes. */
+  expanded: boolean
+  onExpandedChange: (open: boolean) => void
+  /** Another song, or a take with no song: opened from its start. */
   onSelect: (take: Take) => void
+  /** Another go at the open song, with the rehearsal it is in when it comes
+   *  from `across`. */
+  onGo: (take: Take, folder?: string) => void
   onRename?: (take: Take) => void
   onShare?: (take: Take) => void
   onDelete?: (take: Take) => void
@@ -73,17 +93,56 @@ export function TakeStrip({
   cloudStates?: Record<number, "queued" | "working">
   emptyHint?: string
 }) {
-  const labels = useLabels()
-  const openPillRef = useRef<HTMLButtonElement | null>(null)
+  const live = liveTake(takes, selected)
+  const isShared = Boolean(live?.cloud?.mix || live?.cloud?.tracks)
+  const tabs = songTabs(takes)
+  // A go here is in this rehearsal when it carries no folder, or this one.
+  const isOpenGo = (go: TabGo) =>
+    live !== null &&
+    go.take.take_number === live.take_number &&
+    (go.folder === undefined || go.folder === folder)
+  // The open song's goes from its page: this rehearsal's read as they are
+  // now from `takes`, since the page's copies can be older than a star or a
+  // mark made here.
+  const goesOf = (tab: Tab, open: boolean): TabGo[] => {
+    if (!(open && across?.length && tab.song)) return tab.takes.map((take) => ({ take }))
+    const several = new Set(across.map((g) => g.folder)).size > 1
+    return across.map((g) => ({
+      take:
+        g.folder === folder
+          ? (takes.find((t) => t.take_number === g.take.take_number) ?? g.take)
+          : g.take,
+      folder: g.folder,
+      day: several ? formatDayIn(g.created_at) : undefined,
+    }))
+  }
+
+  const openTab = live && tabs.find((t) => t.takes.some((x) => x.take_number === live.take_number))
+  // ↑ and ↓: the previous and next go at the open song, in the order its
+  // column lists them. Nothing at either end, nor on a take with no song.
+  const step = (dir: -1 | 1) => {
+    if (!openTab?.song) return
+    const goes = goesOf(openTab, true)
+    const go = neighbour(goes, goes.findIndex(isOpenGo), dir)
+    if (go) onGo(go.take, go.folder)
+  }
+  useKey("ArrowUp", () => step(-1), live !== null)
+  useKey("ArrowDown", () => step(1), live !== null)
+
+  const row = useRef<HTMLDivElement | null>(null)
 
   // The strip doesn't wrap (see the note below), so on a rehearsal with many
-  // takes the one you just picked can land outside the visible row — this is
-  // what keeps the vertical budget fixed without also hiding the take. The
+  // songs the one just picked can land outside the visible row: this keeps
+  // the vertical budget fixed without also hiding the tab. A rename can move
+  // the open go to another song's tab, so that counts as a pick too. The
   // hook has to run before the empty-state return below, or the count of
   // hooks called would change between an empty and a non-empty rehearsal.
+  const openKey = openTab ? openTab.key : null
   useEffect(() => {
-    openPillRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" })
-  }, [selected?.take_number])
+    row.current
+      ?.querySelector("[data-tab][aria-current='true']")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [selected?.take_number, folder, openKey])
 
   if (takes.length === 0) {
     return (
@@ -95,94 +154,63 @@ export function TakeStrip({
     )
   }
 
-  const live = liveTake(takes, selected)
-  const isShared = Boolean(live?.cloud?.mix || live?.cloud?.tracks)
-
   return (
-    <div role="group" aria-label="Take strip" className="flex items-center gap-2">
-      <span className="shrink-0 text-xs tracking-wide text-muted-foreground uppercase">
-        Takes
-      </span>
+    <div
+      role="group"
+      aria-label="Take strip"
+      className={cn("flex gap-2", expanded ? "items-start" : "items-center")}
+    >
+      <button
+        type="button"
+        aria-expanded={expanded}
+        title="Every song's goes"
+        onClick={(e) => {
+          onExpandedChange(!expanded)
+          e.currentTarget.blur()
+        }}
+        className={cn(
+          "-ml-2 flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-xs tracking-wide text-muted-foreground uppercase hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
+          expanded && "mt-4"
+        )}
+      >
+        Songs
+        {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+      </button>
 
-      <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto py-1">
-        {takes.map((take) => {
-          const open = selected?.take_number === take.take_number
-          const cloudState = cloudStates?.[take.take_number]
-          // The old rows showed this unconditionally, and a pill collapsing
-          // it away would be a silent regression, not a simplification.
-          const statusText = takeCloudStatus(take, cloudState)
+      <div
+        ref={row}
+        className={cn(
+          "flex min-w-0 flex-1 gap-1 overflow-x-auto border-b",
+          expanded ? "items-stretch" : "items-end"
+        )}
+      >
+        {tabs.map((tab) => {
+          const open = tab === openTab
+          const goes = goesOf(tab, open)
+          const shown = open
+            ? (goes.find(isOpenGo) ?? { take: live! })
+            : goes[goes.length - 1]
           return (
-            <button
-              key={take.take_number}
-              ref={open ? openPillRef : undefined}
-              type="button"
-              aria-label={takeButtonLabel(take, statusText)}
-              aria-current={open ? "true" : undefined}
-              onClick={(e) => {
-                onSelect(take)
-                // Otherwise focus stays on the pill and Space picks it again
-                // instead of starting playback.
-                e.currentTarget.blur()
-              }}
-              className={cn(
-                "flex shrink-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm transition-colors",
-                open
-                  ? "border-primary bg-primary/15"
-                  : "bg-card hover:bg-accent/50"
-              )}
-            >
-              <span className="tnum text-[11px] text-muted-foreground">
-                {String(take.take_number).padStart(2, "0")}
-              </span>
-              <span className="flex max-w-40 min-w-0">
-                <TakeTitle take={take} cut />
-              </span>
-              {take.starred && (
-                <Star
-                  aria-hidden
-                  data-starred
-                  className="size-3 shrink-0 fill-current text-signal"
-                />
-              )}
-              {take.markers && take.markers.length > 0 && (
-                <span className="flex shrink-0 items-center gap-1">
-                  {labels
-                    .filter((l) =>
-                      take.markers?.some((m) => labelOf(labels, m.label_id).id === l.id)
-                    )
-                    .map((l) => (
-                      <span
-                        key={l.id}
-                        title={l.name}
-                        className={cn("size-1.5 shrink-0 rounded-full", labelLook(l.colour).dot)}
-                      />
-                    ))}
-                  <span className="tnum text-[11px] text-muted-foreground">
-                    {take.markers.length}
-                  </span>
-                </span>
-              )}
-              <span className="tnum text-[11px] text-muted-foreground">
-                {formatMMSS(take.duration_sec)}
-              </span>
-              {statusText && (
-                <span
-                  className={cn(
-                    "text-[11px]",
-                    cloudState ? "text-muted-foreground" : "text-destructive"
-                  )}
-                  title={cloudState ? undefined : take.cloud_error}
-                >
-                  {statusText}
-                </span>
-              )}
-            </button>
+            <SongTab
+              key={tab.key}
+              tabKey={tab.key}
+              song={tab.song}
+              goes={goes}
+              shown={shown}
+              open={open}
+              expanded={expanded}
+              isOpenGo={isOpenGo}
+              cloudStates={cloudStates}
+              onPick={() => onSelect(lastPlayed(tab))}
+              onRow={(go) => (open ? onGo(go.take, go.folder) : onSelect(go.take))}
+              onToggle={() => onExpandedChange(!expanded)}
+            />
           )
         })}
       </div>
 
       {live && (
-        <div className="flex shrink-0 items-center gap-1">
+        <div className={cn("flex shrink-0 items-center gap-1", expanded && "mt-4")}>
           {onStar && <StarButton take={live} onStar={onStar} />}
           {onRename && (
             <Button

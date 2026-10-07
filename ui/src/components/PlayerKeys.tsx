@@ -22,7 +22,7 @@ const kbdClass =
  * The transport stays as plain as it was, and anyone who wants the keys asks
  * for them once: with the ? key or the button at the end of the row.
  */
-export function PlayerKeys({ spaceKey }: { spaceKey: boolean }) {
+export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: boolean }) {
   const [open, setOpen] = useState(false)
   useKey("?", () => setOpen(true), !open)
 
@@ -30,6 +30,10 @@ export function PlayerKeys({ spaceKey }: { spaceKey: boolean }) {
     ...(spaceKey ? [[["Space"], "Play / pause"] as [string[], string]] : []),
     [["←", "→"], "10 seconds back / forward"],
     [["Home"], "To the start"],
+    // Only where the take strip is: the review screen has one take.
+    ...(goKeys
+      ? [[["↑", "↓"], "Previous / next go at this song"] as [string[], string]]
+      : []),
     [["M"], "Mark this spot"],
     [["R"], "Repeat on / off"],
     // Not keys, but the other thing nobody finds without being told: the

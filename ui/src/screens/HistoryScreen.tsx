@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Shell, EmptyState } from "@/components/Shell"
 import { RehearsalList } from "@/components/RehearsalList"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
+import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { HistorySwitch } from "@/components/HistorySwitch"
 import { SongList } from "@/components/SongList"
@@ -15,6 +16,7 @@ import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
+import { goesByTime } from "@/lib/songTabs"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
@@ -131,12 +133,15 @@ export function HistoryScreen({
   const {
     selected,
     cued,
+    expanded,
+    setExpanded,
     select,
     close,
     uncue,
     reselect,
     forget,
     openAt,
+    move,
     playInOverview,
     player,
   } = useTakeStripPlayer<PlacedTake>(byPlace)
@@ -353,17 +358,35 @@ export function HistoryScreen({
 
   // A go opened from a song's page: the player has its rehearsal's takes,
   // whichever rehearsal Rehearsals has chosen, and Escape comes back to the
-  // page scrolled where it was.
+  // page scrolled where it was. "keep" is another go at the song from inside
+  // the player, in another rehearsal: it opens at the same place, and the
+  // page's scroll, kept when the player was opened, is left as it is.
+  //
+  // A go is opened once its rehearsal has been read, and only if nothing
+  // else was picked meanwhile: another go, another tab, or Escape back to
+  // the page. Each of those changes what is selected, and so turns the
+  // ticket.
   const songSection = useRef<HTMLElement | null>(null)
   const songScroll = useRef<number | null>(null)
-  const openGo = async (take: PlacedTake, at?: number) => {
+  const going = useRef(0)
+  useEffect(() => {
+    going.current++
+  }, [selected])
+  const openGo = async (take: PlacedTake, at?: number | "keep") => {
     const scrolled = songSection.current?.scrollTop ?? 0
+    const ticket = ++going.current
     const res = await api().get_rehearsal(take.folder)
+    if (ticket !== going.current) return
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the rehearsal" })
       return
     }
     setGoRehearsal(res)
+    if (at === "keep") {
+      const fresh = res.takes.find((t) => t.take_number === take.take_number)
+      move(fresh ? placed(take.folder, fresh) : take)
+      return
+    }
     songScroll.current = scrolled
     if (at === undefined) select(take)
     else openAt(take, at)
@@ -435,10 +458,18 @@ export function HistoryScreen({
     player.pause()
     onBack()
   }
-  // Escape peels one layer at a time: the open take first, then a take
-  // playing in the overview, then history itself — the same ladder the back
-  // button climbs, one rung per press.
-  useEscape(() => (selected ? select(null) : cued ? uncue() : back()))
+  // Escape peels one layer at a time: the strip's columns, the open take,
+  // then a take playing in the overview, then history itself — the same
+  // ladder the back button climbs, one rung per press.
+  useEscape(() =>
+    selected && expanded
+      ? setExpanded(false)
+      : selected
+        ? select(null)
+        : cued
+          ? uncue()
+          : back()
+  )
 
   const deleteTake = async (take: PlacedTake) => {
     dismiss(SAID)
@@ -652,22 +683,41 @@ export function HistoryScreen({
     const opened = inPlayer
     // What the strip and its buttons hand on is a take of this rehearsal.
     const here = (take: Take) => placed(opened.folder, take)
+    // Opened from a song's page, the song's goes are every go at it, by
+    // time; another song picked on the strip has this evening's.
+    const playedSong = liveTake(opened.takes, selected)?.song
+    const across =
+      view === "songs" && pageShown && playedSong && pageShown.title === playedSong
+        ? goesByTime(pageShown.goes ?? [])
+        : undefined
     return (
       <Shell
         playback
         subtitle={formatDateHuman(opened.created_at)}
         title={opened.name}
         onBack={back}
+        facts={
+          <EveningFacts
+            takes={opened.takes}
+            bytes={rehearsals?.find((r) => r.folder === opened.folder)?.disk_bytes ?? null}
+            folder={opened.folder}
+          />
+        }
       >
         <div className="flex w-full flex-col gap-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <FolderOpen className="size-3.5 shrink-0" />
-            <span className="truncate font-mono">{opened.folder}</span>
-          </div>
           <TakeStrip
             takes={opened.takes}
             selected={selected}
+            folder={opened.folder}
+            across={across}
+            expanded={expanded}
+            onExpandedChange={setExpanded}
             onSelect={(take) => select(here(take))}
+            onGo={(take, folder) =>
+              folder === undefined || folder === opened.folder
+                ? move(here(take))
+                : void openGo(placed(folder, take), "keep")
+            }
             onRename={(take) => setTakeToRename(here(take))}
             onShare={(take) => setTakeToShare(here(take))}
             onDelete={(take) => setTakeToDelete(here(take))}
@@ -682,6 +732,7 @@ export function HistoryScreen({
             onRemoveMarker={(sec) => removeMarker(selected, sec)}
             onCrop={(from, to) => void cropTake(selected, from, to)}
             spaceKey
+            goKeys
             canCrop={!busy}
             status={<RunningLine entry={cropping} label="Cropping" />}
           />

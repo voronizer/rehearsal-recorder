@@ -87,6 +87,7 @@ from rehearsal_recorder.platform_support import (
     app_root,
     describe_path_limit,
     move_to_trash,
+    open_in_file_manager,
     reveal_in_file_manager,
     safe_filename,
     trash_kind,
@@ -777,6 +778,16 @@ class Api:
             return reveal_in_file_manager(path.parent)
         return reveal_in_file_manager(path)
 
+    def show_rehearsal_folder(self, folder):
+        """Opens a rehearsal's folder in the system's file manager: the
+        button in the player's header. Only a rehearsal the library knows,
+        since the window names the folder."""
+        if not self._lib.has(folder):
+            return {"ok": False, "error": "Rehearsal not found"}
+        if not Path(folder).is_dir():
+            return {"ok": False, "error": "The rehearsal's folder is not on disk"}
+        return open_in_file_manager(folder)
+
     def open_releases(self, latest=False):
         """The releases page, in the browser: the window would open it in
         itself, with no way back. `latest` opens the newest release's own
@@ -1445,6 +1456,9 @@ class Api:
             "last_attempt": _last_attempt(takes, coming["song"]),
             "recording": self._recorder is not None,
             "cloud_queue": self._cloud_queue.states(s["folder"]),
+            # The header's "On disk", measured as History measures a
+            # rehearsal. Read when the screen asks, which is after each take.
+            "disk_bytes": _folder_bytes(s["folder"]),
         }
 
     def _next_take(self, take_number=None, chosen=True):

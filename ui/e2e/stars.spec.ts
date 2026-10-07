@@ -94,7 +94,7 @@ test("a take just saved is starred from the rehearsal's own overview", async ({ 
   expect((await calls(page, "set_take_star")).at(-1)?.args.slice(1)).toEqual([1, true])
 })
 
-test("in the player, ★ is beside the open take, and its pill carries it", async ({ page }) => {
+test("in the player, ★ is beside the open take, and its tab carries it", async ({ page }) => {
   const overview = await openEvening(page)
   await overview.getByRole("button", { name: "Take 2 Pałyn 2" }).click()
   const strip = page.getByRole("group", { name: "Take strip" })
@@ -102,15 +102,17 @@ test("in the player, ★ is beside the open take, and its pill carries it", asyn
   await star(strip, "Pałyn 2").click()
   await expect(star(strip, "Pałyn 2")).toHaveAttribute("aria-pressed", "true")
   expect((await calls(page, "set_take_star")).at(-1)?.args).toEqual(["/rec/old", 2, true])
-  await expect(strip.getByRole("button", { name: /^Take 2 Pałyn 2, starred/ })).toBeVisible()
-  await expect(strip.locator("[aria-current='true'] [data-starred]")).toHaveCount(1)
+  await expect(strip.locator("[aria-current='true'] [data-tab-line] [data-starred]")).toHaveCount(1)
 })
 
-test("every starred pill carries ★, not only the open one", async ({ page }) => {
+test("a tab carries the ★ of its go, and the columns every starred go", async ({ page }) => {
   const overview = await openEvening(page, "window.__STARRED__ = ['/rec/old#1', '/rec/old#3'];")
   await overview.getByRole("button", { name: "Take 4 Viasna 1" }).click()
   const strip = page.getByRole("group", { name: "Take strip" })
-  await expect(strip.locator("[data-starred]")).toHaveCount(2)
+  // Pałyn's tab shows Pałyn 2, the go a click on it opens, which has none.
+  await expect(strip.locator("[data-tab='take:3'] [data-tab-line] [data-starred]")).toHaveCount(1)
+  await expect(strip.locator("[data-tab='Pałyn'] [data-tab-line] [data-starred]")).toHaveCount(0)
+  await strip.getByRole("button", { name: "Songs", exact: true }).click()
   await expect(strip.getByRole("button", { name: /^Take 1 Pałyn 1, starred/ })).toBeVisible()
   await expect(strip.getByRole("button", { name: /^Take 3 Take 3, starred/ })).toBeVisible()
 })

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
+import { type Spot, useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import type { Take } from "@/lib/api"
 
 /** Two copies of one take, within one rehearsal: a rename or a crop hands
@@ -33,11 +33,46 @@ export function useTakeStripPlayer<T extends Take = Take>(
   const sameTake = (a: T | null, b: T | null) => a !== null && b !== null && same(a, b)
   const [selected, setSelected] = useState<T | null>(null)
   const [cued, setCued] = useState<T | null>(null)
+  // Whether the strip's tabs are opened out into columns. They start shut
+  // each time a take is opened from outside the player, and stay as they
+  // are while goes are gone through inside it.
+  const [expanded, setExpanded] = useState(false)
   const loaded = selected ?? cued
   const player = useMultitrackPlayer(
     loaded?.tracks ?? null,
     loaded?.duration_sec ?? 0
   )
+
+  // What to do once the take being opened is open: seek to a note in it,
+  // start playing it from the overview, or put back the place kept from
+  // another go at the song. Sent before, Python has no player to act on and
+  // drops it. "Open" is loading having gone on and then off again, because
+  // on the render that asks, loading is still false from before.
+  type Pending = { at: number | null; play: boolean; spot?: Spot }
+  const [pending, setPending] = useState<Pending | null>(null)
+  const sawLoading = useRef(false)
+  const { loading, loadError, seek, play, restore } = player
+  useEffect(() => {
+    if (pending === null) return
+    if (loading) {
+      sawLoading.current = true
+      return
+    }
+    if (!sawLoading.current) return
+    sawLoading.current = false
+    if (!loadError) {
+      if (pending.spot) restore(pending.spot)
+      if (pending.at !== null) seek(pending.at)
+      if (pending.play) play()
+    }
+    setPending(null)
+  }, [pending, loading, loadError, seek, play, restore])
+
+  const whenOpen = (next: Pending | null) => {
+    sawLoading.current = false
+    setPending(next)
+  }
+  const drop = () => whenOpen(null)
 
   // Nothing is open until somebody picks a take: opening a rehearsal should
   // not start reading audio files nobody asked for.
@@ -46,12 +81,19 @@ export function useTakeStripPlayer<T extends Take = Take>(
   // where it is. Going back to the overview keeps a take that is playing
   // playing there, and puts away one that is not — the overview is where the
   // rest of the takes are, not a place to leave a paused one hanging.
+  //
+  // Whatever was waiting for another take to open — a place carried from
+  // the go before, a note — is let go of: it was asked for that take.
   const select = (take: T | null) => {
     if (take === null) {
       setCued(player.playing ? selected : null)
       setSelected(null)
+      setExpanded(false)
+      drop()
       return
     }
+    if (selected === null) setExpanded(false)
+    if (!sameTake(take, loaded)) drop()
     setSelected(sameTake(take, loaded) ? loaded : take)
     setCued(null)
   }
@@ -60,6 +102,8 @@ export function useTakeStripPlayer<T extends Take = Take>(
   const close = () => {
     setSelected(null)
     setCued(null)
+    setExpanded(false)
+    drop()
   }
 
   /** The take playing in the overview is stopped and put away. */
@@ -78,36 +122,9 @@ export function useTakeStripPlayer<T extends Take = Take>(
 
   /** A deleted take is let go of, wherever it was. */
   const forget = (take: T) => {
+    if (sameTake(selected, take) || sameTake(cued, take)) drop()
     setSelected((s) => (sameTake(s, take) ? null : s))
     setCued((c) => (sameTake(c, take) ? null : c))
-  }
-
-  // What to do once the take being opened is open: seek to a note in it, or
-  // start playing it from the overview. Sent before, Python has no player to
-  // act on and drops it. "Open" is loading having gone on and then off
-  // again, because on the render that asks, loading is still false from
-  // before.
-  const [pending, setPending] = useState<{ at: number | null; play: boolean } | null>(null)
-  const sawLoading = useRef(false)
-  const { loading, loadError, seek, play } = player
-  useEffect(() => {
-    if (pending === null) return
-    if (loading) {
-      sawLoading.current = true
-      return
-    }
-    if (!sawLoading.current) return
-    sawLoading.current = false
-    if (!loadError) {
-      if (pending.at !== null) seek(pending.at)
-      if (pending.play) play()
-    }
-    setPending(null)
-  }, [pending, loading, loadError, seek, play])
-
-  const whenOpen = (next: { at: number | null; play: boolean }) => {
-    sawLoading.current = false
-    setPending(next)
   }
 
   /** Opening a take at a spot — a note in the rehearsal overview. */
@@ -117,8 +134,20 @@ export function useTakeStripPlayer<T extends Take = Take>(
       seek(at)
       return
     }
-    whenOpen({ at, play: false })
     select(take)
+    whenOpen({ at, play: false })
+  }
+
+  /**
+   * Another go at the open song, at the same place: its row in the column,
+   * or ↑ ↓. A second move before the first go has opened carries the first
+   * one's place on, not the nothing the half-opened go has yet.
+   */
+  const move = (take: T) => {
+    if (sameTake(take, loaded)) return
+    const spot = pending?.spot ?? player.spot()
+    select(take)
+    whenOpen({ at: null, play: false, spot })
   }
 
   /** Play or pause a take from its row in the overview, without opening it. */
@@ -134,12 +163,15 @@ export function useTakeStripPlayer<T extends Take = Take>(
   return {
     selected,
     cued,
+    expanded,
+    setExpanded,
     select,
     close,
     uncue,
     reselect,
     forget,
     openAt,
+    move,
     playInOverview,
     player,
   }
