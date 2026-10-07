@@ -1,5 +1,15 @@
-import { useEffect, useRef } from "react"
-import { ChevronDown, ChevronUp, Cloud, CloudCheck, Music2, Pencil, Trash2 } from "lucide-react"
+import { useEffect } from "react"
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Cloud,
+  CloudCheck,
+  Music2,
+  Pencil,
+  Trash2,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/Shell"
 import { cn } from "@/lib/utils"
@@ -7,6 +17,7 @@ import { formatDayIn } from "@/lib/format"
 import { StarButton } from "@/components/StarButton"
 import { SongTab, type TabGo } from "@/components/SongTab"
 import { useKey } from "@/hooks/useSpacebar"
+import { useRowEdges } from "@/hooks/useRowEdges"
 import { lastPlayed, neighbour, songTabs, type SongTab as Tab } from "@/lib/songTabs"
 import type { SongGo, Take } from "@/lib/api"
 
@@ -129,7 +140,7 @@ export function TakeStrip({
   useKey("ArrowUp", () => step(-1), live !== null)
   useKey("ArrowDown", () => step(1), live !== null)
 
-  const row = useRef<HTMLDivElement | null>(null)
+  const { ref: rowRef, row, page } = useRowEdges()
 
   // The strip doesn't wrap (see the note below), so on a rehearsal with many
   // songs the one just picked can land outside the visible row: this keeps
@@ -139,10 +150,10 @@ export function TakeStrip({
   // hooks called would change between an empty and a non-empty rehearsal.
   const openKey = openTab ? openTab.key : null
   useEffect(() => {
-    row.current
+    row
       ?.querySelector("[data-tab][aria-current='true']")
       ?.scrollIntoView({ block: "nearest", inline: "nearest" })
-  }, [selected?.take_number, folder, openKey])
+  }, [row, selected?.take_number, folder, openKey])
 
   if (takes.length === 0) {
     return (
@@ -177,36 +188,40 @@ export function TakeStrip({
         {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
       </button>
 
-      <div
-        ref={row}
-        className={cn(
-          "flex min-w-0 flex-1 gap-1 overflow-x-auto border-b",
-          expanded ? "items-stretch" : "items-end"
-        )}
-      >
-        {tabs.map((tab) => {
-          const open = tab === openTab
-          const goes = goesOf(tab, open)
-          const shown = open
-            ? (goes.find(isOpenGo) ?? { take: live! })
-            : goes[goes.length - 1]
-          return (
-            <SongTab
-              key={tab.key}
-              tabKey={tab.key}
-              song={tab.song}
-              goes={goes}
-              shown={shown}
-              open={open}
-              expanded={expanded}
-              isOpenGo={isOpenGo}
-              cloudStates={cloudStates}
-              onPick={() => onSelect(lastPlayed(tab))}
-              onRow={(go) => (open ? onGo(go.take, go.folder) : onSelect(go.take))}
-              onToggle={() => onExpandedChange(!expanded)}
-            />
-          )
-        })}
+      <div className="relative flex min-w-0 flex-1">
+        <div
+          ref={rowRef}
+          className={cn(
+            "peer/row flex min-w-0 flex-1 gap-1 overflow-x-auto border-b",
+            expanded ? "items-stretch" : "items-end"
+          )}
+        >
+          {tabs.map((tab) => {
+            const open = tab === openTab
+            const goes = goesOf(tab, open)
+            const shown = open
+              ? (goes.find(isOpenGo) ?? { take: live! })
+              : goes[goes.length - 1]
+            return (
+              <SongTab
+                key={tab.key}
+                tabKey={tab.key}
+                song={tab.song}
+                goes={goes}
+                shown={shown}
+                open={open}
+                expanded={expanded}
+                isOpenGo={isOpenGo}
+                cloudStates={cloudStates}
+                onPick={() => onSelect(lastPlayed(tab))}
+                onRow={(go) => (open ? onGo(go.take, go.folder) : onSelect(go.take))}
+                onToggle={() => onExpandedChange(!expanded)}
+              />
+            )
+          })}
+        </div>
+        <Edge side="before" onPage={() => page(-1)} />
+        <Edge side="after" onPage={() => page(1)} />
       </div>
 
       {live && (
@@ -259,5 +274,34 @@ export function TakeStrip({
         </div>
       )}
     </div>
+  )
+}
+
+/** A round ‹ or › at an end of the strip that has more songs past it: a
+ *  screenful that way. Shown only while the row says there is more that way
+ *  (`useRowEdges`). On the line of the tabs' names, as the Songs button and
+ *  the take's buttons are, so it stays put when the strip opens out. */
+function Edge({ side, onPage }: { side: "before" | "after"; onPage: () => void }) {
+  const name = side === "before" ? "Earlier songs" : "Later songs"
+  const Icon = side === "before" ? ChevronLeft : ChevronRight
+  return (
+    <button
+      type="button"
+      aria-label={name}
+      title={name}
+      onClick={(e) => {
+        onPage()
+        // Space would press it again rather than play.
+        e.currentTarget.blur()
+      }}
+      className={cn(
+        "absolute top-7.5 z-10 hidden size-7.5 place-items-center rounded-full border bg-card text-foreground shadow-md hover:bg-accent",
+        side === "before"
+          ? "-left-1 peer-data-[before]/row:grid"
+          : "-right-1 peer-data-[after]/row:grid"
+      )}
+    >
+      <Icon className="size-3.5" />
+    </button>
   )
 }

@@ -149,10 +149,13 @@ export function SongTab({
     widest.current = el.offsetWidth
     el.style.minWidth = `${widest.current}px`
   })
+
+  const title = song ?? `Take ${shown.take.take_number}`
+
   // A long name is cut short so it does not take half the strip; the whole
   // of it is a hover away, on the names that were cut and only on those.
   // Whether it was cut is known only from the layout, so, like the width
-  // above, it is set on the element rather than rendered.
+  // above it, it is set on the element rather than rendered.
   const text = useRef<HTMLSpanElement | null>(null)
   const head = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
@@ -162,7 +165,6 @@ export function SongTab({
     else head.current.removeAttribute("title")
   })
 
-  const title = song ?? `Take ${shown.take.take_number}`
   const statusOf = (go: TabGo) =>
     takeCloudStatus(go.take, go.folder === undefined ? cloudStates?.[go.take.take_number] : undefined)
   const status = statusOf(shown)

@@ -581,3 +581,75 @@ test("a long song name is cut to 224 px and shown whole on hover", async ({ page
   await expect(openTab(strip(page))).toHaveAttribute("data-tab", LONG)
   await expect(openTab(strip(page)).locator(`[title='${LONG}']`)).toHaveCount(1)
 })
+
+const TWENTY = ["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym", "Ptuška", "Daroha", "Rečka",
+  "Vieter", "Zorka", "Kvietka", "Rassvet", "Lieta", "Zima", "Vosień", "Bierah", "Rečyšča",
+  "Ranica", "Viečar", "Noč"]
+const tabRow = (page: Page) => strip(page).locator("[data-tab]").first().locator("..")
+const scrolled = (page: Page) => tabRow(page).evaluate((el) => el.scrollLeft)
+/** Where the row is once a smooth move has come to rest. */
+async function rested(page: Page) {
+  let at = -1
+  await expect
+    .poll(async () => {
+      const was = at
+      at = await scrolled(page)
+      return at === was
+    })
+    .toBe(true)
+  return at
+}
+const earlier = (page: Page) => strip(page).getByRole("button", { name: "Earlier songs" })
+const later = (page: Page) => strip(page).getByRole("button", { name: "Later songs" })
+
+test("a few songs show no arrows", async ({ page }) => {
+  await openGo(page)
+  await expect(openTab(strip(page))).toBeVisible()
+  await expect(earlier(page)).toHaveCount(0)
+  await expect(later(page)).toHaveCount(0)
+  expect(await tabRow(page).evaluate((el) => getComputedStyle(el).maskImage)).toBe("none")
+})
+
+test("the mouse wheel moves the songs sideways", async ({ page }) => {
+  await openOf(page, TWENTY)
+  const pageAt = await page.evaluate(() => window.scrollY)
+  await strip(page).locator("[data-tab='Viasna']").hover()
+  await page.mouse.wheel(0, 300)
+  await expect.poll(() => scrolled(page)).toBeGreaterThan(0)
+  expect(await page.evaluate(() => window.scrollY)).toBe(pageAt)
+})
+
+test("an arrow at a side with more songs moves the row a screenful", async ({ page }) => {
+  await openOf(page, TWENTY)
+  await expect(later(page)).toBeVisible()
+  await expect(earlier(page)).toHaveCount(0)
+  expect(await tabRow(page).evaluate((el) => getComputedStyle(el).maskImage)).not.toBe("none")
+  const width = await tabRow(page).evaluate((el) => el.clientWidth)
+  await later(page).click()
+  expect(await rested(page)).toBeGreaterThanOrEqual(width - 96 - 1)
+  await expect(earlier(page)).toBeVisible()
+  // It gives up focus, so Space still plays.
+  expect(await page.evaluate(() => document.activeElement?.getAttribute("aria-label"))).not.toBe(
+    "Later songs"
+  )
+  for (let i = 0; i < 5 && (await earlier(page).count()); i++) {
+    const at = await scrolled(page)
+    await earlier(page).click()
+    expect(await rested(page)).toBeLessThan(at)
+  }
+  expect(await scrolled(page)).toBe(0)
+  await expect(earlier(page)).toHaveCount(0)
+})
+
+test("the wheel over an open column scrolls the column, not the songs", async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 760 })
+  await openOf(page, [...Array(12).fill("Alpha"), ...TWENTY.slice(0, 12)])
+  await songs(page).click()
+  const column = strip(page).locator("[data-column='Alpha']")
+  await expect(column).toBeVisible()
+  expect(await column.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+  await column.hover()
+  await page.mouse.wheel(0, 200)
+  await expect.poll(() => column.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  expect(await scrolled(page)).toBe(0)
+})
