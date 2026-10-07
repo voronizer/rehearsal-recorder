@@ -203,6 +203,27 @@ test.describe("playing an earlier go", () => {
     expect((opened.args[0] as { file: string }[])[0].file).toBe("/rec/older/d2.wav")
   })
 
+  // A click made by a script, as a screen reader's or the site's story's is,
+  // lands where the fake answers the opening in the same breath: loading
+  // goes on and off in one render. The go must play all the same.
+  test("a click from a script plays an earlier go too", async ({ page }) => {
+    await withDaroha(page)
+    const daroha = card(page, "Daroha")
+    await daroha.getByRole("button", { name: "Play Daroha 2" }).evaluate((b: HTMLElement) => b.click())
+    await expect(daroha.getByRole("button", { name: "Pause Daroha 2" })).toBeVisible()
+    await expect.poll(() => playing(page)).toBe(true)
+  })
+
+  test("a note clicked from a script plays its go from 3 s before", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true" })
+    await startRehearsal(page)
+    await pill(page, "Pałyn").click()
+    const palyn = card(page, "Pałyn")
+    await palyn.locator("[data-note]").first().evaluate((n: HTMLElement) => n.click())
+    await expect(palyn.getByRole("button", { name: "Pause Pałyn 2" })).toBeVisible()
+    await expect.poll(async () => (await calls(page, "player_seek")).at(-1)?.args[0]).toBe(69)
+  })
+
   test("an earlier take 2 and tonight's take 2 are told apart", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)

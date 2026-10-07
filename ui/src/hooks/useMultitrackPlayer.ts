@@ -53,6 +53,11 @@ export function useMultitrackPlayer(
   const [media, setMedia] = useState<TrackMedia[]>([])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // An open of a take that has finished, opened or failed: a fresh object
+  // each time, for the tracks it was for. Loading going on and off says as
+  // much only when a render falls between the two, and none does when
+  // Python answers at once.
+  const [settled, setSettled] = useState<{ tracks: TrackFile[] } | null>(null)
   // Not a failure: the take plays, just not out of the chosen device.
   const [outputWarning, setOutputWarning] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
@@ -173,10 +178,12 @@ export function useMultitrackPlayer(
         setOutputWarning(opened.warning ?? null)
         applyState(opened)
         setLoading(false)
+        setSettled({ tracks })
       } catch (e) {
         if (cancelled) return
         setLoadError(e instanceof Error ? e.message : String(e))
         setLoading(false)
+        setSettled({ tracks })
       }
     })()
 
@@ -365,6 +372,7 @@ export function useMultitrackPlayer(
     media,
     loading,
     loadError,
+    settled,
     outputWarning,
     playing,
     position,
