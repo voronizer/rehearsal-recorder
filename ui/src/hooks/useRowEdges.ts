@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 
 /** How far a row fades out at an end that has more of it past the edge. */
 export const FADE = 48
@@ -9,6 +9,15 @@ function fadeMask(before: boolean, after: boolean): string {
   const from = before ? `transparent, #000 ${FADE}px` : "#000"
   const to = after ? `#000 calc(100% - ${FADE}px), transparent` : "#000"
   return `linear-gradient(to right, ${from}, ${to})`
+}
+
+/** Whether `el` is whole in the row and clear of a fade at either end. */
+function isClear(row: HTMLElement, el: HTMLElement): boolean {
+  const box = row.getBoundingClientRect()
+  const r = el.getBoundingClientRect()
+  const from = box.left + (row.hasAttribute("data-before") ? FADE : 0)
+  const to = box.right - (row.hasAttribute("data-after") ? FADE : 0)
+  return r.left >= from - 1 && r.right <= to + 1
 }
 
 /**
@@ -24,10 +33,15 @@ function fadeMask(before: boolean, after: boolean): string {
  * `ref` goes on the row. It is a callback, not a ref object, because the
  * row can come later than the component: the rehearsal screen's strip has
  * no row until its first take. `keep` picks the one thing in the row that
- * is brought back into view when the row gets narrower or wider.
+ * is brought back into view when the row gets narrower or wider, unless
+ * the row was moved away from it on purpose.
  */
 export function useRowEdges(keep: string) {
   const [row, setRow] = useState<HTMLElement | null>(null)
+  // Whether the row was last moved, by the wheel, a swipe or ‹ ›, to where
+  // `keep` is not in view. Only a move counts: the row getting narrower is
+  // what a reveal is for, and must not count as moving away.
+  const away = useRef(false)
 
   const measure = useCallback(() => {
     if (!row) return
@@ -57,6 +71,7 @@ export function useRowEdges(keep: string) {
       if (from - FADE < at) at = from - FADE
       else if (to + FADE > at + row.clientWidth) at = to + FADE - row.clientWidth
       row.scrollTo({ left: Math.max(0, Math.min(at, row.scrollWidth - row.clientWidth)) })
+      away.current = false
     },
     [row]
   )
@@ -64,22 +79,33 @@ export function useRowEdges(keep: string) {
   useEffect(() => {
     if (!row) return
     // A narrower window, or the take's buttons coming in, can leave the
-    // open tab past an edge; opening the strip out changes only the height.
+    // open tab past an edge. So can the window's scrollbar coming in when
+    // the strip opens out, which is why a row moved away stays put.
     let width = -1
     const resized = new ResizeObserver(() => {
       if (row.clientWidth !== width) {
         width = row.clientWidth
         const el = row.querySelector<HTMLElement>(keep)
-        if (el) reveal(el)
+        if (el && !away.current) reveal(el)
       }
       measure()
     })
     resized.observe(row)
+    const moved = () => {
+      measure()
+      const el = row.querySelector<HTMLElement>(keep)
+      away.current = el !== null && !isClear(row, el)
+    }
     const wheel = (e: WheelEvent) => {
-      // A sideways swipe already scrolls it, and Ctrl or ⌘ is a zoom.
-      if (e.ctrlKey || e.metaKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return
-      // An opened-out column of goes scrolls up and down on its own.
-      if (e.target instanceof Element && e.target.closest("[data-column]")) return
+      // A sideways swipe already scrolls it, and Ctrl or ⌘ is a zoom. A turn
+      // that cannot be cancelled is one the page scrolls anyway, such as the
+      // rest of a trackpad swipe: moving the row too would move it twice.
+      if (!e.cancelable || e.ctrlKey || e.metaKey) return
+      if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return
+      // An opened-out column of goes that scrolls takes the wheel for
+      // itself, to its end and past it, rather than slide off sideways.
+      const column = e.target instanceof Element ? e.target.closest("[data-column]") : null
+      if (column && column.scrollHeight > column.clientHeight) return
       const by = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? row.clientWidth : 1)
       const room = by > 0 ? row.scrollWidth - row.clientWidth - row.scrollLeft : row.scrollLeft
       // At the end the page gets the wheel back, as if the row were not there.
@@ -87,11 +113,11 @@ export function useRowEdges(keep: string) {
       e.preventDefault()
       row.scrollBy({ left: by })
     }
-    row.addEventListener("scroll", measure, { passive: true })
+    row.addEventListener("scroll", moved, { passive: true })
     row.addEventListener("wheel", wheel, { passive: false })
     return () => {
       resized.disconnect()
-      row.removeEventListener("scroll", measure)
+      row.removeEventListener("scroll", moved)
       row.removeEventListener("wheel", wheel)
     }
   }, [row, keep, measure, reveal])

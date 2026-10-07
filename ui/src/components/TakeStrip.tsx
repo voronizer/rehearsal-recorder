@@ -278,8 +278,8 @@ export function TakeStrip({
 
 /** A round ‹ or › at an end of the strip that has more songs past it: a
  *  screenful that way. Shown only while the row says there is more that way
- *  (`useRowEdges`). On the line of the tabs' names, as the Songs button and
- *  the take's buttons are, so it stays put when the strip opens out. */
+ *  (`useRowEdges`). On the line under the tabs' names, as in the mockup,
+ *  measured from the top so it stays put when the strip opens out. */
 function Edge({ side, onPage }: { side: "before" | "after"; onPage: () => void }) {
   const name = side === "before" ? "Earlier songs" : "Later songs"
   const Icon = side === "before" ? ChevronLeft : ChevronRight

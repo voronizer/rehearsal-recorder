@@ -610,13 +610,64 @@ test("a few songs show no arrows", async ({ page }) => {
   expect(await tabRow(page).evaluate((el) => getComputedStyle(el).maskImage)).toBe("none")
 })
 
+/** How far the window's own content is scrolled down. */
+const down = (page: Page) => page.locator("main").evaluate((el) => el.scrollTop)
+
 test("the mouse wheel moves the songs sideways", async ({ page }) => {
+  // Short enough for the window's content to scroll, so a wheel turn that
+  // went to it would show.
+  await page.setViewportSize({ width: 1180, height: 700 })
   await openOf(page, TWENTY)
-  const pageAt = await page.evaluate(() => window.scrollY)
+  expect(await page.locator("main").evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
   await strip(page).locator("[data-tab='Viasna']").hover()
   await page.mouse.wheel(0, 300)
   await expect.poll(() => scrolled(page)).toBeGreaterThan(0)
-  expect(await page.evaluate(() => window.scrollY)).toBe(pageAt)
+  expect(await down(page)).toBe(0)
+})
+
+test("a sideways wheel moves the songs once", async ({ page }) => {
+  await openOf(page, TWENTY)
+  await strip(page).locator("[data-tab='Viasna']").hover()
+  await page.mouse.wheel(120, 0)
+  await expect.poll(() => scrolled(page)).toBe(120)
+})
+
+test("a wheel turn the page cannot cancel does not move the songs", async ({ page }) => {
+  // A trackpad's later events in a swipe the page did not cancel at first.
+  await openOf(page, TWENTY)
+  await strip(page)
+    .locator("[data-tab='Viasna']")
+    .evaluate((el) =>
+      el.dispatchEvent(new WheelEvent("wheel", { deltaY: 200, bubbles: true, cancelable: false }))
+    )
+  await page.waitForTimeout(200)
+  expect(await scrolled(page)).toBe(0)
+})
+
+test("the wheel over a column too short to scroll moves the songs", async ({ page }) => {
+  await openOf(page, TWENTY)
+  await songs(page).click()
+  const column = strip(page).locator("[data-column='Viasna']")
+  await expect(column).toBeVisible()
+  await column.hover()
+  await page.mouse.wheel(0, 200)
+  await expect.poll(() => scrolled(page)).toBeGreaterThan(0)
+})
+
+test("the songs stay where they were moved when the strip gets a little narrower", async ({
+  page,
+}) => {
+  // As when the window's scrollbar comes in on opening the strip out.
+  await openOf(page, TWENTY)
+  await strip(page).locator("[data-tab='Viasna']").hover()
+  await page.mouse.wheel(0, 800)
+  const at = await rested(page)
+  expect(at).toBeGreaterThan(300)
+  await page.locator("main").evaluate((el) => {
+    el.style.paddingRight = `${parseFloat(getComputedStyle(el).paddingRight) + 15}px`
+  })
+  await page.waitForTimeout(300)
+  expect(await scrolled(page)).toBe(at)
 })
 
 test("an arrow at a side with more songs moves the row a screenful", async ({ page }) => {
