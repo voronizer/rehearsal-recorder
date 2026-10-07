@@ -54,8 +54,11 @@ export function BeforeTonightCard({
 }) {
   const [open, setOpen] = useState(false)
   // Once in, the slide is taken off: shown again after being hidden, an
-  // animation would start over.
+  // animation would start over. Hidden before the slide is over (a take
+  // opened at once), the slide is cut short and never ends, so being hidden
+  // counts as having arrived.
   const [arrived, setArrived] = useState(false)
+  if (hidden && !arrived) setArrived(true)
   const title = before?.song ?? song
   const all = before ? [before.first, ...before.more] : []
   const goes = open ? all : all.slice(0, 1)

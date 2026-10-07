@@ -182,6 +182,27 @@ test.describe("the card", () => {
     expect(await palyn.evaluate((el) => el.getAnimations().length)).toBe(0)
   })
 
+  test("a take opened while the card slides in does not slide it in again", async ({ page }) => {
+    await openBandApp(page)
+    await startRehearsal(page, 6)
+    // A slide slowed down, so the take is surely opened before it is over.
+    await page.addStyleTag({
+      content: "[aria-label$='before tonight'] { animation-duration: 5s !important }",
+    })
+    await pill(page, "Pałyn").click()
+    const palyn = card(page, "Pałyn")
+    await expect(palyn).toBeVisible()
+    // Hidden mid-slide, the slide is cut short and never ends.
+    await page
+      .locator("[aria-label='Rehearsal overview']")
+      .getByRole("button", { name: /^Take 1 / })
+      .click()
+    await expect(palyn).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(palyn).toBeVisible()
+    expect(await palyn.evaluate((el) => el.getAnimations().length)).toBe(0)
+  })
+
   test("a long title is cut short in the card's heading, whole on hover", async ({ page }) => {
     const long = "A very long song title that goes on and on past the panel"
     await openApp(page, { before: `window.__EXTRA_SONGS__ = ${JSON.stringify([long])}` })

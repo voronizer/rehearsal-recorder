@@ -23,6 +23,9 @@ async function openVolume(page: Page): Promise<Locator> {
   await headerVolume(page).click()
   const panel = page.getByRole("dialog", { name: "Playback volume" })
   await expect(panel).toBeVisible()
+  // It grows and slides in as it opens: a slider measured on the way is not
+  // where it ends up, and a click there misses it.
+  await panel.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
   return panel.getByRole("slider", { name: "Master volume" })
 }
 
