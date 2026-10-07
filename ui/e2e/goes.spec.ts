@@ -411,6 +411,84 @@ test("a place on its way is dropped when the take is closed", async ({ page }) =
   await startsFresh(page, from)
 })
 
+/** Holds each of `names` in the fake until `release` lets that one go. */
+async function holdEach(page: Page, names: string[]) {
+  await page.evaluate((ns) => {
+    const w = window as unknown as {
+      __HOLD__?: Record<string, Promise<void>>
+      __RELEASE__?: Record<string, () => void>
+    }
+    w.__HOLD__ = {}
+    w.__RELEASE__ = {}
+    for (const n of ns) w.__HOLD__[n] = new Promise<void>((r) => (w.__RELEASE__![n] = r))
+  }, names)
+}
+async function release(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__: Record<string, Promise<void>>
+      __RELEASE__: Record<string, () => void>
+    }
+    delete w.__HOLD__[n]
+    w.__RELEASE__[n]()
+  }, name)
+}
+
+test("the place goes to the next go a step at a time: the loop, then the seek, then Play", async ({
+  page,
+}) => {
+  // Python answers each call on a thread of its own, so a call sent before
+  // the one ahead of it has answered can overtake it.
+  await openGo(page, "Take 1 Pałyn 1")
+  await dragRegion(page, 0.25, 0.5)
+  await repeat(page).click()
+  await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
+  await transport(page).getByRole("button", { name: "Play", exact: true }).click()
+  await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+  await holdEach(page, ["player_set_loop", "player_seek"])
+  const from = await everyCall(page)
+  const sent = async () =>
+    (await callsFrom(page, from))
+      .map((c) => c.name)
+      .filter((n) => ["player_set_loop", "player_seek", "player_play"].includes(n))
+  await page.keyboard.press("ArrowDown")
+  await expect.poll(() => opened(page)).toBe("/rec/old/p2.wav")
+  await expect.poll(sent).toEqual(["player_set_loop"])
+  await page.waitForTimeout(300)
+  expect(await sent()).toEqual(["player_set_loop"])
+  await release(page, "player_set_loop")
+  await expect.poll(sent).toEqual(["player_set_loop", "player_seek"])
+  await page.waitForTimeout(300)
+  expect(await sent()).toEqual(["player_set_loop", "player_seek"])
+  await release(page, "player_seek")
+  await expect.poll(sent).toEqual(["player_set_loop", "player_seek", "player_play"])
+  await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+})
+
+test("a place still waiting on the loop's answer is not put on a go opened since", async ({
+  page,
+}) => {
+  await openGo(page, "Take 1 Pałyn 1")
+  await dragRegion(page, 0.25, 0.5)
+  await repeat(page).click()
+  await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
+  await transport(page).getByRole("button", { name: "Play", exact: true }).click()
+  await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+  await holdEach(page, ["player_set_loop"])
+  const loops = await callCount(page, "player_set_loop")
+  await page.keyboard.press("ArrowDown")
+  await expect.poll(() => callCount(page, "player_set_loop")).toBe(loops + 1)
+  await strip(page).getByRole("button", { name: /^Viasna, go 1/ }).click()
+  await expect.poll(() => opened(page)).toBe("/rec/old/v1.wav")
+  await expect(timeline(page)).toBeVisible()
+  const from = await everyCall(page)
+  await release(page, "player_set_loop")
+  await page.waitForTimeout(400)
+  const after = await callsFrom(page, from)
+  expect(after.filter((c) => c.name === "player_seek" || c.name === "player_play")).toEqual([])
+  await expect(transport(page).getByRole("button", { name: "Play", exact: true })).toBeVisible()
+})
+
 /** Pałyn 1 of Tuesday jam opened from Pałyn's page, whose ↑ is the last
  *  go at it in First rehearsal, the rehearsal before. */
 async function fromSongPage(page: Page) {

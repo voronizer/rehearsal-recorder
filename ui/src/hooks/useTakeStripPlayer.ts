@@ -61,7 +61,7 @@ export function useTakeStripPlayer<T extends Take = Take>(
     if (!sawLoading.current) return
     sawLoading.current = false
     if (!loadError) {
-      if (pending.spot) restore(pending.spot)
+      if (pending.spot) void restore(pending.spot)
       if (pending.at !== null) seek(pending.at)
       if (pending.play) play()
     }

@@ -87,6 +87,9 @@ export function useMultitrackPlayer(
   // Anchor for smoothing the position between answers from Python.
   const anchor = useRef<{ position: number; at: number } | null>(null)
   const openedRef = useRef(false)
+  // Counts the takes opened, so a step waiting on Python's answer about one
+  // take is not then sent to a take opened since.
+  const opening = useRef(0)
 
   const applyState = useCallback(
     (s: {
@@ -129,6 +132,7 @@ export function useMultitrackPlayer(
   useEffect(() => {
     let cancelled = false
     openedRef.current = false
+    opening.current += 1
     setMedia([])
     setPlaying(false)
     setPosition(0)
@@ -277,7 +281,7 @@ export function useMultitrackPlayer(
       const target = Math.max(0, Math.min(duration, seconds))
       setPosition(target)
       anchor.current = { position: target, at: performance.now() }
-      void call(() => api().player_seek(target))
+      return call(() => api().player_seek(target))
     },
     [call, duration]
   )
@@ -313,11 +317,8 @@ export function useMultitrackPlayer(
 
   const applyLoop = useCallback(
     (next: { a: number | null; b: number | null }, enabled: boolean) => {
-      if (!enabled) {
-        void call(() => api().player_set_loop(null, null))
-        return
-      }
-      void call(() => api().player_set_loop(next.a ?? 0, next.b ?? duration))
+      if (!enabled) return call(() => api().player_set_loop(null, null))
+      return call(() => api().player_set_loop(next.a ?? 0, next.b ?? duration))
     },
     [call, duration]
   )
@@ -326,29 +327,36 @@ export function useMultitrackPlayer(
    * Puts a place kept from another go on the take just opened, clamped to
    * its length. A loop left shorter than half a second is dropped, and
    * Repeat with it. The loop goes to Python before the seek, and the seek
-   * before Play, so the first thing heard is the place.
+   * before Play, so the first thing heard is the place. Each waits for the
+   * answer to the one before: Python takes every call on a thread of its
+   * own, and one sent at once could overtake it.
    */
   const restore = useCallback(
-    (kept: Spot) => {
+    async (kept: Spot) => {
       if (duration <= 0) return
+      const take = opening.current
       const clamp = (t: number) => Math.max(0, Math.min(duration, t))
       let at = clamp(kept.position)
       const band = kept.region && { a: clamp(kept.region.a), b: clamp(kept.region.b) }
+      let loop: Promise<void> | undefined
       if (band && band.b - band.a >= MIN_KEPT_REGION_SEC) {
         setRegionState(band)
         if (kept.looping) {
           setLooping(true)
-          applyLoop(band, true)
+          loop = applyLoop(band, true)
           if (at < band.a || at >= band.b) at = band.a
         }
       } else if (!kept.region && kept.looping) {
         // Repeat over the whole take.
         setLooping(true)
-        applyLoop({ a: null, b: null }, true)
+        loop = applyLoop({ a: null, b: null }, true)
       }
       if (kept.view) setView(kept.view.from, kept.view.to)
-      seek(at)
-      if (kept.playing) void call(() => api().player_play())
+      await loop
+      if (opening.current !== take) return
+      await seek(at)
+      if (opening.current !== take) return
+      if (kept.playing) await call(() => api().player_play())
     },
     [duration, applyLoop, setView, seek, call]
   )

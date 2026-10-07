@@ -637,8 +637,12 @@ window.__MAKE_API__ = () => ({
   }),
   player_play: track('player_play', async () => { if (P) { P.playing = true; P.t0 = clock(); } return {ok:true, ...playerState()}; }),
   player_pause: async () => { if (P) { moveTo(position()); P.playing = false; } return {ok:true, ...playerState()}; },
-  player_seek: track('player_seek', async (s) => { if (P) moveTo(s); return {ok:true, ...playerState()}; }),
+  player_seek: track('player_seek', async (s) => {
+    await held('player_seek');
+    if (P) moveTo(s); return {ok:true, ...playerState()};
+  }),
   player_set_loop: track('player_set_loop', async (a, b) => {
+    await held('player_set_loop');
     if (!P) return {ok:false};
     P.loop = (a === null || b === null || b - a < 0.2) ? null : {a, b};
     if (P.loop && (position() < P.loop.a || position() >= P.loop.b)) moveTo(P.loop.a);
