@@ -277,3 +277,18 @@ test.describe("playing an earlier go", () => {
     await expect.poll(() => playing(page)).toBe(false)
   })
 })
+
+test("the first take of a song tonight is measured against its go before tonight", async ({
+  page,
+}) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await pill(page, "Daroha").click()
+  await expect(card(page, "Daroha")).toBeVisible()
+  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await expect(page.getByText("Took 4:00 on 25 Aug")).toBeVisible()
+  await expect(page.getByRole("progressbar", { name: "Against the last go" })).toHaveAttribute(
+    "aria-valuemax",
+    "240"
+  )
+})

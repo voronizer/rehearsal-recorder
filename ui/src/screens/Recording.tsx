@@ -14,7 +14,7 @@ import {
   type RecordingHealth,
   type PlacedTrack,
 } from "@/lib/api"
-import { formatClock, formatMMSS } from "@/lib/format"
+import { formatClock, formatDate, formatMMSS } from "@/lib/format"
 import { isSilent, watchStep, type TrackWatch } from "@/lib/levels"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
@@ -241,8 +241,13 @@ export function Recording({
             </div>
             <div className="flex justify-between gap-4 text-sm text-muted-foreground">
               <span className="tnum">0:00</span>
-              {/* The song is over the clock already. */}
-              <span>Took {formatMMSS(lastAttempt.duration_sec)} last time</span>
+              {/* The song is over the clock already. The first go of the
+                  evening is measured against one from before tonight, and
+                  says which day that was. */}
+              <span>
+                Took {formatMMSS(lastAttempt.duration_sec)}{" "}
+                {lastAttempt.created_at ? `on ${formatDate(lastAttempt.created_at)}` : "last time"}
+              </span>
             </div>
           </div>
         )}
