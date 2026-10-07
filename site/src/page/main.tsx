@@ -1,11 +1,18 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
+import { inject } from "@vercel/analytics"
 import "./page.css"
 import { loadDeletionKind } from "@/lib/deletion"
 import { loadLabels } from "@/lib/labels"
 import { installDemo } from "../stage/demo"
 import { Page } from "./Page"
 import { loadPieces } from "./pieces"
+
+// Visits are counted by Vercel's Web Analytics: the page only, so a visit is
+// one view however many frames of the app it shows. Built here and not on
+// Vercel, it loads Vercel's script from /_vercel/insights/, which a
+// deployment serves once the project has Web Analytics switched on.
+inject()
 
 // The tiles' pieces of the app are drawn here, in the page, from the same
 // fake Python side the frames run on.

@@ -101,6 +101,16 @@ test("a frame scrolled past holds still", async ({ page }) => {
   await expect.poll(() => heldIn(page, "hero")).toBe("false")
 })
 
+// Vercel's script itself is only on Vercel, once the project has Web
+// Analytics switched on; here it is a missing file.
+test("the page counts its visit with Vercel's analytics, the app in it does not", async ({ page }) => {
+  const analytics = 'script[src="/_vercel/insights/script.js"]'
+  await page.goto("/")
+  await expect(page.locator(analytics)).toHaveCount(1)
+  await expect.poll(() => sceneIn(page, "hero"), { timeout: 20_000 }).toBe("hero")
+  await expect(frame(page, "hero").contentFrame().locator(analytics)).toHaveCount(0)
+})
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 

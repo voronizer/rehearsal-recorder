@@ -11,6 +11,10 @@
 # connection, and this uploads the build it made (vercel deploy --prebuilt).
 # It needs three repository secrets: VERCEL_TOKEN, VERCEL_ORG_ID and
 # VERCEL_PROJECT_ID.
+#
+# The page counts visits with Vercel's Web Analytics, which is switched on in
+# the Vercel project (Analytics, Enable). Only a deployment made after that
+# serves its script, so when it is switched on later, run this by hand.
 
 name: Site
 
