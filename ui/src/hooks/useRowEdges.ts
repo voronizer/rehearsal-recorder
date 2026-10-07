@@ -23,9 +23,10 @@ function fadeMask(before: boolean, after: boolean): string {
  *
  * `ref` goes on the row. It is a callback, not a ref object, because the
  * row can come later than the component: the rehearsal screen's strip has
- * no row until its first take.
+ * no row until its first take. `keep` picks the one thing in the row that
+ * is brought back into view when the row gets narrower or wider.
  */
-export function useRowEdges() {
+export function useRowEdges(keep: string) {
   const [row, setRow] = useState<HTMLElement | null>(null)
 
   const measure = useCallback(() => {
@@ -44,9 +45,35 @@ export function useRowEdges() {
   // row's own box, and a resize observer would not hear of it.
   useLayoutEffect(measure)
 
+  /** Moves the row as little as it takes for `el` to be whole in it, and
+   *  clear of a fade, which would hide half of it otherwise. */
+  const reveal = useCallback(
+    (el: HTMLElement) => {
+      if (!row) return
+      const box = row.getBoundingClientRect()
+      const from = el.getBoundingClientRect().left - box.left + row.scrollLeft
+      const to = from + el.offsetWidth
+      let at = row.scrollLeft
+      if (from - FADE < at) at = from - FADE
+      else if (to + FADE > at + row.clientWidth) at = to + FADE - row.clientWidth
+      row.scrollTo({ left: Math.max(0, Math.min(at, row.scrollWidth - row.clientWidth)) })
+    },
+    [row]
+  )
+
   useEffect(() => {
     if (!row) return
-    const resized = new ResizeObserver(measure)
+    // A narrower window, or the take's buttons coming in, can leave the
+    // open tab past an edge; opening the strip out changes only the height.
+    let width = -1
+    const resized = new ResizeObserver(() => {
+      if (row.clientWidth !== width) {
+        width = row.clientWidth
+        const el = row.querySelector<HTMLElement>(keep)
+        if (el) reveal(el)
+      }
+      measure()
+    })
     resized.observe(row)
     const wheel = (e: WheelEvent) => {
       // A sideways swipe already scrolls it, and Ctrl or ⌘ is a zoom.
@@ -58,7 +85,7 @@ export function useRowEdges() {
       // At the end the page gets the wheel back, as if the row were not there.
       if (room < 1) return
       e.preventDefault()
-      row.scrollLeft += by
+      row.scrollBy({ left: by })
     }
     row.addEventListener("scroll", measure, { passive: true })
     row.addEventListener("wheel", wheel, { passive: false })
@@ -67,7 +94,7 @@ export function useRowEdges() {
       row.removeEventListener("scroll", measure)
       row.removeEventListener("wheel", wheel)
     }
-  }, [row, measure])
+  }, [row, keep, measure, reveal])
 
   /** The next screenful one way, less the fades, so the tab half under one
    *  is whole after the move. */
@@ -78,5 +105,5 @@ export function useRowEdges() {
     [row]
   )
 
-  return { ref: setRow, row, page }
+  return { ref: setRow, row, page, reveal }
 }

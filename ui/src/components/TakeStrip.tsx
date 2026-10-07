@@ -140,7 +140,7 @@ export function TakeStrip({
   useKey("ArrowUp", () => step(-1), live !== null)
   useKey("ArrowDown", () => step(1), live !== null)
 
-  const { ref: rowRef, row, page } = useRowEdges()
+  const { ref: rowRef, row, page, reveal } = useRowEdges("[data-tab][aria-current='true']")
 
   // The strip doesn't wrap (see the note below), so on a rehearsal with many
   // songs the one just picked can land outside the visible row: this keeps
@@ -150,10 +150,9 @@ export function TakeStrip({
   // hooks called would change between an empty and a non-empty rehearsal.
   const openKey = openTab ? openTab.key : null
   useEffect(() => {
-    row
-      ?.querySelector("[data-tab][aria-current='true']")
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" })
-  }, [row, selected?.take_number, folder, openKey])
+    const tab = row?.querySelector<HTMLElement>("[data-tab][aria-current='true']")
+    if (tab) reveal(tab)
+  }, [row, reveal, selected?.take_number, folder, openKey])
 
   if (takes.length === 0) {
     return (

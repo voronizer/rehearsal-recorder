@@ -653,3 +653,27 @@ test("the wheel over an open column scrolls the column, not the songs", async ({
   await expect.poll(() => column.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
   expect(await scrolled(page)).toBe(0)
 })
+
+/** Whether the open tab is whole in the row, and clear of a fade at an end
+ *  that has more songs past it. */
+function inView(page: Page) {
+  return openTab(strip(page)).evaluate((el) => {
+    const row = el.parentElement!
+    const r = row.getBoundingClientRect()
+    const t = el.getBoundingClientRect()
+    const from = r.left + (row.hasAttribute("data-before") ? 48 : 0)
+    const to = r.right - (row.hasAttribute("data-after") ? 48 : 0)
+    return t.left >= from - 1 && t.right <= to + 1
+  })
+}
+
+test("the open tab comes back into view when the window narrows", async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 820 })
+  await openOf(page, TWENTY.slice(0, 7), 7)
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Daroha")
+  await expect.poll(() => inView(page)).toBe(true)
+  await page.setViewportSize({ width: 900, height: 820 })
+  await expect(later(page)).toHaveCount(0)
+  await expect(earlier(page)).toBeVisible()
+  await expect.poll(() => inView(page)).toBe(true)
+})
