@@ -7,11 +7,13 @@ import { falseStarts, starredToSend } from "@/lib/evening"
 import { formatMMSS } from "@/lib/format"
 import { canBePutBack, goPlural, rehearsalCloudToo, trashName } from "@/lib/deletion"
 import { notify } from "@/lib/notices"
+import { pollSoon } from "@/lib/activity"
 
 /** Off, but still saying why under the mouse: a disabled button takes no
  *  pointer events, so its title would never be read. */
 const OFF =
-  "aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-background dark:aria-disabled:hover:bg-input/30"
+  "aria-disabled:cursor-default aria-disabled:opacity-50 aria-disabled:hover:bg-background " +
+  "dark:aria-disabled:hover:bg-input/30"
 
 /**
  * The evening's two buttons, over its takes: Send starred copies every ★
@@ -43,21 +45,27 @@ export function EveningActions({
   onDeleted: (takes: Take[]) => void
 }) {
   const [sending, setSending] = useState(false)
+  const [clearing, setClearing] = useState(false)
   // The false starts as they were when asked about: what is confirmed is
   // what goes.
   const [asking, setAsking] = useState<Take[] | null>(null)
 
   const toSend = starredToSend(takes, waiting)
+  const onTheWay = takes.some((t) => t.starred && t.take_number in (waiting ?? {}))
   const sendWhy = !cloudDir
     ? "Choose a cloud folder in Settings"
     : !takes.some((t) => t.starred)
       ? "No take has ★"
-      : toSend.length === 0
-        ? "Every ★ take is in the cloud folder"
-        : "Copy every ★ take to the cloud folder, as What gets published says"
+      : toSend.length > 0
+        ? "Copy every ★ take to the cloud folder, as What gets published says"
+        : onTheWay
+          ? "Every ★ take is in the cloud folder or on its way"
+          : "Every ★ take is in the cloud folder"
   const sendOff = !cloudDir || toSend.length === 0 || sending
 
   const starts = falseStarts(takes, falseStartSec)
+  // While they are being moved, the count still has them.
+  const clearOff = starts.length === 0 || clearing
   const clearWhy =
     starts.length > 0
       ? `Takes shorter than ${falseStartSec} s with no ★ and no marks`
@@ -68,8 +76,21 @@ export function EveningActions({
     setSending(true)
     try {
       const res = await api().send_starred(folder)
+      // The copies run in the background now: ask after them at once.
+      pollSoon()
+      const failed = res.ok ? (res.failed ?? []) : []
       if (!res.ok) {
         notify({ key: "evening", kind: "error", text: res.error ?? "Could not send the ★ takes" })
+      } else if (failed.length > 0) {
+        const first = takes.find((t) => t.take_number === failed[0].take_number)
+        notify({
+          key: "evening",
+          kind: "error",
+          text:
+            failed.length === 1
+              ? `Could not send ${first?.name ?? "a take"}: ${failed[0].error}`
+              : `Could not send ${failed.length} of them: ${failed[0].error}`,
+        })
       }
     } catch {
       notify({ key: "evening", kind: "error", text: "Could not send the ★ takes" })
@@ -79,6 +100,7 @@ export function EveningActions({
   }
 
   const clear = async (going: Take[]) => {
+    setClearing(true)
     try {
       const res = await api().delete_takes(
         folder,
@@ -109,6 +131,7 @@ export function EveningActions({
     } catch {
       notify({ key: "evening", kind: "error", text: "Could not clear the false starts" })
     }
+    setClearing(false)
     onChanged()
   }
 
@@ -132,9 +155,9 @@ export function EveningActions({
       <Button
         variant="outline"
         size="sm"
-        aria-disabled={starts.length === 0 || undefined}
+        aria-disabled={clearOff || undefined}
         title={clearWhy}
-        onClick={() => starts.length > 0 && setAsking(starts)}
+        onClick={() => !clearOff && setAsking(starts)}
         className={OFF}
       >
         <Trash2 />
@@ -157,10 +180,8 @@ export function EveningActions({
               ))}
             </ul>
             <p>
-              {`${n === 1 ? "The take and all its tracks" : "The takes and all their tracks"} ${goPlural()}.${rehearsalCloudToo(
-                inCloud,
-                n
-              )} ${canBePutBack(n > 1)}`}
+              {`${n === 1 ? "The take and all its tracks" : "The takes and all their tracks"} ` +
+                `${goPlural()}.${rehearsalCloudToo(inCloud, n)} ${canBePutBack(n > 1)}`}
             </p>
           </div>
         }

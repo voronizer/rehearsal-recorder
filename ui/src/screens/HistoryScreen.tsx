@@ -162,6 +162,13 @@ export function HistoryScreen({
       )
       .map((e) => [e.take_number as number, e.state])
   )
+  // Said in the rows as on the rehearsal screen: "Waiting for the cloud".
+  const cloudStates = Object.fromEntries(
+    Object.entries(cloudWaiting).map(([n, state]) => [
+      n,
+      state === "running" ? ("working" as const) : ("queued" as const),
+    ])
+  )
   const cropping = useRunning(
     "crop",
     (e) => e.folder === selected?.folder && e.take_number === selected?.take_number
@@ -929,6 +936,7 @@ export function HistoryScreen({
                   <RehearsalOverview
                     takes={opened.takes}
                     songs={opened.songs ?? []}
+                    cloudStates={cloudStates}
                     playback={
                       // Only a take of this rehearsal plays here: take 1 of
                       // another is not this one's take 1.

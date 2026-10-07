@@ -900,7 +900,10 @@ window.__MAKE_API__ = () => ({
     return {ok:true, trashed:true, takes_left:0};
   }),
   // Python takes them out of the rehearsal, the live one included.
+  // A test can make it take a while (__DELETE_MS__), as moving many tracks
+  // to the Trash does.
   delete_takes: track('delete_takes', async (folder, numbers) => {
+    if (window.__DELETE_MS__) await new Promise(r => setTimeout(r, window.__DELETE_MS__));
     for (const n of numbers) deleted.add(`${folder}#${n}`);
     if (session && folder === session.folder)
       session.takes = session.takes.filter(t => !numbers.includes(t.take_number));
@@ -982,19 +985,29 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({ok:true, take, cloud:shared}));
   }),
   // api.send_starred: the ★ takes with nothing in the cloud folder go as
-  // What gets published says. The copy is made at once here.
+  // What gets published says. A tonight's copy is made at once here; an
+  // older rehearsal's waits in the activity list, as Python's queue has it.
+  // __UNSENDABLE__ lists take numbers whose files are gone.
   send_starred: track('send_starred', async (folder) => {
     if (!cloudDir) return {ok:false, error:'No cloud folder chosen', needs_dir:true};
     const live = session && folder === session.folder;
     const takes = live ? session.takes : pastRehearsal(folder).takes;
-    const queued = [];
+    const queued = [], failed = [];
     for (const t of takes) {
       if (!t.starred || t.cloud?.mix || t.cloud?.tracks) continue;
+      if ((window.__UNSENDABLE__ || []).includes(t.take_number)) {
+        failed.push({take_number:t.take_number, error:'The take has no files left on disk'});
+        continue;
+      }
       if (live) t.cloud = cloudShare(autoPublish.what);
-      else window.__SHARED__ = [...(window.__SHARED__ || []), `${folder}#${t.take_number}`];
+      else {
+        window.__ACTIVITY__ = [...(window.__ACTIVITY__ || []), {
+          id: 900 + t.take_number, kind:'cloud', title:t.name, folder, take_number:t.take_number,
+          state:'waiting', fraction:0, step:null, error:null, detail:null, retry:null, seen:false}];
+      }
       queued.push(t.take_number);
     }
-    return {ok:true, queued};
+    return {ok:true, queued, failed};
   }),
   unshare_take: track('unshare_take', async (folder, n) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);

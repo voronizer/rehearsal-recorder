@@ -943,6 +943,10 @@ export function Settings({
             <p className="text-xs text-muted-foreground">
               {AUTO_PUBLISH_OPTIONS.find((o) => o.id === settings?.auto_publish_what)?.hint}
             </p>
+            {/* Send starred, over a rehearsal's takes, sends by hand what
+                this says; its tooltip sends people here, and this says so
+                back. */}
+            <p className="text-xs text-muted-foreground">This is also what Send starred sends.</p>
           </div>
 
             </>

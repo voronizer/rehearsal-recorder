@@ -13,10 +13,11 @@ const PILL =
   "hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 
 /**
- * The songs under a take's name, in two rows at most (`rows` says otherwise): what this rehearsal
- * played, then the other rehearsals' songs, the latest played first, and
- * All songs… last. Each shows the go a take would be ("Polyn 3", the number
- * dimmed); a click puts only the title in the field.
+ * The songs under a take's name, in two rows at most (`rows` says
+ * otherwise): what this rehearsal played, then the other rehearsals' songs,
+ * the latest played first, and All songs… last. Each shows the go a take
+ * would be ("Polyn 3", the number dimmed); a click puts only the title in
+ * the field.
  *
  * A click puts the song's title in the field and takes no focus of its own;
  * a field being typed in is then left (TakeNameField's `put`), so Space
@@ -66,9 +67,19 @@ export function SongPills({
     if (!rowEl || !m) return
     const lay = () => {
       const kids = [...m.children] as HTMLElement[]
-      const width = new Map(candidates.map((c, i) => [c.song, kids[i].getBoundingClientRect().width]))
+      const width = new Map(
+        candidates.map((c, i) => [c.song, kids[i].getBoundingClientRect().width])
+      )
       const last = kids[candidates.length]?.getBoundingClientRect().width ?? 0
-      const picked = pillsShown(here, other, (c) => width.get(c.song) ?? 0, last, rowEl.clientWidth, GAP, rows)
+      const picked = pillsShown(
+        here,
+        other,
+        (c) => width.get(c.song) ?? 0,
+        last,
+        rowEl.clientWidth,
+        GAP,
+        rows
+      )
       // Measuring and setting this before the row paints is the point of
       // doing it in a layout effect rather than the ResizeObserver alone.
       // eslint-disable-next-line react/set-state-in-effect

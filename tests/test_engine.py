@@ -6401,6 +6401,12 @@ def main():
     ok("a limit that is not a number is refused",
        s59.set_false_start("x").get("ok") is False
        and s59.get_settings()["false_start_sec"] == 120)
+    # The config is a file somebody may edit by hand.
+    for written59, read59 in ((1000, 120), (1, 5), (45.0, 45), (True, 30), ("45", 30)):
+        s59._config["false_start_sec"] = written59
+        ok(f"a limit of {written59!r} in the config is read as {read59}",
+           s59.get_settings()["false_start_sec"] == read59)
+    s59.set_false_start(120)
 
     s59.start_rehearsal("Evening", None, SR, [{"name": "A", "channel": 1}], 16)
     live59 = s59._session["folder"]
@@ -6429,11 +6435,20 @@ def main():
                             str(cloud59))
     sent59 = s59.send_starred(live59)
     ok("the starred takes not in the cloud folder are sent",
-       sent59 == {"ok": True, "queued": [1]})
+       sent59 == {"ok": True, "queued": [1], "failed": []})
     ok("as Settings' What gets published says",
        [j[1:] for j in s59._cloud_queue._jobs] == [[1, "both"]])
     ok("a take already waiting is not sent again",
-       s59.send_starred(live59) == {"ok": True, "queued": []}
+       s59.send_starred(live59) == {"ok": True, "queued": [], "failed": []}
+       and len(s59._cloud_queue._jobs) == 1)
+    keep59(5, "Polyn")
+    s59.set_take_star(live59, 5, True)
+    for track59 in s59._lib.take(live59, 5)["tracks"]:
+        Path(track59["file"]).unlink()
+    ok("a starred take that cannot be sent is said, with why",
+       s59.send_starred(live59) == {
+           "ok": True, "queued": [],
+           "failed": [{"take_number": 5, "error": "The take has no files left on disk"}]}
        and len(s59._cloud_queue._jobs) == 1)
 
     take4_dir59 = Path(s59._lib.take(live59, 4)["tracks"][0]["file"]).parent
@@ -6444,7 +6459,7 @@ def main():
        gone59.get("failed") == [{"take_number": 99, "error": "Take not found"}])
     ok("their folders are gone and the rest stay",
        not take4_dir59.exists()
-       and [t["take_number"] for t in s59.get_rehearsal(live59)["takes"]] == [1, 3])
+       and [t["take_number"] for t in s59.get_rehearsal(live59)["takes"]] == [1, 3, 5])
     s59.finish_rehearsal()
 
     print("\n" + "=" * 60)

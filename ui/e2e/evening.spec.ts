@@ -173,6 +173,37 @@ test("Clear false starts asks first and removes only them", async ({ page }) => 
   await expect(clear).toBeDisabled()
 })
 
+test("Send starred says which take it could not send, and why", async ({ page }) => {
+  const overview = await openEvening(page, "window.__UNSENDABLE__ = [2];")
+  await overview.getByRole("button", { name: /Send starred/ }).click()
+  await expect(page.getByText("Could not send Pałyn 2: The take has no files left on disk")).toBeVisible()
+})
+
+test("Clear false starts is off while it clears", async ({ page }) => {
+  const overview = await openEvening(page, "window.__DELETE_MS__ = 1500;")
+  const clear = overview.getByRole("button", { name: /Clear false starts/ })
+  await clear.click()
+  await page.getByRole("dialog").getByRole("button", { name: "Move to the Trash" }).click()
+  // Still clearing: pressed again, it asks nothing.
+  await expect(clear).toBeDisabled({ timeout: 300 })
+  await clear.click({ force: true })
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(row(overview, 4)).toHaveCount(0)
+  expect(await callCount(page, "delete_takes")).toBe(1)
+})
+
+test("Not named goes once its last take is cleared", async ({ page }) => {
+  const overview = await openEvening(page, "", [
+    { name: "Pałyn", duration_sec: 200 },
+    { name: "Take 2", duration_sec: 8 },
+  ])
+  await expect(overview.getByRole("group", { name: "Not named" })).toBeVisible()
+  await overview.getByRole("button", { name: /Clear false starts/ }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Move to the Trash" }).click()
+  await expect(overview.getByRole("group", { name: "Not named" })).toHaveCount(0)
+  await expect(overview.getByRole("group", { name: "Pałyn" })).toBeVisible()
+})
+
 test("the buttons sit on their own line in a 960 px window", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 680 })
   const overview = await openEvening(page)
@@ -225,7 +256,20 @@ test("in History Send starred sends the starred takes of that rehearsal", async 
   await expect(send).toHaveText(/Send starred\s*1/)
   await send.click()
   expect((await calls(page, "send_starred")).at(-1)?.args).toEqual(["/rec/old"])
-  await expect(send).toHaveAttribute("title", "Every ★ take is in the cloud folder")
+  await expect(send).toHaveText(/^\s*Send starred\s*$/)
+  await expect(send).toBeDisabled()
+})
+
+test("in History a starred take on its way says so, in its row and in the tooltip", async ({ page }) => {
+  const overview = await openPast(page, "Tuesday jam", "window.__STARRED__ = ['/rec/old#1'];")
+  const send = overview.getByRole("button", { name: /Send starred/ })
+  const polls = () => page.evaluate(() => (window as unknown as { __ACTIVITY_POLLS__: number }).__ACTIVITY_POLLS__)
+  const before = await polls()
+  await send.click()
+  // It asks after the copy at once, not at the next look in two seconds.
+  await expect.poll(polls, { timeout: 400 }).toBeGreaterThan(before)
+  await expect(row(overview, 1)).toContainText("Waiting for the cloud")
+  await expect(send).toHaveAttribute("title", "Every ★ take is in the cloud folder or on its way")
 })
 
 test("in History a pill under an unnamed take names it there", async ({ page }) => {

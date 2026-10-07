@@ -3134,8 +3134,13 @@ class Api:
         }
 
     def _false_start_sec(self):
+        # The config is a file somebody may edit by hand: a number is held to
+        # the range Settings offers, and anything else (true included, which
+        # Python counts as 1) is the default.
         value = self._config.get("false_start_sec")
-        return value if isinstance(value, int) else FALSE_START_SEC
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return FALSE_START_SEC
+        return min(FALSE_START_MAX, max(FALSE_START_MIN, int(value)))
 
     def set_false_start(self, seconds):
         """
@@ -3339,7 +3344,8 @@ class Api:
         Send starred: every ★ take of a rehearsal with nothing of it in the
         cloud folder and no copy waiting, queued as What gets published says.
         A take already there is not sent again, even if the setting has
-        changed since; its share dialog is there for that.
+        changed since; its share dialog is there for that. A take that cannot
+        be sent (its files gone) is in `failed`, with why.
         """
         if self._cloud_dir is None:
             return {"ok": False, "error": "No cloud folder chosen", "needs_dir": True}
@@ -3351,14 +3357,17 @@ class Api:
             return {"ok": False, "error": "Rehearsal not found"}
         what = self._config.get("auto_publish_what") or "mix"
         waiting = self._cloud_queue.states(folder)
-        queued = []
+        queued, failed = [], []
         for take in rehearsal["takes"]:
             n = take["take_number"]
             if not take.get("starred") or n in waiting or _shape_of(take.get("cloud")):
                 continue
-            if self.share_take(folder, n, what).get("ok"):
+            res = self.share_take(folder, n, what)
+            if res.get("ok"):
                 queued.append(n)
-        return {"ok": True, "queued": queued}
+            else:
+                failed.append({"take_number": n, "error": res.get("error", "Could not copy")})
+        return {"ok": True, "queued": queued, "failed": failed}
 
     def retry_cloud(self, entry_id):
         """A failed copy, queued again as the one it was."""

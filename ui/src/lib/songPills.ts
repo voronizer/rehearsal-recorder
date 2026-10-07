@@ -28,10 +28,11 @@ export function fitsInRows(
 }
 
 /**
- * The songs the rows under a take's name show (two unless told otherwise), in the order shown: this
- * rehearsal's first, then the others, as many as fit with All songs… after
- * them. When this rehearsal's alone do not fit, the ones whose latest take
- * is latest stay, still in the order they were first played.
+ * The songs the rows under a take's name show (two unless told otherwise),
+ * in the order shown: this rehearsal's first, then the others, as many as
+ * fit with All songs… after them. When this rehearsal's alone do not fit,
+ * the ones whose latest take is latest stay, still in the order they were
+ * first played.
  */
 export function pillsShown(
   here: SongChoice[],

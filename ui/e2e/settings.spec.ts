@@ -85,6 +85,7 @@ test("what cloud copies are written as, and nothing about copies without a folde
   await expect(page.getByText("What gets published")).toHaveCount(1)
   await expect(page.getByRole("button", { name: "The mix" })).toBeEnabled()
   await expect(page.getByText("Every track as recorded")).toHaveCount(1)
+  await expect(page.getByText("This is also what Send starred sends.")).toHaveCount(1)
 
   // The cloud folder is the gate. Without one none of the questions about a
   // copy have a subject: they are not greyed out but gone, and the folder

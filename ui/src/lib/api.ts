@@ -747,8 +747,15 @@ type PyApi = {
   >
   clear_cloud_dir(): Promise<Ok>
   /** Queues the rehearsal's ★ takes with no copy in the cloud folder and
-   *  none waiting, as What gets published says. */
-  send_starred(folder: string): Promise<Ok<{ queued?: number[]; needs_dir?: boolean }>>
+   *  none waiting, as What gets published says. `failed`: the ones that
+   *  could not be sent (their files gone), with why. */
+  send_starred(folder: string): Promise<
+    Ok<{
+      queued?: number[]
+      failed?: { take_number: number; error: string }[]
+      needs_dir?: boolean
+    }>
+  >
   /** Seconds, kept within 5 to 120. */
   set_false_start(seconds: number): Promise<Ok<{ false_start_sec?: number }>>
 
