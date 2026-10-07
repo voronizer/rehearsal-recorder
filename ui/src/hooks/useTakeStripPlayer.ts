@@ -141,11 +141,16 @@ export function useTakeStripPlayer<T extends Take = Take>(
   /**
    * Another go at the open song, at the same place: its row in the column,
    * or ↑ ↓. A second move before the first go has opened carries the first
-   * one's place on, not the nothing the half-opened go has yet.
+   * one's place on, not the nothing the half-opened go has yet; so does a
+   * move before a go opened at a note has, with the note's place.
    */
   const move = (take: T) => {
     if (sameTake(take, loaded)) return
-    const spot = pending?.spot ?? player.spot()
+    const note: Spot | null =
+      pending && pending.at !== null
+        ? { position: pending.at, region: null, looping: false, view: null, playing: pending.play }
+        : null
+    const spot = pending?.spot ?? note ?? player.spot()
     select(take)
     whenOpen({ at: null, play: false, spot })
   }

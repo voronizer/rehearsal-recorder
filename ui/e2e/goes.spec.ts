@@ -489,6 +489,25 @@ test("a place still waiting on the loop's answer is not put on a go opened since
   await expect(transport(page).getByRole("button", { name: "Play", exact: true })).toBeVisible()
 })
 
+test("↑ before a note's go has opened carries the note's place", async ({ page }) => {
+  // As if ↑ were pressed once the go was open, at the note.
+  await openApp(page, { before: "window.__FULL_EVENING__ = true" })
+  await openHistory(page)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await hold(page, "player_open")
+  const opens = await callCount(page, "player_open")
+  await overview.locator("[data-note]", { hasText: "this one is the take" }).click()
+  await expect.poll(() => callCount(page, "player_open")).toBe(opens + 1)
+  await page.keyboard.press("ArrowUp")
+  await expect.poll(() => callCount(page, "player_open")).toBe(opens + 2)
+  const seeks = await callCount(page, "player_seek")
+  await letGo(page)
+  await expect.poll(() => callCount(page, "player_seek")).toBeGreaterThan(seeks)
+  expect(await opened(page)).toBe("/rec/old/p1.wav")
+  expect((await calls(page, "player_seek")).at(-1)!.args[0] as number).toBeCloseTo(72, 0)
+  await expect(transport(page).getByRole("button", { name: "Play", exact: true })).toBeVisible()
+})
+
 /** Pałyn 1 of Tuesday jam opened from Pałyn's page, whose ↑ is the last
  *  go at it in First rehearsal, the rehearsal before. */
 async function fromSongPage(page: Page) {
