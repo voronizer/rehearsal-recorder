@@ -28,9 +28,13 @@ describe("songTabs", () => {
 
   it("is a tab per song in the order first played, and one per take with no song", () => {
     const tabs = songTabs(evening)
-    expect(tabs.map((t) => t.key)).toEqual(["Pałyn", "take:2", "Viasna", "take:5"])
+    expect(tabs.map((t) => t.key)).toEqual(["song:Pałyn", "take:2", "song:Viasna", "take:5"])
     expect(tabs[0].song).toBe("Pałyn")
     expect(tabs[1].song).toBeNull()
+  })
+  it("never keys a song as a take with no song, whatever the song is called", () => {
+    const tabs = songTabs([take(1, "take:3", 1), take(3, null)])
+    expect(new Set(tabs.map((t) => t.key)).size).toBe(2)
   })
   it("holds a song's takes in the order played", () => {
     expect(songTabs(evening)[0].takes.map((t) => t.take_number)).toEqual([1, 4])

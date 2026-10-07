@@ -243,7 +243,7 @@ test.describe("a saved take", () => {
     await expect(timeline(page)).toHaveCount(1)
     const strip = page.getByRole("group", { name: "Take strip" })
     await expect(
-      strip.locator("[data-tab='Pałyn'][aria-current='true'] [data-tab-line]")
+      strip.locator("[data-tab='song:Pałyn'][aria-current='true'] [data-tab-line]")
     ).toContainText("2")
     // Same take, same marker, one player.
     await expect(page.getByText("this one is the take")).toHaveCount(1)

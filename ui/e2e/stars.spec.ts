@@ -111,7 +111,7 @@ test("a tab carries the ★ of its go, and the columns every starred go", async 
   const strip = page.getByRole("group", { name: "Take strip" })
   // Pałyn's tab shows Pałyn 2, the go a click on it opens, which has none.
   await expect(strip.locator("[data-tab='take:3'] [data-tab-line] [data-starred]")).toHaveCount(1)
-  await expect(strip.locator("[data-tab='Pałyn'] [data-tab-line] [data-starred]")).toHaveCount(0)
+  await expect(strip.locator("[data-tab='song:Pałyn'] [data-tab-line] [data-starred]")).toHaveCount(0)
   await strip.getByRole("button", { name: "Songs", exact: true }).click()
   await expect(strip.getByRole("button", { name: /^Take 1 Pałyn 1, starred/ })).toBeVisible()
   await expect(strip.getByRole("button", { name: /^Take 3 Take 3, starred/ })).toBeVisible()

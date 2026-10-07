@@ -3,7 +3,8 @@ import type { SongGo, Take } from "@/lib/api"
 /**
  * One tab of the player's strip: a song and its goes that evening, in the
  * order played, or a take nobody named, which is a tab of its own. `key` is
- * the song's title, or `take:<n>` for a take with no song.
+ * `song:<title>`, or `take:<n>` for a take with no song: a song can be
+ * called anything, "take:3" included, and must not share a key with take 3.
  */
 export type SongTab = { key: string; song: string | null; takes: Take[] }
 
@@ -21,7 +22,7 @@ export function songTabs(takes: Take[]): SongTab[] {
     if (tab) {
       tab.takes.push(take)
     } else {
-      const fresh = { key: song, song, takes: [take] }
+      const fresh = { key: `song:${song}`, song, takes: [take] }
       bySong.set(song, fresh)
       tabs.push(fresh)
     }

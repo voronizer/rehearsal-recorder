@@ -45,8 +45,8 @@ test("one tab per song, in the order first played", async ({ page }) => {
   const s = await openGo(page)
   expect(
     await s.locator("[data-tab]").evaluateAll((els) => els.map((el) => el.getAttribute("data-tab")))
-  ).toEqual(["Pałyn", "take:3", "Viasna"])
-  await expect(openTab(s)).toHaveAttribute("data-tab", "Pałyn")
+  ).toEqual(["song:Pałyn", "take:3", "song:Viasna"])
+  await expect(openTab(s)).toHaveAttribute("data-tab", "song:Pałyn")
   await expect(openTab(s).locator("[data-tab-line]")).toHaveText(/^2/)
   await expect(s.getByRole("button", { name: "Viasna, go 1, 4:10", exact: true })).toBeVisible()
   await expect(s.getByRole("button", { name: "Take 3, 1:30", exact: true })).toBeVisible()
@@ -56,7 +56,7 @@ test("another song's tab opens its last go from the start", async ({ page }) => 
   const s = await openGo(page)
   const seeks = await callCount(page, "player_seek")
   await s.getByRole("button", { name: "Viasna, go 1, 4:10" }).click()
-  await expect(openTab(s)).toHaveAttribute("data-tab", "Viasna")
+  await expect(openTab(s)).toHaveAttribute("data-tab", "song:Viasna")
   expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
     { name: "Guitar", file: "/rec/old/v1.wav" },
   ])
@@ -68,10 +68,10 @@ test("a tab keeps its size when it is opened", async ({ page }) => {
   const s = await openGo(page)
   const before = await widths(s)
   await s.getByRole("button", { name: "Viasna, go 1, 4:10" }).click()
-  await expect(openTab(s)).toHaveAttribute("data-tab", "Viasna")
+  await expect(openTab(s)).toHaveAttribute("data-tab", "song:Viasna")
   expect(await widths(s)).toEqual(before)
   await s.getByRole("button", { name: /^Pałyn, go 2/ }).click()
-  await expect(openTab(s)).toHaveAttribute("data-tab", "Pałyn")
+  await expect(openTab(s)).toHaveAttribute("data-tab", "song:Pałyn")
   expect(await widths(s)).toEqual(before)
   // Nor when the columns open under them: a take with no song is a narrow
   // tab over a column with its dash.
@@ -87,7 +87,7 @@ test("Songs opens the tabs into columns, and the number too", async ({ page }) =
   await songs(page).click()
   await expect(songs(page)).toHaveAttribute("aria-expanded", "true")
   await expect(s.locator("[data-column]")).toHaveCount(3)
-  const palyn = s.locator("[data-column='Pałyn']")
+  const palyn = s.locator("[data-column='song:Pałyn']")
   await expect(palyn.locator("button[data-go-row]")).toHaveCount(2)
   await expect(palyn.getByRole("button", { name: "Take 1 Pałyn 1" })).toBeVisible()
   await expect(palyn.getByRole("button", { name: "Take 2 Pałyn 2" })).toHaveAttribute(
@@ -128,8 +128,8 @@ test("a go in another song's column starts from the start", async ({ page }) => 
   await page.mouse.click(box.x + box.width * (30 / 178), box.y + box.height / 2)
   await expect.poll(() => callCount(page, "player_seek")).toBe(seeks + 1)
   const after = await callCount(page, "player_seek")
-  await s.locator("[data-column='Viasna']").getByRole("button", { name: "Take 4 Viasna 1" }).click()
-  await expect(openTab(s)).toHaveAttribute("data-tab", "Viasna")
+  await s.locator("[data-column='song:Viasna']").getByRole("button", { name: "Take 4 Viasna 1" }).click()
+  await expect(openTab(s)).toHaveAttribute("data-tab", "song:Viasna")
   expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
     { name: "Guitar", file: "/rec/old/v1.wav" },
   ])
@@ -185,7 +185,7 @@ test("the place is kept going to another go at the song", async ({ page }) => {
 
   await songs(page).click()
   const from = await everyCall(page)
-  await s.locator("[data-column='Pałyn']").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
+  await s.locator("[data-column='song:Pałyn']").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
   await expect(openTab(s).locator("[data-tab-line]")).toHaveText(/^2/)
   await expect.poll(() => opened(page)).toBe("/rec/old/p2.wav")
   await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
@@ -393,7 +393,7 @@ async function startsFresh(page: Page, from: number) {
 test("a place on its way is dropped when another song's tab is picked", async ({ page }) => {
   await moveOnItsWay(page)
   await strip(page).getByRole("button", { name: /^Viasna, go 1/ }).click()
-  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Viasna")
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "song:Viasna")
   const from = await everyCall(page)
   await letGo(page)
   await startsFresh(page, from)
@@ -409,6 +409,103 @@ test("a place on its way is dropped when the take is closed", async ({ page }) =
   await letGo(page)
   await expect(timeline(page)).toBeVisible()
   await startsFresh(page, from)
+})
+
+/** Holds each of `names` in the fake until `release` lets that one go. */
+async function holdEach(page: Page, names: string[]) {
+  await page.evaluate((ns) => {
+    const w = window as unknown as {
+      __HOLD__?: Record<string, Promise<void>>
+      __RELEASE__?: Record<string, () => void>
+    }
+    w.__HOLD__ = {}
+    w.__RELEASE__ = {}
+    for (const n of ns) w.__HOLD__[n] = new Promise<void>((r) => (w.__RELEASE__![n] = r))
+  }, names)
+}
+async function release(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__: Record<string, Promise<void>>
+      __RELEASE__: Record<string, () => void>
+    }
+    delete w.__HOLD__[n]
+    w.__RELEASE__[n]()
+  }, name)
+}
+
+test("the place goes to the next go a step at a time: the loop, then the seek, then Play", async ({
+  page,
+}) => {
+  // Python answers each call on a thread of its own, so a call sent before
+  // the one ahead of it has answered can overtake it.
+  await openGo(page, "Take 1 Pałyn 1")
+  await dragRegion(page, 0.25, 0.5)
+  await repeat(page).click()
+  await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
+  await transport(page).getByRole("button", { name: "Play", exact: true }).click()
+  await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+  await holdEach(page, ["player_set_loop", "player_seek"])
+  const from = await everyCall(page)
+  const sent = async () =>
+    (await callsFrom(page, from))
+      .map((c) => c.name)
+      .filter((n) => ["player_set_loop", "player_seek", "player_play"].includes(n))
+  await page.keyboard.press("ArrowDown")
+  await expect.poll(() => opened(page)).toBe("/rec/old/p2.wav")
+  await expect.poll(sent).toEqual(["player_set_loop"])
+  await page.waitForTimeout(300)
+  expect(await sent()).toEqual(["player_set_loop"])
+  await release(page, "player_set_loop")
+  await expect.poll(sent).toEqual(["player_set_loop", "player_seek"])
+  await page.waitForTimeout(300)
+  expect(await sent()).toEqual(["player_set_loop", "player_seek"])
+  await release(page, "player_seek")
+  await expect.poll(sent).toEqual(["player_set_loop", "player_seek", "player_play"])
+  await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+})
+
+test("a place still waiting on the loop's answer is not put on a go opened since", async ({
+  page,
+}) => {
+  await openGo(page, "Take 1 Pałyn 1")
+  await dragRegion(page, 0.25, 0.5)
+  await repeat(page).click()
+  await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
+  await transport(page).getByRole("button", { name: "Play", exact: true }).click()
+  await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+  await holdEach(page, ["player_set_loop"])
+  const loops = await callCount(page, "player_set_loop")
+  await page.keyboard.press("ArrowDown")
+  await expect.poll(() => callCount(page, "player_set_loop")).toBe(loops + 1)
+  await strip(page).getByRole("button", { name: /^Viasna, go 1/ }).click()
+  await expect.poll(() => opened(page)).toBe("/rec/old/v1.wav")
+  await expect(timeline(page)).toBeVisible()
+  const from = await everyCall(page)
+  await release(page, "player_set_loop")
+  await page.waitForTimeout(400)
+  const after = await callsFrom(page, from)
+  expect(after.filter((c) => c.name === "player_seek" || c.name === "player_play")).toEqual([])
+  await expect(transport(page).getByRole("button", { name: "Play", exact: true })).toBeVisible()
+})
+
+test("↑ before a note's go has opened carries the note's place", async ({ page }) => {
+  // As if ↑ were pressed once the go was open, at the note.
+  await openApp(page, { before: "window.__FULL_EVENING__ = true" })
+  await openHistory(page)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await hold(page, "player_open")
+  const opens = await callCount(page, "player_open")
+  await overview.locator("[data-note]", { hasText: "this one is the take" }).click()
+  await expect.poll(() => callCount(page, "player_open")).toBe(opens + 1)
+  await page.keyboard.press("ArrowUp")
+  await expect.poll(() => callCount(page, "player_open")).toBe(opens + 2)
+  const seeks = await callCount(page, "player_seek")
+  await letGo(page)
+  await expect.poll(() => callCount(page, "player_seek")).toBeGreaterThan(seeks)
+  expect(await opened(page)).toBe("/rec/old/p1.wav")
+  expect((await calls(page, "player_seek")).at(-1)!.args[0] as number).toBeCloseTo(72, 0)
+  await expect(transport(page).getByRole("button", { name: "Play", exact: true })).toBeVisible()
 })
 
 /** Pałyn 1 of Tuesday jam opened from Pałyn's page, whose ↑ is the last
@@ -514,7 +611,7 @@ test("a renamed go's tab is scrolled into view", async ({ page }) => {
   await page.getByRole("dialog").locator("input").fill("Alpha")
   await page.getByRole("dialog").getByRole("button", { name: "Rename" }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
-  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Alpha")
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "song:Alpha")
   await expect
     .poll(() =>
       openTab(strip(page)).evaluate((el) => {
@@ -550,7 +647,7 @@ test("from a song's page, its tab is as wide shut as open", async ({ page }) => 
   await expect(timeline(page)).toBeVisible()
   const open = await places(page)
   await strip(page).getByRole("button", { name: /^Viasna, go 1/ }).click()
-  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Viasna")
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "song:Viasna")
   expect(await places(page)).toEqual(open)
 })
 
@@ -569,7 +666,7 @@ async function openOf(page: Page, names: string[], open = 1) {
 
 test("a long song name is cut to 224 px and shown whole on hover", async ({ page }) => {
   await openOf(page, ["Pałyn", LONG])
-  const long = strip(page).locator(`[data-tab='${LONG}']`)
+  const long = strip(page).locator(`[data-tab='song:${LONG}']`)
   const name = long.locator("[data-tab-name]")
   await expect(name).toHaveText(LONG)
   expect((await name.boundingBox())!.width).toBeLessThanOrEqual(224)
@@ -578,7 +675,7 @@ test("a long song name is cut to 224 px and shown whole on hover", async ({ page
   await expect(openTab(strip(page)).locator("[title]")).toHaveCount(0)
   await expect(openTab(strip(page))).not.toHaveAttribute("title")
   await button.click()
-  await expect(openTab(strip(page))).toHaveAttribute("data-tab", LONG)
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", `song:${LONG}`)
   await expect(openTab(strip(page)).locator(`[title='${LONG}']`)).toHaveCount(1)
 })
 
@@ -619,7 +716,7 @@ test("the mouse wheel moves the songs sideways", async ({ page }) => {
   await page.setViewportSize({ width: 1180, height: 700 })
   await openOf(page, TWENTY)
   expect(await page.locator("main").evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
-  await strip(page).locator("[data-tab='Viasna']").hover()
+  await strip(page).locator("[data-tab='song:Viasna']").hover()
   await page.mouse.wheel(0, 300)
   await expect.poll(() => scrolled(page)).toBeGreaterThan(0)
   expect(await down(page)).toBe(0)
@@ -627,7 +724,7 @@ test("the mouse wheel moves the songs sideways", async ({ page }) => {
 
 test("a sideways wheel moves the songs once", async ({ page }) => {
   await openOf(page, TWENTY)
-  await strip(page).locator("[data-tab='Viasna']").hover()
+  await strip(page).locator("[data-tab='song:Viasna']").hover()
   await page.mouse.wheel(120, 0)
   await expect.poll(() => scrolled(page)).toBe(120)
 })
@@ -636,7 +733,7 @@ test("a wheel turn the page cannot cancel does not move the songs", async ({ pag
   // A trackpad's later events in a swipe the page did not cancel at first.
   await openOf(page, TWENTY)
   await strip(page)
-    .locator("[data-tab='Viasna']")
+    .locator("[data-tab='song:Viasna']")
     .evaluate((el) =>
       el.dispatchEvent(new WheelEvent("wheel", { deltaY: 200, bubbles: true, cancelable: false }))
     )
@@ -647,7 +744,7 @@ test("a wheel turn the page cannot cancel does not move the songs", async ({ pag
 test("the wheel over a column too short to scroll moves the songs", async ({ page }) => {
   await openOf(page, TWENTY)
   await songs(page).click()
-  const column = strip(page).locator("[data-column='Viasna']")
+  const column = strip(page).locator("[data-column='song:Viasna']")
   await expect(column).toBeVisible()
   await column.hover()
   await page.mouse.wheel(0, 200)
@@ -659,7 +756,7 @@ test("the songs stay where they were moved when the strip gets a little narrower
 }) => {
   // As when the window's scrollbar comes in on opening the strip out.
   await openOf(page, TWENTY)
-  await strip(page).locator("[data-tab='Viasna']").hover()
+  await strip(page).locator("[data-tab='song:Viasna']").hover()
   await page.mouse.wheel(0, 800)
   const at = await rested(page)
   expect(at).toBeGreaterThan(300)
@@ -696,7 +793,7 @@ test("the wheel over an open column scrolls the column, not the songs", async ({
   await page.setViewportSize({ width: 1180, height: 760 })
   await openOf(page, [...Array(12).fill("Alpha"), ...TWENTY.slice(0, 12)])
   await songs(page).click()
-  const column = strip(page).locator("[data-column='Alpha']")
+  const column = strip(page).locator("[data-column='song:Alpha']")
   await expect(column).toBeVisible()
   expect(await column.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
   await column.hover()
@@ -721,7 +818,7 @@ function inView(page: Page) {
 test("the open tab comes back into view when the window narrows", async ({ page }) => {
   await page.setViewportSize({ width: 1180, height: 820 })
   await openOf(page, TWENTY.slice(0, 7), 7)
-  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Daroha")
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "song:Daroha")
   await expect.poll(() => inView(page)).toBe(true)
   await page.setViewportSize({ width: 900, height: 820 })
   await expect(later(page)).toHaveCount(0)

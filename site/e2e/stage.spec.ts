@@ -77,7 +77,7 @@ test("the story goes through its six steps", async ({ page }) => {
   await step(page, 5)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("compare")
   const open = page.locator("[data-tab][aria-current='true']")
-  await expect(open).toHaveAttribute("data-tab", "Pałyn")
+  await expect(open).toHaveAttribute("data-tab", "song:Pałyn")
   await expect(open.locator("[data-tab-line]")).toHaveText(/^6/)
   await expect(page.locator("[data-column]").first()).toBeVisible()
   await expect(page.locator("[data-region-span]")).toBeVisible()
