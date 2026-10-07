@@ -13,7 +13,7 @@ const PILL =
   "hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 
 /**
- * The songs under a take's name, in two rows at most: what this rehearsal
+ * The songs under a take's name, in two rows at most (`rows` says otherwise): what this rehearsal
  * played, then the other rehearsals' songs, the latest played first, and
  * All songs… last. Each shows the go a take would be ("Polyn 3", the number
  * dimmed); a click puts only the title in the field.
@@ -32,12 +32,14 @@ export function SongPills({
   value,
   initial,
   onPick,
+  rows = 2,
 }: {
   choices: SongChoices | null
   value: string
   /** What the field started from: it does not narrow them. */
   initial: string
   onPick: (name: string) => void
+  rows?: number
 }) {
   const all = choices ? [...choices.here, ...choices.other] : []
   const typed = value.trim().toLocaleLowerCase()
@@ -66,7 +68,7 @@ export function SongPills({
       const kids = [...m.children] as HTMLElement[]
       const width = new Map(candidates.map((c, i) => [c.song, kids[i].getBoundingClientRect().width]))
       const last = kids[candidates.length]?.getBoundingClientRect().width ?? 0
-      const picked = pillsShown(here, other, (c) => width.get(c.song) ?? 0, last, rowEl.clientWidth, GAP)
+      const picked = pillsShown(here, other, (c) => width.get(c.song) ?? 0, last, rowEl.clientWidth, GAP, rows)
       // Measuring and setting this before the row paints is the point of
       // doing it in a layout effect rather than the ResizeObserver alone.
       // eslint-disable-next-line react/set-state-in-effect
@@ -78,7 +80,7 @@ export function SongPills({
     return () => watch.disconnect()
     // `key` stands for the candidates: the same names, the same layout.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
+  }, [key, rows])
 
   if (all.length === 0) return null
   const byName = new Map(candidates.map((c) => [c.song, c]))

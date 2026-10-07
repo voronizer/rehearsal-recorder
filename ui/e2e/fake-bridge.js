@@ -546,10 +546,17 @@ window.__MAKE_API__ = () => ({
     ? {ok:false, error: window.__RETRY_REFUSED__} : {ok:true, queued:true})),
   stop_monitor: track('stop_monitor', async () => ({ok:true})),
 
+  // A page can start the rehearsal with takes in it already:
+  // window.__TONIGHT__ = [{name, duration_sec, starred?, markers?, cloud?}, …],
+  // numbered from 1 in that order.
   start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, _tr, _depth) => {
-    session = {name, folder:'/rec/' + name, takes:[],
+    const folder = '/rec/' + name;
+    const tonight = (window.__TONIGHT__ || []).map((t, i) => ({take_number:i + 1, markers:[],
+      tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));
+    for (const t of tonight) fileDurations[t.tracks[0].file] = t.duration_sec;
+    session = {name, folder, takes:asSent(tonight),
                tracks: window.__SESSION_TRACKS__ || [{name:'Guitar',channel:1},{name:'Vocals',channel:2}]};
-    takeCounter = 0;
+    takeCounter = tonight.length;
     nextName = null;
     return {ok:true, folder:session.folder};
   }),
@@ -891,8 +898,11 @@ window.__MAKE_API__ = () => ({
     deleted.add(`${folder}#${n}`);
     return {ok:true, trashed:true, takes_left:0};
   }),
+  // Python takes them out of the rehearsal, the live one included.
   delete_takes: track('delete_takes', async (folder, numbers) => {
     for (const n of numbers) deleted.add(`${folder}#${n}`);
+    if (session && folder === session.folder)
+      session.takes = session.takes.filter(t => !numbers.includes(t.take_number));
     return {ok:true, deleted:[...numbers], failed:[]};
   }),
   // History's Songs view (api.list_songs, api.get_song), from library().

@@ -6,12 +6,14 @@ import { Kbd, Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
+import { EveningActions } from "@/components/EveningActions"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/ConfirmDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
+import { useEveningSettings } from "@/hooks/useEveningSettings"
 import { TakeNameField } from "@/components/TakeNameField"
 import { BeforeTonightCard } from "@/components/BeforeTonightCard"
 import { byPlace, type PlacedTake } from "@/lib/songs"
@@ -86,6 +88,7 @@ export function Rehearsal({
   } | null>(null)
   const [renamingRehearsal, setRenamingRehearsal] = useState(false)
   const [finishing, setFinishing] = useState(false)
+  const evening = useEveningSettings()
 
   // The next take's name as the field last settled on it, against the
   // session's name at the time: once Python has it, the session says the
@@ -466,6 +469,22 @@ export function Rehearsal({
               onShare={setToShare}
               onDelete={setToDelete}
               cloudStates={session.cloud_queue}
+              falseStartSec={evening?.falseStartSec}
+              folder={session.folder}
+              onName={(take, title) => void renameTake(take, title)}
+              actions={
+                evening && (
+                  <EveningActions
+                    folder={session.folder}
+                    takes={session.takes}
+                    falseStartSec={evening.falseStartSec}
+                    cloudDir={evening.cloudDir}
+                    waiting={session.cloud_queue}
+                    onChanged={onChanged}
+                    onDeleted={(gone) => gone.forEach(forget)}
+                  />
+                )
+              }
             />
           )
         )}
