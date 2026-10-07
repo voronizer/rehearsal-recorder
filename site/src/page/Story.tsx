@@ -9,7 +9,7 @@ const scrolling = (): ScrollBehavior =>
   matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
 
 /**
- * The six steps on the left, and on the right the app going through them:
+ * The seven steps on the left, and on the right the app going through them:
  * the step in the middle of the screen is the one it shows. The rail under
  * it fills as the page scrolls, and jumps to a step.
  */

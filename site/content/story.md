@@ -1,12 +1,17 @@
 # From soundcheck to the take you keep.
 
-<!-- The app beside these steps goes through the same six, by id: see
+<!-- The app beside these steps goes through the same seven, by id: see
      site/src/stage/Story.tsx. Keep the ids and their order. -->
 
 ## Set up the tracks. {#setup}
 
 One per musician: a name and the input it comes in on. Check signal, and
 everyone sees their own bar move.
+
+## Hear last week first. {#before}
+
+Name the next take after a song, and its best go from before sits right
+beside it.
 
 ## Record. {#record}
 

@@ -209,7 +209,7 @@ levels = function () {
 };
 
 api.start_rehearsal = async (name) => {
-  session = {name, folder: `C:\\Users\\alex\\RehearsalRecordings\\${name} - 2026-09-22 19-00`,
+  session = {name, folder: `C:\\Users\\alex\\RehearsalRecordings\\${name} - 2026-09-29 19-00`,
              tracks: PARTS,
              takes: JSON.parse(JSON.stringify(EARLIER))};
   takeCounter = EARLIER.length;
