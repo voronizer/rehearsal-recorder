@@ -165,6 +165,21 @@ export function useTakeStripPlayer<T extends Take = Take>(
     setCued(take)
   }
 
+  /**
+   * Play a take where it is from a spot in it, without opening it: a note
+   * under one of the rehearsal screen's earlier goes plays from just before
+   * it. The take already loaded is moved there; another is loaded first.
+   */
+  const cueAt = (take: T, at: number) => {
+    if (sameTake(take, loaded)) {
+      seek(at)
+      play()
+      return
+    }
+    whenOpen({ at, play: true })
+    setCued(take)
+  }
+
   return {
     selected,
     cued,
@@ -178,6 +193,7 @@ export function useTakeStripPlayer<T extends Take = Take>(
     openAt,
     move,
     playInOverview,
+    cueAt,
     player,
   }
 }

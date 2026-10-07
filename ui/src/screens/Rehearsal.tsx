@@ -14,6 +14,7 @@ import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { TakeNameField } from "@/components/TakeNameField"
 import { BeforeTonightCard } from "@/components/BeforeTonightCard"
+import { byPlace, type PlacedTake } from "@/lib/songs"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
@@ -55,8 +56,13 @@ export function Rehearsal({
     openAt,
     move,
     playInOverview,
+    cueAt,
     player,
-  } = useTakeStripPlayer()
+  } = useTakeStripPlayer(byPlace)
+  // An earlier go from the panel is a take placed in its own rehearsal:
+  // take numbers repeat from one rehearsal to the next, and tonight's
+  // takes have no folder of their own here.
+  const cuedEarlier = cued !== null && (cued as PlacedTake).folder !== undefined
   // A take open in the player, or playing in the overview: either way Space
   // is its, and Escape puts it away before it finishes anything.
   const inHand = selected !== null || cued !== null
@@ -186,6 +192,14 @@ export function Rehearsal({
     const id = setInterval(() => onChanged(), 1500)
     return () => clearInterval(id)
   }, [inFlight, onChanged])
+
+  // An earlier go is the card's song's: another song picked under the field
+  // puts it away. A refresh that leaves the song as it was does not.
+  const beforeSong = session.before_tonight?.song ?? null
+  useEffect(() => {
+    if (cuedEarlier) uncue()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beforeSong])
 
   const finish = async () => {
     player.pause()
@@ -346,9 +360,19 @@ export function Rehearsal({
               before={session.before_tonight ?? null}
               song={nextSong}
               playedTonight={nextPlayedTonight}
-              playback={null}
-              onPlay={() => {}}
-              onPlayAt={() => {}}
+              playback={
+                cuedEarlier
+                  ? {
+                      take: cued as PlacedTake,
+                      playing: player.playing,
+                      loading: player.loading,
+                      position: player.position,
+                      duration: player.duration,
+                    }
+                  : null
+              }
+              onPlay={playInOverview}
+              onPlayAt={(take, at) => cueAt(take, Math.max(0, at - 3))}
             />
           )}
         </aside>
@@ -423,13 +447,15 @@ export function Rehearsal({
               takes={session.takes}
               songs={session.songs ?? []}
               playback={
-                cued && {
-                  take: cued.take_number,
-                  playing: player.playing,
-                  loading: player.loading,
-                  position: player.position,
-                  duration: player.duration,
-                }
+                cued && !cuedEarlier
+                  ? {
+                      take: cued.take_number,
+                      playing: player.playing,
+                      loading: player.loading,
+                      position: player.position,
+                      duration: player.duration,
+                    }
+                  : null
               }
               onPlay={playInOverview}
               onOpen={select}

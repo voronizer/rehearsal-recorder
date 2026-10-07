@@ -1,4 +1,13 @@
-import { expect, openApp, openBandApp, recordTake, startRehearsal, test } from "./app.ts"
+import {
+  calls,
+  callCount,
+  expect,
+  openApp,
+  openBandApp,
+  recordTake,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Step 6 of issue #12: the Next take field, its songs and the named song's
@@ -165,5 +174,106 @@ test.describe("the card", () => {
       .poll(async () => Math.round((await panel(page).boundingBox())!.width))
       .toBe(360)
     expect(await panel(page).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  })
+})
+
+test.describe("playing an earlier go", () => {
+  /** Whether the fake's one player is playing. */
+  const playing = (page: Page) =>
+    page.evaluate(async () => {
+      const w = window as unknown as {
+        pywebview: { api: { player_state: () => Promise<{ playing?: boolean }> } }
+      }
+      return Boolean((await w.pywebview.api.player_state()).playing)
+    })
+
+  async function withDaroha(page: Page, options: { before?: string; after?: string } = {}) {
+    await openApp(page, options)
+    await startRehearsal(page)
+    await pill(page, "Daroha").click()
+    await expect(card(page, "Daroha")).toBeVisible()
+  }
+
+  test("play starts an earlier go in place, with no player", async ({ page }) => {
+    await withDaroha(page)
+    await card(page, "Daroha").getByRole("button", { name: "Play Daroha 2" }).click()
+    await expect(card(page, "Daroha").getByRole("button", { name: "Pause Daroha 2" })).toBeVisible()
+    await expect(page.getByRole("group", { name: "Take timeline" })).toHaveCount(0)
+    const opened = (await calls(page, "player_open")).at(-1)!
+    expect((opened.args[0] as { file: string }[])[0].file).toBe("/rec/older/d2.wav")
+  })
+
+  test("an earlier take 2 and tonight's take 2 are told apart", async ({ page }) => {
+    await openApp(page)
+    await startRehearsal(page)
+    for (const n of [1, 2]) {
+      await recordTake(page, n)
+      await page.getByRole("button", { name: /Save take/ }).click()
+    }
+    await pill(page, "Daroha").click()
+    const daroha = card(page, "Daroha")
+    await daroha.getByRole("button", { name: "Play Daroha 2" }).click()
+    await expect(daroha.getByRole("button", { name: "Pause Daroha 2" })).toBeVisible()
+    const tonight = page.locator("[aria-label='Rehearsal overview'] [data-take='2']")
+    await expect(tonight.getByRole("button", { name: /^Pause / })).toHaveCount(0)
+
+    await tonight.getByRole("button", { name: /^Play / }).click()
+    await expect(tonight.getByRole("button", { name: /^Pause / })).toBeVisible()
+    await expect(daroha.getByRole("button", { name: "Play Daroha 2" })).toBeVisible()
+  })
+
+  test("a note plays its go from 3 s before", async ({ page }) => {
+    await openApp(page, { before: "window.__FULL_EVENING__ = true" })
+    await startRehearsal(page)
+    await pill(page, "Pałyn").click()
+    const palyn = card(page, "Pałyn")
+    await palyn.locator("[data-note]").first().click()
+    await expect(palyn.getByRole("button", { name: "Pause Pałyn 2" })).toBeVisible()
+    await expect.poll(async () => (await calls(page, "player_seek")).at(-1)?.args[0]).toBe(69)
+  })
+
+  test("Space pauses and plays it, Escape puts it away", async ({ page }) => {
+    await withDaroha(page)
+    const daroha = card(page, "Daroha")
+    await daroha.getByRole("button", { name: "Play Daroha 2" }).click()
+    await expect(daroha.getByRole("button", { name: "Pause Daroha 2" })).toBeVisible()
+    await page.keyboard.press("Space")
+    await expect(daroha.getByRole("button", { name: "Play Daroha 2" })).toBeVisible()
+    await page.keyboard.press("Space")
+    await expect(daroha.getByRole("button", { name: "Pause Daroha 2" })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(daroha.getByRole("button", { name: /^Pause / })).toHaveCount(0)
+    expect(await playing(page)).toBe(false)
+    expect(await callCount(page, "finish_rehearsal")).toBe(0)
+    await expect(page.getByText("Finish this rehearsal?")).toHaveCount(0)
+  })
+
+  test("Record stops an earlier go before the take starts", async ({ page }) => {
+    await withDaroha(page, {
+      after:
+        "const api = window.pywebview.api; const start = api.start_take;" +
+        "api.start_take = async (...a) => {" +
+        " window.__PLAYING_AT_START__ = (await api.player_state()).playing; return start(...a); };",
+    })
+    const daroha = card(page, "Daroha")
+    await daroha.getByRole("button", { name: "Play Daroha 2" }).click()
+    await expect(daroha.getByRole("button", { name: "Pause Daroha 2" })).toBeVisible()
+    await page.getByRole("button", { name: /Record take 1/ }).click()
+    await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
+    const atStart = await page.evaluate(
+      () => (window as unknown as { __PLAYING_AT_START__: boolean }).__PLAYING_AT_START__
+    )
+    expect(atStart).toBe(false)
+  })
+
+  test("picking another song stops the earlier go", async ({ page }) => {
+    await withDaroha(page)
+    const daroha = card(page, "Daroha")
+    await daroha.getByRole("button", { name: "Play Daroha 2" }).click()
+    await expect(daroha.getByRole("button", { name: "Pause Daroha 2" })).toBeVisible()
+    await pill(page, "Pałyn").click()
+    await expect(card(page, "Pałyn")).toBeVisible()
+    await expect(panel(page).getByRole("button", { name: /^Pause / })).toHaveCount(0)
+    await expect.poll(() => playing(page)).toBe(false)
   })
 })
