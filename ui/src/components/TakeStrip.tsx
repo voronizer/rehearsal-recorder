@@ -190,8 +190,9 @@ export function TakeStrip({
       <div className="relative flex min-w-0 flex-1">
         <div
           ref={rowRef}
+          // No scrollbar of its own: the wheel, the fade and ‹ › stand for it.
           className={cn(
-            "peer/row flex min-w-0 flex-1 gap-1 overflow-x-auto border-b",
+            "peer/row flex min-w-0 flex-1 gap-1 overflow-x-auto border-b [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
             expanded ? "items-stretch" : "items-end"
           )}
         >
