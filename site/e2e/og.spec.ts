@@ -22,6 +22,15 @@ test("og.html shows the page's words beside the app", async ({ page }) => {
     )
     .toBe("hero")
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex")
+  await expect(page.locator("html")).toHaveAttribute("data-og", "ready")
+})
+
+// A picture in the fallback font would be cached by every chat that shows
+// it, so scripts/og.mjs draws none when the page's font did not come.
+test("og.html says so when the page's font did not load", async ({ page }) => {
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort())
+  await page.goto("/og.html")
+  await expect(page.locator("html")).toHaveAttribute("data-og", "no-font")
 })
 
 test("the link picture is a 1200 by 630 PNG", async ({ request }) => {

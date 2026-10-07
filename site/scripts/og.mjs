@@ -4,7 +4,8 @@
 // Chromium has to be installed (npx playwright install chromium).
 //
 // It waits for the app in the picture to be playing and for the fonts, and
-// fails rather than leave a half-drawn picture or none.
+// fails rather than leave a half-drawn picture, one in the wrong font, or
+// none.
 import { fileURLToPath } from "node:url"
 import { chromium } from "@playwright/test"
 import { preview } from "vite"
@@ -22,8 +23,12 @@ try {
   await page.goto(`http://127.0.0.1:${port}/og.html`)
   const app = page.frameLocator('iframe[src$="#hero"]')
   await app.locator('html[data-scene="hero"]').waitFor({ state: "attached", timeout: 30_000 })
-  await page.evaluate(() => document.fonts.ready)
   await app.locator("html").evaluate(() => document.fonts.ready)
+  // The page says whether its font came (src/og/main.tsx).
+  await page.locator("html[data-og]").waitFor({ state: "attached", timeout: 30_000 })
+  if ((await page.locator("html").getAttribute("data-og")) !== "ready") {
+    throw new Error("the page's font (Instrument Sans) did not load")
+  }
   await page.screenshot({ path: out })
   console.log(`Drew ${out}`)
 } catch (e) {

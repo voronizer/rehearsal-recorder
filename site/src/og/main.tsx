@@ -31,3 +31,10 @@ createRoot(document.getElementById("root")!).render(
     <Og />
   </StrictMode>
 )
+
+// Whether the page's own font came, for scripts/og.mjs: once nothing is
+// loading, fonts.ready is done whether or not the font did, and the picture
+// would be drawn in the fallback.
+void document.fonts.ready
+  .then(() => document.fonts.load('600 60px "Instrument Sans"'))
+  .then((faces) => (document.documentElement.dataset.og = faces.length > 0 ? "ready" : "no-font"))

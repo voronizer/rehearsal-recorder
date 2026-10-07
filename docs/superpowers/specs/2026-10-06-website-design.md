@@ -237,6 +237,9 @@ chose the tags instead.
   eyebrow and the app's rehearsal screen (the hero's frame) at 1200 by 630,
   the variant Alex picked; `site/scripts/og.mjs` photographs it from the
   build into `og.png`, in the site's CI, so it always shows the app as it is.
+  The runner has no Mac or Windows font, so Inter stands in for the app's
+  system font (`site/scripts/og-fonts.conf`), and no picture is drawn when
+  the page's own font did not load.
 - **The 404 page** (`site/404.html`): "Nothing was recorded here", a button
   back to the main page, the download for the visitor's computer, and
   Take 404 in the app's own player, four tracks of silence, 4:04 long (Alex

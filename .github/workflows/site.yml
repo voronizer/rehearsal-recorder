@@ -119,6 +119,19 @@ jobs:
         working-directory: site
         run: npx playwright install --with-deps chromium
 
+      # The app in the link picture draws in the computer's own font, which
+      # the runner does not have: Inter stands in for it, as when the
+      # picture was chosen (site/scripts/og-fonts.conf). The browser's step
+      # has just updated apt's lists. A stuck mirror fails it rather than
+      # hold the job.
+      - name: Fonts for the link picture
+        timeout-minutes: 5
+        run: |
+          sudo apt-get install -y --no-install-recommends fonts-inter
+          sudo cp site/scripts/og-fonts.conf /etc/fonts/conf.d/56-og-fonts.conf
+          fc-match -f '%{family}\n' -- -apple-system | grep -q '^Inter' ||
+            { echo "::error::The link picture would not be in Inter."; exit 1; }
+
       # og.png, the picture a chat shows for a link to the site: og.html,
       # photographed from this build (see site/scripts/og.mjs).
       - name: Draw the link picture
