@@ -115,6 +115,12 @@ jobs:
         working-directory: site
         run: npx playwright install --with-deps chromium
 
+      # og.png, the picture a chat shows for a link to the site: og.html,
+      # photographed from this build (see site/scripts/og.mjs).
+      - name: Draw the link picture
+        working-directory: site
+        run: npm run og
+
       - name: Playwright
         working-directory: site
         run: npm run test:e2e

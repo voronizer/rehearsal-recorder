@@ -65,7 +65,8 @@ function seo(): Plugin {
 // The website: a page (index.html) and the app in a frame (stage.html), both
 // drawn by the interface's own components. They are imported from ../ui/src
 // with the interface's `@/`, and run on the interface's own React, so there
-// is one copy of it; the site's package.json does not list it.
+// is one copy of it; the site's package.json does not list it. og.html is
+// the link picture's page, which scripts/og.mjs photographs into og.png.
 export default defineConfig({
   base: "/",
   // The app's icons: the favicon, and the logo its screens show.
@@ -89,6 +90,7 @@ export default defineConfig({
       input: {
         index: fileURLToPath(new URL("./index.html", import.meta.url)),
         stage: fileURLToPath(new URL("./stage.html", import.meta.url)),
+        og: fileURLToPath(new URL("./og.html", import.meta.url)),
       },
     },
   },

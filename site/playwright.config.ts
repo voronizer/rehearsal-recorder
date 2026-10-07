@@ -1,8 +1,8 @@
 import { defineConfig, devices } from "@playwright/test"
 
 // The built site in a real browser: the page, and the app in its frames on
-// the fake Python side. It serves site/dist, so build first:
-// npm run build && npm run test:e2e.
+// the fake Python side. It serves site/dist, so build first, and draw the
+// link picture into it: npm run build && npm run og && npm run test:e2e.
 
 const PORT = 4179
 

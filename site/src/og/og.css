@@ -1,0 +1,19 @@
+/* The link picture, 1200 by 630: the page's words on the left, the app on
+   the right, running off the edge (mockup variant 2). The colours and type
+   are the page's own (see ../page/page.css). */
+:root {
+  --og-tile: #f4f5f7;
+  --og-fg: #16181d;
+  --og-rec: #e5484d;
+  --og-sans: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; }
+body { width: 1200px; height: 630px; overflow: hidden; background: var(--og-tile); color: var(--og-fg); font-family: var(--og-sans); }
+.og-text { position: absolute; left: 72px; top: 0; bottom: 0; width: 470px; display: flex; flex-direction: column; justify-content: center; gap: 26px; }
+.og-brand { display: flex; align-items: center; gap: 14px; font-weight: 600; font-size: 34px; }
+.og-brand svg { width: 52px; height: 52px; margin: -4px; }
+.og-text h1 { font-size: 60px; line-height: 1.04; letter-spacing: -0.03em; font-weight: 600; text-wrap: balance; }
+.og-eyebrow { color: var(--og-rec); font-weight: 600; font-size: 28px; }
+.og-shot { position: absolute; left: 590px; top: 84px; width: 760px; height: 640px; border-radius: 22px; overflow: hidden; background: #fafafa; box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.08), 0 40px 80px -40px rgba(16, 24, 40, 0.45); }
+/* The app's window, 1180 by 960 as on the page, shown 1000 wide. */
+.og-shot iframe { display: block; width: 1180px; height: 960px; border: 0; transform: scale(calc(1000 / 1180)); transform-origin: 0 0; pointer-events: none; }
