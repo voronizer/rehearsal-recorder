@@ -384,7 +384,7 @@ test.describe("Songs in History", () => {
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
     await expect(
-      page.locator("[data-tab='Pałyn'][aria-current='true'] [data-tab-line]")
+      page.locator("[data-tab='song:Pałyn'][aria-current='true'] [data-tab-line]")
     ).toHaveText(/^2/)
 
     await page.keyboard.press("Escape")
@@ -405,7 +405,7 @@ test.describe("Songs in History", () => {
     await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
     const strip = page.getByRole("group", { name: "Take strip" })
     await strip.getByRole("button", { name: "Songs", exact: true }).click()
-    const column = strip.locator("[data-column='Pałyn']")
+    const column = strip.locator("[data-column='song:Pałyn']")
     // First rehearsal, 25 Aug, then Tuesday jam, 10 Sep; Missing jam's are
     // not on disk.
     await expect(column.locator("[data-day]")).toHaveText(["Tue 25 Aug", "Thu 10 Sep"])
@@ -429,7 +429,7 @@ test.describe("Songs in History", () => {
     await rungGroup(page, "/rec/old").getByRole("button", { name: "Take 2 Pałyn 2" }).click()
     const strip = page.getByRole("group", { name: "Take strip" })
     await strip.getByRole("button", { name: "Songs", exact: true }).click()
-    const column = strip.locator("[data-column='Pałyn']")
+    const column = strip.locator("[data-column='song:Pałyn']")
     await expect(column.locator("button[data-go-row]")).toHaveCount(26)
     await expect(column.locator("button[aria-current='true']")).toBeInViewport()
     await expect(page.getByRole("toolbar", { name: "Transport" })).toBeInViewport()
@@ -444,8 +444,8 @@ test.describe("Songs in History", () => {
       await strip
         .locator("[data-tab]")
         .evaluateAll((els) => els.map((el) => el.getAttribute("data-tab")))
-    ).toEqual(["Daroha", "Pałyn"])
-    await expect(strip.locator("[data-tab][aria-current='true']")).toHaveAttribute("data-tab", "Pałyn")
+    ).toEqual(["song:Daroha", "song:Pałyn"])
+    await expect(strip.locator("[data-tab][aria-current='true']")).toHaveAttribute("data-tab", "song:Pałyn")
 
     await page.keyboard.press("Escape")
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
@@ -458,9 +458,9 @@ test.describe("Songs in History", () => {
     await toFirstRehearsal(page)
     const strip = page.getByRole("group", { name: "Take strip" })
     await strip.getByRole("button", { name: /^Daroha, go 2/ }).click()
-    await expect(strip.locator("[data-tab][aria-current='true']")).toHaveAttribute("data-tab", "Daroha")
+    await expect(strip.locator("[data-tab][aria-current='true']")).toHaveAttribute("data-tab", "song:Daroha")
     await strip.getByRole("button", { name: "Songs", exact: true }).click()
-    const column = strip.locator("[data-column='Daroha']")
+    const column = strip.locator("[data-column='song:Daroha']")
     await expect(column.locator("[data-day]")).toHaveCount(0)
     await expect(column.locator("button[data-go-row]")).toHaveCount(2)
   })
@@ -475,7 +475,7 @@ test.describe("Songs in History", () => {
     await expect(page.locator("[aria-label='Take timeline']")).toBeVisible()
     await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
     const strip = page.getByRole("group", { name: "Take strip" })
-    await expect(strip.locator("[data-tab='Daroha']")).toHaveAttribute("aria-current", "true")
+    await expect(strip.locator("[data-tab='song:Daroha']")).toHaveAttribute("aria-current", "true")
     await strip.getByRole("button", { name: "Songs", exact: true }).click()
     await expect(strip.getByRole("button", { name: /^Take 2 Daroha 2/ })).toBeVisible()
     await expect(strip.getByRole("button", { name: /Pałyn/ })).toHaveCount(0)
