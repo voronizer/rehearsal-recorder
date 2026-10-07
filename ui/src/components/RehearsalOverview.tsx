@@ -18,7 +18,7 @@ import { labelCounts, labelLook, labelOf, markText, useLabels } from "@/lib/labe
 import { isFalseStart } from "@/lib/evening"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
-import type { Song, Take } from "@/lib/api"
+import type { Song, SongChoices, Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 const NOT_NAMED = "Not named"
@@ -140,8 +140,12 @@ export function RehearsalOverview({
       ))}
     </div>
   )
-  // Anything renamed or added changes the go each pill offers.
+  // Anything renamed or added changes the go each pill offers. A take
+  // nobody named would be the same go at any song as another one, so one
+  // look, which reads the whole library, serves them all.
   const version = takes.map((t) => `${t.take_number}:${t.name}`).join("|")
+  const naming = onName !== undefined && folder !== undefined
+  const nameChoices = useSongChoices(naming && unnamed.length > 0, folder, null, version)
 
   return (
     <section aria-label="Rehearsal overview" className="flex flex-col gap-3.5">
@@ -212,8 +216,8 @@ export function RehearsalOverview({
                   onShare={onShare}
                   onDelete={onDelete}
                 />
-                {isUnnamed && onName && folder !== undefined && (
-                  <NamePills take={t} folder={folder} version={version} onName={onName} />
+                {isUnnamed && onName && nameChoices && (
+                  <NamePills take={t} choices={nameChoices} onName={onName} />
                 )}
               </Fragment>
             ))}
@@ -231,17 +235,14 @@ export function RehearsalOverview({
  */
 function NamePills({
   take,
-  folder,
-  version,
+  choices,
   onName,
 }: {
   take: Take
-  folder: string
-  version: string
+  choices: SongChoices
   onName: (take: Take, title: string) => void
 }) {
-  const choices = useSongChoices(true, folder, take.take_number, version)
-  if (!choices || choices.here.length + choices.other.length === 0) return null
+  if (choices.here.length + choices.other.length === 0) return null
   return (
     <div data-name-pills={take.take_number} className="-mt-1.5 ml-11 flex items-center gap-2.5">
       <span className="shrink-0 text-xs text-muted-foreground">Name:</span>

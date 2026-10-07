@@ -31,9 +31,15 @@ export function takesLine(f: EveningFacts): string {
 }
 
 /** A false start: shorter than the limit set in Settings, with no ★ and no
- *  marks. A take somebody starred or marked was worth something. */
+ *  marks. A take somebody starred or marked was worth something, and one of
+ *  0 s is one whose length was never known (an old one imported). */
 export function isFalseStart(take: Take, limitSec: number): boolean {
-  return take.duration_sec < limitSec && !take.starred && !take.markers?.length
+  return (
+    take.duration_sec > 0 &&
+    take.duration_sec < limitSec &&
+    !take.starred &&
+    !take.markers?.length
+  )
 }
 
 /** The evening's false starts, in the order they were played. */

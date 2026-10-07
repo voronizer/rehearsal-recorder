@@ -60,6 +60,11 @@ describe("isFalseStart", () => {
   it("follows the limit it is given", () => {
     expect(isFalseStart(take(4, null, 12), 10)).toBe(false)
   })
+  it("is not a take whose length is not known", () => {
+    // An imported take with no length on record is stored as 0 s: clearing
+    // it would trash a real recording.
+    expect(isFalseStart(take(4, null, 0), 30)).toBe(false)
+  })
 })
 
 describe("falseStarts", () => {

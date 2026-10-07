@@ -8,26 +8,33 @@ export type EveningSettings = { falseStartSec: number; cloudDir: string | null }
 // every take) draws its false starts and buttons at once rather than a
 // moment later, the overview shifting under them.
 let known: EveningSettings | null = null
+const screens = new Set<(s: EveningSettings) => void>()
+
+/** Reads them again, for every screen showing them. */
+export function reloadEveningSettings(): Promise<void> {
+  return api()
+    .get_settings()
+    .then((s) => {
+      known = { falseStartSec: s.false_start_sec ?? 30, cloudDir: s.cloud_dir }
+      for (const show of screens) show(known)
+    })
+    // Without them the overview draws no false starts and no buttons.
+    .catch(() => {})
+}
 
 /**
  * The false-start limit and the cloud folder, read from Settings when the
- * screen opens: both change only on the Settings page, which no screen
- * using them is open over. Null until the first read.
+ * screen opens. The limit changes only on the Settings page, which no screen
+ * using it is open over; the cloud folder can also be chosen from a take's
+ * cloud button, which reads them again. Null until the first read.
  */
 export function useEveningSettings(): EveningSettings | null {
   const [settings, setSettings] = useState(known)
   useEffect(() => {
-    let current = true
-    api()
-      .get_settings()
-      .then((s) => {
-        known = { falseStartSec: s.false_start_sec ?? 30, cloudDir: s.cloud_dir }
-        if (current) setSettings(known)
-      })
-      // Without them the overview draws no false starts and no buttons.
-      .catch(() => {})
+    screens.add(setSettings)
+    void reloadEveningSettings()
     return () => {
-      current = false
+      screens.delete(setSettings)
     }
   }, [])
   return settings

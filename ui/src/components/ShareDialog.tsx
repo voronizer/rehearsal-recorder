@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { api, type ShareWhat, type Take } from "@/lib/api"
 import { pollSoon } from "@/lib/activity"
+import { reloadEveningSettings } from "@/hooks/useEveningSettings"
 
 const overlayClass =
   "fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
@@ -55,6 +56,8 @@ export function ShareDialog({
       return
     }
     setCloudDir(res.cloud_dir ?? null)
+    // Send starred, over the takes, goes by it too.
+    void reloadEveningSettings()
   }
 
   const share = async (what: ShareWhat) => {

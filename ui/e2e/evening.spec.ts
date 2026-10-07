@@ -119,6 +119,36 @@ test("Send starred is off with no cloud folder, and says where to choose one", a
   await expect(send).toHaveAttribute("title", "Choose a cloud folder in Settings")
 })
 
+test("a cloud folder chosen from a take's cloud button turns Send starred on", async ({ page }) => {
+  const overview = await openEvening(page, "window.__CLOUD_DIR__ = null;")
+  const send = overview.getByRole("button", { name: /Send starred/ })
+  await expect(send).toBeDisabled()
+  await row(overview, 1).hover()
+  await overview.getByRole("button", { name: /^Copy .* to the cloud$/ }).first().click()
+  await page.getByRole("dialog").getByText("Choose").click()
+  await expect.poll(() => callCount(page, "choose_cloud_dir")).toBe(1)
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(send).toBeEnabled()
+  await expect(send).toHaveText(/Send starred\s*2/)
+})
+
+test("the songs under the takes nobody named are asked for once", async ({ page }) => {
+  const overview = await openEvening(page)
+  await expect(overview.locator('[data-name-pills="6"] [data-song-choice]').first()).toBeVisible()
+  await expect(overview.locator('[data-name-pills="10"] [data-song-choice]').first()).toBeVisible()
+  const folder = await folderOf(page)
+  const asked = async () =>
+    (await calls(page, "song_choices")).filter((c) => c.args[0] === folder).length
+  // Each look reads the whole library, so two takes nobody named, or twelve,
+  // are one look between them.
+  expect(await asked()).toBe(1)
+  await overview.locator('[data-name-pills="6"] [data-song-choice="Viasna"]').click()
+  await expect(overview.locator('[data-name-pills="6"]')).toHaveCount(0)
+  await expect(overview.locator('[data-name-pills="10"] [data-song-choice]').first()).toBeVisible()
+  await expect.poll(asked).toBe(2)
+})
+
 test("Clear false starts asks first and removes only them", async ({ page }) => {
   const overview = await openEvening(page)
   const clear = overview.getByRole("button", { name: /Clear false starts/ })
