@@ -862,6 +862,7 @@ window.__MAKE_API__ = () => ({
       return {ok:false, error:'Could not read the rehearsal: session.json is damaged'};
     // First rehearsal has the songs a page added, as the library has them.
     const r = folder === '/rec/older' ? withExtraSongs(pastRehearsal(folder)) : pastRehearsal(folder);
+    r.takes = r.takes.filter(t => !deleted.has(`${folder}#${t.take_number}`));
     for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
     return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes)}));
   }),

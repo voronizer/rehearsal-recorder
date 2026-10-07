@@ -1,4 +1,4 @@
-import { calls, callCount, expect, openApp, startRehearsal, test } from "./app.ts"
+import { calls, callCount, expect, openApp, openHistory, startRehearsal, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Sorting the evening on the rehearsal screen: false starts drawn as such,
@@ -150,4 +150,56 @@ test("the buttons sit on their own line in a 960 px window", async ({ page }) =>
   const send = await overview.getByRole("button", { name: /Send starred/ }).boundingBox()
   expect(send!.y).toBeGreaterThan(played!.y + played!.height)
   expect(await overview.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+})
+
+test("clearing a false start playing in the overview lets the player go", async ({ page }) => {
+  const overview = await openEvening(page)
+  await overview.getByRole("button", { name: "Play Pałyn 3" }).click()
+  await expect(overview.getByRole("button", { name: "Pause Pałyn 3" })).toBeVisible()
+  const closes = await callCount(page, "player_close")
+  await overview.getByRole("button", { name: /Clear false starts/ }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Move to the Trash" }).click()
+  await expect(row(overview, 4)).toHaveCount(0)
+  await expect.poll(() => callCount(page, "player_close")).toBeGreaterThan(closes)
+  await expect(overview.getByRole("button", { name: /^Pause / })).toHaveCount(0)
+})
+
+// History: Tuesday jam is one take of Pałyn, 20 s here, so a false start;
+// Wednesday jam is two takes nobody named.
+async function openPast(page: Page, name: string, before = "") {
+  await openApp(page, { before: `window.__OLD_LENGTH_SEC__ = 20; window.__CLOUD_DIR__ = '/cloud'; ${before}` })
+  await openHistory(page, name)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await expect(overview).toBeVisible()
+  return overview
+}
+
+test("in History a rehearsal has its false starts and both buttons", async ({ page }) => {
+  const overview = await openPast(page, "Tuesday jam")
+  await expect(row(overview, 1)).toHaveAttribute("data-false-start")
+  await expect(overview.getByRole("button", { name: /Send starred/ })).toHaveAttribute(
+    "title",
+    "No take has ★"
+  )
+  await overview.getByRole("button", { name: /Clear false starts/ }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("heading")).toHaveText("Move 1 false start to the Trash?")
+  await dialog.getByRole("button", { name: "Move to the Trash" }).click()
+  expect((await calls(page, "delete_takes")).at(-1)?.args).toEqual(["/rec/old", [1]])
+  await expect(page.getByText("No takes", { exact: true })).toBeVisible()
+})
+
+test("in History Send starred sends the starred takes of that rehearsal", async ({ page }) => {
+  const overview = await openPast(page, "Tuesday jam", "window.__STARRED__ = ['/rec/old#1'];")
+  const send = overview.getByRole("button", { name: /Send starred/ })
+  await expect(send).toHaveText(/Send starred\s*1/)
+  await send.click()
+  expect((await calls(page, "send_starred")).at(-1)?.args).toEqual(["/rec/old"])
+  await expect(send).toHaveAttribute("title", "Every ★ take is in the cloud folder")
+})
+
+test("in History a pill under an unnamed take names it there", async ({ page }) => {
+  const overview = await openPast(page, "Wednesday jam")
+  await overview.locator('[data-name-pills="2"] [data-song-choice="Pałyn"]').click()
+  expect((await calls(page, "rename_take")).at(-1)?.args).toEqual(["/rec/quiet", 2, "Pałyn"])
 })

@@ -6,6 +6,7 @@ import { RehearsalList } from "@/components/RehearsalList"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
+import { EveningActions } from "@/components/EveningActions"
 import { HistorySwitch } from "@/components/HistorySwitch"
 import { SongList } from "@/components/SongList"
 import { SongPage } from "@/components/SongPage"
@@ -15,6 +16,7 @@ import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/Conf
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
+import { useEveningSettings } from "@/hooks/useEveningSettings"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { goesByTime } from "@/lib/songTabs"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
@@ -44,7 +46,7 @@ import {
   rehearsalCloudToo,
   takeCloudToo,
 } from "@/lib/deletion"
-import { useCloudSettled, useRunning, watching } from "@/lib/activity"
+import { useActivity, useCloudSettled, useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 import {
   byPlace,
@@ -145,6 +147,21 @@ export function HistoryScreen({
     playInOverview,
     player,
   } = useTakeStripPlayer<PlacedTake>(byPlace)
+  const evening = useEveningSettings()
+  // This rehearsal's takes on their way to the cloud folder: Send starred
+  // does not count them again.
+  const { entries } = useActivity()
+  const cloudWaiting = Object.fromEntries(
+    entries
+      .filter(
+        (e) =>
+          e.kind === "cloud" &&
+          (e.state === "waiting" || e.state === "running") &&
+          e.folder === opened?.folder &&
+          e.take_number !== null
+      )
+      .map((e) => [e.take_number as number, e.state])
+  )
   const cropping = useRunning(
     "crop",
     (e) => e.folder === selected?.folder && e.take_number === selected?.take_number
@@ -933,6 +950,24 @@ export function HistoryScreen({
                     onShare={(take) => setTakeToShare(placed(opened.folder, take))}
                     onDelete={(take) => setTakeToDelete(placed(opened.folder, take))}
                     onOpenSong={(title) => void openSong(title)}
+                    falseStartSec={evening?.falseStartSec}
+                    folder={opened.folder}
+                    onName={(take, title) => void renameTake(placed(opened.folder, take), title)}
+                    actions={
+                      evening && (
+                        <EveningActions
+                          folder={opened.folder}
+                          takes={opened.takes}
+                          falseStartSec={evening.falseStartSec}
+                          cloudDir={evening.cloudDir}
+                          waiting={cloudWaiting}
+                          onChanged={() => void changed(opened.folder)}
+                          onDeleted={(gone) =>
+                            gone.forEach((t) => forget(placed(opened.folder, t)))
+                          }
+                        />
+                      )
+                    }
                   />
                 ) : (
                   <EmptyState
