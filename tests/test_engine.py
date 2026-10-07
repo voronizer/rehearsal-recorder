@@ -6428,7 +6428,7 @@ def main():
     s59._lib.set_cloud_copy(live59, 3, {"mix": str(cloud59 / "x" / "03 - Vesna.wav")},
                             str(cloud59))
     sent59 = s59.send_starred(live59)
-    ok("the ★ takes not in the cloud folder are sent",
+    ok("the starred takes not in the cloud folder are sent",
        sent59 == {"ok": True, "queued": [1]})
     ok("as Settings' What gets published says",
        [j[1:] for j in s59._cloud_queue._jobs] == [[1, "both"]])
