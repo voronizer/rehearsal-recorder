@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useRef, type Ref } from "react"
+import { Fragment, useLayoutEffect, useRef } from "react"
 import { Star } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
@@ -118,7 +118,6 @@ export function SongTab({
   onPick,
   onRow,
   onToggle,
-  innerRef,
 }: {
   tabKey: string
   song: string | null
@@ -135,8 +134,22 @@ export function SongTab({
   onPick: () => void
   onRow: (go: TabGo) => void
   onToggle: () => void
-  innerRef?: Ref<HTMLDivElement>
 }) {
+  // A tab is as wide as the widest of its goes' lines, and a line's status
+  // comes and goes on its own: "Waiting for the cloud", then nothing once
+  // the copy is done. So while the strip is up a tab only ever widens, and
+  // no tab moves under the mouse because a copy finished. Set on the
+  // element, not through state: it is a floor for the layout, measured from
+  // the layout, and a render for it would be one more render per tab.
+  const box = useRef<HTMLDivElement | null>(null)
+  const widest = useRef(0)
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el || el.offsetWidth <= widest.current) return
+    widest.current = el.offsetWidth
+    el.style.minWidth = `${widest.current}px`
+  })
+
   const title = song ?? `Take ${shown.take.take_number}`
   const statusOf = (go: TabGo) =>
     takeCloudStatus(go.take, go.folder === undefined ? cloudStates?.[go.take.take_number] : undefined)
@@ -190,7 +203,7 @@ export function SongTab({
 
   return (
     <div
-      ref={innerRef}
+      ref={box}
       data-tab={tabKey}
       aria-current={open ? "true" : undefined}
       className="flex shrink-0 flex-col"

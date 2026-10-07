@@ -361,11 +361,22 @@ export function HistoryScreen({
   // page scrolled where it was. "keep" is another go at the song from inside
   // the player, in another rehearsal: it opens at the same place, and the
   // page's scroll, kept when the player was opened, is left as it is.
+  //
+  // A go is opened once its rehearsal has been read, and only if nothing
+  // else was picked meanwhile: another go, another tab, or Escape back to
+  // the page. Each of those changes what is selected, and so turns the
+  // ticket.
   const songSection = useRef<HTMLElement | null>(null)
   const songScroll = useRef<number | null>(null)
+  const going = useRef(0)
+  useEffect(() => {
+    going.current++
+  }, [selected])
   const openGo = async (take: PlacedTake, at?: number | "keep") => {
     const scrolled = songSection.current?.scrollTop ?? 0
+    const ticket = ++going.current
     const res = await api().get_rehearsal(take.folder)
+    if (ticket !== going.current) return
     if (!res.ok) {
       notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the rehearsal" })
       return

@@ -798,6 +798,7 @@ window.__MAKE_API__ = () => ({
     return {ok:true, folder:'/rec/relocated'};
   }),
   get_rehearsal: track('get_rehearsal', async (folder) => {
+    await held('get_rehearsal');
     if (window.__REHEARSAL_UNREADABLE__)
       return {ok:false, error:'Could not read the rehearsal: session.json is damaged'};
     // First rehearsal has the songs a page added, as the library has them.

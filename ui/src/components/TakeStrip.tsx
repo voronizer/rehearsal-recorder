@@ -129,16 +129,20 @@ export function TakeStrip({
   useKey("ArrowUp", () => step(-1), live !== null)
   useKey("ArrowDown", () => step(1), live !== null)
 
-  const openTabRef = useRef<HTMLDivElement | null>(null)
+  const row = useRef<HTMLDivElement | null>(null)
 
   // The strip doesn't wrap (see the note below), so on a rehearsal with many
   // songs the one just picked can land outside the visible row: this keeps
-  // the vertical budget fixed without also hiding the tab. The hook has to
-  // run before the empty-state return below, or the count of hooks called
-  // would change between an empty and a non-empty rehearsal.
+  // the vertical budget fixed without also hiding the tab. A rename can move
+  // the open go to another song's tab, so that counts as a pick too. The
+  // hook has to run before the empty-state return below, or the count of
+  // hooks called would change between an empty and a non-empty rehearsal.
+  const openKey = openTab ? openTab.key : null
   useEffect(() => {
-    openTabRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" })
-  }, [selected?.take_number, folder])
+    row.current
+      ?.querySelector("[data-tab][aria-current='true']")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }, [selected?.take_number, folder, openKey])
 
   if (takes.length === 0) {
     return (
@@ -174,6 +178,7 @@ export function TakeStrip({
       </button>
 
       <div
+        ref={row}
         className={cn(
           "flex min-w-0 flex-1 gap-1 overflow-x-auto border-b",
           expanded ? "items-stretch" : "items-end"
@@ -188,7 +193,6 @@ export function TakeStrip({
           return (
             <SongTab
               key={tab.key}
-              innerRef={open ? openTabRef : undefined}
               tabKey={tab.key}
               song={tab.song}
               goes={goes}

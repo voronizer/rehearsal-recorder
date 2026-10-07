@@ -343,3 +343,213 @@ test("a narrow window keeps the length, the takes and the button", async ({ page
   await expect(fact(page, "In the cloud")).toBeHidden()
   await expect(fact(page, "On disk")).toBeHidden()
 })
+
+// A place on its way to a go, or a go on its way from another rehearsal,
+// is the person's last word only until they say something else.
+
+/** Holds `name` in the fake until `letGo` is called. */
+async function hold(page: Page, name: string) {
+  await page.evaluate((n) => {
+    const w = window as unknown as {
+      __HOLD__?: Record<string, Promise<void>>
+      __LET_GO__?: () => void
+    }
+    w.__HOLD__ = { [n]: new Promise<void>((r) => (w.__LET_GO__ = r)) }
+  }, name)
+}
+async function letGo(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __HOLD__?: object; __LET_GO__: () => void }
+    w.__HOLD__ = {}
+    w.__LET_GO__()
+  })
+}
+
+/** Pałyn 1 open with a loop on Repeat, then ↓ held on its way to Pałyn 2. */
+async function moveOnItsWay(page: Page) {
+  await openGo(page, "Take 1 Pałyn 1")
+  await dragRegion(page, 0.25, 0.5)
+  await repeat(page).click()
+  await expect(repeat(page)).toHaveAttribute("aria-pressed", "true")
+  await hold(page, "player_open")
+  const opens = await callCount(page, "player_open")
+  await page.keyboard.press("ArrowDown")
+  await expect.poll(() => callCount(page, "player_open")).toBe(opens + 1)
+}
+
+/** Viasna 1 opened with nothing of Pałyn's place on it. */
+async function startsFresh(page: Page, from: number) {
+  await expect.poll(() => opened(page)).toBe("/rec/old/v1.wav")
+  await page.waitForTimeout(400)
+  const after = await callsFrom(page, from)
+  expect(after.filter((c) => c.name === "player_set_loop")).toEqual([])
+  expect(
+    after.filter((c) => c.name === "player_seek" && (c.args[0] as number) > 0)
+  ).toEqual([])
+  await expect(repeat(page)).toHaveAttribute("aria-pressed", "false")
+  await expect(page.locator("[data-region-span]")).toHaveCount(0)
+}
+
+test("a place on its way is dropped when another song's tab is picked", async ({ page }) => {
+  await moveOnItsWay(page)
+  await strip(page).getByRole("button", { name: /^Viasna, go 1/ }).click()
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Viasna")
+  const from = await everyCall(page)
+  await letGo(page)
+  await startsFresh(page, from)
+})
+
+test("a place on its way is dropped when the take is closed", async ({ page }) => {
+  await moveOnItsWay(page)
+  await page.keyboard.press("Escape")
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await expect(overview).toBeVisible()
+  await overview.getByRole("button", { name: "Take 4 Viasna 1" }).click()
+  const from = await everyCall(page)
+  await letGo(page)
+  await expect(timeline(page)).toBeVisible()
+  await startsFresh(page, from)
+})
+
+/** Pałyn 1 of Tuesday jam opened from Pałyn's page, whose ↑ is the last
+ *  go at it in First rehearsal, the rehearsal before. */
+async function fromSongPage(page: Page) {
+  await openApp(page, {
+    before: `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = ["Pałyn", "Pałyn"];`,
+  })
+  await openHistory(page)
+  await page.getByRole("button", { name: "Songs", exact: true }).click()
+  await page.locator("[data-song='Pałyn']").click()
+  await page
+    .locator(`[data-rung-group="/rec/old"]`)
+    .getByRole("button", { name: "Take 1 Pałyn 1" })
+    .click()
+  await expect(timeline(page)).toBeVisible()
+}
+const openedFiles = async (page: Page, from: number) =>
+  (await calls(page, "player_open"))
+    .slice(from)
+    .map((c) => (c.args[0] as { file: string }[])[0].file)
+
+test("a go on its way from another rehearsal gives way to a later move", async ({ page }) => {
+  await fromSongPage(page)
+  const opens = await callCount(page, "player_open")
+  await hold(page, "get_rehearsal")
+  await page.keyboard.press("ArrowUp")
+  await expect.poll(() => callCount(page, "get_rehearsal")).toBeGreaterThan(0)
+  await page.keyboard.press("ArrowDown")
+  await expect.poll(() => opened(page)).toBe("/rec/old/p2.wav")
+  await letGo(page)
+  await page.waitForTimeout(800)
+  expect(await openedFiles(page, opens)).toEqual(["/rec/old/p2.wav"])
+  await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
+})
+
+test("a go on its way from another rehearsal is dropped by Escape", async ({ page }) => {
+  await fromSongPage(page)
+  const opens = await callCount(page, "player_open")
+  const asked = await callCount(page, "get_rehearsal")
+  await hold(page, "get_rehearsal")
+  await page.keyboard.press("ArrowUp")
+  await expect.poll(() => callCount(page, "get_rehearsal")).toBe(asked + 1)
+  await page.keyboard.press("Escape")
+  await expect(timeline(page)).toHaveCount(0)
+  await letGo(page)
+  await page.waitForTimeout(800)
+  await expect(timeline(page)).toHaveCount(0)
+  expect(await openedFiles(page, opens)).toEqual([])
+})
+
+/** Where each tab is along the strip, and how wide. */
+async function places(page: Page) {
+  return strip(page)
+    .locator("[data-tab]")
+    .evaluateAll((els) =>
+      els.map((el) => {
+        const r = el.getBoundingClientRect()
+        return { key: el.getAttribute("data-tab"), x: Math.round(r.x), w: Math.round(r.width) }
+      })
+    )
+}
+
+/** A rehearsal that starts with `names` kept already, as the fake keeps
+ *  them: each is waiting for the cloud until the screen asks again. */
+async function startWith(page: Page, names: string[], clock = false) {
+  if (clock) await page.clock.install()
+  await openApp(page, {
+    after: `
+      const api = window.pywebview.api; const start = api.start_rehearsal;
+      api.start_rehearsal = async (...a) => { const r = await start(...a);
+        for (const name of ${JSON.stringify(names)}) {
+          const { take_number: n } = await api.start_take();
+          await api.keep_take(n, '/tmp/draft', name, 6, [{name:'Guitar', file:'/rec/k' + n + '.wav'}], []);
+        }
+        return r; };
+    `,
+  })
+  await startRehearsal(page, names.length + 1)
+}
+
+test("no tab moves when a copy to the cloud finishes", async ({ page }) => {
+  await startWith(page, ["Pałyn", "Viasna", "Pałyn"], true)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await overview.getByRole("button", { name: /^Take 2 Viasna/ }).click()
+  await expect(timeline(page)).toBeVisible()
+  await expect(strip(page).getByText("Waiting for the cloud").first()).toBeVisible()
+  const before = await places(page)
+  await page.clock.runFor(4000)
+  await expect(strip(page).getByText(/for the cloud|to the cloud/)).toHaveCount(0)
+  expect(await places(page)).toEqual(before)
+})
+
+test("a renamed go's tab is scrolled into view", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 760 })
+  const names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India"]
+  await startWith(page, names)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  await expect(overview.getByText("Waiting for the cloud")).toHaveCount(0)
+  await overview.getByRole("button", { name: /^Take 9 India/ }).click()
+  await expect(timeline(page)).toBeVisible()
+  await page.getByRole("button", { name: /^Rename take India/ }).click()
+  await page.getByRole("dialog").locator("input").fill("Alpha")
+  await page.getByRole("dialog").getByRole("button", { name: "Rename" }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Alpha")
+  await expect
+    .poll(() =>
+      openTab(strip(page)).evaluate((el) => {
+        const row = el.parentElement!.getBoundingClientRect()
+        const r = el.getBoundingClientRect()
+        return r.left >= row.left - 1 && r.right <= row.right + 1
+      })
+    )
+    .toBe(true)
+})
+
+test("from a song's page, its tab is as wide shut as open", async ({ page }) => {
+  // One go at Pałyn in First rehearsal failed its copy, so its line, unseen
+  // in the tab, is the widest.
+  const failed = `
+    const api = window.pywebview.api; const get = api.get_song;
+    api.get_song = async (id) => { const r = await get(id);
+      for (const g of r.goes || [])
+        if (g.folder === '/rec/older' && g.take.take_number === 3) g.take.cloud_error = 'Cloud folder not found';
+      return r; };
+  `
+  await openApp(page, {
+    before: `window.__FULL_EVENING__ = true; window.__EXTRA_SONGS__ = ["Pałyn", "Pałyn"];`,
+    after: failed,
+  })
+  await openHistory(page)
+  await page.getByRole("button", { name: "Songs", exact: true }).click()
+  await page.locator("[data-song='Pałyn']").click()
+  await page
+    .locator(`[data-rung-group="/rec/old"]`)
+    .getByRole("button", { name: "Take 2 Pałyn 2" })
+    .click()
+  await expect(timeline(page)).toBeVisible()
+  const open = await places(page)
+  await strip(page).getByRole("button", { name: /^Viasna, go 1/ }).click()
+  await expect(openTab(strip(page))).toHaveAttribute("data-tab", "Viasna")
+  expect(await places(page)).toEqual(open)
+})

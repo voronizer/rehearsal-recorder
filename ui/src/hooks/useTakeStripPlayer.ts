@@ -43,52 +43,6 @@ export function useTakeStripPlayer<T extends Take = Take>(
     loaded?.duration_sec ?? 0
   )
 
-  // Nothing is open until somebody picks a take: opening a rehearsal should
-  // not start reading audio files nobody asked for.
-  //
-  // Opening the take already playing in the overview keeps it playing, from
-  // where it is. Going back to the overview keeps a take that is playing
-  // playing there, and puts away one that is not — the overview is where the
-  // rest of the takes are, not a place to leave a paused one hanging.
-  const select = (take: T | null) => {
-    if (take === null) {
-      setCued(player.playing ? selected : null)
-      setSelected(null)
-      setExpanded(false)
-      return
-    }
-    if (selected === null) setExpanded(false)
-    setSelected(sameTake(take, loaded) ? loaded : take)
-    setCued(null)
-  }
-
-  /** Nothing in hand any more: the rehearsal is being left. */
-  const close = () => {
-    setSelected(null)
-    setCued(null)
-    setExpanded(false)
-  }
-
-  /** The take playing in the overview is stopped and put away. */
-  const uncue = () => setCued(null)
-
-  // After a rename or a crop, the take in hand is pointed at its fresh copy:
-  // its folder moved, or its files were rewritten. That is a new `tracks`
-  // identity on purpose, and the player opens it again from zero. Only the
-  // take it is about is touched: the one that is `was`, which is the fresh
-  // copy itself unless the take changed what makes it the same (a
-  // rehearsal renamed under a take that knows its rehearsal's folder).
-  const reselect = (fresh: T, was: T = fresh) => {
-    setSelected((s) => (sameTake(s, was) ? fresh : s))
-    setCued((c) => (sameTake(c, was) ? fresh : c))
-  }
-
-  /** A deleted take is let go of, wherever it was. */
-  const forget = (take: T) => {
-    setSelected((s) => (sameTake(s, take) ? null : s))
-    setCued((c) => (sameTake(c, take) ? null : c))
-  }
-
   // What to do once the take being opened is open: seek to a note in it,
   // start playing it from the overview, or put back the place kept from
   // another go at the song. Sent before, Python has no player to act on and
@@ -114,9 +68,63 @@ export function useTakeStripPlayer<T extends Take = Take>(
     setPending(null)
   }, [pending, loading, loadError, seek, play, restore])
 
-  const whenOpen = (next: Pending) => {
+  const whenOpen = (next: Pending | null) => {
     sawLoading.current = false
     setPending(next)
+  }
+  const drop = () => whenOpen(null)
+
+  // Nothing is open until somebody picks a take: opening a rehearsal should
+  // not start reading audio files nobody asked for.
+  //
+  // Opening the take already playing in the overview keeps it playing, from
+  // where it is. Going back to the overview keeps a take that is playing
+  // playing there, and puts away one that is not — the overview is where the
+  // rest of the takes are, not a place to leave a paused one hanging.
+  //
+  // Whatever was waiting for another take to open — a place carried from
+  // the go before, a note — is let go of: it was asked for that take.
+  const select = (take: T | null) => {
+    if (take === null) {
+      setCued(player.playing ? selected : null)
+      setSelected(null)
+      setExpanded(false)
+      drop()
+      return
+    }
+    if (selected === null) setExpanded(false)
+    if (!sameTake(take, loaded)) drop()
+    setSelected(sameTake(take, loaded) ? loaded : take)
+    setCued(null)
+  }
+
+  /** Nothing in hand any more: the rehearsal is being left. */
+  const close = () => {
+    setSelected(null)
+    setCued(null)
+    setExpanded(false)
+    drop()
+  }
+
+  /** The take playing in the overview is stopped and put away. */
+  const uncue = () => setCued(null)
+
+  // After a rename or a crop, the take in hand is pointed at its fresh copy:
+  // its folder moved, or its files were rewritten. That is a new `tracks`
+  // identity on purpose, and the player opens it again from zero. Only the
+  // take it is about is touched: the one that is `was`, which is the fresh
+  // copy itself unless the take changed what makes it the same (a
+  // rehearsal renamed under a take that knows its rehearsal's folder).
+  const reselect = (fresh: T, was: T = fresh) => {
+    setSelected((s) => (sameTake(s, was) ? fresh : s))
+    setCued((c) => (sameTake(c, was) ? fresh : c))
+  }
+
+  /** A deleted take is let go of, wherever it was. */
+  const forget = (take: T) => {
+    if (sameTake(selected, take) || sameTake(cued, take)) drop()
+    setSelected((s) => (sameTake(s, take) ? null : s))
+    setCued((c) => (sameTake(c, take) ? null : c))
   }
 
   /** Opening a take at a spot — a note in the rehearsal overview. */
@@ -126,8 +134,8 @@ export function useTakeStripPlayer<T extends Take = Take>(
       seek(at)
       return
     }
-    whenOpen({ at, play: false })
     select(take)
+    whenOpen({ at, play: false })
   }
 
   /**
@@ -137,8 +145,9 @@ export function useTakeStripPlayer<T extends Take = Take>(
    */
   const move = (take: T) => {
     if (sameTake(take, loaded)) return
-    whenOpen({ at: null, play: false, spot: pending?.spot ?? player.spot() })
+    const spot = pending?.spot ?? player.spot()
     select(take)
+    whenOpen({ at: null, play: false, spot })
   }
 
   /** Play or pause a take from its row in the overview, without opening it. */
