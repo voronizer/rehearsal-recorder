@@ -324,6 +324,13 @@ class Library:
                 db, None if rehearsal is None else rehearsal.id, name, take_number)
         return {"song": title, "go": go, "name": take_name(title, go, take_number)}
 
+    def song_id(self, title):
+        """The id of the song titled `title`, compared casefolded as titles
+        are, or None when no song has it."""
+        with self._session() as db:
+            song = self._songs_by_key(db).get((title or "").casefold())
+            return None if song is None else song.id
+
     def next_goes(self):
         """{title: the go the next take of that song would be}, for every
         song: one past its count of goes given, as _resolve counts it. One
