@@ -65,7 +65,7 @@ api.list_labels = async () => {
 """
 
 # An unsaved take waiting at startup: set before MOCK, which reads it once.
-DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 5', name:'take 5',
+DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 6', name:'take 6',
   tracks:['Drums','Bass','Guitar','Vocals'], duration_sec:214,
   rehearsal_folder:'/rec/tue', rehearsal_name:'Tuesday jam',
   created_at:'2026-09-22T19:00:00'}];"""
@@ -146,11 +146,11 @@ def main():
         page.fill("#rehearsal-name", "Tuesday jam")
 
         page.click("text=Start rehearsal")
-        page.wait_for_selector("text=Record take 4")
+        page.wait_for_selector("text=Record take 6")
         page.wait_for_timeout(500)
         shoot(page, "rehearsal")
 
-        page.click("text=Record take 4")
+        page.click("text=Record take 6")
         page.wait_for_selector("text=Stop")
         page.wait_for_timeout(3200)
         shoot(page, "recording")
@@ -160,7 +160,7 @@ def main():
         page.wait_for_timeout(1200)
         shoot(page, "review")
         page.get_by_role("button", name="Save take").click()
-        page.wait_for_selector("text=Record take 5")
+        page.wait_for_selector("text=Record take 7")
 
         page.click("button[aria-label^='Take 2 Pałyn 2']")
         page.wait_for_selector("[aria-label='Take timeline']")

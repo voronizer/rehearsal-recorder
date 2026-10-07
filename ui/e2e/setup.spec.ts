@@ -6,6 +6,7 @@ import {
   openApp,
   setFake,
   startButton,
+  startRehearsal,
   test,
 } from "./app.ts"
 import type { Page } from "@playwright/test"
@@ -112,13 +113,30 @@ test("Escape leaves a rehearsal with nothing in it yet, without asking", async (
   await startButton(page).click()
   await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
   await page.keyboard.press("Escape")
-  await expect(page.getByText("Rehearsal finished")).toBeVisible()
-  expect(await callCount(page, "finish_rehearsal")).toBe(1)
-  await expect(page.getByText("Saved: 0 takes")).toHaveCount(1)
-  const again = page.getByRole("button", { name: /New rehearsal/ })
-  await expect.poll(() => keyOn(again)).toBe("Space")
-  await again.click()
   await expect(startButton(page)).toBeVisible()
+  await expect(page.locator("#rehearsal-name")).toBeVisible()
+  expect(await callCount(page, "finish_rehearsal")).toBe(1)
+})
+
+test("Finish goes straight to the start screen; Escape asks first", async ({ page }) => {
+  // Bands close the app rather than press Finish, so nothing waits after it:
+  // the start screen's Last time already has the evening.
+  await openApp(page, { before: "window.__TONIGHT__ = [{name: 'Pałyn', duration_sec: 200}];" })
+  await startRehearsal(page, 2)
+  await page.getByRole("button", { name: /^Finish/ }).click()
+  await expect(startButton(page)).toBeVisible()
+  await expect(page.locator("#rehearsal-name")).toBeVisible()
+  expect(await callCount(page, "finish_rehearsal")).toBe(1)
+  await expect(page.getByText("Rehearsal finished")).toHaveCount(0)
+
+  await startButton(page).click()
+  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+  await page.keyboard.press("Escape")
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("heading")).toHaveText("Finish this rehearsal?")
+  await dialog.getByRole("button", { name: "Finish" }).click()
+  await expect(startButton(page)).toBeVisible()
+  expect(await callCount(page, "finish_rehearsal")).toBe(2)
 })
 
 test("does not guess a driver when several are offered and none is resolved", async ({ page }) => {

@@ -86,7 +86,7 @@ test.describe("the card", () => {
     // The first row is measured: not while the card is still sliding in.
     await page.emulateMedia({ reducedMotion: "reduce" })
     await openBandApp(page)
-    await startRehearsal(page, 4)
+    await startRehearsal(page, 6)
     await pill(page, "Pałyn").click()
     const palyn = card(page, "Pałyn")
     const rows = palyn.getByRole("button", { name: /^(Play|Pause) / })
@@ -163,7 +163,7 @@ test.describe("the card", () => {
 
   test("a take opened and put away leaves the card as it was", async ({ page }) => {
     await openBandApp(page)
-    await startRehearsal(page, 4)
+    await startRehearsal(page, 6)
     await pill(page, "Pałyn").click()
     const palyn = card(page, "Pałyn")
     await toggle(page).click()
@@ -179,6 +179,27 @@ test.describe("the card", () => {
     await expect(palyn).toBeVisible()
     // Still opened out, and not sliding in again: it never went away.
     await expect(toggle(page)).toHaveText(/^Fewer/)
+    expect(await palyn.evaluate((el) => el.getAnimations().length)).toBe(0)
+  })
+
+  test("a take opened while the card slides in does not slide it in again", async ({ page }) => {
+    await openBandApp(page)
+    await startRehearsal(page, 6)
+    // A slide slowed down, so the take is surely opened before it is over.
+    await page.addStyleTag({
+      content: "[aria-label$='before tonight'] { animation-duration: 5s !important }",
+    })
+    await pill(page, "Pałyn").click()
+    const palyn = card(page, "Pałyn")
+    await expect(palyn).toBeVisible()
+    // Hidden mid-slide, the slide is cut short and never ends.
+    await page
+      .locator("[aria-label='Rehearsal overview']")
+      .getByRole("button", { name: /^Take 1 / })
+      .click()
+    await expect(palyn).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(palyn).toBeVisible()
     expect(await palyn.evaluate((el) => el.getAnimations().length)).toBe(0)
   })
 

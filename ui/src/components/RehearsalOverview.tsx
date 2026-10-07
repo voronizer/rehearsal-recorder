@@ -7,14 +7,18 @@ import {
   Play,
   Trash2,
 } from "lucide-react"
+import { Fragment, type ReactNode } from "react"
 import { StarButton } from "@/components/StarButton"
+import { SongPills } from "@/components/SongPills"
+import { useSongChoices } from "@/hooks/useSongChoices"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { labelCounts, labelLook, labelOf, markText, useLabels } from "@/lib/labels"
+import { isFalseStart } from "@/lib/evening"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
-import type { Song, Take } from "@/lib/api"
+import type { Song, SongChoices, Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 const NOT_NAMED = "Not named"
@@ -57,6 +61,13 @@ function inCloud(take: Take): boolean {
  *
  * It also stands in for the take strip while nothing is open, so a take
  * still waiting for the cloud says so here, as its pill did.
+ *
+ * It is where an evening is sorted, too, on the night or later in History:
+ * a false start (shorter than `falseStartSec`, no ★, no marks) is drawn
+ * grey with a dashed bar where it stands; a take nobody named has the song
+ * pills under it, one click naming it (`onName`); and the screen's
+ * `actions`, Send starred and Clear false starts, sit in the row of figures,
+ * the legend of marks moving to a line of its own under them.
  */
 export function RehearsalOverview({
   takes,
@@ -71,6 +82,10 @@ export function RehearsalOverview({
   onShare,
   onDelete,
   onOpenSong,
+  falseStartSec,
+  folder,
+  onName,
+  actions,
 }: {
   takes: Take[]
   songs: Song[]
@@ -86,6 +101,14 @@ export function RehearsalOverview({
   onDelete?: (take: Take) => void
   /** Opens a song's page in History's Songs view; null is Not named's. */
   onOpenSong?: (title: string | null) => void
+  /** Left out, no take is drawn as a false start. */
+  falseStartSec?: number
+  /** The rehearsal's folder, for the songs a take could be named after. */
+  folder?: string
+  /** Names a take after a song from its pills; left out, there are none. */
+  onName?: (take: Take, title: string) => void
+  /** Drawn on the right of the row of figures. */
+  actions?: ReactNode
 }) {
   const labels = useLabels()
   const byNumber = new Map(takes.map((t) => [t.take_number, t]))
@@ -107,28 +130,44 @@ export function RehearsalOverview({
   const shared = takes.filter(inCloud).length
   // Every mark counts, a plain one with nothing written included (spec D2).
   const counts = labelCounts(labels, takes.flatMap((t) => t.markers ?? []))
+  const legend = counts.length > 0 && (
+    <div className="ml-auto flex flex-wrap justify-end gap-x-3.5 gap-y-1 text-xs text-muted-foreground">
+      {counts.map(({ label, n }) => (
+        <span key={label.id} className="flex items-center gap-1.5">
+          <span className={cn("size-2 rounded-full", labelLook(label.colour).dot)} />
+          {n} {label.name}
+        </span>
+      ))}
+    </div>
+  )
+  // Anything renamed or added changes the go each pill offers. A take
+  // nobody named would be the same go at any song as another one, so one
+  // look, which reads the whole library, serves them all.
+  const version = takes.map((t) => `${t.take_number}:${t.name}`).join("|")
+  const naming = onName !== undefined && folder !== undefined
+  const nameChoices = useSongChoices(naming && unnamed.length > 0, folder, null, version)
 
   return (
     <section aria-label="Rehearsal overview" className="flex flex-col gap-3.5">
-      <div className="flex flex-wrap items-end gap-x-9 gap-y-3 px-1 pb-1">
-        <Stat value={formatMMSS(total)} label="played" />
-        <Stat value={String(takes.length)} label={takes.length === 1 ? "take" : "takes"} />
-        {songCount > 0 && (
-          <Stat value={String(songCount)} label={songCount === 1 ? "song" : "songs"} />
-        )}
-        {shared > 0 && (
-          <Stat value={`${shared} of ${takes.length}`} label="in the cloud" />
-        )}
-        {counts.length > 0 && (
-          <div className="ml-auto flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-muted-foreground">
-            {counts.map(({ label, n }) => (
-              <span key={label.id} className="flex items-center gap-1.5">
-                <span className={cn("size-2 rounded-full", labelLook(label.colour).dot)} />
-                {n} {label.name}
-              </span>
-            ))}
-          </div>
-        )}
+      <div className="flex flex-col gap-2 px-1 pb-1">
+        <div className="flex flex-wrap items-end gap-x-9 gap-y-3">
+          <Stat value={formatMMSS(total)} label="played" />
+          <Stat value={String(takes.length)} label={takes.length === 1 ? "take" : "takes"} />
+          {songCount > 0 && (
+            <Stat value={String(songCount)} label={songCount === 1 ? "song" : "songs"} />
+          )}
+          {shared > 0 && (
+            <Stat value={`${shared} of ${takes.length}`} label="in the cloud" />
+          )}
+          {/* Too narrow for both, the buttons go to a line of their own,
+              still on the right. */}
+          {actions ? (
+            <div className="ml-auto flex flex-wrap justify-end gap-2 self-center">{actions}</div>
+          ) : (
+            legend
+          )}
+        </div>
+        {actions && legend}
       </div>
 
       {rows.map((row) => {
@@ -161,26 +200,62 @@ export function RehearsalOverview({
               </span>
             </div>
             {row.takes.map((t) => (
-              <TakeRow
-                key={t.take_number}
-                take={t}
-                unnamed={isUnnamed}
-                longest={longest}
-                cloudState={cloudStates?.[t.take_number]}
-                here={playback?.take === t.take_number ? playback : null}
-                onPlay={onPlay}
-                onOpen={onOpen}
-                onOpenAt={onOpenAt}
-                onRename={onRename}
-                onStar={onStar}
-                onShare={onShare}
-                onDelete={onDelete}
-              />
+              <Fragment key={t.take_number}>
+                <TakeRow
+                  take={t}
+                  unnamed={isUnnamed}
+                  falseStart={falseStartSec !== undefined && isFalseStart(t, falseStartSec)}
+                  longest={longest}
+                  cloudState={cloudStates?.[t.take_number]}
+                  here={playback?.take === t.take_number ? playback : null}
+                  onPlay={onPlay}
+                  onOpen={onOpen}
+                  onOpenAt={onOpenAt}
+                  onRename={onRename}
+                  onStar={onStar}
+                  onShare={onShare}
+                  onDelete={onDelete}
+                />
+                {isUnnamed && onName && nameChoices && (
+                  <NamePills take={t} choices={nameChoices} onName={onName} />
+                )}
+              </Fragment>
             ))}
           </div>
         )
       })}
     </section>
+  )
+}
+
+/**
+ * The songs a take nobody named could be, under it: one row of the Next take
+ * field's pills, tonight's songs first, each as the go the take would be. A
+ * click names it, and it moves into that song.
+ */
+function NamePills({
+  take,
+  choices,
+  onName,
+}: {
+  take: Take
+  choices: SongChoices
+  onName: (take: Take, title: string) => void
+}) {
+  if (choices.here.length + choices.other.length === 0) return null
+  return (
+    <div data-name-pills={take.take_number} className="-mt-1.5 ml-11 flex items-center gap-2.5">
+      <span className="shrink-0 text-xs text-muted-foreground">Name:</span>
+      <div className="min-w-0 flex-1">
+        <SongPills
+          choices={choices}
+          value=""
+          initial=""
+          rows={1}
+          onPick={(title) => onName(take, title)}
+        />
+      </div>
+    </div>
   )
 }
 
@@ -205,6 +280,7 @@ function Stat({ value, label }: { value: string; label: string }) {
 export function TakeRow({
   take,
   unnamed,
+  falseStart = false,
   longest,
   cloudState,
   here,
@@ -220,6 +296,8 @@ export function TakeRow({
 }: {
   take: Take
   unnamed: boolean
+  /** Drawn grey, its bar dashed, and said to be one after its length. */
+  falseStart?: boolean
   longest: number
   cloudState?: "queued" | "working"
   here: OverviewPlayback | null
@@ -248,7 +326,11 @@ export function TakeRow({
   const playing = here?.playing ?? false
 
   return (
-    <div data-take={take.take_number} className="flex flex-col gap-0.5">
+    <div
+      data-take={take.take_number}
+      data-false-start={falseStart || undefined}
+      className="flex flex-col gap-0.5"
+    >
       {/* The whole row opens the take, as its bar does: a short take's bar
           is a small thing to aim at, and the row lights up under the mouse
           all the way across. The buttons on it keep their own jobs. The bar
@@ -307,7 +389,9 @@ export function TakeRow({
                 ? "border-dashed border-muted-foreground/45 bg-transparent"
                 : starred
                   ? "border-signal/50 bg-signal/10 hover:bg-signal/15"
-                  : "bg-muted hover:bg-accent"
+                  : falseStart
+                    ? "border-dashed border-muted-foreground/45 bg-transparent hover:bg-accent"
+                    : "bg-muted hover:bg-accent"
             )}
             style={{ width: `${(take.duration_sec / longest) * BAR_SHARE}%` }}
           >
@@ -339,7 +423,7 @@ export function TakeRow({
             <span
               className={cn(
                 "relative flex min-w-0 text-[13px]",
-                unnamed && "text-muted-foreground"
+                (unnamed || falseStart) && "text-muted-foreground"
               )}
             >
               <TakeTitle take={take} cut />
@@ -353,7 +437,7 @@ export function TakeRow({
             )}
           </button>
 
-          <span className="tnum shrink-0 text-[13px]">
+          <span className={cn("tnum shrink-0 text-[13px]", falseStart && "text-muted-foreground")}>
             {here && (
               <>
                 <span className="text-primary">{formatMMSS(here.position)}</span>
@@ -362,6 +446,11 @@ export function TakeRow({
             )}
             {formatMMSS(take.duration_sec)}
           </span>
+          {falseStart && (
+            <span className="shrink-0 rounded-full border border-warn/50 px-2 text-[11px] leading-[18px] whitespace-nowrap text-warn">
+              false start
+            </span>
+          )}
           {shared && (
             <CloudCheck
               data-in-cloud

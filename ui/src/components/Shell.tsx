@@ -74,8 +74,8 @@ export function Shell({
   return (
     <div className="relative flex h-full flex-col overflow-hidden">
       {!(title || onBack || headerAction) && activity && (
-        // Finished has no header, and it is where a copy started by the last
-        // take is often still running when people decide to quit.
+        // A screen with no header still shows long work, in its corner;
+        // Recording turns it off.
         <div className="absolute top-3 right-4 z-10">
           <ActivityButton />
         </div>

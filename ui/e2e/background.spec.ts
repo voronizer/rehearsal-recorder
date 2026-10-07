@@ -1,4 +1,13 @@
-import { callCount, calls, expect, openApp, setFake, startRehearsal, test } from "./app.ts"
+import {
+  callCount,
+  calls,
+  expect,
+  openApp,
+  setFake,
+  startButton,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Long work — a copy to the cloud, saving or cropping a take — runs in the
@@ -156,13 +165,14 @@ test.describe("the background work button, from any screen", () => {
     await expect(button).toHaveCount(1)
   })
 
-  test("is on the Finished screen too, where people decide to quit", async ({ page }) => {
-    // Finished has no header of its own, and it is where a copy started by
-    // the last take is still running when people decide to quit.
+  test("is on the start screen Finish lands on, where people decide to quit", async ({
+    page,
+  }) => {
+    // A copy started by the last take is often still running then.
     await openApp(page, { before: "window.__ACTIVITY__ = [];" })
     await startRehearsal(page)
     await page.getByRole("button", { name: /Finish/ }).click()
-    await expect(page.getByText("Rehearsal finished")).toBeVisible()
+    await expect(startButton(page)).toBeVisible()
     await activity(page, [entry()])
     await expect(workButton(page)).toBeVisible()
   })

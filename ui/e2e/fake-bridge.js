@@ -414,6 +414,14 @@ const fieldText = (r) => r.song || r.name;
 // the one that comes next.
 function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); }
 
+// What a copy to the cloud folder leaves on a take, as share_take makes it.
+function cloudShare(what) {
+  const shared = {};
+  if (what === 'mix' || what === 'both') shared.mix = cloudDir + '/mix.wav';
+  if (what === 'tracks' || what === 'both') shared.tracks = cloudDir + '/tracks';
+  return shared;
+}
+
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
   startup_problems: track('startup_problems', async () =>
@@ -484,6 +492,13 @@ window.__MAKE_API__ = () => ({
     cloudFormat = f;
     return {ok:true, cloud_format:f, encoder:'soundfile'};
   }),
+  set_false_start: track('set_false_start', async (seconds) => {
+    const n = Math.round(Number(seconds));
+    if (!Number.isFinite(n)) return {ok:false, error:'Not a number of seconds'};
+    const value = Math.max(5, Math.min(120, n));
+    writeCfg({...readCfg(), false_start_sec: value});
+    return {ok:true, false_start_sec: value};
+  }),
   set_auto_publish: track('set_auto_publish', async (on, what) => {
     autoPublish = {on, what: what || autoPublish.what};
     return {ok:true, auto_publish:autoPublish.on, auto_publish_what:autoPublish.what};
@@ -531,10 +546,17 @@ window.__MAKE_API__ = () => ({
     ? {ok:false, error: window.__RETRY_REFUSED__} : {ok:true, queued:true})),
   stop_monitor: track('stop_monitor', async () => ({ok:true})),
 
+  // A page can start the rehearsal with takes in it already:
+  // window.__TONIGHT__ = [{name, duration_sec, starred?, markers?, cloud?}, …],
+  // numbered from 1 in that order.
   start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, _tr, _depth) => {
-    session = {name, folder:'/rec/' + name, takes:[],
+    const folder = '/rec/' + name;
+    const tonight = (window.__TONIGHT__ || []).map((t, i) => ({take_number:i + 1, markers:[],
+      tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));
+    for (const t of tonight) fileDurations[t.tracks[0].file] = t.duration_sec;
+    session = {name, folder, takes:asSent(tonight),
                tracks: window.__SESSION_TRACKS__ || [{name:'Guitar',channel:1},{name:'Vocals',channel:2}]};
-    takeCounter = 0;
+    takeCounter = tonight.length;
     nextName = null;
     return {ok:true, folder:session.folder};
   }),
@@ -840,6 +862,7 @@ window.__MAKE_API__ = () => ({
       return {ok:false, error:'Could not read the rehearsal: session.json is damaged'};
     // First rehearsal has the songs a page added, as the library has them.
     const r = folder === '/rec/older' ? withExtraSongs(pastRehearsal(folder)) : pastRehearsal(folder);
+    r.takes = r.takes.filter(t => !deleted.has(`${folder}#${t.take_number}`));
     for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
     return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes)}));
   }),
@@ -875,6 +898,16 @@ window.__MAKE_API__ = () => ({
   delete_take: track('delete_take', async (folder, n) => {
     deleted.add(`${folder}#${n}`);
     return {ok:true, trashed:true, takes_left:0};
+  }),
+  // Python takes them out of the rehearsal, the live one included.
+  // A test can make it take a while (__DELETE_MS__), as moving many tracks
+  // to the Trash does.
+  delete_takes: track('delete_takes', async (folder, numbers) => {
+    if (window.__DELETE_MS__) await new Promise(r => setTimeout(r, window.__DELETE_MS__));
+    for (const n of numbers) deleted.add(`${folder}#${n}`);
+    if (session && folder === session.folder)
+      session.takes = session.takes.filter(t => !numbers.includes(t.take_number));
+    return {ok:true, deleted:[...numbers], failed:[]};
   }),
   // History's Songs view (api.list_songs, api.get_song), from library().
   // The list is read when it is asked for; a test can hold the answer on its
@@ -944,14 +977,37 @@ window.__MAKE_API__ = () => ({
   share_take: track('share_take', async (folder, n, what) => {
     if (!cloudDir) return {ok:false, error:'No cloud folder chosen', needs_dir:true};
     const take = (session ? session.takes : []).find(t => t.take_number === n);
-    const shared = {};
-    if (what === 'mix' || what === 'both') shared.mix = cloudDir + '/mix.wav';
-    if (what === 'tracks' || what === 'both') shared.tracks = cloudDir + '/tracks';
+    const shared = cloudShare(what);
     if (take) take.cloud = shared;
     // Deep copy, same as session_state/get_rehearsal — a live handle would
     // alias the mock's own state, which the real bridge's JSON round-trip
     // never allows.
     return JSON.parse(JSON.stringify({ok:true, take, cloud:shared}));
+  }),
+  // api.send_starred: the ★ takes with nothing in the cloud folder go as
+  // What gets published says. A tonight's copy is made at once here; an
+  // older rehearsal's waits in the activity list, as Python's queue has it.
+  // __UNSENDABLE__ lists take numbers whose files are gone.
+  send_starred: track('send_starred', async (folder) => {
+    if (!cloudDir) return {ok:false, error:'No cloud folder chosen', needs_dir:true};
+    const live = session && folder === session.folder;
+    const takes = live ? session.takes : pastRehearsal(folder).takes;
+    const queued = [], failed = [];
+    for (const t of takes) {
+      if (!t.starred || t.cloud?.mix || t.cloud?.tracks) continue;
+      if ((window.__UNSENDABLE__ || []).includes(t.take_number)) {
+        failed.push({take_number:t.take_number, error:'The take has no files left on disk'});
+        continue;
+      }
+      if (live) t.cloud = cloudShare(autoPublish.what);
+      else {
+        window.__ACTIVITY__ = [...(window.__ACTIVITY__ || []), {
+          id: 900 + t.take_number, kind:'cloud', title:t.name, folder, take_number:t.take_number,
+          state:'waiting', fraction:0, step:null, error:null, detail:null, retry:null, seen:false}];
+      }
+      queued.push(t.take_number);
+    }
+    return {ok:true, queued, failed};
   }),
   unshare_take: track('unshare_take', async (folder, n) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
@@ -1055,6 +1111,7 @@ window.__MAKE_API__ = () => ({
     output_channels: outputDevice.channels || [1, 2],
     cloud_format: cloudFormat,
     auto_publish: autoPublish.on, auto_publish_what: autoPublish.what,
+    false_start_sec: readCfg().false_start_sec ?? window.__FALSE_START__ ?? 30,
     cloud_formats:[
       {id:'wav', label:'As recorded', hint:'Exactly the files on disk.'},
       {id:'flac', label:'Lossless (FLAC)', hint:'About half the size.'},

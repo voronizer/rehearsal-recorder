@@ -39,10 +39,16 @@ export function goPlural() {
   return "go to the Trash"
 }
 
-export function canBePutBack() {
+/** "the Trash" / "the _deleted folder": where a question says things go. */
+export function trashName() {
+  return where?.kind === "folder" ? `the ${where.folder} folder` : "the Trash"
+}
+
+export function canBePutBack(several = false) {
+  const it = several ? "them" : "it"
   return where?.kind === "folder"
-    ? "Nothing is destroyed — you can move it back, or empty that folder yourself."
-    : "You can put it back from there."
+    ? `Nothing is destroyed — you can move ${it} back, or empty that folder yourself.`
+    : `You can put ${it} back from there.`
 }
 
 /**

@@ -33,6 +33,22 @@ export async function press(text: string, { exact = false } = {}): Promise<void>
 
 export const hasText = (text: string) => document.body.innerText.includes(text)
 
+/**
+ * Scrolls the screen's own middle so `el` is in the middle of it. Not
+ * scrollIntoView: that scrolls every box around the element, the page this
+ * frame sits in included, and the visitor's page would jump.
+ */
+export function bringIntoView(el: Element): void {
+  const middle = el.closest("main")
+  if (!middle) return
+  const box = el.getBoundingClientRect()
+  const view = middle.getBoundingClientRect()
+  middle.scrollBy({
+    top: box.top - view.top - (view.height - box.height) / 2,
+    behavior: "smooth",
+  })
+}
+
 /** Types into a field so that React hears it. */
 export function fill(input: HTMLInputElement, value: string): void {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value)

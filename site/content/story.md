@@ -1,6 +1,6 @@
 # From soundcheck to the take you keep.
 
-<!-- The app beside these steps goes through the same seven, by id: see
+<!-- The app beside these steps goes through the same five, by id: see
      site/src/stage/Story.tsx. Keep the ids and their order. -->
 
 ## Set up the tracks. {#setup}
@@ -8,30 +8,22 @@
 One per musician: a name and the input it comes in on. Check signal, and
 everyone sees their own bar move.
 
-## Hear last week first. {#before}
+## Hear last week, then record. {#record}
 
 Name the next take after a song, and its best go from before sits right
-beside it.
+beside it. Then a big clock, and a tile per track that turns red when it
+clips.
 
-## Record. {#record}
+## Keep the good ones. {#keep}
 
-A big clock and a tile for each track. A tile that clips turns red and says
-how many times.
-
-## Keep it or not. {#review}
-
-Stop, and the take is ready to play, already named after the song. Save it or
-discard it.
+Stop, save it, and sort the evening as you go: one click names a take, the
+false starts are grey, and the ★ ones go to the band's folder with one
+button.
 
 ## Find it later. {#history}
 
-Every rehearsal, song by song, with the marks you left. Months later you still
-know which Pałyn was the one.
-
-## Find a song. {#song}
-
-Every go at it, from every rehearsal, one line an evening. ▶ plays the ★
-one.
+Every rehearsal, song by song, with the marks you left. A song's page has
+every go at it, one line an evening.
 
 ## Compare goes. {#compare}
 
