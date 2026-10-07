@@ -27,6 +27,8 @@ export type SiteContent = {
   story: { title: string; steps: Section[] }
   faq: { title: string; questions: Section[] }
   closing: { title: string }
+  /** The 404 page's heading and line. */
+  notFound: { title: string; lede: string }
 }
 
 export const TILES = ["health", "track", "rehearsals", "marks", "cloud", "formats", "trash"] as const
@@ -62,6 +64,7 @@ export function readContent(tagFromRelease?: string): SiteContent {
   const features = doc("features.md")
   const story = doc("story.md")
   const faq = doc("faq.md")
+  const notFound = doc("notfound.md")
 
   return {
     version,
@@ -83,6 +86,7 @@ export function readContent(tagFromRelease?: string): SiteContent {
     story: { title: story.title!, steps: sectionsByIds("story.md", story, [...STEPS]) },
     faq: { title: faq.title!, questions: faq.sections },
     closing: { title: doc("closing.md").title! },
+    notFound: { title: notFound.title!, lede: notFound.intro },
   }
 }
 

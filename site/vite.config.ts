@@ -66,7 +66,9 @@ function seo(): Plugin {
 // drawn by the interface's own components. They are imported from ../ui/src
 // with the interface's `@/`, and run on the interface's own React, so there
 // is one copy of it; the site's package.json does not list it. og.html is
-// the link picture's page, which scripts/og.mjs photographs into og.png.
+// the link picture's page, which scripts/og.mjs photographs into og.png, and
+// 404.html what Vercel answers for an address that is no file (see
+// vercel-config.json).
 export default defineConfig({
   base: "/",
   // The app's icons: the favicon, and the logo its screens show.
@@ -91,6 +93,7 @@ export default defineConfig({
         index: fileURLToPath(new URL("./index.html", import.meta.url)),
         stage: fileURLToPath(new URL("./stage.html", import.meta.url)),
         og: fileURLToPath(new URL("./og.html", import.meta.url)),
+        notfound: fileURLToPath(new URL("./404.html", import.meta.url)),
       },
     },
   },

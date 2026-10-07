@@ -157,6 +157,18 @@ body {
 .oss p { font-size: clamp(1.2rem, 2vw, 1.5rem); font-weight: 600; letter-spacing: -0.02em; margin: 0; }
 .oss .links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 26px; }
 
+/* ---- The 404 page (404.html): its words on the left, the take with
+   nothing on it on the right, or under them on a phone ---- */
+.nf-split { padding-block: clamp(40px, 7vw, 96px) clamp(64px, 9vw, 120px); }
+@media (min-width: 900px) { .nf-split { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(32px, 5vw, 64px); align-items: center; } }
+.nf-split .hero-text { justify-items: start; text-align: left; }
+.nf-split .h1 { font-size: clamp(2.5rem, 5.6vw, 4.4rem); }
+.nf-split .cta { justify-content: flex-start; }
+/* Its own box to scroll in, though it never does: the player's master row
+   holds to the bottom of whatever scrolls (in the app, the window), and
+   here that is the take's box, not the page. */
+.nf-take { padding: 16px; border-radius: 18px; overflow: hidden; }
+
 /* ---- Footer ---- */
 .footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-block: 24px 40px; border-top: 1px solid var(--page-line); color: var(--page-muted); font-size: 0.82rem; }
 .footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
