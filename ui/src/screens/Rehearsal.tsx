@@ -43,7 +43,7 @@ export function Rehearsal({
 }: {
   session: Extract<SessionState, { active: true }>
   onStartTake: (takeNumber: number, takeName: string, takeGo: number | null) => void
-  onFinished: (folder: string, takeCount: number) => void
+  onFinished: () => void
   onChanged: () => void
 }) {
   const {
@@ -212,7 +212,7 @@ export function Rehearsal({
       setError(res.error ?? "Could not finish the rehearsal")
       return
     }
-    onFinished(res.folder ?? session.folder, res.take_count ?? 0)
+    onFinished()
   }
 
   const deleteTake = async (take: Take) => {

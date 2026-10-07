@@ -77,17 +77,6 @@ test("review: Discard with an edge, Save take rightmost", async ({ page }) => {
   expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
 })
 
-test("finished: History with an edge, New rehearsal rightmost", async ({ page }) => {
-  await openApp(page)
-  await startRehearsal(page)
-  await page.getByRole("button", { name: /^Finish/ }).click()
-  await expect(page.getByText("Rehearsal finished")).toBeVisible()
-  const f = await footer(page)
-  expect(f.main).toMatch(/^New rehearsal/)
-  expect(f.variants).toEqual(["outline", "default"])
-  expect(f).toMatchObject({ oneLine: true, onTheRight: true, sideways: false, inside: true })
-})
-
 test("drafts: the note on the left, Decide later with an edge on the right", async ({ page }) => {
   await openApp(page, {
     before: `window.__DRAFTS__ = [{dir: '/rec/old/_drafts/take 1', name: 'take 1',

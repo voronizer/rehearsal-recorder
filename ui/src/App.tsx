@@ -8,7 +8,6 @@ import { Review } from "@/screens/Review"
 import { HistoryScreen } from "@/screens/HistoryScreen"
 import { DraftsScreen } from "@/screens/DraftsScreen"
 import { Settings } from "@/screens/Settings"
-import { Finished } from "@/screens/Finished"
 import {
   api,
   waitForApi,
@@ -35,7 +34,6 @@ type Screen =
   | { name: "review"; take: PendingTake }
   | { name: "history"; folder?: string; song?: string | null }
   | { name: "settings" }
-  | { name: "finished"; folder: string; takeCount: number }
 
 export function App() {
   // Every dialog in the app, once: moving between a dialog's controls with
@@ -215,17 +213,6 @@ export function App() {
     )
   }
 
-  if (screen.name === "finished") {
-    return (
-      <Finished
-        folder={screen.folder}
-        takeCount={screen.takeCount}
-        onNewRehearsal={() => setScreen({ name: "setup" })}
-        onOpenHistory={() => setScreen({ name: "history" })}
-      />
-    )
-  }
-
   // Guard against drift: no rehearsal, but the screen needs its data.
   if (!session.active) return setupScreen
 
@@ -236,9 +223,9 @@ export function App() {
         onStartTake={(takeNumber, takeName, takeGo) =>
           setScreen({ name: "recording", takeNumber, takeName, takeGo })
         }
-        onFinished={(folder, takeCount) =>
-          setScreen({ name: "finished", folder, takeCount })
-        }
+        // Straight to the start screen: its Last time is the evening just
+        // finished, and bands mostly close the app instead anyway.
+        onFinished={() => setScreen({ name: "setup" })}
         onChanged={() => void refreshSession()}
       />
     )
