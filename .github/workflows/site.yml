@@ -15,6 +15,10 @@
 # (the short links /mac and /windows, a year's cache for the build's hashed
 # files) is in site/vercel-config.json.
 #
+# The picture a chat shows for a link to the site, og.png, is drawn here
+# from the build (npm run og, after the build and before the tests), so it
+# shows the app as the build has it.
+#
 # The page counts visits with Vercel's Web Analytics, which is switched on in
 # the Vercel project (Analytics, Enable). Only a deployment made after that
 # serves its script, so when it is switched on later, run this by hand.
