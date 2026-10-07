@@ -2,27 +2,33 @@ import type { SongChoice } from "@/lib/api"
 
 /**
  * Whether pills of `widths`, in order with `gap` between them and then one
- * more `last` wide (All songs…), wrap into at most two rows `row` wide. A
+ * more `last` wide (All songs…), wrap into at most `rows` rows `row` wide. A
  * pill wider than the row takes a row of its own, cut short to it.
  */
-export function fitsInTwoRows(widths: number[], last: number, row: number, gap: number): boolean {
-  let rows = 1
+export function fitsInRows(
+  widths: number[],
+  last: number,
+  row: number,
+  gap: number,
+  rows: number
+): boolean {
+  let used = 1
   let x = 0
   for (const w of [...widths, last]) {
     const width = Math.min(w, row)
     if (x === 0) x = width
     else if (x + gap + width <= row) x += gap + width
     else {
-      rows += 1
+      used += 1
       x = width
     }
-    if (rows > 2) return false
+    if (used > rows) return false
   }
   return true
 }
 
 /**
- * The songs the two rows under a take's name show, in the order shown: this
+ * The songs the rows under a take's name show (two unless told otherwise), in the order shown: this
  * rehearsal's first, then the others, as many as fit with All songs… after
  * them. When this rehearsal's alone do not fit, the ones whose latest take
  * is latest stay, still in the order they were first played.
@@ -33,9 +39,10 @@ export function pillsShown(
   width: (c: SongChoice) => number,
   last: number,
   row: number,
-  gap: number
+  gap: number,
+  rows = 2
 ): SongChoice[] {
-  const fits = (cs: SongChoice[]) => fitsInTwoRows(cs.map(width), last, row, gap)
+  const fits = (cs: SongChoice[]) => fitsInRows(cs.map(width), last, row, gap, rows)
   if (fits(here)) {
     const shown = [...here]
     for (const c of other) {

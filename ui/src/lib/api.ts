@@ -570,6 +570,8 @@ export type Settings = {
   cloud_formats: { id: CloudFormat; label: string; hint: string }[]
   auto_publish: boolean
   auto_publish_what: ShareWhat
+  /** A take shorter than this, with no ★ and no marks, is a false start. */
+  false_start_sec: number
   /** Whether the app asks GitHub if a newer version is out — updates.py. */
   check_updates: boolean
   /** Which encoder the machine has, if any. */
@@ -744,8 +746,20 @@ type PyApi = {
     Ok<{ cloud_dir?: string; cancelled?: boolean }>
   >
   clear_cloud_dir(): Promise<Ok>
+  /** Queues the rehearsal's ★ takes with no copy in the cloud folder and
+   *  none waiting, as What gets published says. */
+  send_starred(folder: string): Promise<Ok<{ queued?: number[]; needs_dir?: boolean }>>
+  /** Seconds, kept within 5 to 120. */
+  set_false_start(seconds: number): Promise<Ok<{ false_start_sec?: number }>>
 
   delete_take(folder: string, takeNumber: number): Promise<DeleteResult>
+  /** Each as delete_take does it; what could not go is said take by take. */
+  delete_takes(
+    folder: string,
+    takeNumbers: number[]
+  ): Promise<
+    Ok<{ deleted?: number[]; failed?: { take_number: number; error: string }[] }>
+  >
   delete_rehearsal(folder: string): Promise<DeleteResult>
 
   add_take_marker(

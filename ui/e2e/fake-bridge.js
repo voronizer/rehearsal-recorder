@@ -414,6 +414,14 @@ const fieldText = (r) => r.song || r.name;
 // the one that comes next.
 function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); }
 
+// What a copy to the cloud folder leaves on a take, as share_take makes it.
+function cloudShare(what) {
+  const shared = {};
+  if (what === 'mix' || what === 'both') shared.mix = cloudDir + '/mix.wav';
+  if (what === 'tracks' || what === 'both') shared.tracks = cloudDir + '/tracks';
+  return shared;
+}
+
 window.__MAKE_API__ = () => ({
   ping: async () => ({ok:true, message:'mock'}),
   startup_problems: track('startup_problems', async () =>
@@ -483,6 +491,13 @@ window.__MAKE_API__ = () => ({
   set_cloud_format: track('set_cloud_format', async (f) => {
     cloudFormat = f;
     return {ok:true, cloud_format:f, encoder:'soundfile'};
+  }),
+  set_false_start: track('set_false_start', async (seconds) => {
+    const n = Math.round(Number(seconds));
+    if (!Number.isFinite(n)) return {ok:false, error:'Not a number of seconds'};
+    const value = Math.max(5, Math.min(120, n));
+    writeCfg({...readCfg(), false_start_sec: value});
+    return {ok:true, false_start_sec: value};
   }),
   set_auto_publish: track('set_auto_publish', async (on, what) => {
     autoPublish = {on, what: what || autoPublish.what};
@@ -876,6 +891,10 @@ window.__MAKE_API__ = () => ({
     deleted.add(`${folder}#${n}`);
     return {ok:true, trashed:true, takes_left:0};
   }),
+  delete_takes: track('delete_takes', async (folder, numbers) => {
+    for (const n of numbers) deleted.add(`${folder}#${n}`);
+    return {ok:true, deleted:[...numbers], failed:[]};
+  }),
   // History's Songs view (api.list_songs, api.get_song), from library().
   // The list is read when it is asked for; a test can hold the answer on its
   // way back (held), to have it arrive after one asked for later.
@@ -944,14 +963,27 @@ window.__MAKE_API__ = () => ({
   share_take: track('share_take', async (folder, n, what) => {
     if (!cloudDir) return {ok:false, error:'No cloud folder chosen', needs_dir:true};
     const take = (session ? session.takes : []).find(t => t.take_number === n);
-    const shared = {};
-    if (what === 'mix' || what === 'both') shared.mix = cloudDir + '/mix.wav';
-    if (what === 'tracks' || what === 'both') shared.tracks = cloudDir + '/tracks';
+    const shared = cloudShare(what);
     if (take) take.cloud = shared;
     // Deep copy, same as session_state/get_rehearsal — a live handle would
     // alias the mock's own state, which the real bridge's JSON round-trip
     // never allows.
     return JSON.parse(JSON.stringify({ok:true, take, cloud:shared}));
+  }),
+  // api.send_starred: the ★ takes with nothing in the cloud folder go as
+  // What gets published says. The copy is made at once here.
+  send_starred: track('send_starred', async (folder) => {
+    if (!cloudDir) return {ok:false, error:'No cloud folder chosen', needs_dir:true};
+    const live = session && folder === session.folder;
+    const takes = live ? session.takes : pastRehearsal(folder).takes;
+    const queued = [];
+    for (const t of takes) {
+      if (!t.starred || t.cloud?.mix || t.cloud?.tracks) continue;
+      if (live) t.cloud = cloudShare(autoPublish.what);
+      else window.__SHARED__ = [...(window.__SHARED__ || []), `${folder}#${t.take_number}`];
+      queued.push(t.take_number);
+    }
+    return {ok:true, queued};
   }),
   unshare_take: track('unshare_take', async (folder, n) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
@@ -1055,6 +1087,7 @@ window.__MAKE_API__ = () => ({
     output_channels: outputDevice.channels || [1, 2],
     cloud_format: cloudFormat,
     auto_publish: autoPublish.on, auto_publish_what: autoPublish.what,
+    false_start_sec: readCfg().false_start_sec ?? window.__FALSE_START__ ?? 30,
     cloud_formats:[
       {id:'wav', label:'As recorded', hint:'Exactly the files on disk.'},
       {id:'flac', label:'Lossless (FLAC)', hint:'About half the size.'},

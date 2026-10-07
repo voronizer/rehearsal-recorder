@@ -29,3 +29,22 @@ export function takesLine(f: EveningFacts): string {
   if (f.songs === 0) return String(f.takes)
   return `${f.takes}, ${f.songs} ${f.songs === 1 ? "song" : "songs"}`
 }
+
+/** A false start: shorter than the limit set in Settings, with no ★ and no
+ *  marks. A take somebody starred or marked was worth something. */
+export function isFalseStart(take: Take, limitSec: number): boolean {
+  return take.duration_sec < limitSec && !take.starred && !take.markers?.length
+}
+
+/** The evening's false starts, in the order they were played. */
+export function falseStarts(takes: Take[], limitSec: number): Take[] {
+  return takes.filter((t) => isFalseStart(t, limitSec))
+}
+
+/** What Send starred would queue: the ★ takes with no copy in the cloud
+ *  folder and none waiting for one. */
+export function starredToSend(takes: Take[], waiting: Record<number, unknown> = {}): Take[] {
+  return takes.filter(
+    (t) => t.starred && !t.cloud?.mix && !t.cloud?.tracks && !(t.take_number in waiting)
+  )
+}

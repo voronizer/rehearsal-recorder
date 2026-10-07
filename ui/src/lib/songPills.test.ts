@@ -1,21 +1,21 @@
 import { describe, expect, it } from "vitest"
-import { fitsInTwoRows, pillsShown } from "@/lib/songPills"
+import { fitsInRows, pillsShown } from "@/lib/songPills"
 import type { SongChoice } from "@/lib/api"
 
 const song = (name: string, last_take?: number): SongChoice => ({ song: name, go: 1, last_take })
 const by = (widths: Record<string, number>) => (c: SongChoice) => widths[c.song]
 
-describe("fitsInTwoRows: pills wrap as flex-wrap lays them out", () => {
+describe("fitsInRows: pills wrap as flex-wrap lays them out", () => {
   it("fits what wraps once", () => {
     // Row of 100, gap 10: [40 40] [40 + last 30].
-    expect(fitsInTwoRows([40, 40, 40], 30, 100, 10)).toBe(true)
+    expect(fitsInRows([40, 40, 40], 30, 100, 10, 2)).toBe(true)
   })
   it("refuses what needs a third row for All songs…", () => {
-    expect(fitsInTwoRows([40, 40, 40, 40], 30, 100, 10)).toBe(false)
+    expect(fitsInRows([40, 40, 40, 40], 30, 100, 10, 2)).toBe(false)
   })
   it("counts a pill wider than the row as one, cut to the row", () => {
-    expect(fitsInTwoRows([500], 30, 100, 10)).toBe(true)
-    expect(fitsInTwoRows([500, 500], 30, 100, 10)).toBe(false)
+    expect(fitsInRows([500], 30, 100, 10, 2)).toBe(true)
+    expect(fitsInRows([500, 500], 30, 100, 10, 2)).toBe(false)
   })
 })
 
@@ -38,6 +38,13 @@ describe("pillsShown: this rehearsal's first, then the rest, as many as fit", ()
       "C",
       "D",
     ])
+  })
+  it("keeps what fits one row when given one row", () => {
+    const here = [song("A", 1), song("B", 2)]
+    const other = [song("C"), song("D")]
+    const w = by({ A: 30, B: 20, C: 20, D: 20 })
+    // Row of 100, gap 10: A 30, B 20, All songs… 30 is 100 already.
+    expect(pillsShown(here, other, w, 30, 100, 10, 1).map((c) => c.song)).toEqual(["A", "B"])
   })
   it("shows nothing when there is nothing", () => {
     expect(pillsShown([], [], () => 0, 30, 100, 10)).toEqual([])
