@@ -18,14 +18,12 @@ describe("the site's content", () => {
     ])
   })
 
-  it("has the seven steps, in order", () => {
+  it("has the five steps, in order", () => {
     expect(content.story.steps.map((s) => s.id)).toEqual([
       "setup",
-      "before",
       "record",
-      "review",
+      "keep",
       "history",
-      "song",
       "compare",
     ])
   })

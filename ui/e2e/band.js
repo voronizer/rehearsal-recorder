@@ -139,7 +139,13 @@ const EARLIER = [
     {at: 50.5, note: 'chorus came in early', label_id: 3},
     {at: 112, note: 'bridge — try it slower', label_id: 4},
     {at: 131, note: 'this one is the take', label_id: 2}]),
-  takeOf(3, 'Viasna', 141, 137, []),
+  // A count-in that went wrong, and a take nobody named: what sorting the
+  // evening is for. Ahoń, so tonight's Pałyn and Viasna keep their goes, and
+  // before Viasna, so Viasna is still the last song played and the Next
+  // take field still offers its next go.
+  takeOf(3, 'Ahoń', 12, 11, []),
+  takeOf(4, 'Take 4', 108, 104, []),
+  takeOf(5, 'Viasna', 141, 137, []),
 ];
 // For the script driving the page: where things are in the song.
 window.__SONG__ = {length: n => fileDurations[`/rec/tue/${n}/Drums.wav`],

@@ -86,7 +86,7 @@ test.describe("the card", () => {
     // The first row is measured: not while the card is still sliding in.
     await page.emulateMedia({ reducedMotion: "reduce" })
     await openBandApp(page)
-    await startRehearsal(page, 4)
+    await startRehearsal(page, 6)
     await pill(page, "Pałyn").click()
     const palyn = card(page, "Pałyn")
     const rows = palyn.getByRole("button", { name: /^(Play|Pause) / })
@@ -163,7 +163,7 @@ test.describe("the card", () => {
 
   test("a take opened and put away leaves the card as it was", async ({ page }) => {
     await openBandApp(page)
-    await startRehearsal(page, 4)
+    await startRehearsal(page, 6)
     await pill(page, "Pałyn").click()
     const palyn = card(page, "Pałyn")
     await toggle(page).click()

@@ -1,4 +1,4 @@
-// stage.html#story: the app going through the seven steps the page tells,
+// stage.html#story: the app going through the five steps the page tells,
 // one screen at a time, each with the props App would give it, after the
 // fake has been brought to where the app would have it.
 //
@@ -18,13 +18,13 @@ import {
 } from "@/lib/api"
 import { CLIPS, demoApi } from "./demo"
 import { Hero } from "./Hero"
-import { button, dragTimeline, fill, hasText, press, sleep, waitFor } from "./drive"
+import { bringIntoView, button, dragTimeline, fill, hasText, press, sleep, waitFor } from "./drive"
 
-export const STORY = ["setup", "before", "record", "review", "history", "song", "compare"] as const
+export const STORY = ["setup", "record", "keep", "history", "compare"] as const
 
 type Scene =
   | { step: "setup" }
-  | { step: "before"; session: SessionState }
+  | { step: "rehearsal"; session: SessionState }
   | {
       step: "record"
       takeNumber: number
@@ -52,6 +52,8 @@ const NAME = "Tuesday jam"
 /** The least a take runs before it is stopped: past the guitar's last clip,
  *  so whoever moves on quickly has still seen it clip all three times. */
 const LEAST_TAKE_MS = (Math.max(...CLIPS) + 0.3) * 1000
+/** How long last week's go plays before Record is pressed. */
+const LAST_WEEK_MS = 3000
 let takeStarted = 0
 let rehearsalName = NAME
 
@@ -71,7 +73,7 @@ export function Story() {
         />
       )
     // The rehearsal screen as the hero has it, with no take open.
-    case "before":
+    case "rehearsal":
       return <Hero initial={now.session} />
     case "record":
       return (
@@ -90,8 +92,9 @@ export function Story() {
           take={now.take}
           rehearsalName={now.rehearsalName}
           onKept={async () => {
-            await api().finish_rehearsal()
-            show({ step: "history" })
+            // Back on the rehearsal screen, with the take just kept on it.
+            const session = await api().session_state()
+            if (session.active) show({ step: "rehearsal", session })
           }}
           onDiscarded={nothing}
           onCropped={(take) => show({ step: "review", take, rehearsalName: now.rehearsalName })}
@@ -111,22 +114,22 @@ const FORWARD: Record<(typeof STORY)[number], () => Promise<void>> = {
     await waitFor(() => button("Stop checking"))
   },
   // The rehearsal started, Pałyn picked under Next take, and its ★ go from
-  // last week playing in the card beside it.
-  async before() {
+  // last week playing in the card beside it; a moment later, Record on the
+  // song picked: the next take is Pałyn 3.
+  async record() {
     button("Stop checking")?.click()
     const bridge = demoApi()
     const t = (await bridge.load_default_tracks()) ?? {}
     await bridge.start_rehearsal(NAME, t.device_index ?? 0, t.samplerate ?? 44100, t.tracks ?? [], t.bit_depth ?? 24)
-    const session = await api().session_state()
-    if (!session.active) throw new Error("demo: the rehearsal did not start")
-    rehearsalName = session.name
-    show({ step: "before", session })
-    ;(await waitFor(() => document.querySelector<HTMLButtonElement>("[data-song-choice='Pałyn']"))).click()
+    const before = await api().session_state()
+    if (!before.active) throw new Error("demo: the rehearsal did not start")
+    rehearsalName = before.name
+    show({ step: "rehearsal", session: before })
+    ;(await waitFor(() => document.querySelector<HTMLButtonElement>("[aria-label='Next take'] [data-song-choice='Pałyn']"))).click()
     ;(await waitFor(() => document.querySelector<HTMLButtonElement>("button[aria-label='Play Pałyn 7']"))).click()
     await waitFor(() => document.querySelector("button[aria-label='Pause Pałyn 7']"))
-  },
-  // Record, on the song picked: the next take is Pałyn 3.
-  async record() {
+    await sleep(LAST_WEEK_MS)
+
     const session = await api().session_state()
     if (!session.active) throw new Error("demo: the rehearsal is not going")
     const started = await api().start_take()
@@ -142,17 +145,30 @@ const FORWARD: Record<(typeof STORY)[number], () => Promise<void>> = {
     })
     await waitFor(() => button("Stop", true))
   },
-  async review() {
+  // Stop, save it, and back on the rehearsal screen the take nobody named
+  // gets its song with one click; the false start is grey, and the
+  // evening's two buttons are over the takes.
+  async keep() {
     await waitFor(() => performance.now() - takeStarted >= LEAST_TAKE_MS)
     await press("Stop", { exact: true })
     await waitFor(() => document.querySelector("#take-name"))
-  },
-  async history() {
     await press("Save take")
-    await waitFor(() => hasText("New songs"))
+    const pill = await waitFor(() =>
+      document.querySelector<HTMLButtonElement>("[data-name-pills='4'] [data-song-choice='Sonca']")
+    )
+    bringIntoView(pill)
+    await sleep(900)
+    pill.click()
+    const named = await waitFor(() =>
+      document.querySelector<HTMLElement>("[role='group'][aria-label='Sonca'] [data-take='4']")
+    )
+    bringIntoView(named)
   },
-  // The same History, switched to its Songs view, on the band's Pałyn.
-  async song() {
+  // Every rehearsal in History, then its Songs view, on the band's Pałyn.
+  async history() {
+    await api().finish_rehearsal()
+    show({ step: "history" })
+    await waitFor(() => hasText("New songs"))
     await press("Songs", { exact: true })
     ;(await waitFor(() => document.querySelector<HTMLElement>('[data-song="Pałyn"]'))).click()
     await waitFor(() => document.querySelector('[data-rung][aria-expanded="true"]'))

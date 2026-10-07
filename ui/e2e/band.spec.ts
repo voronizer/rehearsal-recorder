@@ -8,7 +8,7 @@ test("the band's rehearsal opens on its next take", async ({ page }) => {
   await openBandApp(page)
   await page.locator("#rehearsal-name").fill("Tuesday jam")
   await startButton(page).click()
-  await expect(page.getByRole("button", { name: /Record take 4/ })).toBeVisible()
+  await expect(page.getByRole("button", { name: /Record take 6/ })).toBeVisible()
   await expect(page.locator("button[aria-label^='Take 2 Pałyn 2']")).toBeVisible()
 })
 
