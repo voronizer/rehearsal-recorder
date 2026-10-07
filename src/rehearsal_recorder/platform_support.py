@@ -390,7 +390,7 @@ def reveal_in_file_manager(path, system=sys.platform, run=None):
         return {"ok": False, "error": str(e)}
 
 
-def open_in_file_manager(path, system=sys.platform, run=None):
+def open_in_file_manager(path, system=sys.platform, run=None, start=None):
     """
     Opens a folder in Finder, Explorer or whatever the desktop uses.
 
@@ -398,18 +398,25 @@ def open_in_file_manager(path, system=sys.platform, run=None):
     no shell ever reads it: a rehearsal's folder is named after what a person
     typed, and a quote or a $( ) in that must stay part of the name.
 
+    Windows opens the folder itself, as a double-click would, rather than
+    being given `explorer` and the path: Explorer reads a comma in what it
+    is given as the end of one of its options, and the recordings can be in
+    a folder with one in its name.
+
     `run` takes the command; by default it is started and not waited for.
+    `start` takes the path on Windows; by default it is os.startfile.
     """
     import subprocess
 
     path = str(path)
-    if system == "win32":
-        command = ["explorer", path]
-    elif system == "darwin":
-        command = ["open", path]
-    else:
-        command = ["xdg-open", path]
     try:
+        if system == "win32":
+            (start or os.startfile)(path)  # noqa: S606 - the platform's own opener
+            return {"ok": True}
+        if system == "darwin":
+            command = ["open", path]
+        else:
+            command = ["xdg-open", path]
         (run or subprocess.Popen)(command)
         return {"ok": True}
     except Exception as e:

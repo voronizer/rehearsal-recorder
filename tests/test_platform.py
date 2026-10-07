@@ -276,8 +276,15 @@ def main():
     ps.open_in_file_manager("/home/a/Rec/Jam", system="linux", run=ran.append)
     ok("elsewhere, xdg-open with the folder",
        ran[-1:] == [["xdg-open", "/home/a/Rec/Jam"]])
-    ps.open_in_file_manager(r"C:\Rec\Jam", system="win32", run=ran.append)
-    ok("on Windows, Explorer with the folder", ran[-1:] == [["explorer", r"C:\Rec\Jam"]])
+    # Not explorer with the path: Explorer reads a comma in what it is given
+    # as the end of one of its options, and the folder the recordings go in
+    # is wherever the person put it.
+    started = []
+    commas = r"C:\Users\a\Rec, live\Jam"
+    before = len(ran)
+    ps.open_in_file_manager(commas, system="win32", run=ran.append, start=started.append)
+    ok("on Windows, the folder is started as Windows opens one, commas and all",
+       started == [commas] and len(ran) == before)
     odd = '/Users/a/Rec/Jam "x" $(touch y); z'
     ps.open_in_file_manager(odd, system="darwin", run=ran.append)
     ok("a name with quotes and $( ) in it is one argument, as it is",
