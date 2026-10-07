@@ -1,4 +1,4 @@
-// stage.html#story: the app going through the six steps the page tells,
+// stage.html#story: the app going through the seven steps the page tells,
 // one screen at a time, each with the props App would give it, after the
 // fake has been brought to where the app would have it.
 //
@@ -9,14 +9,22 @@ import { Setup } from "@/screens/Setup"
 import { Recording } from "@/screens/Recording"
 import { Review } from "@/screens/Review"
 import { HistoryScreen } from "@/screens/HistoryScreen"
-import { api, type LastAttempt, type PendingTake, type PlacedTrack } from "@/lib/api"
+import {
+  api,
+  type LastAttempt,
+  type PendingTake,
+  type PlacedTrack,
+  type SessionState,
+} from "@/lib/api"
 import { CLIPS, demoApi } from "./demo"
+import { Hero } from "./Hero"
 import { button, dragTimeline, fill, hasText, press, sleep, waitFor } from "./drive"
 
-export const STORY = ["setup", "record", "review", "history", "song", "compare"] as const
+export const STORY = ["setup", "before", "record", "review", "history", "song", "compare"] as const
 
 type Scene =
   | { step: "setup" }
+  | { step: "before"; session: SessionState }
   | {
       step: "record"
       takeNumber: number
@@ -62,6 +70,9 @@ export function Story() {
           onOpenSettings={nothing}
         />
       )
+    // The rehearsal screen as the hero has it, with no take open.
+    case "before":
+      return <Hero initial={now.session} />
     case "record":
       return (
         <Recording
@@ -99,7 +110,9 @@ const FORWARD: Record<(typeof STORY)[number], () => Promise<void>> = {
     await press("Check signal")
     await waitFor(() => button("Stop checking"))
   },
-  async record() {
+  // The rehearsal started, Pałyn picked under Next take, and its ★ go from
+  // last week playing in the card beside it.
+  async before() {
     button("Stop checking")?.click()
     const bridge = demoApi()
     const t = (await bridge.load_default_tracks()) ?? {}
@@ -107,6 +120,15 @@ const FORWARD: Record<(typeof STORY)[number], () => Promise<void>> = {
     const session = await api().session_state()
     if (!session.active) throw new Error("demo: the rehearsal did not start")
     rehearsalName = session.name
+    show({ step: "before", session })
+    ;(await waitFor(() => document.querySelector<HTMLButtonElement>("[data-song-choice='Pałyn']"))).click()
+    ;(await waitFor(() => document.querySelector<HTMLButtonElement>("button[aria-label='Play Pałyn 7']"))).click()
+    await waitFor(() => document.querySelector("button[aria-label='Pause Pałyn 7']"))
+  },
+  // Record, on the song picked: the next take is Pałyn 3.
+  async record() {
+    const session = await api().session_state()
+    if (!session.active) throw new Error("demo: the rehearsal is not going")
     const started = await api().start_take()
     if (!started.ok || started.take_number == null) throw new Error("demo: the take did not start")
     takeStarted = performance.now()

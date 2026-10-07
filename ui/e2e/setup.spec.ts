@@ -18,14 +18,17 @@ test("says the app's name with its logo, and fills the band in from the template
 }) => {
   await openApp(page)
   // The one screen that says the app's name says it with the logo; the
-  // working screens after it carry neither.
-  expect(
-    await page.evaluate(() => {
-      const h = document.querySelector("header h1")
-      const img = h?.querySelector<HTMLImageElement>('img[src$="favicon.svg"]')
-      return !!img && img.complete && img.naturalWidth > 0 && h!.textContent!.trim() === "РЭХА"
-    })
-  ).toBe(true)
+  // working screens after it carry neither. The logo can still be loading
+  // when the screen first shows.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const h = document.querySelector("header h1")
+        const img = h?.querySelector<HTMLImageElement>('img[src$="favicon.svg"]')
+        return !!img && img.complete && img.naturalWidth > 0 && h!.textContent!.trim() === "РЭХА"
+      })
+    )
+    .toBe(true)
   await expect(page.locator("input[aria-label='Track 1 name']")).toHaveValue("Guitar")
   // Free space is always on screen. The fake's disk lasts for weeks: past
   // two days the estimate is "many hours", which "about" does not go in

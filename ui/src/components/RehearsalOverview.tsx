@@ -226,7 +226,9 @@ export function TakeRow({
   missing?: boolean
   where?: string
   onPlay: (take: Take) => void
-  onOpen: (take: Take) => void
+  /** Opens the take in the player. Left out, the row and its bar play it
+   *  where it is, as the rehearsal screen's earlier goes do. */
+  onOpen?: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
   onRename?: (take: Take) => void
   onStar?: (take: Take, starred: boolean) => void
@@ -234,6 +236,7 @@ export function TakeRow({
   onDelete?: (take: Take) => void
 }) {
   const labels = useLabels()
+  const open = onOpen ?? onPlay
   const status = takeCloudStatus(take, cloudState)
   const shared = inCloud(take)
   const starred = take.starred ?? false
@@ -252,7 +255,7 @@ export function TakeRow({
           stays the one to reach with Tab. */}
       <div
         onClick={(e) => {
-          if (!missing && !(e.target as HTMLElement).closest("button")) onOpen(take)
+          if (!missing && !(e.target as HTMLElement).closest("button")) open(take)
         }}
         className={cn(
           "group -mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1 transition-colors",
@@ -294,8 +297,8 @@ export function TakeRow({
           <button
             type="button"
             aria-label={takeButtonLabel(take, status)}
-            title={missing ? "Not found on disk" : "Open it in the player"}
-            onClick={() => onOpen(take)}
+            title={missing ? "Not found on disk" : onOpen ? "Open it in the player" : "Play it here"}
+            onClick={() => open(take)}
             disabled={missing}
             data-starred={starred || undefined}
             className={cn(

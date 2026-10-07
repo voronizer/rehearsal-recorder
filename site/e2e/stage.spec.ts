@@ -48,33 +48,38 @@ test("held, the hero stands still, and goes on when let go", async ({ page }) =>
   await expect.poll(() => clock(page), { timeout: 2_000 }).not.toBe(at)
 })
 
-test("the story goes through its six steps", async ({ page }) => {
+test("the story goes through its seven steps", async ({ page }) => {
   await page.goto("/stage.html#story")
   await step(page, 0)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("setup")
   await expect(page.getByRole("button", { name: /Stop checking/ })).toBeVisible()
 
   await step(page, 1)
-  await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("record")
-  await expect(page.locator("h1")).toContainText(/Viasna\s*2/)
-  await expect(page.getByText("clipped 3×")).toBeVisible({ timeout: 6_000 })
+  await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("before")
+  await expect(page.getByRole("region", { name: "Pałyn before tonight" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Pause Pałyn 7" })).toBeVisible()
 
   await step(page, 2)
+  await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("record")
+  await expect(page.locator("h1")).toContainText(/Pałyn\s*3/)
+  await expect(page.getByText("clipped 3×")).toBeVisible({ timeout: 6_000 })
+
+  await step(page, 3)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("review")
   await expect(page.locator("#take-name")).toBeVisible()
 
-  await step(page, 3)
+  await step(page, 4)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("history")
   await expect(page.getByText("New songs").first()).toBeVisible()
 
-  await step(page, 4)
+  await step(page, 5)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("song")
   await expect(page.locator("[data-song-head] h2")).toHaveText("Pałyn")
   await expect(
     page.locator("[data-rung-group]").filter({ has: page.locator("[aria-expanded='true']") })
   ).toContainText("Pałyn 7")
 
-  await step(page, 5)
+  await step(page, 6)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("compare")
   const open = page.locator("[data-tab][aria-current='true']")
   await expect(open).toHaveAttribute("data-tab", "song:Pałyn")
@@ -86,7 +91,7 @@ test("the story goes through its six steps", async ({ page }) => {
 test("a jump from the first step to the last ends on the last", async ({ page }) => {
   await page.goto("/stage.html#story")
   await step(page, 0)
-  await step(page, 5)
+  await step(page, 6)
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("compare")
   await page.waitForTimeout(1_500)
   expect(await scene(page)).toBe("compare")
@@ -94,7 +99,7 @@ test("a jump from the first step to the last ends on the last", async ({ page })
 
 test("a step back starts the story again", async ({ page }) => {
   await page.goto("/stage.html#story")
-  await step(page, 4)
+  await step(page, 5)
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("song")
   await step(page, 0)
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("setup")

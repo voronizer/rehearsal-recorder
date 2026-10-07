@@ -89,7 +89,7 @@ Space starts the rehearsal again. **Check signal** stops it.
 
 ### The rehearsal screen
 
-![A rehearsal with three takes, grouped by song, and the notes left on them](screenshots/rehearsal.png)
+![A rehearsal with three takes, grouped by song, and the notes left on them; on the right the next take's name, the songs, and how the song went before tonight](screenshots/rehearsal.png)
 
 Press **Start rehearsal**, or Space. The rehearsal screen shows the takes
 recorded so far, grouped by song. Each take is a bar drawn to its length,
@@ -114,7 +114,7 @@ uses. **Show in Finder** (**Show in Explorer** on Windows) opens its folder.
 In a narrow window only the length, the takes and the button fit. The player
 in History has the same header.
 
-Left of the button is **Next take**: the name the next take will get, in a
+On the right is **Next take**: the name the next take will get, in a
 field of its own, and under it, in two rows, the songs you could play
 instead: tonight's first, as the next go at each ("Pałyn 3"), then the
 songs of earlier rehearsals, the latest first. **All songs…** at the end
@@ -125,6 +125,21 @@ Enter. The take is then recorded under that name, and the recording
 screen can say how long the last go at that song took. ✕ puts back the
 name the take would have had anyway. If you discard the take, the next
 one keeps the name you picked.
+
+Under the songs is how the song in the field went before tonight, so "how
+did we play the bridge last week?" needs no trip to History. It shows one
+go: the song's newest starred go (★), or, with none starred, the last go of
+the last rehearsal that played it, with the day it was played. The button
+at its right, **2 more** for example, adds the last go of each of the three
+latest rehearsals that played it. The goes play right there, with their
+notes under them:
+
+- **Play** plays the go. Space pauses and continues it, and Esc stops it.
+- Click a note to play the go from a few seconds before it.
+- Picking another song, or pressing **Record take**, stops it.
+
+A song nobody has played before tonight says so. While a take is open in
+the player, the earlier goes are hidden.
 
 ### While recording
 
@@ -139,7 +154,9 @@ laptop.
   The take's number is up top, beside the red RECORDING.
 - **The clock** shows how long the take has been running.
 - **The bar under it** shows up when this is another go at a song you have
-  already played in this rehearsal: "Took 2:21 last time". It fills as you
+  already played in this rehearsal: "Took 2:21 last time". The first go of
+  the evening at a song played before is measured against the go the
+  rehearsal screen showed for it: "Took 3:20 on 22 Sep". It fills as you
   play, so you can see how far into the song you are.
 - **Each track has a tile** that fills from the bottom with its level. The
   fill is in dB, like the meters on a mixer: −60 dB at the bottom, full
@@ -164,8 +181,8 @@ during a take. Press **Stop**, or Space, when the song is over.
 
 ![After stopping: name the take, then save or discard it](screenshots/review.png)
 
-After you stop, the take opens straight away so you can listen to it. Its
-name is in the same field, in the same place as before you recorded: check
+After you stop, the take opens straight away so you can listen to it. The
+name it was recorded under is in the name field at the bottom left: check
 it, then press **Save take** (Space) or **Discard**. ✕ there puts back
 the name the take would have had if none had been picked before recording.
 A discarded take goes to the Trash. Pressing Esc also discards it, but asks

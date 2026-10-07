@@ -69,6 +69,15 @@ _WITH_TAKES = (
     selectinload(Rehearsal.takes).selectinload(Take.cloud_copy),
 )
 
+# A take read as a go at its song (goes_of, goes_before), and their order:
+# the newest rehearsal first, the order played within one.
+_AS_GO = (
+    selectinload(Take.rehearsal), selectinload(Take.song),
+    selectinload(Take.files), selectinload(Take.markers),
+    selectinload(Take.cloud_copy),
+)
+_GO_ORDER = (Rehearsal.created_at.desc(), Rehearsal.id, Take.take_number)
+
 
 class Library:
     def __init__(self, recordings_dir, cloud_dir=lambda: None, migrations=MIGRATIONS):
@@ -324,6 +333,13 @@ class Library:
                 db, None if rehearsal is None else rehearsal.id, name, take_number)
         return {"song": title, "go": go, "name": take_name(title, go, take_number)}
 
+    def song_id(self, title):
+        """The id of the song titled `title`, compared casefolded as titles
+        are, or None when no song has it."""
+        with self._session() as db:
+            song = self._songs_by_key(db).get((title or "").casefold())
+            return None if song is None else song.id
+
     def next_goes(self):
         """{title: the go the next take of that song would be}, for every
         song: one past its count of goes given, as _resolve counts it. One
@@ -384,23 +400,8 @@ class Library:
             if song_id is not None and song is None:
                 return None
             title = None if song is None else song.title
-            takes = db.scalars(
-                select(Take)
-                .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
-                .where(Take.song_id.is_(None) if song_id is None else Take.song_id == song_id)
-                .options(
-                    selectinload(Take.rehearsal), selectinload(Take.song),
-                    selectinload(Take.files), selectinload(Take.markers),
-                    selectinload(Take.cloud_copy),
-                )
-                .order_by(Rehearsal.created_at.desc(), Rehearsal.id, Take.take_number)
-            ).all()
-            goes = []
-            for take in takes:
-                folder = self._folder(take.rehearsal.folder)
-                goes.append({"folder": str(folder), "rehearsal": take.rehearsal.name,
-                             "created_at": take.rehearsal.created_at,
-                             "take": self._take_data(folder, take)})
+            goes = self._goes(db, Take.song_id.is_(None) if song_id is None
+                              else Take.song_id == song_id)
         cloud = self._cloud_dir()
         there = {}
         for go in goes:
@@ -409,6 +410,65 @@ class Library:
                 there[go["folder"]] = Path(go["folder"]).is_dir()
             go["missing"] = not there[go["folder"]]
         return {"id": song_id, "title": title, "goes": goes}
+
+    def goes_before(self, song_id, folder):
+        """
+        goes_of for the rehearsal screen's card, which asks on every refresh
+        while the rehearsal in `folder` is on: only goes from rehearsals on
+        disk other than that one, and of those only the ones the card picks
+        from, so none "missing". They are the last go of each of the three
+        newest such rehearsals, and the later ★ go of the newest such
+        rehearsal with one. None for an id no song has.
+        """
+        live = Path(folder)
+        with self._session() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                return None
+            title = song.title
+            rows = db.execute(
+                select(Take.id, Take.starred, Rehearsal.folder)
+                .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+                .where(Take.song_id == song_id)
+                .order_by(*_GO_ORDER)
+            ).all()
+            last, starred, there = {}, None, {}
+            for take_id, star, key in rows:
+                if key not in there:
+                    if len(last) == 3 and starred is not None:
+                        break
+                    path = self._folder(key)
+                    there[key] = path != live and path.is_dir()
+                if not there[key]:
+                    continue
+                if key in last or len(last) < 3:
+                    last[key] = take_id
+                if star and (starred is None or starred[0] == key):
+                    starred = (key, take_id)
+            wanted = set(last.values()) | ({starred[1]} if starred else set())
+            goes = self._goes(db, Take.id.in_(wanted))
+        cloud = self._cloud_dir()
+        for go in goes:
+            self._take_out(go["take"], cloud)
+            go["missing"] = False
+        return {"id": song_id, "title": title, "goes": goes}
+
+    def _goes(self, db, which):
+        """The takes `which` picks, as goes in goes_of's shape less "missing"."""
+        takes = db.scalars(
+            select(Take)
+            .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+            .where(which)
+            .options(*_AS_GO)
+            .order_by(*_GO_ORDER)
+        ).all()
+        goes = []
+        for take in takes:
+            folder = self._folder(take.rehearsal.folder)
+            goes.append({"folder": str(folder), "rehearsal": take.rehearsal.name,
+                         "created_at": take.rehearsal.created_at,
+                         "take": self._take_data(folder, take)})
+        return goes
 
     # ---------- rehearsals ----------
 

@@ -7,6 +7,14 @@ opening.
 
 ## Unreleased
 
+- **Hear last time before you play it.** The rehearsal screen keeps the
+  next take's name and the songs in a panel on the right, and under them
+  how the song in the field went before tonight: its newest ★ go, or the
+  last go of the last rehearsal that played it, with the day. A button
+  adds the last go of each of its three latest rehearsals. They play right
+  there, a note from a few seconds before it, with no need to finish and
+  look in History. The first take of a song tonight is then measured
+  against that go: "Took 3:20 on 22 Sep".
 - **Every song has a page.** History has two views, *Rehearsals* and
   *Songs*, and opens on the one used last. A song's page has every go at
   it, from every rehearsal, one line an evening with its goes drawn to

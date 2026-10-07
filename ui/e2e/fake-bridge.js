@@ -322,11 +322,42 @@ function playsOf(song, r, goes, rehearsals) {
   return {folder:r.folder, rehearsal:r.name, created_at:r.created_at, take:goes[goes.length - 1]};
 }
 
-// And api._last_attempt: how long the latest go at the next take's song ran.
-function lastAttempt(takes, song) {
+// And api._last_attempt: how long the latest go at the next take's song ran,
+// tonight, or with none the go shown before tonight, with its day.
+function lastAttempt(takes, song, before = null) {
   if (!song) return null;
   const goes = takes.filter(t => t.song === song);
-  return goes.length ? {song, duration_sec: goes[goes.length - 1].duration_sec} : null;
+  if (goes.length) return {song, duration_sec: goes[goes.length - 1].duration_sec};
+  return before ? {song, duration_sec: before.first.take.duration_sec,
+                   created_at: before.first.created_at} : null;
+}
+
+// api._before_tonight: the next take's song as it went before tonight — the
+// go shown (songPlays' pick) and the last go of each of the three latest
+// rehearsals less that one — over the library, less the rehearsal in
+// progress and the rehearsals not on disk.
+async function beforeTonight(song) {
+  if (!song) return null;
+  const goes = [];
+  for (const r of await libraryNow()) {
+    if (r.missing || (session && r.folder === session.folder)) continue;
+    for (const t of r.takes)
+      if (t.song && t.song.toLowerCase() === song.toLowerCase()) {
+        for (const tr of t.tracks) fileDurations[tr.file] = t.duration_sec;
+        goes.push({folder:r.folder, rehearsal:r.name, created_at:r.created_at, missing:false, take:t});
+      }
+  }
+  const first = songPlays(goes);
+  if (!first) return null;
+  const last = new Map();
+  for (const g of goes) {
+    if (!last.has(g.folder) && last.size === 3) break;
+    last.set(g.folder, g);
+  }
+  const more = [...last.values()]
+    .filter(g => !(g.folder === first.folder && g.take.take_number === first.take.take_number))
+    .map(({folder, rehearsal, created_at, take}) => ({folder, rehearsal, created_at, take}));
+  return {song: goes[0].take.song, first, more};
 }
 
 // What a take is a go at, as Python's library resolves a name
@@ -509,6 +540,7 @@ window.__MAKE_API__ = () => ({
   }),
   session_state: async () => {
     if (!session) return {active:false};
+    const before = await beforeTonight(nextTake().song);
     // Drain on read, the way the real queue empties once a take is copied —
     // otherwise the interface would see the same take "queued" forever.
     const cq = cloudQueue;
@@ -523,7 +555,8 @@ window.__MAKE_API__ = () => ({
        next_take_number:takeCounter + 1,
        next_take_name:suggestName(), next_take_go:nextTake().go,
        next_take_default:suggestName(undefined, false),
-       last_attempt:lastAttempt(session.takes, nextTake().song),
+       before_tonight:before,
+       last_attempt:lastAttempt(session.takes, nextTake().song, before),
        recording:false, cloud_queue:cq, disk_bytes:48000000 * session.takes.length}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {

@@ -280,19 +280,59 @@ def _plays_of(goes):
             "created_at": pick["created_at"], "take": pick["take"]}
 
 
-def _last_attempt(takes, song):
+def _before_tonight(title, goes, folder):
+    """
+    The song `title` as it went before tonight, for the rehearsal screen's
+    card beside the Next take field: {"song", "first", "more"}, or None when
+    it has no go before tonight.
+
+    `goes` are the song's goes as Library.goes_of gives them, newest
+    rehearsal first, or the few of them Library.goes_before keeps; `folder`
+    is the rehearsal in progress, whose goes are tonight's and left out. So
+    are rehearsals not on disk: their goes cannot be played. "first" is the
+    go shown, as _plays_of picks it: the newest ★ go, or the last go of the
+    latest rehearsal. "more" is what "N more" adds under it: the last go of
+    each of the three latest rehearsals, less the one shown. Each in
+    _go_at's shape.
+    """
+    live = Path(folder)
+    kept = [g for g in goes if not g["missing"] and Path(g["folder"]) != live]
+    first = _plays_of(kept)
+    if first is None:
+        return None
+    last = {}
+    for g in kept:
+        if g["folder"] not in last and len(last) == 3:
+            break
+        last[g["folder"]] = g
+    shown = (first["folder"], first["take"]["take_number"])
+    more = [{"folder": g["folder"], "rehearsal": g["rehearsal"],
+             "created_at": g["created_at"], "take": g["take"]}
+            for g in last.values()
+            if (g["folder"], g["take"]["take_number"]) != shown]
+    return {"song": title, "first": first, "more": more}
+
+
+def _last_attempt(takes, song, before=None):
     """
     How long the latest go at `song` among `takes` ran, as {"song",
     "duration_sec"}, or None when there was none. The recording screen says
     it under its clock — "Vesna took 2:21 last time" — so the band can see
     how far into the song they are.
+
+    With no go tonight it is the go shown before tonight (`before`, from
+    _before_tonight), with the day it was played: "Took 3:05 on 28 Sep".
     """
     if song is None:
         return None
     goes = [t for t in takes if t.get("song") == song]
-    if not goes:
-        return None
-    return {"song": song, "duration_sec": goes[-1].get("duration_sec")}
+    if goes:
+        return {"song": song, "duration_sec": goes[-1].get("duration_sec")}
+    if before is not None:
+        first = before["first"]
+        return {"song": song, "duration_sec": first["take"].get("duration_sec"),
+                "created_at": first["created_at"]}
+    return None
 
 
 def _field_text(named):
@@ -1439,6 +1479,7 @@ class Api:
         s = self._session
         takes = self._session_takes()
         coming = self._next_take()
+        before = self._before_tonight_for(coming["song"])
         return {
             "active": True,
             "name": s["name"],
@@ -1453,13 +1494,34 @@ class Api:
             # What it would hold without a title picked, which the rehearsal
             # screen offers to go back to.
             "next_take_default": self.suggest_take_name(chosen=False),
-            "last_attempt": _last_attempt(takes, coming["song"]),
+            # The song the field names, as it went before tonight.
+            "before_tonight": before,
+            "last_attempt": _last_attempt(takes, coming["song"], before),
             "recording": self._recorder is not None,
             "cloud_queue": self._cloud_queue.states(s["folder"]),
             # The header's "On disk", measured as History measures a
             # rehearsal. Read when the screen asks, which is after each take.
             "disk_bytes": _folder_bytes(s["folder"]),
         }
+
+    def _before_tonight_for(self, title):
+        """_before_tonight for the song titled `title`, the one the Next
+        take field resolves to; None for no song, or one the library has
+        no goes of yet."""
+        if not title:
+            return None
+        try:
+            song_id = self._lib.song_id(title)
+            if song_id is None:
+                return None
+            found = self._lib.goes_before(song_id, self._session["folder"])
+        except Exception:
+            # The library could not answer. The card is a look back, and the
+            # rehearsal screen it sits on must go on refreshing without it.
+            return None
+        if found is None:
+            return None
+        return _before_tonight(found["title"], found["goes"], self._session["folder"])
 
     def _next_take(self, take_number=None, chosen=True):
         """

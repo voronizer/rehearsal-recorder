@@ -13,6 +13,8 @@ import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { TakeNameField } from "@/components/TakeNameField"
+import { BeforeTonightCard } from "@/components/BeforeTonightCard"
+import { byPlace, type PlacedTake } from "@/lib/songs"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
@@ -54,8 +56,13 @@ export function Rehearsal({
     openAt,
     move,
     playInOverview,
+    cueAt,
     player,
-  } = useTakeStripPlayer()
+  } = useTakeStripPlayer(byPlace)
+  // An earlier go from the panel is a take placed in its own rehearsal:
+  // take numbers repeat from one rehearsal to the next, and tonight's
+  // takes have no folder of their own here.
+  const cuedEarlier = cued !== null && (cued as PlacedTake).folder !== undefined
   // A take open in the player, or playing in the overview: either way Space
   // is its, and Escape puts it away before it finishes anything.
   const inHand = selected !== null || cued !== null
@@ -107,6 +114,13 @@ export function Rehearsal({
   // The go Python has for the name the field shows, while that is the name
   // it answered for; undefined for a pick it has not answered yet.
   const knownGo = nextName === session.next_take_name ? session.next_take_go : undefined
+  // The song the next take is named for, as Python has it: the card under
+  // the field is about it. A name with a go is a song's; "Take N" has none.
+  const nextSong = session.next_take_go != null ? session.next_take_name : null
+  // Both are the song's title as the library keeps it: Python has matched a
+  // name typed in other capitals to its song already.
+  const nextPlayedTonight =
+    nextSong !== null && (session.songs ?? []).some((s) => s.name === nextSong)
   const knownGoRef = useRef(knownGo)
   useEffect(() => {
     knownGoRef.current = knownGo
@@ -179,6 +193,14 @@ export function Rehearsal({
     const id = setInterval(() => onChanged(), 1500)
     return () => clearInterval(id)
   }, [inFlight, onChanged])
+
+  // An earlier go is the card's song's: another song picked under the field
+  // puts it away. A refresh that leaves the song as it was does not.
+  const beforeSong = session.before_tonight?.song ?? null
+  useEffect(() => {
+    if (cuedEarlier) uncue()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beforeSong])
 
   const finish = async () => {
     player.pause()
@@ -313,22 +335,51 @@ export function Rehearsal({
           folder={session.folder}
         />
       }
-      footer={
-        <FooterRow
-          error={error}
-          rule
-          left={
-            <TakeNameField
-              id="next-take-name"
-              label="Next take"
-              value={nextName}
-              fallback={fallback}
-              choices={nextChoices}
-              knownGo={knownGo}
-              onCommit={nameNextTake}
-            />
-          }
+      // The next take's name and its songs sit with what the song went
+      // like before tonight, in a panel of their own on the setup screen's
+      // panel colour (issue #12 step 6).
+      aside={
+        <aside
+          aria-label="Next take"
+          data-next-take-panel
+          className="flex w-[22.5rem] shrink-0 flex-col gap-5 overflow-y-auto border-l bg-panel px-5 py-6 min-[1100px]:w-[26rem]"
         >
+          <TakeNameField
+            id="next-take-name"
+            label="Next take"
+            value={nextName}
+            fallback={fallback}
+            choices={nextChoices}
+            knownGo={knownGo}
+            onCommit={nameNextTake}
+            onPanel
+          />
+          {/* Hidden while a take is open: the one player is its. */}
+          <BeforeTonightCard
+            key={session.before_tonight?.song ?? nextSong ?? ""}
+            hidden={selected !== null}
+            before={session.before_tonight ?? null}
+            song={nextSong}
+            playedTonight={nextPlayedTonight}
+            playback={
+              cuedEarlier
+                ? {
+                    take: cued as PlacedTake,
+                    playing: player.playing,
+                    loading: player.loading,
+                    position: player.position,
+                    duration: player.duration,
+                  }
+                : null
+            }
+            problem={cuedEarlier ? player.loadError : null}
+            onPlay={playInOverview}
+            onPlayAt={(take, at) => cueAt(take, Math.max(0, at - 3))}
+          />
+        </aside>
+      }
+      footer={
+        <FooterRow error={error}>
           <div className="flex items-center gap-3">
             {/* Escape finishes only with no take in hand; with one, it puts
                 the take away — see useEscape above. */}
@@ -397,13 +448,15 @@ export function Rehearsal({
               takes={session.takes}
               songs={session.songs ?? []}
               playback={
-                cued && {
-                  take: cued.take_number,
-                  playing: player.playing,
-                  loading: player.loading,
-                  position: player.position,
-                  duration: player.duration,
-                }
+                cued && !cuedEarlier
+                  ? {
+                      take: cued.take_number,
+                      playing: player.playing,
+                      loading: player.loading,
+                      position: player.position,
+                      duration: player.duration,
+                    }
+                  : null
               }
               onPlay={playInOverview}
               onOpen={select}

@@ -6234,6 +6234,156 @@ def main():
     finally:
         api57mod.open_in_file_manager = real_open57
 
+    print("\n[58] The next song's goes from before tonight")
+    # The rehearsal screen shows the song the next take is named for as it
+    # went before tonight: one go, and a few more on request. The recording
+    # screen measures its first go of the evening against that same go.
+    import shutil as shutil58
+    tmp58 = Path(tempfile.mkdtemp())
+    _, s58 = fresh_api(tmp58)
+
+    def rehearsal58(name, created_at, takes):
+        """A rehearsal from an old session.json: (name, seconds) per take."""
+        folder = tmp58 / "Rec" / f"{name} - {created_at[:10]} {created_at[11:13]}-00"
+        folder.mkdir(parents=True)
+        (folder / "session.json").write_text(json.dumps({
+            "name": name, "created_at": created_at, "samplerate": SR,
+            "tracks": [{"name": "Gtr", "channel": 1}],
+            "takes": [{"take_number": i + 1, "name": n, "duration_sec": sec,
+                       "tracks": [], "markers": []} for i, (n, sec) in enumerate(takes)],
+        }))
+        import_all(s58._lib, s58._cloud_dir)
+        return str(folder)
+
+    A58 = rehearsal58("First", "2026-08-25T19:00:00",
+                      [("Polyn", 180), ("Polyn 2", 190), ("Doroga", 200)])
+    B58 = rehearsal58("Middle", "2026-09-10T19:00:00", [("Polyn", 210), ("Vesna", 220)])
+    C58 = rehearsal58("Tuesday", "2026-09-15T19:00:00",
+                      [("Polyn", 230), ("Polyn 2", 240), ("Vesna", 250)])
+    D58 = rehearsal58("Last", "2026-09-22T19:00:00", [("Vesna", 260), ("Polyn", 270)])
+
+    def pick58(go):
+        return (go["folder"], go["take"]["take_number"])
+
+    def before58():
+        return s58.session_state()["before_tonight"]
+
+    s58.start_rehearsal("Live", 0, SR, [{"name": "Gtr", "channel": 1}])
+    live58 = Path(s58._session["folder"])
+
+    def keep58(number, name):
+        s58._session["take_counter"] = number
+        d = live58 / "_drafts" / f"take {number}"
+        write_wav(d / "Gtr.wav", 100, seconds=1.0)
+        return s58.keep_take(number, str(d), name, 1.0,
+                             [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
+
+    s58.set_next_take_name("Polyn")
+    b58 = before58()
+    ok("with no star, the last go of the latest rehearsal is shown",
+       b58 is not None and pick58(b58["first"]) == (D58, 2))
+    ok("more is the last go of each of three rehearsals, less the one shown",
+       b58 is not None and [pick58(g) for g in b58["more"]] == [(C58, 2), (B58, 1)])
+    ok("the song is the library's title", b58 is not None and b58["song"] == "Polyn")
+    ok("a go is in _go_at's shape",
+       b58 is not None and set(b58["first"]) == {"folder", "rehearsal", "created_at", "take"}
+       and all(set(g) == {"folder", "rehearsal", "created_at", "take"} for g in b58["more"]))
+    s58.set_take_star(C58, 1, True)
+    b58 = before58()
+    ok("the newest starred go is shown", b58 is not None and pick58(b58["first"]) == (C58, 1))
+    ok("then all three rehearsals' last goes",
+       b58 is not None and [pick58(g) for g in b58["more"]] == [(D58, 2), (C58, 2), (B58, 1)])
+    s58.set_take_star(C58, 1, False)
+
+    s58.set_next_take_name("polyn")
+    b58 = before58()
+    ok("a title in another case finds its song", b58 is not None and b58["song"] == "Polyn")
+    ok("and the field names it as the library does",
+       s58.session_state()["next_take_name"] == "Polyn")
+    la58 = s58.session_state()["last_attempt"]
+    ok("the first go tonight is measured against the go shown",
+       la58 is not None and la58["duration_sec"] == 270
+       and str(la58.get("created_at", "")).startswith("2026-09-22"))
+
+    keep58(1, "Polyn")
+    st58 = s58.session_state()
+    b58 = st58["before_tonight"]
+    ok("tonight's go is never before tonight",
+       b58 is not None and all(Path(g["folder"]) != live58 for g in [b58["first"], *b58["more"]])
+       and pick58(b58["first"]) == (D58, 2))
+    ok("nor counted among the three rehearsals",
+       b58 is not None and [pick58(g) for g in b58["more"]] == [(C58, 2), (B58, 1)])
+    ok("with a go tonight, last time is tonight's",
+       st58["last_attempt"] is not None and "created_at" not in st58["last_attempt"]
+       and st58["last_attempt"]["duration_sec"] == 1.0)
+
+    # The screen asks for its state after everything done on it: the card
+    # reads the few goes it can show, not every go at the song with its
+    # files and marks.
+    read58 = []
+    take_data58 = s58._lib._take_data
+
+    def counting58(folder, take):
+        read58.append(take.id)
+        return take_data58(folder, take)
+
+    s58._lib._take_data = counting58
+    try:
+        s58.set_next_take_name("Take 2")
+        s58.session_state()
+        without58 = len(read58)
+        s58.set_next_take_name("Polyn")
+        read58.clear()
+        s58.session_state()
+        n58 = len(read58) - without58
+        ok(f"the card reads only the goes it can show ({n58} read)", n58 <= 3)
+    finally:
+        s58._lib._take_data = take_data58
+
+    s58.set_take_star(A58, 1, True)
+    b58 = before58()
+    ok("a star older than the three rehearsals is still the go shown",
+       b58 is not None and pick58(b58["first"]) == (A58, 1)
+       and [pick58(g) for g in b58["more"]] == [(D58, 2), (C58, 2), (B58, 1)])
+    s58.set_take_star(A58, 1, False)
+
+    shutil58.move(D58, str(tmp58 / "moved"))
+    try:
+        b58 = before58()
+        ok("a rehearsal not on disk is skipped and not counted",
+           b58 is not None and pick58(b58["first"]) == (C58, 2)
+           and [pick58(g) for g in b58["more"]] == [(B58, 1), (A58, 2)])
+    finally:
+        shutil58.move(str(tmp58 / "moved"), D58)
+
+    keep58(2, "Sonca")
+    ok("a song played only tonight has none", before58() is None)
+    s58.set_next_take_name("Take 3")
+    st58 = s58.session_state()
+    ok("Take N has none", st58["before_tonight"] is None and st58["last_attempt"] is None)
+    s58.set_next_take_name("Nothing yet")
+    ok("a new song has none", before58() is None)
+
+    # The library failing to answer for the card must not take the
+    # rehearsal screen down with it: the session is what it shows.
+    s58.set_next_take_name("Polyn")
+    goes_before58 = s58._lib.goes_before
+
+    def broken58(*_a, **_k):
+        raise RuntimeError("database is locked")
+
+    s58._lib.goes_before = broken58
+    try:
+        st58 = s58.session_state()
+        ok("a library that cannot answer leaves the session as it is",
+           st58.get("active") is True and st58["before_tonight"] is None
+           and st58["next_take_name"] == "Polyn")
+    except Exception as e:
+        ok(f"a library that cannot answer leaves the session as it is ({e!r})", False)
+    finally:
+        s58._lib.goes_before = goes_before58
+    s58.finish_rehearsal()
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

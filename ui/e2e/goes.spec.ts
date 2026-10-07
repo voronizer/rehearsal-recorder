@@ -489,6 +489,30 @@ test("a place still waiting on the loop's answer is not put on a go opened since
   await expect(transport(page).getByRole("button", { name: "Play", exact: true })).toBeVisible()
 })
 
+test("a note clicked while its take opens to play in the overview opens it there", async ({
+  page,
+}) => {
+  // As if the note were clicked once the take was playing: it opens in the
+  // player at the note, and goes on playing.
+  await openApp(page, { before: "window.__FULL_EVENING__ = true" })
+  await openHistory(page)
+  const overview = page.locator("[aria-label='Rehearsal overview']")
+  const note = overview.locator("[data-note]", { hasText: "this one is the take" })
+  await hold(page, "player_open")
+  const opens = await callCount(page, "player_open")
+  const row = overview.locator("[data-take]", {
+    has: page.locator("[data-note]", { hasText: "this one is the take" }),
+  })
+  await row.getByRole("button", { name: /^Play / }).click()
+  await expect.poll(() => callCount(page, "player_open")).toBe(opens + 1)
+  await note.click()
+  const seeks = await callCount(page, "player_seek")
+  await letGo(page)
+  await expect.poll(() => callCount(page, "player_seek")).toBeGreaterThan(seeks)
+  expect((await calls(page, "player_seek")).at(-1)!.args[0] as number).toBeCloseTo(72, 0)
+  await expect(transport(page).getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+})
+
 test("↑ before a note's go has opened carries the note's place", async ({ page }) => {
   // As if ↑ were pressed once the go was open, at the note.
   await openApp(page, { before: "window.__FULL_EVENING__ = true" })
@@ -571,7 +595,7 @@ async function places(page: Page) {
 
 /** A rehearsal that starts with `names` kept already, as the fake keeps
  *  them: each is waiting for the cloud until the screen asks again. */
-async function startWith(page: Page, names: string[], clock = false) {
+async function startWith(page: Page, names: string[], clock = false, tracks = ["Guitar"]) {
   if (clock) await page.clock.install()
   await openApp(page, {
     after: `
@@ -579,7 +603,9 @@ async function startWith(page: Page, names: string[], clock = false) {
       api.start_rehearsal = async (...a) => { const r = await start(...a);
         for (const name of ${JSON.stringify(names)}) {
           const { take_number: n } = await api.start_take();
-          await api.keep_take(n, '/tmp/draft', name, 6, [{name:'Guitar', file:'/rec/k' + n + '.wav'}], []);
+          const files = ${JSON.stringify(tracks)}.map((t, i) =>
+            ({name: t, file: '/rec/k' + n + (i ? '-' + t : '') + '.wav'}));
+          await api.keep_take(n, '/tmp/draft', name, 6, files, []);
         }
         return r; };
     `,
@@ -656,8 +682,8 @@ test("from a song's page, its tab is as wide shut as open", async ({ page }) => 
 const LONG = "Pieśnia pra doŭhuju darohu dadomu praz uvieś horad"
 
 /** A rehearsal kept with `names`, the `open`-th of them open in the player. */
-async function openOf(page: Page, names: string[], open = 1) {
-  await startWith(page, names)
+async function openOf(page: Page, names: string[], open = 1, tracks = ["Guitar"]) {
+  await startWith(page, names, false, tracks)
   const overview = page.locator("[aria-label='Rehearsal overview']")
   await expect(overview.getByText("Waiting for the cloud")).toHaveCount(0)
   await overview.getByRole("button", { name: new RegExp(`^Take ${open} `) }).click()
@@ -711,10 +737,10 @@ test("a few songs show no arrows", async ({ page }) => {
 const down = (page: Page) => page.locator("main").evaluate((el) => el.scrollTop)
 
 test("the mouse wheel moves the songs sideways", async ({ page }) => {
-  // Short enough for the window's content to scroll, so a wheel turn that
-  // went to it would show.
-  await page.setViewportSize({ width: 1180, height: 700 })
-  await openOf(page, TWENTY)
+  // The app's smallest window, and a second track, so the window's content
+  // scrolls: a wheel turn that went to it would show.
+  await page.setViewportSize({ width: 1180, height: 680 })
+  await openOf(page, TWENTY, 1, ["Guitar", "Bass"])
   expect(await page.locator("main").evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
   await strip(page).locator("[data-tab='song:Viasna']").hover()
   await page.mouse.wheel(0, 300)
