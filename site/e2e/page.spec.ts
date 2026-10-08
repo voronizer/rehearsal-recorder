@@ -92,6 +92,48 @@ test("the story follows the scroll, and the rail goes back", async ({ page }) =>
   await expect.poll(() => sceneIn(page, "story"), { timeout: 20_000 }).toBe("setup")
 })
 
+test("the step on screen lights the line the app is on", async ({ page }) => {
+  await page.goto("/")
+  const steps = page.locator("#how .step")
+  const now = page.locator("#how .step.on .beats li.now")
+  const elsewhere = page.locator("#how .step:not(.on) .beats li.now")
+  await steps.nth(3).evaluate((el) => el.scrollIntoView({ block: "center" }))
+  await expect(now).toHaveText(/^Marks: every Went wrong, from every rehearsal\./, { timeout: 40_000 })
+  await expect(elsewhere).toHaveCount(0)
+  await expect(now).toHaveText(/^A click on Pałyn: /, { timeout: 20_000 })
+  await expect(elsewhere).toHaveCount(0)
+  await expect(now).toHaveAttribute("aria-current", "true")
+
+  await steps.nth(0).evaluate((el) => el.scrollIntoView({ block: "center" }))
+  await expect(now).toHaveCount(0)
+  await expect(now).toHaveText(/^Name the rehearsal, or keep the date\./, { timeout: 20_000 })
+  await expect(elsewhere).toHaveCount(0)
+})
+
+test("a step left and come back to is dark until the app gets to it again", async ({ page }) => {
+  await page.goto("/")
+  const steps = page.locator("#how .step")
+  const now = page.locator("#how .step.on .beats li.now")
+  await steps.nth(3).evaluate((el) => el.scrollIntoView({ block: "center" }))
+  await expect(now).toHaveText(/^A click on Pałyn: /, { timeout: 40_000 })
+
+  // Up to the first step starts the app again; it is slow to come back
+  // here, so it is still starting when the fourth step is back on screen.
+  await page.route(/\/stage\.html/, async (route) => {
+    await new Promise((r) => setTimeout(r, 1_500))
+    await route.continue()
+  })
+  await steps.nth(0).evaluate((el) => el.scrollIntoView({ block: "center" }))
+  await expect(steps.nth(0)).toHaveClass(/\bon\b/)
+  await steps.nth(3).evaluate((el) => el.scrollIntoView({ block: "center" }))
+  await expect(steps.nth(3)).toHaveClass(/\bon\b/)
+  expect(await now.count()).toBe(0)
+  await page.waitForTimeout(500)
+  expect(await now.count()).toBe(0)
+  await page.unrouteAll({ behavior: "wait" })
+  await expect(now).toHaveText(/^History opens on the newest rehearsal\./, { timeout: 40_000 })
+})
+
 test("a frame scrolled past holds still", async ({ page }) => {
   await page.goto("/")
   await expect.poll(() => heldIn(page, "hero"), { timeout: 20_000 }).toBe("false")

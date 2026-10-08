@@ -69,8 +69,11 @@ test("the story goes through its five steps", async ({ page }) => {
   await expect(overview.locator("[data-false-start]")).toHaveCount(1)
   await expect(overview.getByRole("button", { name: /Send starred/ })).toBeVisible()
 
-  // History, and on to Pałyn's page.
+  // History's marks: every Went wrong, then a song in them, on to Pałyn's page.
   await step(page, 3)
+  const wentWrong = page.locator('section[aria-label="Went wrong"]')
+  await expect(wentWrong).toBeVisible({ timeout: 30_000 })
+  await expect(wentWrong.locator("[data-mark]")).toHaveCount(5)
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("history")
   await expect(page.locator("[data-song-head] h2")).toHaveText("Pałyn")
   await expect(
@@ -81,9 +84,35 @@ test("the story goes through its five steps", async ({ page }) => {
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("compare")
   const open = page.locator("[data-tab][aria-current='true']")
   await expect(open).toHaveAttribute("data-tab", "song:Pałyn")
-  await expect(open.locator("[data-tab-line]")).toHaveText(/^6/)
+  await expect(open.locator("[data-tab-line]")).toHaveText(/^7/)
   await expect(page.locator("[data-column]").first()).toBeVisible()
   await expect(page.locator("[data-region-span]")).toBeVisible()
+})
+
+test("the story tells the page each line as it gets to it", async ({ page }) => {
+  // The stage is the page here, so it tells itself.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __beats: number[][] }
+    w.__beats = []
+    window.addEventListener("message", (e) => {
+      if (e.data?.type === "rr-beat") w.__beats.push([e.data.step, e.data.beat])
+    })
+  })
+  await page.goto("/stage.html#story")
+  await step(page, 4)
+  const beats = () => page.evaluate(() => (window as unknown as { __beats: number[][] }).__beats)
+  await expect.poll(async () => (await beats()).length, { timeout: 60_000 }).toBe(15)
+  expect(await beats()).toEqual([0, 1, 2, 3, 4].flatMap((s) => [0, 1, 2].map((b) => [s, b])))
+})
+
+test("the story finds the marks grouped by rehearsal, whatever was kept", async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("mock-python-config", JSON.stringify({ marks_grouping: "song" }))
+  )
+  await page.goto("/stage.html#story")
+  await step(page, 3)
+  await expect.poll(() => scene(page), { timeout: 40_000 }).toBe("history")
+  await expect(page.locator("[data-song-head] h2")).toHaveText("Pałyn")
 })
 
 test("a jump from the first step to the last ends on the last", async ({ page }) => {

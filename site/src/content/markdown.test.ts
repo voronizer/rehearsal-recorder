@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { inline, parseDoc, sectionsByIds, sectionsByTitles } from "./markdown"
+import { inline, leadAndBeats, parseDoc, sectionsByIds, sectionsByTitles } from "./markdown"
 
 describe("parseDoc", () => {
   it("splits a file into its title, intro and sections", () => {
@@ -44,6 +44,23 @@ describe("inline", () => {
     )
     expect(inline("[x](javascript:void0)")).toBe("x")
     expect(inline("[x](data:text/html,hi)")).toBe("x")
+  })
+})
+
+describe("leadAndBeats", () => {
+  it("parts a story step into its line and the lines under it", () => {
+    expect(leadAndBeats("One line.\n\n- first\n- **Marks**: second\n- third")).toEqual({
+      lead: ["One line."],
+      beats: ["first", "<strong>Marks</strong>: second", "third"],
+    })
+  })
+
+  it("has no lines under a body with no list", () => {
+    expect(leadAndBeats("One line.\n\nAnother.")).toEqual({ lead: ["One line.", "Another."], beats: [] })
+  })
+
+  it("keeps a line that wraps onto the next as one", () => {
+    expect(leadAndBeats("Lead.\n\n- a line that\n  wraps\n- next").beats).toEqual(["a line that wraps", "next"])
   })
 })
 

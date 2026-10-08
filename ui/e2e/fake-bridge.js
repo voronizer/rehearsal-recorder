@@ -133,6 +133,31 @@ function withCloud(r) {
   return r;
 }
 
+// A page can ask for more marks across the library (window.__MORE_MARKS__),
+// for History's Marks view: Daroha 2 at First rehearsal, Pałyn 8 at the
+// Missing jam, and two on Take 1 at the Wednesday jam.
+
+// Marks changed on takes of the rehearsals before this one, as
+// "folder#take_number": those rehearsals are built afresh on every call, so
+// what the player changed is kept here and laid over them.
+const pastMarks = {};
+function withEdits(r) {
+  for (const t of r.takes) {
+    const kept = pastMarks[`${r.folder}#${t.take_number}`];
+    if (kept) t.markers = kept.map(m => ({...m, label_id: labelIdOf(m.label_id)}));
+  }
+  return r;
+}
+// The take a mark is changed on: tonight's, or one of a rehearsal before.
+async function markedTake(folder, n) {
+  if (session && folder === session.folder) return session.takes.find(t => t.take_number === n);
+  const r = (await libraryNow()).find(x => x.folder === folder);
+  return r && r.takes.find(t => t.take_number === n);
+}
+function keepMarks(folder, n, take) {
+  if (take && !(session && folder === session.folder)) pastMarks[`${folder}#${n}`] = take.markers;
+}
+
 // The library's labels, in their order, as list_labels gives them: the four
 // every library starts with (migration 0004), or a page's own
 // (window.__LABELS__ = [{id, name, colour}, …]).
@@ -173,30 +198,58 @@ function labelIdOf(id) {
   return labels.some(l => l.id === id) ? id : labels[0].id;
 }
 
-// The labels with how many marks each has, in the live rehearsal and the
-// fuller evening's.
-function labelsAsSent() {
-  const takes = [...(session ? session.takes : []), ...pastRehearsal('/rec/old').takes];
-  const marks = takes.flatMap(t => t.markers || []);
-  return labels.map(l => ({...l, marks: marks.filter(m => labelIdOf(m.label_id) === l.id).length}));
+// When the live rehearsal was made, for the marks in it: Python has it in
+// the library from its start.
+const TONIGHT_AT = '2026-10-06T19:00:00';
+
+// Every mark in the library, the live rehearsal's first, as Python has them:
+// [{r: the rehearsal, t: the take, m: the mark}], the newest rehearsal first,
+// then the order played, then the moment.
+async function marksNow() {
+  const all = await libraryNow();
+  const rehearsals = [
+    ...(session ? [{folder:session.folder, name:session.name, created_at:TONIGHT_AT,
+                    missing:false, takes:session.takes}] : []),
+    ...all.filter(r => !session || r.folder !== session.folder)];
+  const out = [];
+  for (const r of rehearsals)
+    for (const t of [...r.takes].sort((a, b) => a.take_number - b.take_number))
+      for (const m of [...(t.markers || [])].sort((a, b) => a.at - b.at))
+        out.push({r, t, m: {...m, label_id: labelIdOf(m.label_id)}});
+  return out;
+}
+
+// The labels with how many marks each has, in how many rehearsals, and the
+// newest of them (api.list_labels).
+async function labelsAsSent() {
+  const marks = await marksNow();
+  return labels.map(l => {
+    const mine = marks.filter(x => x.m.label_id === l.id);
+    const days = mine.map(x => x.r.created_at).sort();
+    return {...l, marks: mine.length, rehearsals: new Set(mine.map(x => x.r.folder)).size,
+            last_marked: days.length ? days[days.length - 1] : null};
+  });
 }
 
 function pastRehearsal(folder) {
   if (folder === '/rec/quiet') {
     const takes = [
-      {take_number:1, name:'Take 1', duration_sec:300, markers:[],
+      {take_number:1, name:'Take 1', duration_sec:300,
+       markers: window.__MORE_MARKS__
+         ? [{at:120, note:'the riff', label_id:1}, {at:200, note:'the riff, slower', label_id:1}] : [],
        tracks:[{name:'Guitar', file:'/rec/quiet/t1.wav'}]},
       {take_number:2, name:'Take 2', duration_sec:300, markers:[],
        tracks:[{name:'Guitar', file:'/rec/quiet/t2.wav'}]}];
-    return withCloud(withStars({folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)}));
+    return withCloud(withStars(withEdits({folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)})));
   }
   if (folder === '/rec/older') {
     const takes = [
       {take_number:1, name:'Daroha', duration_sec:230, markers:[],
        tracks:[{name:'Guitar', file:'/rec/older/d1.wav'}]},
-      {take_number:2, name:'Daroha 2', duration_sec:240, markers:[],
+      {take_number:2, name:'Daroha 2', duration_sec:240,
+       markers: window.__MORE_MARKS__ ? [{at:30, note:'', label_id:3}] : [],
        tracks:[{name:'Guitar', file:'/rec/older/d2.wav'}]}];
-    return withCloud(withStars({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)}));
+    return withCloud(withStars(withEdits({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)})));
   }
   // Its own path, distinct from the live session's /rec/g.wav — two takes
   // sharing a dummy path would let one's mocked length leak onto the other.
@@ -218,7 +271,7 @@ function pastRehearsal(folder) {
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Pałyn', duration_sec:oldLength, markers:[],
         tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
-  return withCloud(withStars({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)}));
+  return withCloud(withStars(withEdits({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)})));
 }
 
 // The whole library, as History's Songs view reads it (api.list_songs and
@@ -230,7 +283,8 @@ function pastRehearsal(folder) {
 // First rehearsal after its two, 200 s each, read by this alone.
 function goneTakes() {
   const take = (n, name, song, go, length) => ({take_number:n, name, song, go,
-    duration_sec:length, markers:[], starred: stars.has(`/rec/gone#${n}`),
+    duration_sec:length, starred: stars.has(`/rec/gone#${n}`),
+    markers: window.__MORE_MARKS__ && n === 1 ? [{at:60, note:'late again', label_id:3}] : [],
     tracks:[{name:'Guitar', file:`/rec/gone/t${n}.wav`}]});
   // Numbered apart from the other rehearsals' goes, so a test naming one
   // names one take.
@@ -726,27 +780,29 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
   update_take_marker: track('update_take_marker', async (folder, n, sec, note, labelId) => {
-    const take = (session ? session.takes : []).find(t => t.take_number === n);
+    const take = await markedTake(folder, n);
     if (take) for (const m of take.markers || []) {
       if (Math.abs(m.at - sec) <= 0.01) {
         if (note !== null && note !== undefined) m.note = note;
         if (labelId !== null && labelId !== undefined) m.label_id = labelIdOf(labelId);
       }
     }
-    return {ok:true, markers: take ? take.markers : []};
+    keepMarks(folder, n, take);
+    return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
   remove_take_marker: track('remove_take_marker', async (folder, n, sec) => {
-    const take = (session ? session.takes : []).find(t => t.take_number === n);
+    const take = await markedTake(folder, n);
     if (take) take.markers = (take.markers || []).filter(m => Math.abs(m.at - sec) > 0.01);
-    return {ok:true, markers: take ? take.markers : []};
+    keepMarks(folder, n, take);
+    return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
-  list_labels: track('list_labels', async () => JSON.parse(JSON.stringify(labelsAsSent()))),
+  list_labels: track('list_labels', async () => JSON.parse(JSON.stringify(await labelsAsSent()))),
   // The same rules and the same words as Python's (store/library.py).
   add_label: track('add_label', async (name, colour) => {
     const refusal = labelRefusal(name, colour);
     if (refusal) return {ok:false, error:refusal};
     labels.push({id: nextLabelId++, name: name.trim().slice(0, 40).trim(), colour});
-    return {ok:true, labels: labelsAsSent()};
+    return {ok:true, labels: await labelsAsSent()};
   }),
   rename_label: track('rename_label', async (id, name) => {
     const label = labels.find(l => l.id === id);
@@ -754,28 +810,28 @@ window.__MAKE_API__ = () => ({
     const refusal = labelRefusal(name, label.colour, id);
     if (refusal) return {ok:false, error:refusal};
     label.name = name.trim().slice(0, 40).trim();
-    return {ok:true, labels: labelsAsSent()};
+    return {ok:true, labels: await labelsAsSent()};
   }),
   recolour_label: track('recolour_label', async (id, colour) => {
     const label = labels.find(l => l.id === id);
     if (!label) return {ok:false, error:'Label not found'};
     if (!LABEL_COLOURS.includes(colour)) return {ok:false, error:'Pick a colour from the palette'};
     label.colour = colour;
-    return {ok:true, labels: labelsAsSent()};
+    return {ok:true, labels: await labelsAsSent()};
   }),
   move_label: track('move_label', async (id, position) => {
     const label = labels.find(l => l.id === id);
     if (!label) return {ok:false, error:'Label not found'};
     labels = labels.filter(l => l.id !== id);
     labels.splice(Math.max(0, Math.min(position, labels.length)), 0, label);
-    return {ok:true, labels: labelsAsSent()};
+    return {ok:true, labels: await labelsAsSent()};
   }),
   delete_label: track('delete_label', async (id, marksTo) => {
     const label = labels.find(l => l.id === id);
     if (!label) return {ok:false, error:'Label not found'};
     if (labels.length === 1)
       return {ok:false, error:'The last label cannot be deleted: every mark needs one'};
-    const used = labelsAsSent().find(l => l.id === id).marks;
+    const used = (await labelsAsSent()).find(l => l.id === id).marks;
     if (used) {
       if (marksTo === null || marksTo === undefined)
         return {ok:false, error:`Say which label the marks of ${label.name} get`};
@@ -786,7 +842,7 @@ window.__MAKE_API__ = () => ({
         for (const m of t.markers || []) if (m.label_id === id) m.label_id = marksTo;
     }
     labels = labels.filter(l => l.id !== id);
-    return {ok:true, labels: labelsAsSent()};
+    return {ok:true, labels: await labelsAsSent()};
   }),
 
   rename_take: track('rename_take', async (folder, n, name) => {
@@ -951,8 +1007,26 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({ok:true, id, title, plays:songPlays(goes), goes}));
   }),
   save_history_view: track('save_history_view', async (view) => {
-    if (view !== 'rehearsals' && view !== 'songs') return {ok:false, error:'Unknown view'};
+    if (!['rehearsals', 'songs', 'marks'].includes(view)) return {ok:false, error:'Unknown view'};
     writeCfg({...readCfg(), history_view: view});
+    return {ok:true};
+  }),
+  // History's Marks view (api.list_marks): every mark with the label, with
+  // what its row shows.
+  list_marks: track('list_marks', async (labelId) => {
+    if (!labels.some(l => l.id === labelId)) return {ok:false, error:'Label not found'};
+    const marks = (await marksNow()).filter(x => x.m.label_id === labelId).map(({r, t, m}) => {
+      if (t.tracks[0]) fileDurations[t.tracks[0].file] = t.duration_sec;
+      return {folder:r.folder, rehearsal:r.name, created_at:r.created_at, missing:Boolean(r.missing),
+              take_number:t.take_number, name:t.name, song:t.song ?? null,
+              duration_sec:t.duration_sec, at:m.at, note:m.note || ''};
+    });
+    await held('list_marks');
+    return JSON.parse(JSON.stringify({ok:true, marks}));
+  }),
+  save_marks_grouping: track('save_marks_grouping', async (grouping) => {
+    if (!['rehearsal', 'song', 'list'].includes(grouping)) return {ok:false, error:'Unknown grouping'};
+    writeCfg({...readCfg(), marks_grouping: grouping});
     return {ok:true};
   }),
   delete_rehearsal: track('delete_rehearsal', async (folder) => {
@@ -1107,6 +1181,7 @@ window.__MAKE_API__ = () => ({
     bit_depth: recording.bit_depth, supported_bit_depths:[16, 24],
     tracks:[], volumes:{}, master_volume: readCfg().master_volume ?? 1,
     history_view: readCfg().history_view ?? 'rehearsals',
+    marks_grouping: readCfg().marks_grouping ?? 'rehearsal',
     output_device_index: outputDevice.index,
     output_channels: outputDevice.channels || [1, 2],
     cloud_format: cloudFormat,

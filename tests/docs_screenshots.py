@@ -53,14 +53,20 @@ VIEWPORT = {"width": 1180, "height": 820}
 # are replaced on the bridge MOCK made.
 BAND = (PROJECT / "ui" / "e2e" / "band.js").read_text(encoding="utf-8")
 
-# Settings › Marks counts every mark in the library; the fake counts the
-# marks of its own history, which the band's replaces. So the counts are the
-# band's: the marks on its rehearsals.
+# Settings › Marks and History's Marks view count every mark in the
+# library, in how many rehearsals and the newest; the fake counts tonight's
+# too. So the counts are the band's: the marks on its rehearsals.
 COUNTED = """
 const labelsOf = api.list_labels;
 api.list_labels = async () => {
-  const marks = Object.keys(PAST).flatMap(f => pastTakes(f)).flatMap(t => t.markers);
-  return (await labelsOf()).map(l => ({...l, marks: marks.filter(m => m.label_id === l.id).length}));
+  const marks = Object.keys(PAST).flatMap(f =>
+    pastTakes(f).flatMap(t => t.markers.map(m => ({...m, folder: f, created_at: PAST[f][1]}))));
+  return (await labelsOf()).map(l => {
+    const mine = marks.filter(m => m.label_id === l.id);
+    const days = mine.map(m => m.created_at).sort();
+    return {...l, marks: mine.length, rehearsals: new Set(mine.map(m => m.folder)).size,
+            last_marked: days.length ? days[days.length - 1] : null};
+  });
 };
 """
 
@@ -76,7 +82,7 @@ DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 6', name:'take 6',
 # so a picture is not half empty.
 HEIGHT = {"unsaved-takes": 420, "setup": 910, "settings": 760, "marks": 420, "rehearsal": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
-          "history": 820, "history-songs": 940}
+          "history": 820, "history-songs": 940, "history-marks": 820}
 
 
 def shoot(page, name):
@@ -201,6 +207,11 @@ def main():
         page.wait_for_selector('[data-rung][aria-expanded="true"]')
         page.wait_for_timeout(400)
         shoot(page, "history-songs")
+        page.get_by_role("button", name="Marks", exact=True).click()
+        page.locator("button[data-label]", has=page.locator("[data-name]", has_text="Went wrong")).click()
+        page.wait_for_selector('section[aria-label="Went wrong"] [data-mark]')
+        page.wait_for_timeout(400)
+        shoot(page, "history-marks")
         page.close()
 
         browser.close()
