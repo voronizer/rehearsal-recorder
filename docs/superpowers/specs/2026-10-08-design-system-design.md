@@ -229,7 +229,7 @@ on Windows.
   | Label colour dots in 5 sizes in 11 places; mark ticks in 4 shapes; 9 chips and pills made by hand, while `Badge` is never used | one dot, one tick, Badge |
   | About 17 warnings and errors: boxes in raw amber beside the theme's warning colour, plain red lines, three different error icons | shadcn Alert for a box, one line style for a field (B4), one icon per meaning |
   | 15 loading signs: spinners in 5 sizes, a spinning refresh icon, plain text | shadcn Spinner, one size per place (B5) |
-  | A take drawn to scale 6 times, each with its own scale, playhead and "starred" green; "how far along" computed 5 times | one take bar and one helper |
+  | A take drawn to scale 6 times, each with its own scale, playhead and "starred" green; "how far along" computed 5 times | the forms stay where they show different things (the whole evening in one strip, a song's goes as columns, one take with its marks, the map in the player); they share one way to draw length, the starred green, a mark's tick and the playhead, and one helper for "how far along". One take with its marks is one component in two sizes, a row and a mini. Whether the start screen keeps columns is settled on its mockup (Alex, 19:14Z: «в смысле все одинаковое будет?») |
   | A take's name written 6 ways ("01", "Take N", the go in a mono box, the raw name); "Not named" typed in 6 places | `TakeTitle` everywhere |
   | A rehearsal's date in 6 forms; counts and plurals written inline about 15 times beside helpers that exist; "1 inputs"; the evening's figures in 6 places; the device line 4 times | `lib/format.ts` only (B8) |
   | "Not on disk" in 6 places, 4 wordings, 2 colours | one wording, one look |
