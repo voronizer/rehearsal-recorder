@@ -4,12 +4,13 @@ import type { HistoryView } from "@/lib/api"
 const VIEWS: { view: HistoryView; label: string }[] = [
   { view: "rehearsals", label: "Rehearsals" },
   { view: "songs", label: "Songs" },
+  { view: "marks", label: "Marks" },
 ]
 
 /**
- * The top of History's list: evening by evening, or song by song. The two
- * answer different questions — "what did we do on Tuesday" and "where is the
- * good Viasna" — over the same takes.
+ * The top of History's list: evening by evening, song by song, or mark by
+ * mark. They answer different questions — "what did we do on Tuesday",
+ * "where is the good Viasna" and "where was that riff" — over the same takes.
  */
 export function HistorySwitch({
   view,
@@ -27,7 +28,7 @@ export function HistorySwitch({
           aria-pressed={view === v.view}
           onClick={() => view !== v.view && onChange(v.view)}
           className={cn(
-            "flex-1 rounded-md px-3 py-1 text-sm transition-colors",
+            "flex-1 rounded-md px-2 py-1 text-sm transition-colors",
             "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
             view === v.view
               ? "bg-background font-medium text-foreground shadow-sm"

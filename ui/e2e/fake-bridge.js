@@ -135,7 +135,28 @@ function withCloud(r) {
 
 // A page can ask for more marks across the library (window.__MORE_MARKS__),
 // for History's Marks view: Daroha 2 at First rehearsal, Pałyn 8 at the
-// Missing jam, and Take 1 at the Wednesday jam.
+// Missing jam, and two on Take 1 at the Wednesday jam.
+
+// Marks changed on takes of the rehearsals before this one, as
+// "folder#take_number": those rehearsals are built afresh on every call, so
+// what the player changed is kept here and laid over them.
+const pastMarks = {};
+function withEdits(r) {
+  for (const t of r.takes) {
+    const kept = pastMarks[`${r.folder}#${t.take_number}`];
+    if (kept) t.markers = kept.map(m => ({...m, label_id: labelIdOf(m.label_id)}));
+  }
+  return r;
+}
+// The take a mark is changed on: tonight's, or one of a rehearsal before.
+async function markedTake(folder, n) {
+  if (session && folder === session.folder) return session.takes.find(t => t.take_number === n);
+  const r = (await libraryNow()).find(x => x.folder === folder);
+  return r && r.takes.find(t => t.take_number === n);
+}
+function keepMarks(folder, n, take) {
+  if (take && !(session && folder === session.folder)) pastMarks[`${folder}#${n}`] = take.markers;
+}
 
 // The library's labels, in their order, as list_labels gives them: the four
 // every library starts with (migration 0004), or a page's own
@@ -214,11 +235,12 @@ function pastRehearsal(folder) {
   if (folder === '/rec/quiet') {
     const takes = [
       {take_number:1, name:'Take 1', duration_sec:300,
-       markers: window.__MORE_MARKS__ ? [{at:120, note:'the riff', label_id:1}] : [],
+       markers: window.__MORE_MARKS__
+         ? [{at:120, note:'the riff', label_id:1}, {at:200, note:'the riff, slower', label_id:1}] : [],
        tracks:[{name:'Guitar', file:'/rec/quiet/t1.wav'}]},
       {take_number:2, name:'Take 2', duration_sec:300, markers:[],
        tracks:[{name:'Guitar', file:'/rec/quiet/t2.wav'}]}];
-    return withCloud(withStars({folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)}));
+    return withCloud(withStars(withEdits({folder, name:'Wednesday jam', created_at:'2026-09-03T19:00:00', takes: asSent(takes)})));
   }
   if (folder === '/rec/older') {
     const takes = [
@@ -227,7 +249,7 @@ function pastRehearsal(folder) {
       {take_number:2, name:'Daroha 2', duration_sec:240,
        markers: window.__MORE_MARKS__ ? [{at:30, note:'', label_id:3}] : [],
        tracks:[{name:'Guitar', file:'/rec/older/d2.wav'}]}];
-    return withCloud(withStars({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)}));
+    return withCloud(withStars(withEdits({folder, name:'First rehearsal', created_at:'2026-08-25T19:00:00', takes: asSent(takes)})));
   }
   // Its own path, distinct from the live session's /rec/g.wav — two takes
   // sharing a dummy path would let one's mocked length leak onto the other.
@@ -249,7 +271,7 @@ function pastRehearsal(folder) {
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Pałyn', duration_sec:oldLength, markers:[],
         tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
-  return withCloud(withStars({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)}));
+  return withCloud(withStars(withEdits({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)})));
 }
 
 // The whole library, as History's Songs view reads it (api.list_songs and
@@ -758,19 +780,21 @@ window.__MAKE_API__ = () => ({
     return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
   update_take_marker: track('update_take_marker', async (folder, n, sec, note, labelId) => {
-    const take = (session ? session.takes : []).find(t => t.take_number === n);
+    const take = await markedTake(folder, n);
     if (take) for (const m of take.markers || []) {
       if (Math.abs(m.at - sec) <= 0.01) {
         if (note !== null && note !== undefined) m.note = note;
         if (labelId !== null && labelId !== undefined) m.label_id = labelIdOf(labelId);
       }
     }
-    return {ok:true, markers: take ? take.markers : []};
+    keepMarks(folder, n, take);
+    return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
   remove_take_marker: track('remove_take_marker', async (folder, n, sec) => {
-    const take = (session ? session.takes : []).find(t => t.take_number === n);
+    const take = await markedTake(folder, n);
     if (take) take.markers = (take.markers || []).filter(m => Math.abs(m.at - sec) > 0.01);
-    return {ok:true, markers: take ? take.markers : []};
+    keepMarks(folder, n, take);
+    return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
   list_labels: track('list_labels', async () => JSON.parse(JSON.stringify(await labelsAsSent()))),
   // The same rules and the same words as Python's (store/library.py).

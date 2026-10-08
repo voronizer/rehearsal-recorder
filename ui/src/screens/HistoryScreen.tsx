@@ -10,6 +10,8 @@ import { EveningActions } from "@/components/EveningActions"
 import { HistorySwitch } from "@/components/HistorySwitch"
 import { SongList } from "@/components/SongList"
 import { SongPage } from "@/components/SongPage"
+import { LabelList } from "@/components/LabelList"
+import { MarksPage } from "@/components/MarksPage"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/ConfirmDialog"
@@ -23,7 +25,9 @@ import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpaceb
 import {
   api,
   type HistoryView,
+  type MarkHit,
   type Marker,
+  type MarksGrouping,
   type RehearsalDetail,
   type RehearsalSummary,
   type SongDetail,
@@ -48,6 +52,8 @@ import {
 } from "@/lib/deletion"
 import { useActivity, useCloudSettled, useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
+import { loadLabels, useLabels } from "@/lib/labels"
+import { markKey, playFrom } from "@/lib/marks"
 import {
   byPlace,
   firstOpen,
@@ -145,6 +151,7 @@ export function HistoryScreen({
     openAt,
     move,
     playInOverview,
+    cueAt,
     player,
   } = useTakeStripPlayer<PlacedTake>(byPlace)
   const evening = useEveningSettings()
@@ -211,6 +218,25 @@ export function HistoryScreen({
     return index
   }
 
+  // The Marks view: the labels down the left, the one chosen (kept across
+  // the switch, as the song chosen is), and its marks on the right, grouped
+  // as the band last chose.
+  const labels = useLabels()
+  const [label, setLabel] = useState<number | null>(null)
+  const [grouping, setGrouping] = useState<MarksGrouping>("rehearsal")
+  const [marks, setMarks] = useState<{ label: number; marks: MarkHit[] } | null>(null)
+  const [marksRead, setMarksRead] = useState(0)
+  const marksShown = useRef(false)
+  // The mark whose ▶ was pressed last: its row shows its take playing.
+  const [playingMark, setPlayingMark] = useState<MarkHit | null>(null)
+  /** The labels' counts and the chosen label's marks, read again: on
+   *  coming to the view, and after anything here changed a take. */
+  const loadMarks = () => {
+    marksShown.current = true
+    void loadLabels()
+    setMarksRead((n) => n + 1)
+  }
+
   /**
    * Reads the list again, and keeps the chosen rehearsal chosen — or `want`,
    * after a rename moved it or a delete took it away. One no longer there
@@ -223,8 +249,10 @@ export function HistoryScreen({
       const pick = want !== undefined ? want : c
       return pick && list.some((r) => r.folder === pick) ? pick : (list[0]?.folder ?? null)
     })
-    // A rehearsal renamed, deleted or found again changes the songs too.
+    // A rehearsal renamed, deleted or found again changes the songs too,
+    // and the marks.
     if (songsShown.current) void loadSongs()
+    if (marksShown.current) loadMarks()
     return list
   }
 
@@ -258,11 +286,26 @@ export function HistoryScreen({
       }
       try {
         const saved = await api().get_settings()
-        const first = saved.history_view === "songs" ? "songs" : "rehearsals"
+        const first =
+          saved.history_view === "songs" || saved.history_view === "marks"
+            ? saved.history_view
+            : "rehearsals"
         setView(first)
         if (first === "songs") void loadSongs()
+        if (first === "marks") loadMarks()
       } catch {
         setView("rehearsals")
+      }
+    })()
+  }, [])
+  // How the Marks view groups, as Python kept it, whichever view is first.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const saved = await api().get_settings()
+        if (saved.marks_grouping) setGrouping(saved.marks_grouping)
+      } catch {
+        // By rehearsal, then; the bridge has said what failed.
       }
     })()
   }, [])
@@ -270,6 +313,8 @@ export function HistoryScreen({
     setView(next)
     void api().save_history_view(next)
     if (next === "songs" && !songsShown.current) void loadSongs()
+    // Fresh counts each time: marks made in the player since are in them.
+    if (next === "marks") loadMarks()
   }
 
   const songOrder = songIndex ? inSongOrder(songIndex) : []
@@ -313,6 +358,27 @@ export function HistoryScreen({
     else next.add(folder)
     setOpenRungs((m) => new Map(m).set(chosenSong, next))
   }
+
+  // The label chosen, or the first when none is or it was deleted.
+  const chosenLabel = labels.find((l) => l.id === label)?.id ?? labels[0]?.id ?? null
+  const labelShown = labels.find((l) => l.id === chosenLabel) ?? null
+  // Its marks. As with a song's page, an answer about a label chosen before
+  // is dropped.
+  const askedMarks = useRef(0)
+  useEffect(() => {
+    const ticket = ++askedMarks.current
+    if (view !== "marks" || chosenLabel === null) return
+    void (async () => {
+      const res = await api().list_marks(chosenLabel)
+      if (ticket !== askedMarks.current) return
+      if (!res.ok) {
+        notify({ key: SAID, kind: "error", text: res.error ?? "Could not read the marks" })
+        return
+      }
+      setMarks({ label: chosenLabel, marks: res.marks ?? [] })
+    })()
+  }, [view, chosenLabel, marksRead])
+  const marksOnShow = marks !== null && marks.label === chosenLabel ? marks.marks : null
 
   const summary = rehearsals?.find((r) => r.folder === current) ?? null
   // Whether the chosen one can be read: not until the list says it is there.
@@ -371,6 +437,12 @@ export function HistoryScreen({
     item?.scrollIntoView({ block: "nearest" })
   }, [view, chosenSong])
 
+  useEffect(() => {
+    if (view !== "marks" || chosenLabel === null) return
+    const item = document.querySelector(`[data-label="${chosenLabel}"]`)
+    item?.scrollIntoView({ block: "nearest" })
+  }, [view, chosenLabel])
+
   /** Another rehearsal, from the list. What was playing stops: it belongs
    *  to the one being left. */
   const choose = (folder: string) => {
@@ -380,46 +452,88 @@ export function HistoryScreen({
     setCurrent(folder)
   }
 
-  // A go opened from a song's page: the player has its rehearsal's takes,
-  // whichever rehearsal Rehearsals has chosen, and Escape comes back to the
-  // page scrolled where it was. "keep" is another go at the song from inside
-  // the player, in another rehearsal: it opens at the same place, and the
-  // page's scroll, kept when the player was opened, is left as it is.
+  // A go opened from a song's page, or a mark's take from the Marks view:
+  // the player has its rehearsal's takes, whichever rehearsal Rehearsals has
+  // chosen, and Escape comes back to the page scrolled where it was. "keep"
+  // is another go at the song from inside the player, in another rehearsal:
+  // it opens at the same place, and the page's scroll, kept when the player
+  // was opened, is left as it is. The take opened is as its rehearsal reads
+  // now: a mark's row has only what it shows of it.
   //
   // A go is opened once its rehearsal has been read, and only if nothing
   // else was picked meanwhile: another go, another tab, or Escape back to
   // the page. Each of those changes what is selected, and so turns the
   // ticket.
-  const songSection = useRef<HTMLElement | null>(null)
-  const songScroll = useRef<number | null>(null)
+  const pane = useRef<HTMLElement | null>(null)
+  const paneScroll = useRef<number | null>(null)
   const going = useRef(0)
   useEffect(() => {
     going.current++
   }, [selected])
-  const openGo = async (take: PlacedTake, at?: number | "keep") => {
-    const scrolled = songSection.current?.scrollTop ?? 0
+  const openGo = async (take: { folder: string; take_number: number }, at?: number | "keep") => {
+    const scrolled = pane.current?.scrollTop ?? 0
     const ticket = ++going.current
     const res = await api().get_rehearsal(take.folder)
     if (ticket !== going.current) return
-    if (!res.ok) {
-      notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the rehearsal" })
+    const fresh = res.ok ? res.takes.find((t) => t.take_number === take.take_number) : undefined
+    if (!fresh) {
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not open the take" })
       return
     }
+    const go = placed(take.folder, fresh)
     setGoRehearsal(res)
     if (at === "keep") {
-      const fresh = res.takes.find((t) => t.take_number === take.take_number)
-      move(fresh ? placed(take.folder, fresh) : take)
+      move(go)
       return
     }
-    songScroll.current = scrolled
-    if (at === undefined) select(take)
-    else openAt(take, at)
+    paneScroll.current = scrolled
+    if (at === undefined) select(go)
+    else openAt(go, at)
   }
   useLayoutEffect(() => {
-    if (selected !== null || songScroll.current === null || !songSection.current) return
-    songSection.current.scrollTop = songScroll.current
-    songScroll.current = null
+    if (selected !== null || paneScroll.current === null || !pane.current) return
+    pane.current.scrollTop = paneScroll.current
+    paneScroll.current = null
   }, [selected])
+
+  /** ▶ on a mark: its take plays here from just before the mark, or, when
+   *  it is the mark playing, pauses. Its rehearsal is read for the take,
+   *  and an answer that comes back after another ▶ is dropped. */
+  const cueing = useRef(0)
+  const playMark = async (m: MarkHit) => {
+    const ticket = ++cueing.current
+    if (
+      playingMark &&
+      markKey(playingMark) === markKey(m) &&
+      cued?.folder === m.folder &&
+      cued.take_number === m.take_number
+    ) {
+      player.toggle()
+      return
+    }
+    const res = await api().get_rehearsal(m.folder)
+    if (ticket !== cueing.current) return
+    const take = res.ok ? res.takes.find((t) => t.take_number === m.take_number) : undefined
+    if (!take) {
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not play the take" })
+      return
+    }
+    setPlayingMark(m)
+    cueAt(placed(m.folder, take), playFrom(m.at))
+  }
+
+  /** Another label, from the list. What was playing stops, as it does for
+   *  another song. */
+  const chooseLabel = (id: number) => {
+    if (id === chosenLabel) return
+    close()
+    setLabel(id)
+  }
+
+  const chooseGrouping = (next: MarksGrouping) => {
+    setGrouping(next)
+    void api().save_marks_grouping(next)
+  }
 
   /** A song's page, from a rehearsal's overview. The rehearsal stays
    *  chosen, for when the Rehearsals view is back. */
@@ -446,6 +560,12 @@ export function HistoryScreen({
   }
 
   const step = (delta: number) => {
+    if (view === "marks") {
+      if (!labels.length) return
+      const at = labels.findIndex((l) => l.id === chosenLabel)
+      chooseLabel(labels[Math.min(labels.length - 1, Math.max(0, at + delta))].id)
+      return
+    }
     if (view === "songs") {
       if (!songOrder.length) return
       const at = chosenSong === null ? 0 : songOrder.indexOf(chosenSong)
@@ -620,8 +740,10 @@ export function HistoryScreen({
   const addMarker = async (take: PlacedTake, seconds: number) => {
     const res = await api().add_take_marker(take.folder, take.take_number, seconds)
     await reopen(take.folder)
-    // A note may never be written: the mark is on the song's page anyway.
+    // A note may never be written: the mark is on the song's page anyway,
+    // and in the Marks view.
     if (songsShown.current) void loadSongs()
+    if (marksShown.current) loadMarks()
     const fresh = res.markers?.find((m) => Math.abs(m.at - seconds) < 0.02)
     setMarkerEdit(fresh ? { take, marker: fresh } : null)
   }
@@ -688,6 +810,7 @@ export function HistoryScreen({
         onDone={() => {
           if (takeToShare) void reopen(takeToShare.folder)
           if (songsShown.current) void loadSongs()
+          if (marksShown.current) loadMarks()
         }}
       />
     </>
@@ -801,7 +924,7 @@ export function HistoryScreen({
       {rehearsals && rehearsals.length > 0 && view !== null && (
         <>
           <nav
-            aria-label={view === "songs" ? "Songs" : "Rehearsals"}
+            aria-label={view === "songs" ? "Songs" : view === "marks" ? "Labels" : "Rehearsals"}
             className="flex w-64 shrink-0 flex-col gap-3 overflow-y-auto border-r px-3 py-4 xl:w-80"
           >
             <HistorySwitch view={view} onChange={showView} />
@@ -809,6 +932,8 @@ export function HistoryScreen({
               songIndex && (
                 <SongList index={songIndex} current={chosenSong} onChoose={chooseSong} />
               )
+            ) : view === "marks" ? (
+              <LabelList labels={labels} current={chosenLabel} onChoose={chooseLabel} />
             ) : (
               <RehearsalList rehearsals={rehearsals} current={current} onChoose={choose} />
             )}
@@ -821,7 +946,7 @@ export function HistoryScreen({
 
           {view === "songs" ? (
             <section
-              ref={songSection}
+              ref={pane}
               aria-label={pageShown ? (pageShown.title ?? "Not named") : "Song"}
               className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
             >
@@ -854,6 +979,38 @@ export function HistoryScreen({
                   onStar={(take, starred) => void starTake(take, starred)}
                   onShare={setTakeToShare}
                   onDelete={setTakeToDelete}
+                  onOpenRehearsal={openRehearsal}
+                />
+              )}
+            </section>
+          ) : view === "marks" ? (
+            <section
+              ref={pane}
+              aria-label={labelShown?.name ?? "Marks"}
+              className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-5"
+            >
+              {labelShown && marksOnShow && (
+                <MarksPage
+                  label={labelShown}
+                  marks={marksOnShow}
+                  grouping={grouping}
+                  onGrouping={chooseGrouping}
+                  playing={
+                    playingMark &&
+                    cued?.folder === playingMark.folder &&
+                    cued.take_number === playingMark.take_number
+                      ? {
+                          key: markKey(playingMark),
+                          playing: player.playing,
+                          loading: player.loading,
+                          position: player.position,
+                          duration: player.duration,
+                        }
+                      : null
+                  }
+                  onPlay={(m) => void playMark(m)}
+                  onOpen={(m) => void openGo(m, m.at)}
+                  onOpenSong={(title) => void openSong(title)}
                   onOpenRehearsal={openRehearsal}
                 />
               )}

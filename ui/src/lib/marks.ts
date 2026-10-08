@@ -27,6 +27,8 @@ export type MarkGroup = {
   kind: MarksGrouping
   /** "Tuesday jam · Tue 22 Sep · 3 marks", "Pałyn · 2 marks"; "" in one list. */
   title: string
+  /** The title less its count: what the heading opens. */
+  name: string
   /** By rehearsal: the rehearsal the heading opens. */
   folder?: string
   /** By song: the song the heading opens, null for the takes with no song. */
@@ -41,7 +43,7 @@ export type MarkGroup = {
  */
 export function groupMarks(marks: MarkHit[], grouping: MarksGrouping, now: Date = new Date()): MarkGroup[] {
   if (marks.length === 0) return []
-  if (grouping === "list") return [{ key: "list", kind: "list", title: "", marks }]
+  if (grouping === "list") return [{ key: "list", kind: "list", title: "", name: "", marks }]
   const groups = new Map<string, MarkGroup>()
   for (const m of marks) {
     const key = grouping === "rehearsal" ? m.folder : m.song === null ? "" : `song:${m.song}`
@@ -49,8 +51,8 @@ export function groupMarks(marks: MarkHit[], grouping: MarksGrouping, now: Date 
     if (!group) {
       group =
         grouping === "rehearsal"
-          ? { key, kind: grouping, title: "", folder: m.folder, marks: [] }
-          : { key, kind: grouping, title: "", song: m.song, marks: [] }
+          ? { key, kind: grouping, title: "", name: "", folder: m.folder, marks: [] }
+          : { key, kind: grouping, title: "", name: "", song: m.song, marks: [] }
       groups.set(key, group)
     }
     group.marks.push(m)
@@ -58,11 +60,11 @@ export function groupMarks(marks: MarkHit[], grouping: MarksGrouping, now: Date 
   const out = [...groups.values()]
   for (const g of out) {
     const first = g.marks[0]
-    const name =
+    g.name =
       grouping === "rehearsal"
         ? `${first.rehearsal} · ${formatDayIn(first.created_at, now)}`
         : (first.song ?? "Not named")
-    g.title = `${name} · ${marksLabel(g.marks.length)}`
+    g.title = `${g.name} · ${marksLabel(g.marks.length)}`
   }
   if (grouping === "song") {
     const unnamed = out.findIndex((g) => g.song === null)
