@@ -680,3 +680,98 @@ test("the go sits apart from the title, not run into it", async ({ page }) => {
   })
   expect(digitX - (title!.x + title!.width)).toBeGreaterThan(2)
 })
+
+// A song renamed or merged away keeps its old title as a way to name it:
+// Palyn, typed after Palyn was merged into Pałyn, is Pałyn's next go.
+test.describe("a song's old name", () => {
+  const OLD = "window.__OLD_NAMES__ = [['Palyn', 'Pałyn']];"
+  const field = (page: Page) => page.getByRole("textbox", { name: "Next take" })
+  const group = (page: Page) => page.getByRole("group", { name: "Next take" })
+  const line = (page: Page) => group(page).locator("[data-old-name]")
+
+  test("typed on the rehearsal screen, it says which song it is", async ({ page }) => {
+    await openApp(page, { before: OLD })
+    await startRehearsal(page)
+    await field(page).fill("Palyn")
+    await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+    await expect(group(page).locator("[data-song-choice]")).toHaveText(["Pałyn 1"])
+    await expect(group(page).locator("[data-song-choice]")).toHaveAttribute("aria-current", "true")
+    await expect(group(page).locator("[data-all-songs]")).toBeVisible()
+    await expect(line(page)).toHaveText("Palyn is Pałyn now. Make Palyn a new song")
+  })
+
+  test("with a number after it, it is the song too", async ({ page }) => {
+    await openApp(page, { before: OLD })
+    await startRehearsal(page)
+    await field(page).fill("palyn 4")
+    await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+  })
+
+  test("leaving the field names the take after the song", async ({ page }) => {
+    await openApp(page, { before: OLD })
+    await startRehearsal(page)
+    await field(page).fill("Palyn")
+    await page.keyboard.press("Enter")
+    expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Palyn"])
+    await expect(field(page)).toHaveValue("Pałyn")
+    await expect(line(page)).toHaveCount(0)
+    await expect(group(page).locator("[data-take-go]")).toHaveText("1")
+  })
+
+  test("Make Palyn a new song forgets the old name, then names the take Palyn", async ({
+    page,
+  }) => {
+    await openApp(page, { before: OLD })
+    await startRehearsal(page)
+    await field(page).fill("Palyn")
+    await line(page).getByRole("button", { name: "Make Palyn a new song" }).click()
+    await expect(field(page)).toHaveValue("Palyn")
+    await expect(group(page).locator("[data-take-go]")).toHaveText("1")
+    await expect(line(page)).toHaveCount(0)
+    const order = (await page.evaluate(() =>
+      (window as unknown as { __CALLS__: { name: string; args: unknown[] }[] }).__CALLS__
+        .filter((c) => c.name === "forget_song_name" || c.name === "set_next_take_name")
+        .map((c) => [c.name, ...c.args])
+    )) as unknown[][]
+    expect(order.slice(-2)).toEqual([
+      ["forget_song_name", "Palyn"],
+      ["set_next_take_name", "Palyn"],
+    ])
+    // Typed again later, it stays a song of its own.
+    await field(page).fill("Viasna")
+    await field(page).fill("Palyn")
+    await expect(group(page).locator("[data-take-go]")).not.toContainText("→")
+  })
+
+  test("the line under the songs moves neither the field nor Record", async ({ page }) => {
+    await openApp(page, { before: OLD })
+    await startRehearsal(page)
+    const record = page.getByRole("button", { name: /Record take 1/ })
+    const fieldAt = (await field(page).boundingBox())!
+    const recordAt = (await record.boundingBox())!
+    await field(page).fill("Palyn")
+    await expect(line(page)).toBeVisible()
+    expect((await field(page).boundingBox())!.y).toBeCloseTo(fieldAt.y, 0)
+    expect((await record.boundingBox())!.y).toBeCloseTo(recordAt.y, 0)
+  })
+
+  test("in Rename take, the old name stays until Rename, saying what it is", async ({ page }) => {
+    await openApp(page, { before: OLD })
+    await startRehearsal(page)
+    await recordTake(page)
+    await saveAs(page, "Viasna")
+    await page.hover("[data-take='1']")
+    await page.getByRole("button", { name: "Rename take Viasna 1" }).click()
+    const dialog = page.getByRole("dialog")
+    const take = dialog.getByRole("textbox", { name: "Take name" })
+    await take.fill("Palyn")
+    await dialog.getByText("Take name", { exact: true }).click()
+    await expect(take).toHaveValue("Palyn")
+    await expect(dialog.locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+    await expect(dialog.locator("[data-old-name]")).toHaveText(
+      "Palyn is Pałyn now. Make Palyn a new song"
+    )
+    await dialog.getByRole("button", { name: "Rename" }).click()
+    expect((await calls(page, "rename_take")).at(-1)?.args.slice(1)).toEqual([1, "Palyn"])
+  })
+})
