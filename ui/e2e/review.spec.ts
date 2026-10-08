@@ -1,4 +1,14 @@
-import { callCount, calls, expect, nameTake, openApp, recordTake, startRehearsal, test } from "./app.ts"
+import {
+  callCount,
+  calls,
+  dragRegion,
+  expect,
+  nameTake,
+  openApp,
+  recordTake,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The screen after a take (issue #12 step 8, A1–A5): the take's song big,
@@ -148,6 +158,23 @@ test("the pencil renames the take and the title, bars and line follow", async ({
   await expect(bars(page)).toHaveCount(0)
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")
+})
+
+test("a take renamed and then cropped keeps its new name, bars and line", async ({ page }) => {
+  await openApp(page, { before: TONIGHT })
+  await startRehearsal(page, 4)
+  await recordTake(page, 4)
+  await nameTake(page, "Dym")
+  await expect(title(page)).toHaveText("Dym 2")
+  await dragRegion(page, 0.25, 0.75)
+  await page.getByRole("button", { name: "Crop to the region" }).click()
+  await page.getByRole("button", { name: "Crop", exact: true }).click()
+  await expect(page.getByText(/^Take 4 recorded/)).toBeVisible()
+  await expect(line(page)).toHaveText(/^0:03 · /)
+  await expect(title(page)).toHaveText("Dym 2")
+  await expect(bars(page)).toHaveText(["1", "2"])
+  await page.getByRole("button", { name: /Save take/ }).click()
+  expect((await calls(page, "keep_take")).at(-1)?.args).toContain("Dym")
 })
 
 test("Space types in the dialog and Esc closes it without discarding", async ({ page }) => {

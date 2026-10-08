@@ -211,6 +211,26 @@ test("the arrows do nothing while a dialog is open", async ({ page }) => {
   await expect(field(page)).toHaveValue("Pałyn")
 })
 
+test("the arrows do nothing while Delete take asks", async ({ page }) => {
+  await openApp(page, { before: withSet(["Pałyn", "Viasna"]) })
+  await startRehearsal(page)
+  await recordTake(page, 1)
+  await page.getByRole("button", { name: /Save take/ }).click()
+  await page.hover("[data-take='1']")
+  await page.getByRole("button", { name: "Delete take Pałyn 1" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog).toBeVisible()
+  const sent = await callCount(page, "set_next_take_name")
+  await page.keyboard.press("ArrowDown")
+  await page.keyboard.press("ArrowUp")
+  await page.waitForTimeout(200)
+  await expect(dialog).toBeVisible()
+  expect(await callCount(page, "set_next_take_name")).toBe(sent)
+  await page.keyboard.press("Escape")
+  await expect(dialog).toHaveCount(0)
+  await expect(field(page)).toHaveValue("Pałyn")
+})
+
 test("a row picked by a key is scrolled into view", async ({ page }) => {
   await page.setViewportSize({ width: 1180, height: 560 })
   await openApp(page, { before: withSet(["Pałyn", "Viasna", "Ahoń", "Sonca"]) })

@@ -189,12 +189,20 @@ export function TakeNameField({
   useImperativeHandle(ref, () => ({ put }))
 
   const oldLine = old && offerNewSong && (
+    // On one line when it fits, else two, each cut with the whole on hover:
+    // floating over the set card, it covers no more than the set's name.
     <p
       data-old-name
-      className={cn("text-xs text-muted-foreground", songs === "pills" && "mt-2")}
+      className={cn(
+        "flex flex-wrap gap-x-1 text-xs text-muted-foreground",
+        songs === "pills" && "mt-2"
+      )}
     >
-      {old.name} is {old.song} now.{" "}
+      <span title={`${old.name} is ${old.song} now.`} className="max-w-full truncate">
+        {old.name} is {old.song} now.
+      </span>{" "}
       <button
+        title={`Make ${old.name} a new song`}
         type="button"
         onMouseDown={(e) => e.preventDefault()}
         onClick={async () => {
@@ -207,7 +215,7 @@ export function TakeNameField({
           setForgot({ name: old.name, from })
           put(text)
         }}
-        className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+        className="max-w-full truncate font-medium text-foreground underline underline-offset-2 hover:text-primary"
       >
         Make {old.name} a new song
       </button>

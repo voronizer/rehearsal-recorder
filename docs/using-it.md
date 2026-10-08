@@ -238,9 +238,9 @@ bottom left says what was recorded: the song, with the go it is, "Viasna 2",
 and under it how long the take ran against the last go at the song tonight,
 "2:31 · 10 s longer than go 1". With no go at it tonight it is measured
 against the go before tonight, with the day: "8 s longer than on 22 Sep".
-Left of the title is a bar for each of the song's goes tonight, as tall as
-it ran: this one in the colour of the text, the ★ goes green, the others
-grey. A take nobody named says "Take 7", grey, and how long it ran.
+Left of the title is a bar for each of the song's goes tonight, the last
+ten of them, as tall as it ran: this one in the colour of the text, the ★
+goes green, the others grey. A take nobody named says "Take 7", grey, and how long it ran.
 
 The name is filled in for you: after a take called "Pałyn", the next one is
 "Pałyn 2". Check it, then press **Save take** (Space) or **Discard**. A

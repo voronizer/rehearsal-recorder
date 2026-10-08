@@ -8,6 +8,7 @@ import { contentClass, overlayClass } from "@/components/ConfirmDialog"
 import { SetSongsEditor } from "@/components/SetEditor"
 import { api, type SongChoices, type SongSet } from "@/lib/api"
 import { asSetSongs } from "@/lib/setSongs"
+import { focusIsLeftover } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 
 // The set a rehearsal plays by, picked on the start screen beside Start
@@ -47,6 +48,11 @@ export function SetPicker({
           size="xl"
           data-set-picker
           title={name ?? "Play freely, or pick a set"}
+          // Focus the mouse left here (a set picked, the menu shut) is not
+          // aimed at it: Space starts the rehearsal, as with any button.
+          onKeyDown={(e) => {
+            if (e.key === " " && focusIsLeftover(e.currentTarget)) e.preventDefault()
+          }}
           className="max-w-[18rem] px-5 has-[>svg]:px-5"
         >
           <ListMusic />
@@ -162,12 +168,28 @@ export function NewSetDialog({
         <DialogPrimitive.Overlay className={overlayClass} />
         <DialogPrimitive.Content
           aria-describedby={undefined}
-          className={cn(contentClass, "flex max-h-[88vh] max-w-lg flex-col")}
+          // Hung from near the top rather than centred, so it does not move
+          // as the songs come in and as they are added: it grows down.
+          className={cn(
+            contentClass,
+            "top-[8vh] flex max-h-[84vh] max-w-lg translate-y-0 flex-col"
+          )}
         >
           <DialogPrimitive.Title className="text-base font-semibold">New set</DialogPrimitive.Title>
           <div className="-mx-6 mt-4 flex min-h-0 flex-col gap-5 overflow-y-auto px-6 pb-1">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="new-set-name">Name</Label>
+              {/* As in Settings › Sets: what is wrong with the name is said
+                  beside it, so the songs under it never move. */}
+              <div className="flex h-3.5 min-w-0 items-center gap-2">
+                <Label htmlFor="new-set-name" className="shrink-0">
+                  Name
+                </Label>
+                {error && (
+                  <p title={error} className="min-w-0 truncate text-sm text-destructive">
+                    · {error}
+                  </p>
+                )}
+              </div>
               <Input
                 id="new-set-name"
                 autoFocus
@@ -180,7 +202,6 @@ export function NewSetDialog({
                   setError(null)
                 }}
               />
-              {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
             <div className="flex flex-col gap-2">
               <span className="text-sm font-medium">Songs, in the order you play them</span>

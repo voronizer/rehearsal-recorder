@@ -159,6 +159,19 @@ test.describe("on the rehearsal screen", () => {
     await expect(setRows(page).filter({ hasText: "next" })).toHaveText([/Viasna/])
   })
 
+  test("a set song nobody has played yet, picked and recorded, is played", async ({ page }) => {
+    await openApp(page, { before: withSets([{ ...GIG, songs: ["Pałyn", "Novaja"] }]) })
+    await startRehearsal(page)
+    await setRow(page, "Novaja").click()
+    await expect(field(page)).toHaveValue("Novaja")
+    await keep(page, 1)
+    await expect(field(page)).toHaveValue("Novaja")
+    await expect(setRow(page, "Novaja")).toContainText("1 go")
+    await expect(card(page)).toContainText("1 of 2 played")
+    await setRow(page, "Pałyn").click()
+    await expect(setRow(page, "Novaja").locator("[data-played-check]")).toHaveCount(1)
+  })
+
   test("a set with no songs says so and nothing else", async ({ page }) => {
     await openApp(page, { before: withSets([{ ...GIG, songs: [] }]) })
     await startRehearsal(page)
@@ -290,6 +303,25 @@ test.describe("on the rehearsal screen", () => {
     await expect(list(page)).toContainText(
       "No song has “Novaja” in it. The take makes it a new one."
     )
+  })
+
+  test("a long old name typed is said in two lines at most, over the set's name only", async ({
+    page,
+  }) => {
+    const old = "Some very long old name of a song that was renamed"
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openApp(page, {
+      before: withSets([GIG], 1, `window.__OLD_NAMES__ = [[${JSON.stringify(old)}, "Pałyn"]];`),
+    })
+    await startRehearsal(page)
+    await field(page).click()
+    await field(page).fill(old)
+    const said = page.locator("[data-old-name]")
+    await expect(said.getByRole("button", { name: `Make ${old} a new song` })).toBeVisible()
+    // The box it floats in, over the set card.
+    const bottom = await said.evaluate((el) => el.parentElement!.getBoundingClientRect().bottom)
+    const firstRow = (await setRows(page).first().boundingBox())!
+    expect(bottom).toBeLessThanOrEqual(firstRow.y)
   })
 
   test("the list keeps its height while the field is typed in", async ({ page }) => {
@@ -460,6 +492,43 @@ test.describe("on the start screen", () => {
     await expect(picker(page)).toHaveText(/Long/)
   })
 
+  test("New set stays where it opened as its songs come in and are added", async ({ page }) => {
+    await openApp(page, {
+      before:
+        "window.__HOLD__ = {song_choices: new Promise((r) => { window.__RELEASE__ = r })};",
+    })
+    await picker(page).click()
+    await menu(page).getByRole("menuitem", { name: "New set…" }).click()
+    const dialog = page.getByRole("dialog", { name: "New set" })
+    const name = dialog.getByLabel("Name")
+    await expect(name).toBeVisible()
+    await page.waitForTimeout(300)
+    const at = (await name.boundingBox())!
+    await page.evaluate(() => (window as unknown as { __RELEASE__: () => void }).__RELEASE__())
+    const add = dialog.locator("[data-set-add]")
+    await expect(add.getByRole("button", { name: "Viasna" })).toBeVisible()
+    await page.waitForTimeout(300)
+    expect((await name.boundingBox())!).toEqual(at)
+    await add.getByRole("button", { name: "Viasna" }).click()
+    await add.getByRole("button", { name: "Dym" }).click()
+    await page.waitForTimeout(300)
+    expect((await name.boundingBox())!).toEqual(at)
+  })
+
+  test("in New set a refused name leaves the songs where they were", async ({ page }) => {
+    await openApp(page, { before: onlySets([GIG, SHORT_SET]) })
+    await picker(page).click()
+    await menu(page).getByRole("menuitem", { name: "New set…" }).click()
+    const dialog = page.getByRole("dialog", { name: "New set" })
+    await dialog.getByLabel("Name").fill("short")
+    await dialog.locator("[data-set-add]").getByRole("button", { name: "Dym" }).click()
+    const songs = dialog.getByText("Songs, in the order you play them")
+    const at = (await songs.boundingBox())!
+    await dialog.getByRole("button", { name: "Create set" }).click()
+    await expect(dialog).toContainText("There is already a set called Short")
+    expect((await songs.boundingBox())!).toEqual(at)
+  })
+
   test("when the bridge fails, Create set says so and can be pressed again", async ({
     page,
     pageErrors,
@@ -500,6 +569,36 @@ test.describe("on the start screen", () => {
     await expect.poll(() => pageErrors.some((e) => /save_next_set failed/.test(e))).toBe(true)
     await page.waitForTimeout(200)
     expectedError(pageErrors, /save_next_set failed/)
+  })
+
+  test("after a set is picked with the mouse, Space starts the rehearsal", async ({ page }) => {
+    await openApp(page, { before: onlySets([GIG, SHORT_SET]) })
+    await picker(page).click()
+    await menu(page).getByRole("menuitemradio", { name: /Short/ }).click()
+    await expect(menu(page)).toHaveCount(0)
+    await page.keyboard.press("Space")
+    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    expect((await calls(page, "start_rehearsal")).at(-1)?.args[5]).toBe(2)
+  })
+
+  test("after the menu is opened and shut with the mouse, Space starts the rehearsal", async ({
+    page,
+  }) => {
+    await openApp(page, { before: onlySets([GIG, SHORT_SET]) })
+    await picker(page).click()
+    await expect(menu(page)).toBeVisible()
+    await picker(page).click({ force: true })
+    await expect(menu(page)).toHaveCount(0)
+    await page.keyboard.press("Space")
+    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+  })
+
+  test("Space on the set button reached with the keyboard opens the menu", async ({ page }) => {
+    await openApp(page, { before: onlySets([GIG, SHORT_SET]) })
+    await picker(page).focus()
+    await page.keyboard.press("Space")
+    await expect(menu(page)).toBeVisible()
+    expect(await callCount(page, "start_rehearsal")).toBe(0)
   })
 
   test("Start sends the chosen set", async ({ page }) => {
@@ -598,6 +697,16 @@ test.describe("in Settings", () => {
     await expect(item(page, "Gig at Hrodna, Sunday")).toBeVisible()
     await nameField(page).fill("Gig")
     await expect(detail(page)).not.toContainText("There is already")
+  })
+
+  test("a refused name leaves the songs where they were", async ({ page }) => {
+    await openSets(page)
+    const songs = detail(page).getByText("Songs, in the order you play them")
+    const at = (await songs.boundingBox())!
+    await nameField(page).fill("new songs")
+    await page.keyboard.press("Enter")
+    await expect(detail(page)).toContainText("There is already a set called New songs")
+    expect((await songs.boundingBox())!).toEqual(at)
   })
 
   test("songs added, dragged and removed are saved at once", async ({ page }) => {

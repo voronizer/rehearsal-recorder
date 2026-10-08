@@ -200,7 +200,18 @@ function SetDetail({
       className="flex min-w-0 flex-col gap-5 rounded-xl border bg-card p-5"
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="set-name">Name</Label>
+        {/* What is wrong with the name is said beside it, a row no taller
+            than the label's, so the songs under it never move. */}
+        <div className="flex h-3.5 min-w-0 items-center gap-2">
+          <Label htmlFor="set-name" className="shrink-0">
+            Name
+          </Label>
+          {error && (
+            <p title={error} className="min-w-0 truncate text-sm text-destructive">
+              · {error}
+            </p>
+          )}
+        </div>
         <Input
           id="set-name"
           value={name}
@@ -221,7 +232,6 @@ function SetDetail({
           onBlur={() => void save()}
           className="max-w-sm"
         />
-        {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium">Songs, in the order you play them</span>
