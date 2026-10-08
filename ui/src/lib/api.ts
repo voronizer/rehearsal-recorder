@@ -271,6 +271,9 @@ export type SongChoice = {
   go: number
   /** On a song this rehearsal played: the number of its latest take. */
   last_take?: number
+  /** Titles the song had, or songs merged into it: typed, they are this
+   *  song too (Library._resolve). */
+  also?: string[]
 }
 
 /** The songs a take can be named after (api.song_choices): what its own
@@ -325,6 +328,8 @@ export type SongSummary = {
   first_played: string
   last_played: string
   starred: number
+  /** Its old names: titles it had, and songs merged into it. */
+  also: string[]
 }
 
 /** The takes nobody named, as the last row of the Songs view. */
@@ -351,9 +356,30 @@ export type SongDetail = {
   error?: string
   id?: number | null
   title?: string | null
+  /** Its old names, which typed are this song too. */
+  also?: string[]
   plays?: SongPlays | null
   goes?: SongGo[]
 }
+
+/** A song renamed (api.rename_song). Refused because the title is another
+ *  song's, title or old name, `into` is that song: merging into it is what
+ *  to offer. */
+export type RenameSongAnswer = Ok<{
+  title?: string
+  goes?: number
+  into?: { id: number; title: string } | null
+}>
+
+/** A song merged into another, or asked about first (api.merge_songs): how
+ *  many goes from how many rehearsals, and the goes they become. */
+export type MergeAnswer = Ok<{
+  into?: string
+  goes?: number
+  rehearsals?: number
+  first?: number | null
+  last?: number | null
+}>
 
 /**
  * What the setup screen says about the rehearsals before this one
@@ -723,6 +749,14 @@ type PyApi = {
    *  the take named, which does not count as a go. With no folder, the
    *  rehearsal in progress. */
   song_choices(folder?: string | null, takeNumber?: number | null): Promise<SongChoices>
+  /** A song's new title; its takes' folders and cloud copies follow in the
+   *  background. */
+  rename_song(songId: number, title: string): Promise<RenameSongAnswer>
+  /** One song's goes become another's, numbered after its own; `dryRun`
+   *  only counts them, for the question. */
+  merge_songs(fromId: number, intoId: number, dryRun?: boolean): Promise<MergeAnswer>
+  /** An old name forgotten: typed again, it is a new song. */
+  forget_song_name(name: string): Promise<Ok>
   /** Takes a rehearsal whose folder is gone out of history. Nothing on disk
    *  is touched — there is nothing left to touch. */
   forget_rehearsal(folder: string): Promise<Ok>

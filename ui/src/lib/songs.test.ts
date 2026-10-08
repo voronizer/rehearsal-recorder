@@ -32,6 +32,7 @@ function song(id: number, title: string, extra: Partial<SongSummary> = {}): Song
     first_played: "2026-09-01T19:00:00",
     last_played: "2026-09-01T19:00:00",
     starred: 0,
+    also: [],
     ...extra,
   }
 }
