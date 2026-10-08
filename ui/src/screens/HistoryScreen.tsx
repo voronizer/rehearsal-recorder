@@ -15,6 +15,7 @@ import { MarksPage } from "@/components/MarksPage"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/ConfirmDialog"
+import { RenameSongDialog } from "@/components/RenameSongDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
@@ -32,6 +33,7 @@ import {
   type RehearsalSummary,
   type SongDetail,
   type SongIndex,
+  type SongSummary,
   type Take,
 } from "@/lib/api"
 import {
@@ -50,20 +52,32 @@ import {
   rehearsalCloudToo,
   takeCloudToo,
 } from "@/lib/deletion"
-import { useActivity, useCloudSettled, useRunning, watching } from "@/lib/activity"
+import {
+  useActivity,
+  useCloudSettled,
+  useNamesSettled,
+  useRunning,
+  watching,
+} from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
+import { forgetSongName } from "@/lib/songNames"
 import { loadLabels, useLabels } from "@/lib/labels"
 import { markKey, playFrom } from "@/lib/marks"
 import {
   byPlace,
   firstOpen,
   inSongOrder,
+  mergeQuestion,
   placed,
   rungsOf,
   songRefFor,
+  type MergeCounts,
   type PlacedTake,
   type SongRef,
 } from "@/lib/songs"
+
+/** A song as renaming and merging name it: which one, and its title. */
+type SongName = { id: number; title: string }
 
 /** "9 takes, 1.2 GB" — what deleting a rehearsal takes away and gives back. */
 function takesAndSize(r: RehearsalSummary | null): string {
@@ -217,6 +231,17 @@ export function HistoryScreen({
     setSongsRead((n) => n + 1)
     return index
   }
+
+  // A song being renamed, from the pencil on its page, and a merge asked
+  // about: the two songs and what the dry run counted.
+  const [songToRename, setSongToRename] = useState<SongSummary | null>(null)
+  const [mergeAsked, setMergeAsked] = useState<{
+    from: SongName
+    into: SongName
+    counts: MergeCounts
+  } | null>(null)
+  const mergeSays =
+    mergeAsked && mergeQuestion(mergeAsked.from.title, mergeAsked.into.title, mergeAsked.counts)
 
   // The Marks view: the labels down the left, the one chosen (kept across
   // the switch, as the song chosen is), and its marks on the right, grouped
@@ -598,6 +623,15 @@ export function HistoryScreen({
     if (view === "songs" && pageShown?.goes?.some((g) => g.folder === e.folder)) void loadSongs()
   })
 
+  // A song renamed or merged has its takes' folders renamed after it, in the
+  // background: what was read before still has the old ones.
+  useNamesSettled(() => {
+    if (opened) void reopen(opened.folder)
+    if (goRehearsal && goRehearsal.folder !== opened?.folder) void reopen(goRehearsal.folder)
+    if (songsShown.current) void loadSongs()
+    if (marksShown.current) loadMarks()
+  })
+
   // A take playing in the overview has the keys as much as an open one.
   const inHand = selected !== null || cued !== null
   useSpacebar(player.toggle, inHand)
@@ -649,6 +683,83 @@ export function HistoryScreen({
     // screen, but playback and the A–B region do not survive this.
     if (res.take) reselect(placed(take.folder, res.take))
     await changed(take.folder)
+  }
+
+  /**
+   * What plays stops, and Python lets go of its files, before a song's goes
+   * are renamed (spec R7): the names pass leaves a take open in the player
+   * alone, so one left playing would keep its old folder until the next
+   * start. close() alone lets go only once React has drawn without it.
+   */
+  const letGoForNames = async () => {
+    close()
+    await api().player_close()
+  }
+
+  /** After a song was renamed or merged: its goes have other names in every
+   *  view. The songs first, for its page; the rest as they come. */
+  const songsChanged = async () => {
+    const index = await loadSongs()
+    void api().list_rehearsals().then(setRehearsals)
+    if (currentRef.current) void reopen(currentRef.current)
+    if (marksShown.current) loadMarks()
+    return index
+  }
+
+  const renameSong = async (from: SongSummary, title: string) => {
+    dismiss(SAID)
+    await letGoForNames()
+    const res = await api().rename_song(from.id, title)
+    if (!res.ok) {
+      // Another song's title or old name, one with no goes left among them:
+      // merging into it is what renaming to it means.
+      if (res.into) await askMerge({ id: from.id, title: from.title }, res.into)
+      else notify({ key: SAID, kind: "error", text: res.error ?? "Could not rename the song" })
+      return
+    }
+    await songsChanged()
+  }
+
+  /** The merge question, with what the dry run counted. */
+  const askMerge = async (from: SongName, into: SongName) => {
+    dismiss(SAID)
+    const res = await api().merge_songs(from.id, into.id, true)
+    if (!res.ok) {
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not merge the songs" })
+      return
+    }
+    setMergeAsked({
+      from,
+      into,
+      counts: {
+        goes: res.goes ?? 0,
+        rehearsals: res.rehearsals ?? 0,
+        first: res.first ?? null,
+        last: res.last ?? null,
+      },
+    })
+  }
+
+  const mergeSongs = async (from: SongName, into: SongName) => {
+    dismiss(SAID)
+    await letGoForNames()
+    const res = await api().merge_songs(from.id, into.id)
+    if (!res.ok) {
+      notify({ key: SAID, kind: "error", text: res.error ?? "Could not merge the songs" })
+      return
+    }
+    await songsChanged()
+    setSong(into.id)
+  }
+
+  /** An old name forgotten from a song's page: typed again, a new song. */
+  const forgetName = async (name: string) => {
+    dismiss(SAID)
+    if (!(await forgetSongName(name))) {
+      notify({ key: SAID, kind: "error", text: `Could not forget ${name}` })
+      return
+    }
+    await loadSongs()
   }
 
   // Python let go of the files before rewriting them, so the take has to be
@@ -989,6 +1100,12 @@ export function HistoryScreen({
                   onShare={setTakeToShare}
                   onDelete={setTakeToDelete}
                   onOpenRehearsal={openRehearsal}
+                  onRenameSong={() =>
+                    setSongToRename(
+                      songIndex?.songs.find((s) => s.id === pageShown.id) ?? null
+                    )
+                  }
+                  onForgetName={(name) => void forgetName(name)}
                 />
               )}
             </section>
@@ -1161,6 +1278,31 @@ export function HistoryScreen({
       )}
 
       {takeDialogs}
+
+      <RenameSongDialog
+        song={songToRename}
+        songs={songIndex?.songs ?? []}
+        onOpenChange={(open) => !open && setSongToRename(null)}
+        onRename={(title) => {
+          if (songToRename) void renameSong(songToRename, title)
+        }}
+        onMerge={(into) => {
+          if (songToRename) void askMerge({ id: songToRename.id, title: songToRename.title }, into)
+        }}
+      />
+
+      <ConfirmDialog
+        open={mergeAsked !== null}
+        onOpenChange={(open) => !open && setMergeAsked(null)}
+        title={mergeSays?.title ?? ""}
+        description={mergeSays?.says}
+        confirmLabel="Merge"
+        destructive={false}
+        onConfirm={() => {
+          if (mergeAsked) void mergeSongs(mergeAsked.from, mergeAsked.into)
+          setMergeAsked(null)
+        }}
+      />
 
       <ConfirmDialog
         open={rehearsalToDelete !== null}

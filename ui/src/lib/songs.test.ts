@@ -6,6 +6,7 @@ import {
   fromLastTime,
   hereFor,
   inSongOrder,
+  mergeQuestion,
   pageLine,
   placed,
   rungsOf,
@@ -189,5 +190,31 @@ describe("the lines under a song", () => {
   it("counts takes, not goes, for Not named", () => {
     const goes = [go("/b", 4, "2026-09-22T19:00:00"), go("/a", 2, "2026-09-10T19:00:00")]
     expect(pageLine(goes, true, NOW)).toBe("2 takes in 2 rehearsals · last Tue 22 Sep")
+  })
+})
+
+describe("mergeQuestion", () => {
+  it("names both songs, the goes, the rehearsals and the goes they become", () => {
+    expect(
+      mergeQuestion("Palyn", "Pałyn", { goes: 2, rehearsals: 1, first: 8, last: 9 })
+    ).toEqual({
+      title: "Merge Palyn into Pałyn?",
+      says:
+        "2 goes in 1 rehearsal become Pałyn 8–9, and their folders and cloud copies are renamed. To split them again, rename the takes one by one.",
+    })
+  })
+
+  it("says one go as one", () => {
+    expect(
+      mergeQuestion("Palyn", "Pałyn", { goes: 1, rehearsals: 1, first: 8, last: 8 }).says
+    ).toBe(
+      "1 go in 1 rehearsal becomes Pałyn 8, and its folder and cloud copies are renamed. To split it off again, rename the take."
+    )
+  })
+
+  it("counts rehearsals in the plural", () => {
+    expect(
+      mergeQuestion("Polin", "Polyn", { goes: 12, rehearsals: 5, first: 11, last: 22 }).says
+    ).toMatch(/^12 goes in 5 rehearsals become Polyn 11–22, /)
   })
 })

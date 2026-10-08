@@ -112,8 +112,9 @@ export function TakeNameField({
     : known === null && draft === null && knownGo !== undefined
       ? knownGo
       : goFor(shown, known)
-  // The song an old name in the field is now.
-  const via = songFor(shown, known)
+  // The song an old name in the field is now. A title is taken whole: in
+  // Rename song, "Palyn 5" is a title of its own, not Palyn.
+  const via = goes ? songFor(shown, known) : songNamed(shown, known)
   const old = via?.old != null ? { name: via.old, song: via.choice.song } : null
   const named = (text: string) => text.trim() || fallback
   const edit = (text: string | null) => {
