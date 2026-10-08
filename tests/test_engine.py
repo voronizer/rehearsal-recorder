@@ -6589,6 +6589,140 @@ def main():
     ok("the number of queries does not grow with the marks",
        len(s60.list_marks(1)["marks"]) == 22 and queries60(1) == few60)
 
+    print("\n[61] Renaming and merging songs")
+    from rehearsal_recorder.activity import Journal as Journal61
+    from rehearsal_recorder.names_pass import NamesPass as NamesPass61
+
+    # The loop: a pass over the takes given, under its own title.
+    journal61 = Journal61()
+    fixed61 = []
+
+    def fix61(folder, number):
+        fixed61.append(number)
+        return {"renamed": True, "error": None}
+
+    queued61 = NamesPass61(find=lambda: [("/r", 9, "Other 1")], fix=fix61,
+                           busy=lambda: False, journal=journal61)
+    queued61.request_takes([("/r", 1, "Polin 1"), ("/r", 2, "Polin 2")],
+                           "Renaming Polyn to Polin")
+    entry61 = None
+    ok("a pass over the takes given renames only those, under its own title",
+       queued61.run_queued() == 2 and fixed61 == [1, 2])
+    entry61 = journal61.snapshot()[0]
+    ok("and says so in its own entry",
+       entry61["kind"] == "names" and entry61["title"] == "Renaming Polyn to Polin"
+       and entry61["state"] == "done" and entry61["detail"] == "2 takes renamed")
+    ok("once", queued61.run_queued() == 0 and fixed61 == [1, 2])
+
+    # The real thing: folders and a cloud copy following a rename and a merge.
+    tmp61 = Path(tempfile.mkdtemp())
+    rec61, cloud61 = tmp61 / "Rec", tmp61 / "Drive"
+    cloud61.mkdir(parents=True)
+    (tmp61 / "config.json").write_text(json.dumps(
+        {"recordings_dir": str(rec61), "cloud_dir": str(cloud61)}), encoding="utf-8")
+    _, p61 = fresh_api(tmp61)
+
+    def rehearsal61(name, created_at, names):
+        folder = rec61 / f"{name} - {created_at[:10]} 19-00"
+        takes = []
+        for i, n in enumerate(names, start=1):
+            take_dir = folder / f"{i:02d} - {n}"
+            write_wav(take_dir / "Gtr.wav", 100, seconds=0.2)
+            takes.append({"take_number": i, "name": n, "duration_sec": 0.2, "markers": [],
+                          "tracks": [{"name": "Gtr", "file": str(take_dir / "Gtr.wav")}]})
+        (folder / "session.json").write_text(json.dumps({
+            "name": name, "created_at": created_at, "samplerate": SR,
+            "tracks": [{"name": "Gtr", "channel": 1}], "takes": takes}), encoding="utf-8")
+        import_all(p61._lib, p61._cloud_dir)
+        return folder
+
+    def dirs61(folder):
+        return sorted(d.name for d in folder.iterdir() if d.is_dir())
+
+    def entry_of61(title):
+        return next((e for e in p61.activity()["entries"] if e["title"] == title), None)
+
+    def song61(title):
+        return next((s for s in p61.list_songs()["songs"] if s["title"] == title), None)
+
+    # Polyn 1-3; Pałyn 1-3, then Palyn 1-2 a week later.
+    one61 = rehearsal61("One", "2026-09-01T19:00:00", ["Polyn", "Polyn", "Pałyn", "Pałyn"])
+    two61 = rehearsal61("Two", "2026-09-08T19:00:00", ["Polyn", "Pałyn", "Viasna"])
+    three61 = rehearsal61("Three", "2026-09-15T19:00:00", ["Palyn", "Palyn"])
+    p61._names_pass.run()
+    mix61 = cloud61 / two61.name / "01 - Polyn 3.wav"
+    mix61.parent.mkdir(parents=True)
+    mix61.write_bytes(b"RIFF")
+    p61._lib.set_cloud_copy(two61, 1, {"mix": str(mix61), "mix_format": "wav", "source": {}},
+                            cloud61)
+
+    polyn61 = song61("Polyn")["id"]
+    renamed61 = p61.rename_song(polyn61, "Polin")
+    ok("a song renamed answers its title and how many goes it has",
+       renamed61 == {"ok": True, "title": "Polin", "goes": 3})
+    p61.player_open([{"name": "Gtr", "file": str(one61 / "02 - Polyn 2" / "Gtr.wav")}])
+    p61._names_pass.run_queued()
+    ok("its folders follow in the background, but not one open in the player",
+       dirs61(one61) == ["01 - Polin 1", "02 - Polyn 2", "03 - Pałyn 1", "04 - Pałyn 2"]
+       and dirs61(two61)[0] == "01 - Polin 3" and p61._open_tracks is not None)
+    ok("and so does its copy in the cloud folder",
+       sorted(p.name for p in (cloud61 / two61.name).iterdir()) == ["01 - Polin 3.wav"])
+    rename_entry61 = entry_of61("Renaming Polyn to Polin")
+    ok("the background work says what it is doing",
+       rename_entry61 is not None and rename_entry61["kind"] == "names"
+       and rename_entry61["state"] == "done")
+    p61.player_close()
+    ok("the take left is renamed by the next pass once the player lets go",
+       p61._names_pass.run() == 1 and "02 - Polin 2" in dirs61(one61))
+
+    pałyn61 = song61("Pałyn")["id"]
+    ok("a title that is another song's is refused, naming that song",
+       p61.rename_song(polyn61, "pałyn") == {
+           "ok": False, "error": "There is already a song called Pałyn",
+           "into": {"id": pałyn61, "title": "Pałyn"}})
+    ok("other refusals name no song",
+       p61.rename_song(polyn61, "Take 2") == {
+           "ok": False, "error": "Take 2 is what a take with no song is called", "into": None})
+
+    palyn61 = song61("Palyn")["id"]
+    p61._lib.set_starred(three61, 2, True)
+    p61._lib.set_starred(one61, 3, True)
+    asked61 = p61.merge_songs(palyn61, pałyn61, True)
+    ok("a merge asked about answers the counts and moves nothing",
+       asked61 == {"ok": True, "into": "Pałyn", "goes": 2, "rehearsals": 1,
+                   "first": 4, "last": 5}
+       and dirs61(three61) == ["01 - Palyn 1", "02 - Palyn 2"])
+    merged61 = p61.merge_songs(palyn61, pałyn61)
+    p61._names_pass.run_queued()
+    ok("merged, its goes are the other's next, folders and all",
+       merged61 == asked61 and dirs61(three61) == ["01 - Pałyn 4", "02 - Pałyn 5"])
+    merge_entry61 = entry_of61("Merging Palyn into Pałyn")
+    ok("the background work says that too",
+       merge_entry61 is not None and merge_entry61["state"] == "done")
+    plays61 = p61.get_song(pałyn61)["plays"]
+    ok("the merged song plays its newest starred go, whichever song it was",
+       plays61["folder"] == str(three61) and plays61["take"]["take_number"] == 2)
+    ok("a song merged into itself is refused",
+       p61.merge_songs(pałyn61, pałyn61) == {
+           "ok": False, "error": "A song cannot be merged into itself"})
+
+    ok("the songs carry their old names, for the name fields",
+       next(c for c in p61.song_choices(str(two61))["here"] if c["song"] == "Pałyn")["also"]
+       == ["Palyn"])
+    ok("and for History", song61("Pałyn")["also"] == ["Palyn"]
+       and p61.get_song(pałyn61)["also"] == ["Palyn"])
+    p61.start_rehearsal("Four", 0, SR, [{"name": "Gtr", "channel": 1}])
+    picked61 = p61.set_next_take_name("Palyn")
+    ok("the old name typed for the next take is the song it went to",
+       picked61["next_take_name"] == "Pałyn" and picked61["next_take_go"] == 6)
+    ok("forgetting it", p61.forget_song_name("palyn") == {"ok": True})
+    again61 = p61.set_next_take_name("Palyn")
+    ok("typed again, it is a new song",
+       again61["next_take_name"] == "Palyn" and again61["next_take_go"] == 1)
+    ok("a name no song was called is not forgotten",
+       p61.forget_song_name("Palyn") == {"ok": False, "error": "No song was called Palyn"})
+    p61.finish_rehearsal()
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
