@@ -79,13 +79,13 @@ async function openMarks(page: Page, before = "") {
 
 const row = (page: Page, name: string) => page.locator(`[data-label='${name}']`)
 
-test("Marks sits between Folders and Appearance, with every label and its marks", async ({
+test("Marks sits between Folders and Sets, with every label and its marks", async ({
   page,
 }) => {
   const list = await openMarks(page)
   const tabs = await page.locator("nav button").allInnerTexts()
   expect(tabs.indexOf("Marks")).toBe(tabs.indexOf("Folders") + 1)
-  expect(tabs.indexOf("Appearance")).toBe(tabs.indexOf("Marks") + 1)
+  expect(tabs.indexOf("Sets")).toBe(tabs.indexOf("Marks") + 1)
   await expect(page.getByText("What a moment in a take can be marked with")).toBeVisible()
   expect(await list.locator("[data-label]").evaluateAll((els) => els.map((e) => e.getAttribute("data-label")))).toEqual([
     "Note",

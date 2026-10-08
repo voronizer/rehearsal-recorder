@@ -455,3 +455,165 @@ test.describe("on the start screen", () => {
     expect((await calls(page, "start_rehearsal")).at(-1)?.args[5] ?? null).toBeNull()
   })
 })
+
+// ---------- Settings › Sets ----------
+
+test.describe("in Settings", () => {
+  const OTHER: SetSeed = { id: 2, name: "New songs", songs: ["Kupalle", "Dym"] }
+
+  async function openSets(page: Page, before = withSets([GIG, OTHER], null)) {
+    await openApp(page, { before })
+    await page.getByRole("button", { name: "Settings" }).click()
+    await page.getByRole("button", { name: "Sets", exact: true }).first().click()
+  }
+
+  const items = (page: Page) => page.getByRole("list", { name: "Sets" }).locator("[data-set-item]")
+  const item = (page: Page, name: string) => page.locator(`[data-set-item="${name}"]`)
+  const detail = (page: Page) => page.locator("[data-set-detail]")
+  const nameField = (page: Page) => detail(page).getByLabel("Name")
+  const songsNow = (page: Page) =>
+    detail(page)
+      .locator("[data-set-editor-song]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-set-editor-song")))
+
+  test("Settings has a Sets tab after Marks", async ({ page }) => {
+    await openSets(page)
+    const tabs = await page.locator("nav button").allInnerTexts()
+    expect(tabs.indexOf("Sets")).toBe(tabs.indexOf("Marks") + 1)
+    await expect(page.getByText("Songs in the order a rehearsal goes through them")).toBeVisible()
+    await expect(items(page)).toHaveCount(2)
+    await expect(item(page, "Gig on the 25th")).toContainText("4 songs")
+    await expect(item(page, "New songs")).toContainText("2 songs")
+    // The first is open beside them, lit in the list.
+    await expect(item(page, "Gig on the 25th")).toHaveAttribute("aria-current", "true")
+    await expect(nameField(page)).toHaveValue("Gig on the 25th")
+    expect(await songsNow(page)).toEqual(["Pałyn", "Viasna", "Ahoń", "Sonca"])
+    await item(page, "New songs").click()
+    await expect(nameField(page)).toHaveValue("New songs")
+    await expect(item(page, "New songs")).toHaveAttribute("aria-current", "true")
+  })
+
+  test("New set adds New set and New set 2 and chooses it", async ({ page }) => {
+    await openSets(page)
+    const add = page.getByRole("button", { name: "New set", exact: true })
+    await add.click()
+    await expect(item(page, "New set")).toHaveAttribute("aria-current", "true")
+    await expect(nameField(page)).toHaveValue("New set")
+    await expect(item(page, "New set")).toContainText("0 songs")
+    await add.click()
+    await expect(item(page, "New set 2")).toHaveAttribute("aria-current", "true")
+    expect((await calls(page, "add_set")).map((c) => c.args)).toEqual([
+      ["New set", []],
+      ["New set 2", []],
+    ])
+    // Not what Start plays by: that is chosen beside it.
+    expect(await callCount(page, "save_next_set")).toBe(0)
+  })
+
+  test("a name is saved on Enter and on leaving, a taken name is refused with the reason", async ({
+    page,
+  }) => {
+    await openSets(page)
+    await nameField(page).fill("Gig at Hrodna")
+    await page.keyboard.press("Enter")
+    await expect(item(page, "Gig at Hrodna")).toBeVisible()
+    await expect(nameField(page)).not.toBeFocused()
+    // Saved once: leaving the field after Enter does not send it again.
+    await page.waitForTimeout(200)
+    expect((await calls(page, "update_set")).map((c) => c.args)).toEqual([
+      [1, "Gig at Hrodna", null],
+    ])
+
+    await nameField(page).fill("Gig at Hrodna, Sunday")
+    await page.getByText("Songs in the order a rehearsal goes through them").click()
+    await expect(item(page, "Gig at Hrodna, Sunday")).toBeVisible()
+
+    await nameField(page).fill("new songs")
+    await page.keyboard.press("Enter")
+    await expect(detail(page)).toContainText("There is already a set called New songs")
+    await expect(nameField(page)).toHaveAttribute("aria-invalid", "true")
+    await expect(item(page, "Gig at Hrodna, Sunday")).toBeVisible()
+    await nameField(page).fill("Gig")
+    await expect(detail(page)).not.toContainText("There is already")
+  })
+
+  test("songs added, dragged and removed are saved at once", async ({ page }) => {
+    await openSets(page)
+    await detail(page).locator("[data-set-add]").getByRole("button", { name: "Dym" }).click()
+    expect(await songsNow(page)).toEqual(["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym"])
+    expect((await calls(page, "update_set")).at(-1)?.args).toEqual([
+      1,
+      null,
+      ["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym"],
+    ])
+    await expect(item(page, "Gig on the 25th")).toContainText("5 songs")
+
+    const handle = detail(page).getByRole("button", { name: "Move Dym" })
+    const top = (await detail(page).locator("[data-set-editor-song='Pałyn']").boundingBox())!
+    await handle.hover()
+    await page.mouse.down()
+    await page.mouse.move(top.x + 20, top.y + 2, { steps: 12 })
+    await page.mouse.up()
+    await expect.poll(() => songsNow(page)).toEqual(["Dym", "Pałyn", "Viasna", "Ahoń", "Sonca"])
+
+    await detail(page).getByRole("button", { name: "Take Viasna out" }).click()
+    expect(await songsNow(page)).toEqual(["Dym", "Pałyn", "Ahoń", "Sonca"])
+
+    await page.reload()
+    await page.getByRole("button", { name: "Settings" }).click()
+    await page.getByRole("button", { name: "Sets", exact: true }).first().click()
+    await expect.poll(() => songsNow(page)).toEqual(["Dym", "Pałyn", "Ahoń", "Sonca"])
+  })
+
+  test("a song not played yet says so", async ({ page }) => {
+    await openSets(page)
+    await item(page, "New songs").click()
+    await expect(detail(page).locator("[data-set-editor-song='Kupalle']")).toContainText(
+      "not played yet"
+    )
+    await expect(detail(page).locator("[data-set-editor-song='Dym']")).not.toContainText(
+      "not played yet"
+    )
+  })
+
+  test("Delete set asks first and the set goes", async ({ page }) => {
+    await openSets(page)
+    await detail(page).getByRole("button", { name: "Delete set" }).click()
+    const ask = page.getByRole("dialog", { name: "Delete Gig on the 25th?" })
+    await expect(ask).toContainText(
+      "Rehearsals played by it keep their takes and their names."
+    )
+    await ask.getByRole("button", { name: "Cancel" }).click()
+    await expect(items(page)).toHaveCount(2)
+    expect(await callCount(page, "delete_set")).toBe(0)
+
+    await detail(page).getByRole("button", { name: "Delete set" }).click()
+    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click()
+    await expect(items(page)).toHaveCount(1)
+    expect((await calls(page, "delete_set")).at(-1)?.args).toEqual([1])
+    await expect(nameField(page)).toHaveValue("New songs")
+  })
+
+  test("no sets says how sets work", async ({ page }) => {
+    await openSets(page, withSets([], null))
+    await expect(page.getByText("No sets yet.")).toContainText(
+      "A set is the songs a rehearsal goes through, in order. Pick one beside Start rehearsal, or play freely as before."
+    )
+    await expect(detail(page)).toHaveCount(0)
+    await page.getByRole("button", { name: "New set", exact: true }).click()
+    await expect(page.getByText("No sets yet.")).toHaveCount(0)
+    await expect(nameField(page)).toHaveValue("New set")
+  })
+
+  test("on a narrow window the chosen set is under the list", async ({ page }) => {
+    await page.setViewportSize({ width: 820, height: 700 })
+    await openSets(page)
+    const list = (await page.getByRole("list", { name: "Sets" }).boundingBox())!
+    const box = (await detail(page).boundingBox())!
+    expect(box.y).toBeGreaterThan(list.y + list.height)
+    await page.setViewportSize({ width: 1180, height: 700 })
+    const wide = (await detail(page).boundingBox())!
+    const listWide = (await page.getByRole("list", { name: "Sets" }).boundingBox())!
+    expect(wide.x).toBeGreaterThan(listWide.x + listWide.width)
+  })
+})
