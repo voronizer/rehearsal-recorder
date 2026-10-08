@@ -60,6 +60,24 @@ class Song(Base):
     last_go: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class SongName(Base):
+    """
+    A title a song had before it was renamed, or the title of a song merged
+    into it (docs/superpowers/specs/2026-10-02-rename-and-merge-songs-design.md,
+    D6-D8): typed again, it names a go at the song. Spelled as it was. Unique
+    case-blind across every song, and never a song's title too, which
+    library.py enforces as it does titles.
+    """
+
+    __tablename__ = "song_name"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    song_id: Mapped[int] = mapped_column(
+        ForeignKey("song.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String)
+
+
 class Track(Base):
     """One input as the rehearsal was set up: its name and which channel."""
 
