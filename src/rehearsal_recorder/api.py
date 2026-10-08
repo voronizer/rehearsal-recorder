@@ -986,7 +986,12 @@ class Api:
         chosen = self._config.get("next_set")
         if not isinstance(chosen, int) or self._library is None:
             return None
-        return chosen if any(st["id"] == chosen for st in self._lib.sets()) else None
+        # Settings asks this too, and opens whatever the library says: it is
+        # where another folder is chosen when this one cannot be read.
+        try:
+            return chosen if self._lib.set_of(chosen) is not None else None
+        except Exception:
+            return None
 
     def save_next_set(self, set_id):
         """The set Start rehearsal plays by, or None to play freely: kept

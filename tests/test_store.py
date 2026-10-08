@@ -31,6 +31,7 @@ _sd.query_hostapis = lambda: []
 _sd.OutputStream = _sd.InputStream = None
 sys.modules.setdefault("sounddevice", _sd)
 
+from alembic import command  # noqa: E402
 from alembic.autogenerate import compare_metadata  # noqa: E402
 from alembic.runtime.migration import MigrationContext  # noqa: E402
 from alembic.script import ScriptDirectory  # noqa: E402
@@ -1102,7 +1103,50 @@ def main():
     fresh14 = lib.add_set("Fresh", [])
     ok("an id is never given twice", fresh14[0]["id"] > long14)
     ok("positions close up", [s["name"] for s in fresh14] == ["Fresh"])
+
+    # Two songs of one set merged into each other are one song, in it once.
+    night14("Wednesday", "2026-09-03T19:00:00", ["Sonca", "Dym", "Opus"])
+    twins14 = lib.add_set("Twins", ["Sonca", "Vesna", "Dym"])
+    twin14 = next(s["id"] for s in twins14 if s["name"] == "Twins")
+    twin_copy14 = lib.set_of(twin14)
+    thu14 = night14("Thursday", "2026-09-04T19:00:00", [], set_copy=twin_copy14)
+    lib.merge_songs(lib.song_id("Sonca"), lib.song_id("Dym"))
+    ok("two songs of a set merged into one are in it once, where the first was",
+       songs14(lib.sets(), twin14) == [("Dym", False), ("Vesna", False)])
+    ok("and in a rehearsal's copy of it too",
+       [s["title"] for s in lib.rehearsal(thu14)["set"]["songs"]] == ["Dym", "Vesna"])
+    # A title with a go after it is the song, as typed in a name field.
+    opus14 = lib.add_set("Opus night", ["Opus 5", "Opus 9 live"])
+    opus_id14 = next(s["id"] for s in opus14 if s["name"] == "Opus night")
+    ok("a set's title with a go after it is the song, as a typed name is",
+       songs14(lib.sets(), opus_id14) == [("Opus", False), ("Opus 9 live", True)])
     lib.close()
+
+    print("\n[15] Migration 0006 keeps every take, down and up again")
+    rec15 = tmp / "Sets down"
+    rec15.mkdir()
+    lib = Library(rec15)
+    folder15 = rec15 / "Monday"
+    lib.create_rehearsal(folder15, "Monday", "2026-09-01T19:00:00", 48000, 24, [])
+    for n, title in enumerate(["Polyn", "Vesna"], start=1):
+        lib.add_take(folder15, {"take_number": n, "name": title, "tracks": []})
+    lib.close()
+
+    def counts15():
+        engine = db.make_engine(db.database_path(rec15))
+        with engine.connect() as c:
+            out = (c.execute(text("SELECT count(*) FROM rehearsal")).scalar(),
+                   c.execute(text("SELECT count(*) FROM take")).scalar())
+        engine.dispose()
+        return out
+
+    engine = db.make_engine(db.database_path(rec15))
+    with engine.begin() as c:
+        command.downgrade(db.alembic_config(c), "0005")
+    engine.dispose()
+    ok("going back to 0005 keeps every rehearsal and take", counts15() == (1, 2))
+    db.open_engine(rec15).dispose()
+    ok("and coming back to the newest keeps them too", counts15() == (1, 2))
 
     print()
     if problems:

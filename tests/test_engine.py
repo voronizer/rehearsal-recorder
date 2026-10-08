@@ -6712,6 +6712,22 @@ def main():
     ok("a picked set deleted reads as none", p62.get_settings()["next_set"] is None)
     p62.save_next_set(None)
     ok("no set is kept too", p62.get_settings()["next_set"] is None)
+    # Settings is where another folder is chosen when this one is gone: it
+    # must open whatever the library says.
+    p62.save_next_set(gig62)
+
+    def unreadable62(*_args, **_kwargs):
+        raise RuntimeError("the drive went away")
+
+    p62._lib.set_of = p62._lib.sets = unreadable62
+    try:
+        answered62 = p62.get_settings()
+    except Exception:
+        answered62 = None
+    del p62._lib.set_of, p62._lib.sets
+    ok("settings still answer when the sets cannot be read, with no set picked",
+       answered62 is not None and answered62["next_set"] is None)
+    p62.save_next_set(None)
 
     p62.start_rehearsal("Played by the set", 0, SR, tracks62, set_id=gig62)
     st62 = p62.session_state()

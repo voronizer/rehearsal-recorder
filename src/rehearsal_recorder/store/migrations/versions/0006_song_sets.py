@@ -9,6 +9,10 @@ or on the start screen (docs/superpowers/specs/2026-10-08-song-sets-design.md,
 D1). A rehearsal started by one keeps a copy of it, as it was then (D7), so
 changing or deleting the set later changes nothing in History. Nothing was
 ever played by a set before this, so both start empty.
+
+The rehearsal's columns are added in place, as 0003 adds take's: batch mode
+rebuilds a table with DROP TABLE, and with foreign keys on that deletes
+every take of every rehearsal, through ON DELETE CASCADE.
 """
 from typing import Sequence, Union
 
@@ -31,13 +35,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sqlite_autoincrement=True,
     )
-    with op.batch_alter_table("rehearsal") as batch:
-        batch.add_column(sa.Column("set_name", sa.String(), nullable=True))
-        batch.add_column(sa.Column("set_songs", sa.JSON(), nullable=True))
+    op.execute("ALTER TABLE rehearsal ADD COLUMN set_name VARCHAR")
+    op.execute("ALTER TABLE rehearsal ADD COLUMN set_songs JSON")
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("rehearsal") as batch:
-        batch.drop_column("set_songs")
-        batch.drop_column("set_name")
+    op.execute("ALTER TABLE rehearsal DROP COLUMN set_songs")
+    op.execute("ALTER TABLE rehearsal DROP COLUMN set_name")
     op.drop_table("song_set")

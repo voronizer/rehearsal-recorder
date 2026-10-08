@@ -223,7 +223,7 @@ class Library:
             if titles is None:
                 titles = self._titles_of(object_session(rehearsal))
             played_by = {"name": rehearsal.set_name,
-                         "songs": [titles(t) for t in rehearsal.set_songs or []]}
+                         "songs": self._songs_of_set(titles, rehearsal.set_songs)}
         return {
             "set": played_by,
             "folder": str(folder),
@@ -647,10 +647,10 @@ class Library:
         goes_of for what the first go tonight is measured against, asked on
         every refresh of the rehearsal screen while the rehearsal in
         `folder` is on: only goes from rehearsals on disk other than that
-        one, and of those only the ones it can be picked from, so none
-        "missing". They are the last go of each of the three newest such
-        rehearsals, and the later ★ go of the newest such rehearsal with one.
-        None for an id no song has.
+        one, and of those only the ones it can be picked from (api._plays_of),
+        so none "missing": the last go of the newest such rehearsal, and the
+        later ★ go of the newest such rehearsal with one. None for an id no
+        song has.
         """
         live = Path(folder)
         with self._session() as db:
@@ -667,13 +667,13 @@ class Library:
             last, starred, there = {}, None, {}
             for take_id, star, key in rows:
                 if key not in there:
-                    if len(last) == 3 and starred is not None:
+                    if last and starred is not None:
                         break
                     path = self._folder(key)
                     there[key] = path != live and path.is_dir()
                 if not there[key]:
                     continue
-                if key in last or len(last) < 3:
+                if key in last or not last:
                     last[key] = take_id
                 if star and (starred is None or starred[0] == key):
                     starred = (key, take_id)
@@ -992,29 +992,51 @@ class Library:
     # returns every set as sets() gives them.
 
     def _titles_of(self, db):
-        """A function from a title in a set to {"title", "new"}: the song's
-        title now, found by its title or an old name, compared casefolded;
-        the title as it is, new, when no song has it."""
+        """A function from a title in a set to {"title", "new"}, as a typed
+        name resolves (_resolve): the song's title now, found by its title or
+        an old name, compared casefolded, then the same less a trailing
+        number ("Opus 5" is Opus when there is a song Opus); the title as it
+        is, new, when no song has it."""
         songs = self._songs_by_key(db)
         olds = self._names_by_key(db)
         titles = dict(db.execute(select(Song.id, Song.title)).all())
 
-        def resolve(text):
+        def known(text):
             key = text.casefold()
             if key in songs:
-                return {"title": songs[key].title, "new": False}
-            if key in olds:
-                return {"title": titles[olds[key].song_id], "new": False}
-            return {"title": text, "new": True}
+                return songs[key].title
+            return titles[olds[key].song_id] if key in olds else None
+
+        def resolve(text):
+            title = known(text)
+            if title is None:
+                base, number = split_go(text)
+                if number is not None:
+                    title = known(base)
+            return {"title": text, "new": True} if title is None else {"title": title, "new": False}
 
         return resolve
+
+    @staticmethod
+    def _songs_of_set(titles, stored):
+        """A set's stored titles as its songs (`titles` is _titles_of): each
+        song once, where it first comes, since two titles can come to name
+        one song when the songs are merged (D9)."""
+        out, seen = [], set()
+        for text in stored or []:
+            song = titles(text)
+            key = song["title"].casefold()
+            if key not in seen:
+                seen.add(key)
+                out.append(song)
+        return out
 
     def sets(self):
         """[{"id", "name", "songs": [{"title", "new"}]}] in their order."""
         with self._session() as db:
             titles = self._titles_of(db)
             return [{"id": st.id, "name": st.name,
-                     "songs": [titles(t) for t in st.songs]}
+                     "songs": self._songs_of_set(titles, st.songs)}
                     for st in self._ordered_sets(db)]
 
     def set_of(self, set_id):
