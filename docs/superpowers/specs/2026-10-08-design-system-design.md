@@ -220,9 +220,9 @@ on Windows.
 
   | Built more than once today | Becomes |
   |---|---|
-  | 13 on/off and pick-one buttons made by swapping two Button looks; 2 identical segmented switches (History's and Marks'); 3 pick-one grids in popovers | shadcn Toggle and ToggleGroup, one look for "on" and "selected" (F2), arrow keys inside a group |
+  | 13 on/off and pick-one buttons made by swapping two Button looks; 2 identical segmented switches (History's and Marks'); 3 pick-one grids in popovers | shadcn Toggle and ToggleGroup, arrow keys inside a group. A pick-one group keeps today's History switch look: a grey track, the chosen item a white plate with a light shadow (Alex, 19:50Z: «мне нравятся переключатели в "сейчас"»); Settings' button rows and the marker's kind picker take it too. A toggle that is on gets the grey fill of a selected row (F2) |
   | About 15 small icon actions (rename, delete, share) in two sizes; the take's toolbar built twice, in two orders | one icon-button size; one take toolbar, the same buttons in the same order everywhere |
-  | 12 whole rows made into buttons, and 2 rows that only a mouse can open; History's three side lists nearly identical; six looks for "selected" | one list row (shadcn Item), one selected look, every row reachable by keyboard |
+  | 12 whole rows made into buttons, and 2 rows that only a mouse can open; History's three side lists nearly identical; six looks for "selected" | one list row (shadcn Item), every row reachable by keyboard; "selected" has two looks instead of six: the white plate inside a switch, a grey fill for a row, pill, tab or toggle that is on |
   | 9 text links with 4 hovers and 3 focus rings | one link look: the text's colour with a thin underline, one hover and the shared focus ring |
   | 5 close ✕ buttons in 4 sizes | one ✕ |
   | The small headings set in capitals (F7), in 2 sizes, 3 letter spacings and 2 weights; 10 section headings in Settings made of a label and a grey hint | one heading for a group and one for a section (F7: no capitals) |
