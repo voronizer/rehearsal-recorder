@@ -313,6 +313,10 @@ api.last_time = async () => {
 library = async () => Promise.all(Object.keys(PAST).map(async folder => (
   {...(await api.get_rehearsal(folder)), missing: false})));
 
+// Pałyn was typed "Palyn" one night, and merged since: the old spelling
+// still leads to it (Library song_name).
+oldNames.set('palyn', {name: 'Palyn', song: 'Pałyn'});
+
 const settings = api.get_settings;
 api.get_settings = async () => ({...(await settings()),
   recordings_dir: 'C:\\Users\\alex\\RehearsalRecordings',

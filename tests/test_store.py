@@ -38,7 +38,7 @@ from sqlalchemy import inspect, text  # noqa: E402
 
 from rehearsal_recorder.store import db  # noqa: E402
 from rehearsal_recorder.store.importer import import_all  # noqa: E402
-from rehearsal_recorder.store.library import LabelRefused, Library  # noqa: E402
+from rehearsal_recorder.store.library import LabelRefused, Library, SongRefused  # noqa: E402
 from rehearsal_recorder.store.models import Base  # noqa: E402
 from rehearsal_recorder.store.names import legacy_song, split_go, take_name  # noqa: E402
 
@@ -856,6 +856,144 @@ def main():
        refused(lib.delete_label, first12)
        == "The last label cannot be deleted: every mark needs one"
        and order12() == [first12])
+    lib.close()
+
+    print("\n[13] Renaming and merging songs (migration 0005)")
+    rec13 = tmp / "Renaming"
+    rec13.mkdir()
+    db.open_engine(rec13, migrations_up_to(tmp, "0004")).dispose()
+    engine = db.open_engine(rec13)
+    ok("a database at 0004 is moved on to the newest migration",
+       db.current_revision(engine) == HEAD)
+    with engine.connect() as c:
+        drift = compare_metadata(MigrationContext.configure(c), Base.metadata)
+        tables13 = inspect(c).get_table_names()
+    engine.dispose()
+    ok("and it is then what models.py describes, with a table of old names",
+       drift == [] and "song_name" in tables13)
+
+    lib = Library(rec13)
+
+    def night13(name, created, titles, stars=()):
+        folder = rec13 / name
+        lib.create_rehearsal(folder, name, created, 48000, 24, [])
+        for n, title in enumerate(titles, start=1):
+            lib.add_take(folder, {"take_number": n, "name": title, "tracks": []})
+            if n in stars:
+                lib.set_starred(folder, n, True)
+        return folder
+
+    def names13(folder):
+        return [t["name"] for t in lib.rehearsal(folder)["takes"]]
+
+    def starred13(folder):
+        return [t["take_number"] for t in lib.rehearsal(folder)["takes"] if t["starred"]]
+
+    def refused13(fn, *args):
+        try:
+            fn(*args)
+        except SongRefused as e:
+            return str(e), e.into
+        return None
+
+    def counts13(answer):
+        return {k: answer[k] for k in ("from", "into", "goes", "rehearsals", "first", "last")}
+
+    one13 = night13("One", "2026-09-01T19:00:00", ["Pałyn"] * 4 + ["Polyn"])
+    two13 = night13("Two", "2026-09-08T19:00:00", ["Pałyn"] * 3 + ["Polyn", "Polyn"], stars=(3,))
+    three13 = night13("Three", "2026-09-15T19:00:00", ["Palyn", "Palyn", "Viasna"], stars=(2,))
+    polyn13 = lib.song_id("Polyn")
+
+    renamed13 = lib.rename_song(polyn13, "Polin")
+    ok("a song renamed: every go carries the new title and keeps its number",
+       names13(one13)[4] == "Polin 1" and names13(two13)[3:] == ["Polin 2", "Polin 3"])
+    ok("it says which takes changed, oldest first, with their names now",
+       renamed13 == {"from": "Polyn", "title": "Polin", "takes": [
+           (str(one13), 5, "Polin 1"), (str(two13), 4, "Polin 2"), (str(two13), 5, "Polin 3")]})
+    ok("and the title it left is remembered", lib.song_names() == {"Polin": ["Polyn"]})
+    ok("typed again, the old title is the song at its next go, alone or with a number",
+       lib.resolve_name(three13, "polyn", 9) == {"song": "Polin", "go": 4, "name": "Polin 4"}
+       and lib.resolve_name(three13, "Polyn 9", 9) == {"song": "Polin", "go": 4, "name": "Polin 4"})
+    lib.rename_song(polyn13, "polin")
+    ok("a case-only rename respells the song and remembers nothing more",
+       names13(one13)[4] == "polin 1" and lib.song_names() == {"polin": ["Polyn"]})
+    ok("the same title again changes nothing", lib.rename_song(polyn13, "polin")["takes"] == [])
+
+    viasna13 = lib.song_id("Viasna")
+    ok("an empty title is refused",
+       refused13(lib.rename_song, polyn13, "  ") == ("A song needs a title", None))
+    ok("so is Take N, what a take with no song is called",
+       refused13(lib.rename_song, polyn13, "Take 4")
+       == ("Take 4 is what a take with no song is called", None))
+    ok("another song's title is refused, naming the song to merge into",
+       refused13(lib.rename_song, polyn13, "viasna")
+       == ("There is already a song called Viasna", {"id": viasna13, "title": "Viasna"}))
+    ok("so is another song's old name",
+       refused13(lib.rename_song, viasna13, "POLYN")
+       == ("POLYN is polin now", {"id": polyn13, "title": "polin"}))
+    ok("a song that is not there is not found",
+       refused13(lib.rename_song, 999, "X") == ("Song not found", None))
+
+    target13 = lib.song_id("Pałyn")
+    palyn13 = lib.song_id("Palyn")
+    asked13 = lib.merge_songs(palyn13, target13, dry_run=True)
+    ok("a dry run counts what a merge would do",
+       counts13(asked13) == {"from": "Palyn", "into": "Pałyn", "goes": 2, "rehearsals": 1,
+                             "first": 8, "last": 9})
+    ok("and changes nothing",
+       names13(three13)[:2] == ["Palyn 1", "Palyn 2"] and lib.song_id("Palyn") == palyn13
+       and lib.song_names() == {"polin": ["Polyn"]})
+    merged13 = lib.merge_songs(palyn13, target13)
+    ok("merged goes are numbered after the song's own, in the order played",
+       names13(three13)[:2] == ["Pałyn 8", "Pałyn 9"]
+       and names13(one13)[:4] == ["Pałyn 1", "Pałyn 2", "Pałyn 3", "Pałyn 4"]
+       and names13(two13)[:3] == ["Pałyn 5", "Pałyn 6", "Pałyn 7"])
+    ok("it says what it did, and which takes changed",
+       counts13(merged13) == counts13(asked13)
+       and merged13["takes"] == [(str(three13), 1, "Pałyn 8"), (str(three13), 2, "Pałyn 9")])
+    ok("every star stays on its take", starred13(two13) == [3] and starred13(three13) == [2])
+    ok("the song merged away is gone, and its title is the other's old name",
+       lib.song_id("Palyn") is None and lib.song_names() == {"Pałyn": ["Palyn"], "polin": ["Polyn"]})
+    ok("typed again, it is the next go of the song it went to",
+       lib.resolve_name(three13, "palyn", 9) == {"song": "Pałyn", "go": 10, "name": "Pałyn 10"})
+    ok("a song is not merged into itself",
+       refused13(lib.merge_songs, target13, target13)
+       == ("A song cannot be merged into itself", None))
+    ok("nor into a song that is not there",
+       refused13(lib.merge_songs, target13, 999) == ("Song not found", None))
+
+    lib.merge_songs(polyn13, target13)
+    ok("old names follow a merge: the merged song's title and its own old names",
+       lib.song_names() == {"Pałyn": ["Palyn", "polin", "Polyn"]}
+       and names13(one13)[4] == "Pałyn 10" and names13(two13)[3:] == ["Pałyn 11", "Pałyn 12"])
+    lib.rename_song(target13, "Palyn")
+    ok("renamed back to an old name, the song takes it as its title and remembers the one it had",
+       lib.song_names() == {"Palyn": ["Pałyn", "polin", "Polyn"]}
+       and names13(three13)[:2] == ["Palyn 8", "Palyn 9"]
+       and lib.resolve_name(three13, "Pałyn", 9)["song"] == "Palyn")
+    summary13 = next(s for s in lib.songs()["songs"] if s["title"] == "Palyn")
+    ok("the songs and a song's page carry its old names",
+       summary13["also"] == ["Pałyn", "polin", "Polyn"]
+       and lib.goes_of(target13)["also"] == ["Pałyn", "polin", "Polyn"]
+       and next(s for s in lib.songs()["songs"] if s["title"] == "Viasna")["also"] == [])
+
+    old13 = rec13 / "Old - 2020-01-01 10-00"
+    old13.mkdir()
+    (old13 / "session.json").write_text(json.dumps({
+        "name": "Old", "created_at": "2020-01-01T10:00:00", "samplerate": 48000,
+        "tracks": [], "takes": [{"take_number": n, "name": name, "tracks": []}
+                                for n, name in enumerate(["polyn", "Polyn 2"], start=1)],
+    }), encoding="utf-8")
+    import_all(lib, None)
+    ok("an old rehearsal imported names its takes through old names too",
+       names13(old13) == ["Palyn 13", "Palyn 14"])
+
+    ok("an old name is forgotten", lib.forget_song_name("POLIN") is True)
+    ok("typed again, it is then a new song",
+       lib.resolve_name(three13, "polin", 9) == {"song": "polin", "go": 1, "name": "polin 1"}
+       and lib.song_names() == {"Palyn": ["Pałyn", "Polyn"]})
+    ok("a name no song was called is not forgotten twice",
+       lib.forget_song_name("polin") is False)
     lib.close()
 
     print()

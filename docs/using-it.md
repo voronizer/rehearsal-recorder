@@ -363,6 +363,29 @@ screen or in History. The folder on disk is renamed too, and a rehearsal
 folder keeps its date: `Tuesday jam - 2026-09-18 19-00`. If you rename a take
 that is open in the player, it starts again from the beginning.
 
+To rename a song, use the pencil beside its title on its page in History.
+Every go is renamed, with its folder on disk and its copies in the cloud
+folder; the files follow in the background, and the background-work list
+says so. A title that differs only in capitals respells the song. Here a
+number at the end is part of the title: "Opus 5" is the whole of it. "Take 4"
+cannot be a song's title, since it is what a take with no song is called.
+
+The same song typed two ways, "Palyn" one night and "Pałyn" the next, is two
+songs until you merge them. Rename song lists the other songs under the
+title: click one, or type its title, and **Rename** becomes **Merge…**. The
+app asks first, saying how many goes from how many rehearsals are renamed
+and what they become. They are numbered after the song's own, in the order
+they were played, so Palyn 1 and 2 become Pałyn 8 and 9; stars stay where
+they were. A merge is not undone in one step: to split a song again, rename
+its takes one by one.
+
+A title a song leaves behind, renamed or merged away, is remembered: typed
+again in any name field, with or without a number, it is that song. The
+field says "Palyn → Pałyn 12", and under the songs, "Palyn is Pałyn now.
+Make Palyn a new song". The link forgets the old name, and the take is a new
+song, Palyn 1. A song's page lists its old names under the title, **Also
+typed as** Palyn, each with × to forget it.
+
 ## History
 
 ![Past rehearsals down the left, the chosen one beside them](screenshots/history.png)
@@ -405,7 +428,9 @@ are starred. The takes nobody named come last, as **Not named**. Click a
 song, or go through them with ↑ and ↓.
 
 A song's page starts with a big **▶**, which plays its newest ★ go, or its
-last go when none is starred. Its ★ goes come next, then the marks left on it
+last go when none is starred. The pencil beside the title renames the song,
+or merges it into another (see [Names and songs](#names-and-songs)); what is
+playing stops first. Its ★ goes come next, then the marks left on it
 the last time it was played; a mark opens its take at that spot. Then every
 go at the song, one line a rehearsal, newest first: the rehearsal's day and
 name, and its goes as bars side by side, all drawn to the song's longest go.

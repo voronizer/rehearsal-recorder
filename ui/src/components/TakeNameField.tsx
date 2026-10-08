@@ -2,8 +2,21 @@ import { useRef, useState } from "react"
 import { X } from "lucide-react"
 import { SongPills } from "@/components/SongPills"
 import type { SongChoices } from "@/lib/api"
-import { goFor } from "@/lib/goes"
+import { goFor, songFor, songNamed } from "@/lib/goes"
+import { forgetSongName } from "@/lib/songNames"
 import { cn } from "@/lib/utils"
+
+/** The choices with one old name taken out of them: forgotten, until
+ *  Python's fresh list arrives. */
+function without(choices: SongChoices | null, name: string): SongChoices | null {
+  if (!choices) return null
+  const key = name.toLocaleLowerCase()
+  const strip = (c: SongChoices["here"][number]) => ({
+    ...c,
+    also: c.also?.filter((a) => a.toLocaleLowerCase() !== key),
+  })
+  return { here: choices.here.map(strip), other: choices.other.map(strip) }
+}
 
 /**
  * A take's name, in one field: over Record before the take, over Save take
@@ -21,13 +34,23 @@ import { cn } from "@/lib/utils"
  * retyping it, still has every song under it — and while the field has
  * focus, the songs area is held at the height it had then, so the list
  * emptying out as it narrows, and filling again once the name is left or
- * put back, moves neither the field nor the buttons beside it.
+ * put back, moves neither the field nor the buttons beside it. A field
+ * focused as it is first drawn (a dialog's) takes that height at the first
+ * key instead, the songs not being drawn yet when focus arrives. Left with
+ * an old name in it, the area stays held, the songs still narrowed to that
+ * one and the line under them, until the name is another.
  *
  * Space types a space and Escape leaves the field (useSpacebar.ts does both
  * for any text field); Enter leaves it too, so the next Space does what the
  * main button says — or, given `onEnter`, does that instead. A song or ✕
  * clicked while typing leaves it as well, for the same Space; given
  * `onEnter`, the field keeps focus instead, so Enter is still there to press.
+ *
+ * A song's old name in it (SongChoice.also), with or without a number, is
+ * that song (rename-and-merge-songs spec, D6 and D8): the field says
+ * "Palyn → Pałyn 12", and under the songs, "Palyn is Pałyn now. Make Palyn
+ * a new song", which forgets the old name and puts it in the field. Not only
+ * while typing: Rename take keeps what was typed until Rename is pressed.
  */
 export function TakeNameField({
   id,
@@ -41,6 +64,9 @@ export function TakeNameField({
   size = "big",
   autoFocus = false,
   onPanel = false,
+  goes = true,
+  offerNewSong = true,
+  onDraft,
 }: {
   id: string
   label: string
@@ -57,6 +83,13 @@ export function TakeNameField({
   /** Set on the rehearsal screen's panel colour, where the muted field
    *  would sink into it: the field is drawn on the card colour instead. */
   onPanel?: boolean
+  /** False for a song's title (Rename song): no go beside it or the songs. */
+  goes?: boolean
+  /** False where an old name typed is not a take being named: no "Make
+   *  Palyn a new song". */
+  offerNewSong?: boolean
+  /** What is typed, as it is typed; null once the field is left. */
+  onDraft?: (text: string | null) => void
 }) {
   // What is typed, while the field has focus; null shows `value`.
   const [draft, setDraft] = useState<string | null>(null)
@@ -69,19 +102,34 @@ export function TakeNameField({
   // it by itself.
   const [startedAs, setStartedAs] = useState<string | null>(null)
   // The songs area's height when focus arrived, held while the field has
-  // focus so narrowing to nothing and back does not move anything beside it.
+  // focus so narrowing to nothing and back does not move anything beside it
+  // (and while an old name is in it, below).
   const [held, setHeld] = useState<number | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const songsArea = useRef<HTMLDivElement>(null)
+  // An old name forgotten here, and the choices it was forgotten from: it
+  // is taken out of them until Python's fresh list replaces them.
+  const [forgot, setForgot] = useState<{ name: string; from: SongChoices | null } | null>(null)
+  const known = forgot && forgot.from === choices ? without(choices, forgot.name) : choices
   const shown = draft ?? value
-  const go =
-    choices === null && draft === null && knownGo !== undefined
+  const go = !goes
+    ? null
+    : known === null && draft === null && knownGo !== undefined
       ? knownGo
-      : goFor(shown, choices)
+      : goFor(shown, known)
+  // The song an old name in the field is now. A title is taken whole: in
+  // Rename song, "Palyn 5" is a title of its own, not Palyn.
+  const via = goes ? songFor(shown, known) : songNamed(shown, known)
+  const old = via?.old != null ? { name: via.old, song: via.choice.song } : null
+  // Held while typing, and after it while an old name narrows the songs to
+  // one and has its line under them: filling again on leaving would move
+  // what is under the area, or the buttons beside it, under the pointer.
+  const holding = startedAs !== null || old !== null
   const named = (text: string) => text.trim() || fallback
   const edit = (text: string | null) => {
     typed.current = text
     setDraft(text)
+    onDraft?.(text)
   }
 
   const commit = (name: string) => {
@@ -138,15 +186,23 @@ export function TakeNameField({
           )}
         >
           <span className="invisible">{shown}</span>
-          {go !== null && (
+          {old ? (
             <span data-take-go className="tnum text-muted-foreground">
-              {" "}
-              {go}
+              {" → "}
+              {old.song}
+              {go !== null && ` ${go}`}
             </span>
+          ) : (
+            go !== null && (
+              <span data-take-go className="tnum text-muted-foreground">
+                {" "}
+                {go}
+              </span>
+            )
           )}
         </div>
         <span id={`${id}-go`} className="sr-only">
-          {go !== null ? `Go ${go}` : ""}
+          {old ? `${old.song}${go !== null ? `, go ${go}` : ""}` : go !== null ? `Go ${go}` : ""}
         </span>
         <input
           id={id}
@@ -161,12 +217,15 @@ export function TakeNameField({
             setStartedAs(value)
             setHeld(songsArea.current?.offsetHeight ?? null)
           }}
-          onChange={(e) => edit(e.target.value)}
+          onChange={(e) => {
+            // Before this key is drawn, the area still has its full height.
+            if (held === null) setHeld(songsArea.current?.offsetHeight ?? null)
+            edit(e.target.value)
+          }}
           onBlur={() => {
             const left = typed.current
             edit(null)
             setStartedAs(null)
-            setHeld(null)
             if (left !== null) commit(named(left))
           }}
           onKeyDown={(e) => {
@@ -192,8 +251,36 @@ export function TakeNameField({
           <X className="size-4" />
         </button>
       </div>
-      <div ref={songsArea} style={{ minHeight: held ?? undefined }}>
-        <SongPills choices={choices} value={shown} initial={startedAs ?? shown} onPick={put} />
+      <div ref={songsArea} style={{ minHeight: (holding && held) || undefined }}>
+        <SongPills
+          choices={known}
+          value={shown}
+          initial={startedAs ?? shown}
+          onPick={put}
+          goes={goes}
+        />
+        {old && offerNewSong && (
+          <p data-old-name className="mt-2 text-xs text-muted-foreground">
+            {old.name} is {old.song} now.{" "}
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={async () => {
+                // What was typed, less a number after it: the go is the app's.
+                const text = songNamed(shown, known)
+                  ? shown.trim()
+                  : shown.trim().replace(/\s+\d+$/, "")
+                const from = choices
+                if (!(await forgetSongName(old.name))) return
+                setForgot({ name: old.name, from })
+                put(text)
+              }}
+              className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+            >
+              Make {old.name} a new song
+            </button>
+          </p>
+        )}
       </div>
     </div>
   )

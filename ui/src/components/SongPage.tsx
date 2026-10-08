@@ -1,4 +1,4 @@
-import { Loader2, Pause, Play } from "lucide-react"
+import { Loader2, Pause, Pencil, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { SongDetail } from "@/lib/api"
 import { formatDayIn, formatMMSS } from "@/lib/format"
@@ -12,6 +12,7 @@ import {
   type PlacedPlayback,
   type PlacedTake,
 } from "@/lib/songs"
+import { OldNames } from "@/components/OldNames"
 import { TakeRow } from "@/components/RehearsalOverview"
 import { SongLadder } from "@/components/SongLadder"
 
@@ -29,6 +30,9 @@ const EYEBROW =
  *
  * The takes nobody named have a page too, so they can be found and given a
  * song; it has nothing to play first, and no ★ goes or marks of its own.
+ *
+ * A song's title has a pencil beside it, for Rename song, and under the
+ * play line the names it is also typed as, each to forget.
  */
 export function SongPage({
   page,
@@ -43,6 +47,8 @@ export function SongPage({
   onShare,
   onDelete,
   onOpenRehearsal,
+  onRenameSong,
+  onForgetName,
 }: {
   page: SongDetail
   playback: PlacedPlayback | null
@@ -57,6 +63,8 @@ export function SongPage({
   onShare: (take: PlacedTake) => void
   onDelete: (take: PlacedTake) => void
   onOpenRehearsal: (folder: string) => void
+  onRenameSong: () => void
+  onForgetName: (name: string) => void
 }) {
   const labels = useLabels()
   const goes = page.goes ?? []
@@ -101,14 +109,27 @@ export function SongPage({
           </button>
         )}
         <div className="min-w-0 flex-1">
-          <h2
-            className={cn(
-              "truncate text-[26px] leading-tight",
-              unnamed ? "font-medium text-muted-foreground" : "font-semibold"
+          <div className="flex min-w-0 items-center gap-1">
+            <h2
+              className={cn(
+                "truncate text-[26px] leading-tight",
+                unnamed ? "font-medium text-muted-foreground" : "font-semibold"
+              )}
+            >
+              {unnamed ? "Not named" : page.title}
+            </h2>
+            {!unnamed && (
+              <button
+                type="button"
+                onClick={onRenameSong}
+                aria-label={`Rename song ${page.title}`}
+                title="Rename song"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <Pencil className="size-4" />
+              </button>
             )}
-          >
-            {unnamed ? "Not named" : page.title}
-          </h2>
+          </div>
           <p className="mt-1 text-[13px] text-muted-foreground">{pageLine(goes, unnamed)}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {unnamed ? (
@@ -124,6 +145,7 @@ export function SongPage({
               `▶ plays the last go, ${plays.take.name} · ${formatDayIn(plays.created_at)}`
             )}
           </p>
+          {!unnamed && <OldNames names={page.also ?? []} onForget={onForgetName} />}
         </div>
       </header>
 

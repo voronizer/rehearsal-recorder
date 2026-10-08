@@ -6,17 +6,31 @@ import { HealthLine } from "@/components/HealthLine"
 import { RehearsalList } from "@/components/RehearsalList"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
 import { StopTake } from "@/components/StopTake"
+import { TakeNameField } from "@/components/TakeNameField"
 import { TrackTile } from "@/components/TrackTile"
-import { api, type RehearsalDetail, type RehearsalSummary } from "@/lib/api"
+import { api, type RehearsalDetail, type RehearsalSummary, type SongChoices } from "@/lib/api"
 import type { TILES } from "../content"
 
-export type PieceData = { rehearsals: RehearsalSummary[]; last: RehearsalDetail }
+export type PieceData = {
+  rehearsals: RehearsalSummary[]
+  last: RehearsalDetail
+  /** The songs under the Next take field, with Pałyn also typed as Palyn. */
+  choices: SongChoices
+}
 
-/** What the tiles show, asked of the bridge as the history screen would. */
+/** What the tiles show, asked of the bridge as the history screen and the
+ *  rehearsal screen would. */
 export async function loadPieces(): Promise<PieceData> {
   const rehearsals = await api().list_rehearsals()
   const last = await api().get_rehearsal(rehearsals[0].folder)
-  return { rehearsals, last }
+  // As at the band's next rehearsal: each song at one past its last go in
+  // the newest one, as Python counts goes across the library (the fake
+  // counts them from 1 each evening).
+  const offered = await api().song_choices()
+  const next = (song: string) =>
+    Math.max(0, ...last.takes.filter((t) => t.song === song).map((t) => t.go ?? 0)) + 1
+  const choices = { here: [], other: offered.other.map((c) => ({ ...c, go: next(c.song) })) }
+  return { rehearsals, last, choices }
 }
 
 const nothing = () => {}
@@ -67,7 +81,11 @@ function Goes({ last, song, only }: { last: RehearsalDetail; song: string; only?
 export type Shot = { pieces: ReactNode; left?: boolean }
 
 /** Which piece goes beside which tile's words, by the tile's id. */
-export function shots({ rehearsals, last }: PieceData): Record<(typeof TILES)[number], Shot | null> {
+export function shots({
+  rehearsals,
+  last,
+  choices,
+}: PieceData): Record<(typeof TILES)[number], Shot | null> {
   const kept = last.takes.find((t) => t.cloud && t.starred)
   return {
     health: {
@@ -105,6 +123,24 @@ export function shots({ rehearsals, last }: PieceData): Record<(typeof TILES)[nu
       pieces: (
         <Piece wide label="Four goes at the song Pałyn, with their marks and comments">
           <Goes last={last} song="Pałyn" />
+        </Piece>
+      ),
+    },
+    names: {
+      left: true,
+      pieces: (
+        <Piece label="The Next take field with Palyn typed: Palyn is Pałyn now, at its next go">
+          <div className="w-[23rem] max-w-full">
+            <TakeNameField
+              id="site-next-take"
+              label="Next take"
+              value="Palyn"
+              fallback="Pałyn"
+              choices={choices}
+              onCommit={nothing}
+              onPanel
+            />
+          </div>
         </Piece>
       ),
     },

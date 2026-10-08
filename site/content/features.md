@@ -23,6 +23,11 @@ What was played, how long it ran, what it weighs. Nothing to fill in.
 
 Keep this, Went wrong or the band's own, with a comment, right on the take.
 
+## Spell it however you like. {#names}
+
+Typed Palyn one night and Pałyn the next? Merge them once, and the old
+spelling still finds the song.
+
 ## The good takes go to the cloud. {#cloud}
 
 Only the ones you keep, into your Drive or Dropbox folder.

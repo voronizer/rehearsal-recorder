@@ -77,7 +77,7 @@ from rehearsal_recorder import updates
 from rehearsal_recorder.mediaserver import AppServer
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
-from rehearsal_recorder.store.library import LabelRefused, Library, as_marker
+from rehearsal_recorder.store.library import LabelRefused, Library, SongRefused, as_marker
 from rehearsal_recorder.store.db import DB_NAME
 from rehearsal_recorder import diagnostics
 from rehearsal_recorder.audio.probe import InterfaceCheck, plan_for, tracks_for
@@ -348,6 +348,11 @@ def _field_text(named):
     (Library.resolve_name): the song's title, its go shown beside it rather
     than typed into it; or "Take N" for a take nobody named."""
     return named["song"] or named["name"]
+
+
+def _takes(takes):
+    """'1 take', '12 takes': how many a names pass has to look at."""
+    return "1 take" if len(takes) == 1 else f"{len(takes)} takes"
 
 
 def _folder_bytes(folder):
@@ -1607,10 +1612,11 @@ class Api:
         """
         The songs a take can be named after, so that nobody types a title the
         band has played before: {"here": [...], "other": [...]}, each
-        {"song", "go"}: the title, which a pill puts in the name field, and
-        the go a take would be as that song — one past its highest go
+        {"song", "go", "also"}: the title, which a pill puts in the name
+        field; the go a take would be as that song — one past its highest go
         anywhere in the library, or, for the take being renamed, its own go
-        at its own song.
+        at its own song; and the song's old names, which typed are the song
+        too (Library._resolve).
 
         "here" is what this rehearsal played, in the order it first played
         it, each with "last_take", the number of its latest take. "other" is
@@ -1626,6 +1632,7 @@ class Api:
         takes = rehearsal["takes"] if rehearsal else []
         own = next((t for t in takes if t.get("take_number") == take_number), None)
         nexts = self._lib.next_goes()
+        also = self._lib.song_names()
 
         def go_for(song):
             if own is not None and own.get("song") == song:
@@ -1633,7 +1640,7 @@ class Api:
             return nexts.get(song, 1)
 
         here = [{"song": s["name"], "go": go_for(s["name"]),
-                 "last_take": max(s["take_numbers"])}
+                 "also": also.get(s["name"], []), "last_take": max(s["take_numbers"])}
                 for s in _songs_of(takes)]
         seen = {c["song"].casefold() for c in here}
         other = []
@@ -1645,7 +1652,8 @@ class Api:
                 key = s["name"].casefold()
                 if key not in seen:
                     seen.add(key)
-                    other.append({"song": s["name"], "go": go_for(s["name"])})
+                    other.append({"song": s["name"], "go": go_for(s["name"]),
+                                  "also": also.get(s["name"], [])})
         return {"here": here, "other": other}
 
     def finish_rehearsal(self):
@@ -2204,10 +2212,10 @@ class Api:
 
     def get_song(self, song_id=None):
         """
-        A song's page: {"ok", "id", "title", "plays", "goes"}, its goes from
-        every rehearsal as Library.goes_of gives them, and "plays" what its
-        play button plays (_plays_of). `song_id` None is the takes with no
-        song.
+        A song's page: {"ok", "id", "title", "also", "plays", "goes"}, its
+        goes from every rehearsal and its old names as Library.goes_of gives
+        them, and "plays" what its play button plays (_plays_of). `song_id`
+        None is the takes with no song.
         """
         found = self._lib.goes_of(song_id)
         if found is None:
@@ -2314,6 +2322,56 @@ class Api:
             # The copies in the cloud folder are named after the take.
             self._rename_take_copies(folder, take_number, updated)
             return {"ok": True, "take": updated}
+
+    def rename_song(self, song_id, title):
+        """
+        Gives a song another title, from its page in History (Library.rename_song):
+        {"ok": True, "title", "goes"}. Its takes' folders and cloud copies
+        follow in the background, in a pass of their own under "Renaming Polyn
+        to Polin · 12 takes" (names_pass.py). Refused with {"ok": False,
+        "error", "into"}, `into` being {"id", "title"} of the song the title
+        already belongs to, if that is why: merge_songs into it is what to
+        offer instead.
+        """
+        try:
+            done = self._lib.rename_song(song_id, title)
+        except SongRefused as e:
+            return {"ok": False, "error": str(e), "into": e.into}
+        # Not under _files_lock: the pass reads each take afresh before it
+        # renames anything, so one running meanwhile only leaves what the
+        # next pass puts right.
+        if done["takes"]:
+            self._names_pass.request_takes(
+                done["takes"],
+                f"Renaming {done['from']} to {done['title']} · {_takes(done['takes'])}")
+        return {"ok": True, "title": done["title"], "goes": len(done["takes"])}
+
+    def merge_songs(self, from_id, into_id, dry_run=False):
+        """
+        Merges song `from_id` into song `into_id` (Library.merge_songs):
+        {"ok": True, "into", "goes", "rehearsals", "first", "last"}, the goes
+        moved, from how many rehearsals, and the goes they become. dry_run
+        answers the same and changes nothing, for the question asked first.
+        Otherwise the files follow as rename_song's do, under "Merging Palyn
+        into Pałyn · 2 takes".
+        """
+        try:
+            done = self._lib.merge_songs(from_id, into_id, dry_run=bool(dry_run))
+        except SongRefused as e:
+            return {"ok": False, "error": str(e)}
+        if not dry_run and done["takes"]:
+            self._names_pass.request_takes(
+                done["takes"],
+                f"Merging {done['from']} into {done['into']} · {_takes(done['takes'])}")
+        return {"ok": True, **{k: done[k] for k in
+                               ("into", "goes", "rehearsals", "first", "last")}}
+
+    def forget_song_name(self, name):
+        """Forgets an old name of a song, from its page or from a name field:
+        typed again, it is a new song."""
+        if self._lib.forget_song_name(name):
+            return {"ok": True}
+        return {"ok": False, "error": f"No song was called {str(name or '').strip()}"}
 
     def rename_rehearsal(self, folder, new_name):
         """Renames a rehearsal and its folder. Its takes' files are kept

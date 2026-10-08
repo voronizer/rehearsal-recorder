@@ -312,18 +312,48 @@ let library = async () => [
 ];
 // Rehearsals deleted, by folder: gone from the library too.
 const deletedRehearsals = new Set();
+// Takes whose song a rename or a merge changed (api.rename_song,
+// api.merge_songs), as "folder#take_number" → {song, go}: the rehearsals
+// before this one are built afresh on every call, so this is laid over them.
+const retitled = new Map();
+function retitle(r, t) {
+  const o = retitled.get(`${r.folder}#${t.take_number}`);
+  return o ? {...t, song:o.song, go:o.go, name:`${o.song} ${o.go}`} : t;
+}
 async function libraryNow() {
   const all = (await library()).filter(r => !deletedRehearsals.has(r.folder)).map(r => ({...r, missing: Boolean(r.missing),
-    takes: r.takes.filter(t => !deleted.has(`${r.folder}#${t.take_number}`))}));
+    takes: r.takes.filter(t => !deleted.has(`${r.folder}#${t.take_number}`)).map(t => retitle(r, t))}));
   return all.sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 // Python numbers songs as they are made; here, in the order they were first
-// played, oldest first.
+// played, oldest first, once: a song renamed keeps its id, as in Python. A
+// page can add songs with no goes left (window.__TAKELESS_SONGS__ = ['Old']),
+// which Python keeps and the Songs view does not list.
+const knownIds = new Map();
 function songIds(all) {
-  const ids = new Map();
   for (const r of [...all].reverse())
-    for (const t of r.takes) if (t.song && !ids.has(t.song)) ids.set(t.song, ids.size + 1);
-  return ids;
+    for (const t of r.takes) if (t.song && !knownIds.has(t.song)) knownIds.set(t.song, knownIds.size + 1);
+  for (const title of window.__TAKELESS_SONGS__ || [])
+    if (!knownIds.has(title)) knownIds.set(title, knownIds.size + 1);
+  return knownIds;
+}
+const titleOfId = (id) => [...knownIds].find(([, i]) => i === id)?.[0];
+
+// Songs' old names (Library song_name): titles renamed or merged away, which
+// typed are the song they went to. Keyed lower case: {name, song}. A page
+// can give some (window.__OLD_NAMES__ = [['Palyn', 'Pałyn'], …]).
+const oldNames = new Map((window.__OLD_NAMES__ || []).map(([name, song]) =>
+  [name.toLowerCase(), {name, song}]));
+const alsoOf = (song) => [...oldNames.values()].filter(v => v.song === song).map(v => v.name)
+  .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+// What a rename or a merge leaves in the background-work list, done.
+// Its title says how many takes, as api.rename_song and merge_songs title it.
+function namesDone(title, n) {
+  window.__ACTIVITY__ = [...(window.__ACTIVITY__ || []), {
+    id: 950 + (window.__ACTIVITY__ || []).length, kind:'names',
+    title: `${title} · ${n === 1 ? '1 take' : `${n} takes`}`, folder:null,
+    take_number:null, state:'done', fraction:1, step:null, error:null,
+    detail: n === 1 ? '1 take renamed' : `${n} takes renamed`, retry:null, seen:false}];
 }
 // api._plays_of: the newest ★ go on disk, else the last go at the newest
 // rehearsal on disk.
@@ -339,6 +369,8 @@ function songPlays(goes) {
 // The rest of the band's repertoire, as other rehearsals in the library
 // played it, the latest first.
 const REPERTOIRE = ['Pałyn', 'Viasna', 'Ahoń', 'Sonca', 'Dym', 'Ptuška', 'Daroha'];
+// The repertoire as renames and merges have left it.
+let repertoire = [...REPERTOIRE];
 
 // Python groups takes by the song each is a go at (api._songs_of) and hands
 // the result over; the mock does the same.
@@ -415,20 +447,21 @@ async function beforeTonight(song) {
 }
 
 // What a take is a go at, as Python's library resolves a name
-// (Library._resolve), over the songs the mock knows: the takes it is given
-// and REPERTOIRE. Python numbers goes across the whole library; the mock
-// counts them within the takes it is given, which is all the interface's
-// tests need — the interface shows what it is sent.
+// (Library._resolve), over the songs the mock knows: the takes it is given,
+// the repertoire and the old names. Python numbers goes across the whole
+// library; the mock counts them within the takes it is given, which is all
+// the interface's tests need — the interface shows what it is sent.
 function songOf(text, takes) {
   const name = (text || '').trim();
   if (!name || /^Take \d+$/.test(name)) return null;
   const known = new Map();
   for (const t of takes) if (t.song) known.set(t.song.toLowerCase(), t.song);
-  for (const s of REPERTOIRE) if (!known.has(s.toLowerCase())) known.set(s.toLowerCase(), s);
-  if (known.has(name.toLowerCase())) return known.get(name.toLowerCase());
+  for (const s of repertoire) if (!known.has(s.toLowerCase())) known.set(s.toLowerCase(), s);
+  const find = (x) => known.get(x.toLowerCase()) ?? oldNames.get(x.toLowerCase())?.song;
+  const whole = find(name);
+  if (whole) return whole;
   const m = /^(.*?)\s+(\d+)$/.exec(name);
-  if (m && known.has(m[1].trim().toLowerCase())) return known.get(m[1].trim().toLowerCase());
-  return name;
+  return (m && find(m[1].trim())) || name;
 }
 function goAt(song, takes, n) {
   const own = takes.find(t => t.take_number === n);
@@ -654,10 +687,10 @@ window.__MAKE_API__ = () => ({
     const takes = !folder || (session && folder === session.folder)
       ? (session ? session.takes : []) : pastRehearsal(folder).takes;
     const here = songsOf(takes).map(s => ({song:s.name, go:goAt(s.name, takes, n),
-                                           last_take:Math.max(...s.take_numbers)}));
+                                           also:alsoOf(s.name), last_take:Math.max(...s.take_numbers)}));
     const seen = new Set(here.map(c => c.song.toLowerCase()));
-    const other = REPERTOIRE.filter(song => !seen.has(song.toLowerCase()))
-      .map(song => ({song, go:1}));
+    const other = repertoire.filter(song => !seen.has(song.toLowerCase()))
+      .map(song => ({song, go:1, also:alsoOf(song)}));
     return {here, other};
   }),
   // One input pinned at the top and one silent, unless a test plays its own.
@@ -980,7 +1013,8 @@ window.__MAKE_API__ = () => ({
         continue;
       }
       const s = bySong.get(t.song) || {id:ids.get(t.song), title:t.song, goes:0,
-        rehearsals:new Set(), first_played:r.created_at, last_played:r.created_at, starred:0};
+        rehearsals:new Set(), first_played:r.created_at, last_played:r.created_at, starred:0,
+        also:alsoOf(t.song)};
       s.goes++; s.rehearsals.add(r.folder); s.starred += t.starred ? 1 : 0;
       if (r.created_at < s.first_played) s.first_played = r.created_at;
       if (r.created_at > s.last_played) s.last_played = r.created_at;
@@ -1004,7 +1038,78 @@ window.__MAKE_API__ = () => ({
         goes.push({folder:r.folder, rehearsal:r.name, created_at:r.created_at,
                    missing:r.missing, take:t});
       }
-    return JSON.parse(JSON.stringify({ok:true, id, title, plays:songPlays(goes), goes}));
+    return JSON.parse(JSON.stringify({ok:true, id, title, also:title ? alsoOf(title) : [],
+                                      plays:songPlays(goes), goes}));
+  }),
+  // A song renamed, or merged into another (api.rename_song,
+  // api.merge_songs), and an old name forgotten (api.forget_song_name), as
+  // Python answers them. The files following are a done entry at once.
+  rename_song: track('rename_song', async (id, title) => {
+    await held('rename_song');
+    const all = await libraryNow();
+    songIds(all);
+    const from = titleOfId(id);
+    const t = String(title || '').trim();
+    const refuse = (error, into = null) => ({ok:false, error, into});
+    if (from === undefined) return refuse('Song not found');
+    if (!t) return refuse('A song needs a title');
+    if (/^Take \d+$/.test(t)) return refuse(`${t} is what a take with no song is called`);
+    const other = [...knownIds.keys()].find(s => s !== from && s.toLowerCase() === t.toLowerCase());
+    if (other) return refuse(`There is already a song called ${other}`, {id:knownIds.get(other), title:other});
+    const old = oldNames.get(t.toLowerCase());
+    if (old && old.song !== from) return refuse(`${t} is ${old.song} now`, {id:knownIds.get(old.song), title:old.song});
+    if (t === from) return {ok:true, title:t, goes:0};
+    let goes = 0;
+    for (const r of all) for (const take of r.takes) if (take.song === from) {
+      retitled.set(`${r.folder}#${take.take_number}`, {song:t, go:take.go});
+      goes++;
+    }
+    for (const take of session ? session.takes : []) if (take.song === from)
+      Object.assign(take, {song:t, name:`${t} ${take.go}`});
+    if (t.toLowerCase() !== from.toLowerCase()) {
+      oldNames.delete(t.toLowerCase());
+      oldNames.set(from.toLowerCase(), {name:from, song:t});
+    }
+    for (const v of oldNames.values()) if (v.song === from) v.song = t;
+    knownIds.set(t, knownIds.get(from));
+    knownIds.delete(from);
+    repertoire = repertoire.map(s => (s === from ? t : s));
+    namesDone(`Renaming ${from} to ${t}`, goes);
+    return {ok:true, title:t, goes};
+  }),
+  merge_songs: track('merge_songs', async (fromId, intoId, dryRun) => {
+    await held('merge_songs');
+    const all = await libraryNow();
+    songIds(all);
+    const from = titleOfId(fromId), into = titleOfId(intoId);
+    if (from === undefined || into === undefined) return {ok:false, error:'Song not found'};
+    if (from === into) return {ok:false, error:'A song cannot be merged into itself'};
+    // Numbered after the target's highest go, the oldest rehearsal first.
+    let last = 0;
+    const moving = [];
+    for (const r of [...all].reverse())
+      for (const t of [...r.takes].sort((a, b) => a.take_number - b.take_number)) {
+        if (t.song === into) last = Math.max(last, t.go);
+        if (t.song === from) moving.push({r, t});
+      }
+    const n = moving.length;
+    const counts = {ok:true, into, goes:n, rehearsals:new Set(moving.map(x => x.r.folder)).size,
+                    first:n ? last + 1 : null, last:n ? last + n : null};
+    if (dryRun) return counts;
+    moving.forEach(({r, t}, i) =>
+      retitled.set(`${r.folder}#${t.take_number}`, {song:into, go:last + 1 + i}));
+    for (const v of oldNames.values()) if (v.song === from) v.song = into;
+    oldNames.set(from.toLowerCase(), {name:from, song:into});
+    knownIds.delete(from);
+    repertoire = repertoire.filter(s => s !== from);
+    namesDone(`Merging ${from} into ${into}`, n);
+    return counts;
+  }),
+  forget_song_name: track('forget_song_name', async (name) => {
+    const key = String(name || '').trim().toLowerCase();
+    if (!oldNames.has(key)) return {ok:false, error:`No song was called ${String(name || '').trim()}`};
+    oldNames.delete(key);
+    return {ok:true};
   }),
   save_history_view: track('save_history_view', async (view) => {
     if (!['rehearsals', 'songs', 'marks'].includes(view)) return {ok:false, error:'Unknown view'};

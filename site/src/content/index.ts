@@ -31,7 +31,16 @@ export type SiteContent = {
   notFound: { title: string; lede: string }
 }
 
-export const TILES = ["health", "track", "rehearsals", "marks", "cloud", "formats", "trash"] as const
+export const TILES = [
+  "health",
+  "track",
+  "rehearsals",
+  "marks",
+  "names",
+  "cloud",
+  "formats",
+  "trash",
+] as const
 export const STEPS = ["setup", "record", "keep", "history", "compare"] as const
 
 const files = import.meta.glob<string>("../../content/*.md", {
