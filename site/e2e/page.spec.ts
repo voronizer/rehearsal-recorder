@@ -111,6 +111,20 @@ test("the page counts its visit with Vercel's analytics, the app in it does not"
   await expect(frame(page, "hero").contentFrame().locator(analytics)).toHaveCount(0)
 })
 
+// All of it is in the HTML as the build wrote it, for readers that run no
+// script: search engines, AI crawlers, and chats drawing a card for a link.
+test("the page tells search engines and chats what it is", async ({ page, request }) => {
+  await page.goto("/")
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", "https://reha.stream/og.png")
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute("content", "summary_large_image")
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://reha.stream/")
+  const ld = JSON.parse((await page.locator('script[type="application/ld+json"]').textContent())!)
+  expect(ld.softwareVersion).toBe(VERSION)
+  expect(await page.locator("noscript").textContent()).toContain(MAC_ZIP)
+  expect(await (await request.get("/robots.txt")).text()).toContain("Sitemap: https://reha.stream/sitemap.xml")
+  expect(await (await request.get("/sitemap.xml")).text()).toContain("<loc>https://reha.stream/</loc>")
+})
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 

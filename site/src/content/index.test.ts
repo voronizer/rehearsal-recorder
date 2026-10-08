@@ -36,6 +36,13 @@ describe("the site's content", () => {
     expect(content.hero.phoneCaption).toContain("Try it on a computer.")
   })
 
+  it("has the 404 page's words", () => {
+    expect(content.notFound.title).toBe("Nothing was recorded here")
+    expect(content.notFound.lede).toBe(
+      "There is no page at this address. The link may be cut short or out of date."
+    )
+  })
+
   it("has seven questions, each with an answer, the name's first", () => {
     expect(content.faq.questions).toHaveLength(7)
     expect(content.faq.questions[0].body).toContain("Belarusian for “echo”")

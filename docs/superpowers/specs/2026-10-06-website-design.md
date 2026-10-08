@@ -216,10 +216,51 @@ ui/e2e/band.js      the band, shared with tests/docs_screenshots.py
   bare domain, with `www` sent to it. Changing the DNS is Alex's, and is
   asked for at the first deploy, not before.
 
+## Links, search engines and the 404 page (added 2026-10-07)
+
+The page is drawn by script, and those that read it without running any
+(chats drawing a card for a link, AI crawlers, a search engine's first
+pass) see only the HTML. Rendering ahead of time stays out (below); Alex
+chose the tags instead.
+
+- **`site/index.html`:** a canonical address, Open Graph and Twitter tags
+  (title and description as the page's own, `og:image`
+  `https://reha.stream/og.png`, 1200 by 630, `summary_large_image`).
+- **At build time** (`seo()` in `site/vite.config.ts`, words from
+  `site/src/content/seo.ts`): JSON-LD describing the app as a
+  `SoftwareApplication` at the version the page shows; a `<noscript>` with
+  the heading, the lede and both downloads; `robots.txt`, which lets every
+  crawler in, AI ones too; and `sitemap.xml`, the one page. Google shows no
+  rich card from the JSON-LD (that needs ratings); it helps engines tell
+  what the app is.
+- **The link picture:** `site/og.html` lays out the page's heading, its
+  eyebrow and the app's rehearsal screen (the hero's frame) at 1200 by 630,
+  the variant Alex picked; `site/scripts/og.mjs` photographs it from the
+  build into `og.png`, in the site's CI, so it always shows the app as it is.
+  The runner has no Mac or Windows font, so Inter stands in for the app's
+  system font (`site/scripts/og-fonts.conf`), and no picture is drawn when
+  the page's own font did not load.
+- **The 404 page** (`site/404.html`): "Nothing was recorded here", a button
+  back to the main page, the download for the visitor's computer, and
+  Take 404 in the app's own player, four tracks of silence, 4:04 long (Alex
+  picked "Пустой дубль"). Vercel answers with it, status 404, for any
+  address that is no file, after `/mac` and `/windows` (the routes after
+  `{ "handle": "filesystem" }` in `vercel-config.json`). Without script it
+  still says so, with a link back (a `<noscript>`).
+- `stage.html`, `og.html` and `404.html` carry `noindex`; analytics counts
+  only the main page.
+- **Search consoles.** Google Search Console is Alex's: the domain
+  property, verified by a DNS TXT record, so nothing for it is in the
+  site's code. Its sitemap, `https://reha.stream/sitemap.xml`, is submitted
+  there once a release has put it on reha.stream. Yandex Webmaster was
+  left out (Alex, 2026-10-07).
+
 ## Not in this
 
 - The docs' screenshots, remade.
 - A dark version of the page.
-- Pages other than this one, other languages, analytics, a blog.
+- Pages other than this one and its 404 page, other languages, a blog.
+  (Visits are counted since 2026-10-07, with Vercel's Web Analytics: see
+  `site/src/page/main.tsx`.)
 - Rendering the page to HTML ahead of time; the text is in the build, the
   page is drawn by React on load.
