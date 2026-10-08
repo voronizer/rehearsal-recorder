@@ -7,6 +7,14 @@ opening.
 
 ## Unreleased
 
+- **Every mark by its label.** History has a third view, *Marks*: the
+  labels down the left, with how many marks each has, in how many
+  rehearsals, and the newest; beside them every mark with the chosen label,
+  from every rehearsal, newest first. **Group by** puts them under a
+  heading per rehearsal, per song, or in one list, and the choice is kept.
+  **▶** plays a mark's take right there from 5 seconds before it; a click
+  opens the take at the mark, and Esc comes back to the list. Marks of a
+  rehearsal not on disk stay, greyed.
 - **Sort the evening as it goes.** The rehearsal screen, and a rehearsal
   in History, sort the evening while everyone remembers it. A take nobody
   named has the songs under it, and one click names it. A take under 30
@@ -24,8 +32,8 @@ opening.
   there, a note from a few seconds before it, with no need to finish and
   look in History. The first take of a song tonight is then measured
   against that go: "Took 3:20 on 22 Sep".
-- **Every song has a page.** History has two views, *Rehearsals* and
-  *Songs*, and opens on the one used last. A song's page has every go at
+- **Every song has a page.** History has a *Songs* view beside
+  *Rehearsals*, and opens on the one used last. A song's page has every go at
   it, from every rehearsal, one line an evening with its goes drawn to
   scale; a click opens an evening's goes to play, open, star, rename or
   delete. Its ★ goes come first, and the marks from the last time it was

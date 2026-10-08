@@ -67,7 +67,8 @@ into it with the wheel when the spot needs finding exactly.
 **Markers say what happened, not just where.** A label and a comment — Keep
 this, Went wrong, or one of the band's own — coloured on the timeline and
 beside each go in the strip over the player, so a glance says which go has
-red in it.
+red in it. History lists every mark of a label from every rehearsal, so every
+Went wrong is one list, each playing from just before it.
 
 **Tells you what a rehearsal was.** Months later a date and a take count are
 not how anyone recognises an evening, so each one says what was played in it,

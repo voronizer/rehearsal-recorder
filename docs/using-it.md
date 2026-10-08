@@ -367,9 +367,10 @@ that is open in the player, it starts again from the beginning.
 
 ![Past rehearsals down the left, the chosen one beside them](screenshots/history.png)
 
-**History** has two views, switched at the top of its list: **Rehearsals**,
-evening by evening, and **Songs**, song by song. It opens on the one you used
-last, or on the rehearsal or song you opened from the setup screen.
+**History** has three views, switched at the top of its list: **Rehearsals**,
+evening by evening, **Songs**, song by song, and **Marks**, label by label.
+It opens on the one you used last, or on the rehearsal or song you opened
+from the setup screen.
 
 **Rehearsals** lists your past rehearsals down the left, by month, and shows
 the chosen one beside the list. It opens on the newest. Each rehearsal in the
@@ -421,6 +422,34 @@ back to the song, scrolled where you were.
 A rehearsal whose folder is not on disk stays on a song's page, greyed and
 marked **not on disk**. Its goes are counted, but they cannot be played or
 opened until the drive is back.
+
+![History's Marks view: every Went wrong, from every rehearsal](screenshots/history-marks.png)
+
+**Marks** lists your labels down the left, in the order Settings → Marks has
+them, each with how many marks have it, in how many rehearsals, and when the
+newest was left. A label nothing has yet is dimmed. Click a label, or go
+through them with ↑ and ↓.
+
+Beside the list are the label's marks, from every rehearsal, newest first.
+**Group by** at the top puts them under a heading per rehearsal (**By
+rehearsal**), per song (**By song**, the takes nobody named last), or in
+**One list**. The choice is kept, and is the same for every label. A heading
+opens its rehearsal in Rehearsals, or its song's page.
+
+Each mark is a row: its comment, or the label's name when it has none, then
+the take and the moment, *Pałyn 4 · 1:51*. Then the take as a bar, drawn to
+the longest take in the list, with the mark as a tick in the label's colour.
+
+- **▶** plays the take right there, from 5 seconds before the mark, so you
+  hear the moment coming. Press it again to pause.
+- Clicking the row opens the take in the player at the mark. Esc comes back
+  to the list, scrolled where you were.
+- A song's name in a row opens the song's page.
+- A mark given another label in the player moves to that label's list.
+
+A rehearsal whose folder is not on disk keeps its marks in the list, greyed
+and marked **not on disk**: they are counted, but cannot be played or opened
+until the drive is back.
 
 ## Sending takes to the cloud
 
@@ -577,8 +606,8 @@ While listening:
 | R | turn Repeat on or off |
 | ? | show the keys |
 
-In History, with no take open, ↑ and ↓ go through the rehearsals, or the
-songs in the Songs view.
+In History, with no take open, ↑ and ↓ go through the rehearsals, the
+songs in the Songs view, or the labels in the Marks view.
 
 Esc goes one step back. It closes a dialog first, then the strip's columns,
 then the open take, then a take playing in the list of takes, then the
@@ -731,8 +760,8 @@ delete them.
 - Under a take, every mark is listed, by its label's name and then its
   comment, if it has one.
 
-A label does nothing else: it changes how its marks look and what they are
-called.
+A label does nothing else: it changes how its marks look, what they are
+called, and under which label History's **Marks** view lists them.
 
 ## Appearance
 
