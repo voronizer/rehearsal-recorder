@@ -78,6 +78,26 @@ test("the tiles show the app's own pieces", async ({ page }) => {
   await expect(tiles.getByText("Soundcheck")).toBeVisible()
   await expect(tiles.getByText("Pałyn").first()).toBeVisible()
   await expect(tiles.getByRole("img", { name: /in the cloud/ }).getByText("1 of 1")).toBeVisible()
+  // Palyn typed in the Next take field: it is Pałyn now.
+  const names = tiles.getByRole("img", { name: /Palyn is Pałyn now/ })
+  await expect(names.locator("[data-take-go]")).toHaveText(/^ → Pałyn \d+$/)
+  await expect(names.getByText("Make Palyn a new song")).toBeVisible()
+})
+
+test("every row of tiles is full", async ({ page }) => {
+  await page.goto("/")
+  const rows = await page.locator("#features .bento").evaluate((bento) => {
+    const right = bento.getBoundingClientRect().right
+    const ends = new Map<number, number>()
+    for (const tile of bento.children) {
+      const box = tile.getBoundingClientRect()
+      const top = Math.round(box.top)
+      ends.set(top, Math.max(ends.get(top) ?? 0, box.right))
+    }
+    return [...ends.values()].map((end) => Math.round(right - end))
+  })
+  expect(rows.length).toBe(4)
+  for (const gap of rows) expect(gap).toBeLessThanOrEqual(1)
 })
 
 test("the story follows the scroll, and the rail goes back", async ({ page }) => {

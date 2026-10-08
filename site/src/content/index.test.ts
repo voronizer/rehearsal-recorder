@@ -7,12 +7,13 @@ import { displayVersion, latestVersion, newsLead } from "./changelog"
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
 describe("the site's content", () => {
-  it("has the seven tiles, in order", () => {
+  it("has the eight tiles, in order", () => {
     expect(content.features.tiles.map((t) => t.id)).toEqual([
       "health",
       "track",
       "rehearsals",
       "marks",
+      "names",
       "cloud",
       "formats",
       "trash",

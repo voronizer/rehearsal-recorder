@@ -10,9 +10,11 @@ const LAYOUT: Record<Id, string> = {
   track: "tile s2",
   rehearsals: "tile s2",
   marks: "tile s4",
+  names: "tile s4",
   cloud: "tile s2",
   formats: "tile s2",
-  trash: "tile s2 word",
+  // Wide, so the last row is as full as the others.
+  trash: "tile s4 word",
 }
 
 export function Features({ data }: { data: PieceData }) {

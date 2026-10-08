@@ -316,15 +316,6 @@ library = async () => Promise.all(Object.keys(PAST).map(async folder => (
 // Pałyn was typed "Palyn" one night, and merged since: the old spelling
 // still leads to it (Library song_name).
 oldNames.set('palyn', {name: 'Palyn', song: 'Pałyn'});
-// Python numbers goes across the library: a song tonight has not played
-// yet is offered at one past its last go in the evenings before.
-const tonightsChoices = api.song_choices;
-api.song_choices = async (folder, n) => {
-  const c = await tonightsChoices(folder, n);
-  const before = Object.keys(PAST).flatMap(pastTakes);
-  const next = song => Math.max(0, ...before.filter(t => t.song === song).map(t => t.go)) + 1;
-  return {...c, other: c.other.map(x => ({...x, go: next(x.song)}))};
-};
 
 const settings = api.get_settings;
 api.get_settings = async () => ({...(await settings()),

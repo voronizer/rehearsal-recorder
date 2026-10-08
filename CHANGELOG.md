@@ -7,6 +7,14 @@ opening.
 
 ## Unreleased
 
+- **Rename a song, or merge two.** The pencil beside a song's title on its
+  page in History renames it: every go, with its folder on disk and its
+  cloud copies, the files following in the background. The other songs are
+  listed under the title; picking one merges the song into it, after
+  asking, its goes numbered after the other song's own. A title left
+  behind is remembered: "Palyn" typed again in any name field is Pałyn's
+  next go, and the field says so, with *Make Palyn a new song* for when it
+  is not. The song's page lists these old names, each to forget.
 - **Every mark by its label.** History has a third view, *Marks*: the
   labels down the left, with how many marks each has, in how many
   rehearsals, and the newest; beside them every mark with the chosen label,
