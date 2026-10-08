@@ -644,12 +644,13 @@ class Library:
 
     def goes_before(self, song_id, folder):
         """
-        goes_of for the rehearsal screen's card, which asks on every refresh
-        while the rehearsal in `folder` is on: only goes from rehearsals on
-        disk other than that one, and of those only the ones the card picks
-        from, so none "missing". They are the last go of each of the three
-        newest such rehearsals, and the later ★ go of the newest such
-        rehearsal with one. None for an id no song has.
+        goes_of for what the first go tonight is measured against, asked on
+        every refresh of the rehearsal screen while the rehearsal in
+        `folder` is on: only goes from rehearsals on disk other than that
+        one, and of those only the ones it can be picked from, so none
+        "missing". They are the last go of each of the three newest such
+        rehearsals, and the later ★ go of the newest such rehearsal with one.
+        None for an id no song has.
         """
         live = Path(folder)
         with self._session() as db:

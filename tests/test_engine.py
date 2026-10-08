@@ -6234,10 +6234,11 @@ def main():
     finally:
         api57mod.open_in_file_manager = real_open57
 
-    print("\n[58] The next song's goes from before tonight")
-    # The rehearsal screen shows the song the next take is named for as it
-    # went before tonight: one go, and a few more on request. The recording
-    # screen measures its first go of the evening against that same go.
+    print("\n[58] The first go tonight against the go before tonight")
+    # The recording screen measures the first go of a song tonight against a
+    # go from before tonight, with its day: the newest starred one, else the
+    # last go of the latest rehearsal that played it. (Before tonight, the
+    # card that showed those goes on the rehearsal screen, is gone.)
     import shutil as shutil58
     tmp58 = Path(tempfile.mkdtemp())
     _, s58 = fresh_api(tmp58)
@@ -6257,16 +6258,10 @@ def main():
 
     A58 = rehearsal58("First", "2026-08-25T19:00:00",
                       [("Polyn", 180), ("Polyn 2", 190), ("Doroga", 200)])
-    B58 = rehearsal58("Middle", "2026-09-10T19:00:00", [("Polyn", 210), ("Vesna", 220)])
+    rehearsal58("Middle", "2026-09-10T19:00:00", [("Polyn", 210), ("Vesna", 220)])
     C58 = rehearsal58("Tuesday", "2026-09-15T19:00:00",
                       [("Polyn", 230), ("Polyn 2", 240), ("Vesna", 250)])
     D58 = rehearsal58("Last", "2026-09-22T19:00:00", [("Vesna", 260), ("Polyn", 270)])
-
-    def pick58(go):
-        return (go["folder"], go["take"]["take_number"])
-
-    def before58():
-        return s58.session_state()["before_tonight"]
 
     s58.start_rehearsal("Live", 0, SR, [{"name": "Gtr", "channel": 1}])
     live58 = Path(s58._session["folder"])
@@ -6278,95 +6273,53 @@ def main():
         return s58.keep_take(number, str(d), name, 1.0,
                              [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
 
-    s58.set_next_take_name("Polyn")
-    b58 = before58()
-    ok("with no star, the last go of the latest rehearsal is shown",
-       b58 is not None and pick58(b58["first"]) == (D58, 2))
-    ok("more is the last go of each of three rehearsals, less the one shown",
-       b58 is not None and [pick58(g) for g in b58["more"]] == [(C58, 2), (B58, 1)])
-    ok("the song is the library's title", b58 is not None and b58["song"] == "Polyn")
-    ok("a go is in _go_at's shape",
-       b58 is not None and set(b58["first"]) == {"folder", "rehearsal", "created_at", "take"}
-       and all(set(g) == {"folder", "rehearsal", "created_at", "take"} for g in b58["more"]))
-    s58.set_take_star(C58, 1, True)
-    b58 = before58()
-    ok("the newest starred go is shown", b58 is not None and pick58(b58["first"]) == (C58, 1))
-    ok("then all three rehearsals' last goes",
-       b58 is not None and [pick58(g) for g in b58["more"]] == [(D58, 2), (C58, 2), (B58, 1)])
-    s58.set_take_star(C58, 1, False)
+    def last58():
+        return s58.session_state()["last_attempt"]
 
-    s58.set_next_take_name("polyn")
-    b58 = before58()
-    ok("a title in another case finds its song", b58 is not None and b58["song"] == "Polyn")
-    ok("and the field names it as the library does",
-       s58.session_state()["next_take_name"] == "Polyn")
-    la58 = s58.session_state()["last_attempt"]
-    ok("the first go tonight is measured against the go shown",
+    s58.set_next_take_name("Polyn")
+    ok("the rehearsal screen has no Before tonight any more",
+       "before_tonight" not in s58.session_state())
+    la58 = last58()
+    ok("with no star, the last go of the latest rehearsal, with its day",
        la58 is not None and la58["duration_sec"] == 270
        and str(la58.get("created_at", "")).startswith("2026-09-22"))
-
-    keep58(1, "Polyn")
-    st58 = s58.session_state()
-    b58 = st58["before_tonight"]
-    ok("tonight's go is never before tonight",
-       b58 is not None and all(Path(g["folder"]) != live58 for g in [b58["first"], *b58["more"]])
-       and pick58(b58["first"]) == (D58, 2))
-    ok("nor counted among the three rehearsals",
-       b58 is not None and [pick58(g) for g in b58["more"]] == [(C58, 2), (B58, 1)])
-    ok("with a go tonight, last time is tonight's",
-       st58["last_attempt"] is not None and "created_at" not in st58["last_attempt"]
-       and st58["last_attempt"]["duration_sec"] == 1.0)
-
-    # The screen asks for its state after everything done on it: the card
-    # reads the few goes it can show, not every go at the song with its
-    # files and marks.
-    read58 = []
-    take_data58 = s58._lib._take_data
-
-    def counting58(folder, take):
-        read58.append(take.id)
-        return take_data58(folder, take)
-
-    s58._lib._take_data = counting58
-    try:
-        s58.set_next_take_name("Take 2")
-        s58.session_state()
-        without58 = len(read58)
-        s58.set_next_take_name("Polyn")
-        read58.clear()
-        s58.session_state()
-        n58 = len(read58) - without58
-        ok(f"the card reads only the goes it can show ({n58} read)", n58 <= 3)
-    finally:
-        s58._lib._take_data = take_data58
-
+    s58.set_take_star(C58, 1, True)
+    ok("the newest starred go once there is one",
+       last58() is not None and last58()["duration_sec"] == 230)
+    s58.set_take_star(C58, 1, False)
     s58.set_take_star(A58, 1, True)
-    b58 = before58()
-    ok("a star older than the three rehearsals is still the go shown",
-       b58 is not None and pick58(b58["first"]) == (A58, 1)
-       and [pick58(g) for g in b58["more"]] == [(D58, 2), (C58, 2), (B58, 1)])
+    ok("a star older than the latest rehearsals is still the one",
+       last58() is not None and last58()["duration_sec"] == 180)
     s58.set_take_star(A58, 1, False)
+
+    s58.set_next_take_name("polyn")
+    ok("a title in another case finds its song",
+       last58() is not None and last58()["song"] == "Polyn")
 
     shutil58.move(D58, str(tmp58 / "moved"))
     try:
-        b58 = before58()
-        ok("a rehearsal not on disk is skipped and not counted",
-           b58 is not None and pick58(b58["first"]) == (C58, 2)
-           and [pick58(g) for g in b58["more"]] == [(B58, 1), (A58, 2)])
+        ok("a rehearsal not on disk is skipped",
+           last58() is not None and last58()["duration_sec"] == 240)
     finally:
         shutil58.move(str(tmp58 / "moved"), D58)
 
-    keep58(2, "Sonca")
-    ok("a song played only tonight has none", before58() is None)
-    s58.set_next_take_name("Take 3")
+    keep58(1, "Polyn")
     st58 = s58.session_state()
-    ok("Take N has none", st58["before_tonight"] is None and st58["last_attempt"] is None)
+    ok("with a go tonight, last time is tonight's",
+       st58["last_attempt"] is not None and "created_at" not in st58["last_attempt"]
+       and st58["last_attempt"]["duration_sec"] == 1.0)
+    keep58(2, "Sonca")
+    ok("a song played only tonight is measured against tonight",
+       last58() is not None and last58()["song"] == "Sonca"
+       and "created_at" not in last58())
+    s58.set_next_take_name("Take 3")
+    ok("Take N has none", last58() is None)
     s58.set_next_take_name("Nothing yet")
-    ok("a new song has none", before58() is None)
+    ok("a new song has none", last58() is None)
 
-    # The library failing to answer for the card must not take the
-    # rehearsal screen down with it: the session is what it shows.
-    s58.set_next_take_name("Polyn")
+    # The library failing to answer must not take the rehearsal screen down
+    # with it: the session is what it shows.
+    s58.set_next_take_name("Vesna")
     goes_before58 = s58._lib.goes_before
 
     def broken58(*_a, **_k):
@@ -6376,8 +6329,8 @@ def main():
     try:
         st58 = s58.session_state()
         ok("a library that cannot answer leaves the session as it is",
-           st58.get("active") is True and st58["before_tonight"] is None
-           and st58["next_take_name"] == "Polyn")
+           st58.get("active") is True and st58["last_attempt"] is None
+           and st58["next_take_name"] == "Vesna")
     except Exception as e:
         ok(f"a library that cannot answer leaves the session as it is ({e!r})", False)
     finally:
@@ -6729,6 +6682,81 @@ def main():
     ok("a name no song was called is not forgotten",
        p61.forget_song_name("Palyn") == {"ok": False, "error": "No song was called Palyn"})
     p61.finish_rehearsal()
+
+    print("\n[62] Song sets")
+    # A set is picked beside Start rehearsal: its first song is the first
+    # take, the rehearsal keeps a copy of it, and History says it.
+    tmp62 = Path(tempfile.mkdtemp())
+    _, p62 = fresh_api(tmp62)
+    tracks62 = [{"name": "Gtr", "channel": 1}]
+    ok("there are no sets to begin with", p62.list_sets() == [])
+    r62 = p62.add_set("Gig", ["Polyn", "Vesna", "Novaja"])
+    ok("a set is made and every set comes back",
+       r62.get("ok") is True and [st["name"] for st in r62["sets"]] == ["Gig"]
+       and [x["title"] for x in r62["sets"][0]["songs"]] == ["Polyn", "Vesna", "Novaja"])
+    gig62 = r62["sets"][0]["id"]
+    ok("a taken name is refused with the reason",
+       p62.add_set("GIG", []) == {"ok": False, "error": "There is already a set called Gig"})
+    ok("an empty name is refused", p62.add_set(" ", [])["ok"] is False)
+    ok("a set is renamed",
+       p62.update_set(gig62, name="Gig on the 25th")["sets"][0]["name"] == "Gig on the 25th")
+    other62 = p62.add_set("Spare", [])["sets"][1]["id"]
+    ok("a set that is not there is refused",
+       p62.update_set(999, name="x") == {"ok": False, "error": "Set not found"})
+
+    ok("no set is picked to begin with", p62.get_settings()["next_set"] is None)
+    ok("picking one is kept", p62.save_next_set(gig62) == {"ok": True}
+       and p62.get_settings()["next_set"] == gig62 and p62._config.get("next_set") == gig62)
+    p62.save_next_set(other62)
+    p62.delete_set(other62)
+    ok("a picked set deleted reads as none", p62.get_settings()["next_set"] is None)
+    p62.save_next_set(None)
+    ok("no set is kept too", p62.get_settings()["next_set"] is None)
+
+    p62.start_rehearsal("Played by the set", 0, SR, tracks62, set_id=gig62)
+    st62 = p62.session_state()
+    ok("the rehearsal says its set",
+       st62["set"] == {"name": "Gig on the 25th", "songs": [
+           {"title": "Polyn", "new": True}, {"title": "Vesna", "new": True},
+           {"title": "Novaja", "new": True}]})
+    ok("the first take is the set's first song",
+       st62["next_take_name"] == "Polyn" and st62["next_take_go"] == 1)
+    live62 = Path(p62._session["folder"])
+
+    def keep62(number, name):
+        p62._session["take_counter"] = number
+        d = live62 / "_drafts" / f"take {number}"
+        write_wav(d / "Gtr.wav", 100, seconds=1.0)
+        return p62.keep_take(number, str(d), name, 1.0,
+                             [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
+
+    keep62(1, "Vesna")
+    ok("after a take the next take follows it, set or no set",
+       p62.session_state()["next_take_name"] == "Vesna")
+    ok("a song of the set played is no longer new",
+       p62.session_state()["set"]["songs"][1] == {"title": "Vesna", "new": False})
+    p62.update_set(gig62, name="Changed", songs=["Doroga"])
+    ok("changing the set later leaves the rehearsal's copy",
+       p62.session_state()["set"]["name"] == "Gig on the 25th")
+    ok("the last go at a song, asked by name",
+       p62.last_attempt("vesna") == {"song": "Vesna", "duration_sec": 1.0})
+    ok("none for a take with no song", p62.last_attempt("Take 3") is None)
+    ok("none for a song never played", p62.last_attempt("Novaja") is None)
+    folder62 = p62._session["folder"]
+    p62.finish_rehearsal()
+
+    listed62 = {r["name"]: r.get("set_name") for r in p62.list_rehearsals()}
+    ok("History's list says the set", listed62.get("Played by the set") == "Gig on the 25th")
+    ok("and the rehearsal itself",
+       p62.get_rehearsal(str(folder62))["set"]["name"] == "Gig on the 25th")
+
+    p62.start_rehearsal("Free", 0, SR, tracks62)
+    ok("played freely, there is no set", p62.session_state()["set"] is None)
+    ok("and the first take is Take 1", p62.session_state()["next_take_name"] == "Take 1")
+    p62.finish_rehearsal()
+    p62.start_rehearsal("Gone", 0, SR, tracks62, set_id=999)
+    ok("a set that is not there starts with none", p62.session_state()["set"] is None)
+    p62.finish_rehearsal()
 
     print("\n" + "=" * 60)
     if problems:
