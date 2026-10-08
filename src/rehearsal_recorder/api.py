@@ -312,14 +312,6 @@ def _last_attempt(takes, song, before=None):
         return {"song": song, "duration_sec": first["take"].get("duration_sec"),
                 "created_at": first["created_at"]}
     return None
-    goes = [t for t in takes if t.get("song") == song]
-    if goes:
-        return {"song": song, "duration_sec": goes[-1].get("duration_sec")}
-    if before is not None:
-        first = before["first"]
-        return {"song": song, "duration_sec": first["take"].get("duration_sec"),
-                "created_at": first["created_at"]}
-    return None
 
 
 def _field_text(named):

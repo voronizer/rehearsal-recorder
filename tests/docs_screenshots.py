@@ -162,7 +162,7 @@ def main():
         shoot(page, "recording")
 
         page.click("text=Stop")
-        page.wait_for_selector("#take-name")
+        page.wait_for_selector("[data-take-summary]")
         page.wait_for_timeout(1200)
         shoot(page, "review")
         page.get_by_role("button", name="Save take").click()

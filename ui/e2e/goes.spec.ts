@@ -3,6 +3,7 @@ import {
   callCount,
   dragRegion,
   expect,
+  nameTake,
   openApp,
   openHistory,
   recordTake,
@@ -315,7 +316,7 @@ test("the rehearsal screen has the same header", async ({ page }) => {
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page, 1)
-  await page.fill("#take-name", "Pałyn")
+  await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
   await recordTake(page, 2)
   await page.getByRole("button", { name: /Save take/ }).click()

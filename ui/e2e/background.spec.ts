@@ -2,6 +2,7 @@ import {
   callCount,
   calls,
   expect,
+  nameTake,
   openApp,
   setFake,
   startButton,
@@ -241,7 +242,7 @@ test.describe("long work shows its progress where it runs", () => {
     await expect(page.getByText("Cropping…")).toHaveCount(0)
 
     // Saved, and cropped again from the rehearsal screen.
-    await page.fill("#take-name", "Pałyn")
+    await nameTake(page, "Pałyn")
     await page.getByRole("button", { name: /Save take/ }).click()
     await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
     await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()

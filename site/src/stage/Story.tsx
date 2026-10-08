@@ -18,6 +18,7 @@ import {
   type PendingTake,
   type PlacedTrack,
   type SessionState,
+  type Take,
 } from "@/lib/api"
 import { CLIPS, demoApi } from "./demo"
 import { Hero } from "./Hero"
@@ -36,7 +37,7 @@ type Scene =
       tracks: PlacedTrack[]
       lastAttempt: LastAttempt | null
     }
-  | { step: "review"; take: PendingTake; rehearsalName: string }
+  | { step: "review"; take: PendingTake; rehearsalName: string; takes: Take[] }
   | { step: "history" }
 
 // The screen on show, outside React so the steps below can change it.
@@ -93,7 +94,11 @@ export function Story() {
           takeGo={now.takeGo}
           tracks={now.tracks}
           lastAttempt={now.lastAttempt}
-          onStopped={(take) => show({ step: "review", take, rehearsalName })}
+          onStopped={async (take) => {
+            // The screen after a take shows the song's goes before it.
+            const session = await api().session_state()
+            show({ step: "review", take, rehearsalName, takes: session.active ? session.takes : [] })
+          }}
         />
       )
     case "review":
@@ -101,13 +106,14 @@ export function Story() {
         <Review
           take={now.take}
           rehearsalName={now.rehearsalName}
+          takes={now.takes}
           onKept={async () => {
             // Back on the rehearsal screen, with the take just kept on it.
             const session = await api().session_state()
             if (session.active) show({ step: "rehearsal", session })
           }}
           onDiscarded={nothing}
-          onCropped={(take) => show({ step: "review", take, rehearsalName: now.rehearsalName })}
+          onCropped={(take) => show({ ...now, take })}
         />
       )
     case "history":
@@ -177,7 +183,7 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
   async keep({ beat, linger }) {
     await waitFor(() => performance.now() - takeStarted >= LEAST_TAKE_MS)
     await press("Stop", { exact: true })
-    await waitFor(() => document.querySelector("#take-name"))
+    await waitFor(() => document.querySelector("[data-take-summary]"))
     beat(0)
     await linger(BEAT_MS)
     await press("Save take")

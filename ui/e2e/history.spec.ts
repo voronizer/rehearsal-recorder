@@ -3,6 +3,7 @@ import {
   calls,
   expect,
   keyOn,
+  nameTake,
   openApp,
   openHistory,
   recordTake,
@@ -20,7 +21,7 @@ test("finishing a rehearsal with takes in it asks, and is answered from the keyb
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page, 1)
-  await page.fill("#take-name", "Pałyn")
+  await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
   await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
   const timeline = page.getByRole("group", { name: "Take timeline" })
