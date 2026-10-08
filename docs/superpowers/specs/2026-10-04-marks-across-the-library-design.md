@@ -24,7 +24,8 @@ Alex settled the design on 2026-10-08 in the thread "Задачи из обсу�
 #12", on the mockup https://claude.ai/artifact/NLduPwfdjF9NKzbBCFBN7e (its
 screenshots are in the project's files, `issue12/step9/mockup/`), and where
 it shows on reha.stream on https://claude.ai/artifact/AigUuiwEuxkwkXBbaKSmyB
-(`issue12/step9/site/`).
+(`issue12/step9/site/`) and https://claude.ai/artifact/Thti1fesgMHJe4RqSaaMLM
+(`issue12/step9/site/copy/`).
 
 ## Decisions
 
@@ -124,9 +125,31 @@ it shows on reha.stream on https://claude.ai/artifact/AigUuiwEuxkwkXBbaKSmyB
 The story keeps its five steps (Alex cut it to five on 2026-10-07). Step
 4, **Find it later**, opens History on Marks at *Went wrong*, then a click
 on Pałyn in one of its marks goes to the song's page, where step 5,
-**Compare goes**, starts as now. Its text: "Every rehearsal, every mark by
-its label, and a page for every song with every go at it, one line an
-evening."
+**Compare goes**, starts as now.
+
+Every step is told more fully, along with the app beside it (Alex, 08:19Z:
+"мне кажется там текста мало слева (да и в остальных шагах тоже)"; at
+08:26Z he chose the variant told "по ходу кадра"):
+
+- **S1. A step is its title, a line on what it is for, and three numbered
+  lines,** one for each thing the app beside it does, in the order it does
+  them.
+- **S2. The line the app is on is lit,** in full colour on a tile; the
+  others stay grey. A line is lit when the app gets to it and stays lit
+  until the next one. Only the step on screen has a lit line, and only once
+  the app has got to it: after a jump, nothing is lit until the app catches
+  up.
+- **S3. Compare goes** ends with ↓, to the next go, so its third line has
+  something to show.
+- **S4. The words:**
+
+| Step | Line | 1 | 2 | 3 |
+|---|---|---|---|---|
+| Set up the tracks. | One track per musician, filled in from last time. | Name the rehearsal, or keep the date. | A track per musician: a name, an icon, the input it comes in on. | Check signal: everyone plays, and each bar moves for its own player. |
+| Hear last week, then record. | Hear how the song went last week, then play it. | Pick Pałyn under Next take. | Its best go from last week plays right beside it. | Record: the take's name over a big clock, and a tile per track that turns red when it clips. |
+| Keep the good ones. | Stop, listen, keep it. The evening sorts itself while everyone remembers. | Stop, and the take opens to listen to. Save it. | A take nobody named: one click on Sonca names it. | False starts are grey, and Send starred puts the ★ takes in the band's folder. |
+| Find it later. | Every rehearsal, every mark and every song, in History. | History opens on the newest rehearsal. | Marks: every Went wrong, from every rehearsal. ▶ plays from just before it. | A click on Pałyn: its page, every go at it, one line an evening. |
+| Compare goes. | Loop the bridge, then hear it in the next go. | Open Pałyn 5 and loop its bridge. | Step to Pałyn 6: it starts at the same bar, still looping. | ↑ and ↓ do the same, through every rehearsal. |
 
 The demo band has six marks in History, three of them Went wrong on one
 evening. It gets a few more on the earlier evenings, on its four labels, so
@@ -157,7 +180,12 @@ Tests come before the code, and each is seen failing first.
     place;
   - a mark with no comment shown by its label's name;
   - a missing rehearsal's mark greyed, with nothing to play.
-- **Site:** step 4 shows Marks, then Pałyn's page; step 5 still compares.
+- **Site:**
+  - step 4 shows Marks, then Pałyn's page; step 5 still compares;
+  - every step has its line and three lines;
+  - the app tells the page each line as it gets to it, in order, step by
+    step;
+  - the page lights that line in the step on screen, and none elsewhere.
 
 ## Docs
 
