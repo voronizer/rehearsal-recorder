@@ -40,6 +40,28 @@ everywhere. It stands on
 - **D5. A merge cannot be undone as one step.** It asks first, saying how
   many goes in how many rehearsals will be renamed. Splitting a song back is
   renaming takes one by one, as today.
+- **D6. A title that leaves is remembered as the song's old name** (Alex,
+  8 Oct 2026, «Сразу Pałyn»). Renamed or merged away, "Palyn" stays a way
+  to say Pałyn: typed again in any name field, alone or with a number after
+  it, it is Pałyn, and the take is Pałyn's next go. This holds for any
+  title that left, other letters, another alphabet or a working title, not
+  only a missing ł. A spelling never typed before is not guessed.
+- **D7. Old names follow the song.** A merge gives the target the merged
+  song's title and its old names. A case-only respelling remembers
+  nothing: titles already match case-blind. A song renamed back to one of
+  its own old names takes it back as its title, and remembers the title it
+  had. A name is never both a title and an old name, and two songs never
+  share an old name.
+- **D8. Where old names show, and forgetting one** (Alex, 8 Oct 2026, «A и
+  C вместе»):
+  - on the song's page under the title: "Also typed as Palyn ×, Polyn ×";
+    × forgets that name;
+  - in a name field, while the text is an old name: "Palyn → Pałyn 12" in
+    the field, the songs under it narrowed to Pałyn, lit, and under them
+    "Palyn is Pałyn now. Make Palyn a new song". The link forgets the name
+    and names the take Palyn, a new song.
+
+  A forgotten name typed again is a new song.
 
 ## The dialog
 
@@ -58,12 +80,23 @@ everywhere. It stands on
   renamed." Confirmed, the page becomes Polyn's.
 - **R4. A title that differs only in case** ("polyn" for "Polyn") is a
   rename of the same song: it respells it.
+- **R5. The dialog's field and pills are the take name field's**, without
+  the goes: a rename gives no go. Another song's old name typed turns the
+  button into *Merge…* as its title does ("Palyn → Pałyn" in the field). A
+  title is taken as typed: a number at its end is part of it. "Take 4" is
+  refused: it is what a take with no song is called.
+- **R6. The merge question**, exactly: "Merge Palyn into Pałyn?" and "2 goes
+  in 1 rehearsal become Pałyn 8–9, and their folders and cloud copies are
+  renamed. To split them again, rename the takes one by one." The button is
+  *Merge*.
+- **R7. What plays on the page stops** before a rename or a merge, so the
+  files it holds can be renamed.
 
 ## Python
 
 - **A1.** `rename_song(song_id, title)`:
-  - returns `{"ok": False, "error": …}` when the title is another song's
-    (case-blind); merging is A2;
+  - returns `{"ok": False, "error": …, "into": {"id", "title"}}` when the
+    title is another song's title or old name (case-blind); merging is A2;
   - otherwise sets the title, then starts the pass for the song's takes.
 - **A2.** `merge_songs(from_id, into_id)`:
   - points `from_id`'s takes at `into_id` and numbers them per D3, in one
@@ -75,13 +108,23 @@ everywhere. It stands on
 - **A3.** The pass takes a set of takes to look at, not only "everything on
   open", so a rename does not walk the whole library. Renaming a single
   take moves its files itself, as `rename_take` does now.
+- **A4.** Old names are a table of their own, `song_name` (migration 0005):
+  the name as it was spelled, and the song it leads to. Naming a take
+  (`Library._resolve`) looks for a title, then an old name, for the whole
+  text, then the same for the text less a trailing number. Old rehearsals
+  imported from `session.json` go through old names too.
+- **A5.** `forget_song_name(name)` forgets one. `list_songs`, `get_song` and
+  `song_choices` give each song its old names as `"also"`.
 
 ## Testing
 
 Tests come before the code, and each is seen failing first.
 
 - **Python:**
-  - A1, including a case-only respelling and a clash refused;
+  - A1, including a case-only respelling, a clash refused, and "Take 4"
+    refused;
+  - D6 and D7: an old name typed, alone and with a number, naming a go at
+    its song; old names carried by a merge; renaming back; forgetting;
   - A2 numbering the moved goes after the song's own, in the order played,
     with the song's own goes unchanged;
   - D4: the ★ goes of both songs still starred after a merge, and the
@@ -94,12 +137,23 @@ Tests come before the code, and each is seen failing first.
   - typing a new title renaming;
   - a pill turning Rename into Merge…, with the question naming the counts;
   - after a merge, the page is the target song's, with every go;
-  - the background-work entry.
+  - the background-work entry;
+  - "Also typed as" and ×;
+  - an old name typed on the rehearsal screen: "→ Pałyn", the one pill
+    lit, and *Make Palyn a new song*.
 
 ## Docs
 
 - `docs/using-it.md`: under "Names and songs".
 - `CHANGELOG.md`.
+
+## On reha.stream
+
+A tile in *Built for the room*, after the marks tile (Alex, 8 Oct 2026,
+«Плитка»): "Spell it however you like." and "Typed Palyn one night and
+Pałyn the next? Merge them once, and the old spelling still finds the
+song." Beside it, the Next take field with "Palyn" typed: "Palyn → Pałyn",
+the go, the one pill lit and the line under it. The story does not change.
 
 ## Not part of this
 
