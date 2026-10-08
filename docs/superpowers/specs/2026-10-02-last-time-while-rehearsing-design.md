@@ -1,5 +1,7 @@
 # Last time while rehearsing: earlier goes at the next song, on the rehearsal screen
 
+> The *Before tonight* card was taken back before any release by [song sets](2026-10-08-song-sets-design.md) (D15). The panel, and the recording screen's "Took 3:20 on 22 Sep", stay.
+
 "How did we play the bridge last week?" comes up in the middle of a
 rehearsal, and the app cannot answer it there.
 
