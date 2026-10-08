@@ -54,7 +54,7 @@ test("the story goes through its five steps", async ({ page }) => {
   await expect.poll(() => scene(page), { timeout: 20_000 }).toBe("setup")
   await expect(page.getByRole("button", { name: /Stop checking/ })).toBeVisible()
 
-  // Last week's ★ go beside the song picked, then Record on it.
+  // Last week's ★ go from the start screen, Start, Pałyn picked, Record.
   await step(page, 1)
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("record")
   await expect(page.locator("h1")).toContainText(/Pałyn\s*3/)
@@ -87,6 +87,36 @@ test("the story goes through its five steps", async ({ page }) => {
   await expect(open.locator("[data-tab-line]")).toHaveText(/^7/)
   await expect(page.locator("[data-column]").first()).toBeVisible()
   await expect(page.locator("[data-region-span]")).toBeVisible()
+})
+
+test("the second step plays last week's Pałyn, starts, and picks Pałyn with the arrow key", async ({
+  page,
+}) => {
+  // What is on screen as each of the step's lines is told.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __seen: object[] }
+    w.__seen = []
+    window.addEventListener("message", (e) => {
+      if (e.data?.type !== "rr-beat" || e.data.step !== 1) return
+      w.__seen.push({
+        beat: e.data.beat,
+        lastWeek: Boolean(
+          document.querySelector("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']")
+        ),
+        field: document.querySelector<HTMLInputElement>("#next-take-name")?.value ?? null,
+        recording: Boolean(document.querySelector("h1")?.textContent?.match(/Pałyn\s*3/)),
+      })
+    })
+  })
+  await page.goto("/stage.html#story")
+  await step(page, 1)
+  await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("record")
+  const seen = await page.evaluate(() => (window as unknown as { __seen: object[] }).__seen)
+  expect(seen).toEqual([
+    { beat: 0, lastWeek: true, field: null, recording: false },
+    { beat: 1, lastWeek: false, field: expect.stringMatching(/^Pałyn/), recording: false },
+    { beat: 2, lastWeek: false, field: null, recording: true },
+  ])
 })
 
 test("the story tells the page each line as it gets to it", async ({ page }) => {

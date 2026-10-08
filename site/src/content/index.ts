@@ -38,6 +38,7 @@ export const TILES = [
   "marks",
   "names",
   "cloud",
+  "sets",
   "formats",
   "trash",
 ] as const

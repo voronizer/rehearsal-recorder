@@ -317,6 +317,14 @@ library = async () => Promise.all(Object.keys(PAST).map(async folder => (
 // still leads to it (Library song_name).
 oldNames.set('palyn', {name: 'Palyn', song: 'Pałyn'});
 
+// The set the band plays its gigs by (Settings › Sets), for the site's sets
+// tile and the docs' pictures. A page that kept sets of its own has those.
+if (sets.length === 0) {
+  sets = [{id: 1, name: 'Gig on the 25th',
+           songs: ['Pałyn', 'Viasna', 'Ahoń', 'Sonca', 'Dym', 'Ptuška']}];
+  nextSetId = 2;
+}
+
 const settings = api.get_settings;
 api.get_settings = async () => ({...(await settings()),
   recordings_dir: 'C:\\Users\\alex\\RehearsalRecordings',

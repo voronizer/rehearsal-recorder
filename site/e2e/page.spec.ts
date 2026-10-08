@@ -78,10 +78,35 @@ test("the tiles show the app's own pieces", async ({ page }) => {
   await expect(tiles.getByText("Soundcheck")).toBeVisible()
   await expect(tiles.getByText("Pałyn").first()).toBeVisible()
   await expect(tiles.getByRole("img", { name: /in the cloud/ }).getByText("1 of 1")).toBeVisible()
-  // Palyn typed in the Next take field: it is Pałyn now.
+  // Palyn typed in the Next take field: it is Pałyn now, the one song
+  // under it, lit; as on the rehearsal screen, a list and no pills.
   const names = tiles.getByRole("img", { name: /Palyn is Pałyn now/ })
   await expect(names.locator("[data-take-go]")).toHaveText(/^ → Pałyn \d+$/)
-  await expect(names.getByText("Make Palyn a new song")).toBeVisible()
+  const songs = names.locator("[data-song-list]")
+  await expect(songs.locator("h2")).toHaveText("Songs")
+  await expect(songs.locator("[data-song-row]")).toHaveCount(1)
+  await expect(songs.locator("[data-song-row='Pałyn']")).toHaveAttribute("aria-current", "true")
+  await expect(names.locator("[data-song-choice]")).toHaveCount(0)
+})
+
+test("the sets tile shows a rehearsal mid-set", async ({ page }) => {
+  await page.goto("/")
+  const tile = page.locator("#features article").filter({
+    has: page.getByRole("heading", { name: "Rehearse the set, in order." }),
+  })
+  const piece = tile.getByRole("img", { name: /Gig on the 25th/ })
+  await expect(piece.locator("input")).toHaveValue("Viasna")
+  const card = piece.locator("[data-set-card]")
+  await expect(card.locator("h2")).toHaveText("Gig on the 25th — 1 of 6 played")
+  await expect(card.locator("[data-set-song]")).toHaveText([
+    /^1Pałyn4 goes$/,
+    /^2Viasna$/,
+    /^3Ahońnext$/,
+    /^4Sonca$/,
+    /^5Dym$/,
+    /^6Ptuška$/,
+  ])
+  await expect(card.locator("[data-set-song='Viasna']")).toHaveAttribute("aria-current", "true")
 })
 
 test("every row of tiles is full", async ({ page }) => {
@@ -96,8 +121,24 @@ test("every row of tiles is full", async ({ page }) => {
     }
     return [...ends.values()].map((end) => Math.round(right - end))
   })
-  expect(rows.length).toBe(4)
+  expect(rows.length).toBe(5)
   for (const gap of rows) expect(gap).toBeLessThanOrEqual(1)
+})
+
+test("on a middle-sized window too, no row of tiles has a hole", async ({ page }) => {
+  await page.setViewportSize({ width: 860, height: 900 })
+  await page.goto("/")
+  const gaps = await page.locator("#features .bento").evaluate((bento) => {
+    const right = bento.getBoundingClientRect().right
+    const ends = new Map<number, number>()
+    for (const tile of bento.children) {
+      const box = tile.getBoundingClientRect()
+      const top = Math.round(box.top)
+      ends.set(top, Math.max(ends.get(top) ?? 0, box.right))
+    }
+    return [...ends.values()].map((end) => Math.round(right - end))
+  })
+  for (const gap of gaps) expect(gap).toBeLessThanOrEqual(1)
 })
 
 test("the story follows the scroll, and the rail goes back", async ({ page }) => {
