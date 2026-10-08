@@ -108,6 +108,9 @@ export type Label = {
 /** What a change to the labels answers: all of them, as they are now. */
 export type LabelsAnswer = Ok<{ labels?: Label[] }>
 
+/** What a change to the sets answers: every set as it now is. */
+export type SetsAnswer = Ok<{ sets?: SongSet[] }>
+
 export type Marker = {
   /** Position in the take, in seconds. */
   at: number
@@ -171,11 +174,11 @@ export type SessionState =
       next_take_go?: number | null
       /** What the next take would be called without a name picked for it. */
       next_take_default?: string
-      /** The song the next take is named for, as it went before tonight:
-       *  the card beside the Next take field. Null with no song, or none. */
-      before_tonight?: BeforeTonight | null
       /** The latest go at the song the next take is named for, if any. */
       last_attempt?: LastAttempt | null
+      /** The set this rehearsal plays by, as it kept it at Start; null when
+       *  it plays freely. */
+      set?: RehearsalSet | null
       recording: boolean
       /** Takes the app is copying to the cloud folder right now. */
       cloud_queue?: Record<number, "queued" | "working">
@@ -195,18 +198,17 @@ export type LastAttempt = {
   created_at?: string | null
 }
 
-/**
- * A song as it went before tonight (api._before_tonight): the go shown
- * beside the Next take field — its newest ★ go, else the last go of its
- * latest rehearsal — and what "N more" adds under it, the last go of each of
- * its three latest rehearsals less that one. Tonight's rehearsal and the
- * ones not on disk are left out.
- */
-export type BeforeTonight = {
-  song: string
-  first: SongPlays
-  more: SongPlays[]
-}
+/** A song in a set: its title now, or as typed when no song has it yet
+ *  (`new`), which is what the set's rows mark with a dot. */
+export type SetSong = { title: string; new: boolean }
+
+/** A set of songs in the order the band means to play them (Settings ›
+ *  Sets), as list_sets gives them. */
+export type SongSet = { id: number; name: string; songs: SetSong[] }
+
+/** The copy of a set a rehearsal keeps from its start: editing or deleting
+ *  the set later leaves it as it was. */
+export type RehearsalSet = { name: string; songs: SetSong[] }
 
 /**
  * A song a rehearsal was spent on, and how many goes it got. Worked out from
@@ -248,6 +250,8 @@ export type RehearsalSummary = {
   /** The folder is not on disk — deleted, renamed outside the app, or on a
    *  drive that is not plugged in. */
   missing?: boolean
+  /** The name of the set it was played by, if any. */
+  set_name?: string | null
 }
 
 export type RehearsalDetail = {
@@ -261,6 +265,9 @@ export type RehearsalDetail = {
   /** The folder is not on disk — deleted, renamed outside the app, or on a
    *  drive that is not plugged in. */
   missing?: boolean
+  /** The set it was played by, as it kept it; null when it was played
+   *  freely. */
+  set?: RehearsalSet | null
 }
 
 /** A song a take can be named after, and the go naming it so would make. */
@@ -617,6 +624,9 @@ export type Settings = {
   history_view?: HistoryView
   /** How its Marks view groups a label's marks. */
   marks_grouping?: MarksGrouping
+  /** The set picked beside Start rehearsal, kept across restarts; null to
+   *  play freely, and when that set is gone. */
+  next_set: number | null
   ui_scale: number
   output_device_index: number | null
   /** Outputs of that card the mix comes out of, from 1: [3, 4] or [5]. */
@@ -679,7 +689,9 @@ type PyApi = {
     deviceIndex: number,
     samplerate: number,
     tracks: Track[],
-    bitDepth?: number
+    bitDepth?: number,
+    /** The set it plays by; left out or null, it plays freely. */
+    setId?: number | null
   ): Promise<Ok<{ folder?: string }>>
   /** Which rate/depth combinations this input actually accepts. */
   recording_formats(
@@ -697,6 +709,10 @@ type PyApi = {
   /** Names the take recorded next; blank goes back to the name it would
    *  have had. Holds until a take is kept. */
   set_next_take_name(name: string): Promise<Ok<{ next_take_name?: string; next_take_go?: number | null }>>
+  /** The latest go at the song `name` resolves to, by session_state's rule
+   *  for last_attempt: what the screen after a take measures it against.
+   *  null with no rehearsal on, no song, or a song never played. */
+  last_attempt(name: string): Promise<LastAttempt | null>
   get_levels(): Promise<Record<string, number>>
   stop_take(): Promise<PendingTake | { ok: false; error: string }>
   keep_take(
@@ -866,6 +882,18 @@ type PyApi = {
   /** A label in use needs `marksTo`: the label its marks get. */
   delete_label(labelId: number, marksTo?: number | null): Promise<LabelsAnswer>
 
+  /** Every set, in order. */
+  list_sets(): Promise<SongSet[]>
+  /** Each answers with every set as it now is, or with the reason it was
+   *  refused: no name, or a name another set has. */
+  add_set(name: string, songs: string[]): Promise<SetsAnswer>
+  /** null leaves the name, or the songs, as they are. */
+  update_set(setId: number, name: string | null, songs: string[] | null): Promise<SetsAnswer>
+  /** Rehearsals played by it keep their copy of it. */
+  delete_set(setId: number): Promise<SetsAnswer>
+  /** The set Start rehearsal plays by, or null to play freely. */
+  save_next_set(setId: number | null): Promise<Ok>
+
   list_drafts(): Promise<Draft[]>
   recover_draft(draftDir: string, name?: string): Promise<Ok<{ take?: Take }>>
   discard_draft(draftDir: string): Promise<DeleteResult>
@@ -1029,6 +1057,8 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "list_songs",
   "list_drafts",
   "list_labels",
+  "list_sets",
+  "last_attempt",
   "get_settings",
   "startup_problems",
 ])

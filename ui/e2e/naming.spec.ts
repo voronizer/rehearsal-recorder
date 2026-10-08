@@ -249,6 +249,15 @@ test.describe("the next take", () => {
       (window as unknown as { __CALLS__: { name: string }[] }).__CALLS__.map((c) => c.name)
     )
 
+  test("the rehearsal panel has no Before tonight card", async ({ page }) => {
+    // The card went with sets (step 8): the go before tonight is still what
+    // the recording screen measures against, but nothing beside the field.
+    await openApp(page)
+    await startRehearsal(page)
+    await expect(field(page)).toBeVisible()
+    await expect(page.locator('[aria-label$="efore tonight"]')).toHaveCount(0)
+  })
+
   test("is named in one field over Record, and keeps its name through a take thrown away", async ({
     page,
   }) => {
@@ -622,7 +631,7 @@ test("a pill puts only the song's title in the field", async ({ page }) => {
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Viasna")
 })
 
-// Tonight's takes, apart from Pałyn's go from before tonight in the panel.
+// Tonight's takes.
 const overview = (page: Page) => page.locator("[aria-label='Rehearsal overview']")
 
 test("a take is shown as its song with the go beside it, from 1", async ({ page }) => {

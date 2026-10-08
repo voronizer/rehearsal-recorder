@@ -242,7 +242,8 @@ export function Recording({
             <div className="flex justify-between gap-4 text-sm text-muted-foreground">
               <span className="tnum">0:00</span>
               {/* The song is over the clock already. The first go of the
-                  evening is measured against one from before tonight, and
+                  evening is measured against the go before tonight (its
+                  newest ★ go, else the last at its latest rehearsal), and
                   says which day that was. */}
               <span>
                 Took {formatMMSS(lastAttempt.duration_sec)}{" "}
