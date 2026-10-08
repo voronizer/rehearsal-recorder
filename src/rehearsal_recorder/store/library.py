@@ -528,9 +528,10 @@ class Library:
         "rehearsals", "first_played", "last_played", "starred", "also"}],
         "not_named": {"takes", "rehearsals", "last_played"} or None}.
 
-        One query, grouped by song, and no folder looked at: a rehearsal on a
-        drive that is not plugged in is counted like any other. A song whose
-        every go was deleted has no takes to group, so it is not listed.
+        Two queries, the goes grouped by song and the songs' old names, and no
+        folder looked at: a rehearsal on a drive that is not plugged in is
+        counted like any other. A song whose every go was deleted has no
+        takes to group, so it is not listed.
         """
         with self._session() as db:
             rows = db.execute(

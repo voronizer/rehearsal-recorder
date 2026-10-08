@@ -350,6 +350,11 @@ def _field_text(named):
     return named["song"] or named["name"]
 
 
+def _takes(takes):
+    """'1 take', '12 takes': how many a names pass has to look at."""
+    return "1 take" if len(takes) == 1 else f"{len(takes)} takes"
+
+
 def _folder_bytes(folder):
     """
     How much of the disk a folder is using, walked rather than worked out from
@@ -2207,10 +2212,10 @@ class Api:
 
     def get_song(self, song_id=None):
         """
-        A song's page: {"ok", "id", "title", "plays", "goes"}, its goes from
-        every rehearsal as Library.goes_of gives them, and "plays" what its
-        play button plays (_plays_of). `song_id` None is the takes with no
-        song.
+        A song's page: {"ok", "id", "title", "also", "plays", "goes"}, its
+        goes from every rehearsal and its old names as Library.goes_of gives
+        them, and "plays" what its play button plays (_plays_of). `song_id`
+        None is the takes with no song.
         """
         found = self._lib.goes_of(song_id)
         if found is None:
@@ -2323,17 +2328,22 @@ class Api:
         Gives a song another title, from its page in History (Library.rename_song):
         {"ok": True, "title", "goes"}. Its takes' folders and cloud copies
         follow in the background, in a pass of their own under "Renaming Polyn
-        to Polin" (names_pass.py). Refused with {"ok": False, "error", "into"},
-        `into` being {"id", "title"} of the song the title already belongs to,
-        if that is why: merge_songs into it is what to offer instead.
+        to Polin · 12 takes" (names_pass.py). Refused with {"ok": False,
+        "error", "into"}, `into` being {"id", "title"} of the song the title
+        already belongs to, if that is why: merge_songs into it is what to
+        offer instead.
         """
         try:
             done = self._lib.rename_song(song_id, title)
         except SongRefused as e:
             return {"ok": False, "error": str(e), "into": e.into}
+        # Not under _files_lock: the pass reads each take afresh before it
+        # renames anything, so one running meanwhile only leaves what the
+        # next pass puts right.
         if done["takes"]:
             self._names_pass.request_takes(
-                done["takes"], f"Renaming {done['from']} to {done['title']}")
+                done["takes"],
+                f"Renaming {done['from']} to {done['title']} · {_takes(done['takes'])}")
         return {"ok": True, "title": done["title"], "goes": len(done["takes"])}
 
     def merge_songs(self, from_id, into_id, dry_run=False):
@@ -2343,7 +2353,7 @@ class Api:
         moved, from how many rehearsals, and the goes they become. dry_run
         answers the same and changes nothing, for the question asked first.
         Otherwise the files follow as rename_song's do, under "Merging Palyn
-        into Pałyn".
+        into Pałyn · 2 takes".
         """
         try:
             done = self._lib.merge_songs(from_id, into_id, dry_run=bool(dry_run))
@@ -2351,7 +2361,8 @@ class Api:
             return {"ok": False, "error": str(e)}
         if not dry_run and done["takes"]:
             self._names_pass.request_takes(
-                done["takes"], f"Merging {done['from']} into {done['into']}")
+                done["takes"],
+                f"Merging {done['from']} into {done['into']} · {_takes(done['takes'])}")
         return {"ok": True, **{k: done[k] for k in
                                ("into", "goes", "rehearsals", "first", "last")}}
 

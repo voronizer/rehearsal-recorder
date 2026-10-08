@@ -19,7 +19,7 @@ docs/superpowers/specs/2026-10-02-songs-in-the-store-design.md, F1–F5.
 
 A song renamed or merged hands over the takes whose names it changed, and
 they are put right in a pass of their own, under a title saying what it is
-("Renaming Polyn to Polin"), without walking the whole library
+("Renaming Polyn to Polin · 12 takes"), without walking the whole library
 (docs/superpowers/specs/2026-10-02-rename-and-merge-songs-design.md, A3).
 """
 
@@ -115,14 +115,19 @@ class NamesPass:
 
     def run_queued(self):
         """Every pass over given takes asked for so far, in turn; how many
-        takes they renamed. The thread runs them; the suites call this."""
+        takes they renamed. One that goes wrong outside a take (its entry
+        says it stopped) does not hold up the ones after it. The thread runs
+        them; the suites call this."""
         renamed = 0
         while not self._stop.is_set():
             with self._queue_lock:
                 if not self._queued:
                     break
                 todo, title = self._queued.popleft()
-            renamed += self.run(todo, title)
+            try:
+                renamed += self.run(todo, title)
+            except Exception as e:
+                print(f"{title} failed: {e}", file=sys.stderr)
         return renamed
 
     def start(self):

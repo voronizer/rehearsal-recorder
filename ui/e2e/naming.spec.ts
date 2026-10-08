@@ -2,6 +2,8 @@ import {
   callCount,
   calls,
   expect,
+  expectedError,
+  notices,
   openApp,
   openHistory,
   recordTake,
@@ -705,6 +707,28 @@ test.describe("a song's old name", () => {
     await startRehearsal(page)
     await field(page).fill("palyn 4")
     await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+    await expect(group(page).locator("[data-song-choice]")).toHaveText(["Pałyn 1"])
+    await expect(group(page).locator("[data-song-choice]")).toHaveAttribute("aria-current", "true")
+    await group(page).locator("[data-all-songs]").click()
+    const all = page.getByRole("dialog", { name: "All songs" })
+    await expect(all.locator("[data-song-choice='Pałyn']")).toHaveAttribute("aria-current", "true")
+  })
+
+  test("Make Palyn a new song that cannot forget says so, and changes nothing", async ({
+    page,
+    pageErrors,
+  }) => {
+    await openApp(page, {
+      before: OLD + " window.__FAIL__ = {forget_song_name: 'database is locked'};",
+    })
+    await startRehearsal(page)
+    await field(page).fill("Palyn")
+    await line(page).getByRole("button", { name: "Make Palyn a new song" }).click()
+    await expect(notices(page, "error").filter({ hasText: "Could not forget Palyn" })).toBeVisible()
+    await expect(field(page)).toHaveValue("Palyn")
+    await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
+    expect(await callCount(page, "set_next_take_name")).toBe(0)
+    expectedError(pageErrors, /forget_song_name failed/)
   })
 
   test("leaving the field names the take after the song", async ({ page }) => {
@@ -716,6 +740,20 @@ test.describe("a song's old name", () => {
     await expect(field(page)).toHaveValue("Pałyn")
     await expect(line(page)).toHaveCount(0)
     await expect(group(page).locator("[data-take-go]")).toHaveText("1")
+  })
+
+  test("typed for the song already next, it settles to the song's title", async ({ page }) => {
+    await openApp(page, { before: OLD })
+    await startRehearsal(page)
+    await recordTake(page)
+    await saveAs(page, "Pałyn")
+    await expect(field(page)).toHaveValue("Pałyn")
+    await field(page).fill("Palyn")
+    await page.keyboard.press("Enter")
+    await expect(field(page)).toHaveValue("Pałyn")
+    await expect(line(page)).toHaveCount(0)
+    await page.keyboard.press("Space")
+    await expect(page.getByRole("heading", { level: 1, name: "Pałyn 2" })).toBeVisible()
   })
 
   test("Make Palyn a new song forgets the old name, then names the take Palyn", async ({
@@ -753,6 +791,42 @@ test.describe("a song's old name", () => {
     await expect(line(page)).toBeVisible()
     expect((await field(page).boundingBox())!.y).toBeCloseTo(fieldAt.y, 0)
     expect((await record.boundingBox())!.y).toBeCloseTo(recordAt.y, 0)
+  })
+
+  test("typed and left, it moves nothing under the songs", async ({ page }) => {
+    await openApp(page, { before: OLD })
+    await startRehearsal(page)
+    await expect.poll(() => rowsUnder(page, "Next take")).toBe(2)
+    const height = async () => (await group(page).boundingBox())!.height
+    const before = await height()
+    await field(page).fill("Palyn")
+    await expect(line(page)).toBeVisible()
+    expect(await height()).toBeCloseTo(before, 0)
+    await page.keyboard.press("Enter")
+    await expect(field(page)).toHaveValue("Pałyn")
+    expect(await height()).toBeCloseTo(before, 0)
+  })
+
+  test("in Rename take, leaving the field with an old name in it moves nothing", async ({
+    page,
+  }) => {
+    await openApp(page, { before: OLD })
+    await startRehearsal(page)
+    await recordTake(page)
+    await saveAs(page, "Viasna")
+    await page.hover("[data-take='1']")
+    await page.getByRole("button", { name: "Rename take Viasna 1" }).click()
+    const dialog = page.getByRole("dialog")
+    const take = dialog.getByRole("textbox", { name: "Take name" })
+    // Once it has zoomed in.
+    await expect.poll(() => dialog.evaluate((d) => d.getAnimations().length)).toBe(0)
+    const before = (await dialog.boundingBox())!.height
+    await take.fill("Palyn")
+    await expect(dialog.locator("[data-old-name]")).toBeVisible()
+    expect((await dialog.boundingBox())!.height).toBeCloseTo(before, 0)
+    await dialog.getByText("Rename take", { exact: true }).click()
+    await expect(take).not.toBeFocused()
+    expect((await dialog.boundingBox())!.height).toBeCloseTo(before, 0)
   })
 
   test("in Rename take, the old name stays until Rename, saying what it is", async ({ page }) => {

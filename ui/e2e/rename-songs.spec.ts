@@ -1,4 +1,13 @@
-import { calls, callCount, expect, openApp, openHistory, test } from "./app.ts"
+import {
+  calls,
+  callCount,
+  expect,
+  expectedError,
+  notices,
+  openApp,
+  openHistory,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Renaming a song, and merging it into another, from its page in History's
@@ -81,33 +90,65 @@ test.describe("Rename song, from a song's page", () => {
     // The old title is remembered.
     await expect(head(page).locator("[data-old-names]")).toContainText("Pałyn")
     await page.locator("button[aria-label^='Background work']").click()
-    await expect(page.getByText("Renaming Pałyn to Polyn")).toBeVisible()
+    await expect(page.getByText("Renaming Pałyn to Polyn · 3 takes")).toBeVisible()
     await expect(page.getByText("3 takes renamed").first()).toBeVisible()
   })
 
-  test("once the files have followed, the page reads its goes again, with their new folders", async ({
+  for (const [state, how] of [
+    ["done", "once the files have followed"],
+    ["failed", "when the files followed only in part"],
+  ] as const) {
+    test(`${how}, the page reads its goes again, with their new folders`, async ({ page }) => {
+      await openApp(page, { before: PALYN })
+      await openSong(page, "Pałyn")
+      await openRename(page, "Pałyn")
+      await titleField(page).fill("Polyn")
+      await dialog(page).getByRole("button", { name: "Rename", exact: true }).click()
+      await expect(head(page).getByRole("heading", { name: "Polyn", exact: true })).toBeVisible()
+      // Past what the rename itself set off; then the pass, finishing later.
+      const polls = await activityPolls(page)
+      await expect.poll(() => activityPolls(page)).toBeGreaterThanOrEqual(polls + 2)
+      const read = await callCount(page, "get_song")
+      await page.evaluate((state) => {
+        const w = window as unknown as { __ACTIVITY__: Record<string, unknown>[] }
+        w.__ACTIVITY__ = [
+          ...w.__ACTIVITY__,
+          { id: 990, kind: "names", title: "Renaming Pałyn to Polyn · 3 takes", folder: null,
+            take_number: null, state, fraction: 1, step: null,
+            error: state === "failed" ? "Could not rename 1 take" : null,
+            detail: state === "done" ? "1 take renamed" : null, retry: null, seen: false },
+        ]
+      }, state)
+      await expect.poll(() => callCount(page, "get_song")).toBeGreaterThan(read)
+    })
+  }
+
+  test("a title typed and Rename pressed at its top edge: nothing moves under the pointer", async ({
     page,
   }) => {
-    await openApp(page, { before: PALYN })
+    const songs = ["Palyn", "Viasna", "Ahoń", "Sonca", "Dym", "Ptuška", "Rečka", "Vieter", "Zorka"]
+    await openApp(page, { before: `window.__EXTRA_SONGS__ = ${JSON.stringify(songs)};` })
     await openSong(page, "Pałyn")
     await openRename(page, "Pałyn")
+    const rename = dialog(page).getByRole("button", { name: "Rename", exact: true })
+    const tops = () =>
+      dialog(page).evaluate((d) => {
+        const all = [...d.querySelectorAll("[data-song-choice], [data-all-songs]")]
+        return new Set(all.map((p) => Math.round(p.getBoundingClientRect().top))).size
+      })
+    await expect.poll(tops).toBe(2)
+    // Once it has zoomed in.
+    await expect.poll(() => dialog(page).evaluate((d) => d.getAnimations().length)).toBe(0)
+    const before = (await dialog(page).boundingBox())!
     await titleField(page).fill("Polyn")
-    await dialog(page).getByRole("button", { name: "Rename", exact: true }).click()
+    // The songs narrow to none as it is typed; the dialog keeps its size.
+    expect((await dialog(page).boundingBox())!.height).toBeCloseTo(before.height, 0)
+    const at = (await rename.boundingBox())!
+    await page.mouse.move(at.x + at.width / 2, at.y + 3)
+    await page.mouse.down()
+    expect((await rename.boundingBox())!.y).toBeCloseTo(at.y, 0)
+    await page.mouse.up()
     await expect(head(page).getByRole("heading", { name: "Polyn", exact: true })).toBeVisible()
-    // Past what the rename itself set off; then the pass, finishing later.
-    const polls = await activityPolls(page)
-    await expect.poll(() => activityPolls(page)).toBeGreaterThanOrEqual(polls + 2)
-    const read = await callCount(page, "get_song")
-    await page.evaluate(() => {
-      const w = window as unknown as { __ACTIVITY__: Record<string, unknown>[] }
-      w.__ACTIVITY__ = [
-        ...w.__ACTIVITY__,
-        { id: 990, kind: "names", title: "Renaming Pałyn to Polyn", folder: null,
-          take_number: null, state: "done", fraction: 1, step: null, error: null,
-          detail: "1 take renamed", retry: null, seen: false },
-      ]
-    })
-    await expect.poll(() => callCount(page, "get_song")).toBeGreaterThan(read)
   })
 
   test("Enter in the field renames, as Rename does", async ({ page }) => {
@@ -196,7 +237,7 @@ test.describe("Rename song, from a song's page", () => {
     await expect(older.getByRole("button", { name: "Take 4 Pałyn 11" })).toBeVisible()
     await expect(head(page).locator("[data-old-names]")).toContainText("Palyn")
     await page.locator("button[aria-label^='Background work']").click()
-    await expect(page.getByText("Merging Palyn into Pałyn")).toBeVisible()
+    await expect(page.getByText("Merging Palyn into Pałyn · 2 takes")).toBeVisible()
   })
 
   test("Cancel on the question changes nothing", async ({ page }) => {
@@ -255,6 +296,47 @@ test.describe("Rename song, from a song's page", () => {
     )
     const renamed = all.indexOf("rename_song")
     expect(all.slice(all.lastIndexOf("player_play"), renamed)).toContain("player_close")
+  })
+
+  test("a case-only Take 4 is a title like any other, as Python has it", async ({ page }) => {
+    await openApp(page, { before: PALYN })
+    await openSong(page, "Palyn")
+    await openRename(page, "Palyn")
+    await titleField(page).fill("take 4")
+    await expect(dialog(page).getByText("2 goes become take 4.")).toBeVisible()
+    await expect(dialog(page).getByRole("button", { name: "Rename", exact: true })).toBeEnabled()
+  })
+
+  test("playback stops before a merge", async ({ page }) => {
+    await openApp(page, { before: PALYN })
+    await openSong(page, "Pałyn")
+    await head(page).getByRole("button", { name: "Play Pałyn 1" }).click()
+    await expect(head(page).getByRole("button", { name: "Pause Pałyn 1" })).toBeVisible()
+    await openRename(page, "Pałyn")
+    await dialog(page).locator("[data-song-choice='Daroha']").click()
+    await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()
+    await question(page).getByRole("button", { name: "Merge", exact: true }).click()
+    await expect(head(page).getByRole("heading", { name: "Daroha", exact: true })).toBeVisible()
+    const all = await page.evaluate(() =>
+      (window as unknown as { __CALLS__: { name: string; args: unknown[] }[] }).__CALLS__.map(
+        (c) => `${c.name}${c.name === "merge_songs" && c.args[2] ? ":asked" : ""}`
+      )
+    )
+    const merged = all.indexOf("merge_songs")
+    expect(all.slice(all.lastIndexOf("player_play"), merged)).toContain("player_close")
+  })
+
+  test("a name that cannot be forgotten says so, and stays", async ({ page, pageErrors }) => {
+    await openApp(page, {
+      before:
+        "window.__OLD_NAMES__ = [['Palyn', 'Pałyn']]; window.__FAIL__ = {forget_song_name: 'database is locked'};",
+    })
+    await openSong(page, "Pałyn")
+    const old = head(page).locator("[data-old-names]")
+    await old.getByRole("button", { name: "Forget Palyn", exact: true }).click()
+    await expect(notices(page, "error").filter({ hasText: "Could not forget Palyn" })).toBeVisible()
+    await expect(old.getByRole("button", { name: "Forget Palyn", exact: true })).toBeVisible()
+    expectedError(pageErrors, /forget_song_name failed/)
   })
 
   test("Also typed as lists the old names, and the cross forgets one", async ({ page }) => {

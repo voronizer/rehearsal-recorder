@@ -34,7 +34,11 @@ function without(choices: SongChoices | null, name: string): SongChoices | null 
  * retyping it, still has every song under it — and while the field has
  * focus, the songs area is held at the height it had then, so the list
  * emptying out as it narrows, and filling again once the name is left or
- * put back, moves neither the field nor the buttons beside it.
+ * put back, moves neither the field nor the buttons beside it. A field
+ * focused as it is first drawn (a dialog's) takes that height at the first
+ * key instead, the songs not being drawn yet when focus arrives. Left with
+ * an old name in it, the area stays held, the songs still narrowed to that
+ * one and the line under them, until the name is another.
  *
  * Space types a space and Escape leaves the field (useSpacebar.ts does both
  * for any text field); Enter leaves it too, so the next Space does what the
@@ -98,7 +102,8 @@ export function TakeNameField({
   // it by itself.
   const [startedAs, setStartedAs] = useState<string | null>(null)
   // The songs area's height when focus arrived, held while the field has
-  // focus so narrowing to nothing and back does not move anything beside it.
+  // focus so narrowing to nothing and back does not move anything beside it
+  // (and while an old name is in it, below).
   const [held, setHeld] = useState<number | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const songsArea = useRef<HTMLDivElement>(null)
@@ -116,6 +121,10 @@ export function TakeNameField({
   // Rename song, "Palyn 5" is a title of its own, not Palyn.
   const via = goes ? songFor(shown, known) : songNamed(shown, known)
   const old = via?.old != null ? { name: via.old, song: via.choice.song } : null
+  // Held while typing, and after it while an old name narrows the songs to
+  // one and has its line under them: filling again on leaving would move
+  // what is under the area, or the buttons beside it, under the pointer.
+  const holding = startedAs !== null || old !== null
   const named = (text: string) => text.trim() || fallback
   const edit = (text: string | null) => {
     typed.current = text
@@ -208,12 +217,15 @@ export function TakeNameField({
             setStartedAs(value)
             setHeld(songsArea.current?.offsetHeight ?? null)
           }}
-          onChange={(e) => edit(e.target.value)}
+          onChange={(e) => {
+            // Before this key is drawn, the area still has its full height.
+            if (held === null) setHeld(songsArea.current?.offsetHeight ?? null)
+            edit(e.target.value)
+          }}
           onBlur={() => {
             const left = typed.current
             edit(null)
             setStartedAs(null)
-            setHeld(null)
             if (left !== null) commit(named(left))
           }}
           onKeyDown={(e) => {
@@ -239,7 +251,7 @@ export function TakeNameField({
           <X className="size-4" />
         </button>
       </div>
-      <div ref={songsArea} style={{ minHeight: held ?? undefined }}>
+      <div ref={songsArea} style={{ minHeight: (holding && held) || undefined }}>
         <SongPills
           choices={known}
           value={shown}
@@ -259,7 +271,7 @@ export function TakeNameField({
                   ? shown.trim()
                   : shown.trim().replace(/\s+\d+$/, "")
                 const from = choices
-                await forgetSongName(old.name)
+                if (!(await forgetSongName(old.name))) return
                 setForgot({ name: old.name, from })
                 put(text)
               }}

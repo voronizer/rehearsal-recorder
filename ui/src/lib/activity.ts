@@ -45,15 +45,16 @@ function busy() {
 }
 
 /** A cloud copy that finished says so in the corner; the operations that run
- *  in place say it on their own screen. A names pass that finished tells
- *  the screens holding takes' paths (useNamesSettled). */
+ *  in place say it on their own screen. A names pass that finished, or
+ *  stopped part way, tells the screens holding takes' paths
+ *  (useNamesSettled). */
 function announce(next: ActivityEntry[]) {
   for (const e of next) {
     const before = known.get(e.id)
     known.set(e.id, e.state)
     if (before === e.state) continue
     if (before === undefined && !primed) continue
-    if (e.kind === "names" && e.state === "done") {
+    if (e.kind === "names" && (e.state === "done" || e.state === "failed")) {
       for (const l of namesListeners) l(e)
     }
     if (e.kind !== "cloud") continue
@@ -156,9 +157,9 @@ export function useCloudSettled(onSettled: (e: ActivityEntry) => void) {
 }
 
 /** Calls `onSettled` each time the names pass has brought takes' folders
- *  and cloud copies into line with their names (names_pass.py): a screen
- *  holding their paths from before reads them again, or what it plays next
- *  is a folder that is not there any more. */
+ *  and cloud copies into line with their names (names_pass.py), or stopped
+ *  with some of them moved: a screen holding their paths from before reads
+ *  them again, or what it plays next is a folder that is not there any more. */
 export function useNamesSettled(onSettled: (e: ActivityEntry) => void) {
   const latest = useRef(onSettled)
   useEffect(() => {

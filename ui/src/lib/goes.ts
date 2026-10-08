@@ -1,7 +1,7 @@
 import type { SongChoice, SongChoices } from "@/lib/api"
 
-/** A take nobody named, as Python names it. */
-const UNNAMED = /^Take \d+$/
+/** A take nobody named, as Python names it: never a song's title. */
+export const UNNAMED = /^Take \d+$/
 /** A number typed after a title out of habit: "Polyn 3". */
 const TRAILING_NUMBER = /^(.*?)\s+(\d+)$/
 

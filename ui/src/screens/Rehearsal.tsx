@@ -134,12 +134,19 @@ export function Rehearsal({
     // the takes when one is renamed or deleted — and what the field keeps
     // is the fallback's own spelling, not a case-only variant typed over it.
     const sent = name.toLocaleLowerCase() === fallback.toLocaleLowerCase() ? "" : name
-    setPicked({ against: session.next_take_name, name: sent === "" ? fallback : name })
+    const shown = sent === "" ? fallback : name
+    setPicked({ against: session.next_take_name, name: shown })
     naming.current = naming.current.then(async () => {
       try {
         const res = await api().set_next_take_name(sent)
         if (res.ok) {
           setError(null)
+          // What the take will be called is Python's answer: "Palyn", an old
+          // name, is Pałyn, and "Pałyn 5" is Pałyn. When that is the name the
+          // session had already, nothing else would bring the field round
+          // to it.
+          const settled = res.next_take_name
+          if (settled) setPicked((p) => (p && p.name === shown ? { ...p, name: settled } : p))
         } else {
           setError(res.error ?? "Could not name the next take")
           // Python never took it: the field goes back to the name it has.

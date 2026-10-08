@@ -6613,6 +6613,11 @@ def main():
        entry61["kind"] == "names" and entry61["title"] == "Renaming Polyn to Polin"
        and entry61["state"] == "done" and entry61["detail"] == "2 takes renamed")
     ok("once", queued61.run_queued() == 0 and fixed61 == [1, 2])
+    # One pass going wrong outside a take leaves the next queued pass to run.
+    queued61.request_takes([("/r", 3)], "Broken")
+    queued61.request_takes([("/r", 4, "Polin 4")], "Renaming Polin to Polyn")
+    ok("a queued pass that breaks does not hold up the next",
+       queued61.run_queued() == 1 and fixed61 == [1, 2, 4])
 
     # The real thing: folders and a cloud copy following a rename and a merge.
     tmp61 = Path(tempfile.mkdtemp())
@@ -6667,7 +6672,7 @@ def main():
        and dirs61(two61)[0] == "01 - Polin 3" and p61._open_tracks is not None)
     ok("and so does its copy in the cloud folder",
        sorted(p.name for p in (cloud61 / two61.name).iterdir()) == ["01 - Polin 3.wav"])
-    rename_entry61 = entry_of61("Renaming Polyn to Polin")
+    rename_entry61 = entry_of61("Renaming Polyn to Polin \u00b7 3 takes")
     ok("the background work says what it is doing",
        rename_entry61 is not None and rename_entry61["kind"] == "names"
        and rename_entry61["state"] == "done")
@@ -6696,9 +6701,11 @@ def main():
     p61._names_pass.run_queued()
     ok("merged, its goes are the other's next, folders and all",
        merged61 == asked61 and dirs61(three61) == ["01 - Pałyn 4", "02 - Pałyn 5"])
-    merge_entry61 = entry_of61("Merging Palyn into Pałyn")
+    merge_entry61 = entry_of61("Merging Palyn into Pa\u0142yn \u00b7 2 takes")
     ok("the background work says that too",
        merge_entry61 is not None and merge_entry61["state"] == "done")
+    ok("and a whole pass after it finds nothing left to rename",
+       p61._names_pass.run() == 0)
     plays61 = p61.get_song(pałyn61)["plays"]
     ok("the merged song plays its newest starred go, whichever song it was",
        plays61["folder"] == str(three61) and plays61["take"]["take_number"] == 2)

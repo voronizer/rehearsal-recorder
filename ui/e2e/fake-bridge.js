@@ -347,9 +347,11 @@ const oldNames = new Map((window.__OLD_NAMES__ || []).map(([name, song]) =>
 const alsoOf = (song) => [...oldNames.values()].filter(v => v.song === song).map(v => v.name)
   .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 // What a rename or a merge leaves in the background-work list, done.
+// Its title says how many takes, as api.rename_song and merge_songs title it.
 function namesDone(title, n) {
   window.__ACTIVITY__ = [...(window.__ACTIVITY__ || []), {
-    id: 950 + (window.__ACTIVITY__ || []).length, kind:'names', title, folder:null,
+    id: 950 + (window.__ACTIVITY__ || []).length, kind:'names',
+    title: `${title} · ${n === 1 ? '1 take' : `${n} takes`}`, folder:null,
     take_number:null, state:'done', fraction:1, step:null, error:null,
     detail: n === 1 ? '1 take renamed' : `${n} takes renamed`, retry:null, seen:false}];
 }

@@ -5,11 +5,7 @@ import { contentClass, overlayClass } from "@/components/ConfirmDialog"
 import { TakeNameField } from "@/components/TakeNameField"
 import type { SongChoices, SongSummary } from "@/lib/api"
 import { goesLabel } from "@/lib/format"
-import { songNamed } from "@/lib/goes"
-
-// What a take with no song is called: never a song's title, or the song
-// could not be named again (Library.rename_song refuses it too).
-const UNNAMED = /^take \d+$/i
+import { songNamed, UNNAMED } from "@/lib/goes"
 
 /**
  * Rename song, from the pencil beside a song's title (rename-and-merge-songs
@@ -95,6 +91,7 @@ function RenameSongForm({
     const into = named ? others.find((s) => s.title === named.choice.song) : undefined
     if (into) return { kind: "merge" as const, into }
     if (typed === "" || typed === song.title) return { kind: "none" as const }
+    // Library.rename_song refuses it too: the song could not be named again.
     if (UNNAMED.test(typed)) return { kind: "refused" as const, typed }
     return { kind: "rename" as const, typed }
   }

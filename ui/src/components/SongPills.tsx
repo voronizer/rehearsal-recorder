@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react"
 import { GoTitle } from "@/components/TakeTitle"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { SongChoice, SongChoices } from "@/lib/api"
-import { songNamed } from "@/lib/goes"
+import { songFor, songNamed } from "@/lib/goes"
 import { pillsShown } from "@/lib/songPills"
 import { ALPHABETICAL } from "@/lib/songs"
 import { cn } from "@/lib/utils"
@@ -30,8 +30,10 @@ const PILL =
  * and again whenever the row changes width.
  *
  * A song's old name typed (SongChoice.also) is that song: it alone is
- * shown, lit, whatever the field started from. `goes` false shows the
- * titles alone, for Rename song, where no go is given.
+ * shown, lit, here and in All songs, whatever the field started from; with
+ * a number typed after it too, as the take would be named. `goes` false
+ * shows the titles alone, for Rename song, where no go is given and a
+ * title is taken whole.
  */
 export function SongPills({
   choices,
@@ -51,7 +53,7 @@ export function SongPills({
 }) {
   const all = choices ? [...choices.here, ...choices.other] : []
   const typed = value.trim().toLocaleLowerCase()
-  const named = songNamed(value, choices)
+  const named = goes ? songFor(value, choices) : songNamed(value, choices)
   const byOld = named?.old != null ? named.choice : null
   const isChoice = (c: SongChoice) => c.song.toLocaleLowerCase() === typed || c === byOld
   const narrowing =
@@ -79,10 +81,13 @@ export function SongPills({
     if (!rowEl || !m) return
     const lay = () => {
       const kids = [...m.children] as HTMLElement[]
-      const width = new Map(
-        candidates.map((c, i) => [c.song, kids[i].getBoundingClientRect().width])
-      )
-      const last = kids[candidates.length]?.getBoundingClientRect().width ?? 0
+      // Widths as laid out, not as drawn: a dialog zooms in as it opens, and
+      // pills measured at 95% would be taken to fit where they do not.
+      const scale = m.getBoundingClientRect().width / m.offsetWidth || 1
+      const widthOf = (el: Element | undefined) =>
+        el ? el.getBoundingClientRect().width / scale : 0
+      const width = new Map(candidates.map((c, i) => [c.song, widthOf(kids[i])]))
+      const last = widthOf(kids[candidates.length])
       const picked = pillsShown(
         here,
         other,
@@ -127,7 +132,7 @@ export function SongPills({
         ))}
         <AllSongsPill
           choices={all}
-          value={value}
+          isChoice={isChoice}
           onPick={onPick}
           goes={goes}
           className={PILL}
@@ -163,19 +168,19 @@ export function SongPills({
  */
 function AllSongsPill({
   choices,
-  value,
+  isChoice,
   onPick,
   goes,
   className,
 }: {
   choices: SongChoice[]
-  value: string
+  /** The song the field names, lit here as among the pills. */
+  isChoice: (c: SongChoice) => boolean
   onPick: (name: string) => void
   goes: boolean
   className: string
 }) {
   const [open, setOpen] = useState(false)
-  const typed = value.trim().toLocaleLowerCase()
   const sorted = [...choices].sort((a, b) => ALPHABETICAL.compare(a.song, b.song))
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -212,7 +217,7 @@ function AllSongsPill({
               key={c.song}
               type="button"
               data-song-choice={c.song}
-              aria-current={c.song.toLocaleLowerCase() === typed ? "true" : undefined}
+              aria-current={isChoice(c) ? "true" : undefined}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 onPick(c.song)
@@ -224,7 +229,7 @@ function AllSongsPill({
               className={cn(
                 "block w-full truncate rounded-md px-1.5 py-0.5 text-left text-sm break-inside-avoid hover:bg-accent",
                 "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-                c.song.toLocaleLowerCase() === typed && "bg-primary/15 ring-1 ring-primary ring-inset"
+                isChoice(c) && "bg-primary/15 ring-1 ring-primary ring-inset"
               )}
             >
               <GoTitle title={c.song} go={goes ? c.go : null} />
