@@ -61,7 +61,7 @@ mockup built from the app.
 Claude's own calls, explained where they come up:
 
 - the rules for ports (P1–P6);
-- what goes into the file (F1–F5);
+- what goes into the file (F1–F7);
 - a rehearsal needs at least one audio track (A1).
 
 ## Words
@@ -145,7 +145,7 @@ opens each entry of `tracks` as a WAV. Kept apart, they never see a `.mid`.
   Listing MIDI ports does not tear down PortAudio or load ASIO drivers, so
   it is safe to do often:
   - the setup screen reads the list every 2 s while it is open;
-  - a take looks every second for a port it is waiting for.
+  - a rehearsal looks every second for a port it is waiting for (Part 3).
 
   The existing **Look again** on the setup screen also reads the ports.
 - **P5. A port another app holds open** (on Windows a port is usually open
@@ -163,14 +163,23 @@ opens each entry of `tracks` as a WAV. Kept apart, they never see a `.mid`.
 
 ## Part 3 — Recording
 
-**A MIDI recorder runs beside the audio recorder.** It is a new module,
-`midi/capture.py`, with `MidiRecorder(tracks, out_dir, anchor)`.
+**The ports stay open for the whole rehearsal.** A new module,
+`midi/ports.py`, opens one `rtmidi.MidiIn` per *Both* or *MIDI* track, with a
+callback, when the rehearsal starts. It closes them when the rehearsal
+finishes or the app closes.
 
-- It opens one `rtmidi.MidiIn` per *Both* or *MIDI* track, with a callback.
-- `start_take` starts it with the `AudioRecorder` (`api.py:1765-1776`).
-- `stop_take`, `shutdown` and `abandon` stop it beside the audio recorder.
+- Between takes it only keeps each port's state (F6) and looks for missing
+  ports (P4).
+- During a take it also hands every event to the take's writer,
+  `midi/capture.py`'s `MidiRecorder(out_dir, anchor)`.
+- `start_take` starts the writer with the `AudioRecorder`
+  (`api.py:1765-1776`); `stop_take`, `shutdown` and `abandon` stop it beside
+  the audio recorder.
 - Losing a port never stops a take. `recording_health` reports only audio
   problems, as now.
+
+Opening a port only when a take starts would lose what was set before it:
+the pedal already down, the sound already picked (F6).
 
 **F1. When a note happened.** Each event is timed from the OS's own MIDI
 timestamps (RtMidi's delta times), not from when Python got around to it.
@@ -185,19 +194,31 @@ The aim is notes within 10 ms of the audio they belong to. That is below
 what a drummer hears as a flam. The plan measures the offset on both
 platforms with a click recorded as audio and as MIDI at once.
 
-**F2. What the file keeps.** Kept:
+**F2. What the file keeps: everything a `.mid` can hold** (Alex, 22:45Z,
+«есть ли смысл что-то фильтровать на записи?»). Nothing is filtered by
+choice. Kept, as sent:
 
-- every channel message: notes, controllers (an e-kit's hi-hat pedal, a
-  sustain pedal), program changes, pitch bend and aftertouch.
+- notes, with their velocities, the release velocity included;
+- every controller: an e-kit's hi-hat pedal (CC 4, from fully open to
+  closed), the sustain, sostenuto and soft pedals, the mod wheel, and the
+  pad position some kits send;
+- program and bank changes: the sound picked on a keyboard or a kit;
+- pitch bend;
+- aftertouch, for the whole channel and per note. Roland kits send a
+  cymbal choke this way;
+- SysEx, which some instruments use for their own settings. python-rtmidi
+  drops it unless told not to (`ignore_types(sysex=False)`).
 
-Dropped:
+Not kept, because a Standard MIDI File has no place for them: it holds
+channel messages, SysEx and its own meta events, and nothing else. mido
+refuses the first group outright ("realtime messages are not allowed in
+MIDI files"). They are signals about the cable and the sync, not playing:
 
-- clock, start/stop and active sensing, which an e-kit sends several times a
-  second;
-- SysEx.
-
-A DAW needs the pedals for the hits to sound right; it does not need the
-rest.
+- clock, start, stop and continue, which a keyboard's arpeggiator or a drum
+  module may send. The `.mid` has its own tempo (D8);
+- active sensing, which an e-kit sends several times a second to say it is
+  still there;
+- MIDI time code, song position, song select and tune request.
 
 **F3. Written as you play.** Events go to `<track>.midraw` as they arrive:
 a line per event, its time in seconds and its bytes. That file is flushed
@@ -211,7 +232,8 @@ with the audio's 30-second flush (`capture.py:39, 331-336`).
 **F4. The file.** It is built with mido's `MidiFile`:
 
 - Standard MIDI File format 0, 960 ticks per beat;
-- at tick 0, the track's name and a 120 bpm tempo (D8);
+- at tick 0, the track's name, the port's name as the device name, a
+  120 bpm tempo (D8), then the state at the start (F6);
 - every event at its time in ticks, so one tick is about half a millisecond;
 - the channels as the device sent them.
 
@@ -219,6 +241,19 @@ with the audio's 30-second flush (`capture.py:39, 331-336`).
 leaves no file, and the take has no notes entry for it. A port that was
 there but sent nothing still leaves a `.mid`, with only its name and tempo,
 so the DAW shows that the track was recording.
+
+**F6. Where everything was when the take started.** Each port's state is
+kept per channel for the whole rehearsal: the last value of every
+controller, the program and bank, pitch bend and channel aftertouch. At time
+0 of a take, the `.mid` gets that state, before any note. A DAW then plays
+the take's first hi-hat closed if the pedal was already down, and the
+keyboard's sound as it was picked before Record. A key already held when the
+take starts is not in the file, nor its release.
+
+**F7. Nothing left hanging at the end.** When a take stops, or its port
+disappears mid-take, every note still held gets its release at that
+moment. A sustain, sostenuto or soft pedal still down is let up. Without
+this a DAW holds those notes to the end of the project.
 
 **Drafts and recovery** (`audio/drafts.py`):
 
@@ -268,7 +303,7 @@ Each track card (`Setup.tsx:579-728`), as the approved mockup has it:
 - **Save as template** and "filled in from last time" keep the mode and the
   port with the band (Part 1).
 - **Check signal** also opens the ports of *Both* and *MIDI* tracks for the
-  check, and closes them before Start.
+  check, and hands them over to the rehearsal at Start.
 
 Cards are now two or three lines tall. The setup screen was checked in the
 mockup at 960–1600 px with ordinary, long and very long names: nothing cut,
@@ -410,7 +445,12 @@ sounddevice is):
 - the recorder:
   - events into a `.midraw`, then a `.mid` with the right ticks, tempo,
     track name and channels;
-  - F2's filtering;
+  - F2: everything played kept, SysEx included, and what a `.mid` cannot
+    hold left out, so mido writes the file;
+  - F6: pedal, program and pitch bend set before a take written at its
+    time 0, from events that came between takes;
+  - F7: notes held at stop, and at a port vanishing, released there, and a
+    held sustain pedal let up;
   - F1's time 0 from a fake audio callback's times, and the fallback;
 - D7:
   - a port missing at start and appearing later, with notes from then on;
@@ -493,7 +533,7 @@ Other notes for the site:
 - A tempo, a click or a metronome; quantizing or editing notes.
 - Choosing which MIDI channels a track takes: a port's every channel goes to
   its track.
-- Recording MIDI clock or SysEx (F2).
+- Keeping MIDI clock or time code, which a `.mid` cannot hold (F2).
 - Notes in the mix, or a rehearsal with no audio track (A1).
 - Notes shown anywhere outside the player: History's lists and a song's
   goes are unchanged.
