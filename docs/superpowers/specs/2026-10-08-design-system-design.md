@@ -223,7 +223,7 @@ on Windows.
   | 13 on/off and pick-one buttons made by swapping two Button looks; 2 identical segmented switches (History's and Marks'); 3 pick-one grids in popovers | shadcn Toggle and ToggleGroup, one look for "on" and "selected" (F2), arrow keys inside a group |
   | About 15 small icon actions (rename, delete, share) in two sizes; the take's toolbar built twice, in two orders | one icon-button size; one take toolbar, the same buttons in the same order everywhere |
   | 12 whole rows made into buttons, and 2 rows that only a mouse can open; History's three side lists nearly identical; six looks for "selected" | one list row (shadcn Item), one selected look, every row reachable by keyboard |
-  | 9 text links with 4 hovers and 3 focus rings | Button's link look |
+  | 9 text links with 4 hovers and 3 focus rings | one link look: the text's colour with a thin underline, one hover and the shared focus ring |
   | 5 close ✕ buttons in 4 sizes | one ✕ |
   | The small headings set in capitals (F7), in 2 sizes, 3 letter spacings and 2 weights; 10 section headings in Settings made of a label and a grey hint | one heading for a group and one for a section (F7: no capitals) |
   | Label colour dots in 5 sizes in 11 places; mark ticks in 4 shapes; 9 chips and pills made by hand, while `Badge` is never used | one dot, one tick, Badge |
