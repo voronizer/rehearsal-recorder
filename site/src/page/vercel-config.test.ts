@@ -22,15 +22,26 @@ const matching = (routes: Route[], path: string) => routes.find((r) => new RegEx
 /** The first route before the files that matches, one that goes on included. */
 const route = (path: string) => matching(before, path)
 
-/** What the build has at an address, as dist/ lays it out. */
-const BUILT =
-  /^\/(|index\.html|stage\.html|og\.html|404\.html|og\.png|robots\.txt|sitemap\.xml|favicon\.svg|assets\/.+)$/
+/** What the build has at an address, as dist/ lays it out: its pages, what
+ *  it writes beside them, the interface's public files, and /assets/. */
+const BUILT = new Set([
+  "/",
+  "/index.html",
+  "/stage.html",
+  "/og.html",
+  "/404.html",
+  "/og.png",
+  "/robots.txt",
+  "/sitemap.xml",
+  ...Object.keys(import.meta.glob("../../../ui/public/*")).map((path) => path.slice(path.lastIndexOf("/"))),
+])
+const built = (path: string) => BUILT.has(path) || /^\/assets\/.+$/.test(path)
 /** What an address gets: a route that ends it before the files, the file,
  *  or a route after them. */
 function served(path: string): Route | "file" | undefined {
   const first = before.find((r) => !r.continue && new RegExp(r.src!).test(path))
   if (first) return first
-  if (BUILT.test(path)) return "file"
+  if (built(path)) return "file"
   return matching(after, path)
 }
 
@@ -70,7 +81,8 @@ describe("vercel-config.json", () => {
     }
   })
   it("serves the build's own files as they are", () => {
-    for (const path of ["/", "/index.html", "/stage.html", "/404.html", "/og.png", "/robots.txt", "/assets/index-Bx1y2z3.js"]) {
+    expect(BUILT).toContain("/favicon.svg")
+    for (const path of [...BUILT, "/assets/index-Bx1y2z3.js"]) {
       expect(served(path)).toBe("file")
     }
   })

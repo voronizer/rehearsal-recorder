@@ -49,6 +49,16 @@ test("its take does not take the page's keys", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Repeat" })).toHaveAttribute("aria-pressed", "false")
 })
 
+test.describe("with script off", () => {
+  test.use({ javaScriptEnabled: false })
+
+  test("the 404 page still says so, and links back", async ({ page }) => {
+    await page.goto("/404.html")
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Nothing was recorded here")
+    await expect(page.getByRole("link", { name: "Go to the main page" })).toHaveAttribute("href", "/")
+  })
+})
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 

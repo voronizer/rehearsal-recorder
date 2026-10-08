@@ -245,7 +245,8 @@ chose the tags instead.
   Take 404 in the app's own player, four tracks of silence, 4:04 long (Alex
   picked "Пустой дубль"). Vercel answers with it, status 404, for any
   address that is no file, after `/mac` and `/windows` (the routes after
-  `{ "handle": "filesystem" }` in `vercel-config.json`).
+  `{ "handle": "filesystem" }` in `vercel-config.json`). Without script it
+  still says so, with a link back (a `<noscript>`).
 - `stage.html`, `og.html` and `404.html` carry `noindex`; analytics counts
   only the main page.
 - **Search consoles.** Google Search Console is Alex's: the domain

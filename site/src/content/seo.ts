@@ -30,7 +30,7 @@ export function softwareJsonLd(version: string): Record<string, unknown> {
   }
 }
 
-/** JSON for a <script> in the page. A "<" in it is written as <, which
+/** JSON for a <script> in the page. A "<" in it is written as \u003c, which
  *  JSON reads the same, so no value can close the script early. */
 export function jsonLdText(data: unknown): string {
   return JSON.stringify(data).replace(/</g, "\\u003c")
@@ -45,6 +45,15 @@ export function noscriptHtml(hero: { title: string; lede: string }): string {
     `<h1>${escape(hero.title)}</h1>`,
     `<p>${escape(hero.lede)}</p>`,
     `<p><a href="${MAC_ZIP}">Download for macOS</a> · <a href="${WINDOWS_ZIP}">Download for Windows</a> · <a href="${REPO}">Source on GitHub</a></p>`,
+  ].join("\n")
+}
+
+/** The 404 page for a reader with no script: what it says, and the way back. */
+export function notFoundNoscriptHtml(notFound: { title: string; lede: string }): string {
+  return [
+    `<h1>${escape(notFound.title)}</h1>`,
+    `<p>${escape(notFound.lede)}</p>`,
+    `<p><a href="/">Go to the main page</a></p>`,
   ].join("\n")
 }
 

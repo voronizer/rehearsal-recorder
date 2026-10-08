@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { changelogHead, displayVersion, latestVersion } from "./src/content/changelog.ts"
 import { parseDoc } from "./src/content/markdown.ts"
-import { jsonLdText, noscriptHtml, robotsTxt, sitemapXml, softwareJsonLd } from "./src/content/seo.ts"
+import { jsonLdText, notFoundNoscriptHtml, noscriptHtml, robotsTxt, sitemapXml, softwareJsonLd } from "./src/content/seo.ts"
 
 const ui = (path: string) => fileURLToPath(new URL(`../ui/${path}`, import.meta.url))
 
@@ -32,16 +32,23 @@ function changelog(): Plugin {
 
 /**
  * What the page says to readers that run no script, written into the HTML:
- * the app as JSON-LD and a <noscript> text with the downloads, both in
- * index.html only; robots.txt and sitemap.xml beside it. The version is the
- * one the page shows (see changelog() above and src/content/index.ts).
+ * the app as JSON-LD and a <noscript> text with the downloads, in index.html;
+ * the 404 page's words and a link back in 404.html; robots.txt and
+ * sitemap.xml beside them. The version is the one the page shows (see
+ * changelog() above and src/content/index.ts).
  */
 function seo(): Plugin {
   const changes = fileURLToPath(new URL("../CHANGELOG.md", import.meta.url))
   const heroFile = fileURLToPath(new URL("./content/hero.md", import.meta.url))
+  const notFoundFile = fileURLToPath(new URL("./content/notfound.md", import.meta.url))
   return {
     name: "site-seo",
     transformIndexHtml(_html, ctx) {
+      if (ctx.path === "/404.html") {
+        const notFound = parseDoc(readFileSync(notFoundFile, "utf-8"))
+        const words = { title: notFound.title ?? "", lede: notFound.intro }
+        return [{ tag: "noscript", children: notFoundNoscriptHtml(words), injectTo: "body-prepend" }]
+      }
       if (ctx.path !== "/index.html") return
       const version = displayVersion(process.env.VITE_SITE_VERSION || latestVersion(readFileSync(changes, "utf-8")))
       const hero = parseDoc(readFileSync(heroFile, "utf-8"))
