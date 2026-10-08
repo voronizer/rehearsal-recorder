@@ -6,6 +6,7 @@ import { RehearsalList } from "@/components/RehearsalList"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
+import { SetName } from "@/components/SetPlayed"
 import { EveningActions } from "@/components/EveningActions"
 import { HistorySwitch } from "@/components/HistorySwitch"
 import { SongList } from "@/components/SongList"
@@ -1166,12 +1167,21 @@ export function HistoryScreen({
                         </Button>
                       )}
                     </div>
-                    <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                    <div
+                      data-rehearsal-head
+                      className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+                    >
                       <span className="shrink-0">
                         {formatDay(summary.created_at).split(" ")[0]}{" "}
                         {formatDateHuman(summary.created_at)}
                       </span>
                       <span aria-hidden>·</span>
+                      {summary.set_name && (
+                        <>
+                          <SetName name={summary.set_name} className="shrink" />
+                          <span aria-hidden>·</span>
+                        </>
+                      )}
                       <FolderOpen className="size-3.5 shrink-0" />
                       <span className="truncate font-mono">{summary.folder}</span>
                     </div>
@@ -1218,6 +1228,7 @@ export function HistoryScreen({
               {readable && opened?.folder === current && (
                 opened.takes.length > 0 ? (
                   <RehearsalOverview
+                    set={opened.set}
                     takes={opened.takes}
                     songs={opened.songs ?? []}
                     cloudStates={cloudStates}

@@ -495,3 +495,68 @@ test.describe("last time, on the setup screen", () => {
     await expect(lastTime(page)).toHaveCount(0)
   })
 })
+
+// ---------- a rehearsal played by a set (issue #12 step 8, H1–H4) ----------
+
+/** Tuesday jam was played by a set: Pałyn and Viasna played, Ahoń and
+ *  Kupalle not. */
+const PLAYED_BY_SET =
+  "window.__FULL_EVENING__ = true;" +
+  `window.__PLAYED_BY__ = {"/rec/old": {name: "Gig on the 25th", songs: ["Viasna", "Pałyn", "Ahoń", "Kupalle"]}};`
+
+test("a rehearsal played by a set shows its name in the list and under its title", async ({
+  page,
+}) => {
+  await openApp(page, { before: PLAYED_BY_SET })
+  const list = await openHistory(page)
+  await expect(list.locator("[data-rehearsal='/rec/old'] [data-set-name]")).toHaveText(
+    "Gig on the 25th"
+  )
+  await expect(list.locator("[data-rehearsal='/rec/quiet'] [data-set-name]")).toHaveCount(0)
+  await list.getByRole("button", { name: /^Tuesday jam/ }).click()
+  const under = page.locator("[data-rehearsal-head] [data-set-name]")
+  await expect(under).toHaveText("Gig on the 25th")
+  await expect(under).toHaveAttribute("title", "Played by the set Gig on the 25th")
+})
+
+test("the set card counts what was played and says not played for the rest", async ({
+  page,
+}) => {
+  await openApp(page, { before: PLAYED_BY_SET })
+  await openHistory(page, "Tuesday jam")
+  const card = page.getByRole("region", { name: "Set Gig on the 25th" })
+  await expect(card).toContainText("Gig on the 25th — 2 of 4 played")
+  const songs = card.locator("[data-set-played]")
+  await expect(songs).toHaveText([/1\s*Viasna\s*1 go/, /2\s*Pałyn\s*2 goes/, /3\s*Ahoń\s*not played/, /4\s*Kupalle\s*not played/])
+  // Two columns read down: Ahoń heads the second.
+  const first = (await songs.nth(0).boundingBox())!
+  const third = (await songs.nth(2).boundingBox())!
+  expect(third.x).toBeGreaterThan(first.x + first.width - 1)
+  expect(third.y).toBeCloseTo(first.y, 0)
+  // Over the songs, under the figures.
+  const pałyn = (await page.getByRole("group", { name: "Pałyn" }).boundingBox())!
+  expect((await card.boundingBox())!.y).toBeLessThan(pałyn.y)
+  // The take nobody named is where it was.
+  await expect(page.getByRole("group", { name: "Not named" })).toBeVisible()
+})
+
+test("a click on a played song in the set card scrolls to it", async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 520 })
+  await openApp(page, { before: PLAYED_BY_SET })
+  await openHistory(page, "Tuesday jam")
+  const viasna = page.getByRole("group", { name: "Viasna" })
+  await expect(viasna).not.toBeInViewport()
+  const card = page.getByRole("region", { name: "Set Gig on the 25th" })
+  await card.locator("[data-set-played='Viasna']").click()
+  await expect(viasna).toBeInViewport()
+  // A song not played has nowhere to go.
+  await expect(card.locator("[data-set-played='Ahoń']")).toBeDisabled()
+})
+
+test("a rehearsal played freely has no set card", async ({ page }) => {
+  await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
+  await openHistory(page, "Tuesday jam")
+  await expect(page.getByRole("group", { name: "Pałyn" })).toBeVisible()
+  await expect(page.locator("[data-set-played-card]")).toHaveCount(0)
+  await expect(page.locator("[data-set-name]")).toHaveCount(0)
+})

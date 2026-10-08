@@ -478,6 +478,10 @@ async function setAsSent(copy) {
   const titles = await setTitles();
   return {name:copy.name, songs:copy.songs.map(titles)};
 }
+// The set a rehearsal before this one was played by, as it kept it: a page
+// gives them by folder (window.__PLAYED_BY__ = {'/rec/old': {name, songs:
+// ['Pałyn', …]}}); the others were played freely.
+const playedBy = (folder) => (window.__PLAYED_BY__ || {})[folder] || null;
 // The same rules and the same words as Python's (Library._set_name, _set_songs).
 function setNameRefusal(name, id) {
   const trimmed = String(name || '').trim().slice(0, 40).trim();
@@ -692,10 +696,10 @@ window.__MAKE_API__ = () => ({
       tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));
     for (const t of tonight) fileDurations[t.tracks[0].file] = t.duration_sec;
     // The set as it is now: the rehearsal keeps its own copy (Library.set_of).
-    const playedBy = sets.find(st => st.id === setId);
+    const byIt = sets.find(st => st.id === setId);
     session = {name, folder, takes:asSent(tonight),
                tracks: window.__SESSION_TRACKS__ || [{name:'Guitar',channel:1},{name:'Vocals',channel:2}],
-               set: playedBy ? {name:playedBy.name, songs:[...playedBy.songs]} : null};
+               set: byIt ? {name:byIt.name, songs:[...byIt.songs]} : null};
     takeCounter = tonight.length;
     nextName = null;
     return {ok:true, folder:session.folder};
@@ -1007,7 +1011,7 @@ window.__MAKE_API__ = () => ({
   }),
 
   list_rehearsals: track('list_rehearsals', async () => ([
-    {folder:'/rec/old', name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
+    {folder:'/rec/old', set_name: playedBy('/rec/old')?.name ?? null, name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
      take_count:9, total_duration_sec:2520, disk_bytes:1200000000, in_cloud:3,
      songs:[{name:'Pałyn', takes:3}, {name:'Viasna', takes:2}, {name:'Ahoń', takes:1},
             {name:'Sonca', takes:1}, {name:'Dym', takes:1}, {name:'Ptuška', takes:1}],
@@ -1042,7 +1046,8 @@ window.__MAKE_API__ = () => ({
     const r = folder === '/rec/older' ? withExtraSongs(pastRehearsal(folder)) : pastRehearsal(folder);
     r.takes = r.takes.filter(t => !deleted.has(`${folder}#${t.take_number}`));
     for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
-    return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes)}));
+    return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes),
+                                      set: await setAsSent(playedBy(folder))}));
   }),
   // The setup screen's last time (api.last_time): Tuesday jam song by song,
   // Daroha from the rehearsal before it, and the others in history's order.

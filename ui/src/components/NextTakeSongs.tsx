@@ -110,7 +110,7 @@ export function SetCard({
       <h2 className="flex min-h-8 min-w-0 items-baseline gap-1.5 pt-1.5 text-[15px] font-semibold">
         <span className="min-w-0 truncate" title={set.name}>
           {set.name}
-        </span>
+        </span>{" "}
         <span className="shrink-0 text-[13px] font-normal text-muted-foreground">
           — {played} of {titles.length} played
         </span>
