@@ -116,7 +116,7 @@ it shows on reha.stream on https://claude.ai/artifact/AigUuiwEuxkwkXBbaKSmyB
 - **A3. Measured, no paging.** With 300 rehearsals × 20 takes × 5 marks
   (30,000 marks, 7,500 a label), A1 takes 36 ms. Reading each mark's whole
   take, as a song's page reads its goes, took 1.2 s for 15,000 marks, which
-  is why A1 reads only what a row shows (put to Alex on 2026-10-08).
+  is why A1 reads only what a row shows (Alex chose it on 2026-10-08, 08:43Z).
 - **A4.** `save_history_view` takes "marks" too, and
   `save_marks_grouping(grouping)` keeps "rehearsal", "song" or "list";
   `get_settings()` gives `marks_grouping`, "rehearsal" when unset.

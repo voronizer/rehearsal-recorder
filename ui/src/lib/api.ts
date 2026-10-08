@@ -99,6 +99,10 @@ export type Label = {
   colour: LabelColour
   /** How many marks have it, in every rehearsal. */
   marks: number
+  /** In how many rehearsals, and the newest of them (null with no marks):
+   *  under the label in History's Marks view. */
+  rehearsals?: number
+  last_marked?: string | null
 }
 
 /** What a change to the labels answers: all of them, as they are now. */
@@ -283,8 +287,32 @@ export type SongPlays = {
   take: Take
 }
 
-/** History's two views (api.save_history_view). */
-export type HistoryView = "rehearsals" | "songs"
+/** History's three views (api.save_history_view). */
+export type HistoryView = "rehearsals" | "songs" | "marks"
+
+/** How History's Marks view groups a label's marks
+ *  (api.save_marks_grouping). */
+export type MarksGrouping = "rehearsal" | "song" | "list"
+
+/** One mark with a label, from any rehearsal (api.list_marks): what its row
+ *  in History's Marks view shows. The take itself is read from its
+ *  rehearsal when it is played or opened. `missing` is the rehearsal's
+ *  folder not being on disk. */
+export type MarkHit = {
+  folder: string
+  rehearsal: string
+  created_at: string
+  missing: boolean
+  take_number: number
+  name: string
+  song: string | null
+  duration_sec: number
+  at: number
+  note: string
+}
+
+/** A label's marks, newest rehearsal first, then the take, then the moment. */
+export type MarksAnswer = Ok<{ marks?: MarkHit[] }>
 
 /** A song in History's Songs view (api.list_songs): how many goes it got,
  *  at how many rehearsals, when, and how many of them have ★. Rehearsals
@@ -561,6 +589,8 @@ export type Settings = {
   theme: "dark" | "light" | "system"
   /** Which of History's views it opens on: the one used last. */
   history_view?: HistoryView
+  /** How its Marks view groups a label's marks. */
+  marks_grouping?: MarksGrouping
   ui_scale: number
   output_device_index: number | null
   /** Outputs of that card the mix comes out of, from 1: [3, 4] or [5]. */
@@ -686,6 +716,9 @@ type PyApi = {
   /** A song's page; null is the takes nobody named. */
   get_song(songId: number | null): Promise<SongDetail>
   save_history_view(view: HistoryView): Promise<Ok>
+  /** Every mark with the label, from every rehearsal. */
+  list_marks(labelId: number): Promise<MarksAnswer>
+  save_marks_grouping(grouping: MarksGrouping): Promise<Ok>
   /** The songs a take of `folder` can be named after, `takeNumber` being
    *  the take named, which does not count as a go. With no folder, the
    *  rehearsal in progress. */

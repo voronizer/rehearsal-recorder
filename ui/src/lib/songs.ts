@@ -119,7 +119,7 @@ export function fromLastTime(goes: SongGo[]): { go: SongGo; marker: Marker }[] {
     )
 }
 
-const rehearsalsLabel = (n: number) => (n === 1 ? "1 rehearsal" : `${n} rehearsals`)
+export const rehearsalsLabel = (n: number) => (n === 1 ? "1 rehearsal" : `${n} rehearsals`)
 
 /** "7 goes · 4 rehearsals · last 28 Sep", under a song in the list. */
 export function songLine(s: SongSummary, now: Date = new Date()): string {
