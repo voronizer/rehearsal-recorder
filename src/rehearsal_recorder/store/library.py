@@ -15,11 +15,11 @@ see models.py for why.
 from pathlib import Path
 
 from sqlalchemy import Integer, cast, func, select, update
-from sqlalchemy.orm import selectinload, sessionmaker
+from sqlalchemy.orm import object_session, selectinload, sessionmaker
 
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
-    CloudCopy, Label, Marker, Rehearsal, Song, SongName, Take, TakeFile, Track,
+    CloudCopy, Label, Marker, Rehearsal, Song, SongName, SongSet, Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
 
@@ -33,6 +33,11 @@ LABEL_NAME_MAX = 40
 class LabelRefused(ValueError):
     """A change to the labels that cannot be made. The message says why, to
     the person, as it is."""
+
+
+class SetRefused(ValueError):
+    """A change to the sets that cannot be made. The message says why, to the
+    person, as it is."""
 
 
 class SongRefused(ValueError):
@@ -208,9 +213,19 @@ class Library:
         data["cloud"] = self._cloud_dict(data["cloud"], cloud)
         return data
 
-    def _rehearsal_data(self, rehearsal):
+    def _rehearsal_data(self, rehearsal, titles=None):
+        """`titles` is _titles_of(db), for the set's songs; made here when
+        not given, which one rehearsal can afford and a list of them not."""
         folder = self._folder(rehearsal.folder)
+        if rehearsal.set_name is None:
+            played_by = None
+        else:
+            if titles is None:
+                titles = self._titles_of(object_session(rehearsal))
+            played_by = {"name": rehearsal.set_name,
+                         "songs": [titles(t) for t in rehearsal.set_songs or []]}
         return {
+            "set": played_by,
             "folder": str(folder),
             "name": rehearsal.name,
             "created_at": rehearsal.created_at,
@@ -694,7 +709,8 @@ class Library:
             rows = db.scalars(
                 select(Rehearsal).options(*_WITH_TAKES).order_by(Rehearsal.created_at.desc())
             ).all()
-            data = [self._rehearsal_data(r) for r in rows]
+            titles = self._titles_of(db)
+            data = [self._rehearsal_data(r, titles) for r in rows]
         cloud = self._cloud_dir()
         return [self._rehearsal_out(d, cloud) for d in data]
 
@@ -708,7 +724,10 @@ class Library:
         with self._session() as db:
             return self._find(db, folder) is not None
 
-    def create_rehearsal(self, folder, name, created_at, samplerate, bit_depth, tracks):
+    def create_rehearsal(self, folder, name, created_at, samplerate, bit_depth, tracks,
+                         set_copy=None):
+        """`set_copy` is the set it is played by, as set_of gives it, kept on
+        the rehearsal as it is now (D7 of the song-sets spec)."""
         with self._session.begin() as db:
             db.add(Rehearsal(
                 folder=self.key(folder),
@@ -716,6 +735,8 @@ class Library:
                 created_at=created_at,
                 samplerate=int(samplerate),
                 bit_depth=int(bit_depth),
+                set_name=None if set_copy is None else set_copy["name"],
+                set_songs=None if set_copy is None else list(set_copy["songs"]),
                 tracks=[
                     Track(position=i, name=t["name"], channel=int(t["channel"]))
                     for i, t in enumerate(tracks)
@@ -960,6 +981,113 @@ class Library:
                 return False
             row.cloud_error = message
             return True
+
+    # ---------- sets ----------
+    #
+    # Songs a rehearsal goes through, in order: a name and titles each, in an
+    # order of their own. A title is resolved when read, through the songs'
+    # titles and old names, so a set follows renames and merges; a title no
+    # song has is a song not played yet. Each change is one transaction and
+    # returns every set as sets() gives them.
+
+    def _titles_of(self, db):
+        """A function from a title in a set to {"title", "new"}: the song's
+        title now, found by its title or an old name, compared casefolded;
+        the title as it is, new, when no song has it."""
+        songs = self._songs_by_key(db)
+        olds = self._names_by_key(db)
+        titles = dict(db.execute(select(Song.id, Song.title)).all())
+
+        def resolve(text):
+            key = text.casefold()
+            if key in songs:
+                return {"title": songs[key].title, "new": False}
+            if key in olds:
+                return {"title": titles[olds[key].song_id], "new": False}
+            return {"title": text, "new": True}
+
+        return resolve
+
+    def sets(self):
+        """[{"id", "name", "songs": [{"title", "new"}]}] in their order."""
+        with self._session() as db:
+            titles = self._titles_of(db)
+            return [{"id": st.id, "name": st.name,
+                     "songs": [titles(t) for t in st.songs]}
+                    for st in self._ordered_sets(db)]
+
+    def set_of(self, set_id):
+        """{"name", "songs"} of the set, the titles as stored, for a
+        rehearsal to keep; None when there is no such set."""
+        with self._session() as db:
+            st = db.get(SongSet, set_id) if set_id is not None else None
+            return None if st is None else {"name": st.name, "songs": list(st.songs)}
+
+    @staticmethod
+    def _ordered_sets(db):
+        return list(db.scalars(select(SongSet).order_by(SongSet.position, SongSet.id)))
+
+    @staticmethod
+    def _set_in(sets, set_id):
+        found = next((st for st in sets if st.id == set_id), None)
+        if found is None:
+            raise SetRefused("Set not found")
+        return found
+
+    @staticmethod
+    def _set_name(sets, name, set_id=None):
+        """`name` as a set is called: trimmed and cut as a label's name is.
+        Refused empty, or when another set has it, compared by casefold."""
+        name = str(name or "").strip()[:LABEL_NAME_MAX].strip()
+        if not name:
+            raise SetRefused("A set needs a name")
+        for other in sets:
+            if other.id != set_id and other.name.casefold() == name.casefold():
+                raise SetRefused(f"There is already a set called {other.name}")
+        return name
+
+    @staticmethod
+    def _set_songs(songs):
+        """Titles trimmed, empty ones dropped, and each once, at its first
+        place, compared casefolded: a song is in a set once (D9)."""
+        out, seen = [], set()
+        for title in songs or []:
+            title = str(title or "").strip()
+            if title and title.casefold() not in seen:
+                seen.add(title.casefold())
+                out.append(title)
+        return out
+
+    def add_set(self, name, songs):
+        """A new set at the end of the list."""
+        with self._session.begin() as db:
+            sets = self._ordered_sets(db)
+            db.add(SongSet(name=self._set_name(sets, name),
+                           songs=self._set_songs(songs), position=len(sets)))
+        return self.sets()
+
+    def update_set(self, set_id, name=None, songs=None):
+        """Renames the set, or replaces its songs, or both; None leaves that
+        part as it is."""
+        with self._session.begin() as db:
+            sets = self._ordered_sets(db)
+            st = self._set_in(sets, set_id)
+            if name is not None:
+                st.name = self._set_name(sets, name, st.id)
+            if songs is not None:
+                st.songs = self._set_songs(songs)
+        return self.sets()
+
+    def delete_set(self, set_id):
+        """Deletes the set. Rehearsals played by it keep their copy."""
+        with self._session.begin() as db:
+            sets = self._ordered_sets(db)
+            st = self._set_in(sets, set_id)
+            sets.remove(st)
+            db.delete(st)
+            for position, other in enumerate(sets):
+                other.position = position
+        return self.sets()
 
     # ---------- labels ----------
     #

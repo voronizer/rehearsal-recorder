@@ -30,6 +30,12 @@ class Rehearsal(Base):
     created_at: Mapped[str] = mapped_column(String)
     samplerate: Mapped[int] = mapped_column(Integer)
     bit_depth: Mapped[int] = mapped_column(Integer)
+    # The set it was played by, copied when it started (migration 0006):
+    # the set's name and its song titles in order, None when played freely.
+    # A copy, not a link, so changing or deleting the set later leaves what
+    # this evening was meant to be.
+    set_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    set_songs: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     tracks: Mapped[list["Track"]] = relationship(
         back_populates="rehearsal", cascade="all, delete-orphan",
@@ -183,6 +189,26 @@ class Label(Base):
     colour: Mapped[str] = mapped_column(String)
     # From 0, with no gaps: the order of the marker dialog's buttons, and
     # the first is what a new mark gets.
+    position: Mapped[int] = mapped_column(Integer)
+
+
+class SongSet(Base):
+    """
+    Songs a rehearsal goes through, in order, made by the band in Settings or
+    on the start screen (docs/superpowers/specs/2026-10-08-song-sets-design.md).
+    The songs are titles, resolved as a typed name is when read, so a song
+    renamed or merged away is still found; a title no song has is a song not
+    played yet. Names are unique case-blind, which library.py enforces. An id
+    is never given twice (AUTOINCREMENT, see migration 0006).
+    """
+
+    __tablename__ = "song_set"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    songs: Mapped[list] = mapped_column(JSON)
+    # From 0, with no gaps: the order the sets are listed in.
     position: Mapped[int] = mapped_column(Integer)
 
 
