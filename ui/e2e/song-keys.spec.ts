@@ -219,3 +219,22 @@ test("a row picked by a key is scrolled into view", async ({ page }) => {
     await down(page, song)
   await expect(row(page, "Kupalle")).toBeInViewport()
 })
+
+test("with six songs played tonight and the list folded, down goes to the first row shown", async ({
+  page,
+}) => {
+  const tonight = ["Pałyn", "Viasna", "Ahoń", "Sonca", "Dym", "Ptuška"]
+    .map((name) => `{name: '${name}', duration_sec: 60}`)
+    .concat("{name: 'Take 7', duration_sec: 5}")
+  await openApp(page, {
+    before: `window.__MORE_SONGS__ = ["Opus", "Kupalle"]; window.__TONIGHT__ = [${tonight}];`,
+  })
+  await startRehearsal(page, 8)
+  await expect(field(page)).toHaveValue("Take 8")
+  await expect(rows(page)).toHaveCount(5)
+  const first = await rows(page).first().getAttribute("data-song-row")
+  await down(page, first!)
+  await expect(rows(page)).toHaveCount(5)
+  const second = await rows(page).nth(1).getAttribute("data-song-row")
+  await down(page, second!)
+})

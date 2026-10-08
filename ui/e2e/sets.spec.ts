@@ -2,6 +2,7 @@ import {
   callCount,
   calls,
   expect,
+  expectedError,
   openApp,
   recordTake,
   startButton,
@@ -156,6 +157,26 @@ test.describe("on the rehearsal screen", () => {
     await field(page).fill("Novaja")
     await page.keyboard.press("Enter")
     await expect(setRows(page).filter({ hasText: "next" })).toHaveText([/Viasna/])
+  })
+
+  test("a set with no songs says so and nothing else", async ({ page }) => {
+    await openApp(page, { before: withSets([{ ...GIG, songs: [] }]) })
+    await startRehearsal(page)
+    await expect(card(page)).toContainText("0 of 0 played")
+    await expect(card(page).locator("p")).toHaveText("This set has no songs.")
+    await expect(rows(page)).toHaveCount(5)
+  })
+
+  test("a set naming a song twice, by an old name or a go, lists it once", async ({ page }) => {
+    const twice = { ...GIG, songs: ["Pałyn", "Palyn", "Viasna 2", "Viasna"] }
+    await openApp(page, {
+      before: withSets([twice], 1, `window.__OLD_NAMES__ = [["Palyn", "Pałyn"]];`),
+    })
+    await startRehearsal(page)
+    expect(await titlesOf(setRows(page), "data-set-song")).toEqual(["Pałyn", "Viasna"])
+    await expect(card(page)).toContainText("0 of 2 played")
+    await page.keyboard.press("ArrowDown")
+    await expect(field(page)).toHaveValue("Viasna")
   })
 
   test("other songs leave out the set, five show, All N songs opens the rest and Fewer folds them", async ({
@@ -437,6 +458,48 @@ test.describe("on the start screen", () => {
     await create.click()
     await expect(dialog).toHaveCount(0)
     await expect(picker(page)).toHaveText(/Long/)
+  })
+
+  test("when the bridge fails, Create set says so and can be pressed again", async ({
+    page,
+    pageErrors,
+  }) => {
+    await openApp(page, {
+      after:
+        "const real = window.pywebview.api.add_set; let failed = false;" +
+        "window.pywebview.api.add_set = (...a) => failed ? real(...a) :" +
+        " (failed = true, Promise.reject(new Error('bridge')));",
+    })
+    await picker(page).click()
+    await menu(page).getByRole("menuitem", { name: "New set…" }).click()
+    const dialog = page.getByRole("dialog", { name: "New set" })
+    const create = dialog.getByRole("button", { name: "Create set" })
+    await dialog.getByLabel("Name").fill("Long")
+    await dialog.locator("[data-set-add]").getByRole("button", { name: "Dym" }).click()
+    await create.click()
+    // What failed, as the bridge tells it (lib/api.ts), and the window stays.
+    await expect(dialog).toContainText("Error: bridge")
+    await expect(create).toBeEnabled()
+    await create.click()
+    await expect(dialog).toHaveCount(0)
+    await expect(picker(page)).toHaveText(/Long/)
+    expectedError(pageErrors, /add_set failed/)
+  })
+
+  test("when the choice cannot be kept, the start screen still shows it", async ({
+    page,
+    pageErrors,
+  }) => {
+    await openApp(page, {
+      before: onlySets([GIG, SHORT_SET]),
+      after: "window.pywebview.api.save_next_set = () => Promise.reject(new Error('bridge'));",
+    })
+    await picker(page).click()
+    await menu(page).getByRole("menuitemradio", { name: /Short/ }).click()
+    await expect(picker(page)).toHaveText(/Short/)
+    await expect.poll(() => pageErrors.some((e) => /save_next_set failed/.test(e))).toBe(true)
+    await page.waitForTimeout(200)
+    expectedError(pageErrors, /save_next_set failed/)
   })
 
   test("Start sends the chosen set", async ({ page }) => {

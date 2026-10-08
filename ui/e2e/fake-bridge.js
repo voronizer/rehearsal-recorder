@@ -452,8 +452,8 @@ const keepSets = () => localStorage.setItem(SETS, JSON.stringify(sets));
 let nextSetId = Math.max(0, ...sets.map(st => st.id)) + 1;
 
 // Library._titles_of: a title in a set as the song it is now — by its title
-// or an old name, compared case-blind — or as typed and new when no song has
-// it.
+// or an old name, compared case-blind, else by what it is a go at ("Viasna
+// 2") — or as typed and new when no song has it.
 async function setTitles() {
   const known = new Map();
   for (const r of await libraryNow())
@@ -461,22 +461,32 @@ async function setTitles() {
   for (const t of session ? session.takes : []) if (t.song) known.set(t.song.toLowerCase(), t.song);
   for (const title of [...repertoire, ...(window.__TAKELESS_SONGS__ || [])])
     if (!known.has(title.toLowerCase())) known.set(title.toLowerCase(), title);
+  const find = (text) => known.get(text.toLowerCase()) ?? oldNames.get(text.toLowerCase())?.song;
   return (text) => {
-    const key = text.toLowerCase();
-    const title = known.get(key) ?? oldNames.get(key)?.song;
+    const m = /^(.*?)\s+(\d+)$/.exec(text.trim());
+    const title = find(text) ?? (m && m[1].trim() ? find(m[1].trim()) : undefined);
     return title ? {title, new:false} : {title:text, new:true};
   };
+}
+// Library._songs_of_set: a set's songs as they are now, each song once, in
+// the place it first comes.
+function songsOfSet(titles, stored) {
+  const seen = new Set();
+  return stored.map(titles).filter(x => {
+    const key = x.title.toLowerCase();
+    return seen.has(key) ? false : (seen.add(key), true);
+  });
 }
 async function setsAsSent() {
   const titles = await setTitles();
   return JSON.parse(JSON.stringify(sets.map(st => ({id:st.id, name:st.name,
-    songs:st.songs.map(titles)}))));
+    songs:songsOfSet(titles, st.songs)}))));
 }
 // A rehearsal's own copy of its set, as sent (Library._rehearsal_data).
 async function setAsSent(copy) {
   if (!copy) return null;
   const titles = await setTitles();
-  return {name:copy.name, songs:copy.songs.map(titles)};
+  return {name:copy.name, songs:songsOfSet(titles, copy.songs)};
 }
 // The set a rehearsal before this one was played by, as it kept it: a page
 // gives them by folder (window.__PLAYED_BY__ = {'/rec/old': {name, songs:
@@ -739,6 +749,7 @@ window.__MAKE_API__ = () => ({
     return {ok:true, next_take_name:suggestName(), next_take_go:nextTake().go};
   }),
   last_attempt: track('last_attempt', async (name) => {
+    await held('last_attempt');
     if (!session) return null;
     const song = songOf(name, session.takes);
     return lastAttempt(session.takes, song, await goBeforeTonight(song));

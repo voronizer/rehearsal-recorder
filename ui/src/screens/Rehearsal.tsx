@@ -16,7 +16,7 @@ import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEveningSettings } from "@/hooks/useEveningSettings"
 import { TakeNameField, type TakeNameFieldHandle } from "@/components/TakeNameField"
 import { SetCard, SongRows } from "@/components/NextTakeSongs"
-import { otherSongs, rowsFor, shortList, songOf, useListOpen } from "@/lib/setSongs"
+import { SHORT, otherSongs, rowsFor, shortList, songOf, useListOpen } from "@/lib/setSongs"
 import { SongKeys } from "@/components/SongKeys"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
@@ -172,13 +172,25 @@ export function Rehearsal({
   }
 
   // ↑ and ↓ go through the rows as they stand: the set's, then the others
-  // (K1). One past the five folded opens the rest; a row picked by a key
-  // is scrolled into view (R7). While typing they move a highlight through
-  // the rows the typing left, which Enter takes (K3).
-  const order = [...setTitles, ...others]
+  // (K1), folded as the list shows them — its five, the song the field
+  // names after them when it is not one, then the rest. One past the five
+  // opens the rest; a row picked by a key is scrolled into view (R7). While
+  // typing they move a highlight through the rows the typing left, which
+  // Enter takes (K3).
+  const short = shortList(others, lastTakes)
+  const extra = current !== null && others.includes(current) && !short.includes(current)
+  const asShown =
+    !listOpen && others.length > SHORT + 1
+      ? [
+          ...short,
+          ...(extra ? [current] : []),
+          ...others.filter((t) => !short.includes(t) && t !== current),
+        ]
+      : others
+  const order = [...setTitles, ...asShown]
   const [highlight, setHighlight] = useState<string | null>(null)
   const reveal = (title: string) => {
-    if (others.includes(title) && !shortList(others, lastTakes).includes(title)) setListOpen(true)
+    if (others.includes(title) && !short.includes(title)) setListOpen(true)
     requestAnimationFrame(() => {
       const panel = document.querySelector("[data-next-take-panel]")
       const key = CSS.escape(title)
@@ -227,6 +239,16 @@ export function Rehearsal({
   // Escape below is what points Space at recording again.
   useSpacebar(inHand ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, inHand)
+  const finish = async () => {
+    player.pause()
+    const res = await api().finish_rehearsal()
+    if (!res.ok) {
+      setError(res.error ?? "Could not finish the rehearsal")
+      return
+    }
+    onFinished()
+  }
+
   // Escape climbs the same ladder here as everywhere: the strip's columns,
   // the open take, then a take playing in the overview, and then the
   // rehearsal itself, because finishing is the only way up from this screen.
@@ -249,16 +271,6 @@ export function Rehearsal({
     const id = setInterval(() => onChanged(), 1500)
     return () => clearInterval(id)
   }, [inFlight, onChanged])
-
-  const finish = async () => {
-    player.pause()
-    const res = await api().finish_rehearsal()
-    if (!res.ok) {
-      setError(res.error ?? "Could not finish the rehearsal")
-      return
-    }
-    onFinished()
-  }
 
   const deleteTake = async (take: Take) => {
     player.pause()

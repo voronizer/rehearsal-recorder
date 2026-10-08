@@ -58,6 +58,25 @@ test("a second go shows bars for the goes tonight and says how it compares", asy
   expect(await height(1)).toBeGreaterThan(await height(2))
 })
 
+test("thirty goes tonight show the last ten as bars and the title stays whole", async ({ page }) => {
+  const goes = Array.from(
+    { length: 30 },
+    (_, i) => `{name: 'Viasna${i ? ` ${i + 1}` : ""}', duration_sec: ${10 + (i % 7)}}`
+  )
+  await page.setViewportSize({ width: 960, height: 680 })
+  await openApp(page, { before: `window.__TONIGHT__ = [${goes.join(",")}];` })
+  await startRehearsal(page, 31)
+  await recordTake(page, 31)
+  await expect(title(page)).toHaveText("Viasna 31")
+  await expect(bars(page)).toHaveCount(10)
+  await expect(bars(page).first()).toHaveText("22")
+  await expect(bars(page).last()).toHaveAttribute("data-here", "")
+  const cut = await title(page)
+    .locator("[data-go-title]")
+    .evaluate((el) => el.scrollWidth > el.clientWidth)
+  expect(cut).toBe(false)
+})
+
 test("a first go tonight is measured against the last go before tonight with its day", async ({
   page,
 }) => {
@@ -67,6 +86,20 @@ test("a first go tonight is measured against the last go before tonight with its
   await record(page, "Pałyn")
   await expect(line(page)).toHaveText(/^0:06 · 9:54 shorter than on 10 Sep/)
   await expect(bars(page)).toHaveCount(0)
+})
+
+test("while the go before tonight is looked up the line has the length alone", async ({
+  page,
+}) => {
+  await openApp(page, {
+    before:
+      "window.__HOLD__ = {last_attempt: new Promise((r) => { window.__RELEASE__ = r })};",
+  })
+  await startRehearsal(page)
+  await record(page, "Pałyn")
+  await expect(line(page)).toHaveText("0:06")
+  await page.evaluate(() => (window as unknown as { __RELEASE__: () => void }).__RELEASE__())
+  await expect(line(page)).toHaveText(/^0:06 · 9:54 shorter than on 10 Sep/)
 })
 
 test("a take with no song says Take N and its length only", async ({ page }) => {

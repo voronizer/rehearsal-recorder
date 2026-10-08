@@ -9,17 +9,22 @@ import { UNNAMED, goFor, songFor } from "@/lib/goes"
 import { cn } from "@/lib/utils"
 
 type Go = { take_number: number; go: number | null; duration_sec: number; starred: boolean }
+/** The go before tonight, asked for `song`: null when there was none. */
+type Before = { song: string; go: { sec: number; day: string } | null }
 
 /** The bars' room: the longest go is this tall. */
 const BAR_PX = 36
+/** The most bars shown: the last goes, this one last, so a song played all
+ *  evening still leaves its title the room. */
+const MOST_BARS = 10
 
 /**
  * The take on the screen after it, where its name field was (issue #12
  * step 8, A1–A4): its song big, with the go it will be and a pencil that
  * opens Rename take; under it how long it ran against the song's go before;
  * left of it the song's goes tonight as bars, each as tall as it ran, this
- * one in the text colour and ★ goes green. A take nobody named is "Take 7",
- * grey, with its length alone. A first go at a song has no bars.
+ * one in the text colour and ★ goes green, the last ten at most. A take
+ * nobody named is "Take 7", grey, with its length alone. A first go at a song has no bars.
  */
 export function TakeSummary({
   name,
@@ -62,8 +67,9 @@ export function TakeSummary({
   const last = tonight.at(-1) ?? null
 
   // With no go tonight, the go before tonight, with its day, as the
-  // recording screen measures against.
-  const [before, setBefore] = useState<{ song: string; sec: number; day: string } | null>(null)
+  // recording screen measures against. Until it is in, the length is said
+  // alone, so nothing said is taken back.
+  const [before, setBefore] = useState<Before | null>(null)
   const askBefore = song !== null && last === null
   useEffect(() => {
     if (!askBefore || song === null) return
@@ -71,29 +77,33 @@ export function TakeSummary({
     api()
       .last_attempt(song)
       .then((a) => {
-        if (current && a?.created_at)
-          setBefore({ song, sec: a.duration_sec, day: formatDate(a.created_at) })
+        if (current)
+          setBefore({
+            song,
+            go: a?.created_at ? { sec: a.duration_sec, day: formatDate(a.created_at) } : null,
+          })
       })
       .catch(() => {
-        /* the length alone is said */
+        if (current) setBefore({ song, go: null })
       })
     return () => {
       current = false
     }
   }, [askBefore, song])
+  const told = before && before.song === song ? before : null
 
   const compare = last
     ? against(durationSec, last.duration_sec, `go ${last.go ?? last.take_number}`)
-    : before && before.song === song
-      ? against(durationSec, before.sec, `on ${before.day}`)
-      : song
+    : told?.go
+      ? against(durationSec, told.go.sec, `on ${told.go.day}`)
+      : told
         ? "the first go at it tonight"
         : null
 
   const goes: (Go & { here?: boolean })[] = [
     ...tonight,
     { take_number: takeNumber, go, duration_sec: durationSec, starred: false, here: true },
-  ]
+  ].slice(-MOST_BARS)
   const longest = Math.max(...goes.map((g) => g.duration_sec), 1)
   const shown = song ?? name
 

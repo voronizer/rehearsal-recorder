@@ -115,10 +115,10 @@ export function SetCard({
           — {played} of {titles.length} played
         </span>
       </h2>
+      {/* Tonight's copy of the set: songs added in Settings › Sets now are
+          for the next rehearsal, so this does not send anyone there. */}
       {titles.length === 0 ? (
-        <p className="px-2 text-sm text-muted-foreground">
-          No songs in it yet: add them in Settings › Sets.
-        </p>
+        <p className="px-2 text-sm text-muted-foreground">This set has no songs.</p>
       ) : (
         <ol className="flex flex-col">
           {titles.map((title, i) => (
