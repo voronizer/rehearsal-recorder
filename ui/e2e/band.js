@@ -214,10 +214,13 @@ levels = function () {
   }));
 };
 
-api.start_rehearsal = async (name) => {
+api.start_rehearsal = async (name, _device, _rate, _tracks, _depth, setId) => {
+  // The set picked beside Start, as the rehearsal keeps it (Library.set_of).
+  const byIt = sets.find(st => st.id === setId);
   session = {name, folder: `C:\\Users\\alex\\RehearsalRecordings\\${name} - 2026-09-29 19-00`,
              tracks: PARTS,
-             takes: JSON.parse(JSON.stringify(EARLIER))};
+             takes: JSON.parse(JSON.stringify(EARLIER)),
+             set: byIt ? {name: byIt.name, songs: [...byIt.songs]} : null};
   takeCounter = EARLIER.length;
   return {ok: true, folder: session.folder};
 };
@@ -275,19 +278,28 @@ const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => 
   take_number: i + 1, name, ...goOfName(name), starred: isTheTake(markers),
   duration_sec: length, markers,
   tracks: PARTS.map(p => ({name: p.name, file: `${folder}/${i + 1}/${p.name}.wav`}))}));
+// The set a rehearsal was played by, when the page gives one
+// (window.__PLAYED_BY__): its songs are all the band's, so none is new. Not
+// the fake's setAsSent, which reads the library, and so this.
+const playedSet = folder => {
+  const set = playedBy(folder);
+  return set ? {name: set.name, songs: set.songs.map(title => ({title, new: false}))} : null;
+};
 api.list_rehearsals = async () => Object.keys(PAST).map(folder => {
   const [name, created_at, disk_bytes] = PAST[folder];
   const takes = pastTakes(folder);
   return {folder, name, created_at, take_count: takes.length, disk_bytes,
           total_duration_sec: takes.reduce((sum, t) => sum + t.duration_sec, 0),
-          songs: songsOf(takes), runs: runsOf(takes), in_cloud: folder === '/rec/tue' ? 3 : 0};
+          songs: songsOf(takes), runs: runsOf(takes), in_cloud: folder === '/rec/tue' ? 3 : 0,
+          set_name: playedBy(folder)?.name ?? null};
 });
 api.get_rehearsal = async folder => {
   const [name, created_at] = PAST[folder];
   const takes = pastTakes(folder);
   if (folder === '/rec/tue')
     for (const n of [4, 7, 9]) takes[n - 1].cloud = {mix: `/cloud/${n}.mp3`, mix_format: 'mp3'};
-  return {ok: true, folder, name, created_at, takes, songs: songsOf(takes)};
+  return {ok: true, folder, name, created_at, takes, songs: songsOf(takes),
+          set: playedSet(folder)};
 };
 api.last_time = async () => {
   const last = await api.get_rehearsal('/rec/tue');

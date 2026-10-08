@@ -70,6 +70,11 @@ api.list_labels = async () => {
 };
 """
 
+# The band's last rehearsal was played by its set, so History has the card
+# of what was played and what was not: Dym and Ptuška were not.
+PLAYED_BY = """window.__PLAYED_BY__ = {'/rec/tue': {name: 'Gig on the 25th',
+  songs: ['Pałyn', 'Viasna', 'Ahoń', 'Sonca', 'Dym', 'Ptuška']}};"""
+
 # An unsaved take waiting at startup: set before MOCK, which reads it once.
 DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 6', name:'take 6',
   tracks:['Drums','Bass','Guitar','Vocals'], duration_sec:214,
@@ -80,7 +85,8 @@ DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 6', name:'take 6',
 # How tall the window is for each picture: tall enough for all four tracks
 # where there is a player, and no taller than the screen needs elsewhere,
 # so a picture is not half empty.
-HEIGHT = {"unsaved-takes": 420, "setup": 910, "settings": 760, "marks": 420, "rehearsal": 770,
+HEIGHT = {"unsaved-takes": 420, "setup": 910, "settings": 760, "marks": 420, "sets": 720,
+          "rehearsal": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
           "history": 820, "history-songs": 940, "history-marks": 820}
 
@@ -133,6 +139,9 @@ def main():
         page.goto(server.base_url, wait_until="networkidle")
         page.wait_for_selector("text=Start rehearsal")
         page.fill("#rehearsal-name", "Tuesday jam")
+        # The rehearsal is played by the band's set, beside Start.
+        page.click("[data-set-picker]")
+        page.get_by_role("menuitemradio", name="Gig on the 25th").click()
         page.click("text=Check signal")
         page.wait_for_timeout(1500)
         shoot(page, "setup")
@@ -146,6 +155,10 @@ def main():
         page.wait_for_selector("text=What a moment in a take can be marked with")
         page.wait_for_timeout(400)
         shoot(page, "marks")
+        page.get_by_role("button", name="Sets", exact=True).first.click()
+        page.wait_for_selector("[data-set-detail]")
+        page.wait_for_timeout(400)
+        shoot(page, "sets")
         page.keyboard.press("Escape")
         page.wait_for_selector("text=Start rehearsal")
         # The setup screen starts again from the date when it comes back.
@@ -195,7 +208,7 @@ def main():
         page.close()
 
         page = browser.new_page(viewport=VIEWPORT)
-        page.add_init_script(MOCK + BAND + COUNTED)
+        page.add_init_script(PLAYED_BY + MOCK + BAND + COUNTED)
         page.goto(server.base_url, wait_until="networkidle")
         page.wait_for_selector("text=Start rehearsal")
         page.click("text=History")

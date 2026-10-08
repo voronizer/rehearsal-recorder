@@ -7,6 +7,24 @@ opening.
 
 ## Unreleased
 
+- **Rehearse by a set.** A set is the songs a gig needs, in the order the
+  band plays them, with a name: "Gig on the 25th". It is made from the
+  start screen with **New set…**, or in **Settings → Sets**, and picked
+  beside **Start rehearsal**, where it stays picked; *No set* plays freely,
+  as before. The rehearsal screen lists the set under the next take's name:
+  the song on now lit, the one after it *next*, each one played with ✓ and
+  its goes. A click on a song, or ↓ and ↑, names the next take after it,
+  and a click into the name selects it whole. The band's other songs are
+  listed under the set the same way, in place of the songs as buttons: five,
+  and the rest one click away. History says which set a rehearsal was
+  played by, and over its songs which of the set's songs were played and
+  which were not.
+- **After a take, just the song.** The screen after a take says what was
+  recorded, in place of the name field and its songs: the song with its go,
+  "Viasna 2", how long the take ran against the last go at it, "2:31 · 10 s
+  longer than go 1", and the song's goes tonight as bars, each as tall as
+  it ran. The pencil beside the song renames the take, and the player gets
+  the room the field took.
 - **Rename a song, or merge two.** The pencil beside a song's title on its
   page in History renames it: every go, with its folder on disk and its
   cloud copies, the files following in the background. The other songs are
@@ -32,14 +50,11 @@ opening.
   published* says; that choice in Settings no longer needs automatic
   sending on. Settings also say how short a false start is. **Finish**
   now goes straight back to the start screen.
-- **Hear last time before you play it.** The rehearsal screen keeps the
-  next take's name and the songs in a panel on the right, and under them
-  how the song in the field went before tonight: its newest ★ go, or the
-  last go of the last rehearsal that played it, with the day. A button
-  adds the last go of each of its three latest rehearsals. They play right
-  there, a note from a few seconds before it, with no need to finish and
-  look in History. The first take of a song tonight is then measured
-  against that go: "Took 3:20 on 22 Sep".
+- **Measured against last time.** The rehearsal screen keeps the next
+  take's name and the songs in a panel on the right. The first take of a
+  song tonight is measured against how it went before tonight, its newest
+  ★ go or the last go of the last rehearsal that played it, with the day:
+  "Took 3:20 on 22 Sep".
 - **Every song has a page.** History has a *Songs* view beside
   *Rehearsals*, and opens on the one used last. A song's page has every go at
   it, from every rehearsal, one line an evening with its goes drawn to
