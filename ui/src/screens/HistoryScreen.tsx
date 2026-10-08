@@ -1009,7 +1009,12 @@ export function HistoryScreen({
                       : null
                   }
                   onPlay={(m) => void playMark(m)}
-                  onOpen={(m) => void openGo(m, m.at)}
+                  onOpen={(m) => {
+                    // Played in the player and still going after Escape,
+                    // the take shows in this row.
+                    setPlayingMark(m)
+                    void openGo(m, m.at)
+                  }}
                   onOpenSong={(title) => void openSong(title)}
                   onOpenRehearsal={openRehearsal}
                 />

@@ -199,6 +199,43 @@ test.describe("Marks in History", () => {
     await expect.poll(() => marks.evaluate((el) => el.scrollTop)).toBe(scrolled)
   })
 
+  test("a take opened from a row and played there comes back playing in that row", async ({ page }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 3, "Went wrong")
+    await row(page, DAROHA).locator("[data-line='comment']").click()
+    await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
+    await page.keyboard.press("Space")
+    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+
+    await page.keyboard.press("Escape")
+    const daroha = row(page, DAROHA)
+    await expect(daroha.getByRole("button", { name: "Pause Daroha 2" })).toBeVisible()
+    await expect(page.getByRole("button", { name: /^Pause / })).toHaveCount(1)
+    const opened = (await calls(page, "player_open")).length
+    await daroha.getByRole("button", { name: "Pause Daroha 2" }).click()
+    await expect(daroha.getByRole("button", { name: "Play Daroha 2 from 0:25" })).toBeVisible()
+    expect((await calls(page, "player_open")).length).toBe(opened)
+  })
+
+  test("a row opened after another of the same take was played is the one that shows it", async ({
+    page,
+  }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    const first = row(page, "/rec/quiet#1@120")
+    const second = row(page, "/rec/quiet#1@200")
+    await first.getByRole("button", { name: "Play Take 1 from 1:55" }).click()
+    await expect(first.getByRole("button", { name: "Pause Take 1" })).toBeVisible()
+
+    await second.locator("[data-line='comment']").click()
+    await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(second.getByRole("button", { name: "Pause Take 1" })).toBeVisible()
+    await expect(first.getByRole("button", { name: "Play Take 1 from 1:55" })).toBeVisible()
+  })
+
   test("a mark with no comment shows its label's name", async ({ page }) => {
     await openApp(page, { before: MORE })
     await openMarks(page)
