@@ -1,4 +1,13 @@
-import { calls, expect, openApp, recordTake, startRehearsal, test } from "./app.ts"
+import {
+  callCount,
+  calls,
+  expect,
+  openApp,
+  recordTake,
+  startButton,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Song sets (issue #12 step 8): a set is a named list of songs in order,
@@ -276,5 +285,173 @@ test.describe("on the rehearsal screen", () => {
     expect(Math.abs(cardNow.height - cardAt.height)).toBeLessThan(1)
     expect(Math.abs(listNow.y - listAt.y)).toBeLessThan(1)
     expect(Math.abs(listNow.height - listAt.height)).toBeLessThan(1)
+  })
+})
+
+// ---------- the start screen: the set beside Start rehearsal ----------
+
+test.describe("on the start screen", () => {
+  const picker = (page: Page) => page.locator("[data-set-picker]")
+  const menu = (page: Page) => page.getByRole("menu", { name: "Sets" })
+  const SHORT_SET: SetSeed = { id: 2, name: "Short", songs: ["Dym"] }
+  const onlySets = (sets: SetSeed[]) => `window.__SETS__ = ${JSON.stringify(sets)};`
+
+  test("No set by default and the menu lists the sets with song counts", async ({ page }) => {
+    await openApp(page, { before: onlySets([GIG, SHORT_SET]) })
+    await expect(picker(page)).toHaveText(/No set/)
+    await picker(page).click()
+    const items = menu(page).getByRole("menuitemradio")
+    await expect(items).toHaveText([
+      /No set: play freely/,
+      /Gig on the 25th\s*4 songs/,
+      /Short\s*1 song/,
+    ])
+    await expect(items.first()).toHaveAttribute("aria-checked", "true")
+    await expect(menu(page).getByRole("menuitem", { name: "New set…" })).toBeVisible()
+    // Beside Start rehearsal, as tall as it.
+    const start = (await startButton(page).boundingBox())!
+    const at = (await picker(page).boundingBox())!
+    expect(at.x + at.width).toBeLessThanOrEqual(start.x)
+    expect(at.height).toBeCloseTo(start.height, 0)
+  })
+
+  test("choosing a set is kept across a reload", async ({ page }) => {
+    await openApp(page, { before: onlySets([GIG, SHORT_SET]) })
+    await picker(page).click()
+    await menu(page)
+      .getByRole("menuitemradio", { name: /Gig on the 25th/ })
+      .click()
+    await expect(menu(page)).toHaveCount(0)
+    await expect(picker(page)).toHaveText(/Gig on the 25th/)
+    expect((await calls(page, "save_next_set")).at(-1)?.args).toEqual([1])
+    await page.reload()
+    await expect(picker(page)).toHaveText(/Gig on the 25th/)
+    await picker(page).click()
+    await expect(
+      menu(page).getByRole("menuitemradio", { name: /Gig on the 25th/ })
+    ).toHaveAttribute("aria-checked", "true")
+    await menu(page)
+      .getByRole("menuitemradio", { name: /No set/ })
+      .click()
+    expect((await calls(page, "save_next_set")).at(-1)?.args).toEqual([null])
+    await expect(picker(page)).toHaveText(/No set/)
+  })
+
+  test("a long set name is cut and whole on hover", async ({ page }) => {
+    const long = "The songs for the long gig in the club"
+    await openApp(page, { before: withSets([{ id: 1, name: long, songs: ["Dym"] }]) })
+    await expect(picker(page)).toHaveAttribute("title", long)
+    const cut = await picker(page)
+      .locator("[data-set-name]")
+      .evaluate((el) => el.scrollWidth > el.clientWidth)
+    expect(cut).toBe(true)
+    await picker(page).click()
+    await expect(menu(page).getByRole("menuitemradio", { name: new RegExp(long) })).toHaveAttribute(
+      "title",
+      long
+    )
+  })
+
+  test("many sets scroll in the menu", async ({ page }) => {
+    const many = Array.from({ length: 30 }, (_, i) => ({
+      id: i + 1,
+      name: `Set ${i + 1}`,
+      songs: ["Dym"],
+    }))
+    await openApp(page, { before: onlySets(many) })
+    await picker(page).click()
+    const scrolls = await menu(page).evaluate((el) => {
+      const box = el.closest("[data-set-menu]")!
+      return box.scrollHeight > box.clientHeight
+    })
+    expect(scrolls).toBe(true)
+    await menu(page)
+      .getByRole("menuitemradio", { name: /Set 30/ })
+      .click()
+    await expect(picker(page)).toHaveText(/Set 30/)
+  })
+
+  test("New set makes a set from the start screen and chooses it", async ({ page }) => {
+    await openApp(page)
+    await picker(page).click()
+    await menu(page).getByRole("menuitem", { name: "New set…" }).click()
+    const dialog = page.getByRole("dialog", { name: "New set" })
+    await expect(dialog).toBeVisible()
+    await dialog.getByLabel("Name").fill("Gig on the 25th")
+    const add = dialog.locator("[data-set-add]")
+    await add.getByRole("button", { name: "Viasna" }).click()
+    await add.getByRole("button", { name: "Pałyn" }).click()
+    // Added, a song leaves the pills.
+    await expect(add.getByRole("button", { name: "Viasna" })).toHaveCount(0)
+    await dialog.getByRole("textbox", { name: "Another song" }).fill("Novaja")
+    await page.keyboard.press("Enter")
+    const rowsNow = () =>
+      dialog
+        .locator("[data-set-editor-song]")
+        .evaluateAll((els) => els.map((e) => e.getAttribute("data-set-editor-song")))
+    expect(await rowsNow()).toEqual(["Viasna", "Pałyn", "Novaja"])
+    await expect(dialog.locator("[data-set-editor-song='Novaja']")).toContainText("not played yet")
+    await expect(dialog.locator("[data-set-editor-song='Pałyn']")).not.toContainText(
+      "not played yet"
+    )
+
+    // Dragged by its handle to the top.
+    const handle = dialog.getByRole("button", { name: "Move Novaja" })
+    const top = (await dialog.locator("[data-set-editor-song='Viasna']").boundingBox())!
+    await handle.hover()
+    await page.mouse.down()
+    await page.mouse.move(top.x + 20, top.y + 2, { steps: 12 })
+    await page.mouse.up()
+    await expect.poll(rowsNow).toEqual(["Novaja", "Viasna", "Pałyn"])
+
+    // ✕ takes one out.
+    await dialog.getByRole("button", { name: "Take Pałyn out" }).click()
+    await dialog.getByRole("button", { name: "Create set" }).click()
+    await expect(dialog).toHaveCount(0)
+    expect((await calls(page, "add_set")).at(-1)?.args).toEqual([
+      "Gig on the 25th",
+      ["Novaja", "Viasna"],
+    ])
+    await expect(picker(page)).toHaveText(/Gig on the 25th/)
+    expect((await calls(page, "save_next_set")).at(-1)?.args).toEqual([1])
+    expect(await callCount(page, "start_rehearsal")).toBe(0)
+  })
+
+  test("Create set needs a name and a song", async ({ page }) => {
+    await openApp(page, { before: onlySets([SHORT_SET]) })
+    await picker(page).click()
+    await menu(page).getByRole("menuitem", { name: "New set…" }).click()
+    const dialog = page.getByRole("dialog", { name: "New set" })
+    const create = dialog.getByRole("button", { name: "Create set" })
+    await expect(create).toBeDisabled()
+    await dialog.getByLabel("Name").fill("short")
+    await expect(create).toBeDisabled()
+    await dialog.locator("[data-set-add]").getByRole("button", { name: "Dym" }).click()
+    await expect(create).toBeEnabled()
+    // A name another set has is refused, and the window says so.
+    await create.click()
+    await expect(dialog).toContainText("There is already a set called Short")
+    await expect(dialog).toBeVisible()
+    await dialog.getByLabel("Name").fill("Long")
+    await expect(dialog).not.toContainText("There is already")
+    await create.click()
+    await expect(dialog).toHaveCount(0)
+    await expect(picker(page)).toHaveText(/Long/)
+  })
+
+  test("Start sends the chosen set", async ({ page }) => {
+    await openApp(page, { before: onlySets([GIG, SHORT_SET]) })
+    await picker(page).click()
+    await menu(page).getByRole("menuitemradio", { name: /Short/ }).click()
+    await startRehearsal(page)
+    expect((await calls(page, "start_rehearsal")).at(-1)?.args[5]).toBe(2)
+    await expect(page.locator("[data-set-card]")).toContainText("Short")
+  })
+
+  test("a deleted chosen set reads No set", async ({ page }) => {
+    await openApp(page, { before: withSets([GIG], 5) })
+    await expect(picker(page)).toHaveText(/No set/)
+    await startRehearsal(page)
+    expect((await calls(page, "start_rehearsal")).at(-1)?.args[5] ?? null).toBeNull()
   })
 })

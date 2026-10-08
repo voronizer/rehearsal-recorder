@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react"
-import type { SongChoices } from "@/lib/api"
-import { songFor } from "@/lib/goes"
+import type { SetSong, SongChoice, SongChoices } from "@/lib/api"
+import { songFor, songNamed } from "@/lib/goes"
 
 // What the rehearsal screen's songs beside the Next take field are worked
 // out from (NextTakeSongs.tsx; issue #12 step 8, R1–R6).
@@ -87,4 +87,22 @@ export function useListOpen(folder: string): [boolean, (open: boolean) => void] 
     [folder]
   )
   return [open, setOpen]
+}
+
+/**
+ * A set's songs as titles, each saying whether the band has played it
+ * (SetSong.new), from the choices a name field has: a title or an old name
+ * of one of their songs is played. While the choices are on their way none
+ * is said to be new.
+ */
+export function asSetSongs(titles: string[], choices: SongChoices | null): SetSong[] {
+  return titles.map((title) => ({ title, new: choices !== null && !songNamed(title, choices) }))
+}
+
+/** The choices less the songs a set already has, for its Add pills. */
+export function notInSet(choices: SongChoices | null, titles: string[]): SongChoices | null {
+  if (!choices) return null
+  const inSet = new Set(titles.map((t) => t.toLocaleLowerCase()))
+  const out = (c: SongChoice) => !inSet.has(c.song.toLocaleLowerCase())
+  return { here: choices.here.filter(out), other: choices.other.filter(out) }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { SongChoices } from "@/lib/api"
-import { otherSongs, rowsFor, shortList, songOf } from "@/lib/setSongs"
+import { asSetSongs, notInSet, otherSongs, rowsFor, shortList, songOf } from "@/lib/setSongs"
 
 const CHOICES: SongChoices = {
   here: [{ song: "Dym", go: 3, also: [] }],
@@ -79,5 +79,29 @@ describe("shortList", () => {
       ["G", 7],
     ])
     expect(shortList(titles, last)).toEqual(["A", "D", "E", "F", "G"])
+  })
+})
+
+describe("asSetSongs", () => {
+  it("says which songs nobody has played, an old name being played", () => {
+    expect(asSetSongs(["Dym", "Palyn", "Kupalle"], CHOICES)).toEqual([
+      { title: "Dym", new: false },
+      { title: "Palyn", new: false },
+      { title: "Kupalle", new: true },
+    ])
+  })
+
+  it("says none is new while the choices are on their way", () => {
+    expect(asSetSongs(["Kupalle"], null)).toEqual([{ title: "Kupalle", new: false }])
+  })
+})
+
+describe("notInSet", () => {
+  it("leaves out the set's songs, case-blind", () => {
+    expect(notInSet(CHOICES, ["dym", "Viasna"])).toEqual({
+      here: [],
+      other: [{ song: "Pałyn", go: 1, also: ["Palyn"] }],
+    })
+    expect(notInSet(null, [])).toBeNull()
   })
 })
