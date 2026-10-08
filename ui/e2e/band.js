@@ -251,17 +251,26 @@ const PAST = {
     ['Viasna 3', 250, [{at: 100, note: 'guitar drifts here', label_id: 3}]],
     ['Viasna 4', 265, []], ['Viasna 5', 252, []],
     ['Ahoń 3', 340, [{at: 187, note: 'solo too long, cut to 8 bars', label_id: 4}]],
-    ['Ahoń 4', 302, []], ['Sonca 2', 390, []], ['Take 11', 130, []]]],
+    ['Ahoń 4', 302, []], ['Sonca 2', 390, []],
+    ['Take 11', 130, [{at: 42, note: 'bass riff after the count-in', label_id: 1}]]]],
   '/rec/sat': ['New songs', '2026-09-19T15:00:00', 1070000000, [
-    ['Dym 2', 280, []], ['Dym 3', 275, []], ['Dym 4', 290, []],
+    ['Dym 2', 280, []],
+    ['Dym 3', 275, [{at: 130, note: 'tempo drops in the second verse', label_id: 3}]],
+    ['Dym 4', 290, []],
     ['Dym 5', 270, [{at: 200, note: 'keep this ending', label_id: 2}]],
-    ['Ptuška', 245, []], ['Ptuška 2', 260, []], ['Ptuška 3', 255, []]]],
+    ['Ptuška', 245, []],
+    ['Ptuška 2', 260, [{at: 75, note: 'half-time groove in the bridge', label_id: 1}]],
+    ['Ptuška 3', 255, []]]],
   '/rec/tue-before': ['Tuesday jam', '2026-09-15T19:00:00', 1310000000, [
     ['Pałyn', 210, []], ['Pałyn 2', 195, []], ['Pałyn 3', 202, []],
-    ['Viasna', 280, []], ['Viasna 2', 270, []], ['Ahoń', 310, []], ['Ahoń 2', 295, []],
-    ['Sonca', 305, []], ['Dym', 228, []]]],
+    ['Viasna', 280, []],
+    ['Viasna 2', 270, [{at: 210, note: 'guitar drifts here again', label_id: 3}]],
+    ['Ahoń', 310, []],
+    ['Ahoń 2', 295, [{at: 20, note: 'drum intro, 4 bars alone', label_id: 1}]],
+    ['Sonca', 305, [{at: 150, note: '', label_id: 4}]], ['Dym', 228, []]]],
   '/rec/soundcheck': ['Soundcheck', '2026-09-12T18:30:00', 173000000, [
-    ['Take 1', 140, []], ['Take 2', 165, []]]]};
+    ['Take 1', 140, []],
+    ['Take 2', 165, [{at: 65, note: 'the riff we jammed while setting up', label_id: 1}]]]]};
 const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => ({
   take_number: i + 1, name, ...goOfName(name), starred: isTheTake(markers),
   duration_sec: length, markers,

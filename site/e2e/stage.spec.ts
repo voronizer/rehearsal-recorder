@@ -69,8 +69,11 @@ test("the story goes through its five steps", async ({ page }) => {
   await expect(overview.locator("[data-false-start]")).toHaveCount(1)
   await expect(overview.getByRole("button", { name: /Send starred/ })).toBeVisible()
 
-  // History, and on to Pałyn's page.
+  // History's marks: every Went wrong, then a song in them, on to Pałyn's page.
   await step(page, 3)
+  const wentWrong = page.locator('section[aria-label="Went wrong"]')
+  await expect(wentWrong).toBeVisible({ timeout: 30_000 })
+  await expect(wentWrong.locator("[data-mark]")).toHaveCount(5)
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("history")
   await expect(page.locator("[data-song-head] h2")).toHaveText("Pałyn")
   await expect(

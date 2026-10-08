@@ -54,6 +54,8 @@ const NAME = "Tuesday jam"
 const LEAST_TAKE_MS = (Math.max(...CLIPS) + 0.3) * 1000
 /** How long last week's go plays before Record is pressed. */
 const LAST_WEEK_MS = 3000
+/** How long every Went wrong is on show before a song in it is opened. */
+const MARKS_MS = 1800
 let takeStarted = 0
 let rehearsalName = NAME
 
@@ -164,13 +166,31 @@ const FORWARD: Record<(typeof STORY)[number], () => Promise<void>> = {
     )
     bringIntoView(named)
   },
-  // Every rehearsal in History, then its Songs view, on the band's Pałyn.
+  // Every rehearsal in History, then its Marks view: every Went wrong from
+  // every rehearsal, and from the first of them, the band's Pałyn.
   async history() {
     await api().finish_rehearsal()
     show({ step: "history" })
     await waitFor(() => hasText("New songs"))
-    await press("Songs", { exact: true })
-    ;(await waitFor(() => document.querySelector<HTMLElement>('[data-song="Pałyn"]'))).click()
+    await press("Marks", { exact: true })
+    ;(
+      await waitFor(() =>
+        [...document.querySelectorAll<HTMLButtonElement>("button[data-label]")].find(
+          (b) => b.querySelector("[data-name]")?.textContent === "Went wrong"
+        )
+      )
+    ).click()
+    await waitFor(() => document.querySelector('section[aria-label="Went wrong"] [data-mark]'))
+    await sleep(MARKS_MS)
+    ;(
+      await waitFor(() =>
+        [
+          ...document.querySelectorAll<HTMLButtonElement>(
+            'section[aria-label="Went wrong"] [data-mark] [data-line="take"] button'
+          ),
+        ].find((b) => b.textContent === "Pałyn")
+      )
+    ).click()
     await waitFor(() => document.querySelector('[data-rung][aria-expanded="true"]'))
   },
   // From the song's page, Pałyn 5 with its bridge on repeat, and on to the
