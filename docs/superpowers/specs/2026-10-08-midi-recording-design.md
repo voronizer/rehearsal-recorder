@@ -60,7 +60,7 @@ mockup built from the app.
 
 Claude's own calls, explained where they come up:
 
-- the rules for ports (P1–P6);
+- the rules for ports (P1–P8);
 - what goes into the file (F1–F7);
 - a rehearsal needs at least one audio track (A1).
 
@@ -126,13 +126,22 @@ opens each entry of `tracks` as a WAV. Kept apart, they never see a `.mid`.
 
 ## Part 2 — Ports
 
-- **P1. Ports are listed by the OS name.** The list comes from python-rtmidi
-  (`MidiIn().get_ports()`), read fresh each time it is asked for.
-  - RtMidi on Windows adds a number to each name ("TD-17 1"), and that
-    number can change when devices are replugged. A saved port matches a
-    listed one with that number ignored.
-  - Two devices with the same name are told apart by the number, in the
-    order the OS lists them.
+The ports come from **libremidi**, through its Python package `pylibremidi`
+(Part 9 says why). Everything the app does with ports goes through one module
+of its own, `midi/ports.py`, so the library could be swapped there alone.
+
+- **P1. A port is remembered by what the OS says about it**: its name, the
+  device's name and maker, and on macOS the ID CoreMIDI gives it. A saved
+  port is found again in that order:
+  1. the same ID;
+  2. the same name;
+  3. the same name without what Windows adds to it, the port's number at
+     the end ("TD-17 1") and the "2- " in front of a second device of the
+     same kind. Both can change when devices are replugged.
+
+  Two identical devices that nothing tells apart are not guessed between:
+  the track shows its port as not connected, and the picker lists both.
+  The plan checks which of these fields each platform really fills in.
 - **P2. One port feeds one track.** Two tracks on the same port stop Start,
   as two tracks on one input do (`devices.channels_available`,
   `devices.py:546-559`): "Drums and Keys both take notes from TD-17."
@@ -140,33 +149,53 @@ opens each entry of `tracks` as a WAV. Kept apart, they never see a `.mid`.
   a track with no input does: "Keys has no MIDI port yet. Pick one, or set it
   to Audio." A port that was picked but is not plugged in does not stop it
   (D7).
-- **P4. Ports are looked for again on their own.** This is unlike audio
-  interfaces, where the device rescan design deliberately has no hotplug.
-  Listing MIDI ports does not tear down PortAudio or load ASIO drivers, so
-  it is safe to do often:
-  - the setup screen reads the list every 2 s while it is open;
-  - a rehearsal looks every second for a port it is waiting for (Part 3).
-
-  The existing **Look again** on the setup screen also reads the ports.
-- **P5. A port another app holds open** (on Windows a port is usually open
-  to one app at a time) is shown like one not plugged in, with its own words: "TD-17 is in
-  use by another app."
-- **P6. Whether a port plugged in after the app started is seen without a
-  restart is checked first, in the plan.**
-  - On macOS this can be checked in CI, with a virtual port made during a
-    take.
+- **P4. Ports plugged in or pulled out are noticed on their own.**
+  - libremidi's observer calls the app when a port appears or goes, on
+    CoreMIDI, on the classic Windows MIDI and on Windows MIDI Services.
+  - The setup screen's list and the waiting tracks follow it at once.
+  - This is unlike audio interfaces, where the device rescan design
+    deliberately has no hotplug. Watching MIDI ports does not tear down
+    PortAudio or load ASIO drivers.
+  - The existing **Look again** on the setup screen also reads the ports.
+- **P5. A port another app holds open** is shown like one not plugged in,
+  with its own words: "TD-17 is in use by another app."
+  - Windows' classic MIDI lets one app at a time use a port. A drummer's
+    EZdrummer or a DAW on the same laptop would lock РЭХА out, or the
+    other way round.
+  - Windows MIDI Services, the new Windows 11 MIDI, lets several apps share
+    a port. It is still reaching people.
+  - The app opens only the ports its tracks use. The plan tests both
+    Windows stacks, and the app's log says which one it is on.
+- **P6. That a port plugged in after Start is seen is checked first, in the
+  plan.**
+  - On macOS it is checked in CI, with a virtual port made during a take.
   - Windows has no virtual ports without a third-party driver, so it is
     checked on a real machine with a real device.
-  - If a platform does not see new ports, P4 falls back to **Look again**
-    for ports between takes. A take then records only the ports that were
-    there when it started, and the amber note says "from the next take".
+  - If a platform's observer misses new ports, the app reads the port list
+    every second instead. If it does not see them that way either, a take
+    records only the ports there when it started, and the amber note says
+    "from the next take".
+- **P7. A device with several ports.** A keyboard such as the Launchkey has
+  its playing port and a separate DAW port. The picker lists a device's
+  playing port first, and during **Check signal** "✓ notes" shows on the
+  port that is actually being played.
+- **P8. The same notes arriving twice.** One instrument plugged in twice
+  (by USB and through the interface's MIDI in) feeds two tracks with the
+  same notes. When the check sees two ports sending the same notes within a
+  few milliseconds, the second card says: "Keys gets the same notes as
+  Synth. Is it one instrument plugged in twice?" It warns and stops
+  nothing.
 
 ## Part 3 — Recording
 
 **The ports stay open for the whole rehearsal.** A new module,
-`midi/ports.py`, opens one `rtmidi.MidiIn` per *Both* or *MIDI* track, with a
+`midi/ports.py`, opens one libremidi input per *Both* or *MIDI* track, with a
 callback, when the rehearsal starts. It closes them when the rehearsal
 finishes or the app closes.
+
+- The callback only puts the event on a queue and returns. A writer thread
+  takes it from there, so a hi-hat pedal sending a stream of positions, or
+  a burst of SysEx, never holds up the next event.
 
 - Between takes it only keeps each port's state (F6) and looks for missing
   ports (P4).
@@ -181,18 +210,34 @@ finishes or the app closes.
 Opening a port only when a take starts would lose what was set before it:
 the pedal already down, the sound already picked (F6).
 
-**F1. When a note happened.** Each event is timed from the OS's own MIDI
-timestamps (RtMidi's delta times), not from when Python got around to it.
-Time 0 is the first sample of the take's audio:
+**F1. When a note happened, on the audio's own clock.** A note belongs at
+the sample of the WAV that was being captured as it was played.
 
-- the audio callback's `time.inputBufferAdcTime` against the stream's
-  `currentTime` puts that sample on the same clock as the MIDI events;
-- where a driver reports no times (zeros), the time the first block arrived,
-  less one block and the stream's input latency, stands in.
+- **Each event carries the OS's own time** for when it arrived, in
+  nanoseconds (libremidi's absolute timestamps), not the time Python got
+  around to it.
+- **The audio interface keeps its own time**, and its clock and the
+  computer's do not run at quite the same speed.
+  - Interfaces are typically within ±50 ppm. One measured interface ran at
+    +196 ppm.
+  - At 50 ppm a 10-minute take drifts 30 ms, and an hour 180 ms.
+  - A note placed by the computer's clock alone would end a long take
+    audibly early or late against the drums' audio.
+- **So every audio block is a mark.** Each audio callback notes the OS time
+  and how many frames the take has captured by then. A line fitted through
+  those marks turns any OS time into a sample position, drift included. It
+  is fitted afresh as the take goes on.
+- **Time 0 is the take's first sample**, less the interface's input
+  latency. Where a driver reports when a block was captured
+  (`time.inputBufferAdcTime`), that is used. PortAudio has had a bug in
+  those times for input-only streams on CoreAudio, so the plan checks them
+  against the block arrival times.
+- **Windows' classic MIDI** gives times to the millisecond, which is enough.
 
-The aim is notes within 10 ms of the audio they belong to. That is below
-what a drummer hears as a flam. The plan measures the offset on both
-platforms with a click recorded as audio and as MIDI at once.
+The aim is notes within 10 ms of the audio they belong to, at the start of
+a take and at the end of an hour-long one. That is below what a drummer
+hears as a flam. The plan measures it on both platforms with a click
+recorded as audio and as MIDI at once.
 
 **F2. What the file keeps: everything a `.mid` can hold** (Alex, 22:45Z,
 «есть ли смысл что-то фильтровать на записи?»). Nothing is filtered by
@@ -206,13 +251,20 @@ choice. Kept, as sent:
 - pitch bend;
 - aftertouch, for the whole channel and per note. Roland kits send a
   cymbal choke this way;
-- SysEx, which some instruments use for their own settings. python-rtmidi
-  drops it unless told not to (`ignore_types(sysex=False)`).
+- SysEx, which some instruments use for their own settings. libremidi
+  drops it unless told not to (`ignore_sysex = False`).
 
 Not kept, because a Standard MIDI File has no place for them: it holds
-channel messages, SysEx and its own meta events, and nothing else. mido
-refuses the first group outright ("realtime messages are not allowed in
-MIDI files"). They are signals about the cable and the sync, not playing:
+channel messages, SysEx and its own meta events, and nothing else. They are
+signals about the cable and the sync, not playing. They have to be left out
+on purpose, because mido does not stop all of them. It refuses clock,
+start, stop, continue and tune request, and the whole save fails. It writes
+active sensing, song position and time code into the file as they are, and
+a DAW may not read past them. It also writes a reset, whose byte starts a
+meta event in a file, and then even mido cannot read the file back. All
+three were tried with mido 1.3.3. So only channel messages and SysEx are
+written, and one event the file cannot take is skipped and logged. It never
+costs the take its `.mid`. Left out:
 
 - clock, start, stop and continue, which a keyboard's arpeggiator or a drum
   module may send. The `.mid` has its own tempo (D8);
@@ -234,8 +286,14 @@ with the audio's 30-second flush (`capture.py:39, 331-336`).
 - Standard MIDI File format 0, 960 ticks per beat;
 - at tick 0, the track's name, the port's name as the device name, a
   120 bpm tempo (D8), then the state at the start (F6);
-- every event at its time in ticks, so one tick is about half a millisecond;
-- the channels as the device sent them.
+- every event at its time in ticks, so one tick is about half a millisecond.
+  Each event's tick is worked out from its time from the start, not added
+  up from the one before, so rounding never builds up over a long take;
+- the channels as the device sent them;
+- names written as UTF-8. mido writes Latin-1 unless told otherwise, and a
+  track called "Pałyn" or "Барабаны" then fails the save
+  (`UnicodeEncodeError`, tried with mido 1.3.3). Some DAWs still show such a
+  name garbled; the file's own name is always right.
 
 **F5. When there is no `.mid`.** A port that never appeared during a take
 leaves no file, and the take has no notes entry for it. A port that was
@@ -247,13 +305,28 @@ kept per channel for the whole rehearsal: the last value of every
 controller, the program and bank, pitch bend and channel aftertouch. At time
 0 of a take, the `.mid` gets that state, before any note. A DAW then plays
 the take's first hi-hat closed if the pedal was already down, and the
-keyboard's sound as it was picked before Record. A key already held when the
-take starts is not in the file, nor its release.
+keyboard's sound as it was picked before Record.
+
+- The bank is written before the program, as instruments expect.
+- Only values that actually arrived are written; nothing is made up.
+- Some controllers are not a state and are never repeated:
+  - 120–127 are commands (all notes off, local control, reset);
+  - 88 only adds precision to the next note's velocity;
+  - 6, 38 and 96–101 only mean something inside the sequence that set them.
+- A key already held when the take starts is not in the file, nor its
+  release.
 
 **F7. Nothing left hanging at the end.** When a take stops, or its port
 disappears mid-take, every note still held gets its release at that
 moment. A sustain, sostenuto or soft pedal still down is let up. Without
 this a DAW holds those notes to the end of the project.
+
+A device switched off behind an interface's MIDI in leaves its port there,
+since the port is the interface's. Many devices say they are alive with
+active sensing: a TD-17 every 250 ms. When it has been arriving and stops
+for more than 300 ms, which is the MIDI standard's own rule, the device
+counts as gone. Its held notes are released at the moment it was last
+heard, and its tile shows "not connected" until it is heard again.
 
 **Drafts and recovery** (`audio/drafts.py`):
 
@@ -349,10 +422,20 @@ The lanes (`Timeline.tsx:457-497`), wherever a take opens in the player:
 - **A *MIDI* track**: a lane of its own, in band order. Its plate has the
   instrument's icon, the name, the port and the same line.
 - **The notes**, drawn on a canvas:
-  - **Drums** (notes on MIDI channel 10, the General MIDI drum channel e-kits
-    use): six rows, Crash, Ride, Hi-hat, Toms, Snare, Kick, from the General
-    MIDI drum map. A seventh row, Other, shows only in a take that has notes
-    outside the map.
+  - **Drums**: six rows, Crash, Ride, Hi-hat, Toms, Snare, Kick.
+    - Which lanes are drums: a track with the drums icon, or notes on MIDI
+      channel 10, the General MIDI drum channel. Drummers do move kits off
+      channel 10, so the icon counts too.
+    - The rows come from the General MIDI drum map, with the extra notes
+      e-kits use beside it. On a TD-17, 22 and 26 are the hi-hat's edge,
+      40 the snare's rim and 58 tom 3's rim; General MIDI calls 58 a
+      vibraslap.
+    - A seventh row, Other, shows only in a take that has notes outside the
+      map.
+    - An e-kit ends each hit about 0.1 s later, so a fast roll overlaps
+      itself on one note. Each release goes to the oldest hit still
+      sounding on that note. A note-on at velocity 0 is a release, as MIDI
+      has it.
   - **Anything else**: notes by pitch, from the take's lowest note to its
     highest, rounded out to whole octaves, with each C labelled.
   - Each note is a bar as long as it was held. A softer note is paler. The
@@ -409,29 +492,74 @@ Each of these handles the `notes` list as it does `tracks`:
     and both change.
   - `_copy_detail` is unchanged.
 
-## Part 9 — Building the app
+## Part 9 — The libraries, and building the app
 
-- **`requirements.txt`** gains:
-  - `python-rtmidi` (MIT; wheels for macOS arm64 and x86_64 and for Windows
-    x64 on Python 3.12, the version the builds use);
-  - `mido` (MIT, pure Python).
+**Ports: libremidi** (`pylibremidi` 5.4.3, MIT and BSD-2-Clause), asked for
+after Alex questioned the first choice (22:49Z, «поищи - может что получше
+и удобнее найдешь»). Three were compared:
 
-  python-rtmidi reads the ports, and mido writes and reads the files.
-- **The PyInstaller spec** collects rtmidi's compiled module.
+| | python-rtmidi | rtmidi2 | pylibremidi |
+|---|---|---|---|
+| Last release | 1.5.8, Nov 2023 | 1.5.0, Oct 2026 | 5.4.3, Jan 2026 |
+| Underneath | RtMidi | RtMidi 6 | libremidi, a rewrite of RtMidi |
+| Wheels | up to Python 3.12 | 3.10–3.14 | 3.10–3.14 |
+| Port plugged in or pulled out | not told; read the list again | not told; read the list again | told, by an observer |
+| An open port still connected | not told | not told | `is_port_connected()` |
+| Event times | time since the last event | time since the last event | the OS's time, in ns |
+| Windows | classic MIDI | classic MIDI | classic MIDI, UWP and Windows MIDI Services |
+
+- **python-rtmidi** was the first choice, and is dropped.
+  - It has had no release since 2023 and has no wheels for Python 3.13.
+  - Its open issues include a Windows crash on 3.13 (#228) and SysEx cut
+    short on Windows (#200).
+  - A delta-only time leaves the first event of each port without a time
+    of its own.
+- **rtmidi2** is alive and simple, but has the same RtMidi underneath: no
+  word when a port comes or goes, and delta times.
+- **libremidi** answers D7 and P4 directly, with its observer, and F1, with
+  its absolute times. It is the library behind ossia score's MIDI and
+  several OBS plugins.
+  - Its Python package is young: four releases in January 2026, none
+    since.
+  - So it sits behind `midi/ports.py` alone, and rtmidi2 is the fallback if
+    the plan's first checks fail on it.
+  - Tried on Linux with Python 3.12: the observer and an input open, and
+    its times are the system's monotonic clock in nanoseconds.
+  - The Windows wheel has the classic, UWP and Windows MIDI Services
+    backends compiled in; the macOS wheel has CoreMIDI.
+  - Its Python package does not include libremidi's file reading and
+    writing.
+
+**Files: mido** (1.3.3, MIT, pure Python), the most used MIDI file library
+for Python. Alternatives were looked at:
+
+- pretty_midi and miditoolkit are built on mido, for music analysis, and
+  drop what they do not model;
+- symusic is fast but made for machine learning, around notes rather than
+  every event;
+- MIDIUtil has had no release since 2018.
+
+mido's two traps for this use are handled in F2 (events a file cannot take)
+and F4 (names as UTF-8).
+
+**Building:**
+
+- **`requirements.txt`** gains `pylibremidi` and `mido`.
+- **The PyInstaller spec** collects pylibremidi's compiled module.
 - **macOS** asks no permission for MIDI.
-- **The self-test** (`app.py --selftest`) opens the MIDI system and lists
-  ports, with no device needed, so a build that lost rtmidi fails in CI,
-  not at a rehearsal.
+- **The self-test** (`app.py --selftest`) starts the MIDI system and lists
+  ports, with no device needed, so a build that lost it fails in CI, not at
+  a rehearsal.
 - **Without a working MIDI system** the app still records audio. The switch
   stays and the port picker says why there are no ports. Saved ports show as
-  not connected, so a *Both* track records its audio and waits for its notes,
-  as in D7.
+  not connected, so a *Both* track records its audio and waits for its
+  notes, as in D7.
 
 ## Testing
 
 Tests come before the code, and each is seen failing first.
 
-**Python** (`tests/test_engine.py`, with python-rtmidi stubbed the way
+**Python** (`tests/test_engine.py`, with pylibremidi stubbed the way
 sounddevice is):
 
 - the band and layouts with modes and ports: a *MIDI* member gets no
@@ -441,17 +569,30 @@ sounddevice is):
   - a *MIDI* track accepted without an input;
   - P2 and P3 refusing a shared port and a missing port;
   - A1 refusing an all-MIDI rehearsal;
-- P1: a saved Windows-style name matching with its number changed;
+- P1: a saved port found by its ID, by its name, and by its name with
+  Windows' number and "2- " changed; two identical devices not guessed
+  between;
+- P8: the same notes from two ports during a check warned about;
 - the recorder:
   - events into a `.midraw`, then a `.mid` with the right ticks, tempo,
     track name and channels;
-  - F2: everything played kept, SysEx included, and what a `.mid` cannot
-    hold left out, so mido writes the file;
+  - F2: everything played kept, SysEx included; clock, tune request,
+    active sensing, song position, time code and reset left out, so the
+    file saves and reads back; an event the file cannot take skipped
+    without losing the rest;
+  - F4: a track named "Pałyn" and one named in Cyrillic saved and read
+    back; a long take's ticks not drifting from rounding;
   - F6: pedal, program and pitch bend set before a take written at its
     time 0, from events that came between takes;
+  - F6: controllers 120–127, 88 and the parameter ones not repeated, and
+    the bank written before the program;
   - F7: notes held at stop, and at a port vanishing, released there, and a
-    held sustain pedal let up;
-  - F1's time 0 from a fake audio callback's times, and the fallback;
+    held sustain pedal let up; active sensing stopping for over 300 ms
+    counted as the device gone;
+  - F1: time 0 from a fake audio callback's times, and the fallback; an
+    interface running 200 ppm fast still putting a note an hour in on its
+    sample, within a millisecond;
+  - a burst of thousands of events in a second, with none lost;
 - D7:
   - a port missing at start and appearing later, with notes from then on;
   - a port vanishing mid-take and coming back, with one file;
@@ -466,11 +607,21 @@ sounddevice is):
   - `.mid` copied as is with the tracks, never renamed `.wav`;
   - left out of the mix;
   - sent again after a crop;
-- `take_notes`: drums found by channel 10, pitches otherwise, and a missing
+- `take_notes`: drums found by the icon or by channel 10, pitches
+  otherwise; TD-17's extra notes in their rows; a fast roll's overlapping
+  hits paired oldest first; a note-on at velocity 0 as a release; a missing
   file reported.
 
 **CI on macOS**: a virtual port made after a take has started is picked up
-(P6).
+by the observer, and one closed is seen as gone (P6).
+
+**By hand, before the PR** (the plan has a checklist for Alex or anyone with
+the devices):
+
+- on Windows, a USB MIDI device plugged in after Start, on the classic
+  Windows MIDI and on Windows MIDI Services;
+- on both platforms, a click recorded as audio and as MIDI at once, at the
+  start of a take and after an hour (F1).
 
 **Playwright** (the fake bridge gains `list_midi_ports`, `midi_activity`,
 `take_notes` and modes on tracks):
@@ -494,7 +645,13 @@ sounddevice is):
   - a port not plugged in;
   - where the `.mid` files are;
   - in a DAW: set the project to 120 bpm, or let it take the file's tempo,
-    and the notes line up with the WAVs.
+    and put the `.mid` at bar 1 where the WAVs start; then they line up.
+    Logic may ask about the tempo, or have the question turned off;
+    Cubase's "Ignore Master Track Events on Merge" keeps the project's own
+    tempo; Ableton puts every channel of a file in one clip;
+  - Bluetooth MIDI adds a few milliseconds of uneven delay, and the classic
+    Windows MIDI does not see it;
+  - on Windows, a port in use by another app.
 
   It has one screenshot each of a card on *Both* and of the player with a
   notes lane, from the fake.
