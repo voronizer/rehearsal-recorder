@@ -5,7 +5,8 @@ built when its feature was, and each settled its own look:
 
 - **The same piece is built several times.** Four hand-made small ▶
   buttons in three sizes with four prop types, four copies of the dialog
-  frame, three key chips, six kinds of screen header on seven screens.
+  frame, three key chips, six kinds of screen header on seven screens,
+  and about thirty more kinds of piece like them (C8).
 - **The screens are a visual mess.** Twelve text sizes, 49 font sizes in px
   that ignore the Appearance scale, fifteen spacing steps, nine corner
   radii, 39 hand-made `<button>`s beside 89 shared `Button`s. Blue means four
@@ -207,7 +208,75 @@ on Windows.
   between them stays at least 4 px, which keeps their 24 px touch areas
   apart (WCAG 2.5.8).
 - **C7. Group.** A panel set apart by its fill (F4), radius 12, with the
-  screen's spacing inside.
+  screen's spacing inside. It replaces about 16 hand-made bordered boxes
+  with six different paddings; the shared `Card` is never used today.
+- **C8. Everything else that is built more than once.** The small player
+  was one example of many (Alex, 15:28Z: «я подозреваю что у нас куча
+  похожих»). A sweep of `ui/src` on main 64682da found about thirty more
+  kinds of piece, each built two to sixteen times; the full lists with every place are
+  in the project's files, `design-system/q-dupes/controls.md` and
+  `display.md`. Each becomes one shared piece, taken from shadcn/ui where
+  it has one (U1):
+
+  | Built more than once today | Becomes |
+  |---|---|
+  | 13 on/off and pick-one buttons made by swapping two Button looks; 2 identical segmented switches (History's and Marks'); 3 pick-one grids in popovers | shadcn Toggle and ToggleGroup, one look for "on" and "selected" (F2), arrow keys inside a group |
+  | About 15 small icon actions (rename, delete, share) in two sizes; the take's toolbar built twice, in two orders | one icon-button size; one take toolbar, the same buttons in the same order everywhere |
+  | 12 whole rows made into buttons, and 2 rows that only a mouse can open; History's three side lists nearly identical; six looks for "selected" | one list row (shadcn Item), one selected look, every row reachable by keyboard |
+  | 9 text links with 4 hovers and 3 focus rings | Button's link look |
+  | 5 close ✕ buttons in 4 sizes | one ✕ |
+  | The small headings set in capitals (F7), in 2 sizes, 3 letter spacings and 2 weights; 10 section headings in Settings made of a label and a grey hint | one heading for a group and one for a section (F7: no capitals) |
+  | Label colour dots in 5 sizes in 11 places; mark ticks in 4 shapes; 9 chips and pills made by hand, while `Badge` is never used | one dot, one tick, Badge |
+  | About 17 warnings and errors: boxes in raw amber beside the theme's warning colour, plain red lines, three different error icons | shadcn Alert for a box, one line style for a field (B4), one icon per meaning |
+  | 15 loading signs: spinners in 5 sizes, a spinning refresh icon, plain text | shadcn Spinner, one size per place (B5) |
+  | A take drawn to scale 6 times, each with its own scale, playhead and "starred" green; "how far along" computed 5 times | one take bar and one helper |
+  | A take's name written 6 ways ("01", "Take N", the go in a mono box, the raw name); "Not named" typed in 6 places | `TakeTitle` everywhere |
+  | A rehearsal's date in 6 forms; counts and plurals written inline about 15 times beside helpers that exist; "1 inputs"; the evening's figures in 6 places; the device line 4 times | `lib/format.ts` only (B8) |
+  | "Not on disk" in 6 places, 4 wordings, 2 colours | one wording, one look |
+  | Progress bars made by hand twice beside `Progress`; level meters 3 ways, the clip level defined twice | `Progress`; one meter |
+  | 3 hand-made empty states beside `EmptyState` | shadcn Empty (B7) |
+  | About 70 native tooltips; a cut name shown whole in one place only when cut, in another always | shadcn Tooltip, one rule (B6) |
+  | 4 expand and collapse toggles with 3 chevron behaviours | shadcn Collapsible |
+  | 3 native checkboxes, 2 styles | shadcn Checkbox or Switch |
+  | Text fields: the name field rebuilds the field's focus ring by hand, the folder field and its Browse button twice, inline editing set up twice | Input and shadcn InputGroup |
+  | 8 dividers made 3 ways, while `Separator` is never used | `Separator` |
+  | The side panel 3 ways; the head of History's right pane 3 ways; 6 screen headers | one side panel, one pane head, one screen header |
+  | The mark note line 3 times; the disk-space line twice, low space yellow in one and red in the other | one each |
+  | One meaning, two icons: copy to the cloud (two cloud icons), the star (an icon and a ★ character) | one icon per meaning |
+  | 5 drag grips, none usable from the keyboard | one grip, moved by arrow keys too |
+  | `ActivityButton` builds its own popover beside the shared one | the shared Popover (U4) |
+
+## Writing components
+
+These rules hold after the rollout too, for every new screen and feature.
+
+- **U1. Use what exists first.** In this order:
+  1. a shared component the app already has, in `ui/src/components/ui/`;
+  2. a component from shadcn/ui, added with its own command
+     (`npx shadcn add kbd`) into the same folder;
+  3. our own component, only when shadcn has nothing like it (the small
+     player C2, the track lane C6).
+
+  Today the nine components in `components/ui/` were copied in by hand and
+  there is no `ui/components.json`, so the shadcn command does not work
+  yet; the foundation PR sets it up. shadcn already has a Dialog, Kbd,
+  Field (with a line for a field's error), Spinner and Empty (an empty
+  state), so C3, C5, B4, B5 and B7 are built on those.
+- **U2. A different look is a variant, not a copy.** A smaller button is a
+  new size in `Button`, as M and S are (C6); a component is never copied
+  to change it. A shadcn component, once added, is our code: it is changed
+  in its own file to follow the theme.
+- **U3. Shared or the screen's own.** A piece used on two screens or more is
+  a shared component. A piece of one screen may live with that screen, but
+  is built only from shared components and theme values. When a second
+  screen needs it, it moves to the shared ones instead of being copied.
+  This is how today's four small ▶ came to be.
+- **U4. Radix and other building blocks only inside `components/ui/`.**
+  Screens use the shared components, never Radix directly. Today five files
+  do (the four dialogs and `ActivityButton.tsx`).
+- **U5. A shared component comes with its story and its line.** Every state
+  in the showcase, in both themes and as on both systems, and a line in the
+  document (K1) saying what it is for.
 
 ## How screens work
 
@@ -259,7 +328,9 @@ on Windows.
   - a radius off 4, 8, 12 or full;
   - `uppercase`;
   - a hand-made `<button>` where a shared one fits;
-  - a dialog that bypasses the shared Dialog.
+  - a dialog that bypasses the shared Dialog;
+  - Radix imported outside `components/ui/` (U4);
+  - a shared component without a story (U5).
 
   Screens not yet redone are on an allow-list that each screen's PR
   shortens; the list is empty before the release. The spacing scale is not
@@ -316,6 +387,10 @@ Told here for Alex to object to; none of them was asked.
   `Shell.tsx:119,125`), so more air (F8) would break it.
 - **A red button at full colour in the dark theme** (C1), **one key chip**
   (C5), **one group panel** (C7), and **one ▶ for a take not on disk** (C2).
+- **What each repeated piece in C8 becomes.**
+- **The rules for writing components (U1-U5).** Alex asked at 15:27Z
+  whether there would be one; the order in U1 follows his preference for
+  the vendor's documented way over a leaner one of our own.
 - **B4 to B9** above, from the research and from Alex's rules for this
   project (layout jumps are bugs; long names and narrow windows are
   checked; a Settings option over a fixed behaviour).
@@ -325,6 +400,8 @@ Told here for Alex to object to; none of them was asked.
 
 ## Left to the plan
 
+- Whether notices (C4) move onto shadcn's toast, Sonner, which has an
+  action button, or stay our own with an action added (U1).
 - Whether the stored label key "blue" is renamed to "orange" (a migration)
   or kept with the new colour (F3).
 - How a take's record is kept until its Undo runs out (B1), and what
