@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { content } from "../content"
+import { leadAndBeats } from "../content/markdown"
 import type { ToStage } from "../frame"
 import { LiveFrame } from "./LiveFrame"
-import { Paragraphs } from "./Md"
+
+/** Each step's line, and the three under it, as HTML. */
+const told = content.story.steps.map((s) => leadAndBeats(s.body))
 
 /** Smooth, unless whoever is reading has asked for less motion. */
 const scrolling = (): ScrollBehavior =>
@@ -11,11 +14,13 @@ const scrolling = (): ScrollBehavior =>
 /**
  * The five steps on the left, and on the right the app going through them:
  * the step in the middle of the screen is the one it shows. The rail under
- * it fills as the page scrolls, and jumps to a step.
+ * it fills as the page scrolls, and jumps to a step. Of the step on screen,
+ * the line the app has got to is lit; none is until the app gets there.
  */
 export function Story() {
   const { story } = content
   const [active, setActive] = useState(0)
+  const [lit, setLit] = useState<{ step: number; beat: number } | null>(null)
   const activeRef = useRef(0)
   const send = useRef<((message: ToStage) => void) | null>(null)
   const steps = useRef<(HTMLLIElement | null)[]>([])
@@ -63,6 +68,7 @@ export function Story() {
     send.current = to
     to({ type: "rr-step", step: activeRef.current })
   }, [])
+  const onBeat = useCallback((step: number, beat: number) => setLit({ step, beat }), [])
 
   return (
     <section className="section" id="how">
@@ -71,7 +77,13 @@ export function Story() {
       </div>
       <div className="story">
         <div className="stage">
-          <LiveFrame scene="story" title="РЭХА, following the steps on this page" lazy onReady={onReady} />
+          <LiveFrame
+            scene="story"
+            title="РЭХА, following the steps on this page"
+            lazy
+            onReady={onReady}
+            onBeat={onBeat}
+          />
           <div className="rail" role="group" aria-label="Steps">
             {story.steps.map((s, i) => (
               <button
@@ -92,7 +104,22 @@ export function Story() {
             <li key={s.id} ref={(el) => void (steps.current[i] = el)} className={i === active ? "step on" : "step"}>
               <span className="n">{i + 1}</span>
               <h3>{s.title}</h3>
-              <Paragraphs text={s.body} />
+              {told[i].lead.map((html, k) => (
+                <p key={k} dangerouslySetInnerHTML={{ __html: html }} />
+              ))}
+              <ol className="beats">
+                {told[i].beats.map((html, k) => {
+                  const now = i === active && lit?.step === i && lit.beat === k
+                  return (
+                    <li
+                      key={k}
+                      className={now ? "now" : undefined}
+                      aria-current={now ? "true" : undefined}
+                      dangerouslySetInnerHTML={{ __html: html }}
+                    />
+                  )
+                })}
+              </ol>
             </li>
           ))}
         </ol>

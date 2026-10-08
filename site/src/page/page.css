@@ -130,6 +130,12 @@ body {
 .step .n { font-family: var(--page-mono); font-size: 0.82rem; color: var(--page-muted); }
 .step h3 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; }
 .step p { color: var(--page-muted); max-width: 26rem; margin: 0; }
+/* A step's three lines; the one the app is on is lit, with the same padding
+   lit or not, so nothing moves when it lights. */
+.beats { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; max-width: 27rem; counter-reset: b; font-size: 0.94rem; }
+.beats li { counter-increment: b; display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 8px 12px; margin-left: -12px; border-radius: 10px; color: var(--page-muted); transition: background-color 0.3s ease, color 0.3s ease; }
+.beats li::before { content: counter(b); font-family: var(--page-mono); font-size: 0.78rem; padding-top: 0.2em; }
+.beats li.now { background: var(--page-tile); color: var(--page-fg); }
 .stage { position: sticky; top: 16px; z-index: 1; display: grid; gap: 14px; }
 .rail { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
 .rail button { all: unset; cursor: pointer; display: grid; gap: 7px; font-size: 0.8rem; color: var(--page-muted); }
@@ -175,4 +181,4 @@ body {
 .footer a { text-decoration: none; }
 .footer a:hover { color: var(--page-fg); }
 
-@media (prefers-reduced-motion: reduce) { .step { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .step, .beats li { transition: none; } }

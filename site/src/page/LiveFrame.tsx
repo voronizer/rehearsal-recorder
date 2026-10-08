@@ -16,6 +16,7 @@ export function LiveFrame({
   interactive = false,
   lazy = false,
   onReady,
+  onBeat,
 }: {
   scene: string
   title: string
@@ -24,6 +25,8 @@ export function LiveFrame({
   lazy?: boolean
   /** Called each time the frame is up, with a way to talk to it. */
   onReady?: (send: (message: ToStage) => void) => void
+  /** Called as the story gets to each line of a step. */
+  onBeat?: (step: number, beat: number) => void
 }) {
   const box = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
@@ -53,6 +56,10 @@ export function LiveFrame({
 
     const onMessage = (e: MessageEvent) => {
       if (e.source !== f.contentWindow || !isFromStage(e.data)) return
+      if (e.data.type === "rr-beat") {
+        onBeat?.(e.data.step, e.data.beat)
+        return
+      }
       send({ type: "rr-hold", hold: !seen })
       onReady?.(send)
     }
@@ -63,7 +70,7 @@ export function LiveFrame({
       watched.disconnect()
       window.removeEventListener("message", onMessage)
     }
-  }, [onReady])
+  }, [onReady, onBeat])
 
   return (
     <div className="screen">

@@ -1,6 +1,6 @@
 // Just enough Markdown for site/content/: a title, an intro, sections under
-// `## ` headings with an optional `{#id}`, and inline bold, emphasis, code
-// and links. The page's words are short; a full Markdown library would be
+// `## ` headings with an optional `{#id}`, a story step's `- ` list, and
+// inline bold, emphasis, code and links. The page's words are short; a full Markdown library would be
 // most of what the page downloads.
 
 export type Section = { title: string; id: string | null; body: string }
@@ -74,6 +74,22 @@ export function paragraphs(body: string): string[] {
     .map((p) => p.replace(/\s*\n\s*/g, " ").trim())
     .filter(Boolean)
     .map(inline)
+}
+
+/**
+ * A story step's body: its paragraphs before the list, and each `- ` line of
+ * the list, both as HTML. A list line may wrap onto the lines under it.
+ */
+export function leadAndBeats(body: string): { lead: string[]; beats: string[] } {
+  const start = body.search(/^- /m)
+  if (start < 0) return { lead: paragraphs(body), beats: [] }
+  const beats = body
+    .slice(start)
+    .split(/^- /m)
+    .map((b) => b.replace(/\s*\n\s*/g, " ").trim())
+    .filter(Boolean)
+    .map(inline)
+  return { lead: paragraphs(body.slice(0, start)), beats }
 }
 
 const where = (file: string) => `site/content/${file}`

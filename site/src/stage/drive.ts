@@ -33,6 +33,11 @@ export async function press(text: string, { exact = false } = {}): Promise<void>
 
 export const hasText = (text: string) => document.body.innerText.includes(text)
 
+/** A key pressed with nothing in focus, as the app's shortcuts hear it. */
+export function key(name: string): void {
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }))
+}
+
 /**
  * Scrolls the screen's own middle so `el` is in the middle of it. Not
  * scrollIntoView: that scrolls every box around the element, the page this

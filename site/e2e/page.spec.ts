@@ -92,6 +92,24 @@ test("the story follows the scroll, and the rail goes back", async ({ page }) =>
   await expect.poll(() => sceneIn(page, "story"), { timeout: 20_000 }).toBe("setup")
 })
 
+test("the step on screen lights the line the app is on", async ({ page }) => {
+  await page.goto("/")
+  const steps = page.locator("#how .step")
+  const now = page.locator("#how .step.on .beats li.now")
+  const elsewhere = page.locator("#how .step:not(.on) .beats li.now")
+  await steps.nth(3).evaluate((el) => el.scrollIntoView({ block: "center" }))
+  await expect(now).toHaveText(/^Marks: every Went wrong, from every rehearsal\./, { timeout: 40_000 })
+  await expect(elsewhere).toHaveCount(0)
+  await expect(now).toHaveText(/^A click on Pałyn: /, { timeout: 20_000 })
+  await expect(elsewhere).toHaveCount(0)
+  await expect(now).toHaveAttribute("aria-current", "true")
+
+  await steps.nth(0).evaluate((el) => el.scrollIntoView({ block: "center" }))
+  await expect(now).toHaveCount(0)
+  await expect(now).toHaveText(/^Name the rehearsal, or keep the date\./, { timeout: 20_000 })
+  await expect(elsewhere).toHaveCount(0)
+})
+
 test("a frame scrolled past holds still", async ({ page }) => {
   await page.goto("/")
   await expect.poll(() => heldIn(page, "hero"), { timeout: 20_000 }).toBe("false")

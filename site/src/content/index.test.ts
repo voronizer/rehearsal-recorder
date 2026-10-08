@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import changelog from "../../../CHANGELOG.md?raw"
 import { content, readContent } from "./index"
+import { leadAndBeats } from "./markdown"
 import { displayVersion, latestVersion, newsLead } from "./changelog"
 
 // The words in site/content/, as the page will use them. An id spelt wrong
@@ -26,6 +27,14 @@ describe("the site's content", () => {
       "history",
       "compare",
     ])
+  })
+
+  it("every step has one line and three lines under it", () => {
+    for (const step of content.story.steps) {
+      const { lead, beats } = leadAndBeats(step.body)
+      expect(lead, step.id!).toHaveLength(1)
+      expect(beats, step.id!).toHaveLength(3)
+    }
   })
 
   it("has the hero's words", () => {
