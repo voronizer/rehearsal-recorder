@@ -310,6 +310,7 @@ export function HistoryScreen({
     })()
   }, [])
   const showView = (next: HistoryView) => {
+    forgetAsked()
     setView(next)
     void api().save_history_view(next)
     if (next === "songs" && !songsShown.current) void loadSongs()
@@ -496,6 +497,13 @@ export function HistoryScreen({
     paneScroll.current = null
   }, [selected])
 
+  /** A take asked for to open or to play, from a list left since: when its
+   *  rehearsal has been read, it is dropped. */
+  const forgetAsked = () => {
+    going.current++
+    cueing.current++
+  }
+
   /** ▶ on a mark: its take plays here from just before the mark, or, when
    *  it is the mark playing, pauses. Its rehearsal is read for the take,
    *  and an answer that comes back after another ▶ is dropped. */
@@ -526,6 +534,7 @@ export function HistoryScreen({
    *  another song. */
   const chooseLabel = (id: number) => {
     if (id === chosenLabel) return
+    forgetAsked()
     close()
     setLabel(id)
   }

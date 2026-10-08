@@ -79,6 +79,8 @@ export function firstFreeColour(labels: Label[]): LabelColour {
 }
 
 let current: Label[] = []
+/** How many times the labels were asked for: only the last answer counts. */
+let asked = 0
 const listeners = new Set<() => void>()
 
 function set(next: Label[]) {
@@ -105,8 +107,12 @@ export function useLabels(): Label[] {
  * has already said it.
  */
 export async function loadLabels() {
+  const ticket = ++asked
   try {
-    set(await api().list_labels())
+    const labels = await api().list_labels()
+    // Python answers each call on a thread of its own: an answer asked for
+    // before the last one has older counts.
+    if (ticket === asked) set(labels)
   } catch {
     // Said by the bridge's error bar.
   }
@@ -114,5 +120,6 @@ export async function loadLabels() {
 
 /** What a change in Settings answered: every label as it is now. */
 export function labelsChanged(labels: Label[]) {
+  asked++
   set(labels)
 }

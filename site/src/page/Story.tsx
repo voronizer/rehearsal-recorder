@@ -47,6 +47,9 @@ export function Story() {
       if (at !== activeRef.current) {
         activeRef.current = at
         setActive(at)
+        // A step back starts the app again, and a step on is one it has
+        // not got to: either way, no line of it is lit yet.
+        setLit(null)
         send.current?.({ type: "rr-step", step: at })
       }
     }
@@ -66,6 +69,7 @@ export function Story() {
 
   const onReady = useCallback((to: (message: ToStage) => void) => {
     send.current = to
+    setLit(null)
     to({ type: "rr-step", step: activeRef.current })
   }, [])
   const onBeat = useCallback((step: number, beat: number) => setLit({ step, beat }), [])

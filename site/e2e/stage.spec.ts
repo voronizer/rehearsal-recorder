@@ -105,6 +105,16 @@ test("the story tells the page each line as it gets to it", async ({ page }) => 
   expect(await beats()).toEqual([0, 1, 2, 3, 4].flatMap((s) => [0, 1, 2].map((b) => [s, b])))
 })
 
+test("the story finds the marks grouped by rehearsal, whatever was kept", async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("mock-python-config", JSON.stringify({ marks_grouping: "song" }))
+  )
+  await page.goto("/stage.html#story")
+  await step(page, 3)
+  await expect.poll(() => scene(page), { timeout: 40_000 }).toBe("history")
+  await expect(page.locator("[data-song-head] h2")).toHaveText("Pałyn")
+})
+
 test("a jump from the first step to the last ends on the last", async ({ page }) => {
   await page.goto("/stage.html#story")
   await step(page, 0)

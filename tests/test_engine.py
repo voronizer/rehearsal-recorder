@@ -6555,6 +6555,12 @@ def main():
     ok("and is still the view after a restart",
        view60.get_settings()["history_view"] == "marks")
 
+    renamed60 = s60.rename_take(first60, 1, "Doroga")
+    hit60 = [m for m in s60.list_marks(3)["marks"] if m["folder"] == first60][0]
+    ok("a take renamed to another song is listed with its new song and name",
+       renamed60.get("ok") is True and hit60["song"] == "Doroga"
+       and hit60["name"].startswith("Doroga"))
+
     s60.delete_label(3, 1)
     ok("a label's marks moved to another when it is deleted are listed under that one",
        where60(1) == [(last60, 1, 20), (last60, 1, 80), (last60, 2, 42),

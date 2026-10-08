@@ -44,6 +44,19 @@ const marksOn = (page: Page) =>
 
 const lastSeek = async (page: Page) => (await calls(page, "player_seek")).at(-1)?.args[0] as number
 
+/** Holds the fake's answers to `name` until let go. */
+const hold = (page: Page, name: string) =>
+  page.evaluate((n) => {
+    const w = window as unknown as { __HOLD__?: Record<string, Promise<void>>; __LET_GO__?: () => void }
+    w.__HOLD__ = { ...w.__HOLD__, [n]: new Promise<void>((r) => (w.__LET_GO__ = r)) }
+  }, name)
+const letGo = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __HOLD__?: object; __LET_GO__: () => void }
+    w.__HOLD__ = {}
+    w.__LET_GO__()
+  })
+
 test.describe("Marks in History", () => {
   test("the switch has three views, and History opens on the one used last", async ({ page }) => {
     await openApp(page, { before: MORE })
@@ -234,6 +247,106 @@ test.describe("Marks in History", () => {
     await page.keyboard.press("Escape")
     await expect(second.getByRole("button", { name: "Pause Take 1" })).toBeVisible()
     await expect(first.getByRole("button", { name: "Play Take 1 from 1:55" })).toBeVisible()
+  })
+
+  test("a play still reading its take when the label changes plays nothing", async ({ page }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 3, "Went wrong")
+    await hold(page, "get_rehearsal")
+    await row(page, VIASNA).getByRole("button", { name: "Play Viasna 1 from 0:35" }).click()
+    await page.keyboard.press("ArrowDown")
+    await expect(pane(page, "Do again").getByRole("heading", { name: "Do again", level: 2 })).toBeVisible()
+    await letGo(page)
+    await page.waitForTimeout(400)
+    expect(await calls(page, "player_open")).toHaveLength(0)
+  })
+
+  test("a row still opening when the label changes opens nothing", async ({ page }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 3, "Went wrong")
+    await hold(page, "get_rehearsal")
+    await row(page, VIASNA).locator("[data-line='comment']").click()
+    await page.keyboard.press("ArrowDown")
+    await expect(pane(page, "Do again").getByRole("heading", { name: "Do again", level: 2 })).toBeVisible()
+    await letGo(page)
+    await page.waitForTimeout(400)
+    await expect(page.getByRole("group", { name: "Take timeline" })).toHaveCount(0)
+  })
+
+  test("a mark removed in the player leaves its label empty, and still chosen", async ({ page }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 2, "Keep this")
+    await pane(page, "Keep this").locator("[data-line='comment']").click()
+    await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
+    await page.getByRole("button", { name: "Remove marker at 1:12" }).click()
+    await expect(page.getByRole("button", { name: "Remove marker at 1:12" })).toHaveCount(0)
+
+    await page.keyboard.press("Escape")
+    const keep = pane(page, "Keep this")
+    await expect(keep).toContainText("Marks given the label Keep this in the player gather here")
+    await expect(keep.locator("[data-mark]")).toHaveCount(0)
+    await expect(keep.getByRole("button", { name: "By song" })).toBeDisabled()
+    await expect(labelItem(page, 2)).toHaveAttribute("data-empty", "true")
+    await expect(labelItem(page, 2)).toHaveAttribute("aria-current", "true")
+  })
+
+  test("the label chosen and then deleted in Settings gives way to the first", async ({ page }) => {
+    await openApp(page, { before: MORE })
+    await openMarks(page)
+    await chooseLabel(page, 4, "Do again")
+    await page.keyboard.press("Escape")
+    await page.getByRole("button", { name: "Settings" }).click()
+    await page.getByRole("button", { name: "Marks", exact: true }).first().click()
+    await page.locator("[data-label='Do again']").hover()
+    await page.getByRole("button", { name: "Delete Do again" }).click()
+    await expect(page.locator("[data-label='Do again']")).toHaveCount(0)
+    await page.keyboard.press("Escape")
+
+    await page.getByRole("button", { name: "History", exact: true }).click()
+    await expect(pane(page, "Note").getByRole("heading", { name: "Note", level: 2 })).toBeVisible()
+    await expect(labelItem(page, 1)).toHaveAttribute("aria-current", "true")
+    await expect(labelItem(page, 4)).toHaveCount(0)
+  })
+
+  test("the counts on the left are the newest, whichever answer comes back last", async ({ page }) => {
+    await openApp(page, { before: MORE })
+    await openHistory(page)
+    // The first ask, made on the way into Marks, answers only after the
+    // counts have changed and been asked for again.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        pywebview: { api: Record<string, (...a: unknown[]) => Promise<unknown>> }
+        __OLD_COUNTS__: () => void
+      }
+      const bridge = w.pywebview.api
+      const ask = bridge.list_labels
+      let first = true
+      bridge.list_labels = async (...a: unknown[]) => {
+        const answer = await ask(...a)
+        if (!first) return answer
+        first = false
+        await new Promise<void>((r) => (w.__OLD_COUNTS__ = r))
+        return answer
+      }
+    })
+    await page.getByRole("button", { name: "Marks", exact: true }).click()
+    await chooseLabel(page, 3, "Went wrong")
+    await row(page, VIASNA).locator("[data-line='comment']").click()
+    await page.getByRole("button", { name: "Edit marker at 0:40" }).click()
+    const dialog = page.getByRole("dialog")
+    await dialog.getByRole("button", { name: "Do again" }).click()
+    await dialog.getByRole("button", { name: "Save", exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+    await page.keyboard.press("Escape")
+    await expect(labelItem(page, 3).locator("[data-count]")).toHaveText("2")
+
+    await page.evaluate(() => (window as unknown as { __OLD_COUNTS__: () => void }).__OLD_COUNTS__())
+    await page.waitForTimeout(400)
+    await expect(labelItem(page, 3).locator("[data-count]")).toHaveText("2")
+    await expect(labelItem(page, 4).locator("[data-count]")).toHaveText("1")
   })
 
   test("a mark with no comment shows its label's name", async ({ page }) => {
