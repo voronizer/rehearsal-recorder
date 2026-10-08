@@ -16,9 +16,10 @@ import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEveningSettings } from "@/hooks/useEveningSettings"
 import { TakeNameField, type TakeNameFieldHandle } from "@/components/TakeNameField"
 import { SetCard, SongRows } from "@/components/NextTakeSongs"
-import { otherSongs, songOf, useListOpen } from "@/lib/setSongs"
+import { otherSongs, rowsFor, shortList, songOf, useListOpen } from "@/lib/setSongs"
+import { SongKeys } from "@/components/SongKeys"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
-import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
+import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
   type Marker,
@@ -133,10 +134,6 @@ export function Rehearsal({
     typing && typing.text.trim() !== "" && typing.text.trim() !== typing.from.trim()
       ? typing.text
       : null
-  const pickSong = (title: string) => {
-    if (fieldRef.current) fieldRef.current.put(title)
-    else nameNextTake(title)
-  }
 
   const nameNextTake = (name: string) => {
     // The name it would have anyway goes as "", so it goes on following
@@ -168,6 +165,46 @@ export function Rehearsal({
       onChanged()
     })
   }
+
+  const pickSong = (title: string) => {
+    if (fieldRef.current) fieldRef.current.put(title)
+    else nameNextTake(title)
+  }
+
+  // ↑ and ↓ go through the rows as they stand: the set's, then the others
+  // (K1). One past the five folded opens the rest; a row picked by a key
+  // is scrolled into view (R7). While typing they move a highlight through
+  // the rows the typing left, which Enter takes (K3).
+  const order = [...setTitles, ...others]
+  const [highlight, setHighlight] = useState<string | null>(null)
+  const reveal = (title: string) => {
+    if (others.includes(title) && !shortList(others, lastTakes).includes(title)) setListOpen(true)
+    requestAnimationFrame(() => {
+      const panel = document.querySelector("[data-next-take-panel]")
+      const key = CSS.escape(title)
+      panel
+        ?.querySelector(`[data-set-song="${key}"], [data-song-row="${key}"]`)
+        ?.scrollIntoView({ block: "nearest" })
+    })
+  }
+  const stepSong = (dir: 1 | -1) => {
+    const at = current === null ? -1 : order.indexOf(current)
+    const to = at < 0 ? (dir > 0 ? order[0] : undefined) : order[at + dir]
+    if (to === undefined) return
+    reveal(to)
+    pickSong(to)
+  }
+  const arrowWhileTyping = (dir: 1 | -1) => {
+    const found = rowsFor(order, narrowBy, current)
+    const from = highlight ?? current
+    const at = from === null ? -1 : found.indexOf(from)
+    const to = at < 0 ? (dir > 0 ? found[0] : found.at(-1)) : found[at + dir]
+    if (to === undefined) return
+    if (narrowBy === null) reveal(to)
+    setHighlight(to)
+  }
+  useKey("ArrowUp", () => stepSong(-1), selected === null && !busy)
+  useKey("ArrowDown", () => stepSong(1), selected === null && !busy)
 
   const startTake = async () => {
     if (busy) return
@@ -366,9 +403,16 @@ export function Rehearsal({
             onCommit={nameNextTake}
             onPanel
             songs="none"
-            onDraft={(text) =>
+            onDraft={(text) => {
+              // What is typed changed, or the field was left: no row is
+              // highlighted any more.
+              if (text !== (typing?.text ?? null)) setHighlight(null)
               setTyping((t) => (text === null ? null : { from: t?.from ?? text, text }))
-            }
+            }}
+            onArrow={arrowWhileTyping}
+            highlighted={() => highlight}
+            selectOnClick
+            labelAside={<SongKeys hidden={selected !== null} />}
           />
           {session.set && (
             <SetCard
@@ -376,7 +420,7 @@ export function Rehearsal({
               goes={goesTonight}
               current={current}
               onPick={pickSong}
-              highlighted={null}
+              highlighted={highlight}
             />
           )}
           <SongRows
@@ -389,7 +433,7 @@ export function Rehearsal({
             inSet={setTitles}
             title={session.set ? "Other songs" : "Songs"}
             onPick={pickSong}
-            highlighted={null}
+            highlighted={highlight}
             open={listOpen}
             onOpen={setListOpen}
           />

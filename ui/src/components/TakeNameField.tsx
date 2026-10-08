@@ -1,4 +1,4 @@
-import { useImperativeHandle, useRef, useState, type Ref } from "react"
+import { useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react"
 import { X } from "lucide-react"
 import { SongPills } from "@/components/SongPills"
 import type { SongChoices } from "@/lib/api"
@@ -59,6 +59,10 @@ export type TakeNameFieldHandle = { put: (name: string) => void }
  * `songs` "none" draws no pills and no All songs…: the rehearsal screen
  * lists the songs as rows beside it instead (NextTakeSongs), which name the
  * take through `ref`'s `put`, as a pill does. The old name's line stays.
+ * There, while typing, ↑ and ↓ go to `onArrow`, and Enter names the take
+ * after the row they are on (`highlighted`) and leaves the field; with
+ * `selectOnClick` the first click into the field selects the name whole,
+ * so typing replaces it, and a second places the caret.
  */
 export function TakeNameField({
   id,
@@ -76,6 +80,10 @@ export function TakeNameField({
   offerNewSong = true,
   onDraft,
   songs = "pills",
+  onArrow,
+  highlighted,
+  selectOnClick = false,
+  labelAside,
   ref,
 }: {
   id: string
@@ -102,6 +110,13 @@ export function TakeNameField({
   onDraft?: (text: string | null) => void
   /** "none": no songs under the field; they are listed beside it. */
   songs?: "pills" | "none"
+  /** ↑ and ↓ while typing: the rows beside the field. */
+  onArrow?: (dir: 1 | -1) => void
+  /** The row ↑ and ↓ are on while typing, which Enter takes. */
+  highlighted?: () => string | null
+  selectOnClick?: boolean
+  /** Drawn at the right of the label. */
+  labelAside?: ReactNode
   ref?: Ref<TakeNameFieldHandle>
 }) {
   // What is typed, while the field has focus; null shows `value`.
@@ -119,6 +134,8 @@ export function TakeNameField({
   // (and while an old name is in it, below).
   const [held, setHeld] = useState<number | null>(null)
   const input = useRef<HTMLInputElement>(null)
+  // A click that focused the field, to select the name whole once it is over.
+  const wholeOnClick = useRef(false)
   const songsArea = useRef<HTMLDivElement>(null)
   // An old name forgotten here, and the choices it was forgotten from: it
   // is taken out of them until Python's fresh list replaces them.
@@ -199,15 +216,18 @@ export function TakeNameField({
 
   return (
     <div role="group" aria-label={label} className="relative flex min-w-0 flex-col gap-2">
-      <label
-        htmlFor={id}
-        className={cn(
-          "font-semibold text-muted-foreground",
-          size === "big" ? "text-[11px] tracking-wider uppercase" : "text-xs"
-        )}
-      >
-        {label}
-      </label>
+      <div className="flex items-center justify-between gap-2">
+        <label
+          htmlFor={id}
+          className={cn(
+            "font-semibold text-muted-foreground",
+            size === "big" ? "text-[11px] tracking-wider uppercase" : "text-xs"
+          )}
+        >
+          {label}
+        </label>
+        {labelAside}
+      </div>
       <div
         className={cn(
           "relative w-full max-w-md rounded-lg border border-input",
@@ -253,6 +273,16 @@ export function TakeNameField({
           autoFocus={autoFocus}
           autoComplete="off"
           spellCheck={false}
+          onMouseDown={() => {
+            // The first click selects the name whole; once in it, a click
+            // places the caret, as anywhere. Selected once the click is
+            // over: Chrome puts back the caret it had before otherwise.
+            wholeOnClick.current = selectOnClick && document.activeElement !== input.current
+          }}
+          onClick={() => {
+            if (wholeOnClick.current) input.current?.select()
+            wholeOnClick.current = false
+          }}
           onFocus={() => {
             edit(value)
             setStartedAs(value)
@@ -270,9 +300,16 @@ export function TakeNameField({
             if (left !== null) commit(named(left))
           }}
           onKeyDown={(e) => {
+            if (onArrow && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+              e.preventDefault()
+              onArrow(e.key === "ArrowDown" ? 1 : -1)
+              return
+            }
             if (e.key !== "Enter") return
             e.preventDefault()
-            if (onEnter) onEnter(named(shown))
+            const row = highlighted?.()
+            if (row) put(row)
+            else if (onEnter) onEnter(named(shown))
             else input.current?.blur()
           }}
           className={cn(
