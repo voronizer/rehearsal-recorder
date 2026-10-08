@@ -25,9 +25,11 @@ the app looks like now, and it is published when a release is.
   Python side that the interface's tests already use.
 - **D5. Published on release.** The site is built and deployed by GitHub
   Actions when a release is out, so it always shows the version people
-  download. A pull request only builds the site and runs its test,
-  so a change to the interface that breaks it shows up before a release,
-  not on the day of one.
+  download. A pull request builds the site and runs its test, so a change
+  to the interface that breaks it shows up before a release, not on the
+  day of one, and (added 2026-10-07) puts the build on Vercel as a preview
+  to look at before merging; reha.stream itself still changes only with a
+  release.
 - **D6. Content follows the repo.** The version and its news come from the
   release and `CHANGELOG.md`; everything else on the page is Markdown in
   `site/content/`, changed in the same pull request as the app.
@@ -187,7 +189,9 @@ ui/e2e/band.js      the band, shared with tests/docs_screenshots.py
 
 - **`.github/workflows/site.yml`:**
   - on a pull request that touches `site/`, `ui/` or `CHANGELOG.md`:
-    build the site and run its test;
+    build the site and run its test, and, for a branch of this repository,
+    deploy the build to Vercel as a preview, shown in the pull request as
+    "View deployment" (added 2026-10-07);
   - when the *Release* workflow has finished well for a published release
     (`workflow_run`), so the zips are already attached and the download
     links work: the same, from the release's tag, then deploy the build to
@@ -204,7 +208,9 @@ ui/e2e/band.js      the band, shared with tests/docs_screenshots.py
   so Vercel never builds on a push; the workflow deploys a build it made
   itself (`vercel deploy --prebuilt --prod`). It needs three repository
   secrets: `VERCEL_TOKEN`, which only Alex can make, and the project's
-  `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`.
+  `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`. The routes Vercel applies (the
+  short links `/mac` and `/windows`, a year's cache for `/assets/`) are in
+  `site/vercel-config.json` (added 2026-10-07).
 - **The domain.** `reha.stream` already points somewhere else
   (207.207.210.107 and .229 on 2026-10-06). The default is the site at the
   bare domain, with `www` sent to it. Changing the DNS is Alex's, and is

@@ -2,15 +2,18 @@
 #
 # A pull request that could change it builds it and runs its tests, so an
 # interface change that breaks the page shows up before a release, not on
-# the day of one. The site is deployed only when a release is out: the
-# Release workflow calls this once it has attached the zips, so the page's
-# download links work from the moment it is up and it shows the version
-# people get.
+# the day of one. A pull request from a branch here also puts its build on
+# Vercel as a preview, to look at before merging. reha.stream itself changes
+# only when a release is out: the Release workflow calls this once it has
+# attached the zips, so the page's download links work from the moment it is
+# up and it shows the version people get.
 #
 # Vercel never builds anything itself: the project there has no Git
 # connection, and this uploads the build it made (vercel deploy --prebuilt).
 # It needs three repository secrets: VERCEL_TOKEN, VERCEL_ORG_ID and
-# VERCEL_PROJECT_ID.
+# VERCEL_PROJECT_ID. What Vercel does with an address before serving a file
+# (the short links /mac and /windows, a year's cache for the build's hashed
+# files) is in site/vercel-config.json.
 #
 # The page counts visits with Vercel's Web Analytics, which is switched on in
 # the Vercel project (Analytics, Enable). Only a deployment made after that
@@ -123,11 +126,23 @@ jobs:
           path: site/playwright-report/
           if-no-files-found: ignore
 
+      # Vercel's Build Output API: the files as they are, served as they are,
+      # with the site's routes from vercel-config.json. A release from before
+      # that file, deployed again by hand, goes up without them.
+      - name: Lay out the build for Vercel
+        run: |
+          mkdir -p site/vercel-output
+          cp -R site/dist site/vercel-output/static
+          if [ -f site/vercel-config.json ]; then
+            cp site/vercel-config.json site/vercel-output/config.json
+          else
+            echo '{"version": 3}' > site/vercel-output/config.json
+          fi
+
       - uses: actions/upload-artifact@v7
-        if: github.event_name != 'pull_request'
         with:
           name: site
-          path: site/dist/
+          path: site/vercel-output/
           if-no-files-found: error
 
   deploy:
@@ -142,14 +157,7 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: site
-          path: dist
-
-      # Vercel's Build Output API: the files as they are, served as they are.
-      - name: Lay out the build for Vercel
-        run: |
-          mkdir -p .vercel/output/static
-          cp -R dist/. .vercel/output/static/
-          echo '{"version": 3}' > .vercel/output/config.json
+          path: .vercel/output
 
       - name: Deploy
         env:
@@ -165,3 +173,36 @@ jobs:
           url=$(npx --yes vercel@62.4.0 deploy --prebuilt --prod --token "$VERCEL_TOKEN")
           echo "Deployed $TAG to $url"
           echo "The site for $TAG is at $url" >> "$GITHUB_STEP_SUMMARY"
+
+  # A pull request's build on Vercel as a preview, never production: the
+  # pull request shows it as "View deployment", and it opens after logging
+  # in to Vercel, with Vercel's toolbar for comments on the page. Secrets
+  # reach a pull request only from a branch of this repository, so one from
+  # a fork or from Dependabot is built and tested and gets no preview.
+  preview:
+    name: preview
+    needs: site
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    environment:
+      name: preview
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: site
+          path: .vercel/output
+
+      - name: Deploy
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          url=$(npx --yes vercel@62.4.0 deploy --prebuilt --token "$VERCEL_TOKEN")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "This pull request's site is at $url" >> "$GITHUB_STEP_SUMMARY"
