@@ -199,7 +199,7 @@ export type LastAttempt = {
 }
 
 /** A song in a set: its title now, or as typed when no song has it yet
- *  (`new`), which is what the set's rows mark with a dot. */
+ *  (`new`: a song not played yet, which Settings › Sets says). */
 export type SetSong = { title: string; new: boolean }
 
 /** A set of songs in the order the band means to play them (Settings ›

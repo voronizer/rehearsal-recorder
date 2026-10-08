@@ -101,6 +101,8 @@ export function Setup({
   // The interface that was chosen and is not plugged in. Not the same as
   // none chosen: the desk is often switched on after the laptop.
   const [missing, setMissing] = useState<SettingsData["missing_device"]>(null)
+  // The set Start plays by (S2): kept in the config across restarts.
+  const [nextSet, setNextSet] = useState<number | null>(null)
   const [rescanning, setRescanning] = useState(false)
   const [stillMissing, setStillMissing] = useState(false)
 
@@ -117,6 +119,7 @@ export function Setup({
 
     const cfg = await api().get_settings()
     setMissing(cfg.missing_device)
+    setNextSet(cfg.next_set ?? null)
     const savedDeviceExists =
       cfg.device_index != null &&
       devs.some((d) => d.index === cfg.device_index)
@@ -344,7 +347,8 @@ export function Setup({
       deviceIndex,
       samplerate,
       tracks,
-      bitDepth
+      bitDepth,
+      nextSet
     )
     setStarting(false)
     if (!res.ok) {

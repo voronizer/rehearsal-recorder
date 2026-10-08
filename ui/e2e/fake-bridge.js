@@ -369,8 +369,9 @@ function songPlays(goes) {
 // The rest of the band's repertoire, as other rehearsals in the library
 // played it, the latest first.
 const REPERTOIRE = ['Pałyn', 'Viasna', 'Ahoń', 'Sonca', 'Dym', 'Ptuška', 'Daroha'];
-// The repertoire as renames and merges have left it.
-let repertoire = [...REPERTOIRE];
+// The repertoire as renames and merges have left it. A page can add songs
+// to it (window.__MORE_SONGS__ = ['Opus', …]), played at other rehearsals.
+let repertoire = [...REPERTOIRE, ...(window.__MORE_SONGS__ || [])];
 
 // Python groups takes by the song each is a go at (api._songs_of) and hands
 // the result over; the mock does the same.

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useImperativeHandle, useRef, useState, type Ref } from "react"
 import { X } from "lucide-react"
 import { SongPills } from "@/components/SongPills"
 import type { SongChoices } from "@/lib/api"
@@ -17,6 +17,10 @@ function without(choices: SongChoices | null, name: string): SongChoices | null 
   })
   return { here: choices.here.map(strip), other: choices.other.map(strip) }
 }
+
+/** What a list drawn beside the field, not under it (the rehearsal
+ *  screen's songs), names the take through: as a pill would. */
+export type TakeNameFieldHandle = { put: (name: string) => void }
 
 /**
  * A take's name, in one field: over Record before the take, over Save take
@@ -51,6 +55,10 @@ function without(choices: SongChoices | null, name: string): SongChoices | null 
  * "Palyn → Pałyn 12", and under the songs, "Palyn is Pałyn now. Make Palyn
  * a new song", which forgets the old name and puts it in the field. Not only
  * while typing: Rename take keeps what was typed until Rename is pressed.
+ *
+ * `songs` "none" draws no pills and no All songs…: the rehearsal screen
+ * lists the songs as rows beside it instead (NextTakeSongs), which name the
+ * take through `ref`'s `put`, as a pill does. The old name's line stays.
  */
 export function TakeNameField({
   id,
@@ -67,6 +75,8 @@ export function TakeNameField({
   goes = true,
   offerNewSong = true,
   onDraft,
+  songs = "pills",
+  ref,
 }: {
   id: string
   label: string
@@ -90,6 +100,9 @@ export function TakeNameField({
   offerNewSong?: boolean
   /** What is typed, as it is typed; null once the field is left. */
   onDraft?: (text: string | null) => void
+  /** "none": no songs under the field; they are listed beside it. */
+  songs?: "pills" | "none"
+  ref?: Ref<TakeNameFieldHandle>
 }) {
   // What is typed, while the field has focus; null shows `value`.
   const [draft, setDraft] = useState<string | null>(null)
@@ -156,8 +169,36 @@ export function TakeNameField({
     }
   }
 
+  useImperativeHandle(ref, () => ({ put }))
+
+  const oldLine = old && offerNewSong && (
+    <p
+      data-old-name
+      className={cn("text-xs text-muted-foreground", songs === "pills" && "mt-2")}
+    >
+      {old.name} is {old.song} now.{" "}
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={async () => {
+          // What was typed, less a number after it: the go is the app's.
+          const text = songNamed(shown, known)
+            ? shown.trim()
+            : shown.trim().replace(/\s+\d+$/, "")
+          const from = choices
+          if (!(await forgetSongName(old.name))) return
+          setForgot({ name: old.name, from })
+          put(text)
+        }}
+        className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+      >
+        Make {old.name} a new song
+      </button>
+    </p>
+  )
+
   return (
-    <div role="group" aria-label={label} className="flex min-w-0 flex-col gap-2">
+    <div role="group" aria-label={label} className="relative flex min-w-0 flex-col gap-2">
       <label
         htmlFor={id}
         className={cn(
@@ -251,37 +292,26 @@ export function TakeNameField({
           <X className="size-4" />
         </button>
       </div>
-      <div ref={songsArea} style={{ minHeight: (holding && held) || undefined }}>
-        <SongPills
-          choices={known}
-          value={shown}
-          initial={startedAs ?? shown}
-          onPick={put}
-          goes={goes}
-        />
-        {old && offerNewSong && (
-          <p data-old-name className="mt-2 text-xs text-muted-foreground">
-            {old.name} is {old.song} now.{" "}
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={async () => {
-                // What was typed, less a number after it: the go is the app's.
-                const text = songNamed(shown, known)
-                  ? shown.trim()
-                  : shown.trim().replace(/\s+\d+$/, "")
-                const from = choices
-                if (!(await forgetSongName(old.name))) return
-                setForgot({ name: old.name, from })
-                put(text)
-              }}
-              className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
-            >
-              Make {old.name} a new song
-            </button>
-          </p>
-        )}
-      </div>
+      {songs === "pills" ? (
+        <div ref={songsArea} style={{ minHeight: (holding && held) || undefined }}>
+          <SongPills
+            choices={known}
+            value={shown}
+            initial={startedAs ?? shown}
+            onPick={put}
+            goes={goes}
+          />
+          {oldLine}
+        </div>
+      ) : (
+        // With the songs listed beside the field, the line floats over them
+        // under it, so nothing under the field moves as it comes and goes.
+        oldLine && (
+          <div className="absolute top-full right-0 left-0 z-10 mt-1.5 max-w-md rounded-lg border bg-popover px-3 py-2 shadow-md">
+            {oldLine}
+          </div>
+        )
+      )}
     </div>
   )
 }

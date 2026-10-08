@@ -14,7 +14,9 @@ import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEveningSettings } from "@/hooks/useEveningSettings"
-import { TakeNameField } from "@/components/TakeNameField"
+import { TakeNameField, type TakeNameFieldHandle } from "@/components/TakeNameField"
+import { SetCard, SongRows } from "@/components/NextTakeSongs"
+import { otherSongs, songOf, useListOpen } from "@/lib/setSongs"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
@@ -114,6 +116,27 @@ export function Rehearsal({
   useEffect(() => {
     knownGoRef.current = knownGo
   }, [knownGo])
+
+  // The songs beside the field (NextTakeSongs): the set, then the others.
+  // What is typed in the field, and what it held as typing began, narrows
+  // them; a row names the take through the field, as a pill would.
+  const fieldRef = useRef<TakeNameFieldHandle>(null)
+  const [typing, setTyping] = useState<{ from: string; text: string } | null>(null)
+  const [listOpen, setListOpen] = useListOpen(session.folder)
+  const setTitles = session.set?.songs.map((s) => s.title) ?? []
+  const others = otherSongs(nextChoices, setTitles)
+  const goesTonight = new Map((session.songs ?? []).map((s) => [s.name, s.takes]))
+  const lastTakes = new Map((nextChoices?.here ?? []).map((c) => [c.song, c.last_take ?? 0]))
+  const shownName = typing?.text ?? nextName
+  const current = songOf(shownName, nextChoices, setTitles)
+  const narrowBy =
+    typing && typing.text.trim() !== "" && typing.text.trim() !== typing.from.trim()
+      ? typing.text
+      : null
+  const pickSong = (title: string) => {
+    if (fieldRef.current) fieldRef.current.put(title)
+    else nameNextTake(title)
+  }
 
   const nameNextTake = (name: string) => {
     // The name it would have anyway goes as "", so it goes on following
@@ -323,8 +346,9 @@ export function Rehearsal({
           folder={session.folder}
         />
       }
-      // The next take's name and its songs, in a panel of their own on the
-      // setup screen's panel colour (issue #12 step 6).
+      // The next take's name, the set and the band's other songs, in a
+      // panel of their own on the setup screen's panel colour (issue #12
+      // steps 6 and 8).
       aside={
         <aside
           aria-label="Next take"
@@ -332,6 +356,7 @@ export function Rehearsal({
           className="flex w-[22.5rem] shrink-0 flex-col gap-5 overflow-y-auto border-l bg-panel px-5 py-6 min-[1100px]:w-[26rem]"
         >
           <TakeNameField
+            ref={fieldRef}
             id="next-take-name"
             label="Next take"
             value={nextName}
@@ -340,6 +365,33 @@ export function Rehearsal({
             knownGo={knownGo}
             onCommit={nameNextTake}
             onPanel
+            songs="none"
+            onDraft={(text) =>
+              setTyping((t) => (text === null ? null : { from: t?.from ?? text, text }))
+            }
+          />
+          {session.set && (
+            <SetCard
+              set={session.set}
+              goes={goesTonight}
+              current={current}
+              onPick={pickSong}
+              highlighted={null}
+            />
+          )}
+          <SongRows
+            titles={others}
+            lastTake={lastTakes}
+            goes={goesTonight}
+            current={current}
+            typed={narrowBy}
+            typing={typing !== null}
+            inSet={setTitles}
+            title={session.set ? "Other songs" : "Songs"}
+            onPick={pickSong}
+            highlighted={null}
+            open={listOpen}
+            onOpen={setListOpen}
           />
         </aside>
       }
