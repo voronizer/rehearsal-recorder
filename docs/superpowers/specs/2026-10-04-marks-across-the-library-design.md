@@ -102,20 +102,21 @@ it shows on reha.stream on https://claude.ai/artifact/AigUuiwEuxkwkXBbaKSmyB
 ## Python
 
 - **A1.** `list_marks(label_id)`:
-  - `{"ok", "marks": [{folder, rehearsal, created_at, missing, take, at,
-    note}]}`, H4's order;
-  - `take` is the same take dict a song's goes have;
+  - `{"ok", "marks": [{folder, rehearsal, created_at, missing, take_number,
+    name, song, duration_sec, at, note}]}`, H4's order;
+  - only what a row shows, in one query; the take itself is read from its
+    rehearsal when ▶ or a click needs it;
   - `missing` as `goes_of` has it (D6), each folder looked at once;
-  - the takes read as `goes_of` reads them, so the number of queries does
-    not grow with the marks, and no audio file is opened;
+  - no audio file is opened;
   - a label that is not there is `{"ok": False, "error": "Label not
     found"}`.
 - **A2.** `list_labels()` adds to each label `rehearsals` (how many
   rehearsals have a mark with it) and `last_marked` (the newest of those
   rehearsals' dates, or None), for H2. Same query, two more aggregates.
-- **A3. Measure before deciding on paging.** Build a library of 300
-  rehearsals × 20 takes × 5 marks, and time A1. Paging is added only if A1
-  for the biggest label takes more than 100 ms.
+- **A3. Measured, no paging.** With 300 rehearsals × 20 takes × 5 marks
+  (30,000 marks, 7,500 a label), A1 takes 36 ms. Reading each mark's whole
+  take, as a song's page reads its goes, took 1.2 s for 15,000 marks, which
+  is why A1 reads only what a row shows (put to Alex on 2026-10-08).
 - **A4.** `save_history_view` takes "marks" too, and
   `save_marks_grouping(grouping)` keeps "rehearsal", "song" or "list";
   `get_settings()` gives `marks_grouping`, "rehearsal" when unset.

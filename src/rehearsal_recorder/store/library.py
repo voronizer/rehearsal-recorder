@@ -411,6 +411,44 @@ class Library:
             go["missing"] = not there[go["folder"]]
         return {"id": song_id, "title": title, "goes": goes}
 
+    def marks_of(self, label_id):
+        """
+        Every mark with the label, from every rehearsal, for History's Marks
+        view: [{"folder", "rehearsal", "created_at", "missing", "take_number",
+        "name", "song", "duration_sec", "at", "note"}], the newest rehearsal
+        first, then the order played, then the moment. None for an id no
+        label has.
+
+        Only what a row shows, in one query: a label can have thousands of
+        marks, and reading each one's whole take (its files, its other marks)
+        took ten times as long. The take is read when it is played or opened.
+        "missing" is as goes_of has it, each folder looked at once.
+        """
+        with self._session() as db:
+            if db.get(Label, label_id) is None:
+                return None
+            rows = db.execute(
+                select(Rehearsal.folder, Rehearsal.name, Rehearsal.created_at,
+                       Take.take_number, Song.title, Take.go, Take.duration_sec,
+                       Marker.at, Marker.note)
+                .join(Take, Marker.take_id == Take.id)
+                .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+                .outerjoin(Song, Take.song_id == Song.id)
+                .where(Marker.label_id == label_id)
+                .order_by(*_GO_ORDER, Marker.at, Marker.id)
+            ).all()
+        there, out = {}, []
+        for key, rehearsal, created_at, number, title, go, duration, at, note in rows:
+            if key not in there:
+                folder = self._folder(key)
+                there[key] = (str(folder), not folder.is_dir())
+            folder, missing = there[key]
+            out.append({"folder": folder, "rehearsal": rehearsal, "created_at": created_at,
+                        "missing": missing, "take_number": number,
+                        "name": take_name(title, go, number), "song": title,
+                        "duration_sec": duration, "at": at, "note": note})
+        return out
+
     def goes_before(self, song_id, folder):
         """
         goes_of for the rehearsal screen's card, which asks on every refresh
@@ -747,17 +785,24 @@ class Library:
     # and returns every label as labels() gives them.
 
     def labels(self):
-        """[{"id", "name", "colour", "marks"}] in their order; marks: how many
-        marks have the label, in every rehearsal."""
+        """[{"id", "name", "colour", "marks", "rehearsals", "last_marked"}] in
+        their order: how many marks have the label, in every rehearsal; in how
+        many rehearsals; and the newest of those rehearsals' created_at, None
+        with no marks."""
         with self._session() as db:
             rows = db.execute(
-                select(Label, func.count(Marker.id))
+                select(Label, func.count(Marker.id),
+                       func.count(Take.rehearsal_id.distinct()),
+                       func.max(Rehearsal.created_at))
                 .outerjoin(Marker, Marker.label_id == Label.id)
+                .outerjoin(Take, Marker.take_id == Take.id)
+                .outerjoin(Rehearsal, Take.rehearsal_id == Rehearsal.id)
                 .group_by(Label.id)
                 .order_by(Label.position, Label.id)
             ).all()
             return [{"id": label.id, "name": label.name, "colour": label.colour,
-                     "marks": marks} for label, marks in rows]
+                     "marks": marks, "rehearsals": rehearsals, "last_marked": last}
+                    for label, marks, rehearsals, last in rows]
 
     @staticmethod
     def _ordered_labels(db):

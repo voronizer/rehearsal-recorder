@@ -6462,6 +6462,127 @@ def main():
        and [t["take_number"] for t in s59.get_rehearsal(live59)["takes"]] == [1, 3, 5])
     s59.finish_rehearsal()
 
+    print("\n[60] Marks across the library: every mark with a label")
+    tmp60 = Path(tempfile.mkdtemp())
+    _, s60 = fresh_api(tmp60)
+
+    def rehearsal60(name, created_at, takes):
+        """A rehearsal from an old session.json: takes as (name, markers),
+        100 s each."""
+        folder = tmp60 / "Rec" / f"{name} - {created_at[:10]} {created_at[11:13]}-00"
+        folder.mkdir(parents=True)
+        (folder / "session.json").write_text(json.dumps({
+            "name": name, "created_at": created_at, "samplerate": SR,
+            "tracks": [{"name": "Gtr", "channel": 1}],
+            "takes": [{"take_number": i + 1, "name": n, "duration_sec": 100,
+                       "tracks": [], "markers": m} for i, (n, m) in enumerate(takes)],
+        }))
+        import_all(s60._lib, s60._cloud_dir)
+        return str(folder)
+
+    def mark60(at, note, label_id):
+        # Old session.json files said a mark's kind; each became a label.
+        kind = {1: "note", 2: "good", 3: "issue", 4: "redo"}[label_id]
+        return {"at": at, "note": note, "kind": kind}
+
+    # Labels as a library starts: 1 Note, 2 Keep this, 3 Went wrong, 4 Do again.
+    first60 = rehearsal60("First", "2026-08-25T19:00:00", [
+        ("Polyn", [mark60(30, "late", 3)]),
+        ("Take 2", [mark60(10, "riff", 1)])])
+    mid60 = rehearsal60("Middle", "2026-09-10T19:00:00", [
+        ("Vesna", [mark60(5, "", 1)])])
+    last60 = rehearsal60("Tuesday", "2026-09-22T19:00:00", [
+        ("Polyn", [mark60(80, "chorus early", 3), mark60(20, "count", 3)]),
+        ("Take 2", [mark60(42, "jam riff", 3)])])
+
+    def where60(label_id):
+        return [(m["folder"], m["take_number"], m["at"])
+                for m in s60.list_marks(label_id)["marks"]]
+
+    went60 = s60.list_marks(3)
+    ok("a label's marks come newest rehearsal first, then by take, then by moment",
+       went60.get("ok") is True
+       and where60(3) == [(last60, 1, 20), (last60, 1, 80), (last60, 2, 42), (first60, 1, 30)])
+    ok("each says what its row shows: the take, its rehearsal and the mark",
+       went60["marks"][0] == {
+           "folder": last60, "rehearsal": "Tuesday", "created_at": "2026-09-22T19:00:00",
+           "missing": False, "take_number": 1, "name": "Polyn 2", "song": "Polyn",
+           "duration_sec": 100, "at": 20, "note": "count"})
+    ok("a take with no song is listed too",
+       went60["marks"][2]["name"] == "Take 2" and went60["marks"][2]["song"] is None)
+    ok("another label's marks are its own",
+       where60(1) == [(mid60, 1, 5), (first60, 2, 10)])
+    ok("a label that is not there is not found",
+       s60.list_marks(999) == {"ok": False, "error": "Label not found"})
+
+    shutil.move(last60, str(tmp60 / "elsewhere"))
+    ok("a rehearsal not on disk keeps its marks, listed as missing, and only its",
+       [m["missing"] for m in s60.list_marks(3)["marks"]] == [True, True, True, False])
+    shutil.move(str(tmp60 / "elsewhere"), last60)
+
+    labels60 = {lb["id"]: lb for lb in s60.list_labels()}
+    ok("a label says in how many rehearsals it marks, and the newest",
+       (labels60[3]["marks"], labels60[3]["rehearsals"], labels60[3]["last_marked"])
+       == (4, 2, "2026-09-22T19:00:00")
+       and (labels60[1]["rehearsals"], labels60[1]["last_marked"]) == (2, "2026-09-10T19:00:00"))
+    ok("and a label with no marks has none of either",
+       (labels60[4]["marks"], labels60[4]["rehearsals"], labels60[4]["last_marked"])
+       == (0, 0, None))
+    ok("a change to the labels answers with the same figures",
+       {lb["id"]: lb["rehearsals"] for lb in s60.rename_label(4, "Again")["labels"]}
+       == {1: 2, 2: 0, 3: 2, 4: 0})
+
+    ok("the marks are grouped by rehearsal until another grouping is chosen",
+       s60.get_settings()["marks_grouping"] == "rehearsal")
+    ok("choosing By song is kept",
+       s60.save_marks_grouping("song") == {"ok": True})
+    _, again60 = fresh_api(tmp60)
+    ok("and is still the grouping after a restart",
+       again60.get_settings()["marks_grouping"] == "song")
+    ok("a grouping there is not is refused, and changes nothing",
+       again60.save_marks_grouping("album") == {"ok": False, "error": "Unknown grouping"}
+       and again60.get_settings()["marks_grouping"] == "song")
+    cfg60 = json.loads((tmp60 / "config.json").read_text())
+    cfg60["marks_grouping"] = 3
+    (tmp60 / "config.json").write_text(json.dumps(cfg60))
+    _, odd60 = fresh_api(tmp60)
+    ok("and one written by hand that makes no sense reads as By rehearsal",
+       odd60.get_settings()["marks_grouping"] == "rehearsal")
+
+    ok("History's Marks view is kept as the others are",
+       odd60.save_history_view("marks") == {"ok": True})
+    _, view60 = fresh_api(tmp60)
+    ok("and is still the view after a restart",
+       view60.get_settings()["history_view"] == "marks")
+
+    s60.delete_label(3, 1)
+    ok("a label's marks moved to another when it is deleted are listed under that one",
+       where60(1) == [(last60, 1, 20), (last60, 1, 80), (last60, 2, 42),
+                      (mid60, 1, 5), (first60, 1, 30), (first60, 2, 10)]
+       and s60.list_marks(3) == {"ok": False, "error": "Label not found"})
+
+    from sqlalchemy import event as sa_event60
+    selects60 = []
+
+    def count60(_conn, _cursor, statement, *_):
+        if statement.lstrip().upper().startswith("SELECT"):
+            selects60.append(statement)
+
+    def queries60(label_id):
+        selects60.clear()
+        sa_event60.listen(s60._lib._engine, "before_cursor_execute", count60)
+        s60.list_marks(label_id)
+        sa_event60.remove(s60._lib._engine, "before_cursor_execute", count60)
+        return len(selects60)
+
+    few60 = queries60(1)
+    rehearsal60("Big", "2026-09-30T19:00:00",
+                [(name, [mark60(10, "a", 1), mark60(50, "b", 1)])
+                 for name in ("Polyn", "Vesna", "Take 3", "Polyn", "Doroga",
+                              "Take 6", "Vesna", "Polyn")])
+    ok("the number of queries does not grow with the marks",
+       len(s60.list_marks(1)["marks"]) == 22 and queries60(1) == few60)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

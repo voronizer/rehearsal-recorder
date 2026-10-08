@@ -254,8 +254,10 @@ def _go_at(rehearsal, take):
             "created_at": rehearsal["created_at"], "take": take}
 
 
-# History's two views (save_history_view).
-HISTORY_VIEWS = ("rehearsals", "songs")
+# History's three views (save_history_view), and how its Marks view groups
+# a label's marks (save_marks_grouping); the first of each is the default.
+HISTORY_VIEWS = ("rehearsals", "songs", "marks")
+MARKS_GROUPINGS = ("rehearsal", "song", "list")
 
 # A take shorter than this, with no ★ and no marks, is a false start on the
 # rehearsal screen; Settings moves it within these bounds (set_false_start).
@@ -674,10 +676,14 @@ class Api:
             "master_volume": self._config.get("master_volume", 1.0),
             "theme": self._config.get("theme", "dark"),
             "ui_scale": self._config.get("ui_scale", 1),
-            # Which of History's two views it opens on: the one used last.
+            # Which of History's views it opens on: the one used last.
             "history_view": (self._config.get("history_view")
                              if self._config.get("history_view") in HISTORY_VIEWS
                              else "rehearsals"),
+            # How History's Marks view groups a label's marks.
+            "marks_grouping": (self._config.get("marks_grouping")
+                               if self._config.get("marks_grouping") in MARKS_GROUPINGS
+                               else "rehearsal"),
             "output_device_index": saved_device(
                 self._config, "output_device", False
             ),
@@ -988,12 +994,21 @@ class Api:
         return {"ok": True}
 
     def save_history_view(self, view):
-        """History's view, Rehearsals or Songs, kept for the next time it
+        """History's view, Rehearsals, Songs or Marks, kept for the next time it
         opens, after a restart too. In the config rather than the window's
         localStorage: pywebview forgets that when the app closes."""
         if view not in HISTORY_VIEWS:
             return {"ok": False, "error": "Unknown view"}
         self._config["history_view"] = view
+        self._write_config()
+        return {"ok": True}
+
+    def save_marks_grouping(self, grouping):
+        """How History's Marks view groups a label's marks, By rehearsal, By
+        song or One list: one choice for every label, kept as the view is."""
+        if grouping not in MARKS_GROUPINGS:
+            return {"ok": False, "error": "Unknown grouping"}
+        self._config["marks_grouping"] = grouping
         self._write_config()
         return {"ok": True}
 
@@ -2199,6 +2214,17 @@ class Api:
             return {"ok": False, "error": "Song not found"}
         return {"ok": True, **found, "plays": _plays_of(found["goes"])}
 
+    def list_marks(self, label_id):
+        """
+        History's Marks view: {"ok", "marks"}, every mark with the label from
+        every rehearsal, as Library.marks_of gives them. From the database
+        alone; no audio file is opened.
+        """
+        marks = self._lib.marks_of(label_id)
+        if marks is None:
+            return {"ok": False, "error": "Label not found"}
+        return {"ok": True, "marks": marks}
+
     # ---------- renaming ----------
 
     def _move_take_dir(self, folder, take_number, take, name):
@@ -2384,9 +2410,10 @@ class Api:
     # the same round trip.
 
     def list_labels(self):
-        """[{id, name, colour, marks}] in order; [] while the recordings
-        database cannot be opened: that is said once at start, and with no
-        database there is nothing to mark."""
+        """[{id, name, colour, marks, rehearsals, last_marked}] in order (see
+        Library.labels); [] while the recordings database cannot be opened:
+        that is said once at start, and with no database there is nothing to
+        mark."""
         if self._library is None:
             return []
         return self._lib.labels()
