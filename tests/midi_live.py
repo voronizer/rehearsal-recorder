@@ -8,11 +8,15 @@ purpose so they never touch a port, and this is the one script that does. CI
 runs it on its own, on the two systems the app is built for, because what it
 asks can only be answered by the system itself:
 
-    macOS    the observer is told when a port appears and goes, the OS's time
-             on an event is the same clock Python reads, and an open port
-             knows it has been pulled. A virtual port stands in for the
+    macOS    watch() is told when a port appears and goes (a hard check, as
+             on_change does not wait for the library's own observer), the
+             OS's time on an event is the same clock Python reads, and an open
+             port knows it has been pulled. A virtual port stands in for the
              instrument: this script makes one, plays 100 notes into it, and
-             closes it again.
+             closes it again; then a second system opened after the first
+             was closed is shown the same. Whether the library's own
+             observer called back is printed beside each step, as
+             information and not as a check.
     Windows  there are no virtual ports without a driver of someone else's,
              so the check is smaller: which MIDI system answered, which the
              library knows, and the ports there are. Playing a note is for
@@ -21,7 +25,9 @@ asks can only be answered by the system itself:
     other    nothing: the app is not built for them.
 
 Everything it prints is also what the notes in midi/ports.py are copied from.
-Output is Latin letters only: Windows CI prints in cp1252.
+Output is Latin letters only in the labels: Windows CI prints in cp1252. The
+library is imported by ports.py's own thread first (open_system()), and only
+then here, so what this script does cannot hide what the app would meet.
 """
 
 import gc
@@ -46,12 +52,18 @@ TOLERANCE_NS = 5_000_000
 PATIENCE_SEC = 2.0
 
 problems = []
+step = ["0"]
+
+
+def section(number, title):
+    step[0] = str(number)
+    print(f"\n[{number}] {title}")
 
 
 def ok(label, cond):
     print(("  ok   " if cond else "  FAIL ") + label)
     if not cond:
-        problems.append(label)
+        problems.append(f"[{step[0]}] {label}")
 
 
 def wait_for(condition, seconds=PATIENCE_SEC):
@@ -91,7 +103,9 @@ def try_observers(lm, apis):
     """
     Start an observer on each API on its own, as ports.py does, and say what
     came of it: open_system() takes the first that starts and does not say why
-    the others did not.
+    the others did not. Last of all, because on CoreMIDI the first client a
+    process makes is the one whose run loop gets the notices, and this makes
+    one with a callback of its own on the main thread.
     """
     for api in apis:
         conf = lm.ObserverConfiguration()
@@ -120,29 +134,81 @@ def listed(system):
     return [p for p in system.inputs() if p.name == PROBE]
 
 
-def macos():
-    import pylibremidi as lm
+def library():
+    """
+    The library module. open_system() has imported it on a thread of its own
+    by now, so this is only a lookup, on the main thread; None if it is not
+    there to be had.
+    """
+    try:
+        import pylibremidi as lm
+    except Exception as e:  # not installed, or not for this Python
+        print(f"    the library cannot be imported here: {type(e).__name__}: {e}")
+        return None
+    return lm
 
-    print("\n[1] CoreMIDI starts")
-    print(f"    libremidi {lm.get_version()}, available_apis(): {lm.available_apis()}")
-    try_observers(lm, [lm.API.COREMIDI])
+
+def start(label):
+    """open_system(), checked; the system or None."""
     system, why = ports.open_system()
-    ok("a MIDI system answers" + (f" ({why})" if why else ""), system is not None)
+    ok(label, system is not None)
+    if why:
+        print(f"    reason given: {why}")
+    return system
+
+
+def notices(system):
+    print(f"    notices from the library's own observer so far: "
+          f"{system.observer_notices} (information, not a check)")
+
+
+def make_and_lose(lm, system, label):
+    """
+    The probe port appears and goes while `system` is watching: on_change is
+    told of both within PATIENCE_SEC, hard, and inputs() follows. Returns the
+    probe as the app kept it, or None if it never was listed.
+    """
+    told = []
+    system.watch(lambda: told.append(time.perf_counter_ns()))
+    out = virtual_output(lm)
+    ok(f"{label}: on_change fires within 2 s of the port appearing",
+       wait_for(lambda: len(told) > 0))
+    ok(f"{label}: inputs() lists the probe", wait_for(lambda: listed(system)))
+    notices(system)
+    before = len(told)
+    out.close_port()
+    gc.collect()
+    ok(f"{label}: on_change fires within 2 s of the port going",
+       wait_for(lambda: len(told) > before))
+    ok(f"{label}: inputs() drops the probe", wait_for(lambda: not listed(system)))
+    notices(system)
+
+
+
+def macos():
+    section(1, "CoreMIDI starts")
+    system = start("a MIDI system answers")
     if system is None:
         return
+    lm = library()
+    if lm is None:
+        system.close()
+        return
+    print(f"    libremidi {lm.get_version()}, available_apis(): {lm.available_apis()}")
     ok("it is CoreMIDI", system.name == "CoreMIDI")
     print(f"    {len(system.inputs())} inputs before the probe:")
     for info in system.inputs():
         show(info)
     print("    as the library lists them:")
-    show_raw(lm, lm.API.COREMIDI)
+    show_raw(lm, system.api)
 
-    print("\n[2] A port made after watch() is told of and listed")
+    section(2, "A port made after watch() is told of and listed")
     told = []
     system.watch(lambda: told.append(time.perf_counter_ns()))
     out = virtual_output(lm)
     ok("on_change fires within 2 s", wait_for(lambda: len(told) > 0))
     ok("inputs() lists the probe", wait_for(lambda: listed(system)))
+    notices(system)
     probe = listed(system)[0] if listed(system) else None
     if probe is None:
         out.close_port()
@@ -151,9 +217,9 @@ def macos():
     print("    the probe, as the app keeps it:")
     show(probe)
     print("    as the library lists it:")
-    show_raw(lm, lm.API.COREMIDI)
+    show_raw(lm, system.api)
 
-    print("\n[3] 100 notes arrive in order, on Python's clock")
+    section(3, "100 notes arrive in order, on Python's clock")
     got = []
     rx = system.open(probe, lambda ns, data: got.append((ns, data)))
     ok("the open port says connected", rx.connected())
@@ -176,7 +242,7 @@ def macos():
     rx.resync()
     ok("still connected after resync()", rx.connected())
 
-    print("\n[4] The port is closed: told, dropped, and the open port knows")
+    section(4, "The port is closed: told, dropped, and the open port knows")
     before = len(told)
     out.close_port()
     out = None
@@ -185,9 +251,10 @@ def macos():
     ok("inputs() drops the probe", wait_for(lambda: not listed(system)))
     ok("the open port says it is not connected",
        wait_for(lambda: rx.connected() is False))
+    notices(system)
     rx.close()
 
-    print("\n[5] The same port made again is seen again")
+    section(5, "The same port made again is seen again")
     before = len(told)
     out = virtual_output(lm)
     ok("on_change fires within 2 s", wait_for(lambda: len(told) > before))
@@ -195,40 +262,49 @@ def macos():
     again = listed(system)
     if again:
         show(again[0])
+    notices(system)
     out.close_port()
     out = None
     gc.collect()
+
+    section(6, "A second system, made after the first was closed")
     system.close()
+    system = start("a second MIDI system answers")
+    if system is not None:
+        make_and_lose(lm, system, "the second system")
+        system.close()
+
+    section(7, "Each API's own observer, on its own (information only)")
+    try_observers(lm, [lm.API.COREMIDI])
 
 
 def windows():
-    import pylibremidi as lm
-
-    print("\n[1] Which MIDI system answers")
-    print(f"    libremidi {lm.get_version()}")
-    print(f"    available_apis(): {lm.available_apis()}")
-    print(f"    available_ump_apis(): {lm.available_ump_apis()}")
-    try_observers(lm, [lm.API.WINDOWS_MIDI_SERVICES, lm.API.WINDOWS_MM])
-    system, why = ports.open_system()
-    ok("a MIDI system answers" + (f" ({why})" if why else ""), system is not None)
+    section(1, "Which MIDI system answers")
+    system = start("a MIDI system answers")
+    lm = library()
+    if lm is not None:
+        print(f"    libremidi {lm.get_version()}")
+        print(f"    available_apis(): {lm.available_apis()}")
+        print(f"    available_ump_apis(): {lm.available_ump_apis()}")
     if system is None:
         return
     print(f"    the app uses: {system.name}")
 
-    print("\n[2] The observer runs and the ports are listed")
-    told = []
-    system.watch(lambda: told.append(time.perf_counter_ns()))
+    section(2, "The ports are listed")
     infos = system.inputs()
     print(f"    {len(infos)} inputs:")
     for info in infos:
         show(info)
-    print("    as the library lists them:")
-    api = lm.API.WINDOWS_MIDI_SERVICES if system.name == "Windows MIDI Services" \
-        else lm.API.WINDOWS_MM
-    show_raw(lm, api)
+    if lm is not None:
+        print("    as the library lists them:")
+        show_raw(lm, system.api)
     ok("listing the ports does not fail", isinstance(infos, list))
-    time.sleep(0.5)
+    notices(system)
     system.close()
+
+    if lm is not None:
+        section(3, "Each API's own observer, on its own (information only)")
+        try_observers(lm, [lm.API.WINDOWS_MIDI_SERVICES, lm.API.WINDOWS_MM])
 
 
 def main():

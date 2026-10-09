@@ -6,7 +6,7 @@ cd ui && npm test                    # the interface, what needs no browser
 cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
-Three Python suites and two for the interface, because they answer different
+Four Python suites and two for the interface, because they answer different
 questions.
 
 ## test_engine.py — the audio
@@ -39,6 +39,20 @@ start, and a chain of test-only migrations stands in for the ones later
 versions will add — so the backup taken first, and the rollback when one
 fails halfway, are checked before there is a second real migration to need
 them.
+
+## test_ports.py — the MIDI ports
+
+`midi/ports.py` is the one module that talks to the MIDI library, and this
+suite runs it against `fake_libremidi.py`, a stand-in for the library with the
+real one's quirks: callbacks only inside `poll()`, no settable timestamps,
+unreadable message bytes, a port that stays "connected" when the device is
+pulled, a dummy instead of an error for what is not there, a COM apartment on
+Windows. It proves `ports.py` handles each of those, not how CoreMIDI or
+Windows behave: that is `python tests/midi_live.py`, which is not a suite (the
+suites block the library so no test opens a port) and which CI runs on its own
+on the Mac and the Windows machine. The other suites stub the library out with
+`sys.modules["pylibremidi"] = None`; the ones for code built on `ports.py`
+use `fake_midi.py`, a system with nothing behind it.
 
 ## The interface — in ui/, in TypeScript
 

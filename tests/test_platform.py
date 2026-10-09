@@ -516,10 +516,23 @@ def main():
         said = run.stdout.decode("utf-8")
     except UnicodeDecodeError:
         said = None
+    problems_before = len(problems)
     ok("what it says reads as UTF-8, whatever the code page",
        said is not None and " — " in said)
     ok("the app's name included, which is Cyrillic",
        said is not None and said.startswith("РЭХА "))
+    # A process that dies in the middle (the MIDI library, on a thread in the
+    # wrong COM apartment, once ended it on Windows with nothing written) says
+    # nothing of the kind, so it is asked for its verdict.
+    ok("and it ran through to its verdict",
+       said is not None and ("Incomplete build" in said
+                             or "This build has everything it needs." in said))
+    if len(problems) > problems_before:
+        # What a failed run left, in ASCII because the CI console may not
+        # print anything else.
+        print(f"    exit code {run.returncode}")
+        print(f"    stdout, the last of it: {ascii(run.stdout[-800:])}")
+        print(f"    stderr, the last of it: {ascii(run.stderr[-800:])}")
 
     print("\n[downloads] A new version goes where a browser would put it")
     # Windows lets the Downloads folder be moved anywhere, so it is asked of

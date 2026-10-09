@@ -95,13 +95,15 @@ class FakePortSystem:
     def send(self, name, ns, data):
         """
         An event from the instrument on the port of that name, handed straight
-        to its on_event. True if a port was listening, False if none was.
+        to the on_event of every port open on it, as the OS gives it to each
+        input that listens. True if a port was listening, False if none was.
         """
+        heard = False
         for port in list(self.open_ports):
             if port.info.name == name and port.connected():
                 port.on_event(ns, data)
-                return True
-        return False
+                heard = True
+        return heard
 
     def _tell(self):
         for on_change in list(self._watchers):
