@@ -19,11 +19,18 @@ It keeps only what arrived. Nothing is made up and nothing is interpreted: an
 "all notes off" or "reset all controllers" is a command, not a value, and is
 neither kept nor applied. So a key stays held through an all-notes-off and is
 let go at the end all the same: a note-off too many costs nothing, one too few
-rings for ever.
+rings for ever. And a pedal that was down when a reset-all-controllers arrived
+is still recorded as down, so the next take starts with it down until the
+player moves it.
 
-Not thread-safe. The caller feeds it and reads it from one thread, or holds its
-own lock around the two.
+A PortState has a lock of its own, held for the length of `feed`, `copy`,
+`start_messages` and `releases`, so a port's thread can feed it while another
+thread copies it or reads it. Each call is one step; two calls in a row are
+not, and a caller that needs two to follow each other (a copy, then the next
+message) holds a lock of its own around both.
 """
+
+import threading
 
 # Never kept as a value, because none is a state (F6): 120-127 are commands
 # (all sound off, reset all controllers, local control, all notes off, the modes),
@@ -56,6 +63,7 @@ class PortState:
     """
 
     def __init__(self):
+        self._lock = threading.Lock()
         self._controllers = {}  # (channel, number) -> value
         self._program = {}  # channel -> program
         self._bend = {}  # channel -> (low byte, high byte)
@@ -64,36 +72,46 @@ class PortState:
 
     def feed(self, data) -> None:
         """
-        Takes one message from the port. A note-on at velocity 0 is a note-off.
-        Key pressure (0xA0) is about a key and not a state, and is not kept.
+        Takes one message from the port: bytes, or anything else made of bytes
+        (a bytearray, a memoryview), or a list or tuple of ints. Anything else
+        is ignored without being turned into bytes, a number included: bytes(5)
+        is five zero bytes, and bytes(10**9) would be a gigabyte of them.
+
+        A note-on at velocity 0 is a note-off. Key pressure (0xA0) is about a
+        key and not a state, and is not kept.
         """
+        if not isinstance(data, (bytes, bytearray, memoryview, list, tuple)):
+            return
         try:
             data = bytes(data)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return
         if not data:
             return
         status = data[0]
         if not 0x80 <= status <= 0xEF:
             return  # SysEx, realtime and system messages, and bytes with no status
-        size = 2 if _PROGRAM <= status <= _PRESSURE | 0x0F else 3  # a program or pressure has one data byte
+        # A program change and a channel pressure (0xC0-0xDF) have one data byte, the rest two.
+        # The same rule as smf.storable, which is not imported here: it would bring in mido.
+        size = 2 if (status & 0xE0) == 0xC0 else 3
         if len(data) != size or max(data[1:]) >= 0x80:
             return
         kind, channel = status & 0xF0, status & 0x0F
-        if kind == _NOTE_ON and data[2]:
-            # A key struck again while still down keeps its place in the line.
-            self._held.setdefault((channel, data[1]), None)
-        elif kind in (_NOTE_ON, _NOTE_OFF):
-            self._held.pop((channel, data[1]), None)
-        elif kind == _CONTROL:
-            if data[1] not in _NEVER_KEPT:
-                self._controllers[channel, data[1]] = data[2]
-        elif kind == _PROGRAM:
-            self._program[channel] = data[1]
-        elif kind == _PRESSURE:
-            self._pressure[channel] = data[1]
-        elif kind == _BEND:
-            self._bend[channel] = (data[1], data[2])
+        with self._lock:
+            if kind == _NOTE_ON and data[2]:
+                # A key struck again while still down keeps its place in the line.
+                self._held.setdefault((channel, data[1]), None)
+            elif kind in (_NOTE_ON, _NOTE_OFF):
+                self._held.pop((channel, data[1]), None)
+            elif kind == _CONTROL:
+                if data[1] not in _NEVER_KEPT:
+                    self._controllers[channel, data[1]] = data[2]
+            elif kind == _PROGRAM:
+                self._program[channel] = data[1]
+            elif kind == _PRESSURE:
+                self._pressure[channel] = data[1]
+            elif kind == _BEND:
+                self._bend[channel] = (data[1], data[2])
 
     def start_messages(self) -> list[bytes]:
         """
@@ -105,23 +123,24 @@ class PortState:
         value, up or down. No key is in it, held or not: a key already down
         when the take starts is not in the file, nor its release (F6).
         """
-        channels = ({channel for channel, _ in self._controllers}
-                    | self._program.keys() | self._bend.keys() | self._pressure.keys())
-        messages = []
-        for channel in sorted(channels):
-            numbers = sorted(number for ch, number in self._controllers if ch == channel)
-            for number in [n for n in (_BANK_MSB, _BANK_LSB) if n in numbers]:
-                messages.append(self._control(channel, number))
-            if channel in self._program:
-                messages.append(bytes((_PROGRAM | channel, self._program[channel])))
-            for number in numbers:
-                if number not in (_BANK_MSB, _BANK_LSB):
+        with self._lock:
+            channels = ({channel for channel, _ in self._controllers}
+                        | self._program.keys() | self._bend.keys() | self._pressure.keys())
+            messages = []
+            for channel in sorted(channels):
+                numbers = sorted(number for ch, number in self._controllers if ch == channel)
+                for number in [n for n in (_BANK_MSB, _BANK_LSB) if n in numbers]:
                     messages.append(self._control(channel, number))
-            if channel in self._bend:
-                messages.append(bytes((_BEND | channel, *self._bend[channel])))
-            if channel in self._pressure:
-                messages.append(bytes((_PRESSURE | channel, self._pressure[channel])))
-        return messages
+                if channel in self._program:
+                    messages.append(bytes((_PROGRAM | channel, self._program[channel])))
+                for number in numbers:
+                    if number not in (_BANK_MSB, _BANK_LSB):
+                        messages.append(self._control(channel, number))
+                if channel in self._bend:
+                    messages.append(bytes((_BEND | channel, *self._bend[channel])))
+                if channel in self._pressure:
+                    messages.append(bytes((_PRESSURE | channel, self._pressure[channel])))
+            return messages
 
     def releases(self) -> list[bytes]:
         """
@@ -134,22 +153,32 @@ class PortState:
         struck). The pedals follow, channels ascending and on each 64, 66, 67;
         one is down from the value 64 up.
         """
-        messages = [bytes((_NOTE_OFF | channel, note, 0)) for channel, note in self._held]
-        for channel in sorted({channel for channel, _ in self._controllers}):
-            for number in _PEDALS:
-                if self._controllers.get((channel, number), 0) >= 64:
-                    messages.append(bytes((_CONTROL | channel, number, 0)))
-        return messages
+        with self._lock:
+            messages = [bytes((_NOTE_OFF | channel, note, 0)) for channel, note in self._held]
+            for channel in sorted({channel for channel, _ in self._controllers}):
+                for number in _PEDALS:
+                    if self._controllers.get((channel, number), 0) >= 64:
+                        messages.append(bytes((_CONTROL | channel, number, 0)))
+            return messages
 
     def copy(self) -> "PortState":
-        """A PortState of its own that starts where this one is: feeding either
-        leaves the other as it was."""
+        """
+        A PortState of its own, with a lock of its own, that starts where this
+        one is: feeding either leaves the other as it was.
+
+        The keys held are copied too, though a take's file has neither a key
+        that was already down when it began nor that key's release (F6). So the
+        `releases` that end a take are the ones of a state fed with the take's
+        own messages, which hold only the keys the take pressed, and not those
+        of the copy that carried the port's state to the take's start.
+        """
         other = PortState()
-        other._controllers = dict(self._controllers)
-        other._program = dict(self._program)
-        other._bend = dict(self._bend)
-        other._pressure = dict(self._pressure)
-        other._held = dict(self._held)
+        with self._lock:
+            other._controllers = dict(self._controllers)
+            other._program = dict(self._program)
+            other._bend = dict(self._bend)
+            other._pressure = dict(self._pressure)
+            other._held = dict(self._held)
         return other
 
     def _control(self, channel: int, number: int) -> bytes:

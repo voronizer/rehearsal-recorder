@@ -11,11 +11,14 @@ is allowed are plain functions over plain dictionaries, so they are called
 directly.
 """
 
+import itertools
 import logging
+import random
 import sys
 import tempfile
 import threading
 import time
+import tracemalloc
 import types
 from pathlib import Path
 
@@ -57,8 +60,8 @@ from rehearsal_recorder.midi import smf  # noqa: E402
 from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
 from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
 from rehearsal_recorder.midi.rules import notes_problem  # noqa: E402
-from rehearsal_recorder.midi.state import PortState  # noqa: E402
 from rehearsal_recorder.midi.smf import read_events, storable, write_mid  # noqa: E402
+from rehearsal_recorder.midi.state import PortState  # noqa: E402
 
 problems = []
 
@@ -567,6 +570,18 @@ def main():
     ok("channels come in order whatever the order they were heard in",
        port_state(b"\xBF\x07\x01", b"\xB2\x07\x02", b"\xC5\x01").start_messages()
        == [b"\xB2\x07\x02", b"\xC5\x01", b"\xBF\x07\x01"])
+    # A set of small numbers does not always come out ascending: list({9, 1}) is [9, 1].
+    ok("a channel heard first is written after a lower one heard later: controllers, program, bend, pressure",
+       port_state(b"\xB9\x07\x01", b"\xB1\x07\x02").start_messages() == [b"\xB1\x07\x02", b"\xB9\x07\x01"]
+       and port_state(b"\xC9\x01", b"\xC1\x02").start_messages() == [b"\xC1\x02", b"\xC9\x01"]
+       and port_state(b"\xE9\x01\x01", b"\xE1\x02\x02").start_messages() == [b"\xE1\x02\x02", b"\xE9\x01\x01"]
+       and port_state(b"\xD9\x01", b"\xD1\x02").start_messages() == [b"\xD1\x02", b"\xD9\x01"]
+       and port_state(b"\xD9\x01", b"\xB1\x07\x02", b"\xE1\x02\x02").start_messages()
+       == [b"\xB1\x07\x02", b"\xE1\x02\x02", b"\xD9\x01"])
+    ok("and the pedals of a higher channel heard first are let up after a lower one's",
+       port_state(b"\xB9\x40\x7F", b"\xB1\x40\x7F").releases() == [b"\xB1\x40\x00", b"\xB9\x40\x00"]
+       and port_state(b"\xB9\x43\x7F", b"\xB1\x40\x7F", b"\xB9\x40\x7F").releases()
+       == [b"\xB1\x40\x00", b"\xB9\x40\x00", b"\xB9\x43\x00"])
     ok("the bank is written first even when it was heard last, the program before the other controllers",
        port_state(b"\xB2\x07\x64", b"\xB2\x20\x03", b"\xB2\x00\x01", b"\xC2\x09", b"\xB2\x01\x30").start_messages()
        == [b"\xB2\x00\x01", b"\xB2\x20\x03", b"\xC2\x09", b"\xB2\x01\x30", b"\xB2\x07\x64"])
@@ -659,13 +674,30 @@ def main():
     s = port_state(b"\x90\x3C\x40", b"\xB0\x07\x64", b"\x80\x3C", b"\x80\x3C\x80", b"\xB0\x07\x65\x66", b"\xB0\x07")
     ok("and it does not disturb what was kept",
        s.start_messages() == [b"\xB0\x07\x64"] and s.releases() == [b"\x80\x3C\x00"])
+    class IntLike:
+        def __index__(self):
+            return 5  # bytes() of one of these is five zero bytes
+
     raised = []
-    for junk in (None, "abc", 3.5, [300], [-1], object()):
+    for junk in (None, "abc", 3.5, [300], [-1], [10**30], [1.5], ["a"], object(), 5, 10**30, -1, True, IntLike()):
         try:
             PortState().feed(junk)
         except Exception as e:
-            raised.append(repr(e))
+            raised.append(repr(junk) + " " + repr(e))
     ok("and what is not even bytes is ignored too, never raised", raised == [])
+    s = port_state(b"\x90\x3C\x40", b"\xB0\x07\x64")
+    before = (s.start_messages(), s.releases())
+    for junk in (5, 10**30, -1, True, IntLike(), 0, 0x90):
+        s.feed(junk)
+    ok("a number is not a message: bytes(5) is five zero bytes, and none is made", (s.start_messages(), s.releases()) == before)
+    tracemalloc.start()
+    PortState().feed(10**8)
+    made = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    ok("not even a hundred million of them, which would be a hundred megabytes", made < 1_000_000)
+    s.feed([0xB0, 0x07, 0x65])
+    s.feed((0xB0, 0x08, 0x01))
+    ok("a list or a tuple of ints is one, as bytes are", s.start_messages() == [b"\xB0\x07\x65", b"\xB0\x08\x01"])
     system = [b"\xF0\x41\x10\x42\xF7", b"\xF0\xF7", b"\xF0\x7F\x7F\x04\x01\x00\x7F\xF7", b"\xF1\x20", b"\xF2\x00\x10", b"\xF3\x01",
               b"\xF4", b"\xF5", b"\xF6", b"\xF7", b"\xF8", b"\xF9", b"\xFA", b"\xFB", b"\xFC", b"\xFD", b"\xFE", b"\xFF"]
     s = port_state(b"\x90\x3C\x40", b"\xB0\x40\x7F", b"\xC0\x05")
@@ -678,6 +710,88 @@ def main():
        port_state(*system).start_messages() == [] and port_state(*system).releases() == [])
     s = port_state(bytearray(b"\x90\x3C\x40"), memoryview(b"\xC0\x05"))
     ok("it takes any bytes-like thing", s.start_messages() == [b"\xC0\x05"] and s.releases() == [b"\x80\x3C\x00"])
+
+    # The state and the .mid agree on what a message is (state.py repeats the rule of
+    # smf.storable, to stay clear of mido): every status, every length up to four bytes, data
+    # bytes below 0x80 and above, and a message changes the state exactly when a .mid could hold
+    # it, bar a key pressure (a key's, not a state) and the system messages (a SysEx the file
+    # keeps and the state does not). "Changes" is seen on a port with nothing and on one holding
+    # keys 0 and 0x40 on every channel, so that a note-off has something to let go.
+    def every_message():
+        yield b""
+        for status in range(0x80, 0x100):
+            for fill in ((0x00, 0x80), (0x40, 0xC0)):
+                for length in range(1, 5):
+                    for data in itertools.product(fill, repeat=length - 1):
+                        yield bytes((status, *data))
+
+    bases = [PortState(), port_state(*[bytes((0x90 | ch, note, 0x40)) for ch in range(16) for note in (0x00, 0x40)])]
+
+    def changes_the_state(message):
+        for base in bases:
+            after = base.copy()
+            after.feed(message)
+            if (after.start_messages(), after.releases()) != (base.start_messages(), base.releases()):
+                return True
+        return False
+
+    disagree, changing, unchanging = [], 0, 0
+    for message in every_message():
+        wanted = (storable(message) and 0x80 <= message[0] <= 0xEF and message[0] & 0xF0 != 0xA0)
+        if changes_the_state(message) != wanted:
+            disagree.append(message.hex(" "))
+        changing += wanted
+        unchanging += not wanted
+    ok("a message changes the state exactly when a .mid could hold it (key pressure and system messages aside)",
+       disagree == [] and changing > 150 and unchanging > 2000)
+
+    # A port's thread feeds while another thread copies and reads: with the switch interval cut
+    # to nothing, so that they change places in the middle of a loop.
+    dice = random.Random(6)
+    traffic = []
+    for _ in range(20_000):
+        channel, a, b = dice.randrange(16), dice.randrange(128), dice.randrange(128)
+        traffic.append(dice.choice([bytes((0x90 | channel, a, b)), bytes((0x80 | channel, a, 0)),
+                                    bytes((0xB0 | channel, a, b)), bytes((0xC0 | channel, a)),
+                                    bytes((0xE0 | channel, a, b)), bytes((0xD0 | channel, a)),
+                                    bytes((0x90 | channel, a, 0))]))
+    shared, errors, fed = PortState(), [], threading.Event()
+
+    def feeder():
+        try:
+            for message in traffic:
+                shared.feed(message)
+        except Exception as e:
+            errors.append("feed " + repr(e))
+        finally:
+            fed.set()
+
+    def reader():
+        try:
+            while True:
+                last = fed.is_set()
+                shared.copy().releases()
+                shared.start_messages()
+                shared.releases()
+                if last:
+                    break
+        except Exception as e:
+            errors.append("read " + repr(e))
+
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        threads = [threading.Thread(target=feeder), threading.Thread(target=reader)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(60)
+    finally:
+        sys.setswitchinterval(interval)
+    ok("one thread feeding 20000 messages while another copies and reads ends with no error", errors == [])
+    alone = port_state(*traffic)
+    ok("and nothing it was fed is lost",
+       shared.start_messages() == alone.start_messages() and shared.releases() == alone.releases())
 
     # What it gives goes into a .mid as it is: the start at tick 0, the releases at the end.
     s = port_state(b"\xB0\x00\x01", b"\xB0\x20\x02", b"\xC0\x05", b"\xB9\x04\x5A", b"\xE0\x00\x50", b"\xD0\x30",
