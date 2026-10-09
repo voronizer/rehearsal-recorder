@@ -3,7 +3,7 @@ Every Python suite, one command:
 
     python tests/run_all.py
 
-Four of them, because they answer different questions and need different
+Five of them, because they answer different questions and need different
 things to be true:
 
     test_engine.py     the audio itself — mixing, seeking, disk safety,
@@ -24,6 +24,11 @@ things to be true:
                        the real one's quirks. The other suites block the
                        library; this one puts the stand-in in its place.
 
+    test_midi.py       recording notes beside the audio — what stops Start,
+                       the rules a track's mode sets, and what the take
+                       keeps of them. No port is opened: the library is
+                       blocked and the rules are plain functions.
+
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.
 
@@ -38,7 +43,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SUITES = ("test_engine.py", "test_platform.py", "test_store.py", "test_ports.py")
+SUITES = ("test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
+          "test_midi.py")
 
 
 def main():

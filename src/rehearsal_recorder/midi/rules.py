@@ -61,6 +61,49 @@ def port_of(track):
     return port_ref(track.get("midi_port")) if records_notes(track) else None
 
 
+def notes_problem(tracks):
+    """
+    None when these tracks can start a rehearsal as far as their notes go, and
+    a sentence when they cannot. Asked before the audio card is, so a band
+    that cannot record is told so in its own words and not in a number about
+    a device. Three things stop Start, said in this order:
+
+    - No track records sound (A1). A take is timed, heard and mixed from its
+      audio, so a rehearsal of nothing but MIDI has nothing to play.
+    - A track that takes notes has no port picked yet (P3). A port that was
+      picked and is not plugged in does not stop it: that waits, like any
+      other (D7).
+    - Two tracks take notes from one port (P2), as two on one input would.
+      Ports are the same when their names are, and a track that only
+      records audio takes notes from none, whatever it is handed. The first
+      two found, in band order, are named.
+
+    No tracks at all is not this check's to refuse: starting with none is
+    refused earlier, with its own words.
+    """
+    if not tracks:
+        return None
+
+    if not any(records_audio(t) for t in tracks):
+        return "At least one track has to record sound, so the takes can be heard."
+
+    portless = [t["name"] for t in tracks if records_notes(t) and port_of(t) is None]
+    if portless:
+        if len(portless) == 1:
+            return f"{portless[0]} has no MIDI port yet. Pick one, or set it to Audio."
+        return f"{', '.join(portless)} have no MIDI port yet. Pick one, or set them to Audio."
+
+    taken = {}
+    for t in tracks:
+        port = port_of(t)
+        if port is None:
+            continue
+        if port["name"] in taken:
+            return f"{taken[port['name']]} and {t['name']} both take notes from {port['name']}."
+        taken[port["name"]] = t["name"]
+    return None
+
+
 def lane_after(band, audio_names, name):
     """
     The audio lane the notes lane of the track `name` follows in the player:

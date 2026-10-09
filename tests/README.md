@@ -6,7 +6,7 @@ cd ui && npm test                    # the interface, what needs no browser
 cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
-Four Python suites and two for the interface, because they answer different
+Five Python suites and two for the interface, because they answer different
 questions.
 
 ## test_engine.py — the audio
@@ -53,6 +53,14 @@ suites block the library so no test opens a port) and which CI runs on its own
 on the Mac and the Windows machine. The other suites stub the library out with
 `sys.modules["pylibremidi"] = None`; the ones for code built on `ports.py`
 use `fake_midi.py`, a system with nothing behind it.
+
+## test_midi.py — notes beside the audio
+
+What a track's mode means and what it allows: the three sentences that stop
+Start (no track that records sound, a track that takes notes with no port,
+two on one port), and that the card check then holds only the tracks that
+record audio to the card's inputs. Plain functions over plain dictionaries:
+no port is opened, and the MIDI library is blocked as in the other suites.
 
 ## The interface — in ui/, in TypeScript
 
