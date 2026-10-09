@@ -7,6 +7,26 @@ opening.
 
 ## Unreleased
 
+- **Record what the e-kit plays, or the keyboard.** Every track card on the
+  setup screen has an **Audio / Both / MIDI** switch, and a track on *Both*
+  or *MIDI* has a port to pick under it: an e-kit's USB cable, a keyboard,
+  or a MIDI cable into the interface, several at once, each on its own
+  track. The notes are saved as a `.mid` beside the take's WAVs, with the
+  track's name, for a DAW; the app draws them in the player and never plays
+  them. Every track so far is *Audio*, and every rehearsal opens as it did.
+  **Check signal** says *✓ notes* beside a port once a note has arrived. A
+  port that is not plugged in does not stop the rehearsal: its card says so
+  in amber, and its notes start the moment it appears, even in the middle of
+  a take; on Windows, a port another program has open says that instead. On
+  the recording screen a *Both* track has a column of notes beside its level
+  and a *MIDI* track a tile of its own, each counting its notes. In the
+  player a *Both* track's notes sit right under its waveform, as the lower
+  half of one card, and a *MIDI* track has a lane of its own: a kit is drawn
+  in six rows, Crash to Kick, anything else by pitch. Renaming, cropping,
+  recovering and deleting a take move its notes with the audio, *The
+  original tracks* in the cloud take each `.mid` as it is, and the mix has
+  none. At least one track has to record sound. The guide's *Recording MIDI*
+  has the rest, with how to line the files up in a DAW.
 - **The laptop stays awake during a take.** While a take records, the
   laptop does not go to sleep and its screen does not go dark or lock, so
   Stop and Space still work after a long jam; after Stop the system's own

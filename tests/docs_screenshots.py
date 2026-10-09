@@ -7,6 +7,10 @@ XR18 and a song for them to play. The fake's own waveform is one sine curve,
 the same on every track: enough to check that a waveform is drawn, and
 nothing like what a band sounds like. Needs Playwright for Python.
 
+The two MIDI pictures lay the drummer on Both, from the e-kit "TD-17", over
+that band (KIT_ON_BOTH): the band itself, ui/e2e/band.js, stays four audio
+tracks.
+
     python tests/docs_screenshots.py
 
 writes docs/screenshots/*.png. It checks nothing and is not part of
@@ -14,6 +18,7 @@ run_all.py. Run it after changing anything the pictures show, and look at
 them before committing.
 """
 
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -82,21 +87,87 @@ DRAFTS = """window.__DRAFTS__ = [{dir:'/rec/tue/_drafts/take 6', name:'take 6',
   created_at:'2026-09-22T19:00:00'}];"""
 
 
+# The drummer on Both, from the e-kit "TD-17", laid over the band for the two
+# MIDI pictures only. It runs after BAND, in the same page, so it sets what
+# band.js made: the setup screen's tracks, and the notes of take 2 (Pałyn 2),
+# the take the player opens. The fake's own kit plays one pattern whatever the
+# song; here the kit plays this one, as the drums on the waveform do: kick and
+# snare on the beats, hi-hat on the eighths, the ride in the choruses, toms in
+# the bridge and a crash on the one of every part. Notes are as take_notes
+# sends them: [start, length, row, velocity], the row counted from Crash.
+KIT_ON_BOTH = """
+{
+  api.load_default_tracks = async () => ({tracks: PARTS.map(p => ({...p, stereo: false,
+    ...(p.name === 'Drums' ? {mode: 'both', midi_port: {name: 'TD-17'}} : {})}))});
+
+  const ROW = {crash: 0, ride: 1, hat: 2, toms: 3, snare: 4, kick: 5};
+  const kitPlays = (end) => {
+    const notes = [];
+    const hit = (t, row, velocity) => {
+      if (t >= end) return;
+      const vel = Math.round(Math.min(127, velocity * (0.88 + 0.12 * hash(t * 7))));
+      notes.push([t, Math.min(0.1, end - t), ROW[row], vel]);
+    };
+    for (let c = 0; c < 4; c++) hit(START - (4 - c) * BEAT, 'snare', 70);
+    let at = START;
+    for (const [kind, bars] of FORM) {
+      for (let b = 0; b < bars * 4; b++) {
+        const t = at + b * BEAT, even = b % 2 === 0;
+        if (kind === 'bridge') {
+          hit(t, 'toms', even ? 112 : 88);
+        } else {
+          hit(t, even ? 'kick' : 'snare', 108);
+          const wash = kind === 'chorus' || kind === 'outro';
+          hit(t, wash ? 'ride' : 'hat', 84);
+          hit(t + BEAT / 2, wash ? 'ride' : 'hat', 62);
+        }
+        if (b === 0) hit(t, 'crash', 120);
+      }
+      at += bars * 4 * BEAT;
+    }
+    return notes.sort((a, b) => a[0] - b[0]);
+  };
+
+  const take = EARLIER[1], file = '/rec/tue/2/Drums.mid';
+  take.notes = [{name: 'Drums', port: 'TD-17', after: 'Drums', file}];
+  take.notes_missing = [];
+  fileDurations[file] = take.duration_sec;
+  api.take_notes = async (files) => (files || []).map(({name, file}) => withIcon(file
+    ? {name, drums: true, rows: [...KIT_ROWS], notes: kitPlays(SONG_END)}
+    : {name, error: 'Notes file not found'}));
+}
+"""
+
+
 # How tall the window is for each picture: tall enough for all four tracks
 # where there is a player, and no taller than the screen needs elsewhere,
 # so a picture is not half empty.
 HEIGHT = {"unsaved-takes": 420, "setup": 910, "settings": 760, "marks": 420, "sets": 720,
           "rehearsal": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
-          "history": 820, "history-songs": 940, "history-marks": 820}
+          "history": 820, "history-songs": 940, "history-marks": 820,
+          "midi-card": 910, "midi-player": 1140}
 
 
-def shoot(page, name):
+def shoot(page, name, clip=None):
+    """`clip`, if given, says what to cut out once the window is its height."""
     OUT.mkdir(parents=True, exist_ok=True)
     page.set_viewport_size({"width": VIEWPORT["width"], "height": HEIGHT[name]})
     page.wait_for_timeout(400)
-    page.screenshot(path=str(OUT / f"{name}.png"))
+    page.screenshot(path=str(OUT / f"{name}.png"), clip=clip(page) if clip else None)
     print(f"  {name}.png")
+
+
+def around(locators, margin=6):
+    """What to cut out: the rectangle that holds all of these, with a margin."""
+    def clip(page):
+        boxes = [loc.bounding_box() for loc in locators]
+        left = min(b["x"] for b in boxes) - margin
+        top = min(b["y"] for b in boxes) - margin
+        right = max(b["x"] + b["width"] for b in boxes) + margin
+        bottom = max(b["y"] + b["height"] for b in boxes) + margin
+        return {"x": left, "y": top, "width": right - left, "height": bottom - top}
+    return clip
 
 
 def zoom_to(page, ratio, seconds):
@@ -115,6 +186,22 @@ def zoom_to(page, ratio, seconds):
         page.keyboard.down("Control")
         page.mouse.wheel(0, -120)
         page.keyboard.up("Control")
+        page.wait_for_timeout(250)
+
+
+def scroll_to(page, start):
+    """Move along a zoomed timeline until its window starts about `start` seconds in."""
+    box = page.get_by_role("group", name="Take timeline").bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    for _ in range(6):
+        # "1:55 – 2:07", beside Whole take.
+        text = page.get_by_text(re.compile(r"^\d+:\d\d\s*[\u2013\u2014-]\s*\d+:\d\d$")).first.inner_text()
+        a_min, a_sec, b_min, b_sec = map(int, re.findall(r"\d+", text))
+        a, b = a_min * 60 + a_sec, b_min * 60 + b_sec
+        if abs(a - start) < 1:
+            return
+        # A sideways wheel moves by its share of the window.
+        page.mouse.wheel((start - a) / (b - a) * box["width"], 0)
         page.wait_for_timeout(250)
 
 
@@ -225,6 +312,38 @@ def main():
         page.wait_for_selector('section[aria-label="Went wrong"] [data-mark]')
         page.wait_for_timeout(400)
         shoot(page, "history-marks")
+        page.close()
+
+        # The drummer on Both: the setup screen's card while the kit is
+        # checked, and the player with the kit's notes under its audio.
+        page = browser.new_page(viewport=VIEWPORT)
+        page.add_init_script(MOCK + BAND + COUNTED + KIT_ON_BOTH)
+        page.goto(server.base_url, wait_until="networkidle")
+        page.wait_for_selector("text=Start rehearsal")
+        page.fill("#rehearsal-name", "Tuesday jam")
+        page.click("text=Check signal")
+        page.wait_for_selector("text=✓ notes")
+        page.wait_for_timeout(600)
+        cards = page.locator("[data-track-card]")
+        shoot(page, "midi-card", around([cards.nth(0), cards.nth(1)]))
+        page.click("text=Stop checking")
+
+        page.click("[data-set-picker]")
+        page.get_by_role("menuitemradio", name="Gig on the 25th").click()
+        page.click("text=Start rehearsal")
+        page.wait_for_selector("text=Record take 6")
+        page.click("button[aria-label^='Take 2 Pałyn 2']")
+        page.wait_for_selector("[aria-label='Take timeline']")
+        page.wait_for_selector("[data-notes-lane='Drums']")
+        page.wait_for_timeout(800)
+        # Zoomed to where the bridge ends and the last chorus comes in, so
+        # each hit shows, and the part played is drawn as played.
+        zoom_to(page, chorus / length, 12)
+        scroll_to(page, chorus - 3.5)
+        box = page.get_by_role("group", name="Take timeline").bounding_box()
+        page.mouse.click(box["x"] + box["width"] * 0.66, box["y"] + box["height"] / 2)
+        page.wait_for_timeout(600)
+        shoot(page, "midi-player")
         page.close()
 
         browser.close()
