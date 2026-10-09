@@ -34,6 +34,7 @@ export type SiteContent = {
 export const TILES = [
   "health",
   "track",
+  "midi",
   "rehearsals",
   "marks",
   "names",

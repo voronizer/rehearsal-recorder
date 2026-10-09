@@ -15,6 +15,11 @@ the only moment anyone would act on it.
 
 Written to disk as you play. If the laptop dies, you lose seconds.
 
+## Notes too, from an e-kit or a keyboard. {#midi}
+
+A track records its audio, its MIDI or both. The notes are saved as .mid
+beside the audio, ready for your DAW.
+
 ## Every rehearsal says what it was. {#rehearsals}
 
 What was played, how long it ran, what it weighs. Nothing to fill in.
