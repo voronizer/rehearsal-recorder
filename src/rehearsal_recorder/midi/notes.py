@@ -26,15 +26,18 @@ OTHER = "Other"
 _CRASH, _RIDE, _HIHAT, _TOMS, _SNARE, _KICK = range(len(DRUM_ROWS))
 _OTHER = len(DRUM_ROWS)
 
-# Which row each note lands on: the General MIDI drum map, and beside it the
-# notes e-kits use. On a TD-17, 22 and 26 are the hi-hat's edge, 40 the snare's
-# rim and 58 the rim of tom 3 (General MIDI calls 58 a vibraslap). A note not
-# here goes to Other; the row is shown only in a take that has one.
+# Which row each note lands on: the General MIDI drum notes that belong to a
+# kit's six rows, and beside them the notes e-kits use. On a TD-17, 22 and 26
+# are the hi-hat's edge, 40 the snare's rim and 58 the rim of tom 3 (General
+# MIDI calls 58 a vibraslap). The rest of General MIDI's percussion is not a
+# kit's (the clap 39, the tambourine 54, the cowbell 56, the Latin drums from
+# 60), and goes to Other with whatever else is not here; that row is shown only
+# in a take that has such a note.
 DRUM_MAP = {
-    36: _KICK,
+    36: _KICK, 35: _KICK,
     38: _SNARE, 40: _SNARE, 37: _SNARE,
     42: _HIHAT, 44: _HIHAT, 46: _HIHAT, 22: _HIHAT, 26: _HIHAT,
-    48: _TOMS, 50: _TOMS, 45: _TOMS, 47: _TOMS, 43: _TOMS, 58: _TOMS,
+    48: _TOMS, 50: _TOMS, 45: _TOMS, 47: _TOMS, 43: _TOMS, 41: _TOMS, 58: _TOMS,
     51: _RIDE, 53: _RIDE, 59: _RIDE,
     49: _CRASH, 55: _CRASH, 57: _CRASH, 52: _CRASH,
 }
@@ -98,13 +101,16 @@ def read_notes(path, drums_icon: bool) -> dict:
         if kind == _NOTE_ON and data[2] > 0:
             note = [round(seconds, 6), 0.0, data[1], data[2]]
             notes.append(note)
-            sounding.setdefault(key, deque()).append((seconds, note))
+            held = sounding.get(key)
+            if held is None:
+                held = sounding[key] = deque()
+            held.append((seconds, note))
             on_channels.add(key[0])
         elif sounding.get(key):
             began, note = sounding[key].popleft()
             note[1] = round(seconds - began, 6)
-    for held in sounding.values():
-        for began, note in held:
+    for unreleased in sounding.values():
+        for began, note in unreleased:
             note[1] = round(end - began, 6)
 
     if drums_icon or on_channels == {_DRUM_CHANNEL}:

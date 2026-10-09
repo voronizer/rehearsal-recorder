@@ -2634,14 +2634,17 @@ def main():
 
         ok("the drum rows are Crash, Ride, Hi-hat, Toms, Snare, Kick, in that order",
            DRUM_ROWS == ["Crash", "Ride", "Hi-hat", "Toms", "Snare", "Kick"])
-        mapped = {36: "Kick", 38: "Snare", 40: "Snare", 37: "Snare",
+        mapped = {36: "Kick", 35: "Kick", 38: "Snare", 40: "Snare", 37: "Snare",
                   42: "Hi-hat", 44: "Hi-hat", 46: "Hi-hat", 22: "Hi-hat", 26: "Hi-hat",
-                  48: "Toms", 50: "Toms", 45: "Toms", 47: "Toms", 43: "Toms", 58: "Toms",
+                  48: "Toms", 50: "Toms", 45: "Toms", 47: "Toms", 43: "Toms", 41: "Toms", 58: "Toms",
                   51: "Ride", 53: "Ride", 59: "Ride",
                   49: "Crash", 55: "Crash", 57: "Crash", 52: "Crash"}
-        ok("the map: 36 Kick; 38, 40, 37 Snare; 42, 44, 46, 22, 26 Hi-hat; 48, 50, 45, 47, 43, 58 Toms; "
+        ok("the map: 36 and 35 Kick; 38, 40, 37 Snare; 42, 44, 46, 22, 26 Hi-hat; 48, 50, 45, 47, 43, 41, 58 Toms; "
            "51, 53, 59 Ride; 49, 55, 57, 52 Crash, and no note besides",
            {note: DRUM_ROWS[row] for note, row in DRUM_MAP.items()} == mapped)
+        general_midi = read9([e for k, n in enumerate((35, 41)) for e in (on(k * 0.1, n, ch=9), off(k * 0.1 + 0.05, n, ch=9))])
+        ok("General MIDI's acoustic bass drum (35) and low floor tom (41) are a Kick and a Tom, not Other",
+           general_midi["rows"] == DRUM_ROWS and [n[2] for n in general_midi["notes"]] == [5, 3])
 
         # Drums: by the icon, or by notes on channel 10 without it.
         keys_ch1 = [on(0.0, 60), off(0.5, 60), on(1.0, 64), off(1.5, 64)]
@@ -2704,6 +2707,19 @@ def main():
         ok("the same note on two channels is two notes: a release closes the oldest of its own channel",
            read9([on(0.0, 60, ch=0), on(0.1, 60, ch=1), off(0.2, 60, ch=1), off(0.5, 60, ch=0)])["notes"]
            == [[0.0, 0.5, 60, 100], [0.1, 0.1, 60, 100]])
+        # A format 1 file, as a DAW saves it: the notes are spread over its tracks and read as one, in time.
+        # Struck in one track and let go in another, the oldest strike is closed first (a last-in-first-out
+        # pairing would give 0.25 and 1.0 here).
+        daw1 = mido.MidiFile(type=1, ticks_per_beat=480)
+        daw1.tracks.append(mido.MidiTrack([mido.MetaMessage("set_tempo", tempo=500_000, time=0)]))
+        daw1.tracks.append(mido.MidiTrack([mido.Message("note_on", note=60, velocity=100, time=0),
+                                           mido.Message("note_on", note=60, velocity=100, time=240)]))
+        daw1.tracks.append(mido.MidiTrack([mido.Message("note_off", note=60, velocity=0, time=480),
+                                           mido.Message("note_off", note=60, velocity=0, time=480)]))
+        daw1.save(folder9 / "daw1.mid")
+        ok("a format 1 file's tracks are read together: a strike in one and its release in another are one note, "
+           "oldest first",
+           read_notes(folder9 / "daw1.mid", False)["notes"] == [[0.0, 0.5, 60, 100], [0.25, 0.75, 60, 100]])
         ok("notes come in the order they began, and a note held while others come and go is one note",
            [(n[0], n[1], n[2]) for n in read9([on(0.0, 60), on(0.1, 64), off(0.2, 64), on(0.3, 67),
                                                off(0.4, 67), off(1.0, 60)])["notes"]]

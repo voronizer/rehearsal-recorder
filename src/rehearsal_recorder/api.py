@@ -1124,22 +1124,36 @@ class Api:
         A take knows its notes only by name and file, as it knows its tracks.
         Whether the lane is a drum grid is the band's icon, found by that name
         as take_media finds a track's; a name the band does not have is judged
-        by the file alone. A file that is not there, or is not a .mid that can
-        be read, is answered with an error and the others still answer."""
+        by the file alone.
+
+        Every file is answered on its own and one can never fail the call: one
+        that is not there, or has no path, is "Notes file not found"; any other
+        trouble (not a .mid, cut short, a folder, a name too long, a drive that
+        will not answer) is "Notes file not readable", said in the log. The
+        answer carries the file's "name" when it was given one."""
         icon_of = layouts.icons(self._config.get("tracks"))
         result = []
         for f in files:
-            path = Path(f["file"])
-            if not path.exists():
-                result.append({"name": f["name"], "error": "Notes file not found"})
+            if not isinstance(f, dict):
+                f = {}
+            named = {"name": f["name"]} if "name" in f else {}
+            if f.get("file") is None:
+                result.append({**named, "error": "Notes file not found"})
                 continue
             try:
-                notes = read_notes(path, icon_of.get(f["name"]) == "drums")
+                path = Path(f["file"])
+                if not path.exists():
+                    result.append({**named, "error": "Notes file not found"})
+                    continue
+                notes = read_notes(path, icon_of.get(f.get("name")) == "drums")
             except Exception as e:
-                print(f"[notes] {path.name}: {type(e).__name__}: {e}")
-                result.append({"name": f["name"], "error": "Notes file not readable"})
+                # The log, not print: a console that cannot show a name such as
+                # "Pałyn" would raise here and fail the call for this very file.
+                logging.getLogger(__name__).warning(
+                    "notes of %s: %s: %s", Path(str(f["file"])).name, type(e).__name__, e)
+                result.append({**named, "error": "Notes file not readable"})
                 continue
-            result.append({"name": f["name"], **notes})
+            result.append({**named, **notes})
         return result
 
     @staticmethod
