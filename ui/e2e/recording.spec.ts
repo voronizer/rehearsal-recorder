@@ -1,4 +1,4 @@
-import { expect, keyOn, openApp, setFake, startRehearsal, test } from "./app.ts"
+import { expect, keyOn, nameTake, openApp, setFake, startRehearsal, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The recording screen is read from across the room. Nobody stands at the
@@ -15,7 +15,7 @@ async function secondGo(page: Page, song = "Viasna") {
   await startRehearsal(page)
   await page.getByRole("button", { name: /Record take 1/ }).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
-  await page.fill("#take-name", song)
+  await nameTake(page, song)
   await page.getByRole("button", { name: /Save take/ }).click()
   await page.getByRole("button", { name: /Record take 2/ }).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()

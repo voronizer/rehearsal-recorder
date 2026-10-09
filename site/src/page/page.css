@@ -97,7 +97,10 @@ body {
 }
 
 /* ---- What it does: a tile per point, each with a piece of the app ---- */
-.bento { display: grid; gap: 16px; grid-template-columns: 1fr; }
+/* Dense: on two columns, a half tile before a full-width one moves up beside
+   the half tile before it, rather than leave a hole. */
+.bento { display: grid; gap: 16px; grid-template-columns: 1fr; grid-auto-flow: row dense; }
+.s6 { grid-column: 1 / -1; }
 @media (min-width: 720px) { .bento { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1000px) { .bento { grid-template-columns: repeat(6, 1fr); } .s2 { grid-column: span 2; } .s4 { grid-column: span 4; } }
 @media (min-width: 720px) and (max-width: 999px) { .s4 { grid-column: span 2; } }

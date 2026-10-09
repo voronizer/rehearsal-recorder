@@ -50,7 +50,7 @@ test.describe("Playback volume in the header", () => {
     await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
     await expect(headerVolume(page)).toHaveCount(0)
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(page.locator("#take-name")).toBeVisible()
+    await expect(page.locator("[data-take-summary]")).toBeVisible()
     await expect(headerVolume(page)).toBeVisible()
   })
 

@@ -17,8 +17,8 @@ One track per musician, filled in from last time.
 
 Hear how the song went last week, then play it.
 
-- Pick Pałyn under Next take.
-- Its best go from last week plays right beside it.
+- ▶ beside Pałyn on the start screen plays its best go from last week.
+- Start, and ↑ picks Pałyn under Next take.
 - Record: the take's name over a big clock, and a tile per track that turns red when it clips.
 
 ## Keep the good ones. {#keep}

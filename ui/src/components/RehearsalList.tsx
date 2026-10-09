@@ -1,4 +1,5 @@
 import { EveningStrip } from "@/components/EveningStrip"
+import { SetName } from "@/components/SetPlayed"
 import { cn } from "@/lib/utils"
 import { formatDuration, formatMonth, formatWhen, takesLabel } from "@/lib/format"
 import type { RehearsalSummary } from "@/lib/api"
@@ -92,6 +93,7 @@ function Item({
           {r.missing ? "Not found on disk" : takesLabel(r.take_count)}
         </span>
       </span>
+      {r.set_name && <SetName name={r.set_name} />}
       {!r.missing && <EveningStrip runs={r.runs ?? []} />}
     </button>
   )

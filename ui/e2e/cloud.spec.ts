@@ -1,4 +1,4 @@
-import { callCount, calls, expect, openApp, recordTake, startRehearsal, test } from "./app.ts"
+import { callCount, calls, expect, nameTake, openApp, recordTake, startRehearsal, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The band's cloud folder: what goes there, and when.
@@ -40,7 +40,7 @@ test("a take is copied to the cloud from its row, and taken back out again", asy
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page, 1)
-  await page.fill("#take-name", "Pałyn")
+  await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
   await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()

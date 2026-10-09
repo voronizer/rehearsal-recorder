@@ -3,12 +3,21 @@
 // are pictures here: still, and not for clicking.
 import type { ReactNode } from "react"
 import { HealthLine } from "@/components/HealthLine"
+import { SetCard, SongRows } from "@/components/NextTakeSongs"
 import { RehearsalList } from "@/components/RehearsalList"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
+import { SongKeys } from "@/components/SongKeys"
 import { StopTake } from "@/components/StopTake"
 import { TakeNameField } from "@/components/TakeNameField"
 import { TrackTile } from "@/components/TrackTile"
-import { api, type RehearsalDetail, type RehearsalSummary, type SongChoices } from "@/lib/api"
+import {
+  api,
+  type RehearsalDetail,
+  type RehearsalSet,
+  type RehearsalSummary,
+  type SongChoices,
+} from "@/lib/api"
+import { otherSongs } from "@/lib/setSongs"
 import type { TILES } from "../content"
 
 export type PieceData = {
@@ -16,6 +25,8 @@ export type PieceData = {
   last: RehearsalDetail
   /** The songs under the Next take field, with Pałyn also typed as Palyn. */
   choices: SongChoices
+  /** The band's set, Gig on the 25th, for the sets tile. */
+  set: RehearsalSet | null
 }
 
 /** What the tiles show, asked of the bridge as the history screen and the
@@ -30,7 +41,8 @@ export async function loadPieces(): Promise<PieceData> {
   const next = (song: string) =>
     Math.max(0, ...last.takes.filter((t) => t.song === song).map((t) => t.go ?? 0)) + 1
   const choices = { here: [], other: offered.other.map((c) => ({ ...c, go: next(c.song) })) }
-  return { rehearsals, last, choices }
+  const [set] = await api().list_sets()
+  return { rehearsals, last, choices, set: set ?? null }
 }
 
 const nothing = () => {}
@@ -78,6 +90,17 @@ function Goes({ last, song, only }: { last: RehearsalDetail; song: string; only?
   )
 }
 
+/** Gig on the 25th mid-set: Pałyn played four times, Viasna up now. */
+const MID_SET = new Map([["Pałyn", 4]])
+
+/**
+ * The rehearsal screen's Next take panel, the field over the songs under
+ * it, as the screen lays them out.
+ */
+function Panel({ children }: { children: ReactNode }) {
+  return <div className="flex w-[23rem] max-w-full flex-col gap-5">{children}</div>
+}
+
 export type Shot = { pieces: ReactNode; left?: boolean }
 
 /** Which piece goes beside which tile's words, by the tile's id. */
@@ -85,6 +108,7 @@ export function shots({
   rehearsals,
   last,
   choices,
+  set,
 }: PieceData): Record<(typeof TILES)[number], Shot | null> {
   const kept = last.takes.find((t) => t.cloud && t.starred)
   return {
@@ -129,8 +153,10 @@ export function shots({
     names: {
       left: true,
       pieces: (
-        <Piece label="The Next take field with Palyn typed: Palyn is Pałyn now, at its next go">
-          <div className="w-[23rem] max-w-full">
+        <Piece label="The Next take field with Palyn typed: Palyn is Pałyn now, at its next go, the one song left under it">
+          <Panel>
+            {/* "Make Palyn a new song" floats over the songs on the screen,
+                and here would hide the one this tile is about. */}
             <TakeNameField
               id="site-next-take"
               label="Next take"
@@ -139,8 +165,25 @@ export function shots({
               choices={choices}
               onCommit={nothing}
               onPanel
+              songs="none"
+              offerNewSong={false}
+              labelAside={<SongKeys />}
             />
-          </div>
+            <SongRows
+              titles={otherSongs(choices, [])}
+              lastTake={new Map()}
+              goes={new Map()}
+              current="Pałyn"
+              typed="Palyn"
+              typing={false}
+              inSet={[]}
+              title="Songs"
+              onPick={nothing}
+              highlighted={null}
+              open={false}
+              onOpen={nothing}
+            />
+          </Panel>
         </Piece>
       ),
     },
@@ -149,6 +192,28 @@ export function shots({
       pieces: kept ? (
         <Piece label={`${kept.name}, marked as the one to keep, in the cloud`}>
           <Goes last={last} song={kept.song ?? ""} only={(n) => n === kept.take_number} />
+        </Piece>
+      ) : null,
+    },
+    sets: {
+      pieces: set ? (
+        <Piece
+          label={`The Next take field with Viasna, and under it the set ${set.name}: Pałyn played 4 times, Viasna now, Ahoń next`}
+        >
+          <Panel>
+            <TakeNameField
+              id="site-set-take"
+              label="Next take"
+              value="Viasna"
+              fallback="Viasna"
+              choices={choices}
+              onCommit={nothing}
+              onPanel
+              songs="none"
+              labelAside={<SongKeys />}
+            />
+            <SetCard set={set} goes={MID_SET} current="Viasna" onPick={nothing} highlighted={null} />
+          </Panel>
         </Piece>
       ) : null,
     },

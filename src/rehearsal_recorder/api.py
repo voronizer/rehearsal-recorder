@@ -77,7 +77,9 @@ from rehearsal_recorder import updates
 from rehearsal_recorder.mediaserver import AppServer
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
-from rehearsal_recorder.store.library import LabelRefused, Library, SongRefused, as_marker
+from rehearsal_recorder.store.library import (
+    LabelRefused, Library, SetRefused, SongRefused, as_marker,
+)
 from rehearsal_recorder.store.db import DB_NAME
 from rehearsal_recorder import diagnostics
 from rehearsal_recorder.audio.probe import InterfaceCheck, plan_for, tracks_for
@@ -288,56 +290,25 @@ def _plays_of(goes):
             "created_at": pick["created_at"], "take": pick["take"]}
 
 
-def _before_tonight(title, goes, folder):
-    """
-    The song `title` as it went before tonight, for the rehearsal screen's
-    card beside the Next take field: {"song", "first", "more"}, or None when
-    it has no go before tonight.
-
-    `goes` are the song's goes as Library.goes_of gives them, newest
-    rehearsal first, or the few of them Library.goes_before keeps; `folder`
-    is the rehearsal in progress, whose goes are tonight's and left out. So
-    are rehearsals not on disk: their goes cannot be played. "first" is the
-    go shown, as _plays_of picks it: the newest ★ go, or the last go of the
-    latest rehearsal. "more" is what "N more" adds under it: the last go of
-    each of the three latest rehearsals, less the one shown. Each in
-    _go_at's shape.
-    """
-    live = Path(folder)
-    kept = [g for g in goes if not g["missing"] and Path(g["folder"]) != live]
-    first = _plays_of(kept)
-    if first is None:
-        return None
-    last = {}
-    for g in kept:
-        if g["folder"] not in last and len(last) == 3:
-            break
-        last[g["folder"]] = g
-    shown = (first["folder"], first["take"]["take_number"])
-    more = [{"folder": g["folder"], "rehearsal": g["rehearsal"],
-             "created_at": g["created_at"], "take": g["take"]}
-            for g in last.values()
-            if (g["folder"], g["take"]["take_number"]) != shown]
-    return {"song": title, "first": first, "more": more}
-
-
 def _last_attempt(takes, song, before=None):
     """
     How long the latest go at `song` among `takes` ran, as {"song",
     "duration_sec"}, or None when there was none. The recording screen says
     it under its clock — "Vesna took 2:21 last time" — so the band can see
-    how far into the song they are.
+    how far into the song they are, and the screen after a take measures the
+    take against it.
 
-    With no go tonight it is the go shown before tonight (`before`, from
-    _before_tonight), with the day it was played: "Took 3:05 on 28 Sep".
+    With no go tonight it is `before()`, the go before tonight
+    (Api._go_before_tonight, in _go_at's shape), with the day it was played:
+    "Took 3:05 on 28 Sep". A function, so it is only looked up when wanted.
     """
     if song is None:
         return None
     goes = [t for t in takes if t.get("song") == song]
     if goes:
         return {"song": song, "duration_sec": goes[-1].get("duration_sec")}
-    if before is not None:
-        first = before["first"]
+    first = before() if before is not None else None
+    if first is not None:
         return {"song": song, "duration_sec": first["take"].get("duration_sec"),
                 "created_at": first["created_at"]}
     return None
@@ -698,6 +669,9 @@ class Api:
             "cloud_formats": CLOUD_FORMATS_INFO,
             "auto_publish": bool(self._config.get("auto_publish", False)),
             "auto_publish_what": self._config.get("auto_publish_what") or "mix",
+            # The set picked beside Start rehearsal, kept until another is
+            # picked; one deleted since reads as none.
+            "next_set": self._next_set(),
             # How short a take is to count as a false start (issue #12 step 7).
             "false_start_sec": self._false_start_sec(),
             "check_updates": bool(self._config.get("check_updates", True)),
@@ -1005,6 +979,25 @@ class Api:
         if view not in HISTORY_VIEWS:
             return {"ok": False, "error": "Unknown view"}
         self._config["history_view"] = view
+        self._write_config()
+        return {"ok": True}
+
+    def _next_set(self):
+        chosen = self._config.get("next_set")
+        if not isinstance(chosen, int) or self._library is None:
+            return None
+        # Settings asks this too, and opens whatever the library says: it is
+        # where another folder is chosen when this one cannot be read.
+        try:
+            return chosen if self._lib.set_of(chosen) is not None else None
+        except Exception:
+            return None
+
+    def save_next_set(self, set_id):
+        """The set Start rehearsal plays by, or None to play freely: kept
+        across restarts, since a band rehearses for a gig over several
+        evenings."""
+        self._config["next_set"] = int(set_id) if set_id is not None else None
         self._write_config()
         return {"ok": True}
 
@@ -1404,8 +1397,12 @@ class Api:
     # ---------- rehearsal ----------
 
     def start_rehearsal(
-        self, name, device_index, samplerate, tracks, bit_depth=DEFAULT_DEPTH
+        self, name, device_index, samplerate, tracks, bit_depth=DEFAULT_DEPTH,
+        set_id=None,
     ):
+        """`set_id` is the set picked beside Start rehearsal: the rehearsal
+        keeps a copy of it as it is now, and its first song is the first
+        take. One that is not there any more starts it with none."""
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
         # Caught before a folder is made for a rehearsal that cannot record.
@@ -1423,6 +1420,8 @@ class Api:
         # The signal check and the recording cannot hold the input at once.
         self.stop_monitor()
 
+        played_by = library.set_of(set_id) if set_id is not None else None
+
         created_at = time.strftime("%Y-%m-%dT%H:%M:%S")
         folder = _unique_path(
             self._recordings_dir
@@ -1439,17 +1438,25 @@ class Api:
             "bit_depth": bit_depth,
             "tracks": tracks,
             "take_counter": 0,
+            "set": played_by,
         }
         # In the database from the start, so History can read the take list
         # even after a restart.
         try:
             library.create_rehearsal(
-                folder, name, created_at, samplerate, bit_depth, tracks
+                folder, name, created_at, samplerate, bit_depth, tracks,
+                set_copy=played_by,
             )
         except Exception:
             self._session = None
             raise
         return {"ok": True, "folder": str(folder)}
+
+    def _session_rehearsal(self):
+        """The rehearsal in progress as the database has it, or None."""
+        if self._session is None:
+            return None
+        return self._lib.rehearsal(self._session["folder"])
 
     def _session_takes(self):
         """The takes of the rehearsal in progress, from the database — the one
@@ -1505,9 +1512,9 @@ class Api:
         if self._session is None:
             return {"active": False}
         s = self._session
-        takes = self._session_takes()
+        here = self._session_rehearsal()
+        takes = here["takes"] if here else []
         coming = self._next_take()
-        before = self._before_tonight_for(coming["song"])
         return {
             "active": True,
             "name": s["name"],
@@ -1522,9 +1529,10 @@ class Api:
             # What it would hold without a title picked, which the rehearsal
             # screen offers to go back to.
             "next_take_default": self.suggest_take_name(chosen=False),
-            # The song the field names, as it went before tonight.
-            "before_tonight": before,
-            "last_attempt": _last_attempt(takes, coming["song"], before),
+            "last_attempt": _last_attempt(
+                takes, coming["song"], lambda: self._go_before_tonight(coming["song"])),
+            # The set it is played by, its titles as they are now, or None.
+            "set": here["set"] if here else None,
             "recording": self._recorder is not None,
             "cloud_queue": self._cloud_queue.states(s["folder"]),
             # The header's "On disk", measured as History measures a
@@ -1532,10 +1540,13 @@ class Api:
             "disk_bytes": _folder_bytes(s["folder"]),
         }
 
-    def _before_tonight_for(self, title):
-        """_before_tonight for the song titled `title`, the one the Next
-        take field resolves to; None for no song, or one the library has
-        no goes of yet."""
+    def _go_before_tonight(self, title):
+        """The go at the song titled `title` that its first go tonight is
+        measured against: its newest ★ go before tonight, else the last go
+        of the latest rehearsal that played it (_plays_of), from rehearsals
+        on disk. None for no song, one with no go before tonight, or when
+        the library cannot answer: the screens that ask must go on without
+        it."""
         if not title:
             return None
         try:
@@ -1544,12 +1555,20 @@ class Api:
                 return None
             found = self._lib.goes_before(song_id, self._session["folder"])
         except Exception:
-            # The library could not answer. The card is a look back, and the
-            # rehearsal screen it sits on must go on refreshing without it.
             return None
-        if found is None:
+        return None if found is None else _plays_of(found["goes"])
+
+    def last_attempt(self, name):
+        """What the screen after a take measures it against, for the song
+        `name` resolves to, by the rule session_state's "last_attempt"
+        has; None with no rehearsal on, for no song, or a song never
+        played."""
+        if self._session is None:
             return None
-        return _before_tonight(found["title"], found["goes"], self._session["folder"])
+        takes = self._session_takes()
+        song = self._lib.resolve_name(
+            self._session["folder"], name, self._session["take_counter"] + 1)["song"]
+        return _last_attempt(takes, song, lambda: self._go_before_tonight(song))
 
     def _next_take(self, take_number=None, chosen=True):
         """
@@ -1584,6 +1603,10 @@ class Api:
                 return {"song": None, "go": None, "name": picked}
         takes = self._session_takes()
         song = takes[-1].get("song") if takes else None
+        played_by = self._session.get("set")
+        if not takes and played_by and played_by["songs"]:
+            # The evening's first take is the set's first song (R3).
+            song = played_by["songs"][0]
         return self._lib.resolve_name(folder, song or "", number)
 
     def suggest_take_name(self, take_number=None, chosen=True):
@@ -2087,6 +2110,8 @@ class Api:
                 # too, and the question before it says so.
                 "in_cloud": sum(1 for t in takes if _shape_of(t.get("cloud"))),
                 "missing": r["missing"],
+                # The set it was played by, None when played freely.
+                "set_name": (r.get("set") or {}).get("name"),
             })
         return items
 
@@ -2105,6 +2130,7 @@ class Api:
             "created_at": r["created_at"],
             "takes": takes,
             "songs": _songs_of(takes),
+            "set": r.get("set"),
         }
 
     def last_time(self):
@@ -2497,6 +2523,35 @@ class Api:
     def delete_label(self, label_id, marks_to=None):
         """A label in use needs `marks_to`, the label its marks get."""
         return self._labels_changed(lambda: self._lib.delete_label(label_id, marks_to))
+
+    # ---------- sets ----------
+    #
+    # Songs a rehearsal goes through, in order, made in Settings › Sets or on
+    # the start screen. A change answers with every set, as labels do.
+
+    def list_sets(self):
+        """[{id, name, songs: [{title, new}]}] in order (see Library.sets);
+        [] while the recordings database cannot be opened."""
+        if self._library is None:
+            return []
+        return self._lib.sets()
+
+    def _sets_changed(self, change):
+        try:
+            return {"ok": True, "sets": change()}
+        except SetRefused as e:
+            return {"ok": False, "error": str(e)}
+
+    def add_set(self, name, songs):
+        return self._sets_changed(lambda: self._lib.add_set(name, songs))
+
+    def update_set(self, set_id, name=None, songs=None):
+        """None leaves the name, or the songs, as they are."""
+        return self._sets_changed(lambda: self._lib.update_set(set_id, name, songs))
+
+    def delete_set(self, set_id):
+        """Rehearsals played by it keep their copy of it."""
+        return self._sets_changed(lambda: self._lib.delete_set(set_id))
 
     # ---------- markers ----------
     #

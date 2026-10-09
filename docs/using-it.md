@@ -33,7 +33,7 @@ under **ASIO** to get all of them. The system output always plays through
 
 ### Set up the tracks
 
-![The setup screen with four tracks, checking the signal](screenshots/setup.png)
+![The setup screen with four tracks, checking the signal, and the set Gig on the 25th picked beside Start rehearsal](screenshots/setup.png)
 
 The setup screen has one track per musician: a name and the input it comes
 in on. The line under **Recording with** shows the interface, how many inputs
@@ -85,11 +85,36 @@ last rehearsal that played a song.
 While something plays from here, Space pauses it and Esc stops it; then
 Space starts the rehearsal again. **Check signal** stops it.
 
+### Play by a set
+
+A band getting ready for a gig plays the same songs in the same order,
+evening after evening. A set is those songs, in that order, with a name:
+"Gig on the 25th". The rehearsal screen then lists them under the next
+take's name, and History says afterwards which of them were played.
+
+The button left of **Start rehearsal** says which set the rehearsal will
+play by, or **No set**. Click it to choose another set, **No set: play
+freely** to play without one, or **New set…** to make one without leaving
+the screen: a name, then the songs in the order you play them. Drag a song
+by its handle to move it, and ✕ takes it out. Under them are the songs you
+have played, to add with a click, and **Another song…** for one nobody has
+played yet, such as a new song for the gig. **Create set** makes the set
+and picks it. The set stays picked for the rehearsals after this one, until
+you pick another.
+
+![Settings → Sets: Gig on the 25th and its six songs, in order](screenshots/sets.png)
+
+**Settings → Sets** has all your sets down the left. Click one to change its
+name or its songs beside the list, which is saved as you go, or to delete
+it with **Delete set**. A rehearsal already played by it keeps its takes and
+their names, and History still shows the set as it was that evening. **New
+set** under the list makes another.
+
 ## Recording takes
 
 ### The rehearsal screen
 
-![A rehearsal with five takes, grouped by song, a false start among them, and Send starred and Clear false starts over them; on the right the next take's name, the songs, and how the song went before tonight](screenshots/rehearsal.png)
+![A rehearsal played by the set Gig on the 25th: five takes grouped by song, a false start among them, and Send starred and Clear false starts over them; on the right the next take's name, the set and the other songs](screenshots/rehearsal.png)
 
 Press **Start rehearsal**, or Space. The rehearsal screen shows the takes
 recorded so far, grouped by song. Each take is a bar drawn to its length,
@@ -137,32 +162,35 @@ uses. **Show in Finder** (**Show in Explorer** on Windows) opens its folder.
 In a narrow window only the length, the takes and the button fit. The player
 in History has the same header.
 
-On the right is **Next take**: the name the next take will get, in a
-field of its own, and under it, in two rows, the songs you could play
-instead: tonight's first, as the next go at each ("Pałyn 3"), then the
-songs of earlier rehearsals, the latest first. **All songs…** at the end
-lists every song you have ever played, in alphabetical order. Typing in
-the field narrows the songs to the ones that match. When you move on to
-another song, click it before you press Record, or type a name and press
-Enter. The take is then recorded under that name, and the recording
-screen can say how long the last go at that song took. ✕ puts back the
-name the take would have had anyway. If you discard the take, the next
-one keeps the name you picked.
+On the right is **Next take**: the name the next take will get, in a field
+of its own, and under it the songs. A new take is another go at the song
+before it, so the name stays until you move on to another song.
 
-Under the songs is how the song in the field went before tonight, so "how
-did we play the bridge last week?" needs no trip to History. It shows one
-go: the song's newest starred go (★), or, with none starred, the last go of
-the last rehearsal that played it, with the day it was played. The button
-at its right, **2 more** for example, adds the last go of each of the three
-latest rehearsals that played it. The goes play right there, with their
-notes under them:
+Playing by a set, the set comes first, as a card: "Gig on the 25th — 3 of 6
+played", then its songs in order. The song in the field is lit, and the one
+after it says **next**. A song played tonight has ✓ and how many goes it
+got. The evening's first take is the set's first song. Under the set,
+**Other songs** are the songs outside it. With no set they are **Songs**,
+every song you have played: tonight's first, then the songs of earlier
+rehearsals, the latest first. Five show, and **All 18 songs** under them
+opens the rest; the song in the field shows even when it is not among the
+five.
 
-- **Play** plays the go. Space pauses and continues it, and Esc stops it.
-- Click a note to play the go from a few seconds before it.
-- Picking another song, or pressing **Record take**, stops it.
+To move on to another song:
 
-A song nobody has played before tonight says so. While a take is open in
-the player, the earlier goes are hidden.
+- Click its row. The set's rows never move, so going back to a song is one
+  click too.
+- Or press ↓ or ↑ for the row below or above the lit one: the set's songs,
+  then the other songs. The two keys at the right of **Next take** say so.
+  While a take is open in the player, the arrows are the player's.
+- Or click the field, which selects the name, and type: the songs narrow to
+  the ones that match, and ↓ or ↑ then Enter picks one. A name no song has
+  is a new song, and Enter keeps it.
+
+The take is then recorded under that name, and the recording screen can say
+how long the last go at that song took. ✕ in the field puts back the name
+the take would have had anyway. If you discard the take, the next one keeps
+the name you picked.
 
 ### While recording
 
@@ -178,8 +206,9 @@ laptop.
 - **The clock** shows how long the take has been running.
 - **The bar under it** shows up when this is another go at a song you have
   already played in this rehearsal: "Took 2:21 last time". The first go of
-  the evening at a song played before is measured against the go the
-  rehearsal screen showed for it: "Took 3:20 on 22 Sep". It fills as you
+  the evening at a song played before is measured against the go ▶ plays
+  for it in Last time: its newest ★ go, or the last go of the last
+  rehearsal that played it, "Took 3:20 on 22 Sep". It fills as you
   play, so you can see how far into the song you are.
 - **Each track has a tile** that fills from the bottom with its level. The
   fill is in dB, like the meters on a mixer: −60 dB at the bottom, full
@@ -202,20 +231,29 @@ during a take. Press **Stop**, or Space, when the song is over.
 
 ### Keep the take or not
 
-![After stopping: name the take, then save or discard it](screenshots/review.png)
+![After stopping: the take's song and its goes tonight, then save or discard it](screenshots/review.png)
 
 After you stop, the take opens straight away so you can listen to it. The
-name it was recorded under is in the name field at the bottom left: check
-it, then press **Save take** (Space) or **Discard**. ✕ there puts back
-the name the take would have had if none had been picked before recording.
-A discarded take goes to the Trash. Pressing Esc also discards it, but asks
-first. If you are typing the name, the first Esc only leaves the name
-field.
+bottom left says what was recorded: the song, with the go it is, "Viasna 2",
+and under it how long the take ran against the last go at the song tonight,
+"2:31 · 10 s longer than go 1". With no go at it tonight it is measured
+against the go before tonight, with the day: "8 s longer than on 22 Sep".
+Left of the title is a bar for each of the song's goes tonight, the last
+ten of them, as tall as it ran: this one in the colour of the text, the ★
+goes green, the others grey. A take nobody named says "Take 7", grey, and how long it ran.
 
-The name is filled in for you. After a take called "Pałyn", the next one is
-called "Pałyn 2". Under the name are the songs you have played: this
-rehearsal's first, then the others, most recent first. Click one to name the
-take after it, then press Space to save. See [Names and songs](#names-and-songs).
+The name is filled in for you: after a take called "Pałyn", the next one is
+"Pałyn 2". Check it, then press **Save take** (Space) or **Discard**. A
+discarded take goes to the Trash. Pressing Esc also discards it, but asks
+first.
+
+The pencil beside the title renames the take. The songs you have played
+are listed under the name, this rehearsal's first, then the others, most
+recent first: click one, or type a name, and press Enter. The title, the
+bars and the line under it follow. ✕ in the field puts back the name the
+take would have had if none had been picked before recording. While you
+rename, Space types and Esc closes the dialog. See [Names and
+songs](#names-and-songs).
 
 If you have a cloud folder, a checkbox under the buttons shows whether this
 take will be sent there. Changing it affects this take only.
@@ -346,12 +384,15 @@ named is called by its number, "Take 4", is not counted as a song, and so is
 a recovered take you did not name. On the rehearsal screen and in History,
 the songs are listed under such a take, so one click names it.
 
-Wherever you name a take, the songs you have already played are listed under
-the name, so you do not have to type them again. Each song comes with the go
-it would be, dimmed beside it; a click puts only the title in the field.
-Typing narrows the list to the songs that match, and clicking one then takes
-you out of the field, so the next Space records or saves. In the Rename take
-dialog you stay in the field, and Enter renames.
+Wherever you name a take, the songs you have already played are listed, so
+you do not have to type them again. On the rehearsal screen they are the
+rows under **Next take** (see [The rehearsal screen](#the-rehearsal-screen)).
+In Rename take, Rename song and History's **Name:** they are under the name,
+each with the go it would be, dimmed beside it, and **All songs…** at the
+end lists every song you have ever played, alphabetically. A click puts only
+the title in the field. Typing narrows the list to the songs that match, and
+clicking one then takes you out of the field, so the next Space records or
+saves. In the Rename take dialog you stay in the field, and Enter renames.
 
 Elsewhere a song's title opens the song's page in History: in Last time on
 the setup screen, and as a song's heading in a rehearsal's overview. **Not
@@ -381,14 +422,14 @@ its takes one by one.
 
 A title a song leaves behind, renamed or merged away, is remembered: typed
 again in any name field, with or without a number, it is that song. The
-field says "Palyn → Pałyn 12", and under the songs, "Palyn is Pałyn now.
-Make Palyn a new song". The link forgets the old name, and the take is a new
+field says "Palyn → Pałyn 12", and under it, "Palyn is Pałyn now. Make
+Palyn a new song". The link forgets the old name, and the take is a new
 song, Palyn 1. A song's page lists its old names under the title, **Also
 typed as** Palyn, each with × to forget it.
 
 ## History
 
-![Past rehearsals down the left, the chosen one beside them](screenshots/history.png)
+![Past rehearsals down the left, the chosen one beside them: played by the set Gig on the 25th, 4 of its 6 songs](screenshots/history.png)
 
 **History** has three views, switched at the top of its list: **Rehearsals**,
 evening by evening, **Songs**, song by song, and **Marks**, label by label.
@@ -408,6 +449,13 @@ right there, and the take's bar opens it in the player, which then has the
 whole window. Esc brings the list back. An evening is sorted here the same
 way too: the songs under a take nobody named, the false starts, **Send
 starred** and **Clear false starts**.
+
+A rehearsal played by a set has the set's name under its date, in the list
+and under its title. Over its songs, a card says how much of the set was
+played, "Gig on the 25th — 4 of 6 played", and lists the set's songs in
+order: each one played with ✓ and its goes, each other **not played**. Click
+a played song to go to its takes. The card shows the set as it was that
+evening, whatever has changed in it since.
 
 You can rename and delete takes and whole rehearsals here. The pencil and
 the bin next to the rehearsal's name work on the rehearsal. Deleting asks
@@ -630,6 +678,9 @@ While listening:
 | M | add a marker |
 | R | turn Repeat on or off |
 | ? | show the keys |
+
+On the rehearsal screen, with no take open, ↑ and ↓ name the next take
+after the song below or above the lit one.
 
 In History, with no take open, ↑ and ↓ go through the rehearsals, the
 songs in the Songs view, or the labels in the Marks view.

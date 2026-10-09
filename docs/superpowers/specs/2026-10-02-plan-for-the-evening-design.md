@@ -1,5 +1,7 @@
 # A plan for the evening: songs picked on the setup screen, ticked off as they are played
 
+> Put off on 7 Oct 2026 and replaced by [song sets](2026-10-08-song-sets-design.md): a set is kept for many evenings, not made for one.
+
 A rehearsal usually starts with "what are we doing tonight?", answered from
 memory.
 

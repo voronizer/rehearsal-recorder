@@ -31,6 +31,7 @@ _sd.query_hostapis = lambda: []
 _sd.OutputStream = _sd.InputStream = None
 sys.modules.setdefault("sounddevice", _sd)
 
+from alembic import command  # noqa: E402
 from alembic.autogenerate import compare_metadata  # noqa: E402
 from alembic.runtime.migration import MigrationContext  # noqa: E402
 from alembic.script import ScriptDirectory  # noqa: E402
@@ -38,7 +39,9 @@ from sqlalchemy import inspect, text  # noqa: E402
 
 from rehearsal_recorder.store import db  # noqa: E402
 from rehearsal_recorder.store.importer import import_all  # noqa: E402
-from rehearsal_recorder.store.library import LabelRefused, Library, SongRefused  # noqa: E402
+from rehearsal_recorder.store.library import (  # noqa: E402
+    LabelRefused, Library, SetRefused, SongRefused,
+)
 from rehearsal_recorder.store.models import Base  # noqa: E402
 from rehearsal_recorder.store.names import legacy_song, split_go, take_name  # noqa: E402
 
@@ -995,6 +998,155 @@ def main():
     ok("a name no song was called is not forgotten twice",
        lib.forget_song_name("polin") is False)
     lib.close()
+
+    print("\n[14] Sets (migration 0006)")
+    rec14 = tmp / "Sets"
+    rec14.mkdir()
+    db.open_engine(rec14, migrations_up_to(tmp, "0005")).dispose()
+    engine = db.open_engine(rec14)
+    ok("a database at 0005 is moved on to the newest migration",
+       db.current_revision(engine) == HEAD)
+    with engine.connect() as c:
+        drift = compare_metadata(MigrationContext.configure(c), Base.metadata)
+        tables14 = inspect(c).get_table_names()
+        rehearsal_cols14 = {col["name"] for col in inspect(c).get_columns("rehearsal")}
+    engine.dispose()
+    ok("and it is then what models.py describes, with a table of sets",
+       drift == [] and "song_set" in tables14)
+    ok("and a rehearsal can keep a copy of its set",
+       {"set_name", "set_songs"} <= rehearsal_cols14)
+
+    lib = Library(rec14)
+
+    def night14(name, created, titles, set_copy=None):
+        folder = rec14 / name
+        lib.create_rehearsal(folder, name, created, 48000, 24, [], set_copy=set_copy)
+        for n, title in enumerate(titles, start=1):
+            lib.add_take(folder, {"take_number": n, "name": title, "tracks": []})
+        return folder
+
+    def refused14(fn, *args, **kwargs):
+        try:
+            fn(*args, **kwargs)
+        except SetRefused as e:
+            return str(e)
+        return None
+
+    def songs14(answer, set_id):
+        found = next((s for s in answer if s["id"] == set_id), None)
+        return None if found is None else [(x["title"], x["new"]) for x in found["songs"]]
+
+    night14("Monday", "2026-09-01T19:00:00", ["Polyn", "Vesna", "Doroga"])
+    ok("there are no sets to begin with", lib.sets() == [])
+    sets14 = lib.add_set(" Gig ", ["Polyn", "vesna", "Polyn", " ", "Novaja"])
+    gig14 = sets14[0]["id"]
+    ok("a set is a name and songs in order, by their titles",
+       len(sets14) == 1 and sets14[0]["name"] == "Gig"
+       and songs14(sets14, gig14) == [("Polyn", False), ("Vesna", False), ("Novaja", True)])
+    ok("a set with the same name in another case is refused",
+       refused14(lib.add_set, "gig", []) == "There is already a set called Gig")
+    ok("a set needs a name", refused14(lib.add_set, "  ", ["Polyn"]) == "A set needs a name")
+    ok("a long name is cut as a label's is",
+       lib.add_set("x" * 60, [])[-1]["name"] == "x" * 40)
+    long14 = lib.sets()[-1]["id"]
+    ok("sets come back in the order they were made",
+       [s["name"] for s in lib.sets()] == ["Gig", "x" * 40])
+
+    sets14 = lib.update_set(gig14, name="Gig on the 25th")
+    ok("a set is renamed and keeps its songs",
+       sets14[0]["name"] == "Gig on the 25th"
+       and songs14(sets14, gig14) == [("Polyn", False), ("Vesna", False), ("Novaja", True)])
+    sets14 = lib.update_set(gig14, songs=["Doroga", "Polyn", "Doroga"])
+    ok("its songs are replaced and keep their name",
+       sets14[0]["name"] == "Gig on the 25th"
+       and songs14(sets14, gig14) == [("Doroga", False), ("Polyn", False)])
+    ok("a rename to another set's name is refused",
+       refused14(lib.update_set, gig14, name="X" * 40) == f"There is already a set called {'x' * 40}")
+    ok("a set that is not there is refused",
+       refused14(lib.update_set, 999, name="Nope") == "Set not found")
+
+    polyn14 = lib.song_id("Polyn")
+    lib.rename_song(polyn14, "Palyn")
+    ok("a song renamed after shows under its new title",
+       songs14(lib.sets(), gig14) == [("Doroga", False), ("Palyn", False)])
+    lib.merge_songs(lib.song_id("Doroga"), lib.song_id("Vesna"))
+    ok("a song merged away shows as the song it went into",
+       songs14(lib.sets(), gig14) == [("Vesna", False), ("Palyn", False)])
+    lib.update_set(gig14, songs=["Vesna", "Palyn", "Novaja"])
+
+    copy14 = lib.set_of(gig14)
+    ok("a set's copy is its name and titles", copy14 == {
+        "name": "Gig on the 25th", "songs": ["Vesna", "Palyn", "Novaja"]})
+    ok("a set that is not there has no copy", lib.set_of(999) is None)
+    tue14 = night14("Tuesday", "2026-09-02T19:00:00", ["Palyn"], set_copy=copy14)
+    ok("a rehearsal keeps the copy of its set",
+       lib.rehearsal(tue14)["set"] == {"name": "Gig on the 25th", "songs": [
+           {"title": "Vesna", "new": False}, {"title": "Palyn", "new": False},
+           {"title": "Novaja", "new": True}]})
+    lib.update_set(gig14, name="Another gig", songs=["Vesna"])
+    ok("changing the set later leaves the rehearsal's copy",
+       lib.rehearsal(tue14)["set"]["name"] == "Gig on the 25th"
+       and len(lib.rehearsal(tue14)["set"]["songs"]) == 3)
+    ok("a rehearsal played freely has no set",
+       lib.rehearsal(rec14 / "Monday")["set"] is None)
+    ok("every rehearsal says its set in the list",
+       {r["name"]: (r["set"] or {}).get("name") for r in lib.rehearsals()}
+       == {"Monday": None, "Tuesday": "Gig on the 25th"})
+
+    sets14 = lib.delete_set(gig14)
+    ok("a set is deleted", [s["id"] for s in sets14] == [long14])
+    ok("deleting it leaves the rehearsal's copy",
+       lib.rehearsal(tue14)["set"]["name"] == "Gig on the 25th")
+    ok("a set that is not there cannot be deleted",
+       refused14(lib.delete_set, gig14) == "Set not found")
+    lib.delete_set(long14)
+    fresh14 = lib.add_set("Fresh", [])
+    ok("an id is never given twice", fresh14[0]["id"] > long14)
+    ok("positions close up", [s["name"] for s in fresh14] == ["Fresh"])
+
+    # Two songs of one set merged into each other are one song, in it once.
+    night14("Wednesday", "2026-09-03T19:00:00", ["Sonca", "Dym", "Opus"])
+    twins14 = lib.add_set("Twins", ["Sonca", "Vesna", "Dym"])
+    twin14 = next(s["id"] for s in twins14 if s["name"] == "Twins")
+    twin_copy14 = lib.set_of(twin14)
+    thu14 = night14("Thursday", "2026-09-04T19:00:00", [], set_copy=twin_copy14)
+    lib.merge_songs(lib.song_id("Sonca"), lib.song_id("Dym"))
+    ok("two songs of a set merged into one are in it once, where the first was",
+       songs14(lib.sets(), twin14) == [("Dym", False), ("Vesna", False)])
+    ok("and in a rehearsal's copy of it too",
+       [s["title"] for s in lib.rehearsal(thu14)["set"]["songs"]] == ["Dym", "Vesna"])
+    # A title with a go after it is the song, as typed in a name field.
+    opus14 = lib.add_set("Opus night", ["Opus 5", "Opus 9 live"])
+    opus_id14 = next(s["id"] for s in opus14 if s["name"] == "Opus night")
+    ok("a set's title with a go after it is the song, as a typed name is",
+       songs14(lib.sets(), opus_id14) == [("Opus", False), ("Opus 9 live", True)])
+    lib.close()
+
+    print("\n[15] Migration 0006 keeps every take, down and up again")
+    rec15 = tmp / "Sets down"
+    rec15.mkdir()
+    lib = Library(rec15)
+    folder15 = rec15 / "Monday"
+    lib.create_rehearsal(folder15, "Monday", "2026-09-01T19:00:00", 48000, 24, [])
+    for n, title in enumerate(["Polyn", "Vesna"], start=1):
+        lib.add_take(folder15, {"take_number": n, "name": title, "tracks": []})
+    lib.close()
+
+    def counts15():
+        engine = db.make_engine(db.database_path(rec15))
+        with engine.connect() as c:
+            out = (c.execute(text("SELECT count(*) FROM rehearsal")).scalar(),
+                   c.execute(text("SELECT count(*) FROM take")).scalar())
+        engine.dispose()
+        return out
+
+    engine = db.make_engine(db.database_path(rec15))
+    with engine.begin() as c:
+        command.downgrade(db.alembic_config(c), "0005")
+    engine.dispose()
+    ok("going back to 0005 keeps every rehearsal and take", counts15() == (1, 2))
+    db.open_engine(rec15).dispose()
+    ok("and coming back to the newest keeps them too", counts15() == (1, 2))
 
     print()
     if problems:

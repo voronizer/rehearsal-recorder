@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils"
  * review screen's footer came to about 270 px; in a row, 183.
  *
  * `rule` draws a line between the two halves, where the left one holds a
- * field. An error goes over the buttons it is about.
+ * field or, on the screen after a take, the take itself. An error goes over
+ * the buttons it is about.
  *
  * With a field, the buttons get the same room on every screen that has one.
  * Its songs wrap under it by the room they have, and buttons of different

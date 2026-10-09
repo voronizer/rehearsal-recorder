@@ -171,7 +171,7 @@ and [stars](2026-10-02-stars-design.md).
   before, it offers: "Post the 23 takes already sent? Oldest first, so the
   chat reads in order." Posting them is background work like any other.
 
-## Schema (migration 0006)
+## Schema (migration 0007: 0006 is song sets)
 
 | Table | Change |
 |---|---|

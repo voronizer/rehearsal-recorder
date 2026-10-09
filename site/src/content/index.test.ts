@@ -7,7 +7,7 @@ import { displayVersion, latestVersion, newsLead } from "./changelog"
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
 describe("the site's content", () => {
-  it("has the eight tiles, in order", () => {
+  it("has the nine tiles, in order", () => {
     expect(content.features.tiles.map((t) => t.id)).toEqual([
       "health",
       "track",
@@ -15,9 +15,19 @@ describe("the site's content", () => {
       "marks",
       "names",
       "cloud",
+      "sets",
       "formats",
       "trash",
     ])
+  })
+
+  it("has the sets tile's words", () => {
+    const sets = content.features.tiles.find((t) => t.id === "sets")!
+    expect(sets.title).toBe("Rehearse the set, in order.")
+    expect(sets.body.replace(/\s+/g, " ").trim()).toBe(
+      "Make the gig's songs a set once. Every take is the song you are on until you move " +
+        "on, and History says which ones you never got to."
+    )
   })
 
   it("has the five steps, in order", () => {
@@ -27,6 +37,16 @@ describe("the site's content", () => {
       "keep",
       "history",
       "compare",
+    ])
+  })
+
+  it("tells the second step as the app goes through it", () => {
+    const record = content.story.steps.find((s) => s.id === "record")!
+    expect(record.title).toBe("Hear last week, then record.")
+    expect(leadAndBeats(record.body).beats).toEqual([
+      "▶ beside Pałyn on the start screen plays its best go from last week.",
+      "Start, and ↑ picks Pałyn under Next take.",
+      "Record: the take's name over a big clock, and a tile per track that turns red when it clips.",
     ])
   })
 
