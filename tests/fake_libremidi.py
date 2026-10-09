@@ -18,6 +18,14 @@ or trying it (the notes at the top of ports.py say how):
     setting either is written down in `world.error_callbacks_set`, which no
     test of ports.py may find true.
   - `absolute_timestamp()` answers 0 on Windows MIDI Services.
+  - The callbacks given to a configuration are held where Python's collector
+    cannot see them (nanobind keeps them in C++), so a cycle through one is
+    never collected: `world.alive()` says which of the library's objects are
+    still there, and a test that left one behind has found the leak the real
+    library reports at exit ("nanobind: leaked 1 instances").
+  - An object of the library that is let go of on a thread says so in
+    `world.order` as ("destroyed", kind, thread), as the real destructors
+    run there.
   - The OS's notice of a port coming or going reaches a CoreMIDI observer only
     when its thread lists the ports; any other gets it when the port comes or
     goes. Either way the callback runs inside `poll()` (`world.silent` turns
@@ -30,6 +38,7 @@ written down: ports.py must never be that of its caller.
 """
 
 import enum
+import gc
 import importlib.abc
 import importlib.machinery
 import queue
@@ -37,6 +46,7 @@ import sys
 import threading
 import time
 import types
+import weakref
 
 
 class World:
@@ -52,16 +62,47 @@ class World:
         self.dummy_in = set()
         # Port names whose open_port() fails, as a port another app holds.
         self.refuse = set()
+        # Make the library's InputConfiguration() raise, or its clock.
+        self.conf_raises = False
+        self.clock_raises = False
         self.silent = False
         self.error_callbacks_set = False
         self.imported_on = []
         self.made_on = []
-        self.inputs = []
-        self.observers = []
+        self._inputs = []
+        self._observers = []
+        self._made = weakref.WeakSet()
+        # Callbacks, by the id of the configuration that holds them.
+        self._hidden = {}
         # What happened, in order, as tuples whose first item says what:
         # ("import",), ("observer",), ("minput",). A test that fakes
         # Windows' COM adds its own calls (see test_ports.py).
         self.order = []
+
+    @property
+    def inputs(self):
+        """The MidiIn objects that are still alive."""
+        return [o for o in (r() for r in self._inputs) if o is not None]
+
+    @property
+    def observers(self):
+        """The Observer objects that are still alive."""
+        return [o for o in (r() for r in self._observers) if o is not None]
+
+    def alive(self):
+        """The kinds of the library's objects not yet let go of, sorted."""
+        gc.collect()
+        return sorted(type(o).__name__ for o in self._made)
+
+    def hold(self, owner, **callbacks):
+        """Keep callbacks for `owner` where the collector cannot see them."""
+        if id(owner) not in self._hidden:
+            self._hidden[id(owner)] = {}
+            weakref.finalize(owner, self._hidden.pop, id(owner), None)
+        self._hidden[id(owner)].update(callbacks)
+
+    def held(self, owner, name):
+        return self._hidden.get(id(owner), {}).get(name)
 
     def add_port(self, name, port_id, device="", maker=""):
         port = self.module.InputPort(name, port_id, device, maker)
@@ -137,13 +178,34 @@ def build(world):
 
     class ObserverConfiguration:
         def __init__(self):
+            world._made.add(self)
             self.track_hardware = True
             self.track_virtual = False
             self.notify_in_constructor = True
-            self.input_added = None
-            self.input_removed = None
             self._on_error = None
             self._on_warning = None
+            world.hold(self, input_added=None, input_removed=None)
+
+        @property
+        def input_added(self):
+            return world.held(self, "input_added")
+
+        @input_added.setter
+        def input_added(self, value):
+            # Like the real one: not None, which it refuses.
+            if value is None:
+                raise TypeError("incompatible function arguments")
+            world.hold(self, input_added=value)
+
+        @property
+        def input_removed(self):
+            return world.held(self, "input_removed")
+
+        @input_removed.setter
+        def input_removed(self, value):
+            if value is None:
+                raise TypeError("incompatible function arguments")
+            world.hold(self, input_removed=value)
 
         @property
         def on_error(self):
@@ -173,11 +235,15 @@ def build(world):
                 api = API.ALSA_RAW if "ALSA_RAW" in world.present_apis else API.DUMMY
             elif api.name not in world.present_apis:
                 api = API.DUMMY
+            world._made.add(self)
             self.conf = conf
             self.api = api
             self.q = queue.SimpleQueue()
             self.known = list(world.ports)
-            world.observers.append(self)
+            world._observers.append(weakref.ref(self))
+
+        def __del__(self):
+            world.order.append(("destroyed", "Observer", threading.current_thread()))
 
         def get_current_api(self):
             return self.api
@@ -213,10 +279,21 @@ def build(world):
 
     class InputConfiguration:
         def __init__(self):
-            self.on_message = None
+            if world.conf_raises:
+                raise RuntimeError("the input configuration could not be made")
+            world._made.add(self)
             self.ignore_sysex = True
             self.ignore_timing = True
             self.ignore_sensing = True
+            world.hold(self, on_message=None)
+
+        @property
+        def on_message(self):
+            return world.held(self, "on_message")
+
+        @on_message.setter
+        def on_message(self, value):
+            world.hold(self, on_message=value)
 
         @property
         def timestamps(self):
@@ -230,13 +307,17 @@ def build(world):
         def __init__(self, conf, api=None):
             world.made_on.append(("MidiIn", threading.current_thread()))
             world.order.append(("minput",))
+            world._made.add(self)
             self.conf = conf
             self.api = API.DUMMY if api.name in world.dummy_in else api
             self.q = queue.SimpleQueue()
             self.open = False
             self.port = None
             self.origin = time.perf_counter_ns() - 7_000_000_000
-            world.inputs.append(self)
+            world._inputs.append(weakref.ref(self))
+
+        def __del__(self):
+            world.order.append(("destroyed", "MidiIn", threading.current_thread()))
 
         def get_current_api(self):
             return self.api
@@ -259,6 +340,8 @@ def build(world):
             return Error()
 
         def absolute_timestamp(self):
+            if world.clock_raises:
+                raise RuntimeError("the clock could not be read")
             if self.api.name == "WINDOWS_MIDI_SERVICES":
                 return 0
             return time.perf_counter_ns() - self.origin

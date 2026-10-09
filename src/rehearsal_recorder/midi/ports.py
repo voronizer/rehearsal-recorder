@@ -9,10 +9,13 @@ test opens a real port. tests/test_ports.py runs this module against a
 stand-in with the library's quirks, and tests/midi_live.py is the one script
 that opens real ports.
 
-The library is only ever used on threads this module starts, never on the
+The library is only ever used on threads this module starts, not on the
 caller's: the observer's thread imports it and makes the observer, and each
 open port's thread makes its input, polls it and closes it. Where the caller
-is the GUI's thread that matters (see COM below).
+is the GUI's thread that matters (see COM below). The one exception is
+OpenPort.resync(), which the owner may call from its own thread and which reads
+a clock of the library's input (`absolute_timestamp()`), nothing that makes or
+frees anything.
 
 What pylibremidi 5.4.3 really does, which is not always what libremidi's own
 documentation says. Read this before changing anything below.
@@ -73,7 +76,16 @@ documentation says. Read this before changing anything below.
     OpenPort.connected() is answered from the list of ports instead.
   - The objects the library makes are held through the callbacks given to
     their configuration, which makes a loop Python's collector cannot see.
-    They are let go of by hand when a port or the system closes.
+    They are let go of by hand when a port or the system closes. And an error
+    from the library is kept as its text and never as the error: the error's
+    traceback holds the frame that made the library's objects, they hold the
+    callbacks, and the callbacks hold this module's, so one kept error is a
+    loop nothing can free, and nanobind reports it when the process ends
+    ("nanobind: leaked 1 instances!"). CI showed that on Windows, where MIDI
+    Services is absent and its observer fails; the same happens on Linux with
+    a failed constructor and a kept exception, and does not once only the text
+    is kept (_reason). The objects are also let go of on the thread that made
+    them and before it leaves its COM apartment, not after.
   - CoreMIDI sends its notices of a port coming or going to the run loop of
     the thread that made the client ("first called", says Apple's
     MIDIServices.h for MIDIClientCreate), and libremidi runs that loop only
@@ -114,7 +126,15 @@ Fields seen on CI. macOS (libremidi 5.4.3, `available_apis()` giving
       name='Reha probe' device='' maker='' id='3615898196'
 A virtual port has no device and no maker. Its id is CoreMIDI's unique ID, and
 a virtual port made again gets a new one (4000197376 for the same name).
-Windows: to be filled from the next run.
+Windows (the CI runner, which has no MIDI ports and no MIDI Services): the
+observer on WINDOWS_MIDI_SERVICES fails to start with "SystemError:
+nanobind::detail::nb_func_error_except(): exception could not be translated!",
+a C++ exception the binding cannot turn into a Python one, which is caught here
+like any other; the one on WINDOWS_MM starts ("an observer on WINDOWS_MM, 0
+inputs"), so the app uses classic Windows MIDI (the self-test says "Windows
+MIDI up, 0 inputs"). So there are no Windows port fields to copy yet: those
+are for the hand list, with a real device (what name, device and maker WinMM
+gives it; its id is empty by design).
 """
 
 import collections
@@ -194,6 +214,16 @@ class _NoLibrary(Exception):
     """The MIDI library cannot be imported: no other system will do better."""
 
 
+def _reason(error) -> str:
+    """
+    What to keep of an error from the library: its text. Never the error
+    itself: its traceback holds the frames, the frames hold the library's
+    objects, and those hold the callbacks and so this module's objects, in a
+    loop the collector cannot see (see the notes at the top).
+    """
+    return str(error) or type(error).__name__
+
+
 def bytes_of(message) -> bytes:
     """
     A received message's bytes, which pylibremidi 5.4.3 will only give one at
@@ -265,34 +295,56 @@ class OpenPort:
 
     def _run(self):
         with _com():
-            midi_in = self._make()
-            if midi_in is None:
-                self._started.set()
-                return
             try:
-                self._in = midi_in
-                self.resync()
-                interval = INPUT_POLL_SEC if self._library_time else STAMPED_POLL_SEC
-                self._started.set()
-                while not self._stop.wait(interval):
-                    self._poll(midi_in)
+                self._serve()
             finally:
-                # Closed here, where it was made and polled. What came in
-                # before it closed is still owed to on_event.
-                self._stop.set()
+                # Whatever happened, open() stops waiting.
+                self._started.set()
+                self._system._forget(self)
+
+    def _serve(self):
+        """
+        Make the input, open it, poll it until told to stop, and close it: all
+        on this thread, where the library's objects are also let go of, when
+        this returns and before the thread leaves its COM apartment.
+        """
+        midi_in = None
+        try:
+            midi_in = self._make()
+            self._in = midi_in
+            self.resync()
+            interval = INPUT_POLL_SEC if self._library_time else STAMPED_POLL_SEC
+            self._started.set()
+            while True:
+                # A sleep, not a wait on the stop event: on Windows a wait
+                # with a timeout is rounded up to the system's timer tick
+                # (15.6 ms), which time.sleep is not since Python 3.11, and a
+                # port stamped when read needs to look every few milliseconds.
+                time.sleep(interval)
+                if self._stop.is_set():
+                    break
+                self._poll(midi_in)
+        except Exception as e:  # anything, so that open() hears of it
+            if self._started.is_set():
+                log.exception("MIDI port %s", self.info.name)
+            else:
+                self._failure = _reason(e)
+        finally:
+            self._stop.set()
+            if midi_in is not None:
+                # What came in before it closed is still owed to on_event.
                 try:
                     midi_in.close_port()
                     self._poll(midi_in)
                 except Exception:
                     log.exception("closing MIDI port %s", self.info.name)
-                # The library's object holds this one, through
-                # `conf.on_message`, in a loop Python's collector cannot see.
-                # So it is let go of by hand.
-                self._in = None
-                self._system._forget(self)
+            # The library's object holds this one, through `conf.on_message`,
+            # in a loop Python's collector cannot see. So it is let go of by
+            # hand.
+            self._in = None
 
     def _make(self):
-        """The library's input, open on the port, or None and the reason."""
+        """The library's input, open on the port. Raises if it will not be."""
         lm = self._lm
         conf = lm.InputConfiguration()
         conf.on_message = self._receive
@@ -301,20 +353,14 @@ class OpenPort:
         conf.ignore_sysex = False
         conf.ignore_sensing = False
         conf.ignore_timing = True
-        try:
-            midi_in = lm.MidiIn(conf, self._system.api)
-            if midi_in.get_current_api() != self._system.api:
-                # The library makes a dummy when it cannot make the one
-                # asked for, and a dummy opens any port and hears nothing.
-                self._failure = f"{self.info.name}: no input could be made for it"
-                return None
-            error = midi_in.open_port(self._native)
-        except Exception as e:  # whatever the library raises
-            self._failure = str(e) or type(e).__name__
-            return None
+        midi_in = lm.MidiIn(conf, self._system.api)
+        if midi_in.get_current_api() != self._system.api:
+            # The library makes a dummy when it cannot make the one asked for,
+            # and a dummy opens any port and hears nothing.
+            raise PortBusy(f"{self.info.name}: no input could be made for it")
+        error = midi_in.open_port(self._native)
         if error:
-            self._failure = str(error)
-            return None
+            raise PortBusy(str(error))
         return midi_in
 
     def _receive(self, message):
@@ -402,8 +448,9 @@ class PortSystem:
         self._lm = None
         self.api = None
         self.name = ""
-        # How many times the library's own observer called back. Only for
-        # looking at: on_change does not depend on it.
+        # How many times the library's own observer called back. Only
+        # tests/midi_live.py and tests/test_ports.py read it, to print and to
+        # check; nothing in the app does, and on_change does not depend on it.
         self.observer_notices = 0
         self._failure = None
         self._watchers = []
@@ -424,7 +471,8 @@ class PortSystem:
             self._shut()
             raise RuntimeError("the MIDI system did not start")
         if self._failure is not None:
-            raise self._failure
+            no_library, text = self._failure
+            raise (_NoLibrary if no_library else RuntimeError)(text)
 
     def inputs(self) -> list[PortInfo]:
         """The input ports the OS lists now."""
@@ -533,19 +581,28 @@ class PortSystem:
 
     def _run(self):
         with _com():
-            observer = self._start()
-            self._ready.set()
-            if observer is None:
-                return
             try:
-                while not self._stop.is_set():
-                    self._wake.wait(WATCH_POLL_SEC)
-                    self._wake.clear()
-                    if self._stop.is_set():
-                        break
-                    self._pass(observer)
+                self._serve()
             finally:
+                self._ready.set()
                 self._shut()
+
+    def _serve(self):
+        """
+        Start the observer and watch with it until closed. The library's
+        objects are let go of when this returns, on this thread and before it
+        leaves its COM apartment.
+        """
+        observer = self._start()
+        self._ready.set()
+        if observer is None:
+            return
+        while not self._stop.is_set():
+            self._wake.wait(WATCH_POLL_SEC)
+            self._wake.clear()
+            if self._stop.is_set():
+                break
+            self._pass(observer)
 
     def _start(self):
         """The library's observer, listed once, or None and the reason."""
@@ -553,7 +610,7 @@ class PortSystem:
             try:
                 import pylibremidi as lm
             except Exception as e:  # a missing or broken library, any way
-                raise _NoLibrary(str(e) or type(e).__name__) from e
+                raise _NoLibrary(_reason(e)) from e
             asked = None if self._asked is None else getattr(lm.API, self._asked)
             conf = lm.ObserverConfiguration()
             conf.input_added = self._notice
@@ -576,7 +633,11 @@ class PortSystem:
             self._list(observer)
             return observer
         except Exception as e:
-            self._failure = e
+            # The error's text, not the error: see _reason. A MIDI Services
+            # that is not there fails here, and the error kept its traceback
+            # alive, and with it the configuration whose callbacks hold this
+            # system: nanobind reported the leak at exit.
+            self._failure = (isinstance(e, _NoLibrary), _reason(e))
             return None
 
     def _pass(self, observer):
@@ -656,5 +717,5 @@ def open_system() -> tuple[PortSystem | None, str | None]:
         except _NoLibrary as e:
             return None, f"MIDI is not available: {e}"
         except Exception as e:
-            reasons.append(str(e) or type(e).__name__)
+            reasons.append(_reason(e))
     return None, "MIDI is not available: " + "; ".join(reasons)

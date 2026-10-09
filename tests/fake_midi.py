@@ -42,10 +42,14 @@ class FakeOpenPort:
 
 class FakePortSystem:
     name = "Fake MIDI"
+    # How often the library's own observer called back: only
+    # tests/midi_live.py reads it, to print it.
+    observer_notices = 0
 
     def __init__(self, ports=()):
         self._ports = list(ports)
         self._watchers = []
+        self._closed = False
         # Every port opened and not yet closed.
         self.open_ports = set()
         # Names whose open() raises PortBusy, as a port another app holds does.
@@ -55,12 +59,14 @@ class FakePortSystem:
         self.opens = {}
 
     def inputs(self):
-        return list(self._ports)
+        return [] if self._closed else list(self._ports)
 
     def watch(self, on_change):
         self._watchers.append(on_change)
 
     def open(self, port, on_event):
+        if self._closed:
+            raise PortBusy("the MIDI system was closed")
         if port.name in self.refuse:
             raise PortBusy(f"{port.name} is in use")
         if port not in self._ports:
@@ -71,6 +77,8 @@ class FakePortSystem:
         return opened
 
     def close(self):
+        """As the real one: its ports close, and it lists and opens nothing."""
+        self._closed = True
         for port in list(self.open_ports):
             port.close()
 
@@ -106,5 +114,7 @@ class FakePortSystem:
         return heard
 
     def _tell(self):
+        if self._closed:
+            return
         for on_change in list(self._watchers):
             on_change()

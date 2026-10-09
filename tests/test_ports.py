@@ -15,6 +15,7 @@ None): this one puts the stand-in there instead.
 
 import contextlib
 import ctypes
+import inspect
 import logging
 import sys
 import threading
@@ -29,6 +30,7 @@ sys.path.insert(0, str(PROJECT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import fake_libremidi  # noqa: E402
+import fake_midi  # noqa: E402
 
 from rehearsal_recorder.midi import ports  # noqa: E402
 
@@ -134,6 +136,20 @@ def names_of(world):
     return [o[0] for o in world.order]
 
 
+def let_go_inside(world, kind):
+    """
+    Whether an object of the library of that kind was let go of on a thread
+    before that thread left its COM apartment. A destructor that runs after
+    CoUninitialize runs outside the apartment the object was made in.
+    """
+    for i, o in enumerate(world.order):
+        if o[0] == "destroyed" and o[1] == kind:
+            leaving = [j for j, p in enumerate(world.order)
+                       if p[0] == "com-uninit" and p[2] is o[2]]
+            return bool(leaving) and i < leaving[0]
+    return False
+
+
 def threads_named(prefix):
     return [t for t in threading.enumerate() if t.name.startswith(prefix)]
 
@@ -194,6 +210,10 @@ def main():
         ok("each on the thread that joined",
            {o[2] for o in world.order if o[0] == "com-init"}
            == {o[2] for o in world.order if o[0] == "com-uninit"})
+        wait_for(lambda: world.alive() == [])
+        ok("the observer is let go of before its thread leaves the apartment",
+           let_go_inside(world, "Observer"))
+        ok("and the input before its thread leaves", let_go_inside(world, "MidiIn"))
         systems.clear()
         fake_libremidi.remove()
     with windows_com(answer=-2147417850) as world:
@@ -482,6 +502,33 @@ def main():
     ok("stamped on Python's clock when it was read, though the library's is 0",
        abs(got[0][0] - before) < 50_000_000)
     finish()
+    # A wait on a lock with a timeout is rounded up to the system's timer tick
+    # on Windows (15.6 ms); time.sleep is not, since Python 3.11. So a port
+    # that is stamped when read, which has to look every 2 ms, sleeps.
+    sleeps = []
+    real_sleep = time.sleep
+
+    def spy(seconds):
+        sleeps.append((threading.current_thread().name, seconds))
+        real_sleep(seconds)
+
+    time.sleep = spy
+    try:
+        for platform, name in (("win32", "Synth"), ("darwin", "TD-17")):
+            world, system, why = start(platform)
+            world.add_port(name, 7)
+            got = []
+            system.open(system.inputs()[0], lambda ns, d: got.append(d))
+            world.send(name, [0x90, 60, 100])
+            wait_for(lambda: got)
+            finish()
+    finally:
+        time.sleep = real_sleep
+    port_sleeps = [sec for who, sec in sleeps if who.startswith("midi-in")]
+    ok("a port stamped when read sleeps between polls for STAMPED_POLL_SEC",
+       ports.STAMPED_POLL_SEC in port_sleeps)
+    ok("one with the library's times sleeps for INPUT_POLL_SEC",
+       ports.INPUT_POLL_SEC in port_sleeps)
 
     print("\n[12] Closing")
     world, system, why = start("darwin")
@@ -495,6 +542,8 @@ def main():
     ok("a closed port is not connected", rx.connected() is False)
     rx.close()
     ok("closing twice is fine", True)
+    ok("a closed port leaves none of the library's objects", wait_for(
+        lambda: "MidiIn" not in world.alive() and "InputConfiguration" not in world.alive()))
     try:
         rx.resync()
         ok("and measuring the clock of a closed port is harmless", True)
@@ -507,6 +556,7 @@ def main():
     ok("closing the system closes its ports", rx2.connected() is False)
     ok("and stops its threads", wait_for(
         lambda: not threads_named("midi")))
+    ok("and none of the library's objects is left", wait_for(lambda: world.alive() == []))
     try:
         system.open(ports.PortInfo("TD-17"), lambda ns, d: None)
         ok("a closed system opens nothing", False)
@@ -551,6 +601,86 @@ def main():
     ok("and no thread", wait_for(
         lambda: not threads_named("midi")))
     finish()
+
+    print("\n[13] What fails to start leaves nothing of the library behind")
+    # The library holds the callbacks it is given where Python's collector
+    # cannot see them, so a configuration that something keeps alive (a failed
+    # start's traceback holds the frame that made it) keeps what the callbacks
+    # point at alive, and the library reports it as a leak when the process
+    # ends. CI showed that on Windows, where MIDI Services is absent.
+    world = fake_libremidi.install()
+    world.observer_raises.add("WINDOWS_MIDI_SERVICES")
+    sys.platform = "win32"
+    system, why = ports.open_system()
+    sys.platform = REAL_PLATFORM
+    systems.append(system)
+    ok("the classic system starts where MIDI Services will not",
+       system is not None and system.name == "Windows MIDI")
+    ok("and only its own configuration is alive, not the failed attempt's",
+       wait_for(lambda: world.alive().count("ObserverConfiguration") == 1))
+    finish()
+    ok("and nothing after it closes", wait_for(lambda: world.alive() == []))
+    world = fake_libremidi.install()
+    world.present_apis.clear()
+    sys.platform = "win32"
+    system, why = ports.open_system()
+    sys.platform = REAL_PLATFORM
+    ok("neither starts", system is None)
+    ok("and nothing of the library is left", wait_for(lambda: world.alive() == []))
+    ok("the reason is text", isinstance(why, str))
+    finish()
+    for knob, what in (("conf_raises", "making its configuration"),
+                       ("clock_raises", "reading its clock")):
+        world, system, why = start("darwin")
+        world.add_port("TD-17", 1234)
+        info = system.inputs()[0]
+        setattr(world, knob, True)
+        began = time.perf_counter()
+        try:
+            system.open(info, lambda ns, d: None)
+            ok(f"a port that fails {what} raises PortBusy", False)
+        except ports.PortBusy as e:
+            ok(f"a port that fails {what} raises PortBusy, with the library's words",
+               "could not be" in str(e))
+        ok(f"and at once, not after waiting for it ({what})", time.perf_counter() - began < 2)
+        setattr(world, knob, False)
+        ok(f"and leaves no thread ({what})", wait_for(lambda: not threads_named("midi-in")))
+        ok(f"or object of the library's but the observer's ({what})", wait_for(
+            lambda: set(world.alive()) <= {"Observer", "ObserverConfiguration"}))
+        good = system.open(info, lambda ns, d: None)
+        ok(f"and the next open works ({what})", good.connected())
+        finish()
+
+    print("\n[14] fake_midi.py behaves as ports.py does")
+    fake = fake_midi.FakePortSystem([ports.PortInfo("TD-17")])
+    heard_a, heard_b = [], []
+    fake.open(fake.inputs()[0], lambda ns, d: heard_a.append(d))
+    fake.open(fake.inputs()[0], lambda ns, d: heard_b.append(d))
+    ok("an event goes to every port open on that name",
+       fake.send("TD-17", 1, b"x") is True and heard_a == [b"x"] and heard_b == [b"x"])
+    ok("and False where none listens", fake.send("Other", 1, b"x") is False)
+    told = []
+    fake.watch(lambda: told.append(1))
+    fake.plug(ports.PortInfo("Other"))
+    ok("a plugged port is told to the watchers", told == [1])
+    fake.close()
+    ok("a closed system lists nothing", fake.inputs() == [])
+    try:
+        fake.open(ports.PortInfo("TD-17"), lambda ns, d: None)
+        ok("and opens nothing", False)
+    except ports.PortBusy:
+        ok("and opens nothing", True)
+    fake.plug(ports.PortInfo("Third"))
+    ok("and tells no one", told == [1])
+    ok("every port it opened is closed", not fake.open_ports)
+    for real, stand_in, names in (
+            (ports.PortSystem, fake_midi.FakePortSystem, ("inputs", "watch", "open", "close")),
+            (ports.OpenPort, fake_midi.FakeOpenPort, ("connected", "resync", "close"))):
+        for name in names:
+            ok(f"{real.__name__}.{name} takes the parameters the stand-in's does",
+               list(inspect.signature(getattr(real, name)).parameters)
+               == list(inspect.signature(getattr(stand_in, name)).parameters))
+    ok("it has the attribute the live check prints", fake.observer_notices == 0)
 
     print("\n" + "=" * 60)
     sys.platform = REAL_PLATFORM

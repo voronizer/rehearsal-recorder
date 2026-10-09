@@ -165,8 +165,7 @@ def notices(system):
 def make_and_lose(lm, system, label):
     """
     The probe port appears and goes while `system` is watching: on_change is
-    told of both within PATIENCE_SEC, hard, and inputs() follows. Returns the
-    probe as the app kept it, or None if it never was listed.
+    told of both within PATIENCE_SEC, hard, and inputs() follows.
     """
     told = []
     system.watch(lambda: told.append(time.perf_counter_ns()))
@@ -182,7 +181,6 @@ def make_and_lose(lm, system, label):
        wait_for(lambda: len(told) > before))
     ok(f"{label}: inputs() drops the probe", wait_for(lambda: not listed(system)))
     notices(system)
-
 
 
 def macos():
