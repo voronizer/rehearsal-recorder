@@ -24,10 +24,12 @@ things to be true:
                        the real one's quirks. The other suites block the
                        library; this one puts the stand-in in its place.
 
-    test_midi.py       recording notes beside the audio — what stops Start,
-                       the rules a track's mode sets, and what the take
-                       keeps of them. No port is opened: the library is
-                       blocked and the rules are plain functions.
+    test_midi.py       recording notes beside the audio. So far: what stops
+                       Start (no track that records sound, a track with no
+                       port, two on one port) and that the card check then
+                       holds only the tracks that record audio. Later tasks
+                       add to it. No port is opened: the library is blocked
+                       and the rules are plain functions.
 
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.

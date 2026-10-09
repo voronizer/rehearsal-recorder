@@ -1,6 +1,7 @@
 """
-Recording notes beside the audio: what stops Start, the rules a track's mode
-sets, and (as the later sections come) what the take keeps of them.
+Recording notes beside the audio. So far this is what stops Start (A1, P2 and
+P3) and what the audio card check then holds; later sections are added here as
+the rest of it is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
@@ -99,13 +100,25 @@ def main():
        "Zed, Ann have no MIDI port yet. Pick one, or set them to Audio.")
     ok("a Both track alone satisfies A1",
        notes_problem([drums]) is None)
-    ok("an Audio track that was handed a port needs none and shares nothing",
-       notes_problem([{**gtr, "midi_port": {"name": "TD-17"}}, drums]) is None
-       and notes_problem([{**gtr, "mode": "audio", "midi_port": None}, drums]) is None)
-    ok("three on one port name the first two, in band order",
+    stray = {"name": "TD-17"}
+    ok("an Audio track carrying a stray port equal to another track's is not counted for P2",
+       notes_problem([{**gtr, "midi_port": stray}, drums]) is None
+       and notes_problem([drums, {**gtr, "midi_port": stray}]) is None
+       and notes_problem([{**gtr, "mode": "audio", "midi_port": stray}, drums]) is None)
+    ok("and an Audio track with a blank or no port is not one that is missing a port",
+       notes_problem([{**gtr, "midi_port": None}, drums]) is None
+       and notes_problem([{**gtr, "mode": "audio", "midi_port": {"name": " "}}, drums]) is None)
+    ok("three on one port name the first two met, in band order",
        notes_problem([gtr, {**keys, "name": "Pad", "midi_port": {"name": "TD-17"}}, drums,
                       {**keys, "midi_port": {"name": "TD-17"}}]) ==
        "Pad and Drums both take notes from TD-17.")
+    # R13: the first collision met walking the band is the one named, not the
+    # first track that has a partner. A and D share p1, B and C share p2; C
+    # is where the walk first meets a port already taken.
+    ok("the first collision met walking the band is the one named",
+       notes_problem([{**drums, "name": name, "midi_port": {"name": port}}
+                      for name, port in (("A", "p1"), ("B", "p2"), ("C", "p2"), ("D", "p1"))]) ==
+       "B and C both take notes from p2.")
     ok("a port is the same port when its name is the same, whatever else is known of it",
        notes_problem([gtr, {**drums, "midi_port": {"name": "TD-17", "id": "a"}},
                       {**keys, "midi_port": {"name": "TD-17", "id": "b"}}]) ==

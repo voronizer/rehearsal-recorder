@@ -56,11 +56,11 @@ use `fake_midi.py`, a system with nothing behind it.
 
 ## test_midi.py — notes beside the audio
 
-What a track's mode means and what it allows: the three sentences that stop
-Start (no track that records sound, a track that takes notes with no port,
-two on one port), and that the card check then holds only the tracks that
-record audio to the card's inputs. Plain functions over plain dictionaries:
-no port is opened, and the MIDI library is blocked as in the other suites.
+So far: the three sentences that stop Start (no track that records sound, a
+track that takes notes with no port, two on one port), and that the card check
+then holds only the tracks that record audio to the card's inputs. Later
+tasks add to it. Plain functions over plain dictionaries: no port is opened,
+and the MIDI library is blocked as in the other suites.
 
 ## The interface — in ui/, in TypeScript
 

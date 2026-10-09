@@ -75,8 +75,11 @@ def notes_problem(tracks):
       other (D7).
     - Two tracks take notes from one port (P2), as two on one input would.
       Ports are the same when their names are, and a track that only
-      records audio takes notes from none, whatever it is handed. The first
-      two found, in band order, are named.
+      records audio takes notes from none, whatever it is handed. The band
+      is walked in order and the first collision met is named: the track
+      that held the port and the one that asked for it. With A and D on one
+      port and B and C on another, B and C are named, because C is where the
+      walk first meets a port already taken.
 
     No tracks at all is not this check's to refuse: starting with none is
     refused earlier, with its own words.
@@ -87,6 +90,9 @@ def notes_problem(tracks):
     if not any(records_audio(t) for t in tracks):
         return "At least one track has to record sound, so the takes can be heard."
 
+    # records_notes is not redundant: port_of is None for a track that only
+    # records audio (it takes notes from none), and that one is not missing a
+    # port, so it must not be listed.
     portless = [t["name"] for t in tracks if records_notes(t) and port_of(t) is None]
     if portless:
         if len(portless) == 1:
