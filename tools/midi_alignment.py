@@ -40,20 +40,33 @@ What it assumes, so a result can be read for what it is:
   not counted, and a hit sustained or swelling into being, such as a bowed
   string, has no onset to measure.
 - Hits are at least 50 ms apart. Two nearer than that, a flam or a roll at its
-  fastest, are one onset, at the first.
+  fastest, are one onset, at the first. And a hit that comes soon after a louder
+  or longer-ringing one can be missed altogether, for it has to stand four times
+  above what the ring leaves: a backbeat at 120 bpm is found, a fast fill or a
+  hi-hat run after a crash may not be. The count of notes matched shows it, and
+  the median and the worst are of the hits found.
 - A WAV that opens on a loud sound, with nothing before it to compare with, has
   an onset at its first sample.
-- The onset is the first sample of the hit that reaches a tenth of its peak: the
-  very sample for a click, and a fraction of a millisecond into the rise of a
-  drum. Which means a drum's onset is a little later than its first stir; the
-  notes of an e-kit are sent at about the same point.
+- The onset is where the hit starts to rise: the first sample that reaches a
+  tenth of its peak (and one and a half times the level before it, so the ring
+  of the hit before is not taken for this one), found by going back through the
+  milliseconds of the rise from the one that caught the hit, up to 50 ms and not
+  to the onset before it (and a few ms after that). A click is on its very
+  sample. A drum is placed a share of its rise after it starts: about 0.5 ms for
+  a rise of 3 ms, 1.5 ms for 10 ms and 2.5 ms for 30 ms, soft or hard, so a note
+  exactly at the start of a drum hit reads that much early. Over the ring of a
+  hit before it, later still: up to 2 ms for a 3 ms rise over a 100 ms ring, up
+  to 7 ms for a 10 ms rise. Nothing here says when an e-kit sends its notes
+  against its audio; that is what the figures are for, and a steady -1 or -2 ms
+  on drums is within this slack.
 - A stereo or wider WAV is read as its loudest channel at each sample, so two
   channels that are upside down against each other do not cancel out.
 - A note is paired with the onset nearest it, if that is within 100 ms
   (`--max-ms`); a note with none is not matched. An onset goes to one note only,
   the nearest, so the second note of a chord, a note that makes no sound of its
   own (a hi-hat pedal) and a note while another's onset is nearer are left
-  unmatched, which the count says. Only note-ons count (not a note-on at
+  unmatched, which the count says; when none is matched the line says so, for a
+  take whose notes are further than that from the audio, or are not of it. Only note-ons count (not a note-on at
   velocity 0, which is a release). Every channel and note number counts.
 - A note paired with the wrong onset gives a wrong distance. On a click track
   that takes a note more than half a click from its own click; on drums, read
@@ -62,7 +75,8 @@ What it assumes, so a result can be read for what it is:
 
 It needs numpy and soundfile, which are in the app's requirements, and runs from
 a source checkout (src is put on the path, so the checkout is what is measured).
-The text it prints is plain ASCII, for a Windows console's code page.
+The text it prints is plain ASCII, for a Windows console's code page: a letter
+outside ASCII in a name is written as its \\uXXXX escape, so names stay apart.
 """
 
 import argparse
@@ -98,20 +112,26 @@ FLOOR_REL = 0.05  # of the loudest frame in the stretch
 FLOOR_ABS = 0.002  # of full scale, which is 1.0: -54 dBFS
 REFRACTORY_SEC = 0.05
 # Then the onset itself is placed to the sample: the first at or over a tenth of
-# the hit's peak (but over twice the level before it), from a little before the
-# frame that caught the hit to a little after.
+# the hit's peak (but over HIT_OVER_LEVEL times the level before it, so the ring
+# of a hit before is not taken for this one). The frame that caught a hit can be
+# late in a slow or soft rise, so the rise is followed back from it through the
+# frames that are all over that, for LOOK_BACK_SEC at most (as far as two hits
+# can be apart) and not to the onset before it and SETTLE_SEC. The hit's peak is
+# looked for LOOK_AHEAD_SEC on.
 HIT_FRACTION = 0.1
-HIT_OVER_LEVEL = 2.0
-LOOK_BACK_SEC = 0.003
+HIT_OVER_LEVEL = 1.5
+LOOK_BACK_SEC = 0.05
 LOOK_AHEAD_SEC = 0.02
+SETTLE_SEC = 0.005
 
-# Frames of a WAV read at a time, so a wide file is not held whole.
+# Samples of a WAV read at a time (frames times channels), so a wide file is not held whole.
 BLOCK_FRAMES = 1 << 20
 
 
 def say(text, stream=None):
-    """Prints `text` as plain ASCII: a name in another script is shown with ?."""
-    print(str(text).encode("ascii", "replace").decode("ascii"), file=stream or sys.stdout)
+    """Prints `text` as plain ASCII: a letter outside ASCII, in a name, is shown as
+    its \\uXXXX escape, which keeps two names that differ apart."""
+    print(str(text).encode("ascii", "backslashreplace").decode("ascii"), file=stream or sys.stdout)
 
 
 def complain(text):
@@ -155,20 +175,34 @@ def find_onsets(rectified, rate):
     level = (sums[end] - sums[begin]) / np.maximum(end - begin, 1)
 
     refractory = max(1, round(REFRACTORY_SEC * rate / hop))
-    back, ahead = round(LOOK_BACK_SEC * rate), round(LOOK_AHEAD_SEC * rate)
+    back_frames = max(1, round(LOOK_BACK_SEC * rate / hop))
+    settle = round(SETTLE_SEC * rate)
+    ahead = round(LOOK_AHEAD_SEC * rate)
     onsets = []
     last = None
     for frame in np.flatnonzero((peaks >= floor) & (peaks > RISE_RATIO * level)):
         if last is not None and frame - last < refractory:
             continue
         last = frame
-        # This frame is in the hit; where it begins is the first sample of it
-        # that is a tenth of its peak. The peak is at least this frame's, which
-        # is over four times the level, so there is always such a sample.
+        # This frame is in the hit, perhaps late in its rise. Where the hit
+        # begins is the first sample of it that is a tenth of its peak (over
+        # twice the level before it, so the tail of a hit before is not taken
+        # for this one). The peak is at least this frame's, which is over four
+        # times the level, so there is always such a sample.
         at = int(frame) * hop
         peak = rectified[at:at + ahead].max()
         over = max(HIT_FRACTION * peak, HIT_OVER_LEVEL * level[frame])
-        first = max(0, at - back)
+        # Back through the frames of the rise, as many as are all over that,
+        # and not further than LOOK_BACK_SEC, nor to the onset before this one
+        # and a moment after it.
+        lowest = max(0, int(frame) - back_frames)
+        if onsets:
+            lowest = max(lowest, (onsets[-1] + settle) // hop + 1)
+        k = int(frame)
+        if peaks[k] >= over:
+            while k > lowest and peaks[k - 1] >= over:
+                k -= 1
+        first = k * hop
         onsets.append(first + int(np.argmax(rectified[first:at + ahead] >= over)))
     return np.asarray(onsets, dtype=np.float64) / rate
 
@@ -203,8 +237,9 @@ def loudness(snd, first, last):
     snd.seek(first)
     parts = []
     left = last - first
+    step = max(1, BLOCK_FRAMES // snd.channels)
     while left > 0:
-        block = snd.read(min(left, BLOCK_FRAMES), dtype="float32", always_2d=True)
+        block = snd.read(min(left, step), dtype="float32", always_2d=True)
         if not len(block):
             break
         parts.append(np.abs(block).max(axis=1))
@@ -239,17 +274,18 @@ def measure(mid_path, wav_path, soundfile, max_sec=MAX_MS / 1000):
     return rate, duration, results
 
 
-def describe(result):
+def describe(result, max_ms):
     """One window's line, after its label and span."""
     if not result["notes"]:
         return "no notes"
-    text = f"matched {len(result['deltas'])} of {result['notes']} notes"
     deltas = result["deltas"]
-    if len(deltas):
-        median = float(np.median(deltas)) * 1000
-        worst = float(deltas[np.argmax(np.abs(deltas))]) * 1000
-        text += f", median {median:+.1f} ms, worst {worst:+.1f} ms"
-    return text + f" ({result['onsets']} onsets in the audio)"
+    text = f"matched {len(deltas)} of {result['notes']} notes"
+    heard = f"{result['onsets']} onsets in the audio"
+    if not len(deltas):
+        return text + f": none within {max_ms:g} ms of an onset ({heard}). Further apart than that, or not of the same take?"
+    median = float(np.median(deltas)) * 1000
+    worst = float(deltas[np.argmax(np.abs(deltas))]) * 1000
+    return text + f", median {median:+.1f} ms, worst {worst:+.1f} ms ({heard})"
 
 
 def find_wav(folder, wavs, name):
@@ -302,7 +338,7 @@ def main(argv=None):
 
     try:
         import soundfile
-    except ImportError:
+    except (ImportError, OSError):  # not installed, or its libsndfile is not there
         complain("This needs the soundfile package, which is in the app's requirements: "
                  "pip install -r requirements.txt")
         return 1
@@ -325,7 +361,7 @@ def main(argv=None):
         say(f"{mid.name} against {wav.name} ({rate} Hz, {clock(duration)} long)")
         for result in results:
             span = f"{clock(result['start'])}-{clock(result['end'])}"
-            say(f"  {result['label']:<12} {span + ':':<15} {describe(result)}")
+            say(f"  {result['label']:<12} {span + ':':<15} {describe(result, args.max_ms)}")
     if measured:
         say(f"A plus is a note later than its audio, a minus earlier. The aim is within {AIM_MS:g} ms.")
     return 0 if measured else 1

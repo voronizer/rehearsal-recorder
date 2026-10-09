@@ -141,16 +141,20 @@ does, a SysEx kept whole, the names kept,
 every tick `round(seconds * 1920)` from the new start over 20000 events and from
 a start that is not on a tick, a file a DAW saved again at other ticks and
 another tempo, and a file that cannot be read or written answered, never
-raised; and the tool for the hand check of F1, `tools/midi_alignment.py`, run as
-a command on a folder of generated WAVs and `.mid` files and its printed
-numbers read back: clicks every half second with notes 3 ms late or 3 ms early,
-a take of 130 s answered in two windows (the notes 2 ms behind at the start and
-9 ms at the end) and one of 90 s in one, 16 and 24-bit stereo and 32-bit float,
-drum hits that rise over 3 ms hard and soft, a note beyond the window left
-unmatched and `--max-ms` widening it, two notes at one click (one matched), a
-`.mid` with no WAV of its name and `--wav`, a folder with no `.mid`, no `.wav`
-or no folder at all exiting non-zero, an unreadable `.mid`, and the output staying
-ASCII for a name in another script. Later tasks add to it.
+raised; and the tool for the hand check of F1, `tools/midi_alignment.py`, run on
+a folder of generated WAVs and `.mid` files and its printed numbers read back
+(four cases as a command, for the exit code and the bytes on the pipe, the rest
+through its `main()` in the suite's own process): clicks every half second with
+notes 3 ms late or 3 ms early, a take of 130 s answered in two windows (the
+notes 2 ms behind at the start and 9 ms at the end) and one of 90 s in one, 16
+and 24-bit, 8 channels and 32-bit float, drum hits that rise over 3 ms hard and
+soft, soft hits (8% of the loudest) that rise over 10 ms and a ringing, irregular
+pattern, each with its notes at the exact start of the hit and the worst within
+3 ms, a note beyond the window left unmatched and said so, `--max-ms` widening
+it, two notes at one click (one matched), a `.mid` with no WAV of its name and
+`--wav`, a folder with no `.mid`, no `.wav` or no folder at all exiting
+non-zero, an unreadable `.mid`, a soundfile that will not import, and the output
+staying ASCII, names in Cyrillic told apart by their escapes. Later tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 

@@ -21,6 +21,9 @@ whose ports the checks plug in, pull out and play.
 
 import ast
 import builtins
+import contextlib
+import importlib.util
+import io
 import itertools
 import json
 import logging
@@ -2948,10 +2951,14 @@ def main():
     # tools/midi_alignment.py (F1): `python tools/midi_alignment.py "<take folder>"`
     # says how far each .mid's notes are from the onsets in the WAV they belong
     # to, so Alex can check the 10 ms aim with a click or an e-kit recorded as
-    # audio and as MIDI at once. It is run here as it is run by hand, a command
-    # on a folder, and what it prints is read back. The WAVs are made with
-    # numpy, and the .mid files with write_mid, so a time in them is a tick over
-    # 1920 (0.52 ms): a note meant to be 3 ms late is 6 ticks, 3.125 ms.
+    # audio and as MIDI at once. What it prints is read back. Four cases run it as
+    # it is run by hand, a command on a folder (the brief's 3 ms case, a name
+    # in another script, no folder given, a folder that is not there), because
+    # only a command shows the exit code and the bytes on the pipe; the rest call
+    # its main() in this process, which starts no interpreter for each. The WAVs
+    # are made with numpy, and the .mid files with write_mid, so a time in them
+    # is a tick over 1920 (0.52 ms): a note meant to be 3 ms late is 6 ticks,
+    # 3.125 ms.
     tool10 = PROJECT / "tools" / "midi_alignment.py"
 
     def clicks10(seconds, *, first=0.0, every=0.5, rate=48000, amp=0.8, hiss=0.0, channels=1):
@@ -2998,13 +3005,40 @@ def main():
             events += [(sec, bytes((0x99, 38, 100))), (sec + 0.05, bytes((0x89, 38, 0)))]
         write_mid(path, track_name=name, port_name="TD-17", start=[], events=sorted(events))
 
-    def run10(*args):
+    spec10 = importlib.util.spec_from_file_location("midi_alignment", tool10)
+    alignment = importlib.util.module_from_spec(spec10)
+    spec10.loader.exec_module(alignment)
+
+    def command10(*args):
         """The tool as a command: (exit code, what it printed, what it said as an
         error, whether all of both is plain ASCII, which a Windows console needs)."""
         done = subprocess.run([sys.executable, str(tool10), *map(str, args)], capture_output=True)
         plain = all(byte < 128 for byte in done.stdout + done.stderr)
         return (done.returncode, done.stdout.decode("ascii", "replace"),
                 done.stderr.decode("ascii", "replace"), plain)
+
+    def run10(*args):
+        """The same, through main() in this process, its output caught."""
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                code = alignment.main([str(arg) for arg in args])
+            except SystemExit as stopped:  # argparse
+                code = stopped.code if isinstance(stopped.code, int) else 1
+        return code, out.getvalue(), err.getvalue(), all(ord(c) < 128 for c in out.getvalue() + err.getvalue())
+
+    def kit10(starts, amps, rise, decay, hiss=0.0005, seed=4):
+        """A noise burst at each of `starts` (seconds), `amps` loud, that takes
+        `rise` s to rise and rings with a time constant of `decay` s, over a
+        little hiss: a drum as the audio hears it, one column of samples."""
+        rng = np.random.default_rng(seed)
+        ring = round(1.0 * 48000)
+        shape = np.minimum(np.arange(ring) / 48000 / rise, 1.0) * np.exp(-np.arange(ring) / 48000 / decay)
+        kit = rng.normal(0.0, hiss, round((starts[-1] + 1.0) * 48000))
+        for sec, loud in zip(starts, amps):
+            at = round(sec * 48000)
+            kit[at:at + ring] += (loud * shape * rng.normal(0.0, 1.0, ring) / 3.0)[:len(kit) - at]
+        return np.clip(kit, -1.0, 1.0)[:, None]
 
     seen10 = re.compile(r"matched (\d+) of (\d+) notes, median ([+-]\d+\.\d) ms, worst ([+-]\d+\.\d) ms")
 
@@ -3033,7 +3067,7 @@ def main():
         samples, clicks = clicks10(20.0)
         late = take10({"Drums.wav": (samples, 48000, "pcm16"),
                        "Drums.mid": [t + 0.003 for t in clicks]})
-        code, out, err, plain = run10(late)
+        code, out, err, plain = command10(late)
         got = windows10(out)
         ok("notes 3 ms late: it runs, and prints one window for a take of 20 s", code == 0 and len(got) == 1)
         ok("a median of 3 ms, within half a millisecond, and all 40 notes matched",
@@ -3069,9 +3103,10 @@ def main():
            "0:00-1:00" in out and "1:10-2:10" in out)
         samples, clicks = clicks10(90.0, rate=16000)
         shorter = take10({"Drums.wav": (samples, 16000, "pcm16"), "Drums.mid": [t + 0.003 for t in clicks]})
-        got = windows10(run10(shorter)[1])
+        out = run10(shorter)[1]
+        got = windows10(out)
         ok("a take under two minutes (90 s) is one window, all of it",
-           len(got) == 1 and got[0][:2] == (180, 180) and "0:00-1:30" in run10(shorter)[1])
+           len(got) == 1 and got[0][:2] == (180, 180) and "0:00-1:30" in out)
 
         # Other formats: what the app writes (16 and 24 bits) and what other
         # recorders do (32-bit float), mono and stereo. Only the right channel
@@ -3089,23 +3124,49 @@ def main():
             ok(f"{label}: the clicks are found, the median is 3 ms and all 20 notes are matched",
                len(got) == 1 and got[0][:2] == (20, 20) and abs(got[0][2] - 3.0) < 0.5)
 
+        # A wide file is read a block of whole frames at a time.
+        samples, clicks = clicks10(10.0, channels=8)
+        wide = take10({"Drums.wav": (samples, 48000, "pcm24"), "Drums.mid": [t + 0.003 for t in clicks]})
+        got = windows10(run10(wide)[1])
+        ok("an 8-channel WAV is read all the same: all 20 notes matched at 3 ms",
+           len(got) == 1 and got[0][:2] == (20, 20) and abs(got[0][2] - 3.0) < 0.5)
+
         # Drum hits are not clicks: a noise burst that takes 3 ms to rise and rings
         # for 150 ms, hard and soft, on irregular beats, over a little hiss. The
         # onset is where the hit rises, to within a millisecond or so.
         rng = np.random.default_rng(11)
-        hits = np.cumsum(rng.uniform(0.3, 1.2, 40)) + 0.3
-        hit_t = np.arange(round(0.4 * 48000)) / 48000
-        body = np.minimum(hit_t / 0.003, 1.0) * np.exp(-hit_t / 0.05)
-        kit = rng.normal(0.0, 0.0005, round((hits[-1] + 1.0) * 48000))
-        for sec, loud in zip(hits, rng.uniform(0.15, 0.9, len(hits))):
-            at = round(sec * 48000)
-            kit[at:at + len(body)] += loud * body * rng.normal(0.0, 1.0, len(body))
-        kit = np.clip(kit, -1.0, 1.0)[:, None]
+        hits = np.round((np.cumsum(rng.uniform(0.3, 1.2, 40)) + 0.3) * 48000) / 48000
+        kit = kit10(hits, rng.uniform(0.15, 0.9, len(hits)), 0.003, 0.05)
         drum_take = take10({"Drums.wav": (kit, 48000, "pcm24"), "Drums.mid": [t + 0.003 for t in hits]})
         got = windows10(run10(drum_take)[1])
         ok("drum hits that rise over 3 ms, hard and soft, are found: all 40, a median within a millisecond of 3 ms",
            len(got) == 1 and got[0][:2] == (40, 40) and abs(got[0][2] - 3.0) < 1.0)
         ok("and the worst of them is within 2.5 ms of the median", len(got) == 1 and abs(got[0][3] - got[0][2]) < 2.5)
+
+        # A hit is found where it starts, not where it has risen. With the notes at
+        # the exact start of each hit, the figures are how far the audio's onset is
+        # after it: a share of the rise. Soft hits that take 10 ms to rise are the
+        # hard case, for the frame that catches them comes late in the rise.
+        # One in four is hard (0.9) and the rest soft (0.07, about 8% of it).
+        soft_at = np.round((0.5 + 0.7 * np.arange(36)) * 48000) / 48000
+        soft_amps = np.where(np.arange(36) % 4 == 0, 0.9, 0.07)
+        soft_take = take10({"Drums.wav": (kit10(soft_at, soft_amps, 0.010, 0.08, seed=3), 48000, "pcm24"),
+                            "Drums.mid": list(soft_at)})
+        got = windows10(run10(soft_take)[1])
+        ok("soft hits, about 8% of the loudest of the minute, that rise over 10 ms: all 36 found, the worst within 3 ms",
+           len(got) == 1 and got[0][:2] == (36, 36) and abs(got[0][3]) < 3.0)
+        # Drums ring into the next hit: 100 ms decay, a hit every 0.2 s give or take
+        # 40%, 0.3 to 0.9 loud. A hit soon after a louder one can be missed (it has
+        # to stand four times above the ring), and the count says how many; those
+        # found are placed at their start, not up to 28 ms into it.
+        gaps = np.random.default_rng(12).uniform(0.12, 0.28, 110)
+        ring_at = np.round((1.0 + np.cumsum(gaps)[np.cumsum(gaps) < 20.0]) * 48000) / 48000
+        ring_amps = np.random.default_rng(112).uniform(0.3, 0.9, len(ring_at))
+        ring_take = take10({"Drums.wav": (kit10(ring_at, ring_amps, 0.003, 0.1, seed=212), 48000, "pcm24"),
+                            "Drums.mid": list(ring_at)})
+        got = windows10(run10(ring_take)[1])
+        ok("a ringing, irregular pattern: more than half its hits are found, and the worst is within 3 ms",
+           len(got) == 1 and got[0][0] > got[0][1] / 2 and abs(got[0][3]) < 3.0)
 
         # How far a note may be from an onset and still be its own.
         samples, clicks = clicks10(10.0)
@@ -3113,7 +3174,10 @@ def main():
         code, out, err, plain = run10(far)
         ok("notes 300 ms late are nearer the next click than their own, and beyond the 100 ms window: none matched",
            code == 0 and "matched 0 of 20 notes" in out and not windows10(out))
-        got = windows10(run10(far, "--max-ms", 250)[1])
+        ok("and it says so, with the window: none within 100 ms of an onset",
+           "none within 100 ms of an onset" in out)
+        out = run10(far, "--max-ms", 250)[1]
+        got = windows10(out)
         ok("--max-ms 250 takes them for the click after, 200 ms early, but for the last note, which has none after it",
            len(got) == 1 and got[0][:2] == (19, 20) and abs(got[0][2] + 200.0) < 0.6)
         two = take10({"Drums.wav": (samples, 48000, "pcm16"),
@@ -3150,9 +3214,9 @@ def main():
         notes_only = take10({"Keys.mid": [t + 0.003 for t in clicks]})
         code, out, err, plain = run10(notes_only)
         ok("a folder with a .mid and no WAV exits non-zero and says so", code != 0 and ".wav" in err and not out)
-        code, out, err, plain = run10(root10 / "not-there")
+        code, out, err, plain = command10(root10 / "not-there")
         ok("a folder that is not there exits non-zero and says so", code != 0 and "not-there" in err)
-        code, out, err, plain = run10()
+        code, out, err, plain = command10()
         ok("no folder given is a usage error that says how to run it, not a traceback",
            code != 0 and "usage" in err.lower() and "Traceback" not in err)
 
@@ -3160,14 +3224,40 @@ def main():
         samples, clicks = clicks10(5.0)
         stem10 = "Pa" + chr(0x142) + "yn"  # Palyn with an l-stroke, which cp1252 cannot print
         polish = take10({stem10 + ".wav": (samples, 48000, "pcm16"), stem10 + ".mid": [t + 0.003 for t in clicks]})
-        code, out, err, plain = run10(polish)
-        ok("a track whose name has a letter outside ASCII is measured and the output stays ASCII (the letter is a ?)",
-           code == 0 and plain and "Pa?yn.mid" in out and len(windows10(out)) == 1)
+        code, out, err, plain = command10(polish)
+        escaped = ascii(stem10)[1:-1]  # Pa, a backslash, u0142, yn
+        ok("a track whose name has a letter outside ASCII is measured and the output stays ASCII, "
+           "the letter written as its escape",
+           code == 0 and plain and escaped + ".mid" in out and escaped != stem10 and len(windows10(out)) == 1)
+        # Names in Cyrillic, which this app is written for, stay apart on a console that has none.
+        names10 = ["".join(map(chr, letters)) for letters in ((0x411, 0x430, 0x441), (0x421, 0x43E, 0x43B, 0x43E))]
+        cyrillic = take10({f"{name}.{kind}": ((samples, 48000, "pcm16") if kind == "wav" else [t + 0.003 for t in clicks])
+                           for name in names10 for kind in ("wav", "mid")})
+        code, out, err, plain = run10(cyrillic)
+        ok("two tracks named in Cyrillic are measured and told apart in plain ASCII, not both as ?s",
+           code == 0 and plain and "?" not in out
+           and all(ascii(name)[1:-1] + ".mid against" in out for name in names10) and len(windows10(out)) == 2)
         broken = take10({"Drums.wav": (samples, 48000, "pcm16")})
         (broken / "Drums.mid").write_bytes(b"not a midi file")
         code, out, err, plain = run10(broken)
         ok("a .mid that cannot be read is named, with no traceback, and nothing measured exits non-zero",
            code != 0 and "Drums.mid" in err and "Traceback" not in err)
+
+        # libsndfile missing: soundfile raises OSError, not ImportError, when it imports.
+        real_import = builtins.__import__
+
+        def no_libsndfile(name, *args, **kwargs):
+            if name == "soundfile":
+                raise OSError("sndfile library not found using ctypes.util.find_library")
+            return real_import(name, *args, **kwargs)
+
+        builtins.__import__ = no_libsndfile
+        try:
+            code, out, err, plain = run10(late)
+        finally:
+            builtins.__import__ = real_import
+        ok("a soundfile that will not import, for want of libsndfile, is said plainly, with no traceback",
+           code != 0 and "soundfile" in err and "pip install" in err and "Traceback" not in err and not out)
 
         tool_source = tool10.read_text(encoding="utf-8") if tool10.exists() else ""
         tool_imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
