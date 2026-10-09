@@ -4,7 +4,9 @@ pulled out by the test, and events arrive when the test sends them.
 
 It has the methods midi/ports.py's PortSystem has and nothing the app does not
 call, so code written against this one runs against the real one. The extra
-calls are the test's: plug(), pull(), send().
+calls are the test's: plug(), pull(), send(); and two settings: `exclusive`,
+for a system that opens a port only once (classic Windows MIDI), and `notify`,
+False for an observer that misses a change.
 
     fake = FakePortSystem()
     fake.plug(PortInfo("TD-17"))
@@ -46,7 +48,7 @@ class FakePortSystem:
     # tests/midi_live.py reads it, to print it.
     observer_notices = 0
 
-    def __init__(self, ports=()):
+    def __init__(self, ports=(), exclusive=False):
         self._ports = list(ports)
         self._watchers = []
         self._closed = False
@@ -54,6 +56,12 @@ class FakePortSystem:
         self.open_ports = set()
         # Names whose open() raises PortBusy, as a port another app holds does.
         self.refuse = set()
+        # True: a port already open cannot be opened again, not even by the
+        # same app, as on classic Windows MIDI (spec P5). CoreMIDI lets it be.
+        self.exclusive = exclusive
+        # False: plug() and pull() tell no watcher, as an observer that misses
+        # a change does (spec P6).
+        self.notify = True
         # How many times each port name has been opened, closed ones too:
         # a port that was kept open between two screens was opened once.
         self.opens = {}
@@ -71,6 +79,8 @@ class FakePortSystem:
             raise PortBusy(f"{port.name} is in use")
         if port not in self._ports:
             raise PortBusy(f"{port.name} is not in the list of ports")
+        if self.exclusive and any(opened.info == port for opened in self.open_ports):
+            raise PortBusy(f"{port.name} is already open")
         self.opens[port.name] = self.opens.get(port.name, 0) + 1
         opened = FakeOpenPort(self, port, on_event)
         self.open_ports.add(opened)
@@ -114,7 +124,7 @@ class FakePortSystem:
         return heard
 
     def _tell(self):
-        if self._closed:
+        if self._closed or not self.notify:
             return
         for on_change in list(self._watchers):
             on_change()

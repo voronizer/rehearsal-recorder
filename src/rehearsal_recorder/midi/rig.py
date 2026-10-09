@@ -4,9 +4,17 @@ the setup screen, watched as they come and go, and handed to each take.
 
 A port is opened when the rehearsal starts and not when a take does, because
 what was set before the take belongs in it: the pedal already down, the sound
-already picked (spec F6). So between takes the rig keeps each track's PortState
-and counts what its port sends, for the meters, and during a take it also hands
-every event to the take's MidiRecorder.
+already picked (spec F6). So between takes the rig keeps each port's PortState
+and counts what it sends, for the meters, and during a take it also hands every
+event to the take's MidiRecorder.
+
+What is open, and what it has set, belongs to the port and not to the name of
+the track it feeds. A port is opened once while any track or the check wants it,
+and a track takes notes from it: a track renamed, two tracks that swap ports, a
+port picked during the check that the check had open already, all keep the port
+open and what it has set. That also matters to a system that lets a port be
+opened only once, as classic Windows MIDI does (P5): the rig never asks it for a
+port it has open. Two tracks on one port share it (P2 is what stops Start).
 
 A track whose port is not there is not an error (D7). It waits, and the port is
 opened when it is plugged in, during a take too: the observer says the list
@@ -15,7 +23,10 @@ not. A port another app holds (P5), and one that two identical devices make it
 impossible to tell (P1), wait the same way, each with its own word for the
 screen. A device behind an interface's MIDI in that is switched off leaves its
 port there; if it has been sending active sensing, its silence says it went
-(F7), and its held notes are let go when it was last heard.
+(F7). A port that goes, by either way or because nothing wants it any more, lets
+go of what it held: in the take, when it was last heard (or now, for one closed
+while still there), and in its state, so the next take does not begin with a
+pedal down that was let up in this one.
 
 Three kinds of thread meet here:
 
@@ -23,25 +34,28 @@ Three kinds of thread meet here:
     last heard and puts the event on one queue, and does nothing else, so a
     hi-hat pedal's stream of positions or a burst of SysEx never holds up the
     next event;
-  - the writer, which takes the queue in order: the track's PortState, the
+  - the writer, which takes the queue in order: the port's PortState, the
     counts, the loudest note, the same notes on two ports (P8), and the take's
-    recorder. A port's coming and going reaches the recorder on the same queue,
-    as markers, so a port's events that were already waiting are written before
-    it is said to be gone, and none of them is lost for arriving after;
-  - the watcher, every TICK_SEC: a port that has gone quiet, the list of ports,
-    each port's clock, and the recorder's flush with the audio's.
+    recorder. Which tracks a port feeds, and its coming and going, reach the
+    writer on the same queue, as markers, so a port's events that were already
+    waiting are written for the tracks it fed when they came, before it is
+    said to be gone, and none of them is lost for arriving after;
+  - the watcher, every TICK_SEC of the rig's clock: a port that has gone quiet,
+    the list of ports, each port's clock, and the recorder's flush with the
+    audio's.
 
 `threads=False` runs neither the writer nor the watcher, and whoever made the
 rig calls `drain()` and `tick()`: the suites do, with a clock of their own.
 
-Locks. `_manage` is held by whatever opens or closes ports (use, refresh, a
-tick's look, begin_take, the end of a take, release), so they happen one at a
-time and the markers they put on the queue are in the order the ports changed.
-`_lock` guards the rig's own state and is only ever held briefly: never while a
-port is opened or closed, never while the recorder is called. The writer takes
-`_lock` alone, so nothing it waits for waits for a port. The order is `_manage`,
-then `_lock`, then a PortState's own lock; the recorder's lock is taken by its
-own calls only, and the recorder calls nothing here.
+Locks. `_manage` is held by whatever opens or closes ports or moves a track from
+one to another (use, refresh, a tick's look, begin_take, the end of a take,
+release), so they happen one at a time and the markers they put on the queue are
+in the order things changed. `_lock` guards the rig's own state and is only ever
+held briefly: never while a port is opened or closed, never while the recorder
+is called. The writer takes `_lock` alone, so nothing it waits for waits for a
+port. The order is `_manage`, then `_lock`, then a PortState's own lock; the
+recorder's lock is taken by its own calls only, and the recorder calls nothing
+here.
 
 It imports neither the MIDI library nor mido: the ports come from ports.py (or
 fake_midi.py), and the files from capture.py.
@@ -94,22 +108,29 @@ _STOP = object()  # on the queue: the writer's thread ends
 
 class _Port:
     """
-    A port the rig has open. `track` is the _Track it feeds, or None for a port
-    the check only counts the notes of (P7).
+    A port the rig has open, whichever tracks it feeds: none for one the check
+    only counts the notes of (P7).
 
-    `heard_ns` is set on the port's own thread as each event arrives (a single
-    assignment), so a writer that is behind does not make a busy port look
-    quiet. `sensing` and `silent_at` are under the rig's lock: whether it has
-    sent active sensing, and the `heard_ns` at which it went quiet. `done` is
-    the writer's own: it has passed the port's closing, and hears it no more.
+    `state` is the port's PortState, kept by the rig for the whole rehearsal and
+    found again when the port is opened again. `tracks` is the _Tracks that take
+    notes from it now, as the rig's lock sees it, which the meters follow; `fed`
+    is their names as the writer has reached them on the queue, which the take's
+    recorder follows. `heard_ns` is set on the port's own thread as each event
+    arrives (a single assignment), so a writer that is behind does not make a
+    busy port look quiet. `sensing` and `silent_at` are under the rig's lock:
+    whether it has sent active sensing, and the `heard_ns` at which it went
+    quiet. `done` is the writer's own: it has passed the port's closing, and
+    hears it no more.
     """
 
-    __slots__ = ("track", "info", "port", "heard_ns", "sensing", "silent_at", "done")
+    __slots__ = ("info", "port", "state", "tracks", "fed", "heard_ns", "sensing", "silent_at", "done")
 
-    def __init__(self, track, info, now):
-        self.track = track
+    def __init__(self, info, state, now):
         self.info = info
         self.port = None
+        self.state = state
+        self.tracks = []
+        self.fed = []
         self.heard_ns = now
         self.sensing = False
         self.silent_at = None
@@ -118,22 +139,21 @@ class _Port:
 
 class _Track:
     """
-    A track that takes notes, as the last `use` gave it. It keeps its PortState
-    for the whole rehearsal, and a track whose saved port changes is a new
-    _Track: the old port's state is not the new one's.
+    A track that takes notes, as the last `use` gave it, by its name: its port
+    as saved, what the screen says of it, and its meters.
     """
 
-    __slots__ = ("name", "saved", "index", "state", "status", "found", "port",
+    __slots__ = ("name", "saved", "index", "status", "found", "last", "port",
                  "notes", "vel", "echo", "recent")
 
-    def __init__(self, name, saved):
+    def __init__(self, name):
         self.name = name
-        self.saved = saved  # the saved port (rules.port_of), None when none is picked
+        self.saved = None  # the saved port (rules.port_of), None when none is picked
         self.index = 0  # its place in the band, for P8's "the later card"
-        self.state = PortState()
-        self.status = "none"  # what the screen says when no port is open
+        self.status = "none"  # what the screen says when no port is open for it
         self.found = None  # the PortInfo its saved port is now, if one
-        self.port = None  # the _Port open for it
+        self.last = None  # the last PortInfo it was found as, whose state a take begins with
+        self.port = None  # the _Port it takes notes from
         self.notes = 0
         self.vel = 0  # the loudest note-on since activity() last read it
         self.echo = None  # the track whose notes this one also gets (P8)
@@ -143,10 +163,13 @@ class _Track:
 class _Take:
     """One take's recorder, and what the writer has told it."""
 
-    __slots__ = ("recorder", "here", "flush_at", "said")
+    __slots__ = ("recorder", "begun", "here", "flush_at", "said")
 
-    def __init__(self, recorder, flush_at):
+    def __init__(self, recorder, begun, flush_at):
         self.recorder = recorder
+        # When it began on the rig's clock: a track that a marker put on the
+        # queue before then makes present is present from then.
+        self.begun = begun
         # Track name -> the _Port it is present through, as far as the recorder
         # has been told. The writer's alone.
         self.here = {}
@@ -171,16 +194,18 @@ class MidiRig:
         self._manage = threading.RLock()
         self._queue = queue.SimpleQueue()
         self._tracks = {}  # name -> _Track, in the band's order
+        self._live = {}  # PortInfo -> _Port, every port open
+        self._states = {}  # PortInfo -> PortState, every port opened this rehearsal
         self._ports = []  # the ports as last read
         self._counted = {}  # PortInfo -> note-ons heard on it, for the picker (P7)
-        self._checking = {}  # PortInfo -> _Port open only to count (P7)
         self._check = False
         self._echoes = {}  # (first track, later track) -> times the same note came on both
         self._take = None
         self._ticks = 0
         self._changed = False  # the observer said the list changed
         self._closed = False
-        self._failure = None
+        self._failures = {}  # what failed -> how, as last said in the log
+        self._failures_lock = threading.Lock()
         self._wake = threading.Event()
         self._stopping = threading.Event()
         self._writer = self._watcher = None
@@ -214,44 +239,44 @@ class MidiRig:
 
     def use(self, tracks, check=False) -> None:
         """
-        These are the band's tracks now. Every track that takes notes gets its
-        port opened if it is there; one already open for the same track and the
-        same saved port stays open, and every other port is closed. With `check`
-        the other ports of each picked port's device are opened too, only to
-        count their notes, so the picker can show which of a keyboard's ports is
-        being played (P7). Raises nothing for a port: one missing, in use or
-        alike shows so in `activity`.
+        These are the band's tracks now. Every track that takes notes takes them
+        from its port, opened if it is there and not open already; a port no
+        track and no check wants any more is closed. With `check` the other ports
+        of each picked port's device are opened too, only to count their notes,
+        so the picker can show which of a keyboard's ports is being played (P7).
+        Raises nothing for a port: one missing, in use or alike shows so in
+        `activity`.
         """
         with self._manage:
             if self._closed:
                 return
             listing = self._list()
             with self._lock:
-                old, new = self._tracks, {}
+                old, new, moved = self._tracks, {}, set()
                 for given in tracks or ():
                     if not isinstance(given, dict) or not records_notes(given):
                         continue
                     name = given.get("name")
                     if not isinstance(name, str) or name in new:
                         continue
+                    track = old.get(name) or _Track(name)
                     saved = port_of(given)
-                    track = old.get(name)
-                    if track is None or track.saved != saved:
-                        track = _Track(name, saved)
+                    if name not in old or track.saved != saved:
+                        moved.add(name)
+                        track.saved = saved
+                        track.echo = None
+                        track.recent.clear()
                     track.index = len(new)
                     new[name] = track
-                leaving = [t.port for t in old.values() if new.get(t.name) is not t and t.port is not None]
                 self._tracks = new
                 self._check = bool(check)
-                # An echo between tracks that are not both still here, as they were, is forgotten.
-                kept = {name for name, track in new.items() if old.get(name) is track}
+                # An echo between tracks that are not both still here, on the
+                # ports they had, is forgotten.
                 self._echoes = {pair: hits for pair, hits in self._echoes.items()
-                                if pair[0] in kept and pair[1] in kept}
+                                if all(name in new and name not in moved for name in pair)}
                 for track in new.values():
                     if track.echo is not None and (track.echo, track.name) not in self._echoes:
                         track.echo = None
-            for port in leaving:
-                self._close(port)
             self._settle(listing)
 
     def refresh(self) -> None:
@@ -293,9 +318,10 @@ class MidiRig:
         """
         A take has started, its audio on `anchor` (its AudioClock, already
         started). Its recorder gets every track that takes notes, each starting
-        from a copy of its port's state as it is now (F6), and every port open and
-        heard as there is present from now. The check's other ports close, and
-        the counts start again.
+        from a copy of its port's state as it is now (F6), and every track whose
+        port is open and heard as there is present from now. The check's other
+        ports close, and the counts start again. A take still recording is
+        abandoned first, as abandon_take would: its notes stay for the drafts.
         """
         with self._manage:
             if self._closed:
@@ -304,24 +330,38 @@ class MidiRig:
                 self.abandon_take()
             with self._lock:
                 self._check = False
-                checking = list(self._checking.values())
-            for port in checking:
+                counting = [port for port in self._live.values() if not port.tracks]
+            for port in counting:
                 self._close(port)
             now = self._now()
             with self._lock:
                 self._zero()
                 tracks = list(self._tracks.values())
+                states = {}
+                for track in tracks:
+                    port = track.port
+                    info = port.info if port is not None else track.last
+                    if info not in self._states:
+                        continue
+                    state = self._states[info].copy()
+                    if port is None or port.silent_at is not None:
+                        # Not there as the take begins: what its port held was
+                        # let go when it went (F7), whether or not the writer
+                        # has reached that yet.
+                        for message in state.releases():
+                            state.feed(message)
+                    states[track.name] = state
                 # The copies and the take begin under the one lock the writer
                 # holds for each event, so an event is either in a copy or in
                 # the take, and never neither.
                 recorder = MidiRecorder(out_dir, anchor,
                                         [{"name": t.name, "port": t.saved["name"] if t.saved else ""}
                                          for t in tracks],
-                                        {t.name: t.state.copy() for t in tracks})
-                self._take = _Take(recorder, now + int(FLUSH_INTERVAL_SEC * _NS))
-                for track in tracks:
-                    if track.port is not None and track.port.silent_at is None:
-                        self._queue.put((None, "present", track.port, now))
+                                        states)
+                self._take = _Take(recorder, now, now + int(FLUSH_INTERVAL_SEC * _NS))
+                for port in self._live.values():
+                    if port.tracks and port.silent_at is None:
+                        self._queue.put((None, "present", port, None, now))
 
     def end_take(self, duration_sec) -> list[dict]:
         """
@@ -340,7 +380,11 @@ class MidiRig:
             return []
 
     def abandon_take(self) -> None:
-        """The take is dropped as a crash would leave it, for the drafts to finish."""
+        """
+        The take is dropped as a crash would leave it: once the writer has
+        written what arrived before now, its .midraw files stay where they are,
+        for the drafts to finish.
+        """
         take = self._end()
         if take is not None:
             try:
@@ -349,8 +393,8 @@ class MidiRig:
                 log.error("The take's notes could not be let go of: %r", e)
 
     def release(self) -> None:
-        """The rehearsal is over: every port closes and the tracks are forgotten.
-        A take still recording is abandoned."""
+        """The rehearsal is over: every port closes, and the tracks, what the ports
+        had set and the counts are forgotten. A take still recording is abandoned."""
         with self._manage:
             self._release()
 
@@ -417,78 +461,92 @@ class MidiRig:
             return
         status = data[0]
         note_on = 0x90 <= status <= 0x9F and len(data) == 3 and data[1] < 0x80 and 0 < data[2] < 0x80
-        track = port.track
         with self._lock:
-            if note_on:
-                self._counted[port.info] = self._counted.get(port.info, 0) + 1
-            if track is None:
-                return
             if port.silent_at is not None and ns > port.silent_at:
                 port.silent_at = None  # heard again
             if status == _SENSING:
                 port.sensing = True
             else:
-                track.state.feed(data)
+                port.state.feed(data)
             take = self._take
             if note_on:
-                track.notes += 1
-                track.vel = max(track.vel, data[2])
-                if take is None:
-                    self._echo(track, ns, data[1], data[2])
+                # Once for the port, whichever tracks it feeds.
+                self._counted[port.info] = self._counted.get(port.info, 0) + 1
+                for track in port.tracks:
+                    track.notes += 1
+                    track.vel = max(track.vel, data[2])
+                    if take is None:
+                        self._echo(track, ns, data[1], data[2])
             if take is None:
                 return
-            here = take.here.get(track.name)
-            # A port not yet present is made so by its first event, unless it is
-            # quiet: its marker may be behind the event on the queue (an event
-            # that was waiting when the take began, or one from a port that has
-            # just opened), or it went quiet and has just been heard again. A
-            # port that has been closed since is still heard up to its closing
-            # (`done`, above), wherever the track's port is now.
-            if here is not port and (here is not None or port.silent_at is not None):
-                return
-        if here is None and not self._present(take, port, ns):
-            return
-        # Active sensing says the port is alive, and a .mid leaves it out (F2).
-        if status != _SENSING:
-            self._tell(take, take.recorder.feed, track.name, ns, data)
+            # A track the port feeds that is not yet present is made so by the
+            # port's first event, unless the port is quiet: its marker may be
+            # behind the event on the queue (an event that was waiting when the
+            # take began, or one from a port that has just opened), or it went
+            # quiet and has just been heard again.
+            names = [name for name in port.fed
+                     if take.here.get(name) is port or (take.here.get(name) is None and port.silent_at is None)]
+        for name in names:
+            if take.here.get(name) is None and not self._present(take, port, name, ns):
+                continue
+            # Active sensing says the port is alive, and a .mid leaves it out (F2).
+            if status != _SENSING:
+                self._tell(take, take.recorder.feed, name, ns, data)
 
     def _marker(self, item):
-        """A port that came or went, or the take's end, in its place among the events."""
-        kind = item[1]
+        """
+        A port that a track began or stopped taking notes from, that closed, that
+        went quiet or that is present as a take begins, or the take's end, each in
+        its place among the events.
+        """
+        _, kind, port, name, ns = item
         if kind == "end":
-            _, _, take, done = item
+            take, done = port, name
             with self._lock:
                 if self._take is take:
                     self._take = None
             done.set()
             return
-        _, _, port, ns = item
-        if kind == "closed":
-            port.done = True
+        present, gone = [], []
         with self._lock:
+            if kind == "closed":
+                port.done = True
+                self._let_go(port)
+            elif kind == "silent":
+                if port.silent_at != ns:
+                    return  # heard again since
+                self._let_go(port)
+            elif kind == "attach" and name not in port.fed:
+                port.fed.append(name)
+            elif kind == "detach" and name in port.fed:
+                port.fed.remove(name)
             take = self._take
-            if take is None or port.track is None:
-                return
-            name = port.track.name
-            here = take.here.get(name)
-            if kind == "present":
-                go = here is None and not port.done and port.silent_at is None
-            elif kind == "closed":
-                go = here is port
-            else:  # "silent": unless it was heard again since
-                go = here is port and port.silent_at == ns
-        if not go:
-            return
-        if kind == "present":
-            self._present(take, port, ns)
-        else:
-            del take.here[name]
-            self._tell(take, take.recorder.gone, name, ns)
+            if take is not None:
+                if kind in ("attach", "present"):
+                    if not port.done and port.silent_at is None:
+                        present = [n for n in ([name] if kind == "attach" else port.fed) if take.here.get(n) is None]
+                elif kind == "detach":
+                    gone = [name] if take.here.get(name) is port else []
+                else:
+                    gone = [n for n in port.fed if take.here.get(n) is port]
+            if kind == "closed":
+                port.fed = []
+        for n in present:
+            self._present(take, port, n, max(ns, take.begun))
+        for n in gone:
+            del take.here[n]
+            self._tell(take, take.recorder.gone, n, ns)
 
-    def _present(self, take, port, ns):
-        if not self._tell(take, take.recorder.present, port.track.name, ns):
+    def _let_go(self, port):
+        """A port that went lets go of what it held, in its state as in the take
+        (F7): the next take does not begin with a pedal down. Under the lock."""
+        for message in port.state.releases():
+            port.state.feed(message)
+
+    def _present(self, take, port, name, ns):
+        if not self._tell(take, take.recorder.present, name, ns):
             return False  # tried again with the port's next event
-        take.here[port.track.name] = port
+        take.here[name] = port
         return True
 
     def _tell(self, take, call, *args):
@@ -509,10 +567,11 @@ class MidiRig:
             return False
 
     def _echo(self, track, ns, note, velocity):
-        """P8, under the lock, for a note-on between takes."""
+        """P8, under the lock, for a note-on between takes. Two tracks on one port
+        get the same notes because they are on one port, which P2 says."""
         window = ECHO_MS * 1_000_000
         for other in self._tracks.values():
-            if other is track or other.port is None:
+            if other is track or other.port is None or other.port is track.port:
                 continue
             for i, (at, n, v) in enumerate(other.recent):
                 if n == note and v == velocity and -window <= ns - at <= window:
@@ -550,9 +609,8 @@ class MidiRig:
             limit = int(SENSING_TIMEOUT_SEC * _NS)
             quiet = []
             with self._lock:
-                for track in self._tracks.values():
-                    port = track.port
-                    if port is None or not port.sensing or port.silent_at is not None:
+                for port in self._live.values():
+                    if not port.sensing or port.silent_at is not None:
                         continue
                     # Read once: the port's thread may set it again meanwhile, and
                     # the silence is the one this time says. An event newer than
@@ -560,14 +618,14 @@ class MidiRig:
                     heard = port.heard_ns
                     if now - heard > limit:
                         port.silent_at = heard
-                        self._queue.put((None, "silent", port, heard))
-                        quiet.append(track)
+                        self._queue.put((None, "silent", port, None, heard))
+                        quiet.append(port.info.name)
                 take = self._take
                 if take is not None and now >= take.flush_at:
                     take.flush_at = now + int(FLUSH_INTERVAL_SEC * _NS)
                     flush = take
-            for track in quiet:
-                log.info("%s: %s has stopped saying it is there", track.name, track.port.info.name)
+            for name in quiet:
+                log.info("%s has stopped saying it is there", name)
             if looking or self._changed:
                 self._look()
             if looking:
@@ -577,9 +635,13 @@ class MidiRig:
             self._tell(flush, flush.recorder.flush)
 
     def _watch(self):
-        due = time.monotonic() + TICK_SEC
+        """The watcher's thread: a tick every TICK_SEC of the rig's clock, and a
+        look at once when the observer says the list changed."""
+        step = int(TICK_SEC * _NS)
+        due = self._now() + step
         while not self._stopping.is_set():
-            woke = self._wake.wait(max(0.0, due - time.monotonic()))
+            wait = min(TICK_SEC, max(0.0, (due - self._now()) / _NS))
+            woke = self._wake.wait(wait)
             if self._stopping.is_set():
                 return
             if woke:
@@ -589,14 +651,15 @@ class MidiRig:
                         self.refresh()
                     except Exception:
                         self._failed("the MIDI watcher")
-            if time.monotonic() >= due:
+            now = self._now()
+            if now >= due:
                 try:
                     self.tick()
                 except Exception:
                     self._failed("the MIDI watcher")
-                due += TICK_SEC
-                if due < time.monotonic():
-                    due = time.monotonic() + TICK_SEC
+                due += step
+                if due <= now:
+                    due = now + step
 
     def _on_change(self):
         """The system's observer, on its own thread: a look is asked for, nothing more."""
@@ -620,69 +683,84 @@ class MidiRig:
                 return list(self._ports)
 
     def _settle(self, listing):
-        """Every track's port, and the check's, as the list of ports now says."""
+        """
+        Every port as the list of ports now says, and every track on its port.
+        In this order: what each track's saved port is now; the ports nobody
+        wants any more, or that went, closed; the ports wanted and not open,
+        opened; and each track moved to the port it is on. Closing first is what
+        lets a system that opens a port once give a track the port the check had,
+        and a port a track keeps is never closed to be opened again.
+        """
+        now = self._now()
         with self._lock:
             self._ports = listing
             tracks = list(self._tracks.values())
+            checking = self._check and self._take is None
+        found, statuses, wanted = {}, {}, []
         for track in tracks:
-            self._settle_track(track, listing)
-        self._settle_checks(listing)
+            info, ambiguous = None, False
+            if self._system is not None and track.saved is not None:
+                info, ambiguous = find_port(track.saved, listing)
+            found[track.name] = info
+            statuses[track.name] = ("none" if track.saved is None else "ambiguous" if ambiguous
+                                    else "missing" if info is None else None)
+            if info is not None and info not in wanted:
+                wanted.append(info)
+        if checking:
+            devices = {info.device for info in wanted if info.device}
+            for info in listing:
+                if info.device in devices and info not in wanted:
+                    wanted.append(info)
 
-    def _settle_track(self, track, listing):
-        found, ambiguous = None, False
-        if self._system is not None and track.saved is not None:
-            found, ambiguous = find_port(track.saved, listing)
-        port = track.port
-        # A port that went is a new one to the OS when it comes back, so one
-        # that is no longer connected is closed even if its name is listed again.
-        if port is not None and (port.info != found or not self._connected(port)):
-            self._close(port)
-            port = None
-        if track.saved is None:
-            status = "none"
-        elif ambiguous:
-            status = "ambiguous"
-        elif found is None:
-            status = "missing"
-        elif port is None:
-            port = self._open(track, found)
-            status = "ok" if port is not None else "in_use"
-        else:
-            status = "ok"
         with self._lock:
-            before = track.status
-            track.found = found
-            track.status = status
-        if status != before:
-            where = (found.name if found is not None else
-                     track.saved["name"] if track.saved is not None else "no port")
-            log.info("%s: %s, %s", track.name, where, status)
-
-    def _settle_checks(self, listing):
-        """P7: the other ports of the devices whose port a track picked, while checking."""
-        with self._lock:
-            wanted = []
-            if self._check and self._take is None:
-                picked = {t.found for t in self._tracks.values() if t.found is not None}
-                devices = {info.device for info in picked if info.device}
-                for info in listing:
-                    if info.device in devices and info not in picked and info not in wanted:
-                        wanted.append(info)
-            open_now = list(self._checking.values())
-        for port in open_now:
+            live = list(self._live.values())
+        for port in live:
             if port.info not in wanted or not self._connected(port):
                 self._close(port)
         for info in wanted:
             with self._lock:
-                there = info in self._checking
+                there = info in self._live
             if not there:
-                self._open(None, info)
+                self._open(info)
 
-    def _open(self, track, info):
-        """A port opened for a track, or (track None) only to count; None if the OS
-        would not."""
+        said = []
+        with self._lock:
+            for port in self._live.values():
+                for track in list(port.tracks):
+                    if self._tracks.get(track.name) is not track or found.get(track.name) != port.info:
+                        # Moved, renamed or gone from the band, from a port still
+                        # there: it lets go now.
+                        port.tracks.remove(track)
+                        track.port = None
+                        self._queue.put((None, "detach", port, track.name, now))
+            for track in tracks:
+                info = found[track.name]
+                port = self._live.get(info) if info is not None else None
+                if port is not None and track.port is not port:
+                    track.port = port
+                    port.tracks.append(track)
+                    port.tracks.sort(key=lambda t: t.index)
+                    self._queue.put((None, "attach", port, track.name, now))
+                status = statuses[track.name] or ("ok" if port is not None else "in_use")
+                if status != track.status:
+                    said.append((track.name, info.name if info is not None else
+                                 track.saved["name"] if track.saved is not None else "no port", status))
+                track.status = status
+                track.found = info
+                if info is not None:
+                    track.last = info
+        for name, where, status in said:
+            log.info("%s: %s, %s", name, where, status)
+
+    def _open(self, info):
+        """A port opened, with the state it had if it was open before in this
+        rehearsal; None if the OS would not."""
         now = self._now()
-        port = _Port(track, info, now)
+        with self._lock:
+            state = self._states.get(info)
+            if state is None:
+                state = self._states[info] = PortState()
+        port = _Port(info, state, now)
         try:
             port.port = self._system.open(info, self._listener(port))
         except PortBusy:
@@ -691,12 +769,7 @@ class MidiRig:
             self._failed(f"opening the MIDI port {info.name}")
             return None
         with self._lock:
-            if track is None:
-                self._checking[info] = port
-            else:
-                track.port = port
-                if self._take is not None:
-                    self._queue.put((None, "present", port, now))
+            self._live[info] = port
         return port
 
     def _listener(self, port):
@@ -713,22 +786,21 @@ class MidiRig:
         """
         Stops listening to a port, and puts its end on the queue after whatever
         it said while it closed. A port closed while still connected (the band
-        changed, the rehearsal ended) lets go of its notes now; one that is no
-        longer connected went when it was last heard.
+        changed, the rehearsal ended) lets go of what it held now; one that is
+        no longer connected went when it was last heard.
         """
         with self._lock:
-            track = port.track
-            if track is not None:
-                if track.port is port:
-                    track.port = None
-            elif self._checking.get(port.info) is port:
-                del self._checking[port.info]
+            if self._live.get(port.info) is port:
+                del self._live[port.info]
+            for track in port.tracks:
+                track.port = None
+            port.tracks = []
         connected = self._connected(port)
         try:
             port.port.close()
         except Exception:
             self._failed(f"closing the MIDI port {port.info.name}")
-        self._queue.put((None, "closed", port, self._now() if connected else port.heard_ns))
+        self._queue.put((None, "closed", port, None, self._now() if connected else port.heard_ns))
 
     def _connected(self, port):
         try:
@@ -738,8 +810,7 @@ class MidiRig:
 
     def _resync(self):
         with self._lock:
-            ports = [t.port for t in self._tracks.values() if t.port is not None]
-            ports += list(self._checking.values())
+            ports = list(self._live.values())
         for port in ports:
             try:
                 port.port.resync()
@@ -758,7 +829,7 @@ class MidiRig:
             if take is None:
                 return None
             done = threading.Event()
-            self._queue.put((None, "end", take, done))
+            self._queue.put((None, "end", take, done, None))
             if self._writer is not None and self._writer.is_alive():
                 if not done.wait(_END_PATIENCE_SEC):
                     log.error("The MIDI writer did not reach the end of the take in time")
@@ -772,13 +843,14 @@ class MidiRig:
     def _release(self):
         self.abandon_take()
         with self._lock:
-            ports = [t.port for t in self._tracks.values() if t.port is not None]
-            ports += list(self._checking.values())
+            ports = list(self._live.values())
             self._tracks = {}
             self._check = False
             self._zero()
         for port in ports:
             self._close(port)
+        with self._lock:
+            self._states = {}
 
     def _zero(self):
         """The counts start again. Under the lock."""
@@ -793,10 +865,13 @@ class MidiRig:
     def _failed(self, what):
         """
         Something nothing here expected, said in the log with its traceback, as
-        the app's log keeps errors. Said once while it repeats, so one that
-        comes back with every event or every tick does not fill the log.
+        the app's log keeps errors. Each kind of failure is said once while it
+        keeps coming back the same way, so one that comes back with every event
+        or every tick does not fill the log, nor two that take turns.
         """
-        failure = (what, repr(sys.exc_info()[1]))
-        if failure != self._failure:
-            self._failure = failure
-            log.exception("%s", what)
+        how = repr(sys.exc_info()[1])
+        with self._failures_lock:
+            if self._failures.get(what) == how:
+                return
+            self._failures[what] = how
+        log.exception("%s", what)

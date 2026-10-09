@@ -2181,6 +2181,219 @@ def main():
             rig.shutdown()
             ok("shutdown closes every port and the system", fake.open_ports == set() and fake.inputs() == [])
 
+            # A port belongs to itself, not to the name of the track it feeds (R36). First on a
+            # system that lets a port be opened once, as classic Windows MIDI does (P5, P7).
+            on_midi = {**keys, "midi_port": midi_port.saved()}
+            one_fake = FakePortSystem([daw_port, midi_port], exclusive=True)
+            once = MidiRig(one_fake, threads=False, now_ns=lambda: now[0])
+            once.use([gtr, on_daw], check=True)
+            for i in range(2):
+                one_fake.send("Launchkey Mini MK3 MIDI Port", 1000 * S + i * 100 * MS, b"\x90\x3c\x40")
+            once.drain()
+            ok("where a port opens once, the check still opens the DAW Port and counts the MIDI Port",
+               open_now(one_fake) == ["Launchkey Mini MK3 DAW Port", "Launchkey Mini MK3 MIDI Port"]
+               and [p["notes"] for p in once.ports()["ports"]] == [2, 0])
+            once.use([gtr, on_midi], check=True)
+            ok("picking the port the check heard keeps it open, now Keys': ok, and opened once",
+               once.activity()["Keys"]["state"] == "ok" and one_fake.opens["Launchkey Mini MK3 MIDI Port"] == 1
+               and open_now(one_fake) == ["Launchkey Mini MK3 DAW Port", "Launchkey Mini MK3 MIDI Port"])
+            once.use([gtr, on_daw], check=True)
+            ok("and picking the DAW Port back takes it as it is, still open, opened once",
+               once.activity()["Keys"]["state"] == "ok" and one_fake.opens["Launchkey Mini MK3 DAW Port"] == 1)
+            once.use([gtr, on_midi], check=True)
+            once.use([gtr, on_midi])
+            ok("at Start the DAW Port closes and Keys is ok on the one port open",
+               once.activity()["Keys"]["state"] == "ok" and open_now(one_fake) == ["Launchkey Mini MK3 MIDI Port"])
+            picked = folder("picked")
+            T7 = now[0] = 1010 * S
+            once.begin_take(picked, take_clock(T7))
+            one_fake.send("Launchkey Mini MK3 MIDI Port", T7 + 200 * MS, b"\x90\x3c\x40")
+            ok("and a note played right after Start is in the take",
+               [m["name"] for m in once.end_take(1.0)] == ["Keys"]
+               and in_ticks(picked / "Keys.mid") == [(384, b"\x90\x3c\x40"), (1920, b"\x80\x3c\x00")])
+            straight_fake = FakePortSystem([daw_port, midi_port], exclusive=True)
+            straight = MidiRig(straight_fake, threads=False, now_ns=lambda: now[0])
+            straight.use([gtr, on_daw], check=True)
+            straight.use([gtr, on_midi])
+            ok("picked and started at once, the port the check held is Keys' and ok, opened once",
+               straight.activity()["Keys"]["state"] == "ok" and straight_fake.opens["Launchkey Mini MK3 MIDI Port"] == 1
+               and open_now(straight_fake) == ["Launchkey Mini MK3 MIDI Port"])
+
+            # Renamed, and two that swap names: the ports stay open and keep what was set (F6, R36).
+            named_fake, named = a_rig(td17, launchkey)
+            named.use([gtr, drums, keys])
+            named_fake.send("TD-17", 1100 * S, b"\xc9\x05")          # kit 6 picked
+            named_fake.send("TD-17", 1100 * S, b"\xb9\x04\x5a")      # the hi-hat half down
+            named_fake.send("Launchkey Mini MK3", 1100 * S, b"\xc0\x07")
+            named.drain()
+            kit_track = {**drums, "name": "Kit"}
+            named.use([gtr, kit_track, keys])
+            act = named.activity()
+            ok("a track renamed on the same port keeps the port open: opened once, and Kit is ok",
+               named_fake.opens["TD-17"] == 1 and act["Kit"]["state"] == "ok" and "Drums" not in act)
+            renamed = folder("renamed")
+            T8 = now[0] = 1110 * S
+            named.begin_take(renamed, take_clock(T8))
+            named.end_take(1.0)
+            ok("and the next take's Kit.mid begins with the kit and the pedal set before the rename (F6)",
+               in_ticks(renamed / "Kit.mid") == [(0, b"\xc9\x05"), (0, b"\xb9\x04\x5a")])
+            swapped = folder("swapped")
+            named.use([gtr, {**kit_track, "midi_port": {"name": "Launchkey Mini MK3"}},
+                       {**keys, "midi_port": {"name": "TD-17"}}])
+            named.begin_take(swapped, take_clock(T8 + 10 * S))
+            named.end_take(1.0)
+            ok("two tracks that swap ports open nothing again, and each takes the state of the port it now has",
+               named_fake.opens == {"TD-17": 1, "Launchkey Mini MK3": 1}
+               and in_ticks(swapped / "Keys.mid") == [(0, b"\xc9\x05"), (0, b"\xb9\x04\x5a")]
+               and in_ticks(swapped / "Kit.mid") == [(0, b"\xc0\x07")])
+
+            # Two tracks on one port: one port open, counted once, and no echo between them.
+            shared_fake = FakePortSystem([td17], exclusive=True)
+            shared = MidiRig(shared_fake, threads=False, now_ns=lambda: now[0])
+            pads = {"name": "Pads", "mode": "midi", "channel": None, "midi_port": {"name": "TD-17"}}
+            shared.use([gtr, drums, pads])
+            for i in range(5):
+                shared_fake.send("TD-17", 1200 * S + i * 100 * MS, b"\x99\x26\x40")
+            shared.drain()
+            act = shared.activity()
+            ok("two tracks on one port share it, open once and both ok, even where a port opens once",
+               shared_fake.opens == {"TD-17": 1} and act["Drums"]["state"] == act["Pads"]["state"] == "ok")
+            ok("its notes are counted once for the port, and are not the same notes twice (P8): P2 says it",
+               shared.ports()["ports"][0]["notes"] == 5 and act["Drums"]["notes"] == act["Pads"]["notes"] == 5
+               and "echo" not in act["Drums"] and "echo" not in act["Pads"]
+               and notes_problem([gtr, drums, pads]) == "Drums and Pads both take notes from TD-17.")
+
+            # A port that goes lets go of what it held, for the next take too (F7).
+            held_fake, held = a_rig(td17, launchkey)
+            held.use([gtr, drums, keys])
+            pulled = folder("pulled")
+            T9 = now[0] = 1300 * S
+            held.begin_take(pulled, take_clock(T9))
+            held_fake.send("Launchkey Mini MK3", T9 + 100 * MS, b"\xb0\x40\x7f")    # the sustain down
+            held_fake.send("TD-17", T9 + 100 * MS, b"\xfe")
+            held_fake.send("TD-17", T9 + 200 * MS, b"\xb9\x40\x7f")                 # and the kit's
+            held.drain()
+            now[0] = T9 + 600 * MS
+            held_fake.pull("Launchkey Mini MK3")
+            held.tick()                                                              # the TD-17 goes quiet too
+            held.drain()
+            held.end_take(3.0)
+            ok("the sustain down when its port was pulled is let up there in the take",
+               in_ticks(pulled / "Keys.mid") == [(192, b"\xb0\x40\x7f"), (192, b"\xb0\x40\x00")]
+               and in_ticks(pulled / "Drums.mid") == [(384, b"\xb9\x40\x7f"), (384, b"\xb9\x40\x00")])
+            held_fake.plug(launchkey)
+            held_fake.send("TD-17", T9 + 4 * S, b"\xfe")
+            now[0] = T9 + 4 * S
+            held.tick()
+            held.drain()
+            after = folder("after")
+            held.begin_take(after, take_clock(now[0]))
+            held.end_take(1.0)
+            ok("and the next take begins with it up, for a port pulled and for one that went quiet",
+               in_ticks(after / "Keys.mid") == [(0, b"\xb0\x40\x00")]
+               and in_ticks(after / "Drums.mid") == [(0, b"\xb9\x40\x00")])
+            held_fake.send("Launchkey Mini MK3", now[0] + 100 * MS, b"\xb0\x40\x7f")
+            held.drain()
+            now[0] += 1 * S
+            held_fake.pull("Launchkey Mini MK3")
+            held.tick()                                              # closed, and the writer not there yet
+            racing = folder("racing")
+            held.begin_take(racing, take_clock(now[0]))
+            held_fake.plug(launchkey)
+            held.tick()
+            held_fake.send("Launchkey Mini MK3", now[0] + 500 * MS, b"\x90\x3c\x40")
+            held.drain()
+            held.end_take(2.0)
+            ok("a take that begins before the writer reaches the pull still begins with the pedal up",
+               [data for _, data in in_ticks(racing / "Keys.mid") if data[0] == 0xB0] == [b"\xb0\x40\x00"])
+
+            # abandon_take, begin_take over a running take, release and refresh.
+            spare_fake, spare = a_rig(td17)
+            spare.use([gtr, drums, keys])
+            first_take, second_take = folder("first-take"), folder("second-take")
+            T10 = now[0] = 1400 * S
+            spare.begin_take(first_take, take_clock(T10))
+            spare_fake.send("TD-17", T10 + 100 * MS, b"\x99\x26\x40")
+            spare.drain()
+            spare.abandon_take()
+            ok("abandon_take leaves the notes as a crash would, for the drafts, and there is no take after it",
+               files_in(first_take) == ["Drums.midraw"] and "992640" in (first_take / "Drums.midraw").read_text()
+               and spare.end_take(1.0) == [])
+            spare.begin_take(first_take, take_clock(T10 + 10 * S))
+            spare_fake.send("TD-17", T10 + 10 * S + 100 * MS, b"\x99\x26\x40")
+            spare.drain()
+            spare.begin_take(second_take, take_clock(T10 + 20 * S))
+            spare_fake.send("TD-17", T10 + 20 * S + 100 * MS, b"\x99\x26\x40")
+            ok("begin_take while a take records abandons that one, as abandon_take would, and records the new one",
+               files_in(first_take) == ["Drums.midraw"] and "992640" in (first_take / "Drums.midraw").read_text()
+               and [m["name"] for m in spare.end_take(1.0)] == ["Drums"]
+               and in_ticks(second_take / "Drums.mid") == [(192, b"\x99\x26\x40"), (1920, b"\x89\x26\x00")])
+            spare_fake.notify = False                                                # the observer misses it
+            spare_fake.plug(launchkey)
+            spare.tick()
+            missed = spare.activity()["Keys"]["state"]
+            spare.refresh()
+            ok("refresh reads the list again: a port plugged in that nothing told of is opened (Look again)",
+               missed == "missing" and spare.activity()["Keys"]["state"] == "ok")
+            spare.release()
+            ok("release closes every port and forgets the tracks and the counts, and still lists the ports",
+               spare_fake.open_ports == set() and spare.activity() == {}
+               and [(p["name"], p["notes"]) for p in spare.ports()["ports"]] == [("TD-17", 0), ("Launchkey Mini MK3", 0)])
+            spare.use([gtr, drums])
+            ok("and the next rehearsal opens them again", spare.activity()["Drums"]["state"] == "ok")
+
+            # A port heard again between a tick reading when it was last heard and
+            # saying it went quiet: the silence that tick saw is over, and nothing
+            # is said to have gone.
+            late_fake, late = a_rig(td17)
+            inner = late._queue
+
+            class Racing:
+                """The rig's queue, with an event that arrives just as a tick finds the port quiet."""
+                arrive = None
+
+                def put(self, item):
+                    if item[0] is None and item[1] == "silent" and Racing.arrive is not None:
+                        arrive, Racing.arrive = Racing.arrive, None
+                        arrive()
+                    inner.put(item)
+
+                def get_nowait(self):
+                    return inner.get_nowait()
+
+            late._queue = Racing()
+            late.use([gtr, drums])
+            T11 = now[0] = 1500 * S
+            heard.clear()
+            late.begin_take(folder("stale"), take_clock(T11))
+            late_fake.send("TD-17", T11 + 100 * MS, b"\xfe")
+            late_fake.send("TD-17", T11 + 200 * MS, b"\x99\x26\x40")
+            late.drain()
+            now[0] = T11 + 600 * MS
+            Racing.arrive = lambda: late_fake.send("TD-17", T11 + 590 * MS, b"\x99\x24\x40")
+            late.tick()
+            late.drain()
+            act = late.activity()["Drums"]
+            late.end_take(1.0)
+            ok("a port heard again just as a tick finds it quiet is still there, and the take is not told it went",
+               Racing.arrive is None and act["state"] == "ok"
+               and [what for what, _ in told("Drums")] == ["present", "feed", "feed"])
+
+            # Two failures that keep coming back are each said once.
+            said_before = len(said7)
+
+            def broken_clock():
+                raise RuntimeError("the clock cannot be read")
+
+            for port in spare_fake.open_ports:
+                port.resync = broken_clock
+            spare_fake.inputs = lambda: (_ for _ in ()).throw(RuntimeError("the list cannot be read"))
+            for _ in range(12):
+                spare.tick()
+            ok("two failures that alternate are each said once in the log, not once each time",
+               len(said7) - said_before == 2 and all(r.levelno == logging.ERROR for r in said7[said_before:]))
+            spare.shutdown()
+
             # With its own threads, as the app runs it.
             live_fake = FakePortSystem([td17])
             live = MidiRig(live_fake)
@@ -2209,6 +2422,24 @@ def main():
             left = [t.name for t in threading.enumerate() if t.name.startswith("midi-rig")]
             ok("shutdown stops both of its threads and closes every port and the system",
                left == [] and live_fake.open_ports == set() and live_fake.inputs() == [])
+
+            # The watcher keeps time by the rig's clock: one that stands still has no ticks.
+            paced_clock = [2000 * S]
+            paced_fake = FakePortSystem([td17])
+            paced = MidiRig(paced_fake, now_ns=lambda: paced_clock[0])
+            try:
+                paced.use([gtr, drums])
+                paced_fake.send("TD-17", paced_clock[0], b"\xfe")
+                time.sleep(1.2)                                   # more than four ticks of the computer's time
+                still = [port.resyncs for port in paced_fake.open_ports] == [0]
+                paced_clock[0] += 1 * S
+                deadline = time.monotonic() + 10
+                while paced.activity()["Drums"]["state"] != "missing" and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                ok("the watcher's ticks follow the rig's clock: none while it stands still, one as it moves",
+                   still and paced.activity()["Drums"]["state"] == "missing")
+            finally:
+                paced.shutdown()
     finally:
         rig_mod.MidiRecorder = real_recorder
 

@@ -87,9 +87,16 @@ waits and records from the moment it is, a port pulled mid-take and plugged
 back is one file with its held notes let go when it was last heard, a port
 another app holds, two that nothing tells apart, no MIDI system at all, a
 device that stops sending active sensing, the same notes on two ports, a
-keyboard's other port counted during the check, the flush, a band changed
-during a take, a burst of 10000 events, a recorder whose disk refuses, and the
-rig on its own two threads. Later tasks add to it.
+keyboard's other port counted during the check and then picked (on a system
+that, like classic Windows MIDI, opens a port only once: `FakePortSystem(...,
+exclusive=True)`), a track renamed or two that swap ports keeping the port open
+and what it set, two tracks on one port, a pedal down when its port goes let up
+in the take and for the next one, the flush, a band changed during a take, a
+burst of 10000 events, a recorder whose disk refuses, abandon_take, a take
+begun over one still recording, Look again when the observer missed a change
+(`fake.notify = False`), release, two failures that take turns said once each,
+and the rig on its own two threads, ticking on its own clock. Later tasks add
+to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 
