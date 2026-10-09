@@ -466,8 +466,10 @@ class AudioRecorder:
 
     def _write_record(self):
         """What the folder needs to describe itself if the app dies: the
-        format, how wide each track is, and which tracks are notes. Best
-        effort — a take that cannot write this is still worth recording."""
+        format, how wide each track is, which track each file is (a file's
+        name is not always its track's: "Synth/Pad" is Synth_Pad.raw), and
+        which tracks are notes. Best effort — a take that cannot write this is
+        still worth recording."""
         try:
             (self.out_dir / TAKE_RECORD).write_text(
                 json.dumps({
@@ -475,6 +477,7 @@ class AudioRecorder:
                     "bit_depth": self.bit_depth,
                     "tracks": [
                         {"file": self.safe_name(t["name"]),
+                         "name": t["name"],
                          "channels": self._width[t["name"]]}
                         for t in self.tracks
                     ],

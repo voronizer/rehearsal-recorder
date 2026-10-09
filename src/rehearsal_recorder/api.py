@@ -77,7 +77,7 @@ from rehearsal_recorder import layouts
 from rehearsal_recorder import updates
 from rehearsal_recorder.mediaserver import AppServer
 from rehearsal_recorder.midi import ports as midiports
-from rehearsal_recorder.midi.capture import CLOCK_FILE, MIDRAW_SUFFIX, note_stems
+from rehearsal_recorder.midi.capture import CLOCK_FILE, MID_SUFFIX, MIDRAW_SUFFIX, note_stems
 from rehearsal_recorder.midi.clock import AudioClock
 from rehearsal_recorder.midi.rig import MidiRig
 from rehearsal_recorder.midi.rules import (
@@ -483,6 +483,9 @@ class Api:
         # The band the take began with, so that Stop reads the tracks it
         # recorded and not the session's as they are by then.
         self._recorder_band = None
+        # True while a Stop writes its take's files, the recorder already let
+        # go of: no take or check may begin until it is done (stop_take).
+        self._stopping = False
         self._session = None
         self._monitor = None
         # The MIDI ports of the signal check and of the rehearsal, kept open
@@ -1419,6 +1422,10 @@ class Api:
         self.stop_monitor()
         if self._recorder is not None:
             return {"ok": False, "error": "Recording in progress"}
+        # A check would put the rig on its own ports while a Stop is still
+        # ending the take's notes on them.
+        if self._stopping:
+            return {"ok": False, "error": "Still saving the last take"}
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
         # Only the tracks that record sound reach the card, and as plain
@@ -1967,6 +1974,11 @@ class Api:
             return {"ok": False, "error": "No rehearsal in progress"}
         if self._recorder is not None:
             return {"ok": False, "error": "Already recording"}
+        # Asked after the recorder, which a Stop lets go of only once this is
+        # set. The rig keeps one take at a time: a take begun now would be
+        # the one the old Stop then ends, with the old take's notes unmade.
+        if self._stopping:
+            return {"ok": False, "error": "Still saving the last take"}
 
         s = self._session
         # Only the tracks that record sound reach the card: a MIDI track has no
@@ -1994,7 +2006,9 @@ class Api:
             # take.json and in the rig's recorder for the files themselves.
             stems = note_stems([t["name"] for t in notes_tracks])
             clock = AudioClock(s["samplerate"])
-            notes = [{"file": stems[t["name"]],
+            # The track's name too: a draft recovered after a crash is named
+            # by it, as its audio is, and not by its file.
+            notes = [{"file": stems[t["name"]], "name": t["name"],
                       "port": (port_of(t) or {}).get("name", "")}
                      for t in notes_tracks]
 
@@ -2057,6 +2071,9 @@ class Api:
         take_number = self._recorder_take_number
         temp_dir = self._recorder_temp_dir
         band = self._recorder_band or []
+        # Set before the recorder is let go of, and cleared once the take's
+        # files are written: start_take and start_monitor wait for it.
+        self._stopping = True
         self._recorder = None
         self._recorder_take_number = None
         self._recorder_temp_dir = None
@@ -2097,6 +2114,7 @@ class Api:
                 "stop", f"Saving “{plain_name}”", temp_dir, take_number, finish,
             )
         finally:
+            self._stopping = False
             self._awake.release()
         notes, missing = self._note_lanes(band, result["tracks"], result["notes"])
         return {
@@ -2130,10 +2148,16 @@ class Api:
                       "time: %s", fault)
         notes = self._notes_step("The take's notes could not be finished",
                                  self._midi.end_take, duration_sec) or []
+
         # AudioRecorder.stop left take.json for the notes to find their ports
-        # in: it goes once no notes file is left that a later try would need it for.
-        if not any(Path(temp_dir).glob(f"*{MIDRAW_SUFFIX}")):
-            (Path(temp_dir) / TAKE_RECORD).unlink(missing_ok=True)
+        # in: it goes once no notes file is left that a later try would need it
+        # for. One that cannot go (Windows, while another program has it open)
+        # costs Stop nothing: it is said in the log and goes with the drafts folder.
+        def forget_record():
+            if not any(Path(temp_dir).glob(f"*{MIDRAW_SUFFIX}")):
+                (Path(temp_dir) / TAKE_RECORD).unlink(missing_ok=True)
+
+        self._notes_step("The take's record could not be removed", forget_record)
         return notes
 
     @staticmethod
@@ -2172,10 +2196,12 @@ class Api:
         the take to the saved list.
 
         notes: the .mid files, as stop_take() returns them in "notes", moved
-        beside the WAVs. Left out, the take is saved with its audio alone. A
-        notes file that could not become a .mid is never thrown away with the
-        drafts folder: it goes into the take's folder as it is (see
-        _move_unmade_notes).
+        beside the WAVs. Any other .mid in the draft goes with them, named as
+        its track: an older screen passes none, and a .mid left in the draft
+        would be deleted with the drafts folder. A notes file that could not
+        become a .mid is never thrown away either: it goes into the take's
+        folder as it is (see _move_unmade_notes). Everything moves or nothing
+        does (_move_take_files).
 
         markers: anything marked while listening on the review screen. They
         are passed in rather than saved as they are placed, because until the
@@ -2201,9 +2227,15 @@ class Api:
         # The review screen is still playing these very files.
         self._release_player_in(temp_dir)
 
-        moved, undo = self._move_tracks(tracks, take_dir)
-        moved_notes, undo_notes = self._move_tracks(notes or [], take_dir)
-        undo += undo_notes + self._move_unmade_notes(temp_dir, take_dir)
+        # Every .mid in the draft is the take's, the ones `notes` leaves out
+        # too: found by their files, they are named as the tracks they belong to.
+        notes = list(notes or [])
+        listed = {Path(n["file"]).name for n in notes}
+        notes += self._named_as_tracks(s["tracks"], [
+            {"name": p.stem, "file": str(p)}
+            for p in sorted(Path(temp_dir).glob(f"*{MID_SUFFIX}")) if p.name not in listed
+        ])
+        moved, moved_notes, undo = self._move_take_files(temp_dir, take_dir, tracks, notes)
 
         take_info = {
             "take_number": take_number,
@@ -2231,14 +2263,37 @@ class Api:
         self._retry_failed_publishes()
         return {"ok": True, "take": kept}
 
+    @classmethod
+    def _move_take_files(cls, draft_dir, take_dir, tracks, notes):
+        """
+        Everything a take keeps from its draft into its folder: the audio, the
+        notes, and any notes file not yet a .mid (_move_unmade_notes). It all
+        moves or none of it does. A file that will not move (Windows refuses
+        one another program holds open) puts back every file moved before it
+        and the error goes on: the draft stays whole and listed, to be saved
+        again, and no audio is left in a folder the library never hears of.
+        Returns the audio and the notes at their new paths, and the (new, old)
+        pairs that put them back should the take not be recorded.
+        """
+        undo = []
+        try:
+            moved = cls._move_tracks(tracks, take_dir, undo)
+            moved_notes = cls._move_tracks(notes, take_dir, undo)
+            cls._move_unmade_notes(draft_dir, take_dir, undo)
+        except BaseException:
+            cls._unmove(undo, take_dir)
+            raise
+        return moved, moved_notes, undo
+
     @staticmethod
-    def _move_tracks(tracks, take_dir):
+    def _move_tracks(tracks, take_dir, undo):
         """
         A take's files into its folder: its audio, or its .mid files, being
-        anything shaped [{"name", "file"}]. Returns them at their new paths,
-        and the (new, old) pairs that put them back.
+        anything shaped [{"name", "file"}]. Returns them at their new paths.
+        Each move's (new, old) pair goes into `undo` as soon as it is made, so
+        one that fails part-way still leaves those before it to be put back.
         """
-        moved, undo = [], []
+        moved = []
         for t in tracks:
             src = Path(t["file"])
             dst = take_dir / src.name
@@ -2246,40 +2301,42 @@ class Api:
                 shutil.move(str(src), str(dst))
                 undo.append((dst, src))
             moved.append({"name": t["name"], "file": str(dst)})
-        return moved, undo
+        return moved
 
     @staticmethod
-    def _move_unmade_notes(draft_dir, take_dir):
+    def _move_unmade_notes(draft_dir, take_dir, undo):
         """
         A notes file the disk would not let become a .mid (it is still a
         .midraw) goes into the take's folder as it is, with the clock and the
         record that a later try needs to make it, and the drafts folder is
         removed as usual: nothing is deleted unconverted. The take does not
-        list it, so its track shows as one with no notes in this take. Returns
-        the (new, old) pairs that put the files back.
+        list it, so its track shows as one with no notes in this take. Each
+        move's (new, old) pair goes into `undo` as it is made.
         """
         draft_dir = Path(draft_dir)
         left = sorted(draft_dir.glob(f"*{MIDRAW_SUFFIX}"))
-        undo = []
         if left:
             for src in [*left, draft_dir / CLOCK_FILE, draft_dir / TAKE_RECORD]:
                 if src.exists():
                     dst = Path(take_dir) / src.name
                     shutil.move(str(src), str(dst))
                     undo.append((dst, src))
-        return undo
 
     @staticmethod
     def _named_as_tracks(band, notes):
         """
-        Notes recovered from a draft, which knows its files by their stems,
-        under the names of the tracks they belong to ("Synth_Pad" is the track
-        "Synth/Pad"), the way stop_take() names them. The stems are
-        capture.note_stems' over the rehearsal's tracks that take notes.
+        Notes found in a draft by their files, whose stems are all a draft
+        knows them by, under the names of the tracks they belong to
+        ("Synth_Pad" is the track "Synth/Pad"), the way stop_take() names
+        them. The stems are capture.note_stems' over the rehearsal's tracks
+        that take notes. A note already named otherwise (finalize names it
+        from take.json where the record has the name) is left as it is.
         """
         stems = note_stems([t["name"] for t in band if records_notes(t)])
         names = {stem: name for name, stem in stems.items()}
-        return [{**n, "name": names.get(n["name"], n["name"])} for n in notes]
+        return [{**n, "name": names.get(n["name"], n["name"])}
+                if n["name"] == Path(n["file"]).stem else n
+                for n in notes]
 
     def _add_moved_take(self, folder, take_info, undo, take_dir):
         """
@@ -2403,10 +2460,9 @@ class Api:
         take_dir = _unique_path(folder / _take_dir_name(take_number, named["name"]))
         take_dir.mkdir(parents=True, exist_ok=True)
 
-        moved, undo = self._move_tracks(result["tracks"], take_dir)
-        moved_notes, undo_notes = self._move_tracks(
-            self._named_as_tracks(r["tracks"], result["notes"]), take_dir)
-        undo += undo_notes + self._move_unmade_notes(draft_dir, take_dir)
+        moved, moved_notes, undo = self._move_take_files(
+            draft_dir, take_dir, result["tracks"],
+            self._named_as_tracks(r["tracks"], result["notes"]))
         take_info = {
             "take_number": take_number,
             "name": display_name,

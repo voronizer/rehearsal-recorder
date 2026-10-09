@@ -26,10 +26,13 @@ say what MIDI there is. A take with notes runs here as well, driven by the
 recorder's own callback and a fake port system: Start gives the card only the
 tracks that record sound (a MIDI track has no input) and begins the notes on
 the audio's clock, Stop stops the audio and then makes the `.mid` files and
-says which tracks have none, Keep and Recover move them beside the WAVs, a
+says which tracks have none, Keep and Recover move them beside the WAVs (Keep
+finds any `.mid` it is not told of, and a recovered track's audio and notes
+come back under its name), everything or nothing when a file will not move, a
 `.midraw` the disk would not let become a `.mid` is moved with the take rather
-than thrown away with the drafts, a kit pulled mid-take costs the take
-nothing, and a rig that fails costs it no audio. A take's notes follow its
+than thrown away with the drafts, no take or check begins while a Stop is
+still saving, a kit pulled mid-take costs the take nothing, and a rig that
+fails costs it no audio. A take's notes follow its
 files: renaming a take, merging its song and the pass that puts names right
 move the `.mid` files with the folder (a take of nothing but notes, which has
 no `.wav` to find its folder by, included, and an unconverted `.midraw` goes

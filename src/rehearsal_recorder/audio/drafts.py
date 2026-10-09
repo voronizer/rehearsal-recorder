@@ -38,6 +38,19 @@ def _widths(take_dir):
         return {}
 
 
+def _names(take_dir, kind):
+    """The track each of a take's files of `kind` ("tracks" for the audio,
+    "notes") belongs to, by its file stem, as take.json records it: "Synth_Pad"
+    is the track "Synth/Pad". Empty for a take recorded before the record named
+    its tracks, whose files go by their own names, as they always have."""
+    try:
+        record = json.loads((Path(take_dir) / TAKE_RECORD).read_text("utf-8"))
+        return {e["file"]: e["name"] for e in record[kind]
+                if isinstance(e.get("name"), str) and e["name"]}
+    except Exception:
+        return {}
+
+
 def draft_dirs(rehearsal_folder):
     """Every draft take folder inside a rehearsal that still holds audio."""
     drafts_root = Path(rehearsal_folder) / DRAFTS_DIR
@@ -53,10 +66,12 @@ def draft_dirs(rehearsal_folder):
 
 def has_audio(folder):
     """Raw counts as audio too — that is exactly the crashed-take case. So do
-    a take's unfinished notes: a take whose only recording is notes is not empty."""
+    a take's notes, unfinished or made: a take whose only recording is notes is
+    not empty, and stays listed after a recovery that found no audio has made
+    its .midraw into a .mid. A half-made .mid.part is not a recording."""
     folder = Path(folder)
     return (any(folder.rglob("*.wav")) or any(folder.rglob(f"*{RAW_SUFFIX}"))
-            or any(folder.rglob(f"*{MIDRAW_SUFFIX}")))
+            or any(folder.rglob(f"*{MIDRAW_SUFFIX}")) or any(folder.rglob(f"*{MID_SUFFIX}")))
 
 
 def wav_frames(path):
@@ -107,7 +122,10 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     shape stop_take() produces, so the rest of the app cannot tell the
     difference between a recovered take and a normally stopped one. The notes
     files become .mid the same way, and a .mid that stop had already made is
-    listed with them: "notes", apart from the audio "tracks".
+    listed with them: "notes", apart from the audio "tracks". Each is named as
+    its track where take.json records the name, so a Both track's audio and
+    its notes come back under the one name, as Stop gives them; otherwise by
+    its file.
 
     `progress(fraction, step)`, when given, hears how far along it is, the
     tracks weighed by their size.
@@ -117,6 +135,8 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     frames = 0
 
     widths = _widths(take_dir)
+    # Read now: take.json is deleted below, once the notes are made.
+    track_names, note_names = _names(take_dir, "tracks"), _names(take_dir, "notes")
     raws = sorted(take_dir.glob(f"*{RAW_SUFFIX}"))
     stages = Stages(
         [(f"Track {i + 1} of {len(raws)}", p.stat().st_size)
@@ -136,13 +156,14 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
 
     for wav_path in sorted(take_dir.glob("*.wav")):
         frames = max(frames, wav_frames(wav_path))
-        tracks.append({"name": wav_path.stem, "file": str(wav_path)})
+        tracks.append({"name": track_names.get(wav_path.stem, wav_path.stem), "file": str(wav_path)})
 
     duration = frames / samplerate if samplerate else 0
     # Before the record goes: it says which port each notes file came from. And
     # not while a notes file is left that could not be made into a .mid, which
     # a second try needs it for.
-    notes = finish_draft(take_dir, duration, samplerate)
+    notes = [{**n, "name": note_names.get(n["name"], n["name"])}
+             for n in finish_draft(take_dir, duration, samplerate)]
     if not any(take_dir.glob(f"*{MIDRAW_SUFFIX}")):
         (take_dir / TAKE_RECORD).unlink(missing_ok=True)
 
