@@ -7960,6 +7960,192 @@ def main():
     apimod66.open_midi_system = real_open66
     apimod66.MIDI_THREADS = False
 
+    print("\n[69] Notes go to the cloud with the tracks")
+    # A take's notes are .mid files beside its WAVs. The original tracks and Both copy each one as it is, under its
+    # own name, never through encode (which would name it <stem>.wav); the mix has no notes in it, and mixdown is only
+    # ever given the WAVs. A copy's record names the notes, so a take that has some reads as changed when its copy
+    # was made without them, and a take that has none reads exactly as it always did.
+    from rehearsal_recorder import cloud as cloudmod69
+    from rehearsal_recorder.midi.smf import write_mid as write_mid69
+
+    def hits69(path, notes):
+        """A .mid of these notes struck 0.25 s apart on channel 10, each let go 0.1 s later."""
+        events = [e for k, note in enumerate(notes)
+                  for e in ((k * 0.25, bytes((0x99, note, 100))), (k * 0.25 + 0.1, bytes((0x89, note, 0))))]
+        write_mid69(path, track_name=path.stem, port_name="Port", start=[], events=events)
+        return str(path)
+
+    root69 = Path(tempfile.mkdtemp())
+    apimod69, a69 = fresh_api(root69)
+    a69.set_cloud_dir(str(root69 / "Cloud"))
+    folder69 = a69.recordings_dir / "Jam - 2026-10-09 20-00"
+    a69._lib.create_rehearsal(folder69, "Jam", "2026-10-09T20:00:00", SR, 16, [
+        {"name": "Drums", "channel": 1, "mode": "both", "midi_port": {"name": "TD-17"}},
+        {"name": "Keys", "mode": "midi", "midi_port": {"name": "Launchkey"}},
+        {"name": "Bass", "channel": 2}])
+    target69 = apimod69._cloud_subfolder(a69._cloud_dir, folder69)
+
+    def keep69(number, audio, notes):
+        """A take the library keeps: these audio tracks (name: level) and these notes (name: pitches)."""
+        where = folder69 / f"take {number}"
+        for name, level in audio.items():
+            write_wav(where / f"{name}.wav", level, seconds=2.0)
+        a69._lib.add_take(folder69, {
+            "take_number": number, "name": f"Take {number}", "duration_sec": 2.0, "markers": [],
+            "tracks": [{"name": n, "file": str(where / f"{n}.wav")} for n in audio],
+            "notes": [{"name": n, "file": hits69(where / f"{n}.mid", pitches)} for n, pitches in notes.items()]})
+
+    asked69 = {"encode": [], "mixdown": [], "copy": []}
+
+    def copy69(number, what, **kw):
+        """_copy_to_cloud, noting what encode, mixdown and copy2 were given."""
+        real = apimod69.encode, apimod69.mixdown, apimod69.shutil.copy2
+        for key in asked69:
+            asked69[key].clear()
+
+        def encode69(src, *args, **kwargs):
+            asked69["encode"].append(Path(src).name)
+            return real[0](src, *args, **kwargs)
+
+        def mixdown69(tracks, *args, **kwargs):
+            asked69["mixdown"] += [Path(t["file"]).name for t in tracks]
+            return real[1](tracks, *args, **kwargs)
+
+        def copy2_69(src, dst, *args, **kwargs):
+            asked69["copy"].append((Path(src).name, Path(dst).name))
+            return real[2](src, dst, *args, **kwargs)
+
+        apimod69.encode, apimod69.mixdown, apimod69.shutil.copy2 = encode69, mixdown69, copy2_69
+        try:
+            return a69._copy_to_cloud(str(folder69), number, what, **kw)
+        finally:
+            apimod69.encode, apimod69.mixdown, apimod69.shutil.copy2 = real
+
+    def mids69(number):
+        return {n["name"]: Path(n["file"]) for n in a69._lib.take(folder69, number)["notes"]}
+
+    def same69(copy, source):
+        """Whether `copy` is there and is byte for byte `source`."""
+        return copy.is_file() and copy.read_bytes() == source.read_bytes()
+
+    keep69(1, {"Drums": 1000, "Bass": 2000}, {"Drums": [36, 38, 42], "Keys": [60, 64]})
+    keep69(2, {"Bass": 800}, {})
+    a69.set_cloud_format("flac")
+
+    print("  The original tracks")
+    res = copy69(1, "tracks")
+    dest69 = Path(res["cloud"]["tracks"])
+    ext69 = ".flac" if res["cloud"]["tracks_format"] == "flac" else ".wav"
+    ok("the take has two .mid files of its own, which differ", sorted(mids69(1)) == ["Drums", "Keys"]
+       and mids69(1)["Drums"].read_bytes() != mids69(1)["Keys"].read_bytes())
+    ok("each .mid is in the copy's folder under its own name, byte for byte the take's",
+       res["ok"] and all(same69(dest69 / f"{n}.mid", p) for n, p in mids69(1).items()))
+    ok("and nothing was made of them as audio: Keys has no sound, Drums has its one",
+       sorted(f.name for f in dest69.iterdir()) == sorted([f"Bass{ext69}", f"Drums{ext69}", "Drums.mid", "Keys.mid"]))
+    ok("encode was given the two audio tracks and never a .mid",
+       len(asked69["encode"]) == 2 and not any(n.endswith(".mid") for n in asked69["encode"]))
+    ok("each .mid was copied under a writing name and moved onto its own",
+       [c for c in asked69["copy"] if c[0].endswith(".mid")]
+       == [("Drums.mid", apimod69.WRITING_PREFIX + "Drums.mid"), ("Keys.mid", apimod69.WRITING_PREFIX + "Keys.mid")])
+    ok("with nothing half-written left", not list(target69.rglob(apimod69.WRITING_PREFIX + "*")))
+    ok("the copy's record names the notes", res["cloud"]["source"].get("notes") == ["Drums", "Keys"])
+
+    seen69 = []
+    res = copy69(1, "tracks", progress=lambda fraction, step: seen69.append((fraction, step)))
+    ok("the progress stages are the audio's alone: a track each, none for the notes",
+       res["ok"] and sorted({s for _, s in seen69}) == ["Track 1 of 2", "Track 2 of 2"]
+       and seen69[-1][0] == 1.0 and [f for f, _ in seen69] == sorted(f for f, _ in seen69))
+
+    print("  Both")
+    res = copy69(1, "both")
+    ok("the .mid files are in the tracks' folder, once each in the whole copy, byte for byte the take's",
+       res["ok"] and sorted(p.name for p in target69.rglob("*.mid")) == ["Drums.mid", "Keys.mid"]
+       and all(same69(Path(res["cloud"]["tracks"]) / f"{n}.mid", p) for n, p in mids69(1).items()))
+    ok("the mix is one audio file with no .mid beside it",
+       Path(res["cloud"]["mix"]).suffix in (".flac", ".wav")
+       and [p.name for p in target69.iterdir() if p.is_file()] == [Path(res["cloud"]["mix"]).name])
+    ok("mixdown was given the two WAVs and nothing else",
+       sorted(asked69["mixdown"]) == ["Bass.wav", "Drums.wav"])
+    ok("encode was never given a .mid",
+       len(asked69["encode"]) == 3 and not any(n.endswith(".mid") for n in asked69["encode"]))
+
+    print("  The mix")
+    res = copy69(1, "mix")
+    ok("the mix has no .mid in it or beside it, and the old copy's notes went with its folder",
+       res["ok"] and "tracks" not in res["cloud"] and not list(target69.rglob("*.mid"))
+       and not [c for c in asked69["copy"] if c[0].endswith(".mid")])
+    ok("mixdown was given the two WAVs and nothing else",
+       sorted(asked69["mixdown"]) == ["Bass.wav", "Drums.wav"])
+
+    print("  What the record says")
+    where69 = a69._cloud_target(folder69)
+    volumes69 = a69.get_settings()["volumes"]
+    res = copy69(2, "tracks")
+    take2 = a69._lib.take(folder69, 2)
+    old69 = {"what": "tracks", "name": take2["name"], "format": "flac", "dir": str(where69),
+             "volumes": {"Bass": 1.0}, "duration_sec": 2.0}
+    ok("a take with no notes: source_of is exactly what it was, with no notes in it",
+       cloudmod69.source_of(take2, "tracks", volumes69, "flac", where69) == old69 and res["cloud"]["source"] == old69)
+    ok("and its copy counts as current", cloudmod69.is_current(take2, "tracks", volumes69, "flac", where69))
+    sent69 = []
+    real_copy69 = a69._copy_to_cloud
+    a69._copy_to_cloud = lambda *args, **kwargs: (sent69.append(args), real_copy69(*args, **kwargs))[1]
+    try:
+        a69.set_auto_publish(True, "tracks")
+        a69._enqueue_publish(folder69, 2)
+        while a69._cloud_queue.run_next():
+            pass
+        a69.set_auto_publish(False, "mix")
+    finally:
+        a69._copy_to_cloud = real_copy69
+    ok("so a copy made before notes existed is not sent again", sent69 == [])
+
+    res = copy69(1, "tracks")
+    take1 = a69._lib.take(folder69, 1)
+    ok("a take that has notes is current with a copy made from them",
+       cloudmod69.is_current(take1, "tracks", volumes69, "flac", where69))
+    older = {**take1, "cloud": {**take1["cloud"], "source": {
+        k: v for k, v in take1["cloud"]["source"].items() if k != "notes"}}}
+    ok("and not with a copy made without them", not cloudmod69.is_current(older, "tracks", volumes69, "flac", where69))
+
+    print("  A crop")
+    cropped69 = a69.crop_take(str(folder69), 1, 0.5, 1.5)
+    while a69._cloud_queue.run_next():
+        pass
+    take1 = a69._lib.take(folder69, 1)
+    dest69 = Path(take1["cloud"].get("tracks") or "")
+    ok("a crop sends the take again, in the shape it had, with its notes in the copy as they are in the take now",
+       cropped69["ok"] and dest69.is_dir() and not take1["cloud"].get("mix")
+       and all(same69(dest69 / f"{n}.mid", p) for n, p in mids69(1).items())
+       and sorted(mids69(1)) == ["Drums", "Keys"])
+    ok("and that copy is current for the cropped take",
+       cloudmod69.is_current(take1, "tracks", volumes69, "flac", where69) and take1["duration_sec"] < 2.0
+       and take1["cloud"]["source"].get("notes") == ["Drums", "Keys"])
+
+    print("  A .mid that is not there")
+    keep69(3, {"Drums": 900}, {"Drums": [36, 38], "Keys": [62]})
+    mids69(3)["Keys"].unlink()
+    res = copy69(3, "tracks")
+    ok("a .mid missing on disk is skipped, and the copy still goes with the rest",
+       res["ok"] and sorted(f.name for f in Path(res["cloud"]["tracks"]).iterdir()) == [f"Drums{ext69}", "Drums.mid"]
+       and same69(Path(res["cloud"]["tracks"]) / "Drums.mid", mids69(3)["Drums"]))
+    ok("with nothing half-written left", not list(target69.rglob(apimod69.WRITING_PREFIX + "*")))
+
+    print("  A rename")
+    renamed69 = a69.rename_take(str(folder69), 3, "Chorus")
+    take3 = a69._lib.take(folder69, 3)
+    dest3 = Path(take3["cloud"].get("tracks") or "")
+    ok("a renamed take's copy is renamed where it is, the .mid inside it, and it is still current",
+       renamed69["ok"] and take3["name"] != "Take 3" and dest3.name == "03 - " + take3["name"]
+       and (dest3 / "Drums.mid").is_file()
+       and cloudmod69.is_current(take3, "tracks", volumes69, "flac", where69))
+
+    print("  Taking a copy back")
+    removed69 = a69.unshare_take(str(folder69), 1)
+    ok("removing a take's copy takes its notes with it, and the other takes' copies stay",
+       removed69["ok"] and not dest69.exists()
+       and sorted(p.parent.name for p in target69.rglob("*.mid")) == [Path(a69._lib.take(folder69, 3)["cloud"]["tracks"]).name])
+
     print("\n[70] take_notes")
     # The player draws a take's notes from its .mid files. A take knows them only
     # by name and file, and whether a lane is a drum grid is the band's icon, found

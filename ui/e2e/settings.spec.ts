@@ -1,4 +1,16 @@
-import { callCount, calls, expect, keyOn, openApp, setFake, startButton, test } from "./app.ts"
+import {
+  callCount,
+  calls,
+  expect,
+  keyOn,
+  nameTake,
+  openApp,
+  recordTake,
+  setFake,
+  startButton,
+  startRehearsal,
+  test,
+} from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Settings: the card, the folders, the appearance, and Under the hood.
@@ -486,6 +498,58 @@ test("what gets published is chosen with sending off, and leaves it off", async 
   await expect(tracks).toHaveAttribute("aria-pressed", "true")
   await expect(page.locator("#auto-publish")).not.toBeChecked()
   await expect(page.getByText("Every track as recorded")).toHaveCount(1)
+})
+
+// The hint for the original tracks: the notes of a MIDI take go with them.
+const TRACKS_HINT =
+  "Every track as recorded, untouched, and the notes as .mid — for opening in a DAW later."
+
+test("the hint for the original tracks in Settings says the notes come as .mid", async ({ page }) => {
+  // The narrowest window the app is laid out for: the longer words wrap, and
+  // nothing is pushed outside the window.
+  await page.setViewportSize({ width: 960, height: 820 })
+  await openSettings(page, "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';")
+  await group(page, "Folders").click()
+  await page.getByRole("button", { name: "The original tracks" }).click()
+  const hint = page.getByText(TRACKS_HINT, { exact: true })
+  await expect(hint).toHaveCount(1)
+  await expect(hint).toBeVisible()
+  const box = (await hint.boundingBox())!
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(960)
+  expect(await hint.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  // The other two answers did not pick up the words about notes.
+  await page.getByRole("button", { name: "The mix", exact: true }).click()
+  await expect(page.getByText("This is what you send people.")).toHaveCount(1)
+  await expect(page.getByText("the notes as .mid")).toHaveCount(0)
+  await page.getByRole("button", { name: "Both", exact: true }).click()
+  await expect(page.getByText("the tracks to work from.")).toHaveCount(1)
+  await expect(page.getByText("the notes as .mid")).toHaveCount(0)
+})
+
+test("the share dialog says the same about the original tracks", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 820 })
+  await openApp(page, { before: "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';" })
+  await startRehearsal(page)
+  await recordTake(page, 1)
+  await nameTake(page, "Verse")
+  await page.getByRole("button", { name: /Save take/ }).click()
+  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Verse']").click()
+  await page.getByRole("button", { name: "Copy Verse 1 to the cloud" }).click()
+  const dialog = page.getByRole("dialog")
+  const hint = dialog.getByText(TRACKS_HINT, { exact: true })
+  await expect(hint).toHaveCount(1)
+  await expect(hint).toBeVisible()
+  const box = (await hint.boundingBox())!
+  const frame = (await dialog.boundingBox())!
+  expect(box.x).toBeGreaterThanOrEqual(frame.x)
+  expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width)
+  expect(await hint.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  // It is the hint of that choice and of no other.
+  await expect(dialog.getByRole("button", { name: "The original tracks" })).toContainText("the notes as .mid")
+  await expect(dialog.getByRole("button", { name: "The mix", exact: true })).not.toContainText(".mid")
+  await expect(dialog.getByRole("button", { name: "Both", exact: true })).not.toContainText(".mid")
 })
 
 test("the false-start limit is on the Folders page, saved when the field is left", async ({

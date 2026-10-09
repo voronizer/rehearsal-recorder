@@ -3690,8 +3690,9 @@ class Api:
     def _copy_to_cloud(self, folder, take_number, what="mix", progress=None):
         """
         Copies one take into the cloud folder. what: "mix" (one stereo file),
-        "tracks" (the originals) or "both". `progress(fraction, step)`, when
-        given, hears how far along it is, weighed in frames of audio.
+        "tracks" (the originals, with the take's notes as .mid) or "both".
+        `progress(fraction, step)`, when given, hears how far along it is,
+        weighed in frames of audio.
 
         Anything shared earlier for this take is replaced, so re-sharing after
         a rename or a new balance leaves one copy, not three.
@@ -3792,6 +3793,19 @@ class Api:
                     writing = None
                     if packed.get("note") and packed["note"] not in notes:
                         notes.append(packed["note"])
+                # The take's notes go beside the tracks as they are: a .mid is
+                # not audio, so it is never encoded (which would rename it
+                # <stem>.wav) and is not part of the mix. One that is not on
+                # disk any more is left out, as a missing track is. They weigh
+                # nothing in the stages: a few kilobytes beside the audio.
+                for midi in take.get("notes") or []:
+                    source = Path(midi.get("file") or "")
+                    if not source.is_file():
+                        continue
+                    writing = _writing_path(dest / source.name)
+                    shutil.copy2(source, writing)
+                    os.replace(writing, dest / source.name)
+                    writing = None
             except OSError as e:
                 if writing is not None:
                     writing.unlink(missing_ok=True)

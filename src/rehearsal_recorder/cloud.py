@@ -5,9 +5,10 @@ the take say it should be.
 A copy is made from six things: which of the mix and the tracks was asked
 for, the take's name (the files are named after it), the format, the balance
 the mix was rendered with, the folder it was written into, and how long the
-take is. Recording those next to the copy is what lets a later pass skip a
-take that is already right, instead of mixing it again every time something
-nudges the queue.
+take is — and, for a take that has notes, a seventh: which they are.
+Recording those next to the copy is what lets a later pass skip a take that
+is already right, instead of mixing it again every time something nudges the
+queue.
 
 The record is a claim about a file on someone else's disk, so it is only
 believed while that file is still there. A sync client that logs out and
@@ -26,7 +27,7 @@ def source_of(take, what, volumes, fmt, target):
     would go. `target` is the name of the rehearsal's subfolder inside the
     cloud folder, not a whole path."""
     names = [t.get("name") for t in take.get("tracks", []) if t.get("name")]
-    return {
+    record = {
         "what": what,
         "name": take.get("name", ""),
         "format": fmt,
@@ -51,6 +52,15 @@ def source_of(take, what, volumes, fmt, target):
         # are, so a re-read of the same take cannot drift.
         "duration_sec": round(float(take.get("duration_sec") or 0), 2),
     }
+    # The notes the tracks' copy carries, by name — only for a take that has
+    # some. Without them there is no key at all, so what is recorded for a
+    # take with no notes is what it always was and every copy already in a
+    # cloud folder still reads as current. A take that gets notes after its
+    # copy was made reads as changed, and is sent again with them.
+    notes = [n.get("name") for n in take.get("notes") or [] if n.get("name")]
+    if notes:
+        record["notes"] = notes
+    return record
 
 
 def copies_exist(shared):
