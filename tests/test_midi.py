@@ -204,15 +204,33 @@ def main():
     # Beyond the brief's own checks: the edges of each rule.
     ok("a port with no device is a group of its own, not lumped with the others",
        [p.name for p in in_order([P("A"), P("B", "X"), P("C"), P("D", "X")])] == ["A", "B", "D", "C"])
-    ok("each control word moves a port after the others, in any case",
-       all([p.name for p in in_order([P(f"Keys {word}", "Keys"), P("Keys", "Keys")])] == ["Keys", f"Keys {word}"]
-           for word in ("DAW", "daw", "MIDIIN2", "InControl", "CONTROL", "ctrl")))
+    for word in ("DAW", "daw", "MIDIIN2", "InControl", "CONTROL", "ctrl"):
+        ok(f"the word {word} in a port's name moves it after the others",
+           [p.name for p in in_order([P(f"Keys {word}", "Keys"), P("Keys", "Keys")])] == ["Keys", f"Keys {word}"])
+    ok("devices are listed in the order the OS meets them, not by name",
+       [p.name for p in in_order([P("Z1", "Zoom"), P("A1", "Alesis"), P("Z2", "Zoom")])] == ["Z1", "Z2", "A1"])
+    ok("a control word in the device's own name does not flag its playing port",
+       [p.name for p in in_order([P("Keystation Controller DAW Port", "Keystation Controller"),
+                                  P("Keystation Controller MIDI Port", "Keystation Controller")])] ==
+       ["Keystation Controller MIDI Port", "Keystation Controller DAW Port"])
+    ok("nor Launch Control XL's, whose playing port is named for the device",
+       [p.name for p in in_order([P("Launch Control XL DAW Port", "Launch Control XL"),
+                                  P("Launch Control XL", "Launch Control XL")])] ==
+       ["Launch Control XL", "Launch Control XL DAW Port"])
     ok("an id only counts where the port has one too",
        find_port({"name": "renamed", "id": "1001"}, [P("TD-17")]) == (None, False))
     ok("two ports alike by id are not guessed between",
        find_port({"name": "renamed", "id": "1001"}, [P("TD-17", id="1001"), P("Keys", id="1001")]) == (None, True))
     ok("a saved port with no usable name and no id finds nothing",
        find_port({"device": "TD-17"}, here) == (None, False) and find_port({"name": "  "}, here) == (None, False))
+    ok("the exact name comes before the bare one: TD-17 1 among TD-17 1 and TD-17 2",
+       find_port({"name": "TD-17 1"}, [P("TD-17 1"), P("TD-17 2")])[0].name == "TD-17 1")
+    ok("bare_name ignores the space around a name", bare_name("  2- TD-17 1 ") == "TD-17")
+    ok("a saved 2- with nothing after it matches no port", find_port({"name": "2- "}, [P("3-")]) == (None, False))
+    ok("a saved KeyLab 49 is not bound to a KeyLab 61 by its bare name",
+       find_port({"name": "KeyLab 49", "device": "KeyLab 49"}, [P("KeyLab 61", "KeyLab 61")]) == (None, False))
+    ok("Windows' renumbered name is still found on its own device",
+       find_port({"name": "TD-17 1", "device": "TD-17"}, [P("TD-17 2", "TD-17")])[0].name == "TD-17 2")
 
     print("\n" + "=" * 60)
     if problems:

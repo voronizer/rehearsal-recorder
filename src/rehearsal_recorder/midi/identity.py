@@ -34,8 +34,11 @@ def bare_name(name: str) -> str:
     number at the end. Both can change when devices are replugged, so a port
     saved as "TD-17 1" can come back as "TD-17 2", or as "2- TD-17". Taking
     them off leaves the name the ports have in common, which is what find_port
-    falls back to when the name itself finds nothing.
+    falls back to when the name itself finds nothing. Space around the name is
+    taken off first, so a name that is only Windows' numbers has an empty bare
+    name, and find_port does not match on that.
     """
+    name = name.strip()
     return _NUMBER_AT_END.sub("", _NUMBER_IN_FRONT.sub("", name))
 
 
@@ -46,17 +49,20 @@ def find_port(saved: dict, ports: list[PortInfo]) -> tuple[PortInfo | None, bool
     something when it was saved, so any of them but the name may be missing.
 
     The tiers are tried in order: a port with the same id, where both have
-    one; then the same name; then the same name as bare_name gives it. The
-    first tier that finds any ports decides. One port is the answer, and two
-    or more alike give (None, True): the caller shows the port as not
-    connected and lists them, rather than guess which was meant. Nothing
-    found is (None, False), and so is a saved port with no usable name and no
-    id.
+    one; then the same name; then the same name as bare_name gives it, on the
+    same device where both name one (a KeyLab 49 is not a KeyLab 61 for being
+    called "KeyLab"). The first tier that finds any ports decides. One port is
+    the answer, and two or more alike give (None, True): the caller shows the
+    port as not connected and lists them, rather than guess which was meant.
+    Nothing found is (None, False), and so is a saved port with no usable name
+    and no id.
     """
     name = saved.get("name")
     name = name if isinstance(name, str) and name.strip() else ""
     ident = saved.get("id")
     ident = ident if isinstance(ident, str) else ""
+    device = saved.get("device")
+    device = device if isinstance(device, str) else ""
 
     # An id counts only where both have one, so a port with no id never
     # matches by it.
@@ -68,9 +74,13 @@ def find_port(saved: dict, ports: list[PortInfo]) -> tuple[PortInfo | None, bool
         alike = [p for p in ports if p.name == name]
         if alike:
             return _one_of(alike)
-        alike = [p for p in ports if bare_name(p.name) == bare_name(name)]
-        if alike:
-            return _one_of(alike)
+        bare = bare_name(name)
+        # An empty bare name would match every port that is only Windows'
+        # numbers, so there is nothing to match on then.
+        if bare:
+            alike = [p for p in ports if bare_name(p.name) == bare and _same_device(p, device)]
+            if alike:
+                return _one_of(alike)
     return None, False
 
 
@@ -108,9 +118,26 @@ def in_order(ports: list[PortInfo]) -> list[PortInfo]:
 
 
 def _is_control(port: PortInfo) -> bool:
-    """Whether a port is a device's control or DAW port (see in_order)."""
+    """
+    Whether a port is a device's control or DAW port (see in_order). The
+    device's own name is taken out of the port's name first: "Launch Control XL"
+    and "Keystation Controller" are names with a control word in them, and their
+    playing ports say nothing of the kind.
+    """
     name = port.name.lower()
+    if port.device:
+        name = name.replace(port.device.lower(), " ")
     return any(word in name for word in _CONTROL_WORDS)
+
+
+def _same_device(port: PortInfo, device: str) -> bool:
+    """
+    Whether a port may be the saved one as far as the device goes: where both
+    name a device, it must be the same one. CoreMIDI fills in the device, so a
+    KeyLab 49 never binds to a KeyLab 61 by the bare name they share. A port
+    that names no device is not held against the saved one.
+    """
+    return not (port.device and device) or port.device == device
 
 
 def _one_of(alike: list[PortInfo]) -> tuple[PortInfo | None, bool]:
