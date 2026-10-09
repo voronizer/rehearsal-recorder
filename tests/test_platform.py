@@ -711,6 +711,46 @@ def main():
         ok(f"a real start and stop on this {'Mac' if sys.platform == 'darwin' else 'Windows'}",
            started and stopped)
 
+    print("\n[battery] The battery's charge, only while the laptop runs on it")
+
+    def internal(state, current, most):
+        return {"Type": "InternalBattery", "Power Source State": state,
+                "Current Capacity": current, "Max Capacity": most}
+
+    ok("a Mac on its battery says its charge",
+       ps.mac_battery([internal("Battery Power", 14, 100)]) == 14)
+    ok("worked out from the capacity when it is not out of 100",
+       ps.mac_battery([internal("Battery Power", 2800, 4000)]) == 70)
+    ok("a Mac on mains says nothing",
+       ps.mac_battery([internal("AC Power", 14, 100)]) is None)
+    ups = dict(internal("Battery Power", 14, 100), Type="UPS")
+    ok("nor a Mac with no battery",
+       ps.mac_battery([]) is None and ps.mac_battery([ups]) is None)
+    ok("nor one that cannot say how full it can be",
+       ps.mac_battery([internal("Battery Power", 14, 0)]) is None
+       and ps.mac_battery([{"Type": "InternalBattery",
+                            "Power Source State": "Battery Power"}]) is None)
+    ok("Windows on its battery says its charge",
+       ps.windows_battery(0, 0, 14) == 14 and ps.windows_battery(0, 2, 64) == 64)
+    ok("Windows on mains says nothing", ps.windows_battery(1, 8, 64) is None)
+    ok("nor without a battery, or when it cannot tell",
+       ps.windows_battery(0, 128, 255) is None
+       and ps.windows_battery(0, 255, 50) is None
+       and ps.windows_battery(0, 1, 255) is None)
+    ok("on Linux there is no answer", ps.battery_percent("linux") is None)
+    # battery_percent() swallows a failure, so the system's call is asked
+    # directly too: a call that is wrong for the system must fail here.
+    if sys.platform == "darwin":
+        ok("IOKit's power sources can be read on this Mac",
+           isinstance(ps._mac_power_sources(), list))
+    if sys.platform == "win32":
+        ok("Windows says what it runs on",
+           ps._windows_power_status().ACLineStatus in (0, 1, 255))
+    if sys.platform in ("darwin", "win32"):
+        charge = ps.battery_percent()
+        ok("this machine's answer is a charge or none",
+           charge is None or (isinstance(charge, int) and 0 <= charge <= 100))
+
     print("\n" + "=" * 60)
 
     if problems:

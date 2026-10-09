@@ -763,3 +763,112 @@ class SleepWatch:
             return False
         self._handle = handle
         return True
+
+
+# ---------- the battery ----------
+
+
+def mac_battery(descriptions):
+    """The charge of a Mac's own battery from IOKit's power source
+    descriptions, 0 to 100, while the Mac runs on it; None on mains, with no
+    battery, or when the battery cannot say how full it can be. A UPS is not
+    the laptop's battery."""
+    for d in descriptions:
+        if d.get("Type") != "InternalBattery":
+            continue
+        if d.get("Power Source State") != "Battery Power":
+            return None
+        most = d.get("Max Capacity")
+        current = d.get("Current Capacity")
+        if not most or current is None:
+            return None
+        return round(current * 100 / most)
+    return None
+
+
+def windows_battery(ac_line, flag, percent):
+    """The charge from GetSystemPowerStatus's SYSTEM_POWER_STATUS, while
+    the laptop runs on its battery; None on mains (ACLineStatus not 0), with
+    no battery (BatteryFlag 128), or when Windows cannot tell (255)."""
+    if ac_line != 0 or flag == 255 or flag & 128 or percent == 255:
+        return None
+    return percent
+
+
+class SYSTEM_POWER_STATUS(ctypes.Structure):
+    _fields_ = [
+        ("ACLineStatus", ctypes.c_ubyte),
+        ("BatteryFlag", ctypes.c_ubyte),
+        ("BatteryLifePercent", ctypes.c_ubyte),
+        ("SystemStatusFlag", ctypes.c_ubyte),
+        ("BatteryLifeTime", ctypes.c_ulong),
+        ("BatteryFullLifeTime", ctypes.c_ulong),
+    ]
+
+
+# IOKit's power source functions, loaded once. The two Copy functions hand
+# over an object the caller owns, and are declared so: asked every couple of
+# seconds through a take, a leak would add up.
+_iokit = {}
+
+
+def _mac_power_sources():
+    if not _iokit:
+        import objc
+        from Foundation import NSBundle
+
+        bundle = NSBundle.bundleWithIdentifier_(
+            "com.apple.framework.IOKit"
+        ) or NSBundle.bundleWithPath_("/System/Library/Frameworks/IOKit.framework")
+        objc.loadBundleFunctions(bundle, _iokit, [
+            ("IOPSCopyPowerSourcesInfo", b"@", "",
+             {"retval": {"already_cfretained": True}}),
+            ("IOPSCopyPowerSourcesList", b"@@", "",
+             {"retval": {"already_cfretained": True}}),
+            ("IOPSGetPowerSourceDescription", b"@@@"),
+        ])
+    blob = _iokit["IOPSCopyPowerSourcesInfo"]()
+    if blob is None:
+        return []
+    sources = _iokit["IOPSCopyPowerSourcesList"](blob) or []
+    found = []
+    for source in sources:
+        description = _iokit["IOPSGetPowerSourceDescription"](blob, source)
+        if description is not None:
+            found.append(dict(description))
+    return found
+
+
+def _windows_power_status():
+    status = SYSTEM_POWER_STATUS()
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetSystemPowerStatus.argtypes = [ctypes.POINTER(SYSTEM_POWER_STATUS)]
+    if not kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+        raise OSError(f"GetSystemPowerStatus: error {ctypes.get_last_error()}")
+    return status
+
+
+_battery_said = False
+
+
+def battery_percent(system=sys.platform):
+    """
+    The laptop's charge, 0 to 100, only while it runs on its battery; None
+    on mains, with no battery, or when the system cannot say. Never raises:
+    asked by the recording screen's health check, which must answer anyway.
+    A failure is printed once, not on every poll.
+    """
+    global _battery_said
+    try:
+        if system == "darwin":
+            return mac_battery(_mac_power_sources())
+        if system == "win32":
+            s = _windows_power_status()
+            return windows_battery(
+                s.ACLineStatus, s.BatteryFlag, s.BatteryLifePercent
+            )
+    except Exception as e:  # noqa: BLE001
+        if not _battery_said:
+            _battery_said = True
+            print(f"[battery] cannot read the battery: {e}")
+    return None
