@@ -10,10 +10,13 @@ things to be true:
                        crash recovery (a crashed take's notes included), both
                        bit depths, compression, the notes going to the
                        cloud with the original tracks, the notes the player
-                       is sent for a take (take_notes), and the MIDI ports
+                       is sent for a take (take_notes), the MIDI ports
                        before a take (the check, Start, Finish, Under the
-                       hood). No browser, no sound card: PortAudio is
-                       stubbed and the samples are inspected directly.
+                       hood), and a take's notes following its files
+                       (renamed, merged, deleted and cropped with the audio,
+                       a take of nothing but notes too). No browser, no
+                       sound card: PortAudio is stubbed and the samples are
+                       inspected directly.
 
     test_platform.py   the places macOS, Windows and Linux differ. Only one
                        of them is here, so the code is driven into each shape
@@ -52,7 +55,10 @@ things to be true:
                        up when its port goes, a take fed through the rig's
                        own threads), and a take's .mid read back as the notes
                        the player draws (a drum grid or a piano roll, a roll on
-                       one note paired oldest first).
+                       one note paired oldest first), and a .mid cropped (the
+                       state before the start at tick 0, a key held across
+                       either end left out or let go, ticks that do not
+                       drift).
                        Later tasks add to it. No port is opened: the library
                        is blocked and the rules are plain functions.
 

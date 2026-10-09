@@ -8,8 +8,8 @@ one take's notes on disk, written as they are played and made a .mid at Stop or
 after a crash (F3, F5 and F7); the rehearsal's ports, which wait, come and go,
 are held by another app or alike, go quiet, send the same notes twice and feed
 a take (D7, P1, P4, P5, P7, P8, F7); a take's .mid read back as the notes the
-player draws, in a drum grid or a piano roll (Part 6); later sections are added
-here as the rest of it is built.
+player draws, in a drum grid or a piano roll (Part 6); a take's .mid cropped
+with its audio (F4); later sections are added here as the rest of it is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
@@ -2605,6 +2605,155 @@ def main():
     rig_imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
                    for n in ast.walk(ast.parse(rig_source)) if isinstance(n, (ast.Import, ast.ImportFrom))}
     ok("the rig imports neither the MIDI library nor mido", not rig_imports & {"pylibremidi", "mido"})
+
+    print("\n[8] Cropping a .mid")
+    # Keeping [start, end) of a take's notes (spec F4). What the instrument was set to
+    # before the start is written at tick 0, a key held across the start is left out with
+    # its release, and a key held across the end is let go at the end.
+
+    def struck8(sec, note, ch=0, vel=100):
+        return (sec, bytes((0x90 | ch, note, vel)))
+
+    def freed8(sec, note, ch=0, vel=0x40):
+        return (sec, bytes((0x80 | ch, note, vel)))
+
+    def control8(sec, number, value, ch=0):
+        return (sec, bytes((0xB0 | ch, number, value)))
+
+    def ticks8(path):
+        """A .mid's events as (tick, bytes), the start messages first."""
+        return [(round(sec * 1920), data) for sec, data in read_events(path)[1]]
+
+    def key8(timed, note):
+        """The note-ons and note-offs of one key among (tick, bytes)."""
+        return [(tick, data) for tick, data in timed if data[0] & 0xF0 in (0x80, 0x90) and data[1] == note]
+
+    with tempfile.TemporaryDirectory() as folder8:
+        folder8 = Path(folder8)
+        # Written with write_mid, so a time in it is exactly a tick over 1920. The program change is
+        # what the take began with; the SysEx is a whole one.
+        sysex8 = b"\xF0\x7E\x7F\x09\x01\xF7"
+        source8 = folder8 / "Клавиши.mid"
+        write_mid(source8, track_name="Клавиши", port_name="Launchkey Mini", start=[b"\xC0\x05"], events=[
+            control8(0.5, 4, 90), control8(0.6, 64, 127),
+            struck8(1.0, 60),                                    # held across the start
+            struck8(2.5, 62), freed8(2.6, 62),                   # inside
+            freed8(3.0, 60),                                     # its release
+            (3.5, sysex8),
+            struck8(4.0, 64),                                    # held across the end
+            control8(5.5, 64, 0), freed8(6.0, 64),
+        ])
+        target8 = folder8 / "Клавиши cut.mid"
+        ok("crop_mid answers {ok: True}", smf.crop_mid(source8, target8, 2.0, 5.0) == {"ok": True})
+        cut8 = ticks8(target8)
+        ok("what was set before the start is at tick 0: the program, then the controllers by number",
+           cut8[:3] == [(0, b"\xC0\x05"), (0, b"\xB0\x04\x5A"), (0, b"\xB0\x40\x7F")])
+        ok("a key held across the start is left out, its release too", key8(cut8, 60) == [])
+        ok("the key inside is at 0.5 and 0.6 s from the new start, its velocities as they were",
+           key8(cut8, 62) == [(960, b"\x90\x3e\x64"), (1152, b"\x80\x3e\x40")])
+        ok("a SysEx inside is kept whole, 1.5 s in", [(t, d) for t, d in cut8 if d[0] == 0xF0] == [(2880, sysex8)])
+        ok("a key held across the end starts at 2.0 s and is let go at 3.0 s, the end",
+           key8(cut8, 64) == [(3840, b"\x90\x40\x64"), (5760, b"\x80\x40\x00")])
+        ok("the pedal that was still down is let up there too, and nothing after the end is in the file",
+           cut8[-2:] == [(5760, b"\x80\x40\x00"), (5760, b"\xB0\x40\x00")] and len(cut8) == 9)
+        ok("the track name and the port's name are kept",
+           read_events(target8)[0] == {"track_name": "Клавиши", "device_name": "Launchkey Mini"})
+        mid8, _ = read_back(target8)
+        ok("it is the same kind of file: format 0, 960 ticks to the beat, 120 bpm",
+           mid8.type == 0 and mid8.ticks_per_beat == 960 and len(mid8.tracks) == 1
+           and any(m.type == "set_tempo" and m.tempo == 500_000 for m in mid8.tracks[0]))
+        ok("the original is as it was", len(ticks8(source8)) == 11 and key8(ticks8(source8), 60)[0][0] == 1920)
+
+        # Everything is the same take.
+        whole8 = folder8 / "whole.mid"
+        ok("a crop of all of it gives the same names and the same events",
+           smf.crop_mid(source8, whole8, 0.0, 100.0) == {"ok": True} and read_events(whole8) == read_events(source8))
+
+        # Keys by channel; a key struck again while held; a release as a note-on at velocity 0.
+        edge8 = folder8 / "edge.mid"
+        write_mid(edge8, track_name="T", port_name="P", start=[], events=[
+            struck8(0.5, 60, ch=0), struck8(0.6, 60, ch=1), struck8(0.7, 61),
+            struck8(2.5, 60, ch=0),                              # struck again before it was let go
+            freed8(2.6, 60, ch=1),                               # channel 2's key, held across the start
+            struck8(2.7, 61, vel=0),                             # the release of a key held across the start
+            freed8(3.0, 60, ch=0),
+        ])
+        edge_cut8 = folder8 / "edge cut.mid"
+        smf.crop_mid(edge8, edge_cut8, 2.0, 5.0)
+        ok("a key struck again after the start keeps its release; one the file never struck has none, "
+           "on its own channel or as a note-on at velocity 0",
+           ticks8(edge_cut8) == [(960, b"\x90\x3c\x64"), (1920, b"\x80\x3c\x40")])
+
+        # Let go at the end: the keys, in the order they were struck, then the pedals.
+        ends8 = folder8 / "ends.mid"
+        smf.crop_mid(source8, ends8, 1.0, 2.0)
+        ok("keys held at the end are let up first, then the pedals that are down",
+           ticks8(ends8) == [(0, b"\xC0\x05"), (0, b"\xB0\x04\x5A"), (0, b"\xB0\x40\x7F"),
+                             (0, b"\x90\x3c\x64"), (1920, b"\x80\x3c\x00"), (1920, b"\xB0\x40\x00")])
+
+        # A range with nothing played in it is a file of its names and what was set.
+        quiet8 = folder8 / "quiet.mid"
+        smf.crop_mid(source8, quiet8, 7.0, 9.0)
+        ok("a range with no notes keeps the names and what was set, the pedal as it last was",
+           ticks8(quiet8) == [(0, b"\xC0\x05"), (0, b"\xB0\x04\x5A"), (0, b"\xB0\x40\x00")]
+           and read_events(quiet8)[0] == {"track_name": "Клавиши", "device_name": "Launchkey Mini"})
+        plain8 = folder8 / "plain.mid"
+        write_mid(plain8, track_name="Keys", port_name="Launchkey", start=[], events=[struck8(1.0, 60), freed8(1.5, 60)])
+        nothing8 = folder8 / "nothing.mid"
+        smf.crop_mid(plain8, nothing8, 3.0, 4.0)
+        ok("and a file that set nothing is the names alone",
+           ticks8(nothing8) == [] and read_events(nothing8)[0] == {"track_name": "Keys", "device_name": "Launchkey"})
+
+        # Ticks come from the time since the start, never from the deltas before: a long take is not off by a tick.
+        long8 = [(i * 0.037, bytes((0x99 if i % 2 == 0 else 0x89, 36, 100 if i % 2 == 0 else 0))) for i in range(20_000)]
+        many8 = folder8 / "many.mid"
+        write_mid(many8, track_name="Kit", port_name="TD-17", start=[], events=long8)
+        for start8, end8, shift8 in ((100.0, 400.0, 192000), (100.0003, 400.0003, 192001)):
+            # 100.0003 s is not on a tick: 192000.576 ticks, so every tick moves by 192001.
+            kept8 = [(round(t * 1920), data) for t, data in long8
+                     if shift8 - 0.5 < round(t * 1920) <= shift8 - 0.5 + 300 * 1920]
+            wanted8, held8 = [], False
+            for tick, data in kept8:
+                if data[0] == 0x99:
+                    held8 = True
+                elif not held8:
+                    continue  # the release of a key struck before the start
+                else:
+                    held8 = False
+                wanted8.append((tick - shift8, data))
+            if held8:
+                wanted8.append((round(300 * 1920), b"\x89\x24\x00"))
+            many_cut8 = folder8 / f"many {start8}.mid"
+            smf.crop_mid(many8, many_cut8, start8, end8)
+            ok(f"20000 events cropped from {start8} s are each on round(seconds * 1920) from the new start, "
+               "none off by the rounding of the ones before",
+               len(wanted8) > 7000 and ticks8(many_cut8) == wanted8)
+
+        # A file a DAW saved again: 480 ticks to the beat, 100 bpm, the tempo in a track of its own.
+        daw8 = folder8 / "daw.mid"
+        daw_file8 = mido.MidiFile(type=1, ticks_per_beat=480, charset="utf-8")
+        daw_file8.tracks.append(mido.MidiTrack([mido.MetaMessage("set_tempo", tempo=600_000)]))
+        daw_file8.tracks.append(mido.MidiTrack([
+            mido.MetaMessage("track_name", name="Bass"),
+            mido.Message("note_on", note=40, velocity=90, time=1600),     # 2.0 s at 100 bpm
+            mido.Message("note_off", note=40, velocity=0, time=800)]))    # 3.0 s
+        daw_file8.save(daw8)
+        daw_cut8 = folder8 / "daw cut.mid"
+        smf.crop_mid(daw8, daw_cut8, 1.0, 2.5)
+        ok("a file with other ticks and another tempo is cut by its own seconds, and written as ours",
+           ticks8(daw_cut8) == [(1920, b"\x90\x28\x5a"), (2880, b"\x80\x28\x00")]
+           and read_events(daw_cut8)[0]["track_name"] == "Bass" and read_back(daw_cut8)[0].ticks_per_beat == 960)
+
+        # What cannot be cropped is said, never raised, and writes nothing.
+        bad8 = folder8 / "bad.mid"
+        bad8.write_bytes(b"not a midi file")
+        gone8 = smf.crop_mid(folder8 / "gone.mid", folder8 / "never1.mid", 0.0, 1.0)
+        torn8 = smf.crop_mid(bad8, folder8 / "never2.mid", 0.0, 1.0)
+        nowhere8 = smf.crop_mid(source8, folder8 / "no folder" / "never3.mid", 0.0, 1.0)
+        ok("a file that is not there, one that is no .mid and a place that cannot be written to are each "
+           "{ok: False, error}",
+           all(r["ok"] is False and r["error"] for r in (gone8, torn8, nowhere8)))
+        ok("and nothing is left behind", not any(p.name.startswith("never") for p in folder8.rglob("*")))
 
     print("\n[9] Notes for the player")
     # A take's .mid read back as what the player's lane draws (Part 6): a drum

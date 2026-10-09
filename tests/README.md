@@ -22,7 +22,14 @@ ports before a take run here too, through the Api on a fake port system: the
 signal check opens them (a band of nothing but MIDI is checked all the same),
 Start keeps what the check had open and opens what the final tracks say,
 Finish and closing the app let them go, and Under the hood and Copy details
-say what MIDI there is.
+say what MIDI there is. A take's notes follow its files:
+renaming a take, merging its song and the pass that puts names right move the
+`.mid` files with the folder (a take of nothing but notes, which has no `.wav`
+to find its folder by, included, and an unconverted `.midraw` goes along),
+deleting finds the folder through them, and cropping cuts them with the audio,
+a draft's too, with the originals of both kinds put aside together and put
+back together when a move fails, when the new `.mid` cannot take its name or
+when one cannot be read.
 
 No sound card and no browser: `sounddevice` is replaced by a stub before
 anything imports it, the renderer is called directly, and the samples that
@@ -115,7 +122,14 @@ octaves otherwise, the General MIDI drum map with the e-kits' extra notes and
 an Other row only when a note outside it is used, a roll on one note paired
 oldest first, a note-on at velocity 0 as a release, a note never released
 lasting to the file's last event, a file with no notes, and a take of an hour
-and 40000 notes. Later tasks add to it.
+and 40000 notes; and a `.mid` cropped (`crop_mid`): what was set before the
+start written at tick 0, a key held across the start left out with its release
+(on its own channel, a note-on at velocity 0 too), a key held across the end let
+go there with the pedals that are down, a SysEx kept whole, the names kept,
+every tick `round(seconds * 1920)` from the new start over 20000 events and from
+a start that is not on a tick, a file a DAW saved again at other ticks and
+another tempo, and a file that cannot be read or written answered, never
+raised. Later tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 

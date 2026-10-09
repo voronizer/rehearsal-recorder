@@ -79,6 +79,7 @@ from rehearsal_recorder.mediaserver import AppServer
 from rehearsal_recorder.midi import ports as midiports
 from rehearsal_recorder.midi.rig import MidiRig
 from rehearsal_recorder.midi.rules import records_audio
+from rehearsal_recorder.midi.smf import crop_mid
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
 from rehearsal_recorder.store.library import (
@@ -202,6 +203,13 @@ def _unique_path(path):
 def _take_dir_name(take_number, name):
     """What a take's folder is called: "03 - Polyn 3"."""
     return f"{int(take_number):02d} - {_safe_name(name)}"
+
+
+def _dirs_of(take):
+    """The folders a take's files are in, its audio's and its notes'. A take of
+    nothing but notes has no audio to find its folder by."""
+    files = [*take["tracks"], *(take.get("notes") or [])]
+    return {Path(f["file"]).parent for f in files if f.get("file")}
 
 
 def _carries(dir_name, expected):
@@ -2433,13 +2441,15 @@ class Api:
     def _move_take_dir(self, folder, take_number, take, name):
         """
         A take's folder renamed to carry `name`, so the names still make
-        sense browsing the disk. Returns (moved, tracks, error): the (old,
-        new) folders when it moved, the take's files at their new paths
-        (None when nothing moved), and why it could not be moved.
+        sense browsing the disk. Returns (moved, tracks, notes, error): the
+        (old, new) folders when it moved, the take's audio files and its notes
+        at their new paths (None when nothing moved), and why it could not be
+        moved. Whatever else is in the folder, an unconverted .midraw among it,
+        goes with it.
         """
-        old_dirs = {Path(t["file"]).parent for t in take["tracks"] if t.get("file")}
+        old_dirs = _dirs_of(take)
         if len(old_dirs) != 1:
-            return None, None, None
+            return None, None, None, None
         old_dir = old_dirs.pop()
         target = folder / _take_dir_name(take_number, name)
         # Path itself compares case-insensitively on Windows, so whether
@@ -2458,7 +2468,7 @@ class Api:
         else:
             new_dir = _unique_path(target)
         if not old_dir.exists() or str(old_dir) == str(new_dir):
-            return None, None, None
+            return None, None, None, None
         # Windows will not rename a folder holding a file the player has
         # mapped, and the rehearsal screen is usually playing the very take
         # it offers to rename. The interface reopens the take from its new
@@ -2467,10 +2477,12 @@ class Api:
         try:
             old_dir.rename(new_dir)
         except OSError as e:
-            return None, None, str(e)
-        return ((old_dir, new_dir),
-                [{**t, "file": str(new_dir / Path(t["file"]).name)} for t in take["tracks"]],
-                None)
+            return None, None, None, str(e)
+
+        def at_new(files):
+            return [{**f, "file": str(new_dir / Path(f["file"]).name)} for f in files]
+
+        return (old_dir, new_dir), at_new(take["tracks"]), at_new(take.get("notes") or []), None
 
     def rename_take(self, folder, take_number, new_name):
         """Renames a take and its folder on disk, keeping paths in sync."""
@@ -2493,14 +2505,15 @@ class Api:
             # differ from what was typed: renamed to its own song, a take
             # keeps its go.
             named = self._lib.resolve_name(folder, display_name, take_number)
-            moved, new_tracks, error = self._move_take_dir(
+            moved, new_tracks, new_notes, error = self._move_take_dir(
                 folder, take_number, take, named["name"])
             if error is not None:
                 print(f"[rename] take folder: {error}")
 
             try:
                 updated = self._lib.update_take(
-                    folder, take_number, name=display_name, tracks=new_tracks
+                    folder, take_number, name=display_name, tracks=new_tracks,
+                    notes=new_notes
                 )
             except Exception:
                 # The folder must not stay renamed under a record that still
@@ -2794,31 +2807,36 @@ class Api:
                     f"A take has to keep at least {MIN_CROP_SEC:g} second"}
         return {"start": start, "end": end}
 
-    def _crop_tracks(self, tracks, start_sec, end_sec, progress=None):
+    def _crop_tracks(self, tracks, start_sec, end_sec, progress=None, notes=()):
         """
-        Rewrites every track shorter and puts the originals in the Trash as
-        one folder named after the take — what turns up there is then a
-        recognisable thing rather than eight loose files called Gtr.wav.
+        Rewrites every track shorter, and every notes file (a .mid) with them,
+        and puts the originals in the Trash as one folder named after the take
+        — what turns up there is then a recognisable thing rather than eight
+        loose files called Gtr.wav. Anything else in the take's folder, an
+        unconverted .midraw among it, is not the crop's to touch.
 
         The order matters, because the app can be killed in the middle of it.
         Every new file is written under WRITING_PREFIX first, so nothing is
         replaced until all of them exist; then the originals move aside
-        together; then the new files take their names; then the folder of
-        originals goes. Die between those last two and the take folder holds
-        obviously-unfinished files with the originals in a folder beside it —
-        repairable by hand, which is the most a step that moves files can
-        promise. A move that fails while the app is alive is undone instead:
-        the take goes back to exactly what it was, because a half-cropped take
-        behind the words "could not crop" is a take nobody goes looking at.
+        together, the .mid files with the .wav files; then the new files take
+        their names; then the folder of originals goes. Die between those last
+        two and the take folder holds obviously-unfinished files with the
+        originals in a folder beside it — repairable by hand, which is the most
+        a step that moves files can promise. A move that fails while the app is
+        alive is undone instead: the take goes back to exactly what it was,
+        because a half-cropped take behind the words "could not crop" is a take
+        nobody goes looking at.
         """
-        take_dir = Path(tracks[0]["file"]).parent
+        files = [*tracks, *notes]
+        take_dir = Path(files[0]["file"]).parent
         written = []
         # What the new files really came out as. Tracks of a take may differ in
         # length, so the take is as long as its longest one — and the region
         # that was asked for is not that length: it is not clamped to the file
         # for a draft, and a legacy take with no stored duration is not clamped
-        # at all.
-        kept_sec = 0.0
+        # at all. A take of nothing but notes has no audio to measure: it is
+        # the region.
+        kept_sec = 0.0 if tracks else max(0.0, end_sec - start_sec)
         # How far along it is, the tracks weighed by their length.
         stages = activitymod.Stages(
             [(f"Track {i + 1} of {len(tracks)}", wav_frames(t["file"]))
@@ -2837,6 +2855,16 @@ class Api:
                 return {"ok": False, "error": res["error"]}
             written.append(target)
             kept_sec = max(kept_sec, res["frames"] / res["samplerate"])
+        for n in notes:
+            source = Path(n["file"])
+            target = _writing_path(source)
+            res = crop_mid(source, target, start_sec, end_sec)
+            if not res["ok"]:
+                target.unlink(missing_ok=True)
+                for w in written:
+                    w.unlink(missing_ok=True)
+                return {"ok": False, "error": f"{source.name}: {res['error']}"}
+            written.append(target)
 
         aside = _unique_path(take_dir.with_name(f"{take_dir.name} (before crop)"))
         # Every original that reached the aside folder, oldest first. On
@@ -2847,12 +2875,12 @@ class Api:
         moved = []
         try:
             aside.mkdir(parents=True)
-            for t in tracks:
-                source = Path(t["file"])
+            for f in files:
+                source = Path(f["file"])
                 shutil.move(str(source), str(aside / source.name))
                 moved.append((aside / source.name, source))
-            for t, target in zip(tracks, written):
-                os.replace(target, Path(t["file"]))
+            for f, target in zip(files, written):
+                os.replace(target, Path(f["file"]))
         except OSError as e:
             # Backwards, so that an original lands on top of a replacement
             # already made rather than under it. os.replace rather than
@@ -2909,7 +2937,8 @@ class Api:
             return {"ok": False, "error": "Take not found"}
 
         tracks = [t for t in take["tracks"] if Path(t.get("file", "")).exists()]
-        if not tracks:
+        notes = [n for n in take.get("notes") or [] if Path(n.get("file", "")).exists()]
+        if not tracks and not notes:
             return {"ok": False, "error": "The take has no files left on disk"}
 
         span = self._crop_span(take["duration_sec"], start_sec, end_sec)
@@ -2926,7 +2955,7 @@ class Api:
             "crop", f"Cropping “{take.get('name') or f'Take {take_number}'}”",
             folder, take_number,
             lambda progress: self._crop_tracks(
-                tracks, span["start"], span["end"], progress=progress),
+                tracks, span["start"], span["end"], progress=progress, notes=notes),
         )
         if not done["ok"]:
             # Nothing else will put the player back: the take's tracks are
@@ -2989,19 +3018,22 @@ class Api:
             **({"error": done["error"]} if "error" in done else {}),
         }
 
-    def crop_draft(self, temp_dir, tracks, start_sec, end_sec):
+    def crop_draft(self, temp_dir, tracks, start_sec, end_sec, notes=None):
         """
         The same cut, one folder over. A take that has been stopped is proper
         .wav already — capture wraps the raw PCM on stop — it just has no
         record in the database yet, so there is nothing here to fix up. The
         files keep their paths, so the caller saves the take as it would have.
+        `notes` are its .mid files, [{"name", "file"}] like the tracks, cut
+        with them and answered the same way.
         """
         temp_dir = Path(temp_dir)
         if not self._inside_recordings(temp_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
         live = [t for t in (tracks or []) if Path(t.get("file", "")).exists()]
-        if not live:
+        live_notes = [n for n in (notes or []) if Path(n.get("file", "")).exists()]
+        if not live and not live_notes:
             return {"ok": False, "error": "The take has no files left on disk"}
 
         span = self._crop_span(0, start_sec, end_sec)
@@ -3013,7 +3045,7 @@ class Api:
         done = self._journaled(
             "crop", "Cropping the take", temp_dir, None,
             lambda progress: self._crop_tracks(
-                live, span["start"], span["end"], progress=progress),
+                live, span["start"], span["end"], progress=progress, notes=live_notes),
         )
         if not done["ok"]:
             # See crop_take: the files the interface would reopen on have not
@@ -3024,6 +3056,7 @@ class Api:
         return {
             "ok": True,
             "tracks": live,
+            "notes": live_notes,
             "duration_sec": done["duration_sec"],
             "trashed": done["trashed"],
             "location": done["location"],
@@ -3215,12 +3248,9 @@ class Api:
                 return {"ok": False, "error": "Take not found"}
 
             # Find the take folder from its files rather than its name: the name
-            # could have been changed by hand.
-            take_dirs = {
-                str(Path(t["file"]).parent)
-                for t in target["tracks"]
-                if t.get("file")
-            }
+            # could have been changed by hand. Its notes are files too: a take
+            # of nothing but notes has no audio to find it by.
+            take_dirs = {str(d) for d in _dirs_of(target)}
             result = {"ok": True, "trashed": False, "location": None}
             for d in take_dirs:
                 if Path(d).exists() and self._inside_recordings(d):
@@ -4055,7 +4085,7 @@ class Api:
         more than one folder, or are not on disk, has no folder to rename.
         """
         wrong = set()
-        dirs = {Path(t["file"]).parent for t in take["tracks"] if t.get("file")}
+        dirs = _dirs_of(take)
         if len(dirs) == 1:
             d = next(iter(dirs))
             if d.is_dir() and not _carries(d.name, _take_dir_name(take["take_number"], take["name"])):
@@ -4121,13 +4151,14 @@ class Api:
                 with self._player_lock:
                     if self._playing_from(take):
                         return {"renamed": False, "error": None}
-                    moved, tracks, error = self._move_take_dir(
+                    moved, tracks, notes, error = self._move_take_dir(
                         folder, take_number, take, take["name"])
                 if error is not None:
                     return {"renamed": False, "error": error}
                 if moved:
                     try:
-                        updated = self._lib.update_take(folder, take_number, tracks=tracks)
+                        updated = self._lib.update_take(
+                            folder, take_number, tracks=tracks, notes=notes)
                     except Exception as e:
                         return self._undo_move(moved, str(e))
                     if updated is None:

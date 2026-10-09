@@ -10,6 +10,8 @@ The file is format 0, 960 ticks to the beat, at 120 bpm (D8), so a tick is a
 DAW has saved again may have other ticks to the beat and tempo changes, and is
 read in its own seconds (read_events).
 
+Cropping a take cuts its notes with its audio (crop_mid, spec F4).
+
 A .mid holds channel messages, SysEx and its own meta events, and nothing else.
 mido does not stop all of what a port sends from being written (it refuses
 clock and a few others and the save fails; active sensing, song position and
@@ -23,6 +25,8 @@ import threading
 from pathlib import Path
 
 import mido
+
+from .state import PortState
 
 log = logging.getLogger(__name__)
 
@@ -235,3 +239,59 @@ def read_events(path) -> tuple[dict, list[tuple[float, bytes]]]:
         events.append(((segment_units + (tick - segment_tick) * tempo) / per_second, data))
     names = {"track_name": metas.get("track_name", ""), "device_name": metas.get("device_name", "")}
     return names, events
+
+
+def crop_mid(source, target, start_sec: float, end_sec: float) -> dict:
+    """
+    Writes the part of `source` from `start_sec` up to `end_sec` (seconds into
+    the file) to `target`, as a file of its own that begins at 0 and is exactly
+    what write_mid makes. Answers {"ok": True}, or {"ok": False, "error"} for a
+    file that cannot be read or written; it does not raise, and writes `target`
+    only once `source` is read. `target` is written straight, so a caller that
+    wants it whole or not at all gives it a name of its own and moves it into
+    place (as the .wav files are).
+
+    What the instrument was set to before the start (the program, the
+    controllers, the pitch bend, the pedals) is written at tick 0, as a take's
+    own start is (F6), not by replaying what came before. A key held across the
+    start is left out with its release: a release for a key the file never
+    struck is dropped, on its channel, whether a note-off or a note-on at
+    velocity 0. A key still held at the end is let go there, and so is a pedal
+    still down (F7). The track's name and the port's name are kept, and a SysEx
+    inside the range whole. Each event's tick is round(seconds * 1920) from the
+    new start, as write_mid does it, so a long take is not off by a tick.
+    """
+    try:
+        names, events = read_events(source)
+        before = PortState()
+        kept = []
+        for seconds, data in events:
+            if seconds < start_sec:
+                before.feed(data)
+            elif seconds < end_sec:
+                kept.append((seconds, data))
+        start = before.start_messages()
+
+        # What the cropped file holds, as it will be played: the end is let go from this.
+        after = PortState()
+        for data in start:
+            after.feed(data)
+        struck = set()
+        shifted = []
+        for seconds, data in kept:
+            kind, key = data[0] & 0xF0, (data[0] & 0x0F, data[1])
+            if kind == 0x90 and data[2]:
+                struck.add(key)
+            elif kind in (0x80, 0x90):
+                if key not in struck:
+                    continue
+                struck.discard(key)
+            shifted.append((seconds - start_sec, data))
+            after.feed(data)
+        end = end_sec - start_sec
+        shifted.extend((end, data) for data in after.releases())
+        write_mid(target, track_name=names["track_name"], port_name=names["device_name"],
+                  start=start, events=shifted)
+    except Exception as e:
+        return {"ok": False, "error": str(e) or type(e).__name__}
+    return {"ok": True}

@@ -5812,7 +5812,7 @@ def main():
 
     def refuse_take_4(folder, number, take, name):
         if number == 4:
-            return None, None, "the folder is open in another program"
+            return None, None, None, "the folder is open in another program"
         return real_move53(folder, number, take, name)
 
     p53._move_take_dir = refuse_take_4
@@ -7959,6 +7959,280 @@ def main():
 
     apimod66.open_midi_system = real_open66
     apimod66.MIDI_THREADS = False
+
+    print("\n[68] A take's notes follow it")
+    # A take's .mid files sit beside its .wav files and go wherever the take goes: its
+    # folder renamed (by hand, by merging its song, or by the pass that puts names right),
+    # deleted, or cropped. A take of nothing but notes has no .wav to find its folder by.
+    from rehearsal_recorder.api import _carries as carries68
+    from rehearsal_recorder.api import _take_dir_name as dir_name68
+    from rehearsal_recorder.midi.smf import read_events as read_events68
+    from rehearsal_recorder.midi.smf import write_mid as write_mid68
+
+    tmp68 = Path(tempfile.mkdtemp())
+    apimod68, a68 = fresh_api(tmp68)
+    a68.start_rehearsal("Notes", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    folder68 = Path(a68._session["folder"])
+
+    def kit68(path):
+        """A kit's .mid: the hi-hat's controller, then a hit and its release each second, from 0.5 s."""
+        events = [e for second in range(4)
+                  for e in ((second + 0.5, b"\x99\x24\x64"), (second + 0.6, b"\x89\x24\x00"))]
+        write_mid68(path, track_name=path.stem, port_name="TD-17", start=[b"\xB9\x04\x5A"], events=events)
+        return {"name": path.stem, "file": str(path)}
+
+    def make68(number, name, audio=("Gtr",), notes=("Drums",), where=None, seconds=4.0):
+        """A kept take in the folder keep_take would make for it (or `where`): a .wav for each of
+        `audio` and a .mid for each of `notes`, added to the library."""
+        named = a68._lib.resolve_name(folder68, name, number)
+        take_dir = folder68 / (where or dir_name68(number, named["name"]))
+        take_dir.mkdir(parents=True, exist_ok=True)
+        tracks = []
+        for stem in audio:
+            write_wav(take_dir / f"{stem}.wav", 1000, seconds=seconds)
+            tracks.append({"name": stem, "file": str(take_dir / f"{stem}.wav")})
+        mids = [kit68(take_dir / f"{stem}.mid") for stem in notes]
+        return a68._lib.add_take(folder68, {
+            "take_number": number, "name": name, "duration_sec": seconds, "markers": [],
+            "tracks": tracks, "notes": mids})
+
+    def kit_ticks68(path):
+        return [(round(sec * 1920), data) for sec, data in read_events68(path)[1]]
+
+    def files68(take_dir):
+        return sorted(p.name for p in take_dir.iterdir())
+
+    whole68 = kit_ticks68(make68(90, "Spare")["notes"][0]["file"])
+    ok("a take as the library lists it has its .mid under notes, apart from the tracks",
+       len(whole68) == 9 and a68._lib.take(folder68, 90)["notes"][0]["name"] == "Drums"
+       and [t["name"] for t in a68._lib.take(folder68, 90)["tracks"]] == ["Gtr"])
+    a68.delete_take(str(folder68), 90)
+
+    # Renaming a take: the folder moves, and the .mid is listed at its new path; a .midraw
+    # the disk would not turn into a .mid goes along with the folder.
+    first68 = make68(1, "Polyn")
+    first_dir68 = Path(first68["notes"][0]["file"]).parent
+    (first_dir68 / "Keys.midraw").write_bytes(b"t 1\n")
+    res = a68.rename_take(str(folder68), 1, "Vesna")
+    moved_dir68 = folder68 / "01 - Vesna 1"
+    ok("renaming a take moves its folder, and the take still lists Drums.mid, at the new path",
+       res["ok"] and moved_dir68.is_dir() and not first_dir68.exists()
+       and [(n["name"], n["file"]) for n in res["take"]["notes"]] == [("Drums", str(moved_dir68 / "Drums.mid"))]
+       and [t["file"] for t in res["take"]["tracks"]] == [str(moved_dir68 / "Gtr.wav")])
+    ok("the files are there, and as the library has them", all(
+        Path(f["file"]).exists() for f in res["take"]["notes"] + res["take"]["tracks"])
+       and a68._lib.take(folder68, 1)["notes"] == res["take"]["notes"])
+    ok("an unconverted .midraw goes along with the folder",
+       files68(moved_dir68) == ["Drums.mid", "Gtr.wav", "Keys.midraw"])
+    ok("and the notes are as they were", kit_ticks68(moved_dir68 / "Drums.mid") == whole68)
+
+    # A take of nothing but notes has no .wav to find its folder by.
+    solo68 = make68(2, "Solo", audio=())
+    solo_dir68 = Path(solo68["notes"][0]["file"]).parent
+    ok("a take of nothing but notes lists no tracks", solo68["tracks"] == [] and len(solo68["notes"]) == 1)
+    res = a68.rename_take(str(folder68), 2, "Pesnya")
+    pesnya_dir68 = folder68 / "02 - Pesnya 1"
+    ok("a take of nothing but notes is renamed too: its folder moves and its .mid is listed at the new path",
+       res["ok"] and pesnya_dir68.is_dir() and not solo_dir68.exists() and res["take"]["tracks"] == []
+       and [n["file"] for n in res["take"]["notes"]] == [str(pesnya_dir68 / "Drums.mid")]
+       and (pesnya_dir68 / "Drums.mid").exists())
+    res = a68.rename_take(str(folder68), 2, "Pesnya")
+    ok("renamed to the name it has, nothing moves and the notes stay", res["ok"] and pesnya_dir68.is_dir()
+       and res["take"]["notes"][0]["file"] == str(pesnya_dir68 / "Drums.mid"))
+
+    # A record that cannot follow: the folder goes back, and the notes with it.
+    real_update68 = a68._lib.update_take
+
+    def refuse_update68(*args, **kwargs):
+        raise RuntimeError("the database is locked")
+
+    a68._lib.update_take = refuse_update68
+    try:
+        try:
+            a68.rename_take(str(folder68), 2, "Niche")
+            raised68 = False
+        except RuntimeError:
+            raised68 = True
+    finally:
+        a68._lib.update_take = real_update68
+    ok("a record that cannot follow puts the folder back, and the take still opens its notes",
+       raised68 and pesnya_dir68.is_dir() and not (folder68 / "02 - Niche 1").exists()
+       and Path(a68._lib.take(folder68, 2)["notes"][0]["file"]).exists())
+
+    # Merging songs: the pass that renames the folders carries the notes.
+    make68(3, "Polyn")
+    make68(4, "Polyn", audio=())
+    make68(5, "Pałyn")
+
+    def song68(title):
+        return next(s for s in a68.list_songs()["songs"] if s["title"] == title)
+
+    merged68 = a68.merge_songs(song68("Polyn")["id"], song68("Pałyn")["id"])
+    a68._names_pass.run_queued()
+    taken68 = {n: a68._lib.take(folder68, n) for n in (3, 4, 5)}
+    ok("merging a song into another renames its takes' folders and each take still lists its notes there",
+       merged68["ok"] and all(
+           carries68(Path(t["notes"][0]["file"]).parent.name, dir_name68(n, t["name"]))
+           and Path(t["notes"][0]["file"]).exists() and t["name"].startswith("Pałyn")
+           for n, t in taken68.items()))
+    ok("the one with audio has both, in one folder; the one of notes alone has its .mid and no audio",
+       Path(taken68[3]["tracks"][0]["file"]).parent == Path(taken68[3]["notes"][0]["file"]).parent
+       and taken68[4]["tracks"] == [] and Path(taken68[4]["notes"][0]["file"]).parent.name.startswith("04 - Pałyn"))
+    ok("and a pass after it finds nothing left to rename", a68._names_pass.run() == 0)
+
+    # The pass that puts names right: a folder that does not carry its take's name.
+    make68(6, "Tango", where="06 - old name")
+    make68(7, "Tango", audio=(), where="07 - another old name")
+    ok("a take whose folder does not carry its name is out of line, notes alone or with audio",
+       {n for _, n, _ in a68._names_out_of_line()} == {6, 7})
+    put68 = a68._put_name_right(str(folder68), 6)
+    ok("the pass puts it right and the take still lists its .mid beside its .wav",
+       put68 == {"renamed": True, "error": None}
+       and (folder68 / "06 - Tango 1" / "Drums.mid").exists()
+       and a68._lib.take(folder68, 6)["notes"][0]["file"] == str(folder68 / "06 - Tango 1" / "Drums.mid")
+       and a68._lib.take(folder68, 6)["tracks"][0]["file"] == str(folder68 / "06 - Tango 1" / "Gtr.wav"))
+    put68 = a68._put_name_right(str(folder68), 7)
+    ok("so does a take of nothing but notes",
+       put68 == {"renamed": True, "error": None} and not (folder68 / "07 - another old name").exists()
+       and a68._lib.take(folder68, 7)["notes"][0]["file"] == str(folder68 / "07 - Tango 2" / "Drums.mid")
+       and (folder68 / "07 - Tango 2" / "Drums.mid").exists())
+    ok("and none is left out of line", a68._names_out_of_line() == [])
+
+    # Deleting: the folder is found through the files the take has, whichever kind.
+    make68(8, "Gone wav")
+    gone_dir68 = folder68 / "08 - Gone wav 1"
+    (gone_dir68 / "Gtr.wav").unlink()
+    (gone_dir68 / "Keys.midraw").write_bytes(b"t 1\n")
+    res = a68.delete_take(str(folder68), 8)
+    ok("a take whose .wav files were deleted by hand still trashes its folder, found through its notes",
+       res["ok"] and not gone_dir68.exists() and a68._lib.take(folder68, 8) is None
+       and res["trashed"] is True)
+    make68(9, "Only notes", audio=())
+    only_dir68 = folder68 / "09 - Only notes 1"
+    res = a68.delete_take(str(folder68), 9)
+    ok("and so does a take of nothing but notes",
+       res["ok"] and not only_dir68.exists() and a68._lib.take(folder68, 9) is None)
+    make68(10, "Plain", notes=())
+    plain_dir68 = folder68 / "10 - Plain 1"
+    res = a68.delete_take(str(folder68), 10)
+    ok("a take with no notes is deleted as it always was",
+       res["ok"] and not plain_dir68.exists() and a68._lib.take(folder68, 10) is None)
+
+    # Cropping: the .mid is cropped with the .wav, and the original goes aside with it. Drums
+    # is a Both track here: a .wav and a .mid of one name.
+    made68 = make68(11, "Cut", audio=("Gtr", "Drums"))
+    cut_dir68 = Path(made68["notes"][0]["file"]).parent
+    (cut_dir68 / "Keys.midraw").write_bytes(b"t 1\n")
+    real_trash68 = apimod68.move_to_trash
+    apimod68.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
+    try:
+        res = a68.crop_take(str(folder68), 11, 1.0, 3.0)
+    finally:
+        apimod68.move_to_trash = real_trash68
+    ok("cropping a take crops its notes with its audio: the take is two seconds, notes and all",
+       res["ok"] and abs(res["take"]["duration_sec"] - 2.0) < 0.01
+       and wav_frames(cut_dir68 / "Gtr.wav") == 2 * SR and wav_frames(cut_dir68 / "Drums.wav") == 2 * SR
+       and res["take"]["notes"] == made68["notes"])
+    ok("the .mid has what was set before the start at tick 0, and the hits of 1.5 s and 2.5 s moved to 0.5 s and 1.5 s",
+       kit_ticks68(cut_dir68 / "Drums.mid") == [
+           (0, b"\xB9\x04\x5A"), (960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00"),
+           (2880, b"\x99\x24\x64"), (3072, b"\x89\x24\x00")])
+    aside68 = Path(res["location"])
+    ok("the originals, .mid and .wav, are in the (before crop) folder together, as they were",
+       aside68.name.endswith("(before crop)") and files68(aside68) == ["Drums.mid", "Drums.wav", "Gtr.wav"]
+       and kit_ticks68(aside68 / "Drums.mid") == whole68 and wav_frames(aside68 / "Gtr.wav") == 4 * SR
+       and wav_frames(aside68 / "Drums.wav") == 4 * SR)
+    ok("the take's folder has the cropped files and what was not the crop's to touch, no .writing- file",
+       files68(cut_dir68) == ["Drums.mid", "Drums.wav", "Gtr.wav", "Keys.midraw"])
+
+    # A crop that stops half way leaves the take exactly as it was, both kinds of file.
+    before68 = {p.name: p.read_bytes() for p in cut_dir68.iterdir()}
+    beside68 = sorted(p.name for p in cut_dir68.parent.iterdir())
+    real_move68, moves68 = apimod68.shutil.move, {"n": 0}
+
+    def flaky_move68(src, dst):
+        moves68["n"] += 1
+        if moves68["n"] == 3:        # the .mid, after both .wav files are aside
+            raise PermissionError("the file is open in another process")
+        return real_move68(src, dst)
+
+    apimod68.shutil.move = flaky_move68
+    try:
+        half68 = a68.crop_take(str(folder68), 11, 0.5, 1.5)
+    finally:
+        apimod68.shutil.move = real_move68
+    ok("a move that fails after the .wav files are aside puts them and the .mid back as they were",
+       not half68["ok"] and {p.name: p.read_bytes() for p in cut_dir68.iterdir()} == before68
+       and sorted(p.name for p in cut_dir68.parent.iterdir()) == beside68)
+
+    real_replace68 = apimod68.os.replace
+
+    def flaky_replace68(src, dst):
+        if Path(src).name == ".writing-Drums.mid":      # the last file to take its name
+            raise PermissionError("the file is open in another process")
+        return real_replace68(src, dst)
+
+    apimod68.os.replace = flaky_replace68
+    try:
+        late68 = a68.crop_take(str(folder68), 11, 0.5, 1.5)
+    finally:
+        apimod68.os.replace = real_replace68
+    ok("and one that fails when the new .mid takes its name puts both originals back, and leaves no .writing- file",
+       not late68["ok"] and {p.name: p.read_bytes() for p in cut_dir68.iterdir()} == before68
+       and sorted(p.name for p in cut_dir68.parent.iterdir()) == beside68)
+
+    (cut_dir68 / "Drums.mid").write_bytes(b"not a midi file")
+    torn68 = a68.crop_take(str(folder68), 11, 0.5, 1.5)
+    ok("a .mid that cannot be read costs the crop and nothing else: the .wav is as long as it was",
+       not torn68["ok"] and wav_frames(cut_dir68 / "Gtr.wav") == 2 * SR
+       and (cut_dir68 / "Drums.mid").read_bytes() == b"not a midi file"
+       and files68(cut_dir68) == ["Drums.mid", "Drums.wav", "Gtr.wav", "Keys.midraw"]
+       and sorted(p.name for p in cut_dir68.parent.iterdir()) == beside68)
+
+    # A take of notes alone is cropped by its length, and the .mid is a file like any.
+    make68(12, "Notes cut", audio=())
+    notes_dir68 = folder68 / "12 - Notes cut 1"
+    res = a68.crop_take(str(folder68), 12, 1.0, 3.0)
+    ok("a take of nothing but notes is cropped: two seconds long, its .mid cut",
+       res["ok"] and abs(res["take"]["duration_sec"] - 2.0) < 0.01
+       and kit_ticks68(notes_dir68 / "Drums.mid")[1:3] == [(960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00")]
+       and files68(notes_dir68) == ["Drums.mid"])
+    ok("a region shorter than a second is refused for notes too", not a68.crop_take(str(folder68), 12, 0.1, 0.4)["ok"])
+    make68(13, "Wav gone")
+    wav_gone_dir68 = folder68 / "13 - Wav gone 1"
+    (wav_gone_dir68 / "Gtr.wav").unlink()
+    res = a68.crop_take(str(folder68), 13, 1.0, 3.0)
+    ok("a take whose .wav went is cropped by what is left of it: the notes",
+       res["ok"] and files68(wav_gone_dir68) == ["Drums.mid"]
+       and kit_ticks68(wav_gone_dir68 / "Drums.mid")[1:3] == [(960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00")])
+
+    # A draft on the review screen has its notes beside its audio, not yet in the library.
+    draft68 = folder68 / "_drafts" / "take 14"
+    write_wav(draft68 / "Gtr.wav", 1000, seconds=4.0)
+    note68 = kit68(draft68 / "Drums.mid")
+    pending68 = [{"name": "Gtr", "file": str(draft68 / "Gtr.wav")}]
+    res = a68.crop_draft(str(draft68), pending68, 1.0, 3.0, notes=[note68])
+    ok("a draft is cropped with its notes: they are answered like the tracks, at the same paths",
+       res["ok"] and res["tracks"] == pending68 and res["notes"] == [note68]
+       and abs(res["duration_sec"] - 2.0) < 0.01 and wav_frames(draft68 / "Gtr.wav") == 2 * SR)
+    ok("the .mid is cut, with what was set before the start at tick 0",
+       kit_ticks68(draft68 / "Drums.mid")[:3] == [(0, b"\xB9\x04\x5A"), (960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00")]
+       and files68(draft68) == ["Drums.mid", "Gtr.wav"])
+    write_wav(draft68 / "Gtr.wav", 1000, seconds=4.0)
+    res = a68.crop_draft(str(draft68), pending68, 1.0, 3.0)
+    ok("a draft cropped with no notes given answers none, as before", res["ok"] and res["notes"] == []
+       and res["tracks"] == pending68)
+    draft_notes68 = folder68 / "_drafts" / "take 15"
+    draft_notes68.mkdir(parents=True)
+    note_only68 = kit68(draft_notes68 / "Drums.mid")
+    ghost68 = {"name": "Keys", "file": str(draft_notes68 / "Keys.mid")}
+    res = a68.crop_draft(str(draft_notes68), [], 1.0, 3.0, notes=[note_only68, ghost68])
+    ok("a draft of nothing but notes is cropped, a note file that is not there is left out, and the length is the region's",
+       res["ok"] and res["tracks"] == [] and res["notes"] == [note_only68]
+       and abs(res["duration_sec"] - 2.0) < 0.01 and kit_ticks68(draft_notes68 / "Drums.mid")[1][0] == 960)
+    ok("a draft with no files left at all is refused as it was",
+       a68.crop_draft(str(draft_notes68), [], 1.0, 3.0, notes=[ghost68])
+       == {"ok": False, "error": "The take has no files left on disk"})
 
     print("\n[69] Notes go to the cloud with the tracks")
     # A take's notes are .mid files beside its WAVs. The original tracks and Both copy each one as it is, under its
