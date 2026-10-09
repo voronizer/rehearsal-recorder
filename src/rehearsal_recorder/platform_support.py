@@ -12,10 +12,12 @@ and says which way it went, so the interface can tell the truth rather than
 promising a Trash that is not there.
 """
 
+import ctypes
 import os
 import re
 import shutil
 import sys
+import threading
 from pathlib import Path
 
 # Where deleted things go when the system offers no recycle bin we can reach.
@@ -469,3 +471,168 @@ def enter_com_apartment(platform=sys.platform, ole32=None):
             f"(0x{result & 0xFFFFFFFF:08X}), so ASIO cards will not open."
         )
     return None
+
+
+# ---------- awake during a take ----------
+
+# NSActivityUserInitiated | NSActivityIdleDisplaySleepDisabled, from
+# Foundation's NSProcessInfo.h: the first keeps the system awake and App Nap
+# off, the second the screen on. Written out so the module loads without
+# PyObjC; the suite checks it against PyObjC's own names on a Mac.
+MAC_AWAKE_OPTIONS = 0x00FFFFFF | (1 << 40)
+MAC_AWAKE_REASON = "Recording a take"
+WINDOWS_AWAKE_REASON = "РЭХА is recording a take"
+
+# POWER_REQUEST_TYPE, from winnt.h: PowerRequestDisplayRequired,
+# PowerRequestSystemRequired and PowerRequestExecutionRequired. Away mode (2)
+# is for media centres and is left alone.
+WINDOWS_AWAKE_REQUESTS = (0, 1, 3)
+POWER_REQUEST_CONTEXT_VERSION = 0
+POWER_REQUEST_CONTEXT_SIMPLE_STRING = 0x1
+
+
+class _ReasonDetailed(ctypes.Structure):
+    _fields_ = [
+        ("LocalizedReasonModule", ctypes.c_void_p),
+        ("LocalizedReasonId", ctypes.c_ulong),
+        ("ReasonStringCount", ctypes.c_ulong),
+        ("ReasonStrings", ctypes.c_void_p),
+    ]
+
+
+class _Reason(ctypes.Union):
+    _fields_ = [
+        ("Detailed", _ReasonDetailed),
+        ("SimpleReasonString", ctypes.c_wchar_p),
+    ]
+
+
+class REASON_CONTEXT(ctypes.Structure):
+    """minwinbase.h's REASON_CONTEXT. Only the plain string is used, but the
+    union is declared whole so the structure has the size Windows reads."""
+    _fields_ = [
+        ("Version", ctypes.c_ulong),
+        ("Flags", ctypes.c_ulong),
+        ("Reason", _Reason),
+    ]
+
+
+def _windows_kernel32():
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.PowerCreateRequest.argtypes = [ctypes.POINTER(REASON_CONTEXT)]
+    kernel32.PowerCreateRequest.restype = wintypes.HANDLE
+    for name in ("PowerSetRequest", "PowerClearRequest"):
+        getattr(kernel32, name).argtypes = [wintypes.HANDLE, ctypes.c_int]
+        getattr(kernel32, name).restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    return kernel32
+
+
+class KeepAwake:
+    """
+    Keeps the laptop and its screen awake while a take records: held from
+    the start of a take to the end of Stop, let go when the window closes.
+    If the app dies, the system drops it by itself.
+
+    Nobody touches the laptop while the band plays, and neither system
+    promises to stay awake for a stream that only records. Each is asked
+    the way its maker documents:
+
+    - macOS: NSProcessInfo's beginActivityWithOptions:reason: with
+      NSActivityUserInitiated, which keeps the system awake and App Nap off
+      even with the window hidden, and NSActivityIdleDisplaySleepDisabled,
+      which keeps the screen on: a Mac usually locks when its screen goes
+      dark, and a locked laptop takes neither Stop nor Space.
+    - Windows: a power request (PowerCreateRequest) set for the display, the
+      system, which Microsoft says a display request needs beside it, and
+      execution, which keeps a hidden app running. A request is made for
+      each take and closed with it: a closed lid, the power button or Sleep
+      in Start ends every request (PowerSetRequest's remarks).
+
+    Elsewhere it does nothing. Holding twice holds once; letting go of
+    nothing does nothing. A call the system refuses is printed and never
+    raises: recording matters more than the lock.
+    """
+
+    def __init__(self, system=sys.platform, process_info=None, kernel32=None):
+        self._system = system
+        self._process_info = process_info
+        self._kernel32 = kernel32
+        self._lock = threading.Lock()
+        self._token = None  # macOS: the activity
+        self._handle = None  # Windows: the request
+        self._set = []  # Windows: the request types it holds
+        self._reason = None  # Windows: kept alive while the request is
+
+    @property
+    def held(self):
+        return self._token is not None or self._handle is not None
+
+    def hold(self):
+        with self._lock:
+            if self.held:
+                return
+            try:
+                if self._system == "darwin":
+                    self._hold_mac()
+                elif self._system == "win32":
+                    self._hold_windows()
+            except Exception as e:  # noqa: BLE001 — never a reason to stop a take
+                print(f"[awake] could not keep the laptop awake: {e}")
+
+    def release(self):
+        with self._lock:
+            try:
+                if self._token is not None:
+                    token, self._token = self._token, None
+                    self._process_info.endActivity_(token)
+                if self._handle is not None:
+                    self._close_windows()
+            except Exception as e:  # noqa: BLE001
+                print(f"[awake] could not let go: {e}")
+
+    def _hold_mac(self):
+        if self._process_info is None:
+            from Foundation import NSProcessInfo
+
+            self._process_info = NSProcessInfo.processInfo()
+        self._token = self._process_info.beginActivityWithOptions_reason_(
+            MAC_AWAKE_OPTIONS, MAC_AWAKE_REASON
+        )
+
+    def _hold_windows(self):
+        if self._kernel32 is None:
+            self._kernel32 = _windows_kernel32()
+        reason = REASON_CONTEXT(
+            POWER_REQUEST_CONTEXT_VERSION, POWER_REQUEST_CONTEXT_SIMPLE_STRING
+        )
+        reason.Reason.SimpleReasonString = WINDOWS_AWAKE_REASON
+        handle = self._kernel32.PowerCreateRequest(ctypes.byref(reason))
+        if not handle or handle in (-1, ctypes.c_void_p(-1).value):
+            print(f"[awake] no power request: error {ctypes.get_last_error()}")
+            return
+        self._handle, self._reason = handle, reason
+        # Each type on its own: one the system refuses still leaves the rest.
+        for kind in WINDOWS_AWAKE_REQUESTS:
+            try:
+                if self._kernel32.PowerSetRequest(handle, kind):
+                    self._set.append(kind)
+                else:
+                    print(f"[awake] request {kind} refused: error {ctypes.get_last_error()}")
+            except Exception as e:  # noqa: BLE001
+                print(f"[awake] request {kind} refused: {e}")
+        if not self._set:
+            self._close_windows()
+
+    def _close_windows(self):
+        handle, self._handle = self._handle, None
+        kinds, self._set = self._set, []
+        try:
+            for kind in kinds:
+                self._kernel32.PowerClearRequest(handle, kind)
+        finally:
+            self._kernel32.CloseHandle(handle)
+            self._reason = None

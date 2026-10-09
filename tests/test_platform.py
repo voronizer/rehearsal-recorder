@@ -527,6 +527,108 @@ def main():
     ok("on a Mac it is Downloads in the home folder",
        ps.downloads_folder(system="darwin") == Path.home() / "Downloads")
 
+    print("\n[awake] A take keeps the laptop and its screen awake")
+    # Nobody touches the laptop while the band plays. Each system has its own
+    # documented call for it; the fakes stand in for the system so that both
+    # branches run here, and the real calls run on CI's Mac and Windows.
+
+    class FakeMac:
+        def __init__(self):
+            self.calls = []
+
+        def beginActivityWithOptions_reason_(self, options, reason):
+            self.calls.append(("begin", options, reason))
+            return "token"
+
+        def endActivity_(self, token):
+            self.calls.append(("end", token))
+
+    class FakeKernel:
+        def __init__(self, fail=False):
+            self.calls, self.fail = [], fail
+
+        def PowerCreateRequest(self, ref):
+            self.calls.append(("create", ref._obj.Reason.SimpleReasonString))
+            return 7
+
+        def PowerSetRequest(self, h, kind):
+            if self.fail:
+                raise OSError("refused")
+            self.calls.append(("set", h, kind))
+            return 1
+
+        def PowerClearRequest(self, h, kind):
+            self.calls.append(("clear", h, kind))
+            return 1
+
+        def CloseHandle(self, h):
+            self.calls.append(("close", h))
+            return 1
+
+    mac = FakeMac()
+    awake = ps.KeepAwake("darwin", process_info=mac)
+    awake.hold()
+    ok("on a Mac a take holds one activity that keeps the system and the screen awake",
+       mac.calls == [("begin", ps.MAC_AWAKE_OPTIONS, "Recording a take")]
+       and awake.held)
+    awake.hold()
+    ok("holding twice holds once", len(mac.calls) == 1)
+    awake.release()
+    ok("letting go ends that activity",
+       mac.calls[-1] == ("end", "token") and not awake.held)
+    idle = FakeMac()
+    ps.KeepAwake("darwin", process_info=idle).release()
+    ok("letting go with nothing held does nothing", idle.calls == [])
+
+    kernel = FakeKernel()
+    awake = ps.KeepAwake("win32", kernel32=kernel)
+    awake.hold()
+    ok("on Windows a take asks for the display, the system and the process",
+       kernel.calls == [("create", "РЭХА is recording a take"),
+                        ("set", 7, 0), ("set", 7, 1), ("set", 7, 3)])
+    awake.release()
+    ok("and lets go of all three and the handle",
+       kernel.calls[-4:] == [("clear", 7, 0), ("clear", 7, 1),
+                             ("clear", 7, 3), ("close", 7)]
+       and not awake.held)
+
+    refusing = FakeKernel(fail=True)
+    awake = ps.KeepAwake("win32", kernel32=refusing)
+    try:
+        awake.hold()
+        awake.release()
+        raised = False
+    except Exception:  # noqa: BLE001
+        raised = True
+    ok("a refusing system does not raise",
+       not raised and refusing.calls[-1] == ("close", 7))
+
+    awake = ps.KeepAwake("linux")
+    try:
+        awake.hold()
+        held_on_linux = awake.held
+        awake.release()
+        raised = False
+    except Exception:  # noqa: BLE001
+        raised = True
+    ok("on Linux it does nothing", not raised and not held_on_linux)
+
+    if sys.platform == "darwin":
+        from Foundation import (
+            NSActivityIdleDisplaySleepDisabled,
+            NSActivityUserInitiated,
+        )
+        ok("the Mac's own names add up to the options used",
+           NSActivityUserInitiated | NSActivityIdleDisplaySleepDisabled
+           == ps.MAC_AWAKE_OPTIONS)
+    if sys.platform in ("darwin", "win32"):
+        real = ps.KeepAwake()
+        real.hold()
+        held = real.held
+        real.release()
+        ok(f"a real hold and release on this {'Mac' if sys.platform == 'darwin' else 'Windows'}",
+           held and not real.held)
+
     print("\n" + "=" * 60)
 
     if problems:
