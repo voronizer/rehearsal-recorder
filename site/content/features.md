@@ -32,6 +32,11 @@ spelling still finds the song.
 
 Only the ones you keep, into your Drive or Dropbox folder.
 
+## Rehearse the set, in order. {#sets}
+
+Make the gig's songs a set once. Every take is the song you are on until you
+move on, and History says which ones you never got to.
+
 ## Records at what the card can do. {#formats}
 
 Only what your interface accepts is offered.

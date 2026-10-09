@@ -248,6 +248,7 @@ export function App() {
     <Review
       take={screen.take}
       rehearsalName={session.name}
+      takes={session.takes}
       onKept={async () => {
         await refreshSession()
         setScreen({ name: "rehearsal" })

@@ -25,7 +25,10 @@ import { FooterRow } from "@/components/FooterRow"
 import { IconPicker } from "@/components/IconPicker"
 import { LastTime } from "@/components/LastTime"
 import { NewDot } from "@/components/NewDot"
+import { NewSetDialog, SetPicker } from "@/components/SetPicker"
 import { Kbd, Shell } from "@/components/Shell"
+import { chosenSet, useSets } from "@/hooks/useSets"
+import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
 import { byFiles, useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { cn } from "@/lib/utils"
@@ -101,6 +104,11 @@ export function Setup({
   // The interface that was chosen and is not plugged in. Not the same as
   // none chosen: the desk is often switched on after the laptop.
   const [missing, setMissing] = useState<SettingsData["missing_device"]>(null)
+  // The set Start plays by (S1–S2), kept across restarts, and New set…
+  // over this screen (S3), with the band's songs to add.
+  const sets = useSets()
+  const [makingSet, setMakingSet] = useState(false)
+  const songChoices = useSongChoices(makingSet, null, null)
   const [rescanning, setRescanning] = useState(false)
   const [stillMissing, setStillMissing] = useState(false)
 
@@ -344,7 +352,8 @@ export function Setup({
       deviceIndex,
       samplerate,
       tracks,
-      bitDepth
+      bitDepth,
+      await chosenSet()
     )
     setStarting(false)
     if (!res.ok) {
@@ -357,7 +366,7 @@ export function Setup({
   // Something from last time playing has Space and Escape, as a take
   // playing in history's overview does; Start gets them back once it stops.
   const inHand = cued !== null
-  useSpacebar(inHand ? player.toggle : start, inHand || canStart)
+  useSpacebar(inHand ? player.toggle : start, (inHand || canStart) && !makingSet)
   useEscape(uncue, inHand)
 
   const playLastTime = (take: Take) => {
@@ -412,16 +421,33 @@ export function Setup({
       }
       footer={
         <FooterRow error={error}>
-          <Button
-            size="xl"
-            onClick={start}
-            disabled={!canStart}
-            aria-keyshortcuts={inHand ? undefined : "Space"}
-          >
-            <Radio />
-            Start rehearsal
-            {!inHand && <Kbd>Space</Kbd>}
-          </Button>
+          <div className="flex items-center gap-3">
+            <SetPicker
+              sets={sets.sets}
+              chosen={sets.chosen}
+              onChoose={sets.choose}
+              onNew={() => setMakingSet(true)}
+            />
+            <Button
+              size="xl"
+              onClick={start}
+              disabled={!canStart}
+              aria-keyshortcuts={inHand ? undefined : "Space"}
+            >
+              <Radio />
+              Start rehearsal
+              {!inHand && <Kbd>Space</Kbd>}
+            </Button>
+          </div>
+          <NewSetDialog
+            open={makingSet}
+            onOpenChange={setMakingSet}
+            choices={songChoices}
+            onCreated={(all, id) => {
+              sets.replace(all)
+              sets.choose(id)
+            }}
+          />
         </FooterRow>
       }
     >

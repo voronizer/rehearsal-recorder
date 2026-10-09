@@ -3,6 +3,7 @@ import {
   calls,
   expect,
   expectedError,
+  nameTake,
   notices,
   openApp,
   openHistory,
@@ -14,74 +15,34 @@ import {
 import type { Page } from "@playwright/test"
 
 // A take is named after the song it is a go at, and the band plays the same
-// songs week after week. So wherever a take is named — on the review screen,
-// renaming it after, and before it is played — the songs already played are
+// songs week after week. So wherever a take is named — in Rename take, right
+// after it or later, and before it is played — the songs already played are
 // there to click, and nobody types a title twice. The fake's repertoire is
 // Pałyn, Viasna, Ahoń, Sonca, Dym, Ptuška and Daroha.
 
+/** The take's name field in Rename take, on the screen after a take. */
 const nameField = (page: Page) => page.locator("#take-name")
+/** That screen's title: the take's song, without its go. */
+const reviewTitle = (page: Page) => page.locator("[data-take-summary] [data-go-title]")
+const renameReview = (page: Page) =>
+  page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
 
 async function saveAs(page: Page, name: string) {
-  await nameField(page).fill(name)
+  await nameTake(page, name)
   await page.getByRole("button", { name: /Save take/ }).click()
 }
 
-/** The pills under the review screen's field, in the order shown. */
+/** The pills under Rename take's field, in the order shown. */
 const pills = (page: Page) =>
   page.getByRole("group", { name: "Take name" }).locator("[data-song-choice]")
 
-/** How many rows the pills under a field take, All songs… included. */
-const rowsUnder = (page: Page, field: string) =>
-  page.evaluate((label) => {
-    const group = document.querySelector(`[role=group][aria-label='${label}']`)!
-    const tops = [...group.querySelectorAll("[data-song-choice], [data-all-songs]")].map((p) =>
-      Math.round(p.getBoundingClientRect().top)
-    )
-    return new Set(tops).size
-  }, field)
+/** The songs listed beside the Next take field, in the order shown. */
+const songRows = (page: Page) => page.locator("[data-next-take-panel] [data-song-row]")
+const songRow = (page: Page, title: string) =>
+  page.locator(`[data-next-take-panel] [data-song-row="${title}"]`)
 
-test("the songs under the review screen's name: this rehearsal's first, a click fills the field", async ({
-  page,
-}) => {
-  await openApp(page)
-  await startRehearsal(page)
-  await recordTake(page)
-  // Nothing played yet tonight: the whole repertoire, the latest played first.
-  await expect(pills(page)).toHaveText([
-    "Pałyn 1",
-    "Viasna 1",
-    "Ahoń 1",
-    "Sonca 1",
-    "Dym 1",
-    "Ptuška 1",
-    "Daroha 1",
-  ])
-  await pills(page).filter({ hasText: /^Ahoń 1$/ }).click()
-  await expect(nameField(page)).toHaveValue("Ahoń")
-  // The click left the keyboard to the screen, so Space saves.
-  await page.keyboard.press("Space")
-  await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")
-
-  // The next take is another go at it: first, lit, and not offered twice.
-  await recordTake(page, 2)
-  await expect(nameField(page)).toHaveValue("Ahoń")
-  await expect(pills(page).first()).toHaveText("Ahoń 2")
-  await expect(pills(page).first()).toHaveAttribute("aria-current", "true")
-  await expect(pills(page).filter({ hasText: /^Ahoń 1$/ })).toHaveCount(0)
-
-  // Typing narrows them over every song; the song typed out in full puts
-  // them all back; a title nobody has played leaves none in the way.
-  await nameField(page).fill("da")
-  await expect(pills(page)).toHaveText(["Daroha 1"])
-  await nameField(page).fill("Daroha")
-  await expect(pills(page).first()).toHaveText("Ahoń 2")
-  await expect(pills(page).filter({ hasText: /^Daroha 1$/ })).toHaveAttribute("aria-current", "true")
-  await nameField(page).fill("Brand new")
-  await expect(pills(page)).toHaveCount(0)
-})
-
-test("two rows at most, in any window, and the songs played latest stay", async ({ page }) => {
-  // Twenty songs played tonight, one go each: more than two rows hold.
+test("five songs show beside the next take, and the songs played latest stay", async ({ page }) => {
+  // Twenty songs played tonight, one go each: more than five rows hold.
   // (Not "Song number N": the app reads a trailing number as a go count, so
   // every one of those would collapse into a single song's 20th go.)
   const takes = Array.from({ length: 20 }, (_, i) => `Song${i + 1}`)
@@ -89,21 +50,15 @@ test("two rows at most, in any window, and the songs played latest stay", async 
   await startRehearsal(page)
   for (const [i, name] of takes.entries()) {
     await recordTake(page, i + 1)
-    await nameField(page).fill(name)
-    await page.getByRole("button", { name: /Save take/ }).click()
+    await saveAs(page, name)
   }
-  for (const width of [1366, 1024, 960]) {
-    await page.setViewportSize({ width, height: 768 })
-    await expect.poll(() => rowsUnder(page, "Next take"), { message: `at ${width}` }).toBe(2)
-    // The ones kept are the latest played, still in the order played.
-    const shown = await page
-      .getByRole("group", { name: "Next take" })
-      .locator("[data-song-choice]")
-      .allTextContents()
-    const numbers = shown.map((s) => Number(/(\d+) 2$/.exec(s)![1]))
-    expect(numbers).toEqual([...numbers].sort((a, b) => a - b))
-    expect(numbers.at(-1)).toBe(20)
-  }
+  // The ones kept are the latest played, still in the order played.
+  await expect(songRows(page)).toHaveCount(5)
+  const shown = await songRows(page).evaluateAll((els) =>
+    els.map((e) => e.getAttribute("data-song-row")!)
+  )
+  expect(shown).toEqual(["Song16", "Song17", "Song18", "Song19", "Song20"])
+  await expect(page.locator("[data-songs-more]")).toHaveText(/All 27 songs/)
 })
 
 test("a quick click on Record or Save take after a name nothing matches still lands", async ({
@@ -115,7 +70,7 @@ test("a quick click on Record or Save take after a name nothing matches still la
       "Array.from({length: 30}, (_, i) => ({song: 'Song' + (i + 1), name: 'Song' + (i + 1)}))});",
   })
   await startRehearsal(page)
-  await expect.poll(() => rowsUnder(page, "Next take")).toBe(2)
+  await expect(songRows(page)).toHaveCount(5)
 
   const field = page.getByRole("textbox", { name: "Next take" })
   await field.fill("Nothing like it")
@@ -127,7 +82,7 @@ test("a quick click on Record or Save take after a name nothing matches still la
   await expect(page.getByRole("heading", { level: 1, name: "Nothing like it" })).toBeVisible()
 
   await page.getByRole("button", { name: /^Stop/ }).click()
-  await nameField(page).fill("Still nothing")
+  await nameTake(page, "Still nothing")
   const save = page.getByRole("button", { name: /Save take/ })
   const saveBox = (await save.boundingBox())!
   await page.mouse.move(saveBox.x + saveBox.width / 2, saveBox.y + 6)
@@ -138,21 +93,28 @@ test("a quick click on Record or Save take after a name nothing matches still la
     .toBe("Still nothing")
 })
 
-test("a song name longer than the row is cut short, and is still one pill", async ({ page }) => {
+test("a song name longer than its row is cut short, and the row keeps its height", async ({
+  page,
+}) => {
   await openApp(page)
   await startRehearsal(page)
   await recordTake(page)
   // Long enough that no row this footer could ever be would hold it.
-  await nameField(page).fill(
+  await saveAs(
+    page,
     "A song with a name so long that no footer anywhere could hold it in one line, " +
       "so long in fact that it must wrap more than the width of any take name field " +
       "could ever allow, however wide the window around it might be"
   )
-  await page.getByRole("button", { name: /Save take/ }).click()
-  const pill = page.getByRole("group", { name: "Next take" }).locator("[data-song-choice]").first()
-  const cut = await pill.evaluate((el) => el.scrollWidth > el.clientWidth)
+  const row = page.locator("[data-next-take-panel] [data-song-row][aria-current=true]")
+  const cut = await row
+    .locator("[data-row-title]")
+    .evaluate((el) => el.scrollWidth > el.clientWidth)
   expect(cut).toBe(true)
-  expect(await rowsUnder(page, "Next take")).toBeLessThanOrEqual(2)
+  expect((await row.boundingBox())!.height).toBeCloseTo(
+    (await songRows(page).last().boundingBox())!.height,
+    0
+  )
 })
 
 test("with no songs at all, nothing is offered under the field", async ({ page }) => {
@@ -161,7 +123,9 @@ test("with no songs at all, nothing is offered under the field", async ({ page }
   })
   await startRehearsal(page)
   await expect(page.getByRole("textbox", { name: "Next take" })).toBeVisible()
-  await expect(page.locator("[data-song-choice], [data-all-songs]")).toHaveCount(0)
+  await expect(
+    page.locator("[data-song-choice], [data-all-songs], [data-song-row], [data-song-list]")
+  ).toHaveCount(0)
 })
 
 test("renaming a take on the rehearsal screen offers the songs, ✕ puts its name back, and Enter renames", async ({
@@ -243,11 +207,19 @@ test("All songs… in the Rename take dialog lists every song and fills the dial
 test.describe("the next take", () => {
   /** The name over Record: one field, and the songs under it. */
   const field = (page: Page) => page.getByRole("textbox", { name: "Next take" })
-  const songs = (page: Page) => page.getByRole("group", { name: "Next take" })
   const order = (page: Page) =>
     page.evaluate(() =>
       (window as unknown as { __CALLS__: { name: string }[] }).__CALLS__.map((c) => c.name)
     )
+
+  test("the rehearsal panel has no Before tonight card", async ({ page }) => {
+    // The card went with sets (step 8): the go before tonight is still what
+    // the recording screen measures against, but nothing beside the field.
+    await openApp(page)
+    await startRehearsal(page)
+    await expect(field(page)).toBeVisible()
+    await expect(page.locator('[aria-label$="efore tonight"]')).toHaveCount(0)
+  })
 
   test("is named in one field over Record, and keeps its name through a take thrown away", async ({
     page,
@@ -258,13 +230,13 @@ test.describe("the next take", () => {
 
     // A song clicked fills the field and names the take; nothing under the
     // pointer moves.
-    const viasna = songs(page).getByRole("button", { name: "Viasna 1", exact: true })
-    const before = await songs(page).locator("[data-song-choice]").allTextContents()
+    const viasna = songRow(page, "Viasna")
+    const before = await songRows(page).allTextContents()
     const at = (await viasna.boundingBox())!
     await viasna.click()
     await expect(field(page)).toHaveValue("Viasna")
     expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Viasna"])
-    expect(await songs(page).locator("[data-song-choice]").allTextContents()).toEqual(before)
+    expect(await songRows(page).allTextContents()).toEqual(before)
     expect((await viasna.boundingBox())!).toEqual(at)
 
     // ✕ goes back to the name it would have had, and tells Python so.
@@ -277,13 +249,13 @@ test.describe("the next take", () => {
     await page.keyboard.press("Space")
     await expect(page.getByRole("heading", { level: 1, name: "Viasna" })).toBeVisible()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(nameField(page)).toHaveValue("Viasna")
+    await expect(reviewTitle(page)).toHaveText("Viasna")
 
     // Thrown away, it is played again under the same name.
     await page.getByRole("button", { name: /^Discard/ }).click()
     await expect(field(page)).toHaveValue("Viasna")
     await recordTake(page, 2)
-    await expect(nameField(page)).toHaveValue("Viasna")
+    await expect(reviewTitle(page)).toHaveText("Viasna")
     await page.getByRole("button", { name: /Save take/ }).click()
     // Kept, it is used up, and the next one follows on from it.
     await expect(field(page)).toHaveValue("Viasna")
@@ -318,7 +290,7 @@ test.describe("the next take", () => {
     await startRehearsal(page)
     await field(page).fill("Via")
     const sent = await callCount(page, "set_next_take_name")
-    await songs(page).getByRole("button", { name: "Viasna 1", exact: true }).click()
+    await songRow(page, "Viasna").click()
     await expect(field(page)).toHaveValue("Viasna")
     await expect(field(page)).not.toBeFocused()
     // What was half typed is not sent on the way out, before or after it.
@@ -346,7 +318,8 @@ test.describe("the next take", () => {
   }) => {
     await openApp(page)
     await startRehearsal(page)
-    const before = await songs(page).locator("[data-song-choice]").count()
+    const before = await songRows(page).count()
+    expect(before).toBe(5)
 
     await field(page).fill("Another one")
     await page.keyboard.press("Enter")
@@ -357,22 +330,23 @@ test.describe("the next take", () => {
     // Come back to it, without retyping: narrowed from what the field held
     // the first time it got focus, not from the name it settled on.
     await field(page).click()
-    await expect(songs(page).locator("[data-song-choice]")).toHaveCount(before)
+    await expect(songRows(page)).toHaveCount(before)
   })
 
-  test("✕ clicked while focused puts back the fallback without narrowing the pills", async ({
+  test("✕ clicked while focused puts back the fallback without narrowing the songs", async ({
     page,
   }) => {
     await openApp(page)
     await startRehearsal(page)
-    const before = await songs(page).locator("[data-song-choice]").count()
+    const before = await songRows(page).count()
+    expect(before).toBe(5)
 
-    await songs(page).getByRole("button", { name: "Viasna 1", exact: true }).click()
+    await songRow(page, "Viasna").click()
     await expect(field(page)).toHaveValue("Viasna")
     await field(page).click()
     await page.getByRole("button", { name: "Put back “Take 1”" }).click()
     await expect(field(page)).toHaveValue("Take 1")
-    await expect(songs(page).locator("[data-song-choice]")).toHaveCount(before)
+    await expect(songRows(page)).toHaveCount(before)
   })
 
   test("typing a name nothing matches moves neither the field nor Record", async ({ page }) => {
@@ -460,9 +434,9 @@ test.describe("the next take", () => {
 })
 
 test.describe("after Stop", () => {
-  // The rehearsal screen has its name field in the panel on the right, and
-  // the save screen at the footer's left: Alex chose that for step 6.
-  test("the name carries over to the save screen's field, and ✕ puts back the one it would have had", async ({
+  // The screen after a take says the take's song; its name field is in
+  // Rename take, behind the pencil beside it (step 8, A4).
+  test("the name carries over to the save screen, and ✕ in Rename take puts back the one it would have had", async ({
     page,
   }) => {
     await openApp(page)
@@ -472,90 +446,34 @@ test.describe("after Stop", () => {
     await page.keyboard.press("Enter")
     await page.getByRole("button", { name: /Record take 1/ }).click()
     await page.getByRole("button", { name: /^Stop/ }).click()
-    await expect(nameField(page)).toHaveValue("Viasna")
-    // Over Save take, with a line between it and the buttons.
+    await expect(reviewTitle(page)).toHaveText("Viasna")
+    // Beside Save take, with a line between it and the buttons.
     await expect(page.locator("footer [data-footer-rule]")).toHaveCount(1)
 
+    await renameReview(page)
+    await expect(nameField(page)).toHaveValue("Viasna")
     await page.getByRole("button", { name: "Put back “Take 1”" }).click()
     await expect(nameField(page)).toHaveValue("Take 1")
+    await page.getByRole("dialog").getByRole("button", { name: "Rename", exact: true }).click()
+    await expect(reviewTitle(page)).toHaveText("Take 1")
     await page.getByRole("button", { name: /Save take/ }).click()
     expect((await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Take 1")
   })
 
-  test("a song picked while typing leaves the field, so Space saves it", async ({ page }) => {
+  test("a song picked in Rename take names the take, and Space then saves it", async ({ page }) => {
     await openApp(page)
     await startRehearsal(page)
     await recordTake(page)
+    await renameReview(page)
     await nameField(page).fill("Ah")
     await pills(page).filter({ hasText: /^Ahoń 1$/ }).click()
     await expect(nameField(page)).toHaveValue("Ahoń")
-    await expect(nameField(page)).not.toBeFocused()
+    await page.keyboard.press("Enter")
+    await expect(page.getByRole("dialog")).toHaveCount(0)
+    await expect(reviewTitle(page)).toHaveText("Ahoń")
     await page.keyboard.press("Space")
     await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Ahoń")
   })
-
-  test("✕ clicked while typing leaves the field too, so Space saves", async ({ page }) => {
-    await openApp(page)
-    await startRehearsal(page)
-    await recordTake(page)
-    await nameField(page).fill("Half a na")
-    await page.getByRole("button", { name: "Put back “Take 1”" }).click()
-    await expect(nameField(page)).toHaveValue("Take 1")
-    await expect(nameField(page)).not.toBeFocused()
-    await page.keyboard.press("Space")
-    await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Take 1")
-  })
-})
-
-test("All songs… lists every song alphabetically, and a click fills the field and closes it", async ({
-  page,
-}) => {
-  await openApp(page)
-  await startRehearsal(page)
-  await recordTake(page)
-  await nameField(page).fill("Viasna")
-  await page.getByRole("button", { name: /Save take/ }).click()
-  await page.getByRole("button", { name: "All songs…" }).click()
-  const panel = page.getByRole("dialog", { name: "All songs" })
-  await expect(panel).toBeVisible()
-  // Every song, case-blind alphabetical, tonight's as its next go.
-  await expect(panel.locator("[data-song-choice]")).toHaveText([
-    "Ahoń 1", "Daroha 1", "Dym 1", "Pałyn 1", "Ptuška 1", "Sonca 1", "Viasna 2",
-  ])
-  await panel.getByRole("button", { name: "Ptuška" }).click()
-  await expect(panel).toHaveCount(0)
-  await expect(page.getByRole("textbox", { name: "Next take" })).toHaveValue("Ptuška")
-  expect((await calls(page, "set_next_take_name")).at(-1)?.args).toEqual(["Ptuška"])
-  // Closed, it leaves the keyboard to the screen: Space records.
-  await page.keyboard.press("Space")
-  await expect(page.getByRole("heading", { level: 1, name: "Ptuška" })).toBeVisible()
-})
-
-test("All songs… opened while typing leaves the field as it was, and a song picked fills it", async ({
-  page,
-}) => {
-  await openApp(page)
-  await startRehearsal(page)
-  const field = page.getByRole("textbox", { name: "Next take" })
-  await field.fill("Pt")
-  const before = await callCount(page, "set_next_take_name")
-  await page.getByRole("button", { name: "All songs…" }).click()
-  const panel = page.getByRole("dialog", { name: "All songs" })
-  await expect(panel).toBeVisible()
-  // Opening the list does not steal the field's focus or send what it holds.
-  await expect(field).toBeFocused()
-  await expect(field).toHaveValue("Pt")
-  expect(await callCount(page, "set_next_take_name")).toBe(before)
-
-  await panel.getByRole("button", { name: "Ptuška" }).click()
-  await expect(panel).toHaveCount(0)
-  await expect(field).toHaveValue("Ptuška")
-  await expect(field).not.toBeFocused()
-  expect((await calls(page, "set_next_take_name")).slice(before).map((c) => c.args)).toEqual([
-    ["Ptuška"],
-  ])
-  await page.keyboard.press("Space")
-  await expect(page.getByRole("heading", { level: 1, name: "Ptuška" })).toBeVisible()
 })
 
 test("All songs… draws a song lit or in focus inside its own box, so none of it shows in the next column", async ({
@@ -564,11 +482,14 @@ test("All songs… draws a song lit or in focus inside its own box, so none of i
   // The window is WebKit on a Mac, and WebKit paints columns as one strip
   // cut at the columns' height: a ring or an outline under the last song of
   // a column showed at the top of the next one.
+  // On the rehearsal screen All songs… is in the Rename take dialog (R8).
   await openApp(page)
   await startRehearsal(page)
-  await page.getByRole("textbox", { name: "Next take" }).fill("Ahoń")
-  await page.keyboard.press("Enter")
-  await page.getByRole("button", { name: "All songs…" }).click()
+  await recordTake(page)
+  await saveAs(page, "Ahoń")
+  await page.hover("[data-take='1']")
+  await page.getByRole("button", { name: "Rename take Ahoń 1" }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "All songs…" }).click()
   const panel = page.getByRole("dialog", { name: "All songs" })
   await expect(panel).toBeVisible()
 
@@ -615,14 +536,16 @@ test("a pill puts only the song's title in the field", async ({ page }) => {
   await recordTake(page)
   await saveAs(page, "Pałyn")
   await recordTake(page, 2)
+  await renameReview(page)
   await expect(pills(page).first()).toHaveText("Pałyn 2")
   await pills(page).filter({ hasText: /^Viasna/ }).click()
   await expect(nameField(page)).toHaveValue("Viasna")
+  await page.getByRole("dialog").getByRole("button", { name: "Rename", exact: true }).click()
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Viasna")
 })
 
-// Tonight's takes, apart from Pałyn's go from before tonight in the panel.
+// Tonight's takes.
 const overview = (page: Page) => page.locator("[aria-label='Rehearsal overview']")
 
 test("a take is shown as its song with the go beside it, from 1", async ({ page }) => {
@@ -696,9 +619,8 @@ test.describe("a song's old name", () => {
     await startRehearsal(page)
     await field(page).fill("Palyn")
     await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
-    await expect(group(page).locator("[data-song-choice]")).toHaveText(["Pałyn 1"])
-    await expect(group(page).locator("[data-song-choice]")).toHaveAttribute("aria-current", "true")
-    await expect(group(page).locator("[data-all-songs]")).toBeVisible()
+    await expect(songRows(page)).toHaveCount(1)
+    await expect(songRow(page, "Pałyn")).toHaveAttribute("aria-current", "true")
     await expect(line(page)).toHaveText("Palyn is Pałyn now. Make Palyn a new song")
   })
 
@@ -707,11 +629,8 @@ test.describe("a song's old name", () => {
     await startRehearsal(page)
     await field(page).fill("palyn 4")
     await expect(group(page).locator("[data-take-go]")).toHaveText("→ Pałyn 1")
-    await expect(group(page).locator("[data-song-choice]")).toHaveText(["Pałyn 1"])
-    await expect(group(page).locator("[data-song-choice]")).toHaveAttribute("aria-current", "true")
-    await group(page).locator("[data-all-songs]").click()
-    const all = page.getByRole("dialog", { name: "All songs" })
-    await expect(all.locator("[data-song-choice='Pałyn']")).toHaveAttribute("aria-current", "true")
+    await expect(songRows(page)).toHaveCount(1)
+    await expect(songRow(page, "Pałyn")).toHaveAttribute("aria-current", "true")
   })
 
   test("Make Palyn a new song that cannot forget says so, and changes nothing", async ({
@@ -793,18 +712,20 @@ test.describe("a song's old name", () => {
     expect((await record.boundingBox())!.y).toBeCloseTo(recordAt.y, 0)
   })
 
-  test("typed and left, it moves nothing under the songs", async ({ page }) => {
+  test("typed and left, it moves nothing under the field", async ({ page }) => {
     await openApp(page, { before: OLD })
     await startRehearsal(page)
-    await expect.poll(() => rowsUnder(page, "Next take")).toBe(2)
-    const height = async () => (await group(page).boundingBox())!.height
-    const before = await height()
+    const list = page.locator("[data-song-list]")
+    await expect(songRows(page)).toHaveCount(5)
+    const at = async () => (await list.boundingBox())!.y
+    const before = await at()
     await field(page).fill("Palyn")
     await expect(line(page)).toBeVisible()
-    expect(await height()).toBeCloseTo(before, 0)
+    expect(await at()).toBeCloseTo(before, 0)
     await page.keyboard.press("Enter")
     await expect(field(page)).toHaveValue("Pałyn")
-    expect(await height()).toBeCloseTo(before, 0)
+    await expect(line(page)).toHaveCount(0)
+    expect(await at()).toBeCloseTo(before, 0)
   })
 
   test("in Rename take, leaving the field with an old name in it moves nothing", async ({

@@ -113,6 +113,16 @@ function letGoOfLeftover(el: Element | null): boolean {
 }
 
 /**
+ * Whether focus on `el` is left over from the mouse rather than chosen (see
+ * watchFocus). A control that answers Space itself before it reaches the
+ * window — a menu's trigger opens on keydown — lets such a Space go by, so it
+ * does what it does everywhere else.
+ */
+export function focusIsLeftover(el: Element | null): boolean {
+  return el !== null && el === pointerFocused && !isTyping(el)
+}
+
+/**
  * True when the focused element has already claimed the keyboard for its own
  * purpose, so none of the shortcuts below should fire. Typing is the obvious
  * case; a dialog is the one that is easy to miss, because Radix closes it on

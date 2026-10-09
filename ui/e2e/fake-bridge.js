@@ -369,8 +369,9 @@ function songPlays(goes) {
 // The rest of the band's repertoire, as other rehearsals in the library
 // played it, the latest first.
 const REPERTOIRE = ['Pałyn', 'Viasna', 'Ahoń', 'Sonca', 'Dym', 'Ptuška', 'Daroha'];
-// The repertoire as renames and merges have left it.
-let repertoire = [...REPERTOIRE];
+// The repertoire as renames and merges have left it. A page can add songs
+// to it (window.__MORE_SONGS__ = ['Opus', …]), played at other rehearsals.
+let repertoire = [...REPERTOIRE, ...(window.__MORE_SONGS__ || [])];
 
 // Python groups takes by the song each is a go at (api._songs_of) and hands
 // the result over; the mock does the same.
@@ -408,21 +409,20 @@ function playsOf(song, r, goes, rehearsals) {
   return {folder:r.folder, rehearsal:r.name, created_at:r.created_at, take:goes[goes.length - 1]};
 }
 
-// And api._last_attempt: how long the latest go at the next take's song ran,
-// tonight, or with none the go shown before tonight, with its day.
+// And api._last_attempt: how long the latest go at a song ran, tonight, or
+// with none the go before tonight (`before`, goBeforeTonight's), with its day.
 function lastAttempt(takes, song, before = null) {
   if (!song) return null;
   const goes = takes.filter(t => t.song === song);
   if (goes.length) return {song, duration_sec: goes[goes.length - 1].duration_sec};
-  return before ? {song, duration_sec: before.first.take.duration_sec,
-                   created_at: before.first.created_at} : null;
+  return before ? {song, duration_sec: before.take.duration_sec,
+                   created_at: before.created_at} : null;
 }
 
-// api._before_tonight: the next take's song as it went before tonight — the
-// go shown (songPlays' pick) and the last go of each of the three latest
-// rehearsals less that one — over the library, less the rehearsal in
+// api._go_before_tonight: the go at a song played before tonight that it is
+// measured against — songPlays' pick over the library, less the rehearsal in
 // progress and the rehearsals not on disk.
-async function beforeTonight(song) {
+async function goBeforeTonight(song) {
   if (!song) return null;
   const goes = [];
   for (const r of await libraryNow()) {
@@ -433,17 +433,79 @@ async function beforeTonight(song) {
         goes.push({folder:r.folder, rehearsal:r.name, created_at:r.created_at, missing:false, take:t});
       }
   }
-  const first = songPlays(goes);
-  if (!first) return null;
-  const last = new Map();
-  for (const g of goes) {
-    if (!last.has(g.folder) && last.size === 3) break;
-    last.set(g.folder, g);
+  return songPlays(goes);
+}
+
+// The library's sets, in their order (Library.sets): kept, as the database
+// keeps them, across a reload — in localStorage, beside the config. A page
+// can give its own (window.__SETS__ = [{id, name, songs: ['Pałyn', …]}, …]).
+const SETS = 'mock-sets';
+let sets = (() => {
+  try {
+    const kept = JSON.parse(localStorage.getItem(SETS));
+    if (Array.isArray(kept)) return kept;
+  } catch { /* none kept */ }
+  return (window.__SETS__ || []).map(st => ({...st, songs:[...st.songs]}));
+})();
+const keepSets = () => localStorage.setItem(SETS, JSON.stringify(sets));
+// Ids are never given twice, as in Python (AUTOINCREMENT).
+let nextSetId = Math.max(0, ...sets.map(st => st.id)) + 1;
+
+// Library._titles_of: a title in a set as the song it is now — by its title
+// or an old name, compared case-blind, else by what it is a go at ("Viasna
+// 2") — or as typed and new when no song has it.
+async function setTitles() {
+  const known = new Map();
+  for (const r of await libraryNow())
+    for (const t of r.takes) if (t.song) known.set(t.song.toLowerCase(), t.song);
+  for (const t of session ? session.takes : []) if (t.song) known.set(t.song.toLowerCase(), t.song);
+  for (const title of [...repertoire, ...(window.__TAKELESS_SONGS__ || [])])
+    if (!known.has(title.toLowerCase())) known.set(title.toLowerCase(), title);
+  const find = (text) => known.get(text.toLowerCase()) ?? oldNames.get(text.toLowerCase())?.song;
+  return (text) => {
+    const m = /^(.*?)\s+(\d+)$/.exec(text.trim());
+    const title = find(text) ?? (m && m[1].trim() ? find(m[1].trim()) : undefined);
+    return title ? {title, new:false} : {title:text, new:true};
+  };
+}
+// Library._songs_of_set: a set's songs as they are now, each song once, in
+// the place it first comes.
+function songsOfSet(titles, stored) {
+  const seen = new Set();
+  return stored.map(titles).filter(x => {
+    const key = x.title.toLowerCase();
+    return seen.has(key) ? false : (seen.add(key), true);
+  });
+}
+async function setsAsSent() {
+  const titles = await setTitles();
+  return JSON.parse(JSON.stringify(sets.map(st => ({id:st.id, name:st.name,
+    songs:songsOfSet(titles, st.songs)}))));
+}
+// A rehearsal's own copy of its set, as sent (Library._rehearsal_data).
+async function setAsSent(copy) {
+  if (!copy) return null;
+  const titles = await setTitles();
+  return {name:copy.name, songs:songsOfSet(titles, copy.songs)};
+}
+// The set a rehearsal before this one was played by, as it kept it: a page
+// gives them by folder (window.__PLAYED_BY__ = {'/rec/old': {name, songs:
+// ['Pałyn', …]}}); the others were played freely.
+const playedBy = (folder) => (window.__PLAYED_BY__ || {})[folder] || null;
+// The same rules and the same words as Python's (Library._set_name, _set_songs).
+function setNameRefusal(name, id) {
+  const trimmed = String(name || '').trim().slice(0, 40).trim();
+  if (!trimmed) return 'A set needs a name';
+  const other = sets.find(st => st.id !== id && st.name.toLowerCase() === trimmed.toLowerCase());
+  return other ? `There is already a set called ${other.name}` : null;
+}
+function setSongs(songs) {
+  const out = [], seen = new Set();
+  for (const raw of songs || []) {
+    const title = String(raw || '').trim();
+    if (title && !seen.has(title.toLowerCase())) { seen.add(title.toLowerCase()); out.push(title); }
   }
-  const more = [...last.values()]
-    .filter(g => !(g.folder === first.folder && g.take.take_number === first.take.take_number))
-    .map(({folder, rehearsal, created_at, take}) => ({folder, rehearsal, created_at, take}));
-  return {song: goes[0].take.song, first, more};
+  return out;
 }
 
 // What a take is a go at, as Python's library resolves a name
@@ -492,7 +554,9 @@ function nextTake(n, chosen = true) {
   const takes = session ? session.takes : [];
   if (chosen && session && nextName) return resolved(nextName, takes, number);
   const last = takes[takes.length - 1];
-  return resolved(last && last.song ? last.song : '', takes, number);
+  // The evening's first take is the set's first song (R3).
+  const first = !takes.length && session && session.set ? session.set.songs[0] : null;
+  return resolved(last && last.song ? last.song : first || '', takes, number);
 }
 // And the name field's text for it: the title, or "Take N".
 const fieldText = (r) => r.song || r.name;
@@ -636,20 +700,25 @@ window.__MAKE_API__ = () => ({
   // A page can start the rehearsal with takes in it already:
   // window.__TONIGHT__ = [{name, duration_sec, starred?, markers?, cloud?}, …],
   // numbered from 1 in that order.
-  start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, _tr, _depth) => {
+  start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, _tr, _depth, setId) => {
     const folder = '/rec/' + name;
     const tonight = (window.__TONIGHT__ || []).map((t, i) => ({take_number:i + 1, markers:[],
       tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));
     for (const t of tonight) fileDurations[t.tracks[0].file] = t.duration_sec;
+    // The set as it is now: the rehearsal keeps its own copy (Library.set_of).
+    const byIt = sets.find(st => st.id === setId);
     session = {name, folder, takes:asSent(tonight),
-               tracks: window.__SESSION_TRACKS__ || [{name:'Guitar',channel:1},{name:'Vocals',channel:2}]};
+               tracks: window.__SESSION_TRACKS__ || [{name:'Guitar',channel:1},{name:'Vocals',channel:2}],
+               set: byIt ? {name:byIt.name, songs:[...byIt.songs]} : null};
     takeCounter = tonight.length;
     nextName = null;
     return {ok:true, folder:session.folder};
   }),
   session_state: async () => {
     if (!session) return {active:false};
-    const before = await beforeTonight(nextTake().song);
+    const song = nextTake().song;
+    const before = await goBeforeTonight(song);
+    const set = await setAsSent(session.set);
     // Drain on read, the way the real queue empties once a take is copied —
     // otherwise the interface would see the same take "queued" forever.
     const cq = cloudQueue;
@@ -664,8 +733,7 @@ window.__MAKE_API__ = () => ({
        next_take_number:takeCounter + 1,
        next_take_name:suggestName(), next_take_go:nextTake().go,
        next_take_default:suggestName(undefined, false),
-       before_tonight:before,
-       last_attempt:lastAttempt(session.takes, nextTake().song, before),
+       last_attempt:lastAttempt(session.takes, song, before), set,
        recording:false, cloud_queue:cq, disk_bytes:48000000 * session.takes.length}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
@@ -679,6 +747,12 @@ window.__MAKE_API__ = () => ({
     if (!session) return {ok:false, error:'No rehearsal in progress'};
     nextName = (name || '').trim() || null;
     return {ok:true, next_take_name:suggestName(), next_take_go:nextTake().go};
+  }),
+  last_attempt: track('last_attempt', async (name) => {
+    await held('last_attempt');
+    if (!session) return null;
+    const song = songOf(name, session.takes);
+    return lastAttempt(session.takes, song, await goBeforeTonight(song));
   }),
   // api.song_choices: the songs of the rehearsal (the live one with no
   // folder), each as the next go at it, and the rest of the repertoire.
@@ -829,6 +903,36 @@ window.__MAKE_API__ = () => ({
     keepMarks(folder, n, take);
     return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
+  list_sets: track('list_sets', async () => setsAsSent()),
+  add_set: track('add_set', async (name, songs) => {
+    const refusal = setNameRefusal(name);
+    if (refusal) return {ok:false, error:refusal};
+    sets.push({id: nextSetId++, name: name.trim().slice(0, 40).trim(), songs: setSongs(songs)});
+    keepSets();
+    return {ok:true, sets: await setsAsSent()};
+  }),
+  update_set: track('update_set', async (id, name, songs) => {
+    const st = sets.find(x => x.id === id);
+    if (!st) return {ok:false, error:'Set not found'};
+    if (name !== null && name !== undefined) {
+      const refusal = setNameRefusal(name, id);
+      if (refusal) return {ok:false, error:refusal};
+      st.name = name.trim().slice(0, 40).trim();
+    }
+    if (songs !== null && songs !== undefined) st.songs = setSongs(songs);
+    keepSets();
+    return {ok:true, sets: await setsAsSent()};
+  }),
+  delete_set: track('delete_set', async (id) => {
+    if (!sets.some(x => x.id === id)) return {ok:false, error:'Set not found'};
+    sets = sets.filter(x => x.id !== id);
+    keepSets();
+    return {ok:true, sets: await setsAsSent()};
+  }),
+  save_next_set: track('save_next_set', async (id) => {
+    writeCfg({...readCfg(), next_set: id ?? null});
+    return {ok:true};
+  }),
   list_labels: track('list_labels', async () => JSON.parse(JSON.stringify(await labelsAsSent()))),
   // The same rules and the same words as Python's (store/library.py).
   add_label: track('add_label', async (name, colour) => {
@@ -918,7 +1022,7 @@ window.__MAKE_API__ = () => ({
   }),
 
   list_rehearsals: track('list_rehearsals', async () => ([
-    {folder:'/rec/old', name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
+    {folder:'/rec/old', set_name: playedBy('/rec/old')?.name ?? null, name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
      take_count:9, total_duration_sec:2520, disk_bytes:1200000000, in_cloud:3,
      songs:[{name:'Pałyn', takes:3}, {name:'Viasna', takes:2}, {name:'Ahoń', takes:1},
             {name:'Sonca', takes:1}, {name:'Dym', takes:1}, {name:'Ptuška', takes:1}],
@@ -953,7 +1057,8 @@ window.__MAKE_API__ = () => ({
     const r = folder === '/rec/older' ? withExtraSongs(pastRehearsal(folder)) : pastRehearsal(folder);
     r.takes = r.takes.filter(t => !deleted.has(`${folder}#${t.take_number}`));
     for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
-    return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes)}));
+    return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes),
+                                      set: await setAsSent(playedBy(folder))}));
   }),
   // The setup screen's last time (api.last_time): Tuesday jam song by song,
   // Daroha from the rehearsal before it, and the others in history's order.
@@ -1287,6 +1392,8 @@ window.__MAKE_API__ = () => ({
     tracks:[], volumes:{}, master_volume: readCfg().master_volume ?? 1,
     history_view: readCfg().history_view ?? 'rehearsals',
     marks_grouping: readCfg().marks_grouping ?? 'rehearsal',
+    // api._next_set: none when the set picked is gone.
+    next_set: sets.some(st => st.id === readCfg().next_set) ? readCfg().next_set : null,
     output_device_index: outputDevice.index,
     output_channels: outputDevice.channels || [1, 2],
     cloud_format: cloudFormat,

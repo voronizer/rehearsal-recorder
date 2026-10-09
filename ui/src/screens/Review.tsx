@@ -5,7 +5,7 @@ import { FooterRow } from "@/components/FooterRow"
 import { Kbd, Shell } from "@/components/Shell"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
-import { TakeNameField } from "@/components/TakeNameField"
+import { TakeSummary } from "@/components/TakeSummary"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import { MarkerDialog } from "@/components/MarkerDialog"
@@ -17,6 +17,7 @@ import {
   type Marker,
   type PendingTake,
   type ShareWhat,
+  type Take,
 } from "@/lib/api"
 import { croppedButNotSwept, formatMMSS } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
@@ -37,12 +38,15 @@ const WHAT_GOES: Record<ShareWhat, string> = {
 export function Review({
   take,
   rehearsalName,
+  takes,
   onKept,
   onDiscarded,
   onCropped,
 }: {
   take: PendingTake
   rehearsalName: string
+  /** Tonight's takes kept so far: the song's goes before this one. */
+  takes: Take[]
   onKept: () => void
   onDiscarded: () => void
   onCropped: (take: PendingTake) => void
@@ -51,7 +55,8 @@ export function Review({
   // over from the previous one with the counter bumped.
   const firstName = take.suggested_name ?? `Take ${take.take_number}`
   const [name, setName] = useState(firstName)
-  // And when the band has moved on, the song they moved to is a click.
+  // And when the band has moved on, the song they moved to is a click, in
+  // Rename take.
   const songChoices = useSongChoices(true, null, take.take_number)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -212,13 +217,14 @@ export function Review({
           error={error}
           rule
           left={
-            <TakeNameField
-              id="take-name"
-              label="Take name"
-              value={name}
-              fallback={take.default_name ?? `Take ${take.take_number}`}
+            <TakeSummary
+              name={name}
+              takeNumber={take.take_number}
+              durationSec={take.duration_sec}
+              takes={takes}
               choices={songChoices}
-              onCommit={setName}
+              fallback={take.default_name ?? `Take ${take.take_number}`}
+              onRename={setName}
             />
           }
         >

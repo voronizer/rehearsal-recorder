@@ -5,6 +5,18 @@ export function formatMMSS(totalSec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`
 }
 
+/**
+ * How a go's length `now` compares with another's, `then`, named by `what`:
+ * "12 s shorter than go 2", "1:05 longer than on 22 Sep" from a minute, and
+ * "as long as go 2" under two seconds either way, which nobody hears.
+ */
+export function against(now: number, then: number, what: string): string {
+  if (Math.abs(now - then) < 2) return `as long as ${what}`
+  const by = Math.round(Math.abs(now - then))
+  const amount = by < 60 ? `${by} s` : formatMMSS(by)
+  return `${amount} ${now > then ? "longer" : "shorter"} than ${what}`
+}
+
 export function formatHMS(totalSec: number): string {
   if (!isFinite(totalSec) || totalSec < 0) totalSec = 0
   const h = String(Math.floor(totalSec / 3600)).padStart(2, "0")

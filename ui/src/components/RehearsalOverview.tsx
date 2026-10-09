@@ -7,7 +7,7 @@ import {
   Play,
   Trash2,
 } from "lucide-react"
-import { Fragment, type ReactNode } from "react"
+import { Fragment, useRef, type ReactNode } from "react"
 import { StarButton } from "@/components/StarButton"
 import { SongPills } from "@/components/SongPills"
 import { useSongChoices } from "@/hooks/useSongChoices"
@@ -18,7 +18,8 @@ import { labelCounts, labelLook, labelOf, markText, useLabels } from "@/lib/labe
 import { isFalseStart } from "@/lib/evening"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
-import type { Song, SongChoices, Take } from "@/lib/api"
+import { SetPlayedCard } from "@/components/SetPlayed"
+import type { RehearsalSet, Song, SongChoices, Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 const NOT_NAMED = "Not named"
@@ -86,6 +87,7 @@ export function RehearsalOverview({
   folder,
   onName,
   actions,
+  set,
 }: {
   takes: Take[]
   songs: Song[]
@@ -109,6 +111,9 @@ export function RehearsalOverview({
   onName?: (take: Take, title: string) => void
   /** Drawn on the right of the row of figures. */
   actions?: ReactNode
+  /** The set it was played by, as History has it: a card of what was
+   *  played over the songs. */
+  set?: RehearsalSet | null
 }) {
   const labels = useLabels()
   const byNumber = new Map(takes.map((t) => [t.take_number, t]))
@@ -146,6 +151,8 @@ export function RehearsalOverview({
   const version = takes.map((t) => `${t.take_number}:${t.name}`).join("|")
   const naming = onName !== undefined && folder !== undefined
   const nameChoices = useSongChoices(naming && unnamed.length > 0, folder, null, version)
+  // Each song's group, for the set card to go to.
+  const groups = useRef(new Map<string, HTMLElement>())
 
   return (
     <section aria-label="Rehearsal overview" className="flex flex-col gap-3.5">
@@ -170,11 +177,25 @@ export function RehearsalOverview({
         {actions && legend}
       </div>
 
+      {set && (
+        <SetPlayedCard
+          set={set}
+          goes={new Map(rows.map((r) => [r.name, r.takes.length]))}
+          onGoTo={(title) =>
+            groups.current.get(title)?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+        />
+      )}
+
       {rows.map((row) => {
         const isUnnamed = row.name === NOT_NAMED
         return (
           <div
             key={row.name}
+            ref={(el) => {
+              if (el) groups.current.set(row.name, el)
+              else groups.current.delete(row.name)
+            }}
             role="group"
             aria-label={row.name}
             className={cn(

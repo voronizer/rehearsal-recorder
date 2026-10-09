@@ -137,7 +137,17 @@ export async function startRehearsal(page: Page, n = 1) {
 export async function recordTake(page: Page, n = 1) {
   await page.getByRole("button", { name: new RegExp(`Record take ${n}`) }).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
-  await expect(page.locator("#take-name")).toBeVisible()
+  await expect(page.locator("[data-take-summary]")).toBeVisible()
+}
+
+/** Names the take on the screen after it, through its pencil and Rename
+ *  take, and leaves it up for review. */
+export async function nameTake(page: Page, name: string) {
+  await page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
+  const dialog = page.getByRole("dialog", { name: "Rename take" })
+  await dialog.locator("#take-name").fill(name)
+  await page.keyboard.press("Enter")
+  await expect(dialog).toHaveCount(0)
 }
 
 /** Draws a region across the timeline, the way a person does: pressed,

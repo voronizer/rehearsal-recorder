@@ -12,10 +12,15 @@ const LAYOUT: Record<Id, string> = {
   marks: "tile s4",
   names: "tile s4",
   cloud: "tile s2",
+  // A row of its own, its words beside the panel as the health tile's are.
+  sets: "tile s6",
   formats: "tile s2",
   // Wide, so the last row is as full as the others.
   trash: "tile s4 word",
 }
+
+/** The tiles with their words beside the piece, not over it. */
+const SPLIT = new Set<Id>(["health", "sets"])
 
 export function Features({ data }: { data: PieceData }) {
   const { features } = content
@@ -39,7 +44,7 @@ export function Features({ data }: { data: PieceData }) {
           const pieces = s?.pieces && <div className={s.left ? "shot left" : "shot"}>{s.pieces}</div>
           return (
             <article key={id} className={LAYOUT[id]}>
-              {id === "health" ? (
+              {SPLIT.has(id) ? (
                 <div className="split">
                   {copy}
                   {pieces}
