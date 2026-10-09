@@ -4,18 +4,21 @@ import { HealthLine } from "@/components/HealthLine"
 import { Shell } from "@/components/Shell"
 import { StopTake } from "@/components/StopTake"
 import { GoTitle } from "@/components/TakeTitle"
+import { MidiTile } from "@/components/midi/MidiTile"
 import { TrackTile } from "@/components/TrackTile"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
   poll as pollPython,
   type LastAttempt,
+  type MidiActivity,
   type PendingTake,
   type RecordingHealth,
   type PlacedTrack,
 } from "@/lib/api"
 import { formatClock, formatDate, formatMMSS } from "@/lib/format"
-import { isSilent, watchStep, type TrackWatch } from "@/lib/levels"
+import { fallBack, isSilent, watchStep, type TrackWatch } from "@/lib/levels"
+import { recordsAudio, recordsNotes } from "@/lib/midi"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
 
@@ -31,12 +34,46 @@ const SAID = "recording"
 // over it half that, so the two read from the same distance.
 const CLOCK_SIZE = "clamp(4rem, 19vh, 9.5rem)"
 
+/** What a track that takes notes is showing: where its fill stands (the
+ *  loudest note lately, falling back between notes as a meter does), how many
+ *  notes this take, and whether its port is plugged in. */
+type NoteWatch = { vel: number; notes: number; connected: boolean }
+
+/**
+ * The tracks' notes after one more poll. Python gives the loudest note since
+ * the last poll, so the fill is the meter's rise and fall back, in the same
+ * time as the levels'.
+ */
+function noteStep(
+  prev: { at: number; tracks: Record<string, NoteWatch> } | null,
+  next: MidiActivity,
+  now: number
+) {
+  const since = prev ? now - prev.at : 0
+  return {
+    at: now,
+    tracks: Object.fromEntries(
+      Object.entries(next).map(([name, a]) => [
+        name,
+        {
+          vel: fallBack(prev?.tracks[name]?.vel ?? 0, a.vel, since),
+          notes: a.notes,
+          connected: a.connected,
+        },
+      ])
+    ),
+  }
+}
+
 /**
  * The take while it records, laid out to be read from behind the kit: nobody
  * stands at the laptop while they play. What is being recorded, big, over a
  * big clock; how far into the song the band is against the last go at it;
  * and a tile per track that lights up with its level and turns red if it
  * clips. Running out of disk is said where the free space always is.
+ *
+ * A track on Both has a column of notes beside its levels, and one on MIDI
+ * alone a tile of its own. Their notes are polled with the levels.
  */
 export function Recording({
   takeNumber,
@@ -63,6 +100,12 @@ export function Recording({
     at: number
     tracks: Record<string, TrackWatch>
   }>(() => ({ at: Date.now(), tracks: {} }))
+  // Null until Python has answered once: a tile does not say "not connected"
+  // for the moment before it is known.
+  const [noted, setNoted] = useState<{ at: number; tracks: Record<string, NoteWatch> } | null>(
+    null
+  )
+  const takesNotes = tracks.some(recordsNotes)
   const [stopping, setStopping] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [health, setHealth] = useState<RecordingHealth | null>(null)
@@ -87,12 +130,19 @@ export function Recording({
     let timeout = 0
 
     // Poll in a chain rather than on an interval: if the bridge stalls, the
-    // requests will not pile up on each other.
+    // requests will not pile up on each other. The notes come with the
+    // levels, and only for a band that has any, so that a Both tile's two
+    // halves move together. The bridge can blink: a call that fails leaves
+    // its half of the screen as it was for this tick.
     const poll = async () => {
-      try {
-        const next = await pollPython("get_levels")
-        if (alive) {
-          const now = Date.now()
+      const [levelsNow, notesNow] = await Promise.allSettled([
+        pollPython("get_levels"),
+        takesNotes ? pollPython("midi_activity") : Promise.resolve(null),
+      ])
+      if (alive) {
+        const now = Date.now()
+        if (levelsNow.status === "fulfilled") {
+          const next = levelsNow.value
           setLevels(next)
           setWatch((prev) => ({
             at: now,
@@ -104,8 +154,10 @@ export function Recording({
             ),
           }))
         }
-      } catch {
-        /* the bridge can blink — the meters just skip this tick */
+        if (notesNow.status === "fulfilled" && notesNow.value) {
+          const next = notesNow.value
+          setNoted((prev) => noteStep(prev, next, now))
+        }
       }
       if (alive) timeout = window.setTimeout(poll, LEVELS_POLL_MS)
     }
@@ -115,7 +167,7 @@ export function Recording({
       alive = false
       window.clearTimeout(timeout)
     }
-  }, [])
+  }, [takesNotes])
 
   const stop = async () => {
     if (stopping) return
@@ -261,6 +313,21 @@ export function Recording({
         >
           {tracks.map((t) => {
             const seen = watch.tracks[t.name]
+            // Known once Python has answered; until then there is no reason
+            // to say it is not connected.
+            const heard = recordsNotes(t)
+              ? (noted?.tracks[t.name] ?? { vel: 0, notes: 0, connected: !noted })
+              : undefined
+            if (heard && !recordsAudio(t))
+              return (
+                <MidiTile
+                  key={t.name}
+                  name={t.name}
+                  icon={t.icon}
+                  port={t.midi_port?.name ?? ""}
+                  {...heard}
+                />
+              )
             return (
               <TrackTile
                 key={t.name}
@@ -273,6 +340,7 @@ export function Recording({
                 held={seen?.hold.map((h) => h.peak) ?? []}
                 clips={seen?.clips ?? 0}
                 silent={isSilent(seen, watch.at)}
+                midi={heard}
               />
             )
           })}

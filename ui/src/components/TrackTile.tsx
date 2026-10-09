@@ -1,4 +1,6 @@
 import { InstrumentIcon } from "@/components/InstrumentIcon"
+import { MidiGlyph } from "@/components/midi/MidiGlyph"
+import { NoteCount, NotesFill } from "@/components/midi/MidiTile"
 import { cn } from "@/lib/utils"
 import { peakToDb } from "@/lib/format"
 import { CLIP_THRESHOLD, QUIET_THRESHOLD, meterReach } from "@/lib/levels"
@@ -23,6 +25,11 @@ const reach = (peak: number) => meterReach(peak) * 100
  * and the fill is in dB too, from −60 at the bottom to full scale at the top,
  * as on the desk the band sets its gain on. The track's icon stands in the
  * corner opposite the figure, as a second way to find your own tile.
+ *
+ * A track on Both keeps all of this and gains a narrow column on the right,
+ * its edge dashed and labelled MIDI, whose fill jumps with each note's
+ * velocity; its header adds how many notes it has had. A track on MIDI alone
+ * has no level and is a MidiTile.
  */
 export function TrackTile({
   name,
@@ -34,6 +41,7 @@ export function TrackTile({
   held,
   clips,
   silent,
+  midi,
 }: {
   name: string
   icon?: string
@@ -48,6 +56,10 @@ export function TrackTile({
   /** Clips since the take began. */
   clips: number
   silent: boolean
+  /** The notes this track takes, when it records them too (Both): where the
+   *  fill stands, 0..1, how many notes this take, and whether its port is
+   *  plugged in. */
+  midi?: { vel: number; notes: number; connected: boolean }
 }) {
   const sides = peaks.length ? peaks : [0]
   // The figure is the peak the line holds, not the last poll's: that
@@ -61,9 +73,13 @@ export function TrackTile({
       aria-label={name}
       data-clipped={clips > 0 || undefined}
       data-silent={silent || undefined}
+      data-not-connected={(midi && !midi.connected) || undefined}
       data-channels={sides.length}
       className={cn(
         "@container relative min-h-24 min-w-0 overflow-hidden rounded-xl border bg-card transition-opacity duration-300",
+        // The port first, so that a clip, which cannot wait, is the edge
+        // that shows when both are so.
+        midi && !midi.connected && "border-amber-500/60",
         clips > 0 && "border-destructive/70",
         silent && "opacity-45"
       )}
@@ -99,6 +115,21 @@ export function TrackTile({
             )}
           </div>
         ))}
+        {midi && (
+          <div
+            data-midi-column
+            data-level={Math.round(midi.vel * 100)}
+            className="relative w-[22%] min-w-3.5 shrink-0 border-l border-dashed"
+          >
+            <NotesFill vel={midi.vel} />
+            <span
+              className="absolute bottom-[clamp(0.375rem,7cqi,1.25rem)] left-1/2 text-[11px] leading-none font-semibold text-primary @max-[7rem]:hidden"
+              style={{ writingMode: "vertical-rl", transform: "translateX(-50%) rotate(180deg)" }}
+            >
+              MIDI
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="relative grid h-full grid-rows-[auto_minmax(0,1fr)] gap-2 p-[clamp(0.375rem,7cqi,1.25rem)]">
@@ -120,6 +151,25 @@ export function TrackTile({
               {peakToDb(peak)}
               <span className="@max-[7rem]:hidden"> dB</span>
             </span>
+            {/* One line for both: the count, or that there is no port to
+                count from, so nothing moves when the port comes and goes. */}
+            {midi && (
+              <span
+                data-notes
+                className="flex items-center gap-1 text-xs text-muted-foreground @max-[7rem]:hidden"
+              >
+                {midi.connected ? (
+                  <>
+                    <MidiGlyph className="size-3 shrink-0 text-primary" />
+                    <span>
+                      <NoteCount notes={midi.notes} />
+                    </span>
+                  </>
+                ) : (
+                  "not connected"
+                )}
+              </span>
+            )}
             {clips > 0 && (
               <span className="text-xs font-semibold text-destructive @max-[7rem]:hidden">
                 {clips > 1 ? `clipped ${clips}×` : "clipped"}
