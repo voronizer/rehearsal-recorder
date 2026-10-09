@@ -94,8 +94,11 @@ a = Analysis(
     # Each migration module imports alembic.op and sqlalchemy only once
     # Alembic runs it, by path, at start — not at import time, so the
     # analysis above cannot see them used and misses them without help.
+    # pylibremidi is a compiled module imported inside a function (so that
+    # an app without MIDI still starts), which is the other thing the
+    # analysis does not follow.
     hiddenimports=["send2trash", "sqlalchemy.dialects.sqlite", "mako",
-                   *collect_submodules("alembic")],
+                   "pylibremidi", *collect_submodules("alembic")],
     hookspath=[],
     excludes=[
         # Nothing here draws with these, and they are large.

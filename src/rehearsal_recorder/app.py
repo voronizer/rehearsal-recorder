@@ -154,6 +154,23 @@ def selftest():
             )
         return "present"
 
+    def midi_up():
+        # Starts the MIDI system and lists its ports; no instrument needed. A
+        # build that lost the library fails here, in CI, not at a rehearsal.
+        from rehearsal_recorder.midi.ports import open_system
+
+        system, why = open_system()
+        if system is None:
+            # The app is built for these two, so there MIDI must work. On any
+            # other system (a developer's Linux) it is allowed not to.
+            if sys.platform in ("darwin", "win32"):
+                raise RuntimeError(why)
+            return why
+        try:
+            return f"{system.name} up, {len(system.inputs())} inputs"
+        finally:
+            system.close()
+
     def encoder():
         from rehearsal_recorder.audio.encode import available
 
@@ -220,6 +237,7 @@ def selftest():
     # machine: the host API is listed, with no devices, even without one.
     if sys.platform == "win32":
         check("ASIO", asio)
+    check("MIDI", midi_up)
     check("sample formats", encoder)
     check("numpy", numpy_works)
     check("history database", database)

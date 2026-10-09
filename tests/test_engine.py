@@ -92,6 +92,10 @@ _sd.check_input_settings = _check_input_settings
 _sd.OutputStream = _FakeStream
 _sd.InputStream = _FakeStream
 sys.modules["sounddevice"] = _sd
+# No suite opens a real MIDI port. With None in sys.modules, importing the
+# library raises ImportError, which midi/ports.open_system() answers as "MIDI is
+# not available" — whatever is plugged into the machine running them.
+sys.modules["pylibremidi"] = None
 
 import numpy as np  # noqa: E402
 

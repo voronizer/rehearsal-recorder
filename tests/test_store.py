@@ -30,6 +30,10 @@ _sd.query_devices = lambda *a, **k: []
 _sd.query_hostapis = lambda: []
 _sd.OutputStream = _sd.InputStream = None
 sys.modules.setdefault("sounddevice", _sd)
+# No suite opens a real MIDI port. With None in sys.modules, importing the
+# library raises ImportError, which midi/ports.open_system() answers as "MIDI is
+# not available" — whatever is plugged into the machine running them.
+sys.modules["pylibremidi"] = None
 
 from alembic import command  # noqa: E402
 from alembic.autogenerate import compare_metadata  # noqa: E402

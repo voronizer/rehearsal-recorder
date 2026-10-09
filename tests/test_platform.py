@@ -25,6 +25,10 @@ _sd.query_devices = lambda *a, **k: []
 _sd.query_hostapis = lambda: []
 _sd.OutputStream = _sd.InputStream = None
 sys.modules["sounddevice"] = _sd
+# No suite opens a real MIDI port. With None in sys.modules, importing the
+# library raises ImportError, which midi/ports.open_system() answers as "MIDI is
+# not available" — whatever is plugged into the machine running them.
+sys.modules["pylibremidi"] = None
 
 import rehearsal_recorder.platform_support as ps  # noqa: E402
 
