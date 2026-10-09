@@ -33,7 +33,9 @@ things to be true:
                        one can hold, written with mido and read back, names
                        in UTF-8, a DAW's own ticks and tempo read right), and
                        what a port has set and holds (the state a take starts
-                       with, the keys and pedals let go at its end).
+                       with, the keys and pedals let go at its end), and the
+                       audio's own clock (a note placed on its sample, drift
+                       included).
                        Later tasks add to it. No port is opened: the library
                        is blocked and the rules are plain functions.
 

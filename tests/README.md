@@ -65,7 +65,10 @@ first, and the `.mid` file: what a Standard MIDI File can hold, written with
 in UTF-8, ticks that do not drift over a long take, and a file a DAW saved
 again at other ticks to the beat and with tempo changes; and what a port has
 set and holds, from the bytes it sent: the state a take's `.mid` starts with
-and the keys and pedals let go when it ends. Later tasks add to it.
+and the keys and pedals let go when it ends; and the audio's own clock: fake
+audio blocks in, a note's time on the computer's clock turned into seconds on
+the audio, an interface 200 ppm fast included (the recorder marking it is in
+`test_engine.py`). Later tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 

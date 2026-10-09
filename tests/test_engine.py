@@ -11,6 +11,7 @@ import re
 import struct
 import sys
 import tempfile
+import time
 import types
 import wave
 from pathlib import Path
@@ -6897,6 +6898,137 @@ def main():
                if isinstance(n, (ast.Import, ast.ImportFrom))}
     ok("the rules import neither the MIDI library nor mido",
        not imports & {"mido", "pylibremidi", "rehearsal_recorder.midi.ports"})
+
+    print("\n[64] The recorder marks the clock")
+    # A take's notes are placed on the audio's own clock (spec F1): the recorder
+    # knows how many frames it has written when each block arrives, so it tells
+    # the clock, and the clock does the rest.
+    from rehearsal_recorder.midi.clock import AudioClock
+
+    marked_dir = tmp / "marked"
+    marked_tracks = [{"name": "Gtr", "channel": 1}, {"name": "Voc", "channel": 2}]
+    clock = AudioClock(SR)
+    clock.latency_sec = 0.010
+    keys_note = [{"file": "Keys", "port": "Launchkey Mini MK3"}]
+    rec_m = AudioRecorder(0, SR, marked_tracks, marked_dir, clock=clock, notes=keys_note)
+    rec_m._raw_files = {
+        t["name"]: open(marked_dir / f"{t['name']}.raw", "wb") for t in marked_tracks
+    }
+    block = np.zeros((256, 2), dtype=np.int16)
+    # The first frame of a block is as old as the block is long and the
+    # interface's latency, when the driver says nothing of it.
+    lag = 10_000_000 + 256 / SR * 1e9
+
+    before = time.perf_counter_ns()
+    rec_m._callback(block, 256, None, None)
+    after = time.perf_counter_ns()
+    one = clock.marks()
+    ok("a block leaves one mark", len(one) == 1)
+    ok("of its first frame", one[0][1] == 0)
+    ok("at the time that frame was captured, on the clock of this process",
+       before - lag <= one[0][0] <= after - lag)
+    rec_m._callback(block, 256, None, None)
+    ok("the next block, a moment later, is the latest and not another kept",
+       [m[1] for m in clock.marks()] == [0, 256])
+
+    # What the driver says of a block: its first frame was captured a certain time ago.
+    driver = types.SimpleNamespace(currentTime=12.500, inputBufferAdcTime=12.480, outputBufferDacTime=0.0)
+    before = time.perf_counter_ns()
+    rec_m._callback(block, 256, driver, None)
+    after = time.perf_counter_ns()
+    ns, frame = clock.marks()[-1]
+    ok("its word is taken: the frame was 20 ms old when the callback ran",
+       frame == 512 and before - 20_000_000 - 1000 <= ns <= after - 20_000_000 + 1000)
+    odd = [types.SimpleNamespace(currentTime=0.0, inputBufferAdcTime=0.0),
+           types.SimpleNamespace(currentTime=5.0, inputBufferAdcTime=0.0),
+           types.SimpleNamespace(currentTime=0.0, inputBufferAdcTime=5.0),
+           types.SimpleNamespace(currentTime=1.0, inputBufferAdcTime=2.0),
+           types.SimpleNamespace(currentTime=5.0, inputBufferAdcTime=3.0),
+           types.SimpleNamespace(currentTime=float("nan"), inputBufferAdcTime=1.0),
+           types.SimpleNamespace(), object()]
+    stray = []
+    for info in odd:
+        before = time.perf_counter_ns()
+        rec_m._callback(block, 256, info, None)
+        after = time.perf_counter_ns()
+        if not before - lag <= clock.marks()[-1][0] <= after - lag:
+            stray.append(info)
+    ok("a zero, a time that is not now, a missing field or no time_info are not believed", stray == [])
+
+    # A block that is not written is not marked.
+    count, last = len(clock.marks()), clock.marks()[-1]
+    rec_m._callback(block, 0, None, None)
+    rec_m._stopping = True
+    rec_m._callback(block, 256, None, None)
+    rec_m._stopping = False
+    ok("a block of no frames, or one that came after Stop, is not", len(clock.marks()) == count and clock.marks()[-1] == last)
+    ok("the frame of a mark is the frames written before its block",
+       clock.marks()[-1][1] == rec_m._frames_written - 256)
+
+    for _ in range(240):
+        rec_m._callback(np.zeros((1024, 2), dtype=np.int16), 1024, None, None)
+    ok("five seconds on, a mark a second and the latest", 5 <= len(clock.marks()) <= 8)
+    ok("the latest is the last block written", clock.marks()[-1][1] == rec_m._frames_written - 1024)
+    for f in rec_m._raw_files.values():
+        f.close()
+
+    # What a crashed take's folder says of its notes.
+    rec_m._write_record()
+    record = json.loads((marked_dir / "take.json").read_text(encoding="utf-8"))
+    ok("take.json lists the notes tracks beside the audio ones",
+       record["notes"] == [{"file": "Keys", "port": "Launchkey Mini MK3"}]
+       and [t["file"] for t in record["tracks"]] == ["Gtr", "Voc"] and record["samplerate"] == SR)
+    keys_note[0]["port"] = "Another"
+    keys_note.append({"file": "Pad", "port": "Pad"})
+    rec_m._write_record()
+    ok("and keeps what it was given, not the list it was given",
+       json.loads((marked_dir / "take.json").read_text(encoding="utf-8"))["notes"]
+       == [{"file": "Keys", "port": "Launchkey Mini MK3"}])
+    plain = AudioRecorder(0, SR, marked_tracks, tmp / "unmarked")
+    plain._write_record()
+    ok("a take with no notes lists none", json.loads((tmp / "unmarked" / "take.json").read_text(encoding="utf-8"))["notes"] == [])
+
+    # No clock, nothing changes: the block is written as it was.
+    plain._raw_files = {
+        t["name"]: open(tmp / "unmarked" / f"{t['name']}.raw", "wb") for t in marked_tracks
+    }
+    plain._callback(block, 256, driver, None)
+    for f in plain._raw_files.values():
+        f.close()
+    ok("with no clock a block is written all the same",
+       plain._frames_written == 256 and (tmp / "unmarked" / "Gtr.raw").stat().st_size == 512)
+
+    # Starting: the clock is told when, before the stream opens, and how late the stream says it is.
+    class _Latent(_sd.InputStream):
+        latency = 0.012
+
+        def __init__(self, **kw):
+            opened_when.append(started.started_ns)
+            super().__init__(**kw)
+
+    class _Vague(_sd.InputStream):
+        latency = (0.01, 0.02)
+
+    started, opened_when = AudioClock(SR), []
+    stock = _sd.InputStream
+    try:
+        for kind, folder in ((_Latent, "latent"), (_Vague, "vague"), (stock, "stock")):
+            _sd.InputStream = kind
+            started.latency_sec = 0.5
+            rec_s = AudioRecorder(0, SR, marked_tracks, tmp / folder, clock=started)
+            began = time.perf_counter_ns()
+            rec_s.start()
+            ended = time.perf_counter_ns()
+            rec_s.abandon()
+            if kind is _Latent:
+                ok("start() says when it began before it opens the stream",
+                   len(opened_when) == 1 and began <= opened_when[0] <= ended)
+                ok("and takes the latency from the stream once open", started.latency_sec == 0.012)
+            else:
+                ok(f"a stream that gives no latency as a number counts none ({folder})", started.latency_sec == 0.0)
+    finally:
+        _sd.InputStream = stock
+    ok("start() set started_ns whatever the stream", started.started_ns is not None)
 
     print("\n" + "=" * 60)
     if problems:

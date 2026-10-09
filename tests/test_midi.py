@@ -3,7 +3,8 @@ Recording notes beside the audio. So far this is what stops Start (A1, P2 and
 P3), what the audio card check then holds, which saved port is found again
 (P1), the order a device's ports are listed in (P7), the .mid file (F2 and
 F4): what one can hold, written and read back, and what a port has set and
-holds (F6 and F7); later sections are added here as the rest of it is built.
+holds (F6 and F7); the audio's own clock, which puts a note on its sample (F1);
+later sections are added here as the rest of it is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
@@ -11,6 +12,7 @@ is allowed are plain functions over plain dictionaries, so they are called
 directly.
 """
 
+import ast
 import itertools
 import logging
 import random
@@ -57,6 +59,7 @@ import mido  # noqa: E402  (to read the files back; src imports it only in midi/
 
 from rehearsal_recorder.audio.devices import channels_available  # noqa: E402
 from rehearsal_recorder.midi import smf  # noqa: E402
+from rehearsal_recorder.midi.clock import AudioClock, MARK_EVERY_SEC, fit, load, save_line  # noqa: E402
 from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
 from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
 from rehearsal_recorder.midi.rules import notes_problem  # noqa: E402
@@ -809,6 +812,223 @@ def main():
         _, back = read_events(path)
         ok("written as a take's start and its end, none is left out and all come back",
            left_out == 0 and back == [(0.0, m) for m in s.start_messages()] + [(2.0, m) for m in s.releases()])
+
+    # Where on the audio a moment on the computer's clock falls. Every audio block
+    # says when it arrived and how many frames the take had by then; a line through
+    # those turns a note's time into a sample, drift included. Fake blocks in, seconds out.
+    print("\n[5] On the audio's own clock")
+    SR = 48000
+    c = AudioClock(SR); c.latency_sec = 0.010
+    T0, rate = 5_000_000_000, SR * 1.0002          # an interface 200 ppm fast
+    rnd = random.Random(7)
+    for k in range(1, 3600 * SR // 1024):
+        end = k * 1024
+        c.mark(T0 + int(end / rate * 1e9) + 10_000_000 + rnd.randint(-2_000_000, 2_000_000), end, 1024, None)
+    ok("a note an hour in lands on its sample", abs(c.to_seconds(T0 + 3_600_000_000_000) - 3600 * 1.0002) < 0.001)
+    ok("and one at the start on time 0", abs(c.to_seconds(T0)) < 0.001)
+    ok("and one half way on its sample too", abs(c.to_seconds(T0 + 1_800_000_000_000) - 1800 * 1.0002) < 0.001)
+    ok("a note a little before the take began is a little before 0", abs(c.to_seconds(T0 - 50_000_000) + 0.05) < 0.001)
+    ok("one mark a second is kept", 3590 < len(c.marks()) < 3610)
+    ok("every mark is an ns and a frame, the frames going up",
+       all(type(n) is int and type(f) is int for n, f in c.marks())
+       and all(a[1] < b[1] for a, b in zip(c.marks(), c.marks()[1:])))
+    ok("the first mark is the first block", c.marks()[0][1] == 0)
+    ok("and the last is the latest block", c.marks()[-1][1] == (3600 * SR // 1024 - 2) * 1024)
+    ok("the marks given are a list of its own", c.marks() is not c.marks() and c.marks() == c.marks())
+    kept = len(c.marks())
+    c.marks().clear()
+    ok("so changing it changes nothing in the clock", len(c.marks()) == kept)
+
+    a = AudioClock(SR); a.mark(T0 + 21_333_333 + 12_000_000, 1024, 1024, 0.012 + 1024 / SR)
+    ok("a driver's own capture time is used", abs(a.marks()[0][0] - T0) < 100_000)
+    b = AudioClock(SR); b.latency_sec = 0.005; b.mark(T0 + 21_333_333 + 5_000_000, 1024, 1024, -3.0)
+    ok("a capture time that makes no sense is not", abs(b.marks()[0][0] - T0) < 100_000)
+    z = AudioClock(SR); z.started_ns = T0
+    ok("with no mark yet, from when the take started", z.to_seconds(T0 + 2_000_000_000) == 2.0)
+    ok("a clock that has not even started says 0", AudioClock(SR).to_seconds(T0) == 0.0)
+    ok("a new clock has no latency and has not started",
+       AudioClock(SR).latency_sec == 0.0 and AudioClock(SR).started_ns is None)
+
+    # The block arrived at T0 + 100 ms and has 1024 frames; the driver's word for
+    # how old its first frame is, believed from now up to a second.
+    def first_frame_at(age):
+        t = AudioClock(SR); t.latency_sec = 0.005
+        t.mark(T0 + 100_000_000, 1024, 1024, age)
+        return t.marks()[0][0]
+    by_its_length = T0 + 100_000_000 - 21_333_333 - 5_000_000
+    ok("a capture time of exactly now is believed", first_frame_at(0.0) == T0 + 100_000_000)
+    ok("one just under a second old is", first_frame_at(0.999) == T0 + 100_000_000 - 999_000_000)
+    ok("one in the future is not: the block's length and the latency instead",
+       abs(first_frame_at(-0.001) - by_its_length) <= 1)
+    ok("one a second old is not", abs(first_frame_at(1.0) - by_its_length) <= 1)
+    ok("a number that is not a number is not", abs(first_frame_at(float("nan")) - by_its_length) <= 1)
+    ok("and none at all is the same", abs(first_frame_at(None) - by_its_length) <= 1)
+    late = AudioClock(SR); late.mark(T0, 5000, 1024, None)
+    ok("a first mark is kept whatever its frame is", [f for _, f in late.marks()] == [5000 - 1024])
+
+    # One mark a second, the first and the latest always there.
+    s10 = AudioClock(SR)
+    for k in range(1, 10 * SR // 1024 + 1):
+        s10.mark(T0 + k * 21_333_333, k * 1024, 1024, None)
+    m10 = s10.marks()
+    spaced = [f for _, f in m10[:-1]]
+    ok("ten seconds of blocks keep a mark a second, and the latest", 10 <= len(m10) <= 12)
+    ok("each kept a second or more after the one before",
+       all(y - x >= MARK_EVERY_SEC * SR for x, y in zip(spaced, spaced[1:])))
+    ok("and the latest is the newest block", m10[-1][1] == (10 * SR // 1024 - 1) * 1024)
+    whole = AudioClock(SR)
+    for k in range(1, 6):
+        whole.mark(T0 + k * 1_000_000_000, k * SR, SR, None)
+    ok("a latest that is a kept one is not there twice",
+       [f for _, f in whole.marks()] == [0, SR, 2 * SR, 3 * SR, 4 * SR])
+    ok("a clock with no block has no marks", AudioClock(SR).marks() == [])
+
+    # The fit is a function of the marks alone, which is how a crashed take's
+    # notes are placed again, from the marks that reached the disk.
+    ok("fit, given the same marks, answers as the clock does",
+       all(fit(c.marks(), SR, T0)(T0 + x) == c.to_seconds(T0 + x) for x in (0, 7_000_000_000, 3_600_000_000_000)))
+    ok("with no marks it counts from the start", fit([], SR, T0)(T0 + 2_500_000_000) == 2.5)
+    ok("and with no start either, from nothing", fit([], SR, None)(T0) == 0.0)
+    ok("with one mark it runs at the rate it was asked for, through it",
+       abs(fit([(T0 + 1_000_000_000, SR)], SR, T0)(T0 + 3_000_000_000) - 3.0) < 1e-9)
+    ok("two marks under half a second apart make no slope, only an offset",
+       abs(fit([(T0, 0), (T0 + 255_000_000, 12_000)], SR, T0)(T0 + 10_000_000_000) - (10 - 0.0025)) < 1e-6)
+    ok("two marks half a second apart do",
+       abs(fit([(T0, 0), (T0 + int(24_000 / rate * 1e9), 24_000)], SR, T0)(T0 + 100_000_000_000)
+           - 100 * 1.0002) < 1e-6)
+    ok("marks that stand still in time are not divided by",
+       abs(fit([(T0, 0), (T0, 2 * SR)], SR, T0)(T0 + 1_000_000_000) - 2.0) < 1e-9)
+    ok("nor are marks that run backwards",
+       abs(fit([(T0 + 2_000_000_000, 0), (T0, 2 * SR)], SR, T0)(T0 + 2_000_000_000) - 2.0) < 1e-9)
+    shuffled = c.marks()
+    random.Random(3).shuffle(shuffled)
+    ok("a fit does not mind the order the marks come in",
+       abs(fit(shuffled, SR, T0)(T0 + 3_600_000_000_000) - c.to_seconds(T0 + 3_600_000_000_000)) < 1e-6)
+    up = 120 * 86_400 * 10**9  # a machine up for months: past 2**53 ns, where floats skip whole nanoseconds
+    ok("a reading from a machine up for months places a note as it would on a fresh one",
+       abs(fit([(up + int(f / rate * 1e9), f) for f in range(0, 120 * SR, SR)], SR, None)(up + 100 * 10**9)
+           - 100 * 1.0002) < 1e-6)
+
+    # A take still going: a note asked about is placed with the marks so far, and
+    # asked about again later, with the marks since. The interface slows down by
+    # 1000 ppm half way through, so that a fit kept too long would show.
+    live = AudioClock(SR)
+    half = 50 * SR // 1024
+    ns_at = T0
+    for k in range(1, 2 * half):
+        ns_at += int(1024 / (rate if k < half else rate * 0.999) * 1e9)
+        live.mark(ns_at, k * 1024, 1024, None)
+        if k == half - 1:
+            early_marks, early_ns, early = live.marks(), ns_at, live.to_seconds(ns_at)
+    late = live.to_seconds(ns_at)
+    ok("asked mid-take, it answers from the marks it has", early == fit(early_marks, SR, None)(early_ns))
+    ok("and later, from the marks since", late == fit(live.marks(), SR, None)(ns_at)
+       and late != fit(early_marks, SR, None)(ns_at))
+
+    # A mark a second goes to disk as a line (take.clock, spec F3), and the fit of
+    # what reached the disk is the one the clock would have made.
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "take.clock"
+
+        def put(text):
+            # Bytes, so that a Windows console's newline does not change what is written.
+            path.write_bytes(text.encode("utf-8"))
+
+        marks = [(T0 + n * 1_000_000_000 + rnd.randint(-2_000_000, 2_000_000), n * SR) for n in range(3600)]
+        put("".join(save_line(m) for m in marks))
+        ok("a mark is a line of an ns, a space, a frame and a newline", save_line((123, 456)) == "123 456\n")
+        ok("3600 marks saved and loaded are the same 3600", load(path) == marks)
+        ok("and the fit of them is the fit of the originals",
+           fit(load(path), SR, T0)(T0 + 1_800_000_000_000) == fit(marks, SR, T0)(T0 + 1_800_000_000_000))
+        ok("a file that is not there has no marks", load(Path(tmp) / "none.clock") == [])
+        (Path(tmp) / "empty.clock").write_bytes(b"")
+        ok("nor has one that is empty", load(Path(tmp) / "empty.clock") == [])
+
+        # The last line of a file that was being written when the app died is cut
+        # anywhere. "12 48", cut from "12 4800", reads as a number, and a wrong one:
+        # only a line that has its newline is a line.
+        three = "".join(save_line(m) for m in marks[:3])
+        wrong = []
+        for tail in (save_line(marks[3])[:-1], "123456789 48", "123456789 ", "123456789", "1234", "-", "\r"):
+            put(three + tail)
+            if load(path) != marks[:3]:
+                wrong.append(tail)
+        ok("a last line cut short anywhere is left out and the rest loads", wrong == [])
+        path.write_bytes(three.encode() + b"\x00" * 8)
+        ok("a file ending in NUL bytes, as a crash can leave one, loads the rest", load(path) == marks[:3])
+        junk = ["garbage", "1 2 3", "1.5 2", "1e9 2", "12 -3", "x" * 5000, "9" * 5000 + " 1", "\u00e9\x00 5", "1  2", ""]
+        put(save_line(marks[0]) + "".join(j + "\n" for j in junk) + save_line(marks[1]) + save_line((-5, 0)))
+        ok("a line that is not an ns and a frame is skipped, and the lines either side of it kept",
+           load(path) == [marks[0], marks[1], (-5, 0)])
+        path.write_bytes(save_line(marks[0]).encode() + b"\xff\xfe junk\n" + save_line(marks[1]).encode())
+        ok("a line that is not text is skipped too", load(path) == [marks[0], marks[1]])
+        path.write_bytes((save_line(marks[0]) + save_line(marks[1])).replace("\n", "\r\n").encode())
+        ok("lines ended the Windows way load", load(path) == [marks[0], marks[1]])
+
+    # mark() runs on the audio thread and marks() on others: with the switch
+    # interval cut to nothing, the reader still sees the marks in order, none twice.
+    shared, errors, done, sizes = AudioClock(SR), [], threading.Event(), []
+
+    def writer():
+        try:
+            for k in range(1, 40_001):
+                shared.mark(T0 + k * 21_333_333, k * 1024, 1024, None)
+        except Exception as e:
+            errors.append("mark " + repr(e))
+        finally:
+            done.set()
+
+    def reader():
+        try:
+            while True:
+                last = done.is_set()
+                got = shared.marks()
+                frames = [f for _, f in got]
+                if frames != sorted(set(frames)):
+                    errors.append("out of order or twice")
+                    return
+                sizes.append(len(got))
+                shared.to_seconds(T0 + 5_000_000_000)
+                if last:
+                    break
+        except Exception as e:
+            errors.append("read " + repr(e))
+
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        # Daemon threads, joined with a limit, as in [4].
+        threads = [threading.Thread(target=writer, daemon=True), threading.Thread(target=reader, daemon=True)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(60)
+    finally:
+        sys.setswitchinterval(interval)
+    ok("both threads finish within a minute", not any(t.is_alive() for t in threads))
+    ok("a clock marked in one thread and read in another is read in order, with no error",
+       errors == [] and sizes != [] and sizes == sorted(sizes))
+    ok("and ends with a mark a second and the latest",
+       abs(len(shared.marks()) - 40_000 * 1024 / (47 * 1024)) <= 2 and shared.marks()[-1][1] == 39_999 * 1024)
+
+    # What the clock leaves behind on the audio thread: a mark a second, and nothing per call.
+    quiet = AudioClock(SR)
+    for k in range(1, 200):
+        quiet.mark(T0 + k * 21_333_333, k * 1024, 1024, None)
+    tracemalloc.start()
+    before = tracemalloc.take_snapshot()
+    for k in range(200, 20_200):
+        quiet.mark(T0 + k * 21_333_333, k * 1024, 1024, None)
+    grown = sum(d.size_diff for d in tracemalloc.take_snapshot().compare_to(before, "filename") if d.size_diff > 0)
+    tracemalloc.stop()
+    ok("20000 blocks, 430 seconds of them, leave a mark a second", 428 <= len(quiet.marks()) <= 433)
+    ok("and under 16 bytes a block, where a mark kept for every block would leave over 100", grown < 20_000 * 16)
+
+    imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
+               for n in ast.walk(ast.parse(Path(sys.modules[AudioClock.__module__].__file__).read_text(encoding="utf-8")))
+               if isinstance(n, (ast.Import, ast.ImportFrom))}
+    ok("the clock imports neither the MIDI library nor mido nor sounddevice",
+       not imports & {"mido", "pylibremidi", "sounddevice", "rehearsal_recorder.midi.ports"})
 
     print("\n" + "=" * 60)
     if problems:
