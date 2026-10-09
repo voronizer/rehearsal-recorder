@@ -1154,13 +1154,23 @@ class Api:
         that is not there, or has no path, is "Notes file not found"; any other
         trouble (not a .mid, cut short, a folder, a name too long, a drive that
         will not answer) is "Notes file not readable", said in the log. The
-        answer carries the file's "name" when it was given one."""
+        answer carries the file's "name" when it was given one.
+
+        Each answer, an error too, carries the band's icon for its name, as
+        take_media's does: a track that records notes only has no audio lane
+        to take it from, and the plate of its notes lane shows it. A track
+        whose port never appeared has no file at all, and is asked with a
+        file of None for the same reason."""
         icon_of = layouts.icons(self._config.get("tracks"))
         result = []
         for f in files:
             if not isinstance(f, dict):
                 f = {}
             named = {"name": f["name"]} if "name" in f else {}
+            # A name that is not text is no member of the band, and cannot be
+            # looked up in it without failing the call.
+            if isinstance(f.get("name"), str) and f["name"] in icon_of:
+                named["icon"] = icon_of[f["name"]]
             if f.get("file") is None:
                 result.append({**named, "error": "Notes file not found"})
                 continue

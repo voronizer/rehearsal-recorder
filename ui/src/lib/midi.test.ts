@@ -246,6 +246,39 @@ describe("laneOrder: the lanes of a take, top to bottom", () => {
     ).toEqual(["audio:Gtr", "audio:Drums", "notes:Drums", "missing:Keys"])
   })
 
+  it("keeps a Both track's own lane right under its sound, missing or not, before the tracks after it", () => {
+    // Keys follows Drums because Drums is the last track before it with
+    // sound: it comes after Drums in the band, so Drums' own lane is first.
+    expect(
+      spell(
+        laneOrder(
+          audio("Gtr", "Drums"),
+          [notes("Keys", "Drums", "Launchkey")],
+          [gone("Drums", "Drums", "TD-17")]
+        )
+      )
+    ).toEqual(["audio:Gtr", "audio:Drums", "missing:Drums", "notes:Keys"])
+    expect(
+      spell(
+        laneOrder(
+          audio("Gtr", "Drums"),
+          [notes("Keys", "Drums", "Launchkey"), notes("Drums", "Drums")],
+          []
+        )
+      )
+    ).toEqual(["audio:Gtr", "audio:Drums", "notes:Drums", "notes:Keys"])
+  })
+
+  it("lays out whatever the audio lanes are, and hands each back as it was given", () => {
+    // The player lays its lanes out from what take_media answered, which has
+    // a track's name and its waveform, and no file.
+    const media = [{ name: "Gtr", peaks: [[0.5]] }]
+    const [first, second] = laneOrder(media, [notes("Keys", "Gtr")], [])
+    expect(first).toEqual({ kind: "audio", name: "Gtr", track: media[0] })
+    expect(first.kind === "audio" && first.track).toBe(media[0])
+    expect(second.kind).toBe("notes")
+  })
+
   it("carries what each lane is made of", () => {
     const [first, second, third] = laneOrder(
       audio("Gtr"),

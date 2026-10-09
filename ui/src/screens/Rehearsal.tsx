@@ -506,6 +506,7 @@ export function Rehearsal({
           <TakePlayer
             player={player}
             markers={liveTake(session.takes, selected)?.markers ?? []}
+            notes={selected.notes} notesMissing={selected.notes_missing}
             onAddMarker={(sec) => addMarker(selected, sec)}
             onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
             onRemoveMarker={(sec) => removeMarker(selected, sec)}

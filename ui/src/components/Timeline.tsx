@@ -3,11 +3,14 @@ import { LaneControls, MasterControls } from "@/components/LaneControls"
 import { RegionTag, type RegionCrop } from "@/components/RegionTag"
 import { TakeMap } from "@/components/TakeMap"
 import { Waveform } from "@/components/Waveform"
+import { NotesLane } from "@/components/midi/NotesLane"
+import { NotesPlate } from "@/components/midi/NotesPlate"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
+import { laneOrder } from "@/lib/midi"
 import { MIN_VIEW_SEC, tickTimes } from "@/lib/timeline"
-import type { Marker } from "@/lib/api"
+import type { Marker, MissingNotes, NotesFile, TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 
 /** A press that never travelled this far is a click, and a click seeks. */
@@ -15,7 +18,8 @@ const DRAG_THRESHOLD_PX = 5
 const GUTTER_PX = 200
 /** The name row, then the fader and its meter, with room between. No taller
  *  than that: at 160 a lane's plate was mostly empty card, and five tracks
- *  took a laptop's screen and more. */
+ *  took a laptop's screen and more. A lane of notes has neither, and is as
+ *  tall as its plate needs instead. */
 const LANE_MIN_PX = 92
 const LANE_MAX_PX = 96
 const RULER_PX = 44
@@ -31,7 +35,10 @@ const ZOOM_PER_PIXEL = 0.002
 
 /**
  * Every track of the take on one time axis: a ruler, a lane each, and one
- * A–B band drawn through all of them.
+ * A–B band drawn through all of them. A track that took notes has a lane of
+ * them too: right under its audio, one card with it, for a Both track, and
+ * where the band has it for a track that records MIDI only (lib/midi.ts
+ * laneOrder).
  *
  * This component is the only place that knows how an x position becomes a
  * second. That mapping used to be copied into every waveform, which is why
@@ -42,11 +49,20 @@ export function Timeline({
   player,
   markers = [],
   crop,
+  notes,
+  notesMissing,
+  notesRead,
 }: {
   player: MultitrackPlayer
   markers?: Marker[]
   /** Crop, offered under the region's times, where the take can be cut. */
   crop?: RegionCrop
+  /** The take's .mid files, and the tracks that took notes and have none. */
+  notes?: NotesFile[]
+  notesMissing?: MissingNotes[]
+  /** What take_notes read back for each of them, by name; null while it
+   *  reads. */
+  notesRead?: Map<string, TakeNotes> | null
 }) {
   const labels = useLabels()
   const surfaceId = useId()
@@ -248,7 +264,10 @@ export function Timeline({
     setGrab({ which, at })
   }
 
-  const rows = media.length
+  // The notes lanes come with the audio lanes, not before them: laid out
+  // around nothing, they would move down the moment the audio arrived.
+  const lanes = media.length > 0 ? laneOrder(media, notes ?? [], notesMissing ?? []) : []
+  const rows = lanes.length
   const ticks = tickTimes(from, to, width)
 
   return (
@@ -281,13 +300,16 @@ export function Timeline({
           className="grid min-h-0 flex-1"
           style={{
             gridTemplateColumns: `${GUTTER_PX}px 1fr`,
-            // `repeat(0, …)` is invalid, which drops the whole declaration —
-            // and rows is 0 on every load until the first track's media
-            // arrives, permanently so once loadError is set.
-            gridTemplateRows:
-              rows > 0
-                ? `${RULER_PX}px repeat(${rows}, minmax(${LANE_MIN_PX}px, 1fr))`
-                : `${RULER_PX}px`,
+            // A row per lane, and none before the first track's media
+            // arrives (never, once loadError is set). A lane of notes grows
+            // to fit its plate, which a long name or port makes taller, and
+            // shares what is left as the audio lanes do.
+            gridTemplateRows: [
+              `${RULER_PX}px`,
+              ...lanes.map((lane) =>
+                lane.kind === "audio" ? `minmax(${LANE_MIN_PX}px, 1fr)` : "minmax(min-content, 1fr)"
+              ),
+            ].join(" "),
             gap: `${ROW_GAP_PX}px ${COLUMN_GAP_PX}px`,
             // Two tracks in a tall window would otherwise give lanes the height
             // of a door. Past this the leftover space simply stays empty, which
@@ -359,6 +381,7 @@ export function Timeline({
           >
             {band && (
               <span
+                data-region
                 className="pointer-events-none absolute border-x border-warn/60 bg-warn/10"
                 style={{
                   left: `${pct(band.a)}%`,
@@ -454,7 +477,47 @@ export function Timeline({
             />
           </div>
 
-          {media.map((m, i) => {
+          {lanes.map((lane, i) => {
+            const row = i + 2
+            if (lane.kind !== "audio") {
+              // A Both track's notes are the lower half of its card: drawn up
+              // over the gap between the rows, so the two halves touch.
+              const before = lanes[i - 1]
+              const paired = before?.kind === "audio" && before.name === lane.name
+              const read = notesRead?.get(lane.name)
+              const port = lane.kind === "notes" ? lane.notes.port : lane.missing.port
+              const marginTop = paired ? -ROW_GAP_PX : 0
+              return (
+                <Fragment key={`notes:${lane.name}`}>
+                  <div style={{ gridColumn: 1, gridRow: row, marginTop }}>
+                    <NotesPlate
+                      name={lane.name}
+                      icon={read?.icon}
+                      port={port}
+                      paired={paired}
+                      missing={lane.kind === "missing"}
+                    />
+                  </div>
+                  <div className="min-w-0" style={{ gridColumn: 2, gridRow: row, marginTop }}>
+                    <NotesLane
+                      name={lane.name}
+                      data={read ?? null}
+                      missing={lane.kind === "missing"}
+                      duration={duration}
+                      view={{ from, to }}
+                      playhead={position}
+                      className={cn(
+                        "h-full rounded-lg border",
+                        paired && "rounded-t-none [border-top-style:dashed]"
+                      )}
+                    />
+                  </div>
+                </Fragment>
+              )
+            }
+            const m = lane.track
+            const after = lanes[i + 1]
+            const paired = after !== undefined && after.kind !== "audio" && after.name === m.name
             const muted = player.isMuted(m.name)
             const soloed = player.isSoloed(m.name)
             const dimmed = muted || (player.hasSolo && !soloed)
@@ -462,11 +525,12 @@ export function Timeline({
               <Fragment key={m.name}>
                 <div
                   className="min-h-0"
-                  style={{ gridColumn: 1, gridRow: i + 2 }}
+                  style={{ gridColumn: 1, gridRow: row }}
                 >
                   <LaneControls
                     name={m.name}
                     icon={m.icon}
+                    paired={paired}
                     channels={m.peaks.length}
                     muted={muted}
                     soloed={soloed}
@@ -480,7 +544,7 @@ export function Timeline({
                   />
                 </div>
 
-                <div className="min-w-0" style={{ gridColumn: 2, gridRow: i + 2 }}>
+                <div data-lane={m.name} className="min-w-0" style={{ gridColumn: 2, gridRow: row }}>
                   <Waveform
                     peaks={m.peaks}
                     peaksFrom={player.peaksWindow.from}
@@ -489,7 +553,11 @@ export function Timeline({
                     viewTo={to}
                     position={position}
                     dimmed={dimmed}
-                    className={cn("h-full rounded-lg border", dimmed && "opacity-60")}
+                    className={cn(
+                      "h-full rounded-lg border",
+                      paired && "rounded-b-none border-b-0",
+                      dimmed && "opacity-60"
+                    )}
                   />
                 </div>
               </Fragment>

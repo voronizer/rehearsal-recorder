@@ -270,7 +270,9 @@ function pastRehearsal(folder) {
      markers:[{at:40, note:'guitar drifts here', label_id:3}],
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Pałyn', duration_sec:oldLength, markers:[],
-        tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
+        tracks:[{name:'Guitar', file:'/rec/old/g.wav'}],
+        // A page can give it notes: {notes, notes_missing}, as a take has them.
+        ...(window.__OLD_TAKE_NOTES__ || {})}];
   return withCloud(withStars(withEdits({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)})));
 }
 
@@ -890,8 +892,9 @@ window.__MAKE_API__ = () => ({
   },
   midi_activity: async () => midiActivity(true),
   // The notes of a take's tracks, a kit pattern for the drums and a keyboard
-  // line for the rest, as long as the take (api.take_notes).
-  take_notes: track('take_notes', async (files) => (files || []).map(({name, file}) => (file
+  // line for the rest, as long as the take (api.take_notes). Each answer, an
+  // error too, carries the band's icon for its name, as take_media's does.
+  take_notes: track('take_notes', async (files) => (files || []).map(({name, file}) => withIcon(file
     ? notesOfFile(name, fileDurations[file] ?? (P ? P.duration : TAKE))
     : {name, error:'Notes file not found'}))),
 

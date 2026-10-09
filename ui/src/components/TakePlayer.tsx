@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Flag,
   Loader2,
@@ -20,7 +20,7 @@ import { canBePutBack, goesTo } from "@/lib/deletion"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, markText, useLabels } from "@/lib/labels"
-import type { Marker } from "@/lib/api"
+import { api, type Marker, type MissingNotes, type NotesFile, type TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 
 const SKIP_SECONDS = 10
@@ -30,6 +30,45 @@ const MIN_CROP_SEC = 1
 const WHOLE_TAKE_SLACK_SEC = 0.05
 
 /**
+ * What take_notes read back from a take's .mid files, by track name: asked
+ * once for each take opened, and not again to zoom or play, since the notes
+ * of a whole take come at once. A track whose port never appeared has no
+ * file, and is asked about in the same call for its icon alone.
+ *
+ * A take is opened again exactly when its lists are new ones: a rename or a
+ * crop hands back fresh copies, with the files moved or rewritten. An answer
+ * is kept with the lists it was for, so a take opened since never shows the
+ * one before's notes while its own are on their way.
+ */
+function useTakeNotes(notes?: NotesFile[], missing?: MissingNotes[]) {
+  const [read, setRead] = useState<{
+    notes?: NotesFile[]
+    missing?: MissingNotes[]
+    byName: Map<string, TakeNotes>
+  } | null>(null)
+  useEffect(() => {
+    const files = [
+      ...(notes ?? []).map((n) => ({ name: n.name, file: n.file })),
+      ...(missing ?? []).map((m) => ({ name: m.name, file: null })),
+    ]
+    if (files.length === 0) return
+    let alive = true
+    api()
+      .take_notes(files)
+      .then((answers) => {
+        if (alive) setRead({ notes, missing, byName: new Map(answers.map((a) => [a.name, a])) })
+      })
+      .catch(() => {
+        /* the bar has said so; the lanes stay empty and the take still plays */
+      })
+    return () => {
+      alive = false
+    }
+  }, [notes, missing])
+  return read && read.notes === notes && read.missing === missing ? read.byName : null
+}
+
+/**
  * The take player: shared transport, A–B repeat, listening markers, and the
  * `Timeline` beneath them — the ruler, the per-track lanes with their
  * waveform/volume/M-S, and the loop band all live there now. The same
@@ -37,6 +76,8 @@ const WHOLE_TAKE_SLACK_SEC = 0.05
  */
 export function TakePlayer({
   player,
+  notes,
+  notesMissing,
   markers = [],
   onAddMarker,
   onEditMarker,
@@ -48,6 +89,11 @@ export function TakePlayer({
   status,
 }: {
   player: MultitrackPlayer
+  /** The take's .mid files, drawn under their audio or in lanes of their
+   *  own; and the tracks that took notes and got none. A take from before
+   *  MIDI has neither. */
+  notes?: NotesFile[]
+  notesMissing?: MissingNotes[]
   /** Saved listening markers, in order. */
   markers?: Marker[]
   onAddMarker?: (seconds: number) => void
@@ -70,6 +116,7 @@ export function TakePlayer({
 }) {
   const labels = useLabels()
   const [cropping, setCropping] = useState(false)
+  const notesRead = useTakeNotes(notes, notesMissing)
   // The same rule the timeline draws by: one end set reaches to the take's
   // own start or end.
   const { region, duration } = player
@@ -112,6 +159,9 @@ export function TakePlayer({
       <Timeline
         player={player}
         markers={markers}
+        notes={notes}
+        notesMissing={notesMissing}
+        notesRead={notesRead}
         crop={
           onCrop
             ? {

@@ -9077,6 +9077,23 @@ def main():
     ok("each file is answered, in the order it was asked", [a["name"] for a in answered] == ["Drums", "Keys", "Pad"])
     ok("what the player is sent can go over the bridge as JSON", json.loads(json.dumps(answered)) == answered)
 
+    # A track that records notes only has no audio lane, and so no take_media answer to take its icon from: the
+    # plate of its notes lane takes it from here, found as take_media finds a track's.
+    ok("each answer carries the band's icon for its name, as take_media's does",
+       answered[0].get("icon") == "drums" and answered[1].get("icon") == "keys")
+    ok("a name the band does not have gets no icon",
+       "icon" not in answered[2])
+    iconned70 = a70.take_notes([{"name": "Keys", "file": str(folder70 / "Gone.mid")},
+                                {"name": "Drums", "file": None}, {"name": "Keys"}, {"name": "Bass", "file": None}])
+    ok("an answer that is an error carries the icon too: a file not found, a file of None, no file at all",
+       iconned70[:3] == [{"name": "Keys", "icon": "keys", "error": "Notes file not found"},
+                         {"name": "Drums", "icon": "drums", "error": "Notes file not found"},
+                         {"name": "Keys", "icon": "keys", "error": "Notes file not found"}])
+    ok("and a band member with no icon gets none, as take_media gives none",
+       iconned70[3] == {"name": "Bass", "error": "Notes file not found"})
+    ok("a name that is not text gets no icon, and does not fail the call",
+       a70.take_notes([{"name": ["Keys"], "file": None}, {"name": "Keys", "file": keys70}])[1].get("icon") == "keys")
+
     gone70 = str(folder70 / "Gone.mid")
     (folder70 / "Torn.mid").write_bytes(b"MThd\x00\x00\x00\x06\x00")
     (folder70 / "Empty.mid").write_bytes(b"")
@@ -9100,6 +9117,8 @@ def main():
     ok("a file that is no .mid, or is cut short, or empty, or a folder, is reported as not readable, and the rest answer",
        [m.get("error") for m in mixed[2:5]] == ["Notes file not readable"] * 3
        and [m["name"] for m in mixed[2:5]] == ["Keys", "Pad", "Folder"] and len(mixed) == 6)
+    ok("a file that is not readable carries its track's icon as well",
+       mixed[2] == {"name": "Keys", "icon": "keys", "error": "Notes file not readable"})
     ok("and it says in the log, as a warning, which files, once each, and not the one that was only missing",
        [r.getMessage().split(":")[0] for r in said70]
        == ["notes of Torn.mid", "notes of Empty.mid", f"notes of {folder70.name}"]

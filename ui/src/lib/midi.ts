@@ -94,9 +94,11 @@ export function notesProblem(tracks: (ModedTrack & { name: string })[]): string 
   return null
 }
 
-/** One lane of a take in the player, as laneOrder lays them out. */
-export type Lane =
-  | { kind: "audio"; name: string; track: TrackFile }
+/** One lane of a take in the player, as laneOrder lays them out. `T` is
+ *  whatever the audio lanes are made of: a take's files, or the player's
+ *  answer from take_media for each. */
+export type Lane<T extends { name: string } = TrackFile> =
+  | { kind: "audio"; name: string; track: T }
   | { kind: "notes"; name: string; notes: NotesFile }
   | { kind: "missing"; name: string; missing: MissingNotes }
 
@@ -107,30 +109,34 @@ export type Lane =
  * (rules.lane_after). `after` null goes before every audio lane. A track whose
  * .mid is missing keeps the place its .mid would have had.
  *
- * Lanes that follow the same audio lane (or all go first) stay in the order
- * they were given, the saved ones before the missing ones: nothing here says
- * how a saved track and a missing one stood in the band. One that follows an
- * audio lane this take does not have goes first, as `null` does, which is
- * where lane_after ends when nothing before it has sound.
+ * A Both track's own lane, saved or missing, comes first under its sound:
+ * every other track that follows that lane follows it because the Both track
+ * was the last before it with sound, so it stood after the Both track in the
+ * band. Other lanes that follow the same audio lane (or all go first) stay in
+ * the order they were given, the saved ones before the missing ones: nothing
+ * here says how a saved track and a missing one stood in the band. One that
+ * follows an audio lane this take does not have goes first, as `null` does,
+ * which is where lane_after ends when nothing before it has sound.
  */
-export function laneOrder(
-  tracks: TrackFile[],
+export function laneOrder<T extends { name: string } = TrackFile>(
+  tracks: T[],
   notes: NotesFile[],
   missing: MissingNotes[]
-): Lane[] {
+): Lane<T>[] {
   const audio = new Set(tracks.map((t) => t.name))
   // The notes lanes by the audio lane they follow; null for the top.
-  const following = new Map<string | null, Lane[]>()
-  const put = (after: string | null, lane: Lane) => {
+  const following = new Map<string | null, Lane<T>[]>()
+  const put = (after: string | null, lane: Lane<T>) => {
     const key = after !== null && audio.has(after) ? after : null
     const group = following.get(key)
-    if (group) group.push(lane)
-    else following.set(key, [lane])
+    if (!group) following.set(key, [lane])
+    else if (lane.name === key) group.unshift(lane)
+    else group.push(lane)
   }
   for (const n of notes) put(n.after, { kind: "notes", name: n.name, notes: n })
   for (const m of missing) put(m.after, { kind: "missing", name: m.name, missing: m })
 
-  const lanes: Lane[] = [...(following.get(null) ?? [])]
+  const lanes: Lane<T>[] = [...(following.get(null) ?? [])]
   for (const track of tracks) {
     lanes.push({ kind: "audio", name: track.name, track }, ...(following.get(track.name) ?? []))
   }

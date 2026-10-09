@@ -150,7 +150,9 @@ export function Review({
       markers,
       // Only an answer that differs from the setting is sent: one that
       // agrees leaves the take following the setting, even if it changes.
-      cloud?.dir && send !== cloud.auto ? send : null
+      cloud?.dir && send !== cloud.auto ? send : null,
+      // The .mid files stop_take made, kept beside the audio.
+      take.notes
     )
     setBusy(false)
     if (!res.ok) {
@@ -180,7 +182,9 @@ export function Review({
     setError(null)
     dismiss("review")
     player.pause()
-    const res = await watching(api().crop_draft(take.temp_dir, take.tracks, from, to))
+    const res = await watching(
+      api().crop_draft(take.temp_dir, take.tracks, from, to, take.notes)
+    )
     setBusy(false)
     if (!res.ok) {
       setError(res.error ?? "Could not crop the take")
@@ -191,9 +195,12 @@ export function Review({
         .filter((m) => m.at >= from && m.at <= to)
         .map((m) => ({ ...m, at: Math.round((m.at - from) * 100) / 100 }))
     )
+    // The notes are cut with the audio. A new list is a take opened again:
+    // the player reads them afresh.
     onCropped({
       ...take,
       tracks: res.tracks ?? take.tracks,
+      notes: res.notes ?? take.notes,
       duration_sec: res.duration_sec ?? take.duration_sec,
     })
     // The crop itself went through — only the sweep of the original is what
@@ -288,6 +295,8 @@ export function Review({
       <div className="flex w-full flex-col gap-6">
         <TakePlayer
           player={player}
+          notes={take.notes}
+          notesMissing={take.notes_missing}
           markers={markers}
           onAddMarker={addMarker}
           onEditMarker={setEditing}

@@ -554,8 +554,12 @@ export type MidiActivity = Record<string, MidiTrackActivity>
  * row, counted from 0 at the top; anything else comes by pitch, from `low` to
  * `high` (whole octaves, C to B). The fourth is the note-on's velocity, 1 to
  * 127 as the .mid has it, unlike `MidiTrackActivity.vel` (0 to 1).
+ *
+ * `icon` is the band's for the name, found as take_media finds a track's, on
+ * an error too: a track that records notes only has no audio lane to take it
+ * from.
  */
-export type TakeNotes =
+export type TakeNotes = { icon?: string } & (
   | { name: string; error: string }
   | {
       name: string
@@ -572,6 +576,7 @@ export type TakeNotes =
       /** [start, length, pitch, velocity] */
       notes: [number, number, number, number][]
     }
+)
 
 /** Player state on the Python side. */
 export type PlayerState = {
@@ -1081,8 +1086,10 @@ type PyApi = {
    *  levels. */
   midi_activity(): Promise<MidiActivity>
   /** The notes of a take's tracks, read back from their .mid files, one answer
-   *  per file in the order asked. */
-  take_notes(files: TrackFile[]): Promise<TakeNotes[]>
+   *  per file in the order asked. A track with no file (its port never
+   *  appeared) is asked with a file of null, for its icon: it is answered
+   *  "Notes file not found". */
+  take_notes(files: (TrackFile | { name: string; file: null })[]): Promise<TakeNotes[]>
   activity(): Promise<Activity>
   activity_seen(): Promise<Ok>
   clear_activity(): Promise<Ok>
