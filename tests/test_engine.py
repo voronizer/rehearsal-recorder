@@ -6888,6 +6888,102 @@ def main():
     ok("the silent-card rule is the one it was",
        hb63.SILENCE_SEC == 3.0 and capmod.SLEPT_GAP_SEC == 10.0)
 
+    # The app holds the laptop awake from a take's start to the end of Stop.
+    class Lock63:
+        def __init__(self, fail=False):
+            self.calls, self.fail = [], fail
+
+        def hold(self):
+            self.calls.append("hold")
+            if self.fail:
+                raise RuntimeError("refused")
+
+        def release(self):
+            self.calls.append("release")
+
+    api63, a63 = fresh_api(tmp63)
+    lock63 = Lock63()
+    a63._awake = lock63
+    a63.start_rehearsal("Late night", 0, SR, one63)
+    a63.start_take()
+    ok("a take that starts holds the laptop awake", lock63.calls == ["hold"])
+    a63.stop_take()
+    ok("and lets go once it is written", lock63.calls == ["hold", "release"])
+
+    lock63.calls.clear()
+    a63.start_take()
+    broken63 = a63._recorder
+
+    def no_disk(progress=None):
+        raise OSError("the disk is full")
+
+    broken63.stop = no_disk
+    try:
+        a63.stop_take()
+        raised63 = False
+    except OSError:
+        raised63 = True
+    ok("even when writing it fails",
+       raised63 and lock63.calls == ["hold", "release"])
+    broken63.abandon()
+
+    class NoCard(capmod.AudioRecorder):
+        def start(self):
+            raise RuntimeError("no card")
+
+    lock63.calls.clear()
+    real_recorder63 = api63.AudioRecorder
+    api63.AudioRecorder = NoCard
+    try:
+        refused63 = a63.start_take()
+    finally:
+        api63.AudioRecorder = real_recorder63
+    ok("a take that cannot start holds nothing",
+       refused63["ok"] is False and lock63.calls == [])
+
+    a63._awake = Lock63(fail=True)
+    started63 = a63.start_take()
+    ok("a lock the system refuses does not stop the take",
+       started63["ok"] is True and a63._recorder is not None)
+    a63._awake = lock63
+
+    a63._laptop_sleeping()
+    ok("the laptop going to sleep reaches the take being recorded",
+       (a63.recording_health()["error"] or "").startswith("The laptop went to sleep at "))
+    a63.stop_take()
+    try:
+        a63._laptop_sleeping()
+        quiet63 = True
+    except Exception:  # noqa: BLE001
+        quiet63 = False
+    a63.start_take()
+    ok("between takes it changes nothing",
+       quiet63 and a63.recording_health()["error"] is None)
+
+    battery_was63 = api63.battery_percent
+    try:
+        api63.battery_percent = lambda: 14
+        ok("the health check says the charge on battery",
+           a63.recording_health()["battery_percent"] == 14)
+        api63.battery_percent = lambda: None
+        health63 = a63.recording_health()
+        ok("and none on mains",
+           "battery_percent" in health63 and health63["battery_percent"] is None)
+
+        def unreadable():
+            raise OSError("no IOKit")
+
+        api63.battery_percent = unreadable
+        health63 = a63.recording_health()
+        ok("a battery that cannot be read leaves the health check working",
+           health63["battery_percent"] is None and "error" in health63)
+    finally:
+        api63.battery_percent = battery_was63
+
+    lock63.calls.clear()
+    a63.shutdown()
+    ok("closing the window lets go", lock63.calls[-1:] == ["release"])
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

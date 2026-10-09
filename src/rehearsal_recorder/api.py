@@ -86,7 +86,10 @@ from rehearsal_recorder.audio.probe import InterfaceCheck, plan_for, tracks_for
 from rehearsal_recorder.platform_support import (
     CRASH_LOG,
     FALLBACK_TRASH,
+    KeepAwake,
+    SleepWatch,
     app_root,
+    battery_percent,
     describe_path_limit,
     move_to_trash,
     open_in_file_manager,
@@ -439,6 +442,10 @@ def _is_output_choice(channels):
 class Api:
     def __init__(self, server_port=0):
         self._recorder = None
+        # The laptop and its screen stay awake while a take records, and a
+        # take hears the system going to sleep anyway (platform_support).
+        self._awake = KeepAwake()
+        self._sleep_watch = SleepWatch(self._laptop_sleeping)
         self._cloud_queue = cloudmod.PublishQueue(
             step=self._publish_step, paused=lambda: self._recorder is not None
         )
@@ -512,6 +519,7 @@ class Api:
         # themselves, so nothing races them.
         self._cloud_queue.start()
         self._names_pass.start()
+        self._sleep_watch.start()
         self._sweep_empty_cloud_dirs_later()
 
     def shutdown(self):
@@ -532,6 +540,8 @@ class Api:
                 recorder.abandon()
             except Exception as e:
                 print(f"[shutdown] letting go of the take: {e}")
+        self._awake.release()
+        self._sleep_watch.stop()
         self.stop_monitor()
         self.player_close()
         self._cloud_queue.stop()
@@ -1392,7 +1402,27 @@ class Api:
             "free_bytes": estimate.get("free_bytes"),
             "minutes_left": estimate.get("minutes"),
             "low_space": estimate.get("low", False),
+            "battery_percent": self._battery(),
         }
+
+    @staticmethod
+    def _battery():
+        """The charge while on battery, or None; never a reason for the
+        health check not to answer."""
+        try:
+            return battery_percent()
+        except Exception as e:  # noqa: BLE001
+            print(f"[battery] {e}")
+            return None
+
+    def _laptop_sleeping(self):
+        """The system says it is going to sleep (SleepWatch). The take being
+        recorded, if there is one, ends where the laptop slept; the screen's
+        next health check after waking stops it and says why. Between takes
+        nothing is lost, so nothing is said."""
+        recorder = self._recorder
+        if recorder is not None:
+            recorder.fell_asleep(time.time())
 
     # ---------- rehearsal ----------
 
@@ -1801,6 +1831,13 @@ class Api:
         self._recorder = recorder
         self._recorder_take_number = take_number
         self._recorder_temp_dir = temp_dir
+        # Held only once the take is really recording; a lock the system
+        # refuses is no reason to stop it (KeepAwake never raises, but this
+        # must not be the line that ends a take).
+        try:
+            self._awake.hold()
+        except Exception as e:  # noqa: BLE001
+            print(f"[awake] {e}")
         return {"ok": True, "take_number": take_number}
 
     def get_levels(self):
@@ -1832,10 +1869,15 @@ class Api:
             default = self.suggest_take_name(take_number, chosen=False)
         except Exception:
             default = f"Take {take_number}"
-        result = self._journaled(
-            "stop", f"Saving “{plain_name}”", temp_dir, take_number,
-            lambda progress: recorder.stop(progress=progress),
-        )
+        # Awake until the take's files are written, whether or not that
+        # works: a laptop asleep half-way through would leave them unwritten.
+        try:
+            result = self._journaled(
+                "stop", f"Saving “{plain_name}”", temp_dir, take_number,
+                lambda progress: recorder.stop(progress=progress),
+            )
+        finally:
+            self._awake.release()
         return {
             "ok": True,
             "take_number": take_number,
