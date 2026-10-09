@@ -283,6 +283,26 @@ test("running out of disk is said on the disk line, and past an hour the clock s
   expect(await badNames(page)).toEqual([])
 })
 
+test("a battery running low is said on the status line, and nothing moves", async ({ page }) => {
+  await secondGo(page)
+  // The row the status line shares with RECORDING: it must not grow a line.
+  const row = topLine(page).locator("..")
+  const before = (await row.boundingBox())!.height
+  await setFake(page, "__BATTERY__", 14)
+  // Said where the free space always is, as long as it holds: not a notice.
+  await expect(page.getByText("Battery 14%: plug the laptop in", { exact: true })).toHaveCount(1)
+  await expect(page.locator("[data-notice]")).toHaveCount(0)
+  expect((await row.boundingBox())!.height).toBe(before)
+  // Charged enough, or plugged in: the usual line.
+  await setFake(page, "__BATTERY__", 64)
+  await expect(page.getByText(/^Interface connected · room for/)).toHaveCount(1)
+  await expect(page.getByText(/^Battery/)).toHaveCount(0)
+  await setFake(page, "__BATTERY__", 14)
+  await expect(page.getByText(/^Battery 14%/)).toHaveCount(1)
+  await setFake(page, "__BATTERY__", null)
+  await expect(page.getByText(/^Interface connected · room for/)).toHaveCount(1)
+})
+
 test("sixteen tracks still fit in one row, a stereo one split down the middle", async ({
   page,
 }) => {

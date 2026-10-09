@@ -537,6 +537,8 @@ export type RecordingHealth = {
   free_bytes?: number
   minutes_left?: number
   low_space?: boolean
+  /** On battery: its charge, 0 to 100. Null on mains or with no battery. */
+  battery_percent?: number | null
 }
 
 /** One of the app's own files, for Under the hood's Show buttons. */
