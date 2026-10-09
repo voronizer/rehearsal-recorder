@@ -629,6 +629,88 @@ def main():
         ok(f"a real hold and release on this {'Mac' if sys.platform == 'darwin' else 'Windows'}",
            held and not real.held)
 
+    print("\n[sleep] The take hears the system say it is going to sleep")
+    # A closed lid cannot be stopped; the take can only end there honestly.
+
+    class FakeCenter:
+        def __init__(self):
+            self.added, self.removed = [], []
+
+        def addObserverForName_object_queue_usingBlock_(self, name, obj, queue, block):
+            self.added.append((name, block))
+            return "obs"
+
+        def removeObserver_(self, observer):
+            self.removed.append(observer)
+
+    class FakePowrprof:
+        def __init__(self):
+            self.flags = self.callback = None
+            self.unregistered = []
+
+        def PowerRegisterSuspendResumeNotification(self, flags, params_ref, handle_ref):
+            self.flags = flags
+            self.callback = params_ref._obj.Callback
+            return 0
+
+        def PowerUnregisterSuspendResumeNotification(self, handle):
+            self.unregistered.append(handle)
+            return 0
+
+    heard = []
+    center = FakeCenter()
+    watch = ps.SleepWatch(lambda: heard.append(1), "darwin", center=center)
+    started = watch.start()
+    ok("on a Mac it listens for the system going to sleep",
+       started and center.added[0][0] == "NSWorkspaceWillSleepNotification")
+    center.added[0][1](None)
+    ok("and the take hears it", heard == [1])
+    watch.stop()
+    ok("and stops listening when asked", center.removed == ["obs"])
+
+    heard.clear()
+    powrprof = FakePowrprof()
+    watch = ps.SleepWatch(lambda: heard.append(1), "win32", powrprof=powrprof)
+    started = watch.start()
+    ok("on Windows it registers a callback for suspend and resume",
+       started and powrprof.flags == 2)
+    ok("going to sleep reaches the take",
+       powrprof.callback(None, 4, None) == 0 and heard == [1])
+    powrprof.callback(None, 18, None)
+    powrprof.callback(None, 7, None)
+    ok("waking does not", heard == [1])
+    watch.stop()
+    ok("and it unregisters when asked", len(powrprof.unregistered) == 1)
+
+    def broken():
+        raise RuntimeError("the take is gone")
+
+    powrprof = FakePowrprof()
+    ps.SleepWatch(broken, "win32", powrprof=powrprof).start()
+    try:
+        answered = powrprof.callback(None, 4, None)
+    except Exception:  # noqa: BLE001
+        answered = None
+    ok("a failing handler never reaches the system", answered == 0)
+
+    ok("on Linux there is nothing to listen to",
+       ps.SleepWatch(lambda: None, "linux").start() is False)
+
+    if sys.platform == "darwin":
+        import AppKit
+        ok("the Mac's notification is the one listened for",
+           AppKit.NSWorkspaceWillSleepNotification == ps.MAC_WILL_SLEEP)
+    if sys.platform in ("darwin", "win32"):
+        real = ps.SleepWatch(lambda: None)
+        started = real.start()
+        try:
+            real.stop()
+            stopped = True
+        except Exception:  # noqa: BLE001
+            stopped = False
+        ok(f"a real start and stop on this {'Mac' if sys.platform == 'darwin' else 'Windows'}",
+           started and stopped)
+
     print("\n" + "=" * 60)
 
     if problems:

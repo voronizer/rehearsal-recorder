@@ -636,3 +636,130 @@ class KeepAwake:
         finally:
             self._kernel32.CloseHandle(handle)
             self._reason = None
+
+
+# The system going to sleep: AppKit's NSWorkspaceWillSleepNotification, and
+# from winuser.h DEVICE_NOTIFY_CALLBACK and PBT_APMSUSPEND.
+MAC_WILL_SLEEP = "NSWorkspaceWillSleepNotification"
+DEVICE_NOTIFY_CALLBACK = 2
+PBT_APMSUSPEND = 4
+
+# ULONG CALLBACK DeviceNotifyCallbackRoutine(PVOID Context, ULONG Type,
+# PVOID Setting). WINFUNCTYPE is Windows-only; elsewhere the suite drives the
+# same code through a C callback of the same shape.
+_SUSPEND_CALLBACK = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)(
+    ctypes.c_ulong, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_void_p
+)
+
+
+class DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS(ctypes.Structure):
+    _fields_ = [("Callback", _SUSPEND_CALLBACK), ("Context", ctypes.c_void_p)]
+
+
+def _windows_powrprof():
+    from ctypes import wintypes
+
+    powrprof = ctypes.WinDLL("powrprof")
+    powrprof.PowerRegisterSuspendResumeNotification.argtypes = [
+        wintypes.DWORD,
+        ctypes.POINTER(DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    powrprof.PowerRegisterSuspendResumeNotification.restype = wintypes.DWORD
+    powrprof.PowerUnregisterSuspendResumeNotification.argtypes = [ctypes.c_void_p]
+    powrprof.PowerUnregisterSuspendResumeNotification.restype = wintypes.DWORD
+    return powrprof
+
+
+class SleepWatch:
+    """
+    Tells `on_sleep` when the system is about to go to sleep: a closed lid,
+    Sleep from the menu, a battery about to run out. No app can stop those;
+    a take can only end where the laptop slept and say so.
+
+    - macOS: NSWorkspaceWillSleepNotification, from NSWorkspace's own
+      notification centre. It is posted on the main thread, where pywebview
+      runs the app, so the handler runs there.
+    - Windows: PowerRegisterSuspendResumeNotification with a callback,
+      which hears PBT_APMSUSPEND (Windows 8 and later). Windows gives an app
+      about two seconds for it, so `on_sleep` only notes it.
+
+    Microsoft does not say whether a desktop app hears it on a laptop with
+    Modern Standby before it is paused, so the take does not rely on this
+    alone (see audio/capture.py). `on_sleep` must not raise into the
+    system; whatever it raises is printed. Elsewhere there is nothing to
+    listen to, and start() says so with False.
+    """
+
+    def __init__(self, on_sleep, system=sys.platform, center=None, powrprof=None):
+        self._on_sleep = on_sleep
+        self._system = system
+        self._center = center
+        self._powrprof = powrprof
+        self._observer = None  # macOS
+        self._callback = self._params = self._handle = None  # Windows
+
+    def _heard(self):
+        try:
+            self._on_sleep()
+        except Exception as e:  # noqa: BLE001 — never into the system's call
+            print(f"[sleep] {e}")
+
+    def start(self):
+        """Listens from now on. True when the system took it."""
+        if self._observer is not None or self._handle is not None:
+            return True
+        try:
+            if self._system == "darwin":
+                return self._start_mac()
+            if self._system == "win32":
+                return self._start_windows()
+        except Exception as e:  # noqa: BLE001 — the app works without it
+            print(f"[sleep] not listening for sleep: {e}")
+        return False
+
+    def stop(self):
+        try:
+            if self._observer is not None:
+                observer, self._observer = self._observer, None
+                self._center.removeObserver_(observer)
+            if self._handle is not None:
+                handle, self._handle = self._handle, None
+                self._powrprof.PowerUnregisterSuspendResumeNotification(handle)
+                self._callback = self._params = None
+        except Exception as e:  # noqa: BLE001
+            print(f"[sleep] {e}")
+
+    def _start_mac(self):
+        if self._center is None:
+            from AppKit import NSWorkspace
+
+            self._center = NSWorkspace.sharedWorkspace().notificationCenter()
+        self._observer = self._center.addObserverForName_object_queue_usingBlock_(
+            MAC_WILL_SLEEP, None, None, lambda notification: self._heard()
+        )
+        return True
+
+    def _start_windows(self):
+        if self._powrprof is None:
+            self._powrprof = _windows_powrprof()
+
+        def callback(context, kind, setting):
+            if kind == PBT_APMSUSPEND:
+                self._heard()
+            return 0
+
+        # Kept on self while registered: ctypes frees a callback nobody
+        # holds, and Windows would call into freed memory.
+        self._callback = _SUSPEND_CALLBACK(callback)
+        self._params = DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS(self._callback, None)
+        handle = ctypes.c_void_p()
+        error = self._powrprof.PowerRegisterSuspendResumeNotification(
+            DEVICE_NOTIFY_CALLBACK, ctypes.byref(self._params), ctypes.byref(handle)
+        )
+        if error:
+            print(f"[sleep] not listening for sleep: error {error}")
+            self._callback = self._params = None
+            return False
+        self._handle = handle
+        return True
