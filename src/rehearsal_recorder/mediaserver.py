@@ -42,6 +42,11 @@ POLLABLE = (
     "recording_health",
     "session_state",
     "activity",
+    # The setup screen's port pickers and note meters, about once a second.
+    # Reading the meters forgets the loudest note since the last read, and
+    # nothing else.
+    "list_midi_ports",
+    "midi_activity",
     # Not asked many times a second, but read-only and asked over and over
     # all the same, by every screen that can show a new version is out.
     "update_status",

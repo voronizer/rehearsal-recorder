@@ -75,6 +75,9 @@ from rehearsal_recorder.names_pass import NamesPass
 from rehearsal_recorder import layouts
 from rehearsal_recorder import updates
 from rehearsal_recorder.mediaserver import AppServer
+from rehearsal_recorder.midi import ports as midiports
+from rehearsal_recorder.midi.rig import MidiRig
+from rehearsal_recorder.midi.rules import records_audio
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
 from rehearsal_recorder.store.library import (
@@ -112,6 +115,12 @@ MIN_CROP_SEC = 1.0
 
 # What a fresh install records at until Settings says otherwise.
 DEFAULT_SAMPLERATE = 44100
+
+# The MIDI system of this machine, asked once when the app starts, and whether
+# the rig that holds the rehearsal's ports runs its own threads. The suites
+# replace both: they have no port to open, and drive the rig themselves.
+open_midi_system = midiports.open_system
+MIDI_THREADS = True
 
 
 # What a cloud copy is called while it is still being written. The worker is
@@ -420,8 +429,9 @@ def _copy_detail(what, res):
 
 
 def _channels_of(tracks):
-    """How many channels these tracks write: a stereo track is two."""
-    return sum(2 if t.get("stereo") else 1 for t in tracks)
+    """How many channels these tracks write: a stereo track is two, and a
+    track that only records MIDI writes none."""
+    return sum(2 if t.get("stereo") else 1 for t in tracks if records_audio(t))
 
 
 def _is_output_choice(channels):
@@ -453,6 +463,11 @@ class Api:
         self._recorder_temp_dir = None
         self._session = None
         self._monitor = None
+        # The MIDI ports of the signal check and of the rehearsal, kept open
+        # between takes so that what an instrument has set is in the next one.
+        # No port is opened until a check or a rehearsal asks.
+        system, midi_error = open_midi_system()
+        self._midi = MidiRig(system, midi_error, threads=MIDI_THREADS)
         # Settings › Under the hood's check of the interface; see probe.py.
         self._check = InterfaceCheck()
         self._player = None
@@ -543,6 +558,13 @@ class Api:
         self._awake.release()
         self._sleep_watch.stop()
         self.stop_monitor()
+        # A take's notes stay for the drafts, as its audio does; then the
+        # ports close, the rig's threads stop and the MIDI system is let go.
+        try:
+            self._midi.abandon_take()
+            self._midi.shutdown()
+        except Exception as e:
+            print(f"[shutdown] letting go of the MIDI ports: {e}")
         self.player_close()
         self._cloud_queue.stop()
         self._names_pass.stop()
@@ -775,6 +797,7 @@ class Api:
                 "recording": recording,
                 "playback": playback,
             },
+            "midi": self._midi.ports(),
             "files": files,
             "deleting": trash_kind(),
             "fallback_trash": FALLBACK_TRASH,
@@ -1225,6 +1248,9 @@ class Api:
                              "look again.",
                 }
             self.stop_monitor()
+            # Look again reads the MIDI ports too, in case the system missed
+            # one coming or going.
+            self._midi.refresh()
 
             before = self._device_names()
             if self._player is not None:
@@ -1312,22 +1338,31 @@ class Api:
 
     def start_monitor(self, device_index, samplerate, tracks):
         """Opens the inputs without recording, so everyone can confirm they
-        land on their own track."""
+        land on their own track, and the MIDI ports of the tracks that take
+        notes, so everyone can confirm those too."""
         self.stop_monitor()
         if self._recorder is not None:
             return {"ok": False, "error": "Recording in progress"}
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
-        stray = channels_available(device_index, tracks)
-        if stray:
-            return {"ok": False, "error": stray}
+        # Only the tracks that record sound reach the card, and as plain
+        # audio ones: what stops Start for the notes (no track that records
+        # sound, a port not picked, two tracks on one) is Start's to say and
+        # never stops the check, which listens to every port that is picked.
+        audio = [t for t in tracks if records_audio(t)]
+        if audio:
+            stray = channels_available(device_index, [{**t, "mode": "audio"} for t in audio])
+            if stray:
+                return {"ok": False, "error": stray}
 
-        monitor = LevelMonitor(device_index, samplerate, tracks)
-        try:
-            monitor.start()
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-        self._monitor = monitor
+            monitor = LevelMonitor(device_index, samplerate, audio)
+            try:
+                monitor.start()
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+            self._monitor = monitor
+        self._midi.use(tracks, check=True)
+        self._midi.reset_counts()
         return {"ok": True}
 
     def monitor_levels(self):
@@ -1347,14 +1382,37 @@ class Api:
             return {"checking": False, "problem": None}
         return {"checking": True, "problem": monitor.problem()}
 
-    def stop_monitor(self):
+    def stop_monitor(self, keep_ports=False):
+        """Lets go of the card, and of the MIDI ports the check opened unless
+        `keep_ports`: Start keeps them, and hands them to the rehearsal. With
+        a rehearsal under way they are its ports, not the check's, and they
+        stay: leaving the setup screen, or Look again, must not close them
+        under a take. Finishing the rehearsal closes them."""
         if self._monitor is not None:
             try:
                 self._monitor.stop()
             except Exception as e:
                 print(f"[monitor] stop: {e}")
             self._monitor = None
+        if not keep_ports and self._session is None:
+            self._midi.release()
         return {"ok": True}
+
+    # ---------- MIDI ports ----------
+
+    def list_midi_ports(self):
+        """The MIDI ports there are, for the port pickers: the system, each
+        port as it is saved with the notes counted on it since the check
+        began, and why there is no system when there is none. Asked over http
+        every second or so."""
+        return self._midi.ports()
+
+    def midi_activity(self):
+        """What each track that takes notes is hearing: its loudest note
+        since the last ask, its note count, and whether its port is there.
+        Asked over http, by one screen at a time (the loudest note is
+        forgotten when it is read)."""
+        return self._midi.activity()
 
     # ---------- disk space and recording health ----------
 
@@ -1436,7 +1494,11 @@ class Api:
         take. One that is not there any more starts it with none."""
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
+        # The take recording keeps the tracks it began with, notes and all.
+        if self._recorder is not None:
+            return {"ok": False, "error": "Recording in progress"}
         # Caught before a folder is made for a rehearsal that cannot record.
+        # The notes' rules are asked first, in their own words (A1, P3, P2).
         stray = channels_available(device_index, tracks)
         if stray:
             return {"ok": False, "error": stray}
@@ -1449,7 +1511,8 @@ class Api:
         library = self._lib
 
         # The signal check and the recording cannot hold the input at once.
-        self.stop_monitor()
+        # Its MIDI ports are kept: the rehearsal takes them over below.
+        self.stop_monitor(keep_ports=True)
 
         played_by = library.set_of(set_id) if set_id is not None else None
 
@@ -1481,6 +1544,9 @@ class Api:
         except Exception:
             self._session = None
             raise
+        # Exactly the ports the final tracks name: one the check had open that
+        # they still name stays open as it is; the rest of the check's close.
+        self._midi.use(tracks)
         return {"ok": True, "folder": str(folder)}
 
     def _session_rehearsal(self):
@@ -1717,6 +1783,7 @@ class Api:
         rehearsal = self._lib.rehearsal(folder)
         take_count = len(rehearsal["takes"]) if rehearsal else 0
         self._session = None
+        self._midi.release()
 
         # A rehearsal where nothing was saved should not leave a folder behind.
         removed = False

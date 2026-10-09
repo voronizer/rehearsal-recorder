@@ -13,7 +13,11 @@ questions.
 
 Mixing, seeking, A–B looping, disk estimates, crash recovery (a crashed take
 that was recording notes comes back with a `.mid` too), take naming, renaming,
-markers, both bit depths, and compressing cloud copies.
+markers, both bit depths, and compressing cloud copies. The MIDI ports before a
+take run here too, through the Api on a fake port system: the signal check
+opens them (a band of nothing but MIDI is checked all the same), Start keeps
+what the check had open and opens what the final tracks say, Finish and closing
+the app let them go, and Under the hood and Copy details say what MIDI there is.
 
 No sound card and no browser: `sounddevice` is replaced by a stub before
 anything imports it, the renderer is called directly, and the samples that

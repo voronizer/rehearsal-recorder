@@ -75,6 +75,29 @@ def tracks_line(tracks):
     return ", ".join(said) or "none"
 
 
+def midi_lines(midi):
+    """A line for each MIDI port the system lists, as the OS describes it, so
+    that a port that cannot be found again can be seen for what it is; or one
+    line saying why there are none."""
+    midi = midi or {}
+    ports = midi.get("ports") or []
+    if not ports:
+        return [f"MIDI: {midi.get('error') or 'no ports'}"]
+    lines = []
+    for port in ports:
+        name = port["name"]
+        about = [port[key] for key in ("device", "maker") if port.get(key) and port[key] != name]
+        if port.get("id"):
+            about.append(f"id {port['id']}")
+        line = f"MIDI: {name}"
+        if about:
+            line += f" ({', '.join(about)})"
+        if midi.get("system"):
+            line += f", {midi['system']}"
+        lines.append(line)
+    return lines
+
+
 def check_line(check):
     """The last check of the interface, in a line, or None if there was none."""
     if not check or check.get("running") or not check.get("checked_at"):
@@ -126,6 +149,7 @@ def report_text(hood, tracks, cloud, check):
     lines.append(f"Audio engine: {audio.get('engine') or 'unknown'}")
     systems = ", ".join(f"{s['name']} ({s['devices']})" for s in audio.get("systems", []))
     lines.append(f"Audio systems: {systems or 'none found'}")
+    lines += midi_lines(hood.get("midi"))
     said = check_line(check)
     if said:
         lines += ["", said]

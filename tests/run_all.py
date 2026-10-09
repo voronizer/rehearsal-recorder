@@ -8,7 +8,8 @@ things to be true:
 
     test_engine.py     the audio itself — mixing, seeking, disk safety,
                        crash recovery (a crashed take's notes included), both
-                       bit depths, compression. No
+                       bit depths, compression, and the MIDI ports before a
+                       take (the check, Start, Finish, Under the hood). No
                        browser, no sound card: PortAudio is stubbed and the
                        samples are inspected directly.
 
