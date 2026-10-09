@@ -6903,6 +6903,7 @@ def main():
     # A take's notes are placed on the audio's own clock (spec F1): the recorder
     # knows how many frames it has written when each block arrives, so it tells
     # the clock, and the clock does the rest.
+    from rehearsal_recorder.audio.devices import input_latency
     from rehearsal_recorder.midi.clock import AudioClock
 
     marked_dir = tmp / "marked"
@@ -6998,18 +6999,48 @@ def main():
     ok("with no clock a block is written all the same",
        plain._frames_written == 256 and (tmp / "unmarked" / "Gtr.raw").stat().st_size == 512)
 
-    # Starting: the clock is told when, before the stream opens, and how late the stream says it is.
+    ok("a clock that works leaves no fault", rec_m.clock_fault is None and plain.clock_fault is None)
+
+    # A clock that raises must not cost the audio, and must not go unsaid: the
+    # first fault is kept, for the app to read at Stop.
+    class _Broken:
+        calls = 0
+
+        def mark(self, *args):
+            _Broken.calls += 1
+            raise RuntimeError(f"clock broke {_Broken.calls}")
+
+    rec_b = AudioRecorder(0, SR, marked_tracks, tmp / "broken", clock=_Broken())
+    rec_b._raw_files = {
+        t["name"]: open(tmp / "broken" / f"{t['name']}.raw", "wb") for t in marked_tracks
+    }
+    loud = np.full((256, 2), 1234, dtype=np.int16)
+    rec_b._callback(loud, 256, None, None)
+    first_fault = rec_b.clock_fault
+    rec_b._callback(loud, 256, None, None)
+    for f in rec_b._raw_files.values():
+        f.close()
+    ok("a clock that raises costs the audio nothing: both blocks are written",
+       _Broken.calls == 2 and rec_b._frames_written == 512
+       and (tmp / "broken" / "Gtr.raw").read_bytes() == struct.pack("<h", 1234) * 512)
+    ok("and the fault is named", first_fault == "RuntimeError('clock broke 1')")
+    ok("a second one leaves the first in place", rec_b.clock_fault == first_fault)
+
+    # Starting: the clock is told when, before the stream opens, and how late the
+    # stream is: what was asked for until the stream says, and then what it says.
+    asked = input_latency(_sd, 0)
+
     class _Latent(_sd.InputStream):
         latency = 0.012
 
         def __init__(self, **kw):
-            opened_when.append(started.started_ns)
+            opened.append((started.started_ns, started.latency_sec, kw["latency"]))
             super().__init__(**kw)
 
     class _Vague(_sd.InputStream):
         latency = (0.01, 0.02)
 
-    started, opened_when = AudioClock(SR), []
+    started, opened = AudioClock(SR), []
     stock = _sd.InputStream
     try:
         for kind, folder in ((_Latent, "latent"), (_Vague, "vague"), (stock, "stock")):
@@ -7022,10 +7053,13 @@ def main():
             rec_s.abandon()
             if kind is _Latent:
                 ok("start() says when it began before it opens the stream",
-                   len(opened_when) == 1 and began <= opened_when[0] <= ended)
-                ok("and takes the latency from the stream once open", started.latency_sec == 0.012)
+                   len(opened) == 1 and began <= opened[0][0] <= ended)
+                ok("and has the latency it asks for on the clock before the stream exists",
+                   asked > 0 and opened[0][1] == asked and opened[0][2] == asked)
+                ok("then takes the latency from the stream once open", started.latency_sec == 0.012)
             else:
-                ok(f"a stream that gives no latency as a number counts none ({folder})", started.latency_sec == 0.0)
+                ok(f"a stream that gives no latency as a number leaves the one asked for ({folder})",
+                   started.latency_sec == asked)
     finally:
         _sd.InputStream = stock
     ok("start() set started_ns whatever the stream", started.started_ns is not None)

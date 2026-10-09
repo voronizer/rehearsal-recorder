@@ -87,14 +87,14 @@ def _block_age(time_info):
         return None
 
 
-def _stream_latency(stream):
-    """The input latency an open stream says it has, in seconds; 0 for a stream
-    that gives none, or something that is not a number (a duplex stream's is a
-    pair)."""
+def _stream_latency(stream, asked):
+    """The input latency an open stream says it has, in seconds; `asked`, the
+    latency it was opened with, for a stream that gives none or something that
+    is not a number (a duplex stream's is a pair)."""
     latency = getattr(stream, "latency", None)
     if isinstance(latency, (int, float)) and math.isfinite(latency) and latency > 0:
         return float(latency)
-    return 0.0
+    return asked
 
 
 class AudioRecorder:
@@ -128,6 +128,14 @@ class AudioRecorder:
         self._notes = [dict(n) for n in notes]
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Why the notes' clock failed, if it did: repr() of the first error
+        # `clock.mark` raised in the audio callback, which carries on without
+        # it (the notes lose the drift correction, the audio loses nothing).
+        # A single assignment, because nothing more is allowed on the audio
+        # thread: no print, no log. The app reads it when the take stops and
+        # writes it to the log there.
+        self.clock_fault = None
 
         self._stream = None
         self._raw_files = {}
@@ -232,8 +240,9 @@ class AudioRecorder:
                     clock.mark(time.perf_counter_ns(),
                                self._frames_written + frames, frames,
                                _block_age(time_info))
-                except Exception:
-                    pass
+                except Exception as e:
+                    if self.clock_fault is None:
+                        self.clock_fault = repr(e)
             self._take_block(indata, frames)
         finally:
             self._heartbeat.leave()
@@ -308,9 +317,14 @@ class AudioRecorder:
                 path = self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}"
                 self._raw_files[track["name"]] = open(path, "wb")
 
+            latency = input_latency(sd, self.device_index)
             with STREAM_LOCK:
                 if self._clock is not None:
+                    # open_stream starts the stream, and its first block can
+                    # be marked before it returns: the clock has the latency
+                    # that was asked for until the stream says what it is.
                     self._clock.started_ns = time.perf_counter_ns()
+                    self._clock.latency_sec = latency
                 self._stream = open_stream(
                     sd.InputStream,
                     device=self.device_index,
@@ -318,12 +332,12 @@ class AudioRecorder:
                     samplerate=self.samplerate,
                     dtype=self._dtype,
                     blocksize=BLOCK_FRAMES,
-                    latency=input_latency(sd, self.device_index),
+                    latency=latency,
                     callback=self._callback,
                     finished_callback=self._finished,
                 )
             if self._clock is not None:
-                self._clock.latency_sec = _stream_latency(self._stream)
+                self._clock.latency_sec = _stream_latency(self._stream, latency)
         except BaseException:
             self._discard_files()
             raise
