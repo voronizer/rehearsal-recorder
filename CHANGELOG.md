@@ -7,6 +7,13 @@ opening.
 
 ## Unreleased
 
+- **The laptop stays awake during a take.** While a take records, the
+  laptop does not go to sleep and its screen does not go dark or lock, so
+  Stop and Space still work after a long jam; after Stop the system's own
+  settings apply again. On battery at 20% or less, the line at the top of
+  the recording screen turns yellow and asks for the charger. If the laptop
+  goes to sleep anyway (a closed lid), the take ends there with everything
+  before it kept, and once the laptop wakes a note says when it slept.
 - **Rehearse by a set.** A set is the songs a gig needs, in the order the
   band plays them, with a name: "Gig on the 25th". It is made from the
   start screen with **New set…**, or in **Settings → Sets**, and picked

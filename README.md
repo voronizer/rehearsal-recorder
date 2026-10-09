@@ -49,14 +49,16 @@ it produces needs neither.
 ## What it does
 
 **Records every musician to their own track** and keeps writing to disk the
-whole time, forcing everything out every 30 seconds. If the app dies, the
-laptop sleeps, or someone trips over the interface, you lose seconds — and
-the interrupted take is offered back to you at the next launch.
+whole time, forcing everything out every 30 seconds. If the app dies or
+someone trips over the interface, you lose seconds — and the interrupted take
+is offered back to you at the next launch. While a take records, the laptop
+and its screen stay awake; if the lid is closed anyway, the take ends there
+with everything before it kept.
 
 **Tells you it is fine while it is running.** The interface is connected, the
-disk has room for this long, this input is clipping, that one is silent. Not
-buried in a menu: on screen during the take, because that is the only moment
-anyone would act on it.
+disk has room for this long, the battery needs the charger, this input is
+clipping, that one is silent. Not buried in a menu: on screen during the
+take, because that is the only moment anyone would act on it.
 
 **Plays the take back immediately**, all tracks in sync, with per-track
 volume, mute and solo, and markers you drop while listening. Every track

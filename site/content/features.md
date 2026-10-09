@@ -8,8 +8,8 @@ laptop might get kicked, and there may be no internet.
 
 ## Tells you it is fine while it runs. {#health}
 
-The interface, the disk, every input: on screen during the take, the only
-moment anyone would act on it.
+The interface, the disk, the battery, every input: on screen during the take,
+the only moment anyone would act on it.
 
 ## Every musician on their own track. {#track}
 
