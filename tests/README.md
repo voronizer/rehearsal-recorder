@@ -73,9 +73,13 @@ the audio, an interface 200 ppm fast included (the recorder marking it is in
 events are played, the `.mid` made from it at Stop, and the same `.mid` made
 from a take whose app died (a torn last line, hex that does not read, a first
 line that never reached the disk), keys held before the take and held at its
-end, a port that goes and comes back, a burst of 40000 events, a disk that
-refuses a write, and two threads driving one recorder. The disk is refused by
-a stand-in for the file, not by a full disk. Later tasks add to it.
+end, a key struck twice and let go as often as it was struck, a port that goes
+and comes back, a burst of 40000 events, a disk that refuses a write or takes
+it only in part, two threads driving one recorder, and a flush or a stop that
+must not hold the other thread up while it waits for the disk. The disk is
+refused by a stand-in for the file, not by a full disk. In `test_engine.py`, a
+draft that `stop` had already made `.mid` files in comes back with them. Later
+tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 

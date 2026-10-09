@@ -7148,6 +7148,49 @@ def main():
     ok("a draft with no notes lists none and recovers none",
        info["notes"] == [] and done["notes"] == [] and [t["name"] for t in done["tracks"]] == ["Gtr"])
 
+    # A draft stop had already converted: .mid files and no .midraw, as when the take was
+    # stopped and not kept, or the app died between two tracks. They are notes of the take as
+    # they are, and recovering the draft must not leave them to be deleted with its folder.
+    from rehearsal_recorder.midi.smf import write_mid as write_mid65
+
+    stopped65 = folder65 / "_drafts" / "take 4"
+    write_wav(stopped65 / "Drums.wav", 100, seconds=1.0)
+    for stem, device in (("Keys", "Launchkey Mini MK3"), ("Pad", "Pad Controller")):
+        write_mid65(stopped65 / f"{stem}.mid", track_name=stem, port_name=device, start=[],
+                    events=[(0.5, b"\x90\x3c\x40"), (0.75, b"\x80\x3c\x00")])
+    (stopped65 / "Odd.mid").write_bytes(b"not a midi file")
+    (stopped65 / "take.json").write_text(json.dumps({
+        "samplerate": SR, "tracks": [{"file": "Drums", "channels": 1}],
+        "notes": [{"file": "Keys", "port": "Keys as take.json has it"}]}), encoding="utf-8")
+    kept65 = {p.name: p.read_bytes() for p in stopped65.glob("*.mid")}
+    info = describe65(stopped65, SR)
+    ok("describe lists a .mid that has no .midraw among the notes", info["notes"] == ["Keys", "Odd", "Pad"]
+       and info["tracks"] == ["Drums"])
+    done = finalize65(stopped65, SR, 16)
+    ok("finalize lists them with the audio's .wav, with the port take.json names, else the file's own, else its name",
+       [(n["name"], n["port"]) for n in done["notes"]]
+       == [("Keys", "Keys as take.json has it"), ("Odd", "Odd"), ("Pad", "Pad Controller")]
+       and [t["name"] for t in done["tracks"]] == ["Drums"])
+    ok("and does not touch them",
+       {p.name: p.read_bytes() for p in stopped65.glob("*.mid")} == kept65
+       and [n["file"] for n in done["notes"]] == [str(stopped65 / f"{s}.mid") for s in ("Keys", "Odd", "Pad")])
+
+    # A conversion the app died in the middle of: the .midraw is still whole, and the .part is
+    # not a take's notes, not a recording, and not kept.
+    halfway65 = folder65 / "_drafts" / "take 5"
+    halfway65.mkdir(parents=True)
+    (halfway65 / "Keys.mid.part").write_bytes(b"MThd half a file")
+    ok("a half-made .mid alone is not a recording", not has_audio65(halfway65))
+    (halfway65 / "Old.mid.part").write_bytes(b"MThd")
+    (halfway65 / "Keys.midraw").write_bytes(f"t {t65}\nn {t65 + 250 * ms65} 903c40\n".encode("ascii"))
+    ok("with a .midraw beside it the take is the .midraw, and the .part is not one of its notes",
+       has_audio65(halfway65) and describe65(halfway65, SR)["notes"] == ["Keys"])
+    done = finalize65(halfway65, SR, 16)
+    ok("recovering it gives one Keys.mid, made from the .midraw, and leaves no .part",
+       sorted(p.name for p in halfway65.iterdir()) == ["Keys.mid"] and [n["name"] for n in done["notes"]] == ["Keys"]
+       and [(round(sec * 1920), d) for sec, d in read_events65(halfway65 / "Keys.mid")[1]]
+       == [(480, b"\x90\x3c\x40"), (480, b"\x80\x3c\x00")])
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

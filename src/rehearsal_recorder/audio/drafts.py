@@ -23,7 +23,7 @@ from rehearsal_recorder.audio.capture import (
 )
 from rehearsal_recorder.activity import Stages
 from rehearsal_recorder.audio.format import bytes_per_sample
-from rehearsal_recorder.midi.capture import MIDRAW_SUFFIX, finish_draft
+from rehearsal_recorder.midi.capture import MID_SUFFIX, MIDRAW_SUFFIX, finish_draft
 
 DRAFTS_DIR = "_drafts"
 
@@ -74,12 +74,14 @@ def describe(take_dir, samplerate, bit_depth=16):
     """What the interface shows about a recoverable draft."""
     take_dir = Path(take_dir)
     tracks = []
-    notes = []
+    unmade, made = set(), set()  # notes files not yet a .mid, and ones that are; a .mid.part is neither
     frames = 0
 
     for path in sorted(take_dir.iterdir()):
         if path.suffix == MIDRAW_SUFFIX:
-            notes.append(path.stem)
+            unmade.add(path.stem)
+        elif path.suffix == MID_SUFFIX:
+            made.add(path.stem)
         elif path.suffix == RAW_SUFFIX:
             track_frames = path.stat().st_size // (
                 bytes_per_sample(bit_depth) * _widths(take_dir).get(path.stem, 1)
@@ -94,7 +96,7 @@ def describe(take_dir, samplerate, bit_depth=16):
         "dir": str(take_dir),
         "name": take_dir.name,
         "tracks": tracks,
-        "notes": notes,
+        "notes": sorted(unmade | made),
         "duration_sec": frames / samplerate if samplerate else 0,
     }
 
@@ -104,8 +106,8 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     Turns raw files into .wav in place and returns the track list in the same
     shape stop_take() produces, so the rest of the app cannot tell the
     difference between a recovered take and a normally stopped one. The notes
-    files become .mid the same way and are listed as "notes", apart from the
-    audio "tracks".
+    files become .mid the same way, and a .mid that stop had already made is
+    listed with them: "notes", apart from the audio "tracks".
 
     `progress(fraction, step)`, when given, hears how far along it is, the
     tracks weighed by their size.

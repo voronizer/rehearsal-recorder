@@ -67,7 +67,8 @@ import mido  # noqa: E402  (to read the files back; src imports it only in midi/
 from rehearsal_recorder.audio.devices import channels_available  # noqa: E402
 from rehearsal_recorder.midi import capture as notes_capture  # noqa: E402
 from rehearsal_recorder.midi import smf  # noqa: E402
-from rehearsal_recorder.midi.capture import CLOCK_FILE, MIDRAW_SUFFIX, MidiRecorder, finish_draft  # noqa: E402
+from rehearsal_recorder.midi.capture import (  # noqa: E402
+    CLOCK_FILE, MIDRAW_SUFFIX, MidiRecorder, finish_draft, note_stems)
 from rehearsal_recorder.midi.clock import AudioClock, MARK_EVERY_SEC, fit, load, save_line  # noqa: E402
 from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
 from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
@@ -1217,7 +1218,9 @@ def main():
                      {"name": "Keys", "file": str(crashed / "Keys.mid"), "port": "Launchkey Mini MK3"}])
         ok("the .midraw files are gone and take.json is left for the audio to use",
            files(crashed) == ["Drums.mid", "Keys.mid", "take.json"])
-        ok("a second go finds nothing left to do", finish_draft(crashed, 3.0) == [])
+        again = {f: (crashed / f).read_bytes() for f in ("Drums.mid", "Keys.mid")}
+        ok("a second go has nothing to convert: the .mid files are listed as they are, and unchanged",
+           finish_draft(crashed, 3.0) == found and again == {f: (crashed / f).read_bytes() for f in again})
 
         unnamed = fresh("unnamed")
         rec = MidiRecorder(unnamed, clock_from(T0), band, {"Drums": kit_start})
@@ -1284,8 +1287,8 @@ def main():
         rec = MidiRecorder(five, watched, [{"name": "Pad", "port": "Pad"}], {})
         rec.present("Pad", T0 + 430 * MS)
         asked = Watched.looked
-        ok("the first call looks at the clock once and has the marks so far on disk",
-           asked == 1 and load(five / CLOCK_FILE) == watched.marks())
+        ok("the first call looks at the clock once and has its kept marks so far on disk, not its latest",
+           asked == 1 and load(five / CLOCK_FILE) == watched.marks()[:-1] != [])
         asked = Watched.looked
         for i in range(20000):
             rec.feed("Pad", T0 + 430 * MS + i * 20_000, b"\x90\x3c\x40" if i % 2 == 0 else b"\x80\x3c\x00")
@@ -1293,12 +1296,12 @@ def main():
         blocks(watched, 20, 70)
         rec.feed("Pad", T0 + 1500 * MS, b"\x90\x3c\x40")
         ok("the first event more than a second later brings the marks made since, once",
-           Watched.looked == asked + 1 and load(five / CLOCK_FILE)[-1] == watched.marks()[-1])
-        blocks(watched, 70, 90)
+           Watched.looked == asked + 1 and load(five / CLOCK_FILE) == watched.marks()[:-1])
+        blocks(watched, 70, 100)
         rec.flush()
         on_disk = load(five / CLOCK_FILE)
-        ok("flush brings the rest: every kept mark is there, once, the frames going up, ending at the latest",
-           set(watched.marks()) <= set(on_disk) and on_disk[-1] == watched.marks()[-1]
+        ok("flush brings the rest: the kept marks, once, the frames going up, and never the clock's latest",
+           on_disk == watched.marks()[:-1] and len(on_disk) == 3 and watched.marks()[-1] not in on_disk
            and [f for _, f in on_disk] == sorted({f for _, f in on_disk}))
         ok("and the clock file is whole lines, an ns, a space and a frame",
            re.fullmatch(r"(-?[0-9]+ [0-9]+\n)+", (five / CLOCK_FILE).read_bytes().decode("ascii")) is not None)
@@ -1373,6 +1376,16 @@ def main():
            set(files(same)) == {"A_B.mid", "A_B (2).mid", "a_b (3).mid"} and len({m["file"] for m in made}) == 3)
         ok("each has its own notes", [[d for _, d in in_ticks(m["file"]) if d[0] == 0x90][0][1] for m in made] == [60, 62, 64]
            and [m["port"] for m in made] == ["P1", "P2", "P3"])
+        ok("the file names are the ones note_stems gives, which anyone who must know them before the recorder exists asks",
+           [Path(m["file"]).stem for m in made] == [note_stems(["A/B", "A:B", "a_b"])[n] for n in ("A/B", "A:B", "a_b")])
+        ok("note_stems: a name that is safe stays, an unsafe one is made safe, as the audio's file is",
+           note_stems(["Drums", "Keys", "Pa\u0142yn", "A/B"]) == {"Drums": "Drums", "Keys": "Keys", "Pa\u0142yn": "Pa\u0142yn", "A/B": "A_B"}
+           and note_stems(["  "]) == {"  ": "track"} and note_stems([]) == {})
+        ok("note_stems: names that make one file name get (2), (3) in track order, whatever the case",
+           note_stems(["Keys", "keys", "KEYS", "A/B", "A:B"]) == {"Keys": "Keys", "keys": "keys (2)", "KEYS": "KEYS (3)",
+                                                                  "A/B": "A_B", "A:B": "A_B (2)"})
+        ok("note_stems: a name met again is the same one, and a stem taken by a renamed one is not given twice",
+           note_stems(["A/B", "A/B", "A:B", "A_B (2)"]) == {"A/B": "A_B", "A:B": "A_B (2)", "A_B (2)": "A_B (2) (2)"})
 
         ok("all of that was done without a word in the log", said6 == [])
 
@@ -1402,69 +1415,206 @@ def main():
            [m["name"] for m in finish_draft(half, 3.0)] == ["Drums", "Keys"] and files(half) == ["Drums.mid", "Keys.mid"]
            and in_ticks(half / "Drums.mid")[-1] == (5760, b"\x89\x2a\x00") and len(said6) == 2)
 
-        # Review focus 4: a disk that refuses. The error comes out of the call that met it, and the recorder carries on.
-        class Refusing:
-            refusing = False
+        # Review focus 4: a disk that refuses. The error comes out of the call that met it, what the disk
+        # did not take is kept for when it does, and the recorder carries on.
+        class Room:
+            """A file on a disk with `room` bytes left (None: as many as it is asked), which takes the part of
+            a write that fits and then refuses. A `hostile` disk raises for a write that does not fit once it
+            has taken its first part, and says no count."""
+            room, hostile = None, False
 
             def __init__(self, real):
                 self.real = real
 
             def write(self, data):
-                if Refusing.refusing:
+                if Room.room is None:
+                    return self.real.write(data)
+                taken = min(len(data), Room.room)
+                if taken == 0 and len(data):
                     raise OSError(28, "No space left on device")
-                return self.real.write(data)
+                self.real.write(data[:taken])
+                Room.room -= taken
+                if taken < len(data) and Room.hostile:
+                    raise OSError(28, "No space left on device")
+                return taken
 
             def __getattr__(self, name):
                 return getattr(self.real, name)
 
-        full = fresh("full")
-        rec = MidiRecorder(full, clock_from(T0), band[:2], {})
-        notes_capture.open = lambda *a, **k: Refusing(builtins.open(*a, **k))
         real_fsync = os.fsync
 
         def broken_fsync(fd):
             raise OSError(5, "Input/output error")
 
-        try:
-            Refusing.refusing = True
+        def meets(call):
             try:
-                rec.present("Keys", T0)
-                met = None
+                call()
             except OSError as e:
-                met = e
-            Refusing.refusing = False
+                return e
+            return None
+
+        sysex = bytes((0xF0, *(1 + i % 100 for i in range(10000)), 0xF7))
+        full = fresh("full")
+        rec = MidiRecorder(full, clock_from(T0), band[:2], {})
+        notes_capture.open = lambda *a, **k: Room(builtins.open(*a, **k))
+        try:
+            Room.room = 0
+            met = meets(lambda: rec.present("Keys", T0))
+            Room.room = None
             ok("a file that cannot be made says so, leaves nothing behind, and is made the next time",
                met is not None and files(full) == [])
             rec.present("Keys", T0)
             rec.present("Drums", T0)
             rec.feed("Drums", T0 + 1 * S, b"\x99\x26\x50")
-            Refusing.refusing = True
-            try:
-                rec.feed("Drums", T0 + 1100 * MS, b"\x89\x26\x00")        # this one is lost
-                met = None
-            except OSError as e:
-                met = e
-            Refusing.refusing = False
-            ok("a write the disk refuses is an OSError", isinstance(met, OSError))
+            Room.room = 0
+            met = [meets(lambda: rec.flush()), meets(lambda: rec.feed("Drums", T0 + 1100 * MS, sysex))]
+            Room.room = None
+            ok("a flush the disk refuses, and a write too big for the buffer, are OSErrors", all(met))
             rec.feed("Drums", T0 + 1200 * MS, b"\x99\x2a\x40")
             os.fsync = broken_fsync
             try:
-                rec.flush()
-                met = None
-            except OSError as e:
-                met = e
+                met = meets(lambda: rec.flush())
             finally:
                 os.fsync = real_fsync
-            ok("so is a flush the disk refuses", isinstance(met, OSError))
+            ok("so is a flush whose fsync the disk refuses", met is not None)
             rec.flush()
             rec.feed("Drums", T0 + 1300 * MS, b"\x99\x2c\x40")
         finally:
             del notes_capture.open
         made = rec.stop(3.0)
-        ok("the recorder was usable after each: stop gives a .mid of what reached the disk, and lets go of what it left held",
-           in_ticks(full / "Drums.mid") == [(1920, b"\x99\x26\x50"), (2304, b"\x99\x2a\x40"), (2496, b"\x99\x2c\x40"),
-                                            (5760, b"\x89\x26\x00"), (5760, b"\x89\x2a\x00"), (5760, b"\x89\x2c\x00")])
+        ok("the recorder was usable after each: what the disk refused is in the .mid, and what is left held is let go",
+           in_ticks(full / "Drums.mid") == [(1920, b"\x99\x26\x50"), (2112, sysex), (2304, b"\x99\x2a\x40"),
+                                            (2496, b"\x99\x2c\x40"), (5760, b"\x89\x26\x00"),
+                                            (5760, b"\x89\x2a\x00"), (5760, b"\x89\x2c\x00")])
         ok("and for both ports", [m["name"] for m in made] == ["Drums", "Keys"] and files(full) == ["Drums.mid", "Keys.mid"])
+
+        # A write the disk takes in part must not leave a fragment for the next line to join. A full disk does
+        # this, and says how much it took or, on some systems, only that it failed.
+        whole = re.compile(r"t -?[0-9]+|s ([0-9a-f]{2})+|n -?[0-9]+ ([0-9a-f]{2})+|g -?[0-9]+")
+        big = bytes((0xF0, *(1 + i % 100 for i in range(6000)), 0xF7))
+        for hostile in (False, True):
+            part = fresh(f"part{int(hostile)}")
+            rec = MidiRecorder(part, clock_from(T0), [{"name": "Pad", "port": "Pad"}], {})
+            notes_capture.open = lambda *a, **k: Room(builtins.open(*a, **k))
+            try:
+                rec.present("Pad", T0)
+                Room.room, Room.hostile = 3000, hostile
+                met = meets(lambda: rec.feed("Pad", T0 + 1 * S, big))
+                Room.room = None
+                rec.feed("Pad", T0 + 2 * S, b"\x90\x3c\x40")
+                rec.flush()
+            finally:
+                del notes_capture.open
+                Room.room, Room.hostile = None, False
+            text = (part / "Pad.midraw").read_bytes().decode("ascii")
+            how = "that says how much it took" if not hostile else "that only fails"
+            ok("a write too big for a disk " + how + " is an OSError, and the file is whole lines",
+               met is not None and text.endswith("\n") and all(whole.fullmatch(x) for x in text[:-1].split("\n")))
+            rec.stop(3.0)
+            ok("and the note after it is in the .mid, with the event it came after",
+               read_events(part / "Pad.mid")[1]
+               == [(1.0, big), (2.0, b"\x90\x3c\x40"), (3.0, b"\x80\x3c\x00")])
+
+        # Keys struck again while down: a release for each strike (R29), not for the key.
+        on, off = (lambda k: bytes((0x90, k, 64))), (lambda k: bytes((0x80, k, 0)))
+        for label, played_at, goes, want in (
+                ("a key struck twice and let go twice keeps both releases and has none to add",
+                 [(1000, on(60)), (1100, on(60)), (1200, off(60)), (1300, off(60))], None,
+                 [(1920, on(60)), (2112, on(60)), (2304, off(60)), (2496, off(60))]),
+                ("one struck twice and let go once is let go once more at the end",
+                 [(1000, on(60)), (1100, on(60)), (1200, off(60))], None,
+                 [(1920, on(60)), (2112, on(60)), (2304, off(60)), (5760, off(60))]),
+                ("one struck twice when its port goes is let go twice there, and a release after that is not kept",
+                 [(1000, on(60)), (1100, on(60)), (1900, off(60))], 1500,
+                 [(1920, on(60)), (2112, on(60)), (2880, off(60)), (2880, off(60))]),
+                ("keys struck twice and once are let go as many times as struck, in the order first pressed",
+                 [(1000, on(62)), (1100, on(60)), (1200, on(62)), (1300, on(62))], None,
+                 [(1920, on(62)), (2112, on(60)), (2304, on(62)), (2496, on(62)),
+                  (5760, off(62)), (5760, off(62)), (5760, off(62)), (5760, off(60))])):
+            strikes = fresh(f"strikes{len(label)}")
+            rec = MidiRecorder(strikes, clock_from(T0), [{"name": "Pad", "port": "Pad"}], {})
+            rec.present("Pad", T0)
+            for at, data in played_at:
+                if goes is not None and at > goes:
+                    rec.gone("Pad", T0 + goes * MS)
+                    rec.present("Pad", T0 + (goes + 100) * MS)
+                    goes = None
+                rec.feed("Pad", T0 + at * MS, data)
+            rec.stop(3.0)
+            ok(label, in_ticks(strikes / "Pad.mid") == want)
+
+        # Review: while a flush waits for the disk, or a stop for the conversion, the writer and the watcher
+        # are not held up: the lock is let go of before either.
+        waiting, let_go = threading.Event(), threading.Event()
+
+        def slow_fsync(fd):
+            waiting.set()
+            let_go.wait(30)
+            return real_fsync(fd)
+
+        locks = fresh("locks")
+        rec = MidiRecorder(locks, clock_from(T0), band[:2], {})
+        rec.present("Drums", T0)
+        rec.feed("Drums", T0 + 1 * S, b"\x99\x26\x50")
+        outcome = {}
+
+        def touches():
+            rec.feed("Drums", T0 + 1100 * MS, b"\x89\x26\x00")
+            rec.present("Keys", T0 + 1100 * MS)
+            rec.gone("Keys", T0 + 1200 * MS)
+            outcome["touched"] = True
+
+        os.fsync = slow_fsync
+        try:
+            flusher = threading.Thread(target=lambda: outcome.setdefault("flush", meets(rec.flush)), daemon=True)
+            flusher.start()
+            asleep = waiting.wait(30)
+            toucher = threading.Thread(target=touches, daemon=True)
+            toucher.start()
+            toucher.join(10)
+            ok("a flush waiting on the disk does not hold up feed, present or gone",
+               asleep and outcome.get("touched") is True and flusher.is_alive())
+        finally:
+            let_go.set()
+            flusher.join(30)
+            os.fsync = real_fsync
+        ok("and finishes when the disk does, with no error", outcome.get("flush", "unset") is None)
+
+        inside, go_on = threading.Event(), threading.Event()
+        real_write = notes_capture.write_mid
+
+        def slow_write(path, **kw):
+            inside.set()
+            go_on.wait(30)
+            return real_write(path, **kw)
+
+        answers = {}
+        notes_capture.write_mid = slow_write
+        try:
+            first = threading.Thread(target=lambda: answers.setdefault("first", rec.stop(3.0)), daemon=True)
+            first.start()
+            busy_converting = inside.wait(30)
+            outcome.clear()
+            toucher = threading.Thread(
+                target=lambda: (rec.feed("Drums", T0 + 1400 * MS, b"\x99\x2a\x40"), rec.present("Drums", T0),
+                                rec.gone("Drums", T0), rec.flush(), outcome.setdefault("touched", True)), daemon=True)
+            toucher.start()
+            toucher.join(10)
+            second = threading.Thread(target=lambda: answers.setdefault("second", rec.stop(3.0)), daemon=True)
+            second.start()
+            second.join(0.3)
+            ok("while stop converts, feed, present, gone and flush are answered at once, and ignored",
+               busy_converting and outcome.get("touched") is True)
+            ok("and a second stop waits for the first", second.is_alive() and "first" not in answers)
+        finally:
+            go_on.set()
+            first.join(30)
+            second.join(30)
+            notes_capture.write_mid = real_write
+        ok("then gives the first one's answer",
+           answers.get("first") == answers.get("second") and [m["name"] for m in answers.get("first", [])] == ["Drums", "Keys"])
+        ok("and what was fed while it converted is not in the file",
+           in_ticks(locks / "Drums.mid") == [(1920, b"\x99\x26\x50"), (2112, b"\x89\x26\x00")])
 
         # Review focus: the writer thread feeds while the watcher thread comes and goes and flushes (R26).
         busy = fresh("busy")

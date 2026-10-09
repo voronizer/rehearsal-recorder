@@ -38,8 +38,8 @@ things to be true:
                        audio's own clock (a note placed on its sample, drift
                        included), and one take's notes on disk (a .midraw
                        written as they are played, the .mid made at Stop or
-                       after a crash, a disk that refuses a write, a recorder
-                       two threads drive).
+                       after a crash, a disk that refuses a write or takes it
+                       in part, a recorder two threads drive).
                        Later tasks add to it. No port is opened: the library
                        is blocked and the rules are plain functions.
 

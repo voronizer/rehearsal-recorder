@@ -2,11 +2,12 @@
 One take's notes on disk: written as they are played, a .mid at Stop, and the
 same .mid for a take whose app died first (spec F3, F5 and F7).
 
-Nothing is kept in memory for the length of a take. Each event goes to its
-track's `<name>.midraw` as it arrives, so an app that dies loses what the audio
-loses and no more: the seconds since the last flush. The file is text, a line
-to a thing, and times stay as the computer's own nanoseconds, the clock a
-port's thread stamped them with:
+Nothing is kept in memory for the length of a take. Each event is a line
+added to its track's `<name>.midraw` as it arrives, a few KB at a time and at
+each flush, so an app that dies loses what the audio loses and no more: the
+seconds since the last flush. The file is text, a line to a thing, and times
+stay as the computer's own nanoseconds, the clock a port's thread stamped them
+with:
 
     t <ns>          first: when the take began
     s <hex>         a message of the state the port was in then (F6), one a line
@@ -15,17 +16,19 @@ port's thread stamped them with:
 
 Where on the audio a note belongs is worked out at the end, from the clock's
 marks (midi/clock.py), because a line fitted through all of a take's marks is
-better than any line through the marks so far. The marks go to `take.clock`
+better than any line through the marks so far. The kept marks go to `take.clock`
 while the take is played, once in a while, so that a take that never got to its
 end can be placed the way it would have been. `stop` and `finish_draft` read
-the same files with the same code, and give the same .mid.
+the same files with the same code, and give the same .mid, up to the clock's
+latest mark, which `stop` has and a file made a second ago does not.
 
 What a .mid begins and ends with is decided there too, from the .midraw alone
 (midi/state.py). The state at the take's start is the `s` lines with whatever
 the port said before the take's first sample. Keys struck before then, and the
 note-offs of keys that were held long before, are left out (F6). What is still
 held when the take ends, or its port goes, is let go at that moment, and what
-the port said while it was gone was not heard (F7).
+the port said while it was gone was not heard (F7). A key struck twice before
+it is let go is let go twice: it is the strikes that are counted, not the keys.
 
 A .mid is written under another name and moved into place, so a crash while it
 is written never leaves half a file where a whole one is looked for. Until it is
@@ -33,8 +36,12 @@ whole its .midraw stays.
 
 `MidiRecorder` is driven by two threads at once, the rig's writer (`feed`) and
 its watcher (`present`, `gone`, `flush`), and has a lock of its own around each
-call. A disk that refuses a write is an OSError out of the call that met it,
-and the recorder goes on: the next call tries again.
+call. The lock is never held while waiting for the disk to be sure (the fsync of
+a flush) or while a .mid is made (the long part of `stop`), so neither stops the
+other thread's calls. A disk that refuses a write is an OSError out of the call
+that met it, and the recorder goes on: what the disk did not take stays in the
+buffer for the next write, and a write it took only in part never leaves a
+fragment for the next line to join (`_Sink`).
 """
 
 import json
@@ -49,7 +56,7 @@ from pathlib import Path
 
 from rehearsal_recorder.audio.capture import TAKE_RECORD, AudioRecorder
 from rehearsal_recorder.midi.clock import MARK_EVERY_SEC, fit, load, save_line
-from rehearsal_recorder.midi.smf import write_mid
+from rehearsal_recorder.midi.smf import read_events, write_mid
 from rehearsal_recorder.midi.state import PortState
 
 log = logging.getLogger(__name__)
@@ -57,8 +64,15 @@ log = logging.getLogger(__name__)
 MIDRAW_SUFFIX = ".midraw"
 CLOCK_FILE = "take.clock"
 MID_SUFFIX = ".mid"
+PART_SUFFIX = ".part"  # after .mid: a .mid that is being written
 
 _MARK_EVERY_NS = int(MARK_EVERY_SEC * 1e9)
+
+# What is waiting to be written goes to the file in one write at this size. A
+# disk that has refused for a long time is not fed for ever: past this much
+# waiting, a new line is not kept, and the call that met it raises.
+_CHUNK = 8 * 1024
+_WAITING_MAX = 1024 * 1024
 
 # The lines of a .midraw. A time is an ns, which has at most 19 digits (clock.py
 # has the same rule for the same reason), and a message is whole bytes in hex.
@@ -68,15 +82,95 @@ _N = re.compile(r"n (-?[0-9]{1,19}) ((?:[0-9a-fA-F]{2})+)")
 _G = re.compile(r"g (-?[0-9]{1,19})")
 
 
+class _Sink:
+    """
+    A file that lines are added to, buffered here and not by Python's own
+    buffered writer, so that a disk that refuses leaves nothing but whole lines.
+
+    The lines wait in `waiting` and go to the file together. A write the disk
+    takes in part is counted (`written`) and the rest waits for the next try,
+    so a line is always finished before the one after it begins. A write that
+    fails with an error may have been taken in part, with no word of how much
+    (Windows does that); the file is then cut back to `written` before the next
+    try, which writes what was not counted again.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        self.raw = open(path, "wb", buffering=0)
+        self.waiting = bytearray()
+        self.written = 0  # bytes the disk has said it has taken
+        self.dirty = False  # a write failed: the file may hold more than `written`
+
+    def write(self, data):
+        if len(self.waiting) >= _WAITING_MAX:
+            self.drain()  # raises if the disk still refuses
+        self.waiting += data
+        if len(self.waiting) >= _CHUNK:
+            self.drain()
+
+    def drain(self):
+        """Everything that waits to the file, to the OS and not yet to the disk."""
+        try:
+            if self.dirty:
+                self.raw.seek(self.written)
+                self.raw.truncate(self.written)
+                self.dirty = False
+            while self.waiting:
+                taken = self.raw.write(self.waiting)
+                if taken is None:
+                    taken = len(self.waiting)
+                if taken <= 0:
+                    raise OSError("the disk took nothing")
+                self.written += taken
+                del self.waiting[:taken]
+        except OSError:
+            self.dirty = True
+            raise
+
+    def fileno(self):
+        return self.raw.fileno()
+
+    def close(self):
+        try:
+            self.drain()
+        finally:
+            self.raw.close()
+
+
+def note_stems(names):
+    """
+    The name each notes track's files have, `{track name: stem}`, for `names`
+    in the band's order: the audio's own `safe_name`, and where two tracks
+    make one (also on a disk that ignores case: "Keys" and "keys") the later
+    ones are " (2)", " (3)". A name met again is the same track.
+
+    The one source of these names: a notes file is `<stem>.midraw` and
+    `<stem>.mid`, and take.json says `stem` for it before the recorder exists.
+    """
+    taken, stems = set(), {}
+    for name in names:
+        if name in stems:
+            continue
+        base = AudioRecorder.safe_name(name)
+        stem, count = base, 1
+        while stem.casefold() in taken:
+            count += 1
+            stem = f"{base} ({count})"
+        taken.add(stem.casefold())
+        stems[name] = stem
+    return stems
+
+
 class _Track:
-    __slots__ = ("name", "port", "stem", "path", "file", "made", "here")
+    __slots__ = ("name", "port", "stem", "path", "sink", "made", "here")
 
     def __init__(self, name, port, stem, path):
         self.name = name
         self.port = port
         self.stem = stem
         self.path = path
-        self.file = None  # the open .midraw, None until the port appears and again once closed
+        self.sink = None  # the open .midraw, None until the port appears and again once closed
         self.made = False  # the port has appeared: there is a file, open or closed
         self.here = False  # the port is there now
 
@@ -104,25 +198,19 @@ class MidiRecorder:
 
     def __init__(self, out_dir, anchor, tracks, states):
         self._lock = threading.Lock()
+        # Held by the stop that is making the .mid files: a second stop waits for it.
+        self._finishing = threading.Lock()
         self._dir = Path(out_dir)
         self._anchor = anchor
         self._states = states or {}
         self._tracks = []
         self._by_name = {}
-        # Two names can make one file name ("A/B" and "A:B"), and on a disk that
-        # ignores case so can "Keys" and "keys": a file each, or one would be
-        # written over the other. The first keeps the name the audio has.
-        taken = set()
+        stems = note_stems([track["name"] for track in tracks])
         for track in tracks:
             name = track["name"]
             if name in self._by_name:
                 continue
-            base = AudioRecorder.safe_name(name)
-            stem, count = base, 1
-            while stem.casefold() in taken:
-                count += 1
-                stem = f"{base} ({count})"
-            taken.add(stem.casefold())
+            stem = stems[name]
             port = track.get("port")
             kept = _Track(name, str(port) if port is not None else "", stem,
                           self._dir / f"{stem}{MIDRAW_SUFFIX}")
@@ -130,7 +218,7 @@ class MidiRecorder:
             self._by_name[name] = kept
         # take.clock: opened with the first mark to write, `_clock_frame` the
         # newest frame written, `_clock_at` the event time of the last look.
-        self._clock_file = None
+        self._clock_sink = None
         self._clock_frame = -1
         self._clock_at = None
         self._ended = False
@@ -166,12 +254,16 @@ class MidiRecorder:
                 return
             if not raw:
                 return
-            track.file.write(f"n {ns} {raw.hex()}\n".encode("ascii"))
+            track.sink.write(f"n {ns} {raw.hex()}\n".encode("ascii"))
             self._save_marks(ns)
 
     def gone(self, name, ns):
         """A port is gone, and `ns` is the last time it was heard: whatever it
-        held is let go there (F7). Nothing is heard from it until `present`."""
+        held is let go there (F7). Nothing is heard from it until `present`.
+
+        A disk that refuses the line loses the place it was let go at, and what
+        was held through the gap is let go at the end instead: one that refuses
+        this refuses the next lines too."""
         with self._lock:
             track = self._by_name.get(name)
             if self._ended or track is None or not track.here:
@@ -179,30 +271,46 @@ class MidiRecorder:
             # Gone first, so that a disk that refuses the line does not leave a
             # port that is not there taking events.
             track.here = False
-            track.file.write(f"g {int(ns)}\n".encode("ascii"))
+            track.sink.write(f"g {int(ns)}\n".encode("ascii"))
             self._save_marks(ns)
 
     def flush(self):
         """Everything to disk, the .midraw files and take.clock: with the
         audio's own flush, every 30 seconds. The marks not yet in take.clock go
         first, whenever the last was. All are tried, and the first error comes
-        out when they have been."""
+        out when they have been.
+
+        The lines go to the OS under the lock; the wait for the disk, which can
+        be long, is outside it, on copies of the descriptors."""
+        error, copies = None, []
         with self._lock:
             if self._ended:
                 return
-            error = None
             try:
                 self._save_marks(time.perf_counter_ns(), force=True)
             except OSError as e:
                 error = e
-            for f in self._open_files():
+            for sink in self._open_sinks():
                 try:
-                    f.flush()
-                    os.fsync(f.fileno())
+                    sink.drain()
                 except OSError as e:
                     error = error or e
-            if error is not None:
-                raise error
+                try:
+                    copies.append(os.dup(sink.fileno()))
+                except OSError as e:
+                    error = error or e
+        for fd in copies:
+            try:
+                os.fsync(fd)
+            except OSError as e:
+                error = error or e
+            finally:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+        if error is not None:
+            raise error
 
     def stop(self, duration_sec):
         """
@@ -214,13 +322,20 @@ class MidiRecorder:
         It does not raise for a .mid it cannot make: that track is left out of
         the answer, said in the log, and its .midraw (and take.clock) stay
         where a recovery can find them.
+
+        The recorder is over at once, and the .mid files are made without the
+        lock, so the other thread's calls are not held up (they are ignored). A
+        second stop waits for the first and gives its answer.
         """
-        with self._lock:
-            if self._ended:
+        with self._finishing:
+            with self._lock:
+                first = not self._ended
+                if first:
+                    self._ended = True
+                    marks = self._anchor.marks()
+                    self._close()
+            if not first:
                 return [dict(note) for note in self._result]
-            self._ended = True
-            marks = self._anchor.marks()
-            self._close()
             made, unfinished = [], False
             for track in self._tracks:
                 if not track.made:
@@ -265,14 +380,14 @@ class MidiRecorder:
             state = PortState()
         head = [f"t {started if started is not None else int(ns)}\n"]
         head += [f"s {message.hex()}\n" for message in state.start_messages()]
-        f = open(track.path, "wb")
+        sink = _Sink(track.path)
         try:
-            f.write("".join(head).encode("ascii"))
-            f.flush()
+            sink.write("".join(head).encode("ascii"))
+            sink.drain()
         except BaseException:
             # Not a file that is half begun: the next `present` makes it again.
             try:
-                f.close()
+                sink.raw.close()
             except OSError:
                 pass
             try:
@@ -280,54 +395,57 @@ class MidiRecorder:
             except OSError:
                 pass
             raise
-        track.file = f
+        track.sink = sink
         track.made = True
 
     def _save_marks(self, ns, force=False):
         """The clock's new marks to take.clock, at most once in MARK_EVERY_SEC
         of event time: one comparison for the events in between, which come by
         the thousand, and a copy of the marks for the one that does not. Only
-        the marks newer than the last written go in. A time as far before the
-        last look as after it is far enough too, so that one stray time cannot
-        hold the marks back for good."""
+        the marks newer than the last written go in, and never the clock's
+        latest, which is a mark of its own and not one of the kept ones the fit
+        of `stop` and of a recovery both mean to be through (the last kept mark
+        goes in with the next look). A time as far before the last look as
+        after it is far enough too, so that one stray time cannot hold the
+        marks back for good."""
         if not force and self._clock_at is not None and -_MARK_EVERY_NS < ns - self._clock_at < _MARK_EVERY_NS:
             return
         self._clock_at = ns
         new = []
-        for mark in reversed(self._anchor.marks()):
+        for mark in reversed(self._anchor.marks()[:-1]):
             if mark[1] <= self._clock_frame:
                 break
             new.append(mark)
         if not new:
             return
         new.reverse()
-        if self._clock_file is None:
-            self._clock_file = open(self._dir / CLOCK_FILE, "ab")
-        self._clock_file.write("".join(map(save_line, new)).encode("ascii"))
-        # Counted as written once they are in the file's buffer: if the flush
+        if self._clock_sink is None:
+            self._clock_sink = _Sink(self._dir / CLOCK_FILE)
+        self._clock_sink.write("".join(map(save_line, new)).encode("ascii"))
+        # Counted as written once they are waiting in the sink: if the drain
         # below fails they are still there, and written again they would be twice.
         self._clock_frame = new[-1][1]
         # To the OS now, a line a second, so that an app that dies has them; the
         # disk gets them with the rest at the next flush.
-        self._clock_file.flush()
+        self._clock_sink.drain()
 
-    def _open_files(self):
-        files = [track.file for track in self._tracks if track.file is not None]
-        if self._clock_file is not None:
-            files.append(self._clock_file)
-        return files
+    def _open_sinks(self):
+        sinks = [track.sink for track in self._tracks if track.sink is not None]
+        if self._clock_sink is not None:
+            sinks.append(self._clock_sink)
+        return sinks
 
     def _close(self):
-        for f in self._open_files():
+        for sink in self._open_sinks():
             try:
-                f.close()
+                sink.close()
             except OSError as e:
-                # Closed all the same; the .midraw has what reached the disk.
-                log.warning("%s: closing it failed: %r", getattr(f, "name", "a notes file"), e)
+                # Closed all the same; the file has what reached the disk.
+                log.warning("%s: closing it failed: %r", sink.path.name, e)
         for track in self._tracks:
-            track.file = None
+            track.sink = None
             track.here = False
-        self._clock_file = None
+        self._clock_sink = None
 
 
 def finish_draft(take_dir, duration_sec, samplerate=None):
@@ -335,6 +453,11 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
     Makes a .mid of every .midraw in a take's folder that the app never got to
     finish, and removes the .midraw files and take.clock. Returns
     [{"name", "file", "port"}], the name being the file's: a draft knows no other.
+    A .mid that is already there with no .midraw beside it, which `stop` made
+    before the app died, is one of the take's notes as it is (nothing is done to
+    it) and is in the answer too, with its port from take.json, else the device
+    name in the file, else its name. A `.mid.part` is what a conversion that was
+    cut short left, and is removed.
 
     The samplerate and the ports' names come from take.json, which the audio
     wrote when the take began (the caller deletes it after this); `samplerate`
@@ -362,8 +485,15 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
             ports.setdefault(entry["file"], entry["port"])
     marks = load(take_dir / CLOCK_FILE) if rate else []
 
+    for leftover in take_dir.glob(f"*{MID_SUFFIX}{PART_SUFFIX}"):
+        try:
+            leftover.unlink()
+        except OSError as e:
+            log.warning("%s could not be removed: %r", leftover.name, e)
+
+    raws = sorted(take_dir.glob(f"*{MIDRAW_SUFFIX}"))
     found, unfinished = [], False
-    for raw in sorted(take_dir.glob(f"*{MIDRAW_SUFFIX}")):
+    for raw in raws:
         port = ports.get(raw.stem) or raw.stem
         mid = raw.with_suffix(MID_SUFFIX)
         try:
@@ -373,9 +503,24 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
             unfinished = True
             continue
         found.append({"name": raw.stem, "file": str(mid), "port": port})
+    unconverted = {raw.stem for raw in raws}
+    for mid in take_dir.glob(f"*{MID_SUFFIX}"):
+        if mid.stem not in unconverted:
+            found.append({"name": mid.stem, "file": str(mid),
+                          "port": ports.get(mid.stem) or _device_name(mid) or mid.stem})
+    found.sort(key=operator.itemgetter("name"))
     if not unfinished:
         _forget_clock(take_dir)
     return found
+
+
+def _device_name(path):
+    """The device name a .mid says it came from, "" if it says none or is not a
+    file that can be read."""
+    try:
+        return read_events(path)[0]["device_name"]
+    except Exception:
+        return ""
 
 
 def _forget_clock(folder):
@@ -390,7 +535,7 @@ def _make_mid(raw_path, mid_path, track_name, port_name, marks, samplerate, dura
     whole and on disk. Raises for what it cannot do; nothing then is left of the
     .mid, and the .midraw is as it was."""
     start, events = _place(_read(raw_path), marks, samplerate, duration_sec)
-    part = mid_path.with_name(mid_path.name + ".part")
+    part = mid_path.with_name(mid_path.name + PART_SUFFIX)
     try:
         write_mid(part, track_name=track_name, port_name=port_name, start=start, events=events)
         with open(part, "r+b") as f:
@@ -461,10 +606,13 @@ def _place(raw, marks, samplerate, duration_sec):
       goes into the state the file begins with (F6). A key struck then is not
       written, nor is its release, nor that of any key the take did not strike
       itself: held long before, or held through a gap.
-    - The rest, up to `duration_sec`, are kept and followed by a running state
-      that starts where the file starts, with no keys. At a moment the port went
-      it lets go of what it holds, and at the end it does (F7). `duration_sec`
-      of 0 or None has no end: everything is kept and the end is the last event.
+    - The rest, up to `duration_sec`, are kept. The strikes of each key are
+      counted (a key struck again while down is let go once for each strike, as
+      a DAW counts them), and a running state that starts where the file starts
+      follows the pedals. At a moment the port went the strikes not let go are,
+      in the order the keys were first pressed, and then the pedals that are
+      down; at the end the same (F7). `duration_sec` of 0 or None has no end:
+      everything is kept and the end is the last event.
     """
     started, start_messages, items = raw
     if started is None and items:
@@ -488,16 +636,21 @@ def _place(raw, marks, samplerate, duration_sec):
     running = PortState()
     for message in start:
         running.feed(message)
-    struck = set()  # the keys this file has struck and not yet let go
+    struck = {}  # (channel, key) -> strikes of it not yet let go, the keys in the order first pressed
     out = []
     last = 0.0
 
     def let_go(at):
+        for (channel, key), strikes in struck.items():
+            for _ in range(strikes):
+                message = bytes((0x80 | channel, key, 0))
+                out.append((at, message))
+                running.feed(message)
+        struck.clear()
         for message in running.releases():
-            out.append((at, message))
-            running.feed(message)
-            if message[0] & 0xF0 == 0x80:
-                struck.discard((message[0] & 0x0F, message[1]))
+            if message[0] & 0xF0 == 0xB0:  # the pedals: the keys were just let go
+                out.append((at, message))
+                running.feed(message)
 
     for (_, data), sec in zip(items, when):
         if end is not None and sec >= end:
@@ -513,9 +666,12 @@ def _place(raw, marks, samplerate, duration_sec):
         if 0x80 <= status < 0xA0 and len(data) == 3 and data[1] < 0x80 and data[2] < 0x80:
             key = (status & 0x0F, data[1])
             if status >= 0x90 and data[2]:
-                struck.add(key)
+                struck[key] = struck.get(key, 0) + 1
             elif key in struck:
-                struck.discard(key)
+                if struck[key] > 1:
+                    struck[key] -= 1
+                else:
+                    del struck[key]
             else:
                 continue  # the release of a key this file never struck
         running.feed(data)
