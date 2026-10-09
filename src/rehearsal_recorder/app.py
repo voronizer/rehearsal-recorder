@@ -179,8 +179,6 @@ def selftest():
         import tempfile
         from pathlib import Path
 
-        import mido
-
         from rehearsal_recorder.midi import smf
 
         notes = [(0.0, b"\x99\x24\x64"), (0.25, b"\x89\x24\x00")]
@@ -190,7 +188,7 @@ def selftest():
             meta, back = smf.read_events(path)
         if skipped or meta != {"track_name": "Pałyn", "device_name": "TD-17"} or back != notes:
             raise RuntimeError(f"wrote {len(notes)} notes, got back {len(back)}: {meta}")
-        return f"mido {mido.version_info}, a .mid written and read back"
+        return f"mido {smf.library_version()}, a .mid written and read back"
 
     def encoder():
         from rehearsal_recorder.audio.encode import available

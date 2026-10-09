@@ -31,9 +31,9 @@ things to be true:
                        port is found again after a replug, the order a
                        device's ports are listed in, and the .mid file (what
                        one can hold, written with mido and read back, names
-                       in UTF-8). Later tasks add to it. No port is opened:
-                       the library is blocked and the rules are plain
-                       functions.
+                       in UTF-8, a DAW's own ticks and tempo read right).
+                       Later tasks add to it. No port is opened: the library
+                       is blocked and the rules are plain functions.
 
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.

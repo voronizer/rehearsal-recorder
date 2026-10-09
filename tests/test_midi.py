@@ -11,6 +11,7 @@ is allowed are plain functions over plain dictionaries, so they are called
 directly.
 """
 
+import logging
 import sys
 import tempfile
 import threading
@@ -261,6 +262,10 @@ def main():
     # tick its own time gives. Read back with mido, which is not this module's
     # to trust: the files are opened here the way a DAW would open them.
     print("\n[3] The .mid file")
+    said = []  # what smf says to the log, so a warning is checked and not printed
+    catcher = logging.Handler(level=logging.INFO)
+    catcher.emit = said.append
+    logging.getLogger(smf.__name__).addHandler(catcher)
     ok("960 ticks to the beat, 120 bpm, 1920 ticks a second",
        (smf.TICKS_PER_BEAT, smf.TEMPO, smf.TICKS_PER_SEC) == (960, 500_000, 1920))
     events = [(0.0, b"\x99\x24\x64"), (0.1, b"\x89\x24\x00"), (0.5, b"\xB9\x04\x5A"),
@@ -337,6 +342,8 @@ def main():
            len(back_many) == 100_000
            and all(abs(got - t) <= 1 / 1920 and data == sent
                    for (got, data), (t, sent) in zip(back_many, long_take)))
+        ok("an app-written file reads back as exactly its tick over 1920",
+           [seconds for seconds, _ in back_many] == [round(t * 1920) / 1920 for t, _ in long_take])
         ok("writing and reading 100000 events is quick (under 20 s; a quadratic one takes minutes)", took < 20)
 
         # Edges: what a caller can get wrong must not cost the take its file.
@@ -352,6 +359,96 @@ def main():
            [seconds for seconds, _ in odd_events] == [0.0, 0.0, 1.0, 1.0])
         ok("and no event is lost for it", [data for _, data in odd_events] ==
            [b"\xB9\x04\x5A", b"\x99\x24\x64", b"\x89\x24\x00", b"\x99\x26\x50"])
+
+        # An event held at the one before is said, once per file, with how many.
+        warnings = [r for r in said if r.levelno >= logging.WARNING]
+        ok("events held at the one before are said once, with their number",
+           len(warnings) == 1 and "2 event(s)" in warnings[0].getMessage())
+        said.clear()
+        write_mid(folder / "inorder.mid", track_name="T", port_name="P", start=[],
+                  events=[(0.0, b"\x99\x24\x64"), (0.0, b"\x89\x24\x00"), (1.0, b"\x99\x26\x50")])
+        ok("and a file in order says nothing", not [r for r in said if r.levelno >= logging.WARNING])
+
+        # A delta is at most 0x0FFFFFFF ticks (about 38 hours): mido writes a longer one as
+        # five bytes, which is not a Standard MIDI File. Such a time costs only its own event.
+        far = folder / "far.mid"
+        said.clear()
+        skipped_far = write_mid(far, track_name="T", port_name="P", start=[],
+                                events=[(0.0, b"\x99\x24\x64"), (1e6, b"\x89\x24\x00"),
+                                        (1.0, b"\x89\x24\x00"), (2.0, b"\x99\x26\x50")])
+        ok("a time too far ahead for a delta is skipped and counted",
+           skipped_far == 1 and [data for _, data in read_events(far)[1]] ==
+           [b"\x99\x24\x64", b"\x89\x24\x00", b"\x99\x26\x50"])
+        ok("and does not drag the events after it", [seconds for seconds, _ in read_events(far)[1]] == [0.0, 1.0, 2.0])
+        ok("and holds nothing back, so says nothing of order",
+           not [r for r in said if r.levelno >= logging.WARNING])
+        limit = 0x0FFFFFFF
+        edge, over = folder / "edge.mid", folder / "over.mid"
+        ok("a delta of exactly 0x0FFFFFFF ticks is kept",
+           write_mid(edge, track_name="T", port_name="P", start=[], events=[(limit / 1920, b"\x99\x24\x64")]) == 0
+           and [tick for tick, _ in played(read_back(edge)[1])] == [limit])
+        ok("and one tick more is not",
+           write_mid(over, track_name="T", port_name="P", start=[], events=[((limit + 1) / 1920, b"\x99\x24\x64")]) == 1
+           and read_events(over)[1] == [])
+        ok("the gap is counted from the last event written, not from one skipped",
+           write_mid(folder / "gap.mid", track_name="T", port_name="P", start=[],
+                     events=[(0.0, b"\x99\x24\x64"), (1e6, b"\x89\x24\x00"), (limit / 1920, b"\x89\x24\x00")]) == 1)
+
+        # Messages that follow one another with the same status are written
+        # without it (running status) and must come back exactly as sent.
+        run = ([(0.0, b"\x90\x3C\x40"), (0.1, b"\x90\x3E\x40"), (0.2, b"\x90\x40\x40")]
+               + [(0.3 + k * 0.01, bytes([0xB9, 0x04, 5 * k])) for k in range(20)]
+               + [(0.6, b"\xC0\x05"), (0.61, b"\xC0\x06"), (0.62, b"\xC0\x07"),
+                  (0.7, b"\xD0\x40"), (0.71, b"\xD0\x41"), (0.72, b"\xD0\x00"),
+                  (0.8, b"\xE0\x00\x40"), (0.81, b"\xE0\x01\x40"), (0.9, b"\xA0\x40\x20"),
+                  (0.91, b"\xA0\x41\x21"), (1.0, b"\xF0\x7D\x01\xF7"), (1.1, b"\xB9\x04\x7F"),
+                  (1.2, b"\xB9\x04\x7E"), (1.3, b"\xC9\x00"), (1.4, b"\xC9\x01")])
+        runs = folder / "runs.mid"
+        ok("a run of same-status messages is written without loss",
+           write_mid(runs, track_name="T", port_name="P", start=[], events=run) == 0)
+        ok("three notes in a row, a stream of CC 4, program changes and pressures come back exactly",
+           read_events(runs)[1] == [(round(t * 1920) / 1920, data) for t, data in run])
+        ok("mido reads the same types back",
+           [msg.type for _, msg in played(read_back(runs)[1])] ==
+           ["note_on"] * 3 + ["control_change"] * 20 + ["program_change"] * 3 + ["aftertouch"] * 3
+           + ["pitchwheel"] * 2 + ["polytouch"] * 2 + ["sysex"] + ["control_change"] * 2 + ["program_change"] * 2)
+
+        # A file a DAW has saved again has its own ticks to the beat and its own
+        # tempo, and changes of it: the seconds follow the file's tempo map.
+        foreign = folder / "foreign.mid"
+        daw = mido.MidiFile(type=1, ticks_per_beat=480, charset="utf-8")
+        daw.tracks.append(mido.MidiTrack([mido.MetaMessage("set_tempo", tempo=500_000, time=0),
+                                          mido.MetaMessage("set_tempo", tempo=1_000_000, time=960)]))
+        daw.tracks.append(mido.MidiTrack([
+            mido.MetaMessage("track_name", name="Клавиши"),
+            mido.Message("note_on", note=60, velocity=64, time=480),    # tick 480
+            mido.Message("note_off", note=60, velocity=0, time=480),    # tick 960, where the tempo halves
+            mido.Message("note_on", note=62, velocity=64, time=480),    # tick 1440
+            mido.Message("note_off", note=62, velocity=0, time=960)]))  # tick 2400
+        daw.save(foreign)
+        ok("a file with 480 ticks to the beat and a tempo change reads in the file's seconds",
+           read_events(foreign) == ({"track_name": "Клавиши", "device_name": ""},
+                                    [(0.5, b"\x90\x3C\x40"), (1.0, b"\x80\x3C\x00"),
+                                     (2.0, b"\x90\x3E\x40"), (4.0, b"\x80\x3E\x00")]))
+        bare = folder / "bare.mid"
+        plain = mido.MidiFile(type=0, ticks_per_beat=96, charset="utf-8")
+        plain.tracks.append(mido.MidiTrack([mido.Message("note_on", note=60, velocity=64, time=96),
+                                            mido.Message("note_off", note=60, velocity=0, time=96)]))
+        plain.save(bare)
+        ok("a file that never states a tempo is at 120 bpm, as MIDI says",
+           [seconds for seconds, _ in read_events(bare)[1]] == [0.5, 1.0])
+        smpte = folder / "smpte.mid"
+        timed_by_frames = mido.MidiFile(type=0, ticks_per_beat=-6360, charset="utf-8")  # 25 frames, 40 ticks
+        timed_by_frames.tracks.append(mido.MidiTrack([mido.Message("note_on", note=60, velocity=64, time=1920)]))
+        timed_by_frames.save(smpte)
+        ok("a file timed in frames, not beats, is read as this module's own 1920 ticks a second",
+           [seconds for seconds, _ in read_events(smpte)[1]] == [1.0])
+
+        # The module's own way of opening and saving, which Task 12's crop goes through.
+        again = folder / "again.mid"
+        smf._save(smf._load(cyrillic), again)
+        ok("a file loaded and saved again through the module keeps its names",
+           read_events(again)[0] == {"track_name": "Барабаны", "device_name": "Электронная установка"})
 
         # If storable ever lets through what mido then refuses, that event is
         # one more skipped. Made to by letting everything through.
@@ -422,6 +519,8 @@ def main():
     ok("storable: not a SysEx that is cut, never ended, or has a status byte inside",
        not any(storable(data) for data in (b"\xF0", b"\xF0\x41\x10", b"\xF0\x41\x80\xF7", b"\xF0\xF0\xF7",
                                            b"\xF0\x41\xF8\x42\xF7", b"\x41\x10\xF7")))
+    ok("the library's version is a number the selftest can print",
+       isinstance(smf.library_version(), str) and smf.library_version()[:1].isdigit())
     ok("storable takes any bytes-like thing",
        storable(bytearray(b"\x99\x24\x64")) and storable(memoryview(b"\xF0\x41\xF7")))
 

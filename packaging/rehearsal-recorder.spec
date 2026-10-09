@@ -30,7 +30,7 @@ Two things that are easy to get wrong and expensive to discover later:
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 # This file lives in packaging/, so the repository is one level up.
 ROOT = Path(SPECPATH).parent
@@ -82,6 +82,12 @@ for package in ("soundfile", "_soundfile_data", "sounddevice", "_sounddevice_dat
         # sounddevice is a single module on Linux, where PortAudio comes from
         # the system — nothing to collect and nothing wrong.
         pass
+
+# mido reads its own version from the installed package's metadata, which
+# PyInstaller leaves behind unless asked: without it the built app's self-test
+# says "mido 0.0.0.dev0". Unlike the libraries above, mido is required, so a
+# build where it is not installed fails here rather than skipping it.
+datas += copy_metadata("mido")
 
 a = Analysis(
     # Not app.py: a module run as a script is __main__, and the package
