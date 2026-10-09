@@ -68,7 +68,7 @@ from rehearsal_recorder.audio.devices import channels_available  # noqa: E402
 from rehearsal_recorder.midi import capture as notes_capture  # noqa: E402
 from rehearsal_recorder.midi import smf  # noqa: E402
 from rehearsal_recorder.midi.capture import (  # noqa: E402
-    CLOCK_FILE, MIDRAW_SUFFIX, MidiRecorder, finish_draft, note_stems)
+    CLOCK_FILE, MIDRAW_SUFFIX, MidiRecorder, NotesDropped, finish_draft, note_stems)
 from rehearsal_recorder.midi.clock import AudioClock, MARK_EVERY_SEC, fit, load, save_line  # noqa: E402
 from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
 from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
@@ -1420,13 +1420,19 @@ def main():
         class Room:
             """A file on a disk with `room` bytes left (None: as many as it is asked), which takes the part of
             a write that fits and then refuses. A `hostile` disk raises for a write that does not fit once it
-            has taken its first part, and says no count."""
-            room, hostile = None, False
+            has taken its first part, and says no count. A `silent` one takes nothing and answers None, as a file
+            that cannot take a write now does."""
+            room, hostile, silent = None, False, False
+            only = None  # a part of the one file name the disk refuses; the rest it takes as asked
 
             def __init__(self, real):
                 self.real = real
 
             def write(self, data):
+                if Room.only is not None and Room.only not in str(self.real.name):
+                    return self.real.write(data)
+                if Room.silent:
+                    return None
                 if Room.room is None:
                     return self.real.write(data)
                 taken = min(len(data), Room.room)
@@ -1514,6 +1520,77 @@ def main():
             ok("and the note after it is in the .mid, with the event it came after",
                read_events(part / "Pad.mid")[1]
                == [(1.0, big), (2.0, b"\x90\x3c\x40"), (3.0, b"\x80\x3c\x00")])
+
+        # A file that answers None has taken nothing, and what it was given waits for the next try.
+        silent = fresh("silent")
+        rec = MidiRecorder(silent, clock_from(T0), [{"name": "Pad", "port": "Pad"}], {})
+        notes_capture.open = lambda *a, **k: Room(builtins.open(*a, **k))
+        try:
+            rec.present("Pad", T0)
+            Room.silent = True
+            met = meets(lambda: rec.feed("Pad", T0 + 1 * S, big))
+            Room.silent = False
+            rec.feed("Pad", T0 + 2 * S, b"\x90\x3c\x40")
+            rec.flush()
+        finally:
+            del notes_capture.open
+            Room.silent = False
+        rec.stop(3.0)
+        ok("a write answered with None is a refusal, and nothing it was given is lost",
+           met is not None and read_events(silent / "Pad.mid")[1]
+           == [(1.0, big), (2.0, b"\x90\x3c\x40"), (3.0, b"\x80\x3c\x00")])
+
+        # A take.clock the disk refuses for longer than the buffer holds: each mark is written once when it takes it.
+        longrun = clock_from(T0)
+        refused_clock = fresh("clockrefused")
+        rec = MidiRecorder(refused_clock, longrun, [{"name": "Pad", "port": "Pad"}], {})
+        notes_capture.open = lambda *a, **k: Room(builtins.open(*a, **k))
+        try:
+            blocks(longrun, 0, 100)
+            rec.present("Pad", T0 + 2 * S)
+            Room.room, Room.only = 0, CLOCK_FILE
+            refusals = 0
+            for k in range(1, 701):
+                blocks(longrun, 100 + 47 * (k - 1), 100 + 47 * k)
+                refusals += meets(lambda: rec.feed("Pad", T0 + (2 + k) * S, b"\x90\x3c\x40")) is not None
+            Room.room = None
+            rec.feed("Pad", T0 + 1000 * S, b"\x80\x3c\x00")
+            rec.flush()
+        finally:
+            del notes_capture.open
+            Room.room, Room.only = None, None
+        frames = [f for _, f in load(refused_clock / CLOCK_FILE)]
+        ok("a take.clock refused for longer than 8 KB of marks: every look meets it", refusals == 700)
+        ok("and when the disk takes them, each kept mark is in take.clock once, the frames going up",
+           len(frames) > 690 and frames == [f for _, f in longrun.marks()[:-1]] and frames == sorted(set(frames)))
+
+        # A megabyte waiting: lines are dropped, and the call and the log say so, which they do not for a line that waits.
+        capped = fresh("capped")
+        rec = MidiRecorder(capped, clock_from(T0), [{"name": "Pad", "port": "Pad"}], {})
+        huge = bytes((0xF0, *(1 + i % 100 for i in range(20000)), 0xF7))
+        notes_capture.open = lambda *a, **k: Room(builtins.open(*a, **k))
+        said_before = len(said6)
+        try:
+            rec.present("Pad", T0)
+            Room.room = 0
+            kinds = [type(meets(lambda: rec.feed("Pad", T0 + (1 + k) * 10 * MS, huge))) for k in range(40)]
+            Room.room = None
+            rec.feed("Pad", T0 + 2 * S, b"\x90\x3c\x40")
+            rec.flush()
+        finally:
+            del notes_capture.open
+            Room.room = None
+        queued = kinds.count(OSError)
+        ok("a line that waits is a plain OSError; once a megabyte waits, a line dropped is a NotesDropped, and stays so",
+           kinds[0] is OSError and kinds[-1] is NotesDropped and 20 < queued < 30
+           and kinds == [OSError] * queued + [NotesDropped] * (40 - queued) and issubclass(NotesDropped, OSError))
+        dropped_said = [r for r in said6[said_before:] if "dropped" in r.getMessage()]
+        ok("and the log says so once for the file, not once for each line",
+           len(dropped_said) == 1 and dropped_said[0].levelno == logging.WARNING and "Pad.midraw" in dropped_said[0].getMessage())
+        rec.stop(3.0)
+        notes_in = read_events(capped / "Pad.mid")[1]
+        ok("the lines that waited are in the .mid once the disk takes them, the dropped ones are not, and the note after is",
+           [d for _, d in notes_in].count(huge) == queued and (2.0, b"\x90\x3c\x40") in notes_in)
 
         # Keys struck again while down: a release for each strike (R29), not for the key.
         on, off = (lambda k: bytes((0x90, k, 64))), (lambda k: bytes((0x80, k, 0)))

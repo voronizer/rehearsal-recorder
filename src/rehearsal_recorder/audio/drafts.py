@@ -139,9 +139,12 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
         tracks.append({"name": wav_path.stem, "file": str(wav_path)})
 
     duration = frames / samplerate if samplerate else 0
-    # Before the record goes: it says which port each notes file came from.
+    # Before the record goes: it says which port each notes file came from. And
+    # not while a notes file is left that could not be made into a .mid, which
+    # a second try needs it for.
     notes = finish_draft(take_dir, duration, samplerate)
-    (take_dir / TAKE_RECORD).unlink(missing_ok=True)
+    if not any(take_dir.glob(f"*{MIDRAW_SUFFIX}")):
+        (take_dir / TAKE_RECORD).unlink(missing_ok=True)
 
     return {
         "tracks": tracks,

@@ -7191,6 +7191,40 @@ def main():
        and [(round(sec * 1920), d) for sec, d in read_events65(halfway65 / "Keys.mid")[1]]
        == [(480, b"\x90\x3c\x40"), (480, b"\x80\x3c\x00")])
 
+    # A notes file that cannot be made into a .mid is left, with the take.json that names its port, so that a
+    # second go can make it; the audio is recovered all the same.
+    import logging as logging65
+    from rehearsal_recorder.midi import capture as capture65
+
+    stuck65 = folder65 / "_drafts" / "take 6"
+    write_wav(stuck65 / "Drums.wav", 100, seconds=1.0)
+    (stuck65 / "take.json").write_text(json.dumps({
+        "samplerate": SR, "tracks": [{"file": "Drums", "channels": 1}],
+        "notes": [{"file": "Keys", "port": "Launchkey Mini MK3"}]}), encoding="utf-8")
+    (stuck65 / "Keys.midraw").write_bytes(f"t {t65}\nn {t65 + 250 * ms65} 903c40\n".encode("ascii"))
+    said65 = []
+    catcher65 = logging65.Handler(level=logging65.INFO)
+    catcher65.emit = said65.append
+    logging65.getLogger(capture65.__name__).addHandler(catcher65)
+
+    def refused_mid(path, **kw):
+        raise OSError(28, "No space left on device")
+
+    real_write_mid65 = capture65.write_mid
+    capture65.write_mid = refused_mid
+    try:
+        first = finalize65(stuck65, SR, 16)
+    finally:
+        capture65.write_mid = real_write_mid65
+    ok("a notes file that cannot be made into a .mid is left where it was, with take.json, and the audio is recovered",
+       first["notes"] == [] and [t["name"] for t in first["tracks"]] == ["Drums"]
+       and sorted(p.name for p in stuck65.iterdir()) == ["Drums.wav", "Keys.midraw", "take.json"] and len(said65) == 1)
+    again = finalize65(stuck65, SR, 16)
+    logging65.getLogger(capture65.__name__).removeHandler(catcher65)
+    ok("a second go makes it, with the port take.json named, and only then deletes take.json",
+       [(n["name"], n["port"]) for n in again["notes"]] == [("Keys", "Launchkey Mini MK3")]
+       and sorted(p.name for p in stuck65.iterdir()) == ["Drums.wav", "Keys.mid"])
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

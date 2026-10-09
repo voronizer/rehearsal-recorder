@@ -41,7 +41,10 @@ a flush) or while a .mid is made (the long part of `stop`), so neither stops the
 other thread's calls. A disk that refuses a write is an OSError out of the call
 that met it, and the recorder goes on: what the disk did not take stays in the
 buffer for the next write, and a write it took only in part never leaves a
-fragment for the next line to join (`_Sink`).
+fragment for the next line to join (`_Sink`). Past a megabyte waiting the disk
+has been refusing for good, and new lines are dropped: `NotesDropped`, an
+OSError of its own so that a line lost can be told from one that waits, and one
+line in the log for the file.
 """
 
 import json
@@ -82,6 +85,15 @@ _N = re.compile(r"n (-?[0-9]{1,19}) ((?:[0-9a-fA-F]{2})+)")
 _G = re.compile(r"g (-?[0-9]{1,19})")
 
 
+class NotesDropped(OSError):
+    """
+    A line that was not kept: the disk has refused writes for so long that a
+    megabyte of lines is waiting for it. Any other OSError out of `feed`,
+    `gone`, `present` or `flush` is a write the disk refused, with the line
+    still waiting to be written when it takes it.
+    """
+
+
 class _Sink:
     """
     A file that lines are added to, buffered here and not by Python's own
@@ -101,11 +113,29 @@ class _Sink:
         self.waiting = bytearray()
         self.written = 0  # bytes the disk has said it has taken
         self.dirty = False  # a write failed: the file may hold more than `written`
+        self.dropping = False  # lines have been dropped, and the log has said so
+
+    def queue(self, data):
+        """Adds lines to what waits, which is all it does: it raises only
+        NotesDropped, and then nothing was added. Lines are dropped when a
+        megabyte waits and the disk will not take it, said once in the log."""
+        if len(self.waiting) >= _WAITING_MAX:
+            try:
+                self.drain()
+            except OSError:
+                pass
+            if len(self.waiting) >= _WAITING_MAX:
+                if not self.dropping:
+                    self.dropping = True
+                    log.warning("%s: the disk has refused writes for so long that new lines are being dropped",
+                                self.path.name)
+                raise NotesDropped(f"{self.path.name}: the disk has refused writes for too long")
+        self.waiting += data
 
     def write(self, data):
-        if len(self.waiting) >= _WAITING_MAX:
-            self.drain()  # raises if the disk still refuses
-        self.waiting += data
+        """`queue`, and the lines to the file once a few KB wait. An OSError out
+        of the second half is a refusal with the lines already queued."""
+        self.queue(data)
         if len(self.waiting) >= _CHUNK:
             self.drain()
 
@@ -117,9 +147,8 @@ class _Sink:
                 self.raw.truncate(self.written)
                 self.dirty = False
             while self.waiting:
-                taken = self.raw.write(self.waiting)
-                if taken is None:
-                    taken = len(self.waiting)
+                # None, from a file that cannot take it now, is nothing taken.
+                taken = self.raw.write(self.waiting) or 0
                 if taken <= 0:
                     raise OSError("the disk took nothing")
                 self.written += taken
@@ -421,9 +450,10 @@ class MidiRecorder:
         new.reverse()
         if self._clock_sink is None:
             self._clock_sink = _Sink(self._dir / CLOCK_FILE)
-        self._clock_sink.write("".join(map(save_line, new)).encode("ascii"))
-        # Counted as written once they are waiting in the sink: if the drain
-        # below fails they are still there, and written again they would be twice.
+        self._clock_sink.queue("".join(map(save_line, new)).encode("ascii"))
+        # Counted as written once they are waiting in the sink, which is all that
+        # `queue` does: when the drain below fails they are still there, and
+        # queued again at the next look they would be there twice.
         self._clock_frame = new[-1][1]
         # To the OS now, a line a second, so that an app that dies has them; the
         # disk gets them with the rest at the next flush.
