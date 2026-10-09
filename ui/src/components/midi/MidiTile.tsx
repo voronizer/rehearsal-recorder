@@ -27,12 +27,14 @@ export function NotesFill({ vel }: { vel: number }) {
 }
 
 /** "12 notes", "1 note". The figure comes first so that a narrow tile can
- *  drop the word and keep the number. */
+ *  drop the word and keep the number. The word goes under 10 rem, where
+ *  "12,345 notes" would not fit on the line: the header must never grow a
+ *  second one when the count gets longer. */
 export function NoteCount({ notes }: { notes: number }) {
   return (
     <>
       <span className="tnum">{notes.toLocaleString("en-US")}</span>
-      <span className="@max-[7rem]:hidden"> {notes === 1 ? "note" : "notes"}</span>
+      <span className="@max-[10rem]:hidden"> {notes === 1 ? "note" : "notes"}</span>
     </>
   )
 }
@@ -56,6 +58,7 @@ export function MidiTile({
   vel,
   notes,
   connected,
+  tip,
 }: {
   name: string
   icon?: string
@@ -66,12 +69,15 @@ export function MidiTile({
   /** Notes played this take. */
   notes: number
   connected: boolean
+  /** What the tooltip says instead of the port's name, when there is more
+   *  to say of it: that another app holds it. */
+  tip?: string
 }) {
   return (
     <div
       role="group"
       aria-label={name}
-      title={port || undefined}
+      title={tip ?? (port || undefined)}
       data-midi-tile
       data-level={Math.round(vel * 100)}
       data-not-connected={!connected || undefined}
@@ -90,7 +96,7 @@ export function MidiTile({
           <div className="flex min-w-0 flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:bg-card/85 [&>span]:px-1">
             <span
               data-notes
-              className="flex items-center gap-1 text-muted-foreground"
+              className="flex items-center gap-1 whitespace-nowrap text-muted-foreground"
               style={{ fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }}
             >
               <MidiGlyph className="size-[0.9em] shrink-0 text-primary @max-[7rem]:hidden" />
@@ -99,11 +105,13 @@ export function MidiTile({
               </span>
             </span>
             {/* Always there, only not seen while the port is: the header is
-                the same height when it comes and goes. */}
+                the same height when it comes and goes. On one line, and gone
+                altogether where the line would not fit: the amber edge says
+                it then. */}
             <span
               data-status
               className={cn(
-                "text-xs text-muted-foreground @max-[7rem]:hidden",
+                "text-xs whitespace-nowrap text-muted-foreground @max-[9.5rem]:hidden",
                 connected && "invisible"
               )}
             >

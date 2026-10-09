@@ -90,6 +90,45 @@ const badNames = (page: Page) =>
       .filter((n) => !Object.values(n).every(Boolean))
   )
 
+/** Makes the fake say every track has had `window.__NOTES__` notes, so a
+ *  count can stand at 99 or at 12,345 without waiting for a kit to get there. */
+const COUNTS = `window.__NOTES__ = 99;
+  const was = window.pywebview.api.midi_activity;
+  window.pywebview.api.midi_activity = async (...a) => {
+    const out = await was(...a);
+    for (const t of Object.values(out)) t.notes = window.__NOTES__;
+    return out;
+  };`
+
+/** Where the parts of a tile stand, down to the pixel: the tile, its icon
+ *  and name, the header's column and what is in it (the figure, the count,
+ *  the line for the port, "clipped"), and a Both tile's column. The digits of
+ *  a count change its width, so for those only the height and the top count. */
+const stand = (tileEl: Locator) =>
+  tileEl.evaluate((el) => {
+    const all = (q: string) => [...el.querySelectorAll(q)]
+    const header = el.querySelector("[data-notes]")?.parentElement
+    const lines = header ? [...header.children] : []
+    const whole = (e: Element | null) => {
+      const r = e?.getBoundingClientRect()
+      return r ? [r.left, r.top, r.width, r.height].map(Math.round) : null
+    }
+    const tall = (e: Element | null) => {
+      const r = e?.getBoundingClientRect()
+      return r ? [r.top, r.height].map(Math.round) : null
+    }
+    return {
+      tile: whole(el),
+      icon: whole(el.querySelector("[data-icon]")),
+      name: whole(el.querySelector("[data-name]")),
+      column: whole(el.querySelector("[data-midi-column]")),
+      header: tall(header ?? null),
+      lines: lines.map(tall),
+      notes: all("[data-notes]").map(tall),
+      status: all("[data-status]").map(tall),
+    }
+  })
+
 test.describe("recording", () => {
   test("a MIDI track gets a tile in band order, as wide as the others", async ({ page }) => {
     await recording(page)
@@ -406,6 +445,95 @@ test.describe("recording", () => {
     expect(await column.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(12)
     // Its fill still jumps.
     await expect(column.locator("[data-midi-fill]")).toBeVisible()
+  })
+
+  // Tiles between 112 and 160 px wide are the 7 to 12 tracks of a band: the
+  // header's column is under 90 px there, and what it says must fit on one
+  // line or give way, so that nothing under it moves.
+  for (const [count, width] of [
+    [8, 1180],
+    [7, 960],
+  ] as const) {
+    test(`the header keeps still at ${count} tracks and ${width} px, as notes arrive and a port comes and goes`, async ({
+      page,
+    }) => {
+      const band: {
+        name: string
+        channel: number | null
+        icon?: string
+        mode?: string
+        midi_port?: { name: string }
+      }[] = [
+        { name: "Drums", channel: 1, icon: "drums", mode: "both", midi_port: { name: "TD-17" } },
+        {
+          name: "Keys",
+          channel: null,
+          icon: "keys",
+          mode: "midi",
+          midi_port: { name: "Launchkey Mini MK3" },
+        },
+        ...Array.from({ length: count - 2 }, (_, i) => ({ name: `Tr ${i + 1}`, channel: i + 2 })),
+      ]
+      const levels = Object.fromEntries(
+        band.filter((t) => t.mode !== "midi").map((t) => [t.name, [t.name === "Drums" ? 0.99 : 0.5]])
+      )
+      await recording(page, { band, levels, after: COUNTS })
+      await page.setViewportSize({ width, height: 820 })
+      const drums = tile(page, "Drums")
+      const keys = tile(page, "Keys")
+      // A clip stands under the Both tile's count: what would be pushed.
+      await expect(drums).toHaveAttribute("data-clipped")
+      const at = (await drums.boundingBox())!
+      expect(at.width, "a tile of the width this is about").toBeGreaterThan(112)
+      expect(at.width).toBeLessThan(160)
+      await expect(drums).toContainText("99")
+      await expect(keys).toContainText("99")
+      const first = [await stand(drums), await stand(keys)]
+
+      // From 99 to a thousand and more: one line, whatever the digits.
+      for (const [notes, shown] of [
+        [999, "999"],
+        [1240, "1,240"],
+        [12345, "12,345"],
+      ] as const) {
+        await setFake(page, "__NOTES__", notes)
+        await expect(drums).toContainText(shown)
+        await expect(keys).toContainText(shown)
+        expect(await stand(drums), `Drums at ${shown}`).toEqual(first[0])
+        expect(await stand(keys), `Keys at ${shown}`).toEqual(first[1])
+      }
+
+      // Both ports pulled out, and plugged in again.
+      await setFake(page, "__MIDI_GONE__", ["TD-17", "Launchkey Mini MK3"])
+      await expect(drums).toHaveAttribute("data-not-connected")
+      await expect(keys).toHaveAttribute("data-not-connected")
+      expect(await stand(drums), "Drums, port gone").toEqual(first[0])
+      expect(await stand(keys), "Keys, port gone").toEqual(first[1])
+      await setFake(page, "__MIDI_GONE__", [])
+      await expect(drums).not.toHaveAttribute("data-not-connected")
+      await expect(keys).not.toHaveAttribute("data-not-connected")
+      expect(await stand(drums), "Drums, port back").toEqual(first[0])
+      expect(await stand(keys), "Keys, port back").toEqual(first[1])
+    })
+  }
+
+  test("a port another app holds reads not connected, and its tooltip says why", async ({ page }) => {
+    await recording(page, { before: "window.__MIDI_BUSY__ = ['Launchkey Mini MK3', 'TD-17'];" })
+    const keys = tile(page, "Keys")
+    const drums = tile(page, "Drums")
+    await expect(keys).toContainText("not connected")
+    await expect(keys).toHaveAttribute("data-not-connected")
+    await expect(keys).toHaveAttribute("title", "\u201cLaunchkey Mini MK3\u201d is in use by another app.")
+    await expect(drums).toHaveAttribute("title", "\u201cTD-17\u201d is in use by another app.")
+    // Let go of: the port's own name again, and none on a Both tile.
+    await setFake(page, "__MIDI_BUSY__", [])
+    await expect(keys).not.toHaveAttribute("data-not-connected")
+    await expect(keys).toHaveAttribute("title", "Launchkey Mini MK3")
+    await expect(drums).not.toHaveAttribute("title")
+    // One that is not plugged in says nothing of another app.
+    await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
+    await expect(keys).toHaveAttribute("data-not-connected")
+    await expect(keys).toHaveAttribute("title", "Launchkey Mini MK3")
   })
 
   test("the tiles are polled with the levels, and no longer when the screen has gone", async ({

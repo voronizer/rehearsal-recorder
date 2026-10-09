@@ -58,8 +58,9 @@ export function TrackTile({
   silent: boolean
   /** The notes this track takes, when it records them too (Both): where the
    *  fill stands, 0..1, how many notes this take, and whether its port is
-   *  plugged in. */
-  midi?: { vel: number; notes: number; connected: boolean }
+   *  plugged in. `tip` is the tile's tooltip, when its port has something to
+   *  say for itself. */
+  midi?: { vel: number; notes: number; connected: boolean; tip?: string }
 }) {
   const sides = peaks.length ? peaks : [0]
   // The figure is the peak the line holds, not the last poll's: that
@@ -71,6 +72,7 @@ export function TrackTile({
     <div
       role="group"
       aria-label={name}
+      title={midi?.tip}
       data-clipped={clips > 0 || undefined}
       data-silent={silent || undefined}
       data-not-connected={(midi && !midi.connected) || undefined}
@@ -151,23 +153,23 @@ export function TrackTile({
               {peakToDb(peak)}
               <span className="@max-[7rem]:hidden"> dB</span>
             </span>
-            {/* One line for both: the count, or that there is no port to
-                count from, so nothing moves when the port comes and goes. */}
+            {/* One line for both, which does not wrap: the count, or that there
+                is no port to count from where that fits, so nothing under it
+                moves when the port comes and goes. */}
             {midi && (
               <span
                 data-notes
-                className="flex items-center gap-1 text-xs text-muted-foreground @max-[7rem]:hidden"
+                className="flex items-center gap-1 text-xs whitespace-nowrap text-muted-foreground @max-[7rem]:hidden"
               >
-                {midi.connected ? (
-                  <>
-                    <MidiGlyph className="size-3 shrink-0 text-primary" />
-                    <span>
-                      <NoteCount notes={midi.notes} />
-                    </span>
-                  </>
-                ) : (
-                  "not connected"
-                )}
+                <span
+                  className={cn("flex items-center gap-1", !midi.connected && "@min-[9.5rem]:hidden")}
+                >
+                  <MidiGlyph className="size-3 shrink-0 text-primary" />
+                  <span>
+                    <NoteCount notes={midi.notes} />
+                  </span>
+                </span>
+                {!midi.connected && <span className="hidden @min-[9.5rem]:inline">not connected</span>}
               </span>
             )}
             {clips > 0 && (

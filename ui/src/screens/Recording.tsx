@@ -36,8 +36,9 @@ const CLOCK_SIZE = "clamp(4rem, 19vh, 9.5rem)"
 
 /** What a track that takes notes is showing: where its fill stands (the
  *  loudest note lately, falling back between notes as a meter does), how many
- *  notes this take, and whether its port is plugged in. */
-type NoteWatch = { vel: number; notes: number; connected: boolean }
+ *  notes this take, whether its port is plugged in, and whether another app
+ *  holds it, which reads as not plugged in too. */
+type NoteWatch = { vel: number; notes: number; connected: boolean; inUse: boolean }
 
 /**
  * The tracks' notes after one more poll. Python gives the loudest note since
@@ -59,6 +60,7 @@ function noteStep(
           vel: fallBack(prev?.tracks[name]?.vel ?? 0, a.vel, since),
           notes: a.notes,
           connected: a.connected,
+          inUse: a.state === "in_use",
         },
       ])
     ),
@@ -313,10 +315,19 @@ export function Recording({
         >
           {tracks.map((t) => {
             const seen = watch.tracks[t.name]
-            // Known once Python has answered; until then there is no reason
-            // to say it is not connected.
+            const port = t.midi_port?.name ?? ""
+            const watched = noted?.tracks[t.name]
+            // Connected until Python has answered once: no reason before
+            // that to say it is not.
             const heard = recordsNotes(t)
-              ? (noted?.tracks[t.name] ?? { vel: 0, notes: 0, connected: !noted })
+              ? {
+                  vel: watched?.vel ?? 0,
+                  notes: watched?.notes ?? 0,
+                  connected: watched?.connected ?? !noted,
+                  // Held by another app it reads "not connected" as well; the
+                  // tooltip says why, since plugging it in again will not help.
+                  tip: watched?.inUse ? `“${port}” is in use by another app.` : undefined,
+                }
               : undefined
             if (heard && !recordsAudio(t))
               return (
@@ -324,7 +335,7 @@ export function Recording({
                   key={t.name}
                   name={t.name}
                   icon={t.icon}
-                  port={t.midi_port?.name ?? ""}
+                  port={port}
                   {...heard}
                 />
               )
