@@ -3511,25 +3511,25 @@ def main():
        L.inputs_for(saved, xr18) == {"Guitar": 3, "Vocals": 7})
     ok("and gives those numbers back",
        L.for_device(band, saved, xr18, 18)
-       == [{"name": "Guitar", "channel": 3, "stereo": False},
-           {"name": "Vocals", "channel": 7, "stereo": False}])
+       == [{"name": "Guitar", "channel": 3, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 7, "stereo": False, "mode": "audio"}])
 
     # The whole point: a card nobody has used yet keeps the band entire.
     ok("an unused card keeps everyone, counted from the first free input",
        L.for_device(band, saved, little, 2)
-       == [{"name": "Guitar", "channel": 1, "stereo": False},
-           {"name": "Vocals", "channel": 2, "stereo": False}])
+       == [{"name": "Guitar", "channel": 1, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 2, "stereo": False, "mode": "audio"}])
 
     both = L.remember(saved, little, [{"name": "Guitar", "channel": 1},
                                       {"name": "Vocals", "channel": 2}])
     ok("going back to the first card brings its own numbers back",
        L.for_device(band, both, xr18, 18)
-       == [{"name": "Guitar", "channel": 3, "stereo": False},
-           {"name": "Vocals", "channel": 7, "stereo": False}])
+       == [{"name": "Guitar", "channel": 3, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 7, "stereo": False, "mode": "audio"}])
     ok("and the other card keeps its own",
        L.for_device(band, both, little, 2)
-       == [{"name": "Guitar", "channel": 1, "stereo": False},
-           {"name": "Vocals", "channel": 2, "stereo": False}])
+       == [{"name": "Guitar", "channel": 1, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 2, "stereo": False, "mode": "audio"}])
 
     print("  the band changes")
     # Somebody joins on one card. Every other card must show them too — that
@@ -3537,12 +3537,12 @@ def main():
     grew = [{"name": "Guitar"}, {"name": "Vocals"}, {"name": "Drums"}]
     ok("a new member appears on a card that never saw them",
        L.for_device(grew, both, xr18, 18)
-       == [{"name": "Guitar", "channel": 3, "stereo": False},
-           {"name": "Vocals", "channel": 7, "stereo": False},
-           {"name": "Drums", "channel": 1, "stereo": False}])
+       == [{"name": "Guitar", "channel": 3, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 7, "stereo": False, "mode": "audio"},
+           {"name": "Drums", "channel": 1, "stereo": False, "mode": "audio"}])
     ok("on the lowest input nobody else is on",
        L.for_device(grew, both, little, 2)[2] == {"name": "Drums", "channel": None,
-                                                  "stereo": False})
+                                                  "stereo": False, "mode": "audio"})
 
     ok("and when the inputs run out, the rest simply have none",
        [t["channel"] for t in L.for_device(
@@ -3572,8 +3572,8 @@ def main():
        L.inputs_for(a32._config["layouts"], big) == {"Guitar": 5, "Vocals": 6})
     ok("the card gets its own numbers back",
        a32.load_default_tracks()["tracks"]
-       == [{"name": "Guitar", "channel": 5, "stereo": False},
-           {"name": "Vocals", "channel": 6, "stereo": False}])
+       == [{"name": "Guitar", "channel": 5, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 6, "stereo": False, "mode": "audio"}])
 
     # Device 1 is the one-input "Podcast mic": the band survives the move.
     a32._remember_device("device", 1)
@@ -3705,8 +3705,8 @@ def main():
     band2 = [{"name": "Gtr"}, {"name": "Keys", "stereo": True}]
     ok("a stereo member takes a pair, counted from the first free input",
        L.for_device(band2, [], xr18, 8)
-       == [{"name": "Gtr", "channel": 1, "stereo": False},
-           {"name": "Keys", "channel": 2, "stereo": True}])
+       == [{"name": "Gtr", "channel": 1, "stereo": False, "mode": "audio"},
+           {"name": "Keys", "channel": 2, "stereo": True, "mode": "audio"}])
     ok("and the pair it takes is not offered to anybody else",
        L.for_device(band2 + [{"name": "Voc"}], [], xr18, 8)[2]["channel"] == 4)
     ok("a stereo member with no room for its second input has none",
@@ -3715,7 +3715,7 @@ def main():
     ok("a remembered pair comes back as a pair",
        L.for_device(band2, L.remember([], xr18, [
            {"name": "Keys", "channel": 5, "stereo": True}]), xr18, 8)[1]
-       == {"name": "Keys", "channel": 5, "stereo": True})
+       == {"name": "Keys", "channel": 5, "stereo": True, "mode": "audio"})
 
     print("  what the card and the disk make of it")
     # Device 0 is the eight-input "Interface".
@@ -3789,7 +3789,7 @@ def main():
     # bass player's icon is theirs whichever card they plug into.
     ok("a member's icon comes back with it",
        L.for_device([{"name": "Bass", "icon": "bass"}], [], xr18, 8)
-       == [{"name": "Bass", "channel": 1, "stereo": False, "icon": "bass"}])
+       == [{"name": "Bass", "channel": 1, "stereo": False, "icon": "bass", "mode": "audio"}])
     ok("and one with no icon has none, rather than a guess",
        "icon" not in L.for_device([{"name": "Gtr"}], [], xr18, 8)[0])
 
@@ -6777,6 +6777,114 @@ def main():
     p62.start_rehearsal("Gone", 0, SR, tracks62, set_id=999)
     ok("a set that is not there starts with none", p62.session_state()["set"] is None)
     p62.finish_rehearsal()
+
+    print("\n[63] A track records audio, both or MIDI")
+    # The mode and the port belong to the band, as stereo and the icon do:
+    # the e-kit goes with the drummer whatever interface is on the desk. A
+    # MIDI track has no input, and takes none from anybody else.
+    import ast
+
+    from rehearsal_recorder import layouts
+    from rehearsal_recorder.midi import rules
+
+    print("  the band")
+    port = {"name": "TD-17", "device": "TD-17", "maker": "Roland"}
+    card = {"name": "Interface", "host_api": "CoreAudio"}
+    ok("a member keeps its mode and port",
+       layouts.band_member({"name": "Drums", "channel": 1, "icon": "drums", "mode": "both",
+                            "midi_port": port})
+       == {"name": "Drums", "icon": "drums", "mode": "both", "midi_port": port})
+    ok("an audio member saves neither",
+       layouts.band_member({"name": "Bass", "channel": 2, "mode": "audio", "midi_port": port})
+       == {"name": "Bass"})
+    ok("a port saved as a bare name is a port",
+       layouts.band_member({"name": "K", "mode": "midi", "midi_port": "TD-17"})["midi_port"]
+       == {"name": "TD-17"})
+    ok("a mode nobody knows is saved as audio",
+       layouts.band_member({"name": "X", "mode": "loud", "midi_port": port}) == {"name": "X"})
+    ok("a Both member with no port yet saves a mode and no port",
+       layouts.band_member({"name": "Drums", "mode": "both"}) == {"name": "Drums", "mode": "both"})
+    ok("a port with no name is no port",
+       "midi_port" not in layouts.band_member(
+           {"name": "K", "mode": "midi", "midi_port": {"device": "TD-17"}}))
+    placed = layouts.for_device(
+        [{"name": "Keys", "mode": "midi", "midi_port": {"name": "Launchkey Mini MK3"}},
+         {"name": "Bass"}], [], card, 2)
+    ok("a MIDI member gets no input", placed[0]["channel"] is None and placed[0]["mode"] == "midi")
+    ok("and takes none from the others", placed[1]["channel"] == 1)
+    ok("an old member reads as audio", placed[1]["mode"] == "audio" and "midi_port" not in placed[1])
+    ok("remember keeps no input for a MIDI member",
+       "Keys" not in layouts.remember([], card, [{"name": "Keys", "channel": 3, "mode": "midi"}])[0]["inputs"])
+
+    print("  placed on a card")
+    ok("a MIDI member's port comes back with it, as a port",
+       placed[0]["midi_port"] == {"name": "Launchkey Mini MK3"})
+    ok("a MIDI member is not stereo, whatever the band says",
+       layouts.for_device([{"name": "Keys", "stereo": True, "mode": "midi"}], [], card, 2)[0]["stereo"]
+       is False)
+    ok("a Both member is placed on an input like an audio one",
+       layouts.for_device([{"name": "Drums", "mode": "both", "midi_port": "TD-17"}], [], card, 2)
+       == [{"name": "Drums", "channel": 1, "stereo": False, "mode": "both",
+            "midi_port": {"name": "TD-17"}}])
+    was_audio = layouts.remember([], card, [{"name": "Keys", "channel": 1}])
+    ok("a member who was on an input and is MIDI now leaves it free",
+       [t["channel"] for t in layouts.for_device(
+           [{"name": "Keys", "mode": "midi"}, {"name": "Bass"}], was_audio, card, 2)] == [None, 1])
+    ok("and gets the input back when it records audio again",
+       [t["channel"] for t in layouts.for_device(
+           [{"name": "Keys", "mode": "both"}, {"name": "Bass"}], was_audio, card, 2)] == [1, 2])
+    ok("an audio member's stray port is not carried",
+       "midi_port" not in layouts.for_device(
+           [{"name": "Bass", "mode": "audio", "midi_port": port}], [], card, 2)[0])
+    ok("a band saved with a bare port name is read as a port",
+       layouts.for_device([{"name": "K", "mode": "midi", "midi_port": "TD-17"}], [], card, 2)[0]["midi_port"]
+       == {"name": "TD-17"})
+
+    print("  the rules")
+    ok("a track with no mode records audio", rules.mode_of({"name": "Bass"}) == "audio")
+    ok("and so does one with a mode nobody knows",
+       rules.mode_of({"mode": "loud"}) == "audio" and rules.mode_of({"mode": None}) == "audio"
+       and rules.mode_of({"mode": ""}) == "audio")
+    ok("the three modes are read as they are",
+       [rules.mode_of({"mode": m}) for m in ("audio", "both", "midi")] == ["audio", "both", "midi"])
+    ok("audio and Both record sound, MIDI does not",
+       [rules.records_audio({"mode": m}) for m in ("audio", "both", "midi")] == [True, True, False]
+       and rules.records_audio({}) is True)
+    ok("Both and MIDI record notes, audio does not",
+       [rules.records_notes({"mode": m}) for m in ("audio", "both", "midi")] == [False, True, True]
+       and rules.records_notes({}) is False)
+    ok("a port saved as a bare name is that name", rules.port_ref("TD-17") == {"name": "TD-17"})
+    ok("a saved port keeps what is filled in and nothing else",
+       rules.port_ref({"name": "TD-17", "device": "", "maker": "Roland", "id": None,
+                       "colour": "red"}) == {"name": "TD-17", "maker": "Roland"}
+       and rules.port_ref({**port, "id": "3"}) == {**port, "id": "3"})
+    ok("a port with no name, or no port, is None",
+       rules.port_ref({"device": "TD-17"}) is None and rules.port_ref({"name": ""}) is None
+       and rules.port_ref("") is None and rules.port_ref("  ") is None
+       and rules.port_ref(None) is None and rules.port_ref(5) is None
+       and rules.port_ref(["TD-17"]) is None and rules.port_ref({"name": 5}) is None)
+    ok("a saved port is a copy, not the dictionary it was read from",
+       rules.port_ref(port) == port and rules.port_ref(port) is not port)
+
+    lanes = [{"name": "Gtr"}, {"name": "Keys", "mode": "midi"}, {"name": "Drums", "mode": "both"},
+             {"name": "Bass"}, {"name": "Pad", "mode": "midi"}]
+    heard = {"Gtr", "Drums", "Bass"}
+    ok("a notes lane follows its own audio lane when it has one",
+       rules.lane_after(lanes, heard, "Drums") == "Drums")
+    ok("a MIDI track's lane follows the audio lane before it in the band",
+       rules.lane_after(lanes, heard, "Keys") == "Gtr"
+       and rules.lane_after(lanes, heard, "Pad") == "Bass")
+    ok("and goes first when no audio lane is before it",
+       rules.lane_after([{"name": "Keys", "mode": "midi"}, {"name": "Gtr"}], {"Gtr"}, "Keys") is None
+       and rules.lane_after(lanes, set(), "Pad") is None)
+    ok("an audio lane that was not recorded is not followed",
+       rules.lane_after(lanes, {"Gtr", "Bass"}, "Drums") == "Gtr")
+    ok("a name that is not in the band follows nobody", rules.lane_after(lanes, heard, "Nobody") is None)
+    imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
+               for n in ast.walk(ast.parse(Path(rules.__file__).read_text(encoding="utf-8")))
+               if isinstance(n, (ast.Import, ast.ImportFrom))}
+    ok("the rules import neither the MIDI library nor mido",
+       not imports & {"mido", "pylibremidi", "rehearsal_recorder.midi.ports"})
 
     print("\n" + "=" * 60)
     if problems:

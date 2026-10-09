@@ -12,9 +12,13 @@ So the two are stored apart. `tracks` is the band: one entry per member, in orde
 plugged in. An entry is a name, whether that instrument is stereo — a
 keyboard has two outputs wherever it is plugged in, so being stereo belongs
 to the band and not to any card — and the icon chosen for it on the setup
-screen, for the same reason. `layouts` holds one entry per interface, and each
-entry maps a name to the input that person uses on that card. Switching
-cards keeps everyone and swaps the numbers.
+screen, for the same reason. So are what it records, audio, both or MIDI
+(`mode`), and the MIDI port it plays into (`midi_port`): the e-kit goes with
+the drummer, whatever interface is on the desk. An audio member saves neither,
+so a band saved before MIDI reads as it did. `layouts` holds one entry per
+interface, and each entry maps a name to the input that person uses on that
+card. Switching cards keeps everyone and swaps the numbers. A member who
+records only MIDI is plugged into no input, and holds none.
 
 The interface is identified by name and audio system rather than by its
 position in PortAudio's list, which moves — see audio/devices.py.
@@ -23,21 +27,28 @@ Everything here is a pure function over plain dictionaries: no sound card is
 touched, which is what makes the cases in for_device() testable without one.
 """
 
+from rehearsal_recorder.midi import rules
+
 # What a fresh install starts with, when there is no band yet.
 DEFAULT_BAND = ({"name": "Guitar 1"}, {"name": "Vocals"})
 
 
 def band_member(track):
     """The band's entry for a track on screen: its name, and stereo and its
-    icon when it has them. The input is the card's, not the band's.
+    icon when it has them, and when it records MIDI its mode and its port.
+    The input is the card's, not the band's.
 
     The icon is whatever name the interface gave it; this side only keeps
     it. One it does not know is drawn as the neutral one there."""
     icon = track.get("icon")
+    mode = rules.mode_of(track)
+    port = rules.port_ref(track.get("midi_port")) if mode != "audio" else None
     return {
         "name": track["name"],
         **({"stereo": True} if track.get("stereo") else {}),
         **({"icon": icon} if isinstance(icon, str) and icon else {}),
+        **({"mode": mode} if mode != "audio" else {}),
+        **({"midi_port": port} if port else {}),
     }
 
 
@@ -153,7 +164,7 @@ def remember(layouts, identity, tracks):
                 keep = dict(entry.get("inputs") or {})
                 break
     for t in tracks:
-        if t.get("channel") is not None:
+        if t.get("channel") is not None and rules.mode_of(t) != "midi":
             keep[t["name"]] = t["channel"]
 
     rest = [
@@ -172,7 +183,11 @@ def for_device(band, layouts, identity, max_inputs):
     A name this card has never seen takes the lowest input nobody else is
     on. When the inputs run out the remaining names arrive with none, rather
     than being dropped: which musicians sit out is the band's answer, not the
-    app's.
+    app's. A member who records only MIDI arrives with none on purpose, is not
+    stereo, and is not counted as waiting for an input: it takes none from
+    anybody.
+
+    Every track says its mode, and its port when it has one.
     """
     max_inputs = max(int(max_inputs or 0), 1)
     members = list(band) or list(DEFAULT_BAND)
@@ -189,6 +204,8 @@ def for_device(band, layouts, identity, max_inputs):
     placed = {}
     taken = set()
     for member in members:
+        if rules.mode_of(member) == "midi":
+            continue
         width = wants(member)
         channel = known.get(member["name"])
         if fits(channel, width, taken):
@@ -197,19 +214,25 @@ def for_device(band, layouts, identity, max_inputs):
 
     out = []
     for member in members:
+        mode = rules.mode_of(member)
         width = wants(member)
-        channel = placed.get(member["name"])
-        if channel is None:
-            channel = next(
-                (c for c in range(1, max_inputs + 1) if fits(c, width, taken)),
-                None,
-            )
-            if channel is not None:
-                taken.update(range(channel, channel + width))
+        channel = None
+        if mode != "midi":
+            channel = placed.get(member["name"])
+            if channel is None:
+                channel = next(
+                    (c for c in range(1, max_inputs + 1) if fits(c, width, taken)),
+                    None,
+                )
+                if channel is not None:
+                    taken.update(range(channel, channel + width))
+        port = rules.port_ref(member.get("midi_port")) if mode != "audio" else None
         out.append({
             "name": member["name"],
             "channel": channel,
-            "stereo": bool(member.get("stereo")),
+            "stereo": bool(member.get("stereo")) and mode != "midi",
+            "mode": mode,
             **({"icon": member["icon"]} if member.get("icon") else {}),
+            **({"midi_port": port} if port else {}),
         })
     return out
