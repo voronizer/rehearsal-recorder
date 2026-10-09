@@ -72,8 +72,10 @@ Nothing else changes: no new screen, no new setting, no new control.
 
 ## Part 1. Keeping awake
 
-A new module, `src/rehearsal_recorder/awake.py`, does it with each system's
-own documented call. Both are reached the way the app already reaches the
+`src/rehearsal_recorder/platform_support.py`, where the app keeps every
+difference between the systems, does it with each system's own documented
+call (first planned as a new `awake.py`; changed while writing the plan,
+since that file keeps the differences in one place on purpose). Both are reached the way the app already reaches the
 system: PyObjC on a Mac (`platform_support.py` already imports `AppKit` and
 `Foundation`; PyObjC comes with pywebview) and `ctypes` on Windows. No new
 library.
@@ -136,7 +138,7 @@ No app can stop a closed lid, Sleep from the menu, or the system putting
 itself to sleep when the battery is about to run out. What the app can do
 is notice, and keep the take honest.
 
-**The system says it is going to sleep.** `awake.py` also listens for that,
+**The system says it is going to sleep.** `platform_support.py` also listens for that,
 once, from when the window is up (`Api.attach_window`) until it closes
 (`Api.shutdown`):
 
@@ -158,14 +160,20 @@ asleep now.
 app hears `PBT_APMSUSPEND` on a laptop with Modern Standby before the system
 pauses it ([Microsoft](https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/integrating-apps-with-modern-standby)
 says only that desktop apps are paused, much as in S3 sleep). So the take
-does not depend on hearing it. The audio callback notes the wall-clock time
-of each block. Blocks come about every 21 ms; if two come more than
-`SLEPT_GAP_SEC` (10 s) apart, the laptop slept between them, at the time of
-the first. The health check asks the same of the last block when none has
-come since, because the interface itself may not come back after waking.
+does not depend on hearing it. It notes the wall-clock time of each sign of
+life: each block, about every 21 ms, and a tick of its own, once a second on
+its own thread, which goes on while the card is silent. If two signs come
+more than `SLEPT_GAP_SEC` (10 s) apart, the whole app was frozen, which is
+what sleep does to it: the laptop slept at the time of the first. The health
+check asks the same of the last sign when none has come since, because the
+interface itself may not come back after waking.
 
-The wall clock is used because it keeps counting while the laptop sleeps;
-the clock the heartbeat uses may not, depending on the system. A person
+The tick is what tells sleep from an unplugged card when the screen's poll
+comes rarely (a hidden window's timers are slowed): the card goes silent but
+the tick goes on, so it is the card. (Changed while writing the plan: the
+first idea compared the last block's time alone, which would call such a
+card a sleep.) The wall clock is used because it keeps counting while the
+laptop sleeps; whether the heartbeat's clock does differs between systems. A person
 setting the computer's clock ten seconds or more forward in the middle of a
 take would end it the same way, kept up to that moment. That is accepted.
 
@@ -194,7 +202,7 @@ the next launch as they do after a crash. That is unchanged.
 
 ## Part 3. The battery line
 
-**Python.** `awake.battery_percent()` returns the charge, 0 to 100, only
+**Python.** `battery_percent()` returns the charge, 0 to 100, only
 while the laptop runs on its battery; `None` on mains power, with no battery
 or when the system cannot say.
 
@@ -268,9 +276,10 @@ with the system's calls replaced by fakes:
 - `AudioRecorder`: after `fell_asleep`, blocks are not written and the
   take's length is what came before; `problem()` gives the sleep notice
   with the time. Two blocks 12 s apart on a patched wall clock end the take
-  at the first, and the second is not written. With no block for 12 s of
-  wall-clock time, `problem()` gives the sleep notice, not the silent card;
-  after 4 s it gives the silent card, as today.
+  at the first, and the second is not written. With no block and no tick
+  for 12 s of wall-clock time, `problem()` gives the sleep notice, not the
+  silent card; a silent card while the tick goes on is the silent card;
+  after 4 s of nothing it gives the silent card, as today.
 - The sleep listener: on a fake Windows, the registered callback with
   `PBT_APMSUSPEND` reaches the take and resume events do not; on a fake
   Mac, the observer is added for the right notification and removed on
