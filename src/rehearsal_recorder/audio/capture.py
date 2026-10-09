@@ -9,11 +9,20 @@ most the last ~30 seconds are lost instead of the whole take.
 On stop() the raw files are wrapped into proper .wav files. That is why a
 take interrupted by a crash leaves .raw files behind — see audio/drafts.py,
 which turns them back into playable takes.
+
+A laptop that goes to sleep in the middle of a take (a closed lid, the
+battery, Sleep from the menu: the app keeps it awake otherwise, see
+platform_support.KeepAwake) ends the take where it slept. Everything up to
+that moment is kept; whatever the card delivers after waking is dropped, so
+the take does not jump from before the sleep to after it. The take hears it
+from the system when the system says so (platform_support.SleepWatch), and
+sees it for itself when it does not: see `_seen`.
 """
 
 import json
 import os
 import threading
+import time
 import wave
 from pathlib import Path
 
@@ -50,6 +59,22 @@ STALLED = (
     f"{heartbeat.SILENCE_SEC:.0f} seconds — it was unplugged, switched off or "
     "stopped answering. Everything captured up to that point has been saved."
 )
+
+# A take that went this long without a sign of life was frozen, and a whole
+# app is frozen by the laptop going to sleep. Blocks come about every 21 ms
+# and the take's own tick every TICK_SEC, so this is no hiccup.
+SLEPT_GAP_SEC = 10.0
+TICK_SEC = 1.0
+
+
+def slept_notice(at):
+    """What the screen says once the laptop wakes, `at` being when it fell
+    asleep, in the 24-hour form the rest of the app uses."""
+    when = time.strftime("%H:%M", time.localtime(at))
+    return (
+        f"The laptop went to sleep at {when}, so the take ends there. "
+        "Everything up to that moment is saved."
+    )
 
 # Capture block size. This used to be half a second, which made the level
 # meters visibly lag: a peak arrived only twice per second and was averaged
@@ -103,6 +128,12 @@ class AudioRecorder:
 
         self._stop_flush = threading.Event()
         self._flush_thread = None
+
+        # When the take last saw itself running (wall clock), and whether the
+        # laptop has slept since it started — see _seen.
+        self._seen_wall = None
+        self._asleep = False
+        self._tick_thread = None
 
         # One figure per channel: a stereo pair whose right microphone died
         # looks exactly like a working one if the two are reduced to their
@@ -162,11 +193,48 @@ class AudioRecorder:
 
         As well as a stream that ended on its own (see _finished), a card
         that has gone silent is called stopped, since an unplugged ASIO card
-        never ends its stream. Once said, it stays said.
+        never ends its stream. A take that has seen no sign of life for
+        SLEPT_GAP_SEC slept, and that is asked first: after waking, the card
+        may not come back, and it would otherwise be called unplugged. Once
+        said, either stays said.
         """
-        if self.error is None and not self._stopping and self._heartbeat.silent():
-            self.error = STALLED
+        if self.error is None and not self._stopping:
+            seen = self._seen_wall
+            if seen is not None and time.time() - seen > SLEPT_GAP_SEC:
+                self.fell_asleep(seen)
+            elif self._heartbeat.silent():
+                self.error = STALLED
         return self.error
+
+    def fell_asleep(self, at):
+        """
+        The laptop went to sleep at `at` (time.time()). From now on nothing
+        more is written, so the take ends there, and the take says why,
+        unless it already had something to say, or is being stopped anyway.
+        """
+        self._asleep = True
+        if self.error is None and not self._stopping:
+            self.error = slept_notice(at)
+
+    def _seen(self, now):
+        """
+        A sign of life at `now`: each block, and the take's own tick.
+
+        The system says it is going to sleep, but Microsoft does not promise
+        that a desktop app hears it on a laptop with Modern Standby, so the
+        take watches for itself. Nothing in a sleeping laptop runs, so two
+        signs of life more than SLEPT_GAP_SEC apart mean it slept between
+        them, at the first. The wall clock, because it counts the time
+        asleep; whether the heartbeat's clock does differs between systems.
+        And the tick, on its own thread, because the card may not come back
+        after waking, and because the screen's poll can be rare (a hidden
+        window's timers are slowed): a card that goes silent while the tick
+        goes on was unplugged, not put to sleep.
+        """
+        seen = self._seen_wall
+        if seen is not None and now - seen > SLEPT_GAP_SEC:
+            self.fell_asleep(seen)
+        self._seen_wall = now
 
     def is_active(self):
         return bool(self._stream is not None and self._stream.active)
@@ -176,11 +244,13 @@ class AudioRecorder:
         # knowing about, not worth stalling the stream over.
         self._heartbeat.enter()
         try:
+            self._seen(time.time())
             if status:
                 self.last_status = str(status)
             # Once a stop is under way the files may be closing, whether or
-            # not the driver has let go of the stream yet.
-            if frames == 0 or self._stopping:
+            # not the driver has let go of the stream yet. After a sleep the
+            # take has ended where the laptop slept.
+            if frames == 0 or self._stopping or self._asleep:
                 return
             self._take_block(indata, frames)
         finally:
@@ -249,6 +319,11 @@ class AudioRecorder:
         while not self._stop_flush.wait(FLUSH_INTERVAL_SEC):
             self.flush()
 
+    def _tick_loop(self):
+        # Not the flush thread: an fsync on a slow disk can take seconds.
+        while not self._stop_flush.wait(TICK_SEC):
+            self._seen(time.time())
+
     def start(self):
         self._write_record()
         try:
@@ -272,10 +347,13 @@ class AudioRecorder:
             self._discard_files()
             raise
         self._heartbeat.start()
+        self._seen_wall = time.time()
 
         self._stop_flush.clear()
         self._flush_thread = threading.Thread(target=self._flush_loop, daemon=True)
         self._flush_thread.start()
+        self._tick_thread = threading.Thread(target=self._tick_loop, daemon=True)
+        self._tick_thread.start()
 
     def _discard_files(self):
         """
@@ -399,8 +477,9 @@ class AudioRecorder:
         """The stream closed and every byte on disk — what stopping and
         abandoning have in common."""
         self._stop_flush.set()
-        if self._flush_thread is not None:
-            self._flush_thread.join(timeout=2)
+        for thread in (self._flush_thread, self._tick_thread):
+            if thread is not None:
+                thread.join(timeout=2)
 
         # Mark the stop as ours, otherwise finished_callback would report it
         # as a vanished interface.
