@@ -136,7 +136,16 @@ go there with the pedals that are down, a SysEx kept whole, the names kept,
 every tick `round(seconds * 1920)` from the new start over 20000 events and from
 a start that is not on a tick, a file a DAW saved again at other ticks and
 another tempo, and a file that cannot be read or written answered, never
-raised. Later tasks add to it.
+raised; and the tool for the hand check of F1, `tools/midi_alignment.py`, run as
+a command on a folder of generated WAVs and `.mid` files and its printed
+numbers read back: clicks every half second with notes 3 ms late or 3 ms early,
+a take of 130 s answered in two windows (the notes 2 ms behind at the start and
+9 ms at the end) and one of 90 s in one, 16 and 24-bit stereo and 32-bit float,
+drum hits that rise over 3 ms hard and soft, a note beyond the window left
+unmatched and `--max-ms` widening it, two notes at one click (one matched), a
+`.mid` with no WAV of its name and `--wav`, a folder with no `.mid`, no `.wav`
+or no folder at all exiting non-zero, an unreadable `.mid`, and the output staying
+ASCII for a name in another script. Later tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 

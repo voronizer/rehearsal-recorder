@@ -59,7 +59,11 @@ things to be true:
                        one note paired oldest first), and a .mid cropped (the
                        state before the start at tick 0, a key held across
                        either end left out or let go, ticks that do not
-                       drift).
+                       drift), and tools/midi_alignment.py, the hand check
+                       of how far the notes are from their audio, run as a
+                       command on a folder of WAVs and .mid files made here
+                       (clicks and drum hits, 3 ms late or early, a take of
+                       two windows, 16, 24 and 32-bit float).
                        Later tasks add to it. No port is opened: the library
                        is blocked and the rules are plain functions.
 

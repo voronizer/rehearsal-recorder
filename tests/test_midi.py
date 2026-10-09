@@ -9,7 +9,8 @@ after a crash (F3, F5 and F7); the rehearsal's ports, which wait, come and go,
 are held by another app or alike, go quiet, send the same notes twice and feed
 a take (D7, P1, P4, P5, P7, P8, F7); a take's .mid read back as the notes the
 player draws, in a drum grid or a piano roll (Part 6); a take's .mid cropped
-with its audio (F4); later sections are added here as the rest of it is built.
+with its audio (F4); the tool that measures how far the notes are from their
+audio (F1, by hand); later sections are added here as the rest of it is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
@@ -27,12 +28,14 @@ import os
 import random
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
 import time
 import tracemalloc
 import types
+import wave
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent
@@ -68,6 +71,7 @@ sys.modules["sounddevice"] = _sd
 sys.modules["pylibremidi"] = None
 
 import mido  # noqa: E402  (to read the files back; src imports it only in midi/smf.py)
+import numpy as np  # noqa: E402
 from fake_midi import FakePortSystem  # noqa: E402
 
 from rehearsal_recorder.audio.devices import channels_available  # noqa: E402
@@ -2933,6 +2937,237 @@ def main():
                          for n in ast.walk(ast.parse(notes_source)) if isinstance(n, (ast.Import, ast.ImportFrom))}
         ok("notes reads through smf and imports neither the MIDI library nor mido",
            not notes_imports & {"pylibremidi", "mido"})
+
+    print("\n[10] The alignment tool")
+    # tools/midi_alignment.py (F1): `python tools/midi_alignment.py "<take folder>"`
+    # says how far each .mid's notes are from the onsets in the WAV they belong
+    # to, so Alex can check the 10 ms aim with a click or an e-kit recorded as
+    # audio and as MIDI at once. It is run here as it is run by hand, a command
+    # on a folder, and what it prints is read back. The WAVs are made with
+    # numpy, and the .mid files with write_mid, so a time in them is a tick over
+    # 1920 (0.52 ms): a note meant to be 3 ms late is 6 ticks, 3.125 ms.
+    tool10 = PROJECT / "tools" / "midi_alignment.py"
+
+    def clicks10(seconds, *, first=0.0, every=0.5, rate=48000, amp=0.8, hiss=0.0, channels=1):
+        """(samples as floats shaped frames by channels, click times in seconds):
+        a click is the sharp start of a 2 kHz burst that dies away in a few ms,
+        like a stick on a rim or a metronome's tick, every `every` s from
+        `first`, over `hiss` of white noise."""
+        samples = np.zeros(round(seconds * rate))
+        if hiss:
+            samples += np.random.default_rng(7).normal(0.0, hiss, len(samples))
+        burst_t = np.arange(round(0.008 * rate)) / rate
+        burst = amp * np.cos(2 * np.pi * 2000 * burst_t) * np.exp(-burst_t / 0.002)
+        times = []
+        t = first
+        while t + 0.008 < seconds:
+            at = round(t * rate)
+            samples[at:at + len(burst)] += burst
+            times.append(at / rate)
+            t += every
+        return np.repeat(samples[:, None], channels, axis=1), times
+
+    def write_wav10(path, samples, rate=48000, kind="pcm16"):
+        """`samples` (frames by channels, -1 to 1) as a WAV: 16 or 24 bits the way
+        the app writes them, through the wave module, or 32-bit float."""
+        samples = np.asarray(samples, dtype=np.float64)
+        if kind == "float32":
+            import soundfile
+            soundfile.write(str(path), samples.astype(np.float32), rate, subtype="FLOAT")
+            return
+        width = 2 if kind == "pcm16" else 3
+        ints = np.round(np.clip(samples, -1.0, 1.0) * ((1 << (8 * width - 1)) - 1)).astype("<i4")
+        raw = (ints.astype("<i2").tobytes() if width == 2
+               else ints.view(np.uint8).reshape(-1, 4)[:, :3].tobytes())
+        with wave.open(str(path), "wb") as wf:
+            wf.setnchannels(samples.shape[1])
+            wf.setsampwidth(width)
+            wf.setframerate(rate)
+            wf.writeframes(raw)
+
+    def write_notes10(path, times, name="Drums"):
+        """A .mid with a snare hit (note 38, channel 10) at each time, and its release."""
+        events = []
+        for sec in times:
+            events += [(sec, bytes((0x99, 38, 100))), (sec + 0.05, bytes((0x89, 38, 0)))]
+        write_mid(path, track_name=name, port_name="TD-17", start=[], events=sorted(events))
+
+    def run10(*args):
+        """The tool as a command: (exit code, what it printed, what it said as an
+        error, whether all of both is plain ASCII, which a Windows console needs)."""
+        done = subprocess.run([sys.executable, str(tool10), *map(str, args)], capture_output=True)
+        plain = all(byte < 128 for byte in done.stdout + done.stderr)
+        return (done.returncode, done.stdout.decode("ascii", "replace"),
+                done.stderr.decode("ascii", "replace"), plain)
+
+    seen10 = re.compile(r"matched (\d+) of (\d+) notes, median ([+-]\d+\.\d) ms, worst ([+-]\d+\.\d) ms")
+
+    def windows10(text):
+        """Each window the tool printed as (matched, of, median ms, worst ms)."""
+        return [(int(m), int(n), float(med), float(worst)) for m, n, med, worst in seen10.findall(text)]
+
+    with tempfile.TemporaryDirectory() as root10:
+        root10 = Path(root10)
+        made10 = itertools.count()
+
+        def take10(files):
+            """A take folder with these files, {name: (samples, rate, kind) for a
+            WAV, [note times] for a .mid}."""
+            folder = root10 / f"take{next(made10)}"
+            folder.mkdir()
+            for name, content in files.items():
+                if name.lower().endswith(".wav"):
+                    samples, rate, kind = content
+                    write_wav10(folder / name, samples, rate, kind)
+                else:
+                    write_notes10(folder / name, content, name=Path(name).stem)
+            return folder
+
+        # The brief's check: clicks every 0.5 s, the notes 3 ms late.
+        samples, clicks = clicks10(20.0)
+        late = take10({"Drums.wav": (samples, 48000, "pcm16"),
+                       "Drums.mid": [t + 0.003 for t in clicks]})
+        code, out, err, plain = run10(late)
+        got = windows10(out)
+        ok("notes 3 ms late: it runs, and prints one window for a take of 20 s", code == 0 and len(got) == 1)
+        ok("a median of 3 ms, within half a millisecond, and all 40 notes matched",
+           bool(got) and abs(got[0][2] - 3.0) < 0.5 and got[0][:2] == (40, 40))
+        ok("the worst is within a millisecond of the median, on clicks at 48000 Hz",
+           bool(got) and abs(got[0][3] - got[0][2]) < 1.0)
+        ok("it says which files it measured, and that plus means later",
+           "Drums.mid" in out and "Drums.wav" in out and "later" in out)
+        ok("and prints plain ASCII only, which a Windows console can show", plain and not err)
+
+        # A note before the audio is negative; the take starts with a rest this time,
+        # so the first note can be before its click.
+        samples, clicks = clicks10(20.0, first=0.5)
+        early = take10({"Drums.wav": (samples, 48000, "pcm16"),
+                        "Drums.mid": [t - 0.003 for t in clicks]})
+        got = windows10(run10(early)[1])
+        ok("notes 3 ms early give a median of -3 ms, the sign kept",
+           len(got) == 1 and abs(got[0][2] + 3.0) < 0.5 and abs(got[0][3] - got[0][2]) < 1.0)
+
+        # The first minute and the last one. The notes keep up at the start and
+        # are 7 ms behind by the end, as a clock that drifts would leave them.
+        samples, clicks = clicks10(130.0, rate=16000)
+        drift = take10({"Drums.wav": (samples, 16000, "pcm16"),
+                        "Drums.mid": [t + (0.002 if t < 65 else 0.009) for t in clicks]})
+        code, out, err, plain = run10(drift)
+        got = windows10(out)
+        ok("a take of 130 s reports two windows, the first minute and the last",
+           code == 0 and len(got) == 2 and "first minute" in out and "last minute" in out)
+        ok("each with its 120 notes matched and its own median, 2 ms and then 9 ms",
+           len(got) == 2 and got[0][:2] == (120, 120) and got[1][:2] == (120, 120)
+           and abs(got[0][2] - 2.0) < 0.5 and abs(got[1][2] - 9.0) < 0.5)
+        ok("the windows are said in minutes and seconds of the take",
+           "0:00-1:00" in out and "1:10-2:10" in out)
+        samples, clicks = clicks10(90.0, rate=16000)
+        shorter = take10({"Drums.wav": (samples, 16000, "pcm16"), "Drums.mid": [t + 0.003 for t in clicks]})
+        got = windows10(run10(shorter)[1])
+        ok("a take under two minutes (90 s) is one window, all of it",
+           len(got) == 1 and got[0][:2] == (180, 180) and "0:00-1:30" in run10(shorter)[1])
+
+        # Other formats: what the app writes (16 and 24 bits) and what other
+        # recorders do (32-bit float), mono and stereo. Only the right channel
+        # hears the click, or the two hear it upside down; neither may lose it.
+        samples, clicks = clicks10(10.0, hiss=0.002, channels=2)
+        right_only = samples.copy()
+        right_only[:, 0] = 0.0
+        upside_down = samples.copy()
+        upside_down[:, 1] *= -1
+        for kind, shape, label in (("pcm16", samples, "16-bit stereo"),
+                                   ("pcm24", right_only, "24-bit stereo with the click on the right only"),
+                                   ("float32", upside_down, "32-bit float stereo with the sides upside down")):
+            folder = take10({"Drums.wav": (shape, 48000, kind), "Drums.mid": [t + 0.003 for t in clicks]})
+            got = windows10(run10(folder)[1])
+            ok(f"{label}: the clicks are found, the median is 3 ms and all 20 notes are matched",
+               len(got) == 1 and got[0][:2] == (20, 20) and abs(got[0][2] - 3.0) < 0.5)
+
+        # Drum hits are not clicks: a noise burst that takes 3 ms to rise and rings
+        # for 150 ms, hard and soft, on irregular beats, over a little hiss. The
+        # onset is where the hit rises, to within a millisecond or so.
+        rng = np.random.default_rng(11)
+        hits = np.cumsum(rng.uniform(0.3, 1.2, 40)) + 0.3
+        hit_t = np.arange(round(0.4 * 48000)) / 48000
+        body = np.minimum(hit_t / 0.003, 1.0) * np.exp(-hit_t / 0.05)
+        kit = rng.normal(0.0, 0.0005, round((hits[-1] + 1.0) * 48000))
+        for sec, loud in zip(hits, rng.uniform(0.15, 0.9, len(hits))):
+            at = round(sec * 48000)
+            kit[at:at + len(body)] += loud * body * rng.normal(0.0, 1.0, len(body))
+        kit = np.clip(kit, -1.0, 1.0)[:, None]
+        drum_take = take10({"Drums.wav": (kit, 48000, "pcm24"), "Drums.mid": [t + 0.003 for t in hits]})
+        got = windows10(run10(drum_take)[1])
+        ok("drum hits that rise over 3 ms, hard and soft, are found: all 40, a median within a millisecond of 3 ms",
+           len(got) == 1 and got[0][:2] == (40, 40) and abs(got[0][2] - 3.0) < 1.0)
+        ok("and the worst of them is within 2.5 ms of the median", len(got) == 1 and abs(got[0][3] - got[0][2]) < 2.5)
+
+        # How far a note may be from an onset and still be its own.
+        samples, clicks = clicks10(10.0)
+        far = take10({"Drums.wav": (samples, 48000, "pcm16"), "Drums.mid": [t + 0.3 for t in clicks]})
+        code, out, err, plain = run10(far)
+        ok("notes 300 ms late are nearer the next click than their own, and beyond the 100 ms window: none matched",
+           code == 0 and "matched 0 of 20 notes" in out and not windows10(out))
+        got = windows10(run10(far, "--max-ms", 250)[1])
+        ok("--max-ms 250 takes them for the click after, 200 ms early, but for the last note, which has none after it",
+           len(got) == 1 and got[0][:2] == (19, 20) and abs(got[0][2] + 200.0) < 0.6)
+        two = take10({"Drums.wav": (samples, 48000, "pcm16"),
+                      "Drums.mid": sorted([t + 0.003 for t in clicks] + [t + 0.004 for t in clicks])})
+        got = windows10(run10(two)[1])
+        ok("two notes at one click are one hit: the nearer is matched and the other is not",
+           len(got) == 1 and got[0][:2] == (20, 40))
+
+        # Which WAV a .mid belongs to.
+        samples, clicks = clicks10(10.0)
+        keys_at = [t + 0.003 for t in clicks]
+        mixed = take10({"Drums.wav": (samples, 48000, "pcm16"), "Drums.mid": keys_at, "Keys.mid": keys_at})
+        code, out, err, plain = run10(mixed)
+        ok("a .mid with no WAV of its name is not guessed at: it says to pick one with --wav, and names the WAVs",
+           "Keys.mid" in err and "--wav" in err and "Drums.wav" in err)
+        ok("the Both track beside it is measured all the same, and the exit is clean",
+           code == 0 and "Drums.mid" in out and len(windows10(out)) == 1)
+        code, out, err, plain = run10(mixed, "--wav", "Drums.wav")
+        ok("--wav Drums.wav measures the other .mid against it too",
+           code == 0 and len(windows10(out)) == 2 and "Keys.mid" in out and not err)
+        code, out, err, plain = run10(mixed, "--wav", "Nothing.wav")
+        ok("--wav with a name that is not there is refused, plainly", code != 0 and "Nothing.wav" in err)
+        keys_only = take10({"Drums.wav": (samples, 48000, "pcm16"), "Keys.mid": keys_at})
+        code, out, err, plain = run10(keys_only)
+        ok("and a folder where no .mid can be paired exits non-zero, saying which WAV to pick",
+           code != 0 and "--wav" in err and "Drums.wav" in err and not windows10(out))
+
+        # Nothing to measure.
+        nothing = root10 / "empty"
+        nothing.mkdir()
+        code, out, err, plain = run10(nothing)
+        ok("a folder with no .mid exits non-zero and says so", code != 0 and ".mid" in err and not out)
+        samples, clicks = clicks10(5.0)
+        notes_only = take10({"Keys.mid": [t + 0.003 for t in clicks]})
+        code, out, err, plain = run10(notes_only)
+        ok("a folder with a .mid and no WAV exits non-zero and says so", code != 0 and ".wav" in err and not out)
+        code, out, err, plain = run10(root10 / "not-there")
+        ok("a folder that is not there exits non-zero and says so", code != 0 and "not-there" in err)
+        code, out, err, plain = run10()
+        ok("no folder given is a usage error that says how to run it, not a traceback",
+           code != 0 and "usage" in err.lower() and "Traceback" not in err)
+
+        # A track named in another script keeps the output plain.
+        samples, clicks = clicks10(5.0)
+        stem10 = "Pa" + chr(0x142) + "yn"  # Palyn with an l-stroke, which cp1252 cannot print
+        polish = take10({stem10 + ".wav": (samples, 48000, "pcm16"), stem10 + ".mid": [t + 0.003 for t in clicks]})
+        code, out, err, plain = run10(polish)
+        ok("a track whose name has a letter outside ASCII is measured and the output stays ASCII (the letter is a ?)",
+           code == 0 and plain and "Pa?yn.mid" in out and len(windows10(out)) == 1)
+        broken = take10({"Drums.wav": (samples, 48000, "pcm16")})
+        (broken / "Drums.mid").write_bytes(b"not a midi file")
+        code, out, err, plain = run10(broken)
+        ok("a .mid that cannot be read is named, with no traceback, and nothing measured exits non-zero",
+           code != 0 and "Drums.mid" in err and "Traceback" not in err)
+
+        tool_source = tool10.read_text(encoding="utf-8") if tool10.exists() else ""
+        tool_imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
+                        for n in ast.walk(ast.parse(tool_source)) if isinstance(n, (ast.Import, ast.ImportFrom))}
+        ok("the tool reads the .mid through the app's own smf and imports neither mido nor the MIDI library",
+           "rehearsal_recorder.midi.smf" in tool_imports and not tool_imports & {"pylibremidi", "mido"})
 
     print("\n" + "=" * 60)
     if problems:
