@@ -1,7 +1,8 @@
 """
 Recording notes beside the audio. So far this is what stops Start (A1, P2 and
-P3) and what the audio card check then holds; later sections are added here as
-the rest of it is built.
+P3), what the audio card check then holds, and which saved port is found again
+(P1) and the order a device's ports are listed in (P7); later sections are added
+here as the rest of it is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
@@ -45,6 +46,8 @@ sys.modules["sounddevice"] = _sd
 sys.modules["pylibremidi"] = None
 
 from rehearsal_recorder.audio.devices import channels_available  # noqa: E402
+from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
+from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
 from rehearsal_recorder.midi.rules import notes_problem  # noqa: E402
 
 problems = []
@@ -174,6 +177,42 @@ def main():
                           [{**keys, "name": f"K{n}", "midi_port": {"name": f"Port {n}"}} for n in range(5)]) ==
        "“Interface” has 8 inputs, but the tracks go up to 9. They were set up for another "
        "interface — give them inputs this one has.")
+
+    # A saved port is found by its id, then its name, then its name without
+    # what Windows adds to it, and two alike are never picked between. Then
+    # the order a device's ports are listed in: its playing port first.
+    print("\n[2] A saved port found again")
+    P = PortInfo
+    here = [P("TD-17", "TD-17", "Roland", "1001"), P("Launchkey Mini MK3 MIDI Port", "Launchkey Mini MK3", "Novation")]
+    ok("found by its id first", find_port({"name": "renamed", "id": "1001"}, here)[0] is here[0])
+    ok("then by its name", find_port({"name": "TD-17"}, here)[0] is here[0])
+    ok("then by its name as Windows renumbers it", find_port({"name": "TD-17 1"}, [P("TD-17 2")])[0].name == "TD-17 2")
+    ok("and with a second device's 2- in front", find_port({"name": "2- TD-17"}, [P("TD-17")])[0].name == "TD-17")
+    ok("two alike are not guessed between", find_port({"name": "TD-17"}, [P("TD-17"), P("TD-17")]) == (None, True))
+    ok("nor two alike once the numbers are taken off",
+       find_port({"name": "TD-17"}, [P("TD-17 1"), P("2- TD-17 2")]) == (None, True))
+    ok("one not there is just missing", find_port({"name": "TD-17"}, []) == (None, False))
+    ok("bare_name takes off both", bare_name("2- TD-17 1") == "TD-17")
+    lk = [P("Launchkey Mini MK3 DAW Port", "Launchkey Mini MK3"), P("TD-17", "TD-17"),
+          P("Launchkey Mini MK3 MIDI Port", "Launchkey Mini MK3")]
+    ok("a keyboard's playing port comes before its DAW port",
+       [p.name for p in in_order(lk)] ==
+       ["Launchkey Mini MK3 MIDI Port", "Launchkey Mini MK3 DAW Port", "TD-17"])
+    ok("and Windows' MIDIIN2 after the first",
+       [p.name for p in in_order([P("MIDIIN2 (Launchkey Mini MK3)", "Launchkey Mini MK3"),
+                                  P("Launchkey Mini MK3", "Launchkey Mini MK3")])][0] == "Launchkey Mini MK3")
+    # Beyond the brief's own checks: the edges of each rule.
+    ok("a port with no device is a group of its own, not lumped with the others",
+       [p.name for p in in_order([P("A"), P("B", "X"), P("C"), P("D", "X")])] == ["A", "B", "D", "C"])
+    ok("each control word moves a port after the others, in any case",
+       all([p.name for p in in_order([P(f"Keys {word}", "Keys"), P("Keys", "Keys")])] == ["Keys", f"Keys {word}"]
+           for word in ("DAW", "daw", "MIDIIN2", "InControl", "CONTROL", "ctrl")))
+    ok("an id only counts where the port has one too",
+       find_port({"name": "renamed", "id": "1001"}, [P("TD-17")]) == (None, False))
+    ok("two ports alike by id are not guessed between",
+       find_port({"name": "renamed", "id": "1001"}, [P("TD-17", id="1001"), P("Keys", id="1001")]) == (None, True))
+    ok("a saved port with no usable name and no id finds nothing",
+       find_port({"device": "TD-17"}, here) == (None, False) and find_port({"name": "  "}, here) == (None, False))
 
     print("\n" + "=" * 60)
     if problems:
