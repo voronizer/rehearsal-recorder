@@ -8,10 +8,11 @@ things to be true:
 
     test_engine.py     the audio itself — mixing, seeking, disk safety,
                        crash recovery (a crashed take's notes included), both
-                       bit depths, compression, and the MIDI ports before a
-                       take (the check, Start, Finish, Under the hood). No
-                       browser, no sound card: PortAudio is stubbed and the
-                       samples are inspected directly.
+                       bit depths, compression, the notes the player is
+                       sent for a take (take_notes), and the MIDI ports
+                       before a take (the check, Start, Finish, Under the
+                       hood). No browser, no sound card: PortAudio is
+                       stubbed and the samples are inspected directly.
 
     test_platform.py   the places macOS, Windows and Linux differ. Only one
                        of them is here, so the code is driven into each shape
@@ -48,7 +49,9 @@ things to be true:
                        a system that opens a port once, a track starting from
                        its port's state while the port is away, a pedal let
                        up when its port goes, a take fed through the rig's
-                       own threads).
+                       own threads), and a take's .mid read back as the notes
+                       the player draws (a drum grid or a piano roll, a roll on
+                       one note paired oldest first).
                        Later tasks add to it. No port is opened: the library
                        is blocked and the rules are plain functions.
 

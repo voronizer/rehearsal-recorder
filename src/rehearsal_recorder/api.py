@@ -69,6 +69,7 @@ from rehearsal_recorder.audio.devices import (
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
+from rehearsal_recorder.midi.notes import read_notes
 from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder import cloud as cloudmod
 from rehearsal_recorder.names_pass import NamesPass
@@ -1112,6 +1113,33 @@ class Api:
                 "duration_sec": (frames / samplerate) if samplerate else 0,
                 "peaks": peaks,
             })
+        return result
+
+    def take_notes(self, files):
+        """The notes of a take for the player: one answer per file, in order,
+        each with its "name", from the .mid read back (midi/notes.py). The
+        notes of a whole take are sent at once, so zooming asks for nothing
+        again.
+
+        A take knows its notes only by name and file, as it knows its tracks.
+        Whether the lane is a drum grid is the band's icon, found by that name
+        as take_media finds a track's; a name the band does not have is judged
+        by the file alone. A file that is not there, or is not a .mid that can
+        be read, is answered with an error and the others still answer."""
+        icon_of = layouts.icons(self._config.get("tracks"))
+        result = []
+        for f in files:
+            path = Path(f["file"])
+            if not path.exists():
+                result.append({"name": f["name"], "error": "Notes file not found"})
+                continue
+            try:
+                notes = read_notes(path, icon_of.get(f["name"]) == "drums")
+            except Exception as e:
+                print(f"[notes] {path.name}: {type(e).__name__}: {e}")
+                result.append({"name": f["name"], "error": "Notes file not readable"})
+                continue
+            result.append({"name": f["name"], **notes})
         return result
 
     @staticmethod

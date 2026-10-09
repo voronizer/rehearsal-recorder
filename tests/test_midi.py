@@ -7,8 +7,9 @@ holds (F6 and F7); the audio's own clock, which puts a note on its sample (F1);
 one take's notes on disk, written as they are played and made a .mid at Stop or
 after a crash (F3, F5 and F7); the rehearsal's ports, which wait, come and go,
 are held by another app or alike, go quiet, send the same notes twice and feed
-a take (D7, P1, P4, P5, P7, P8, F7); later sections are added here as the rest
-of it is built.
+a take (D7, P1, P4, P5, P7, P8, F7); a take's .mid read back as the notes the
+player draws, in a drum grid or a piano roll (Part 6); later sections are added
+here as the rest of it is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
@@ -77,6 +78,7 @@ from rehearsal_recorder.midi.capture import (  # noqa: E402
     CLOCK_FILE, MIDRAW_SUFFIX, MidiRecorder, NotesDropped, finish_draft, note_stems)
 from rehearsal_recorder.midi.clock import AudioClock, MARK_EVERY_SEC, fit, load, save_line  # noqa: E402
 from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
+from rehearsal_recorder.midi.notes import DRUM_MAP, DRUM_ROWS, read_notes  # noqa: E402
 from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
 from rehearsal_recorder.midi.rig import MidiRig  # noqa: E402
 from rehearsal_recorder.midi.rules import notes_problem  # noqa: E402
@@ -2603,6 +2605,166 @@ def main():
     rig_imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
                    for n in ast.walk(ast.parse(rig_source)) if isinstance(n, (ast.Import, ast.ImportFrom))}
     ok("the rig imports neither the MIDI library nor mido", not rig_imports & {"pylibremidi", "mido"})
+
+    print("\n[9] Notes for the player")
+    # A take's .mid read back as what the player's lane draws (Part 6): a drum
+    # grid for a kit, a piano roll for anything else. The files are made with
+    # write_mid, so a time in them is a tick over 1920 as in a take.
+
+    def on(sec, note, vel=100, ch=0):
+        return (sec, bytes((0x90 | ch, note, vel)))
+
+    def off(sec, note, ch=0, vel=0x40):
+        return (sec, bytes((0x80 | ch, note, vel)))
+
+    def cc(sec, number=4, value=90, ch=0):
+        return (sec, bytes((0xB0 | ch, number, value)))
+
+    with tempfile.TemporaryDirectory() as folder9:
+        folder9 = Path(folder9)
+        made9 = itertools.count()
+
+        def read9(events, drums_icon=False):
+            path = folder9 / f"take{next(made9)}.mid"
+            # In time order, as write_mid is given them; the sort is stable, so
+            # what is on one instant keeps the order it was written in.
+            events = sorted(events, key=lambda event: event[0])
+            write_mid(path, track_name="Keys", port_name="Port", start=[], events=events)
+            return read_notes(path, drums_icon)
+
+        ok("the drum rows are Crash, Ride, Hi-hat, Toms, Snare, Kick, in that order",
+           DRUM_ROWS == ["Crash", "Ride", "Hi-hat", "Toms", "Snare", "Kick"])
+        mapped = {36: "Kick", 38: "Snare", 40: "Snare", 37: "Snare",
+                  42: "Hi-hat", 44: "Hi-hat", 46: "Hi-hat", 22: "Hi-hat", 26: "Hi-hat",
+                  48: "Toms", 50: "Toms", 45: "Toms", 47: "Toms", 43: "Toms", 58: "Toms",
+                  51: "Ride", 53: "Ride", 59: "Ride",
+                  49: "Crash", 55: "Crash", 57: "Crash", 52: "Crash"}
+        ok("the map: 36 Kick; 38, 40, 37 Snare; 42, 44, 46, 22, 26 Hi-hat; 48, 50, 45, 47, 43, 58 Toms; "
+           "51, 53, 59 Ride; 49, 55, 57, 52 Crash, and no note besides",
+           {note: DRUM_ROWS[row] for note, row in DRUM_MAP.items()} == mapped)
+
+        # Drums: by the icon, or by notes on channel 10 without it.
+        keys_ch1 = [on(0.0, 60), off(0.5, 60), on(1.0, 64), off(1.5, 64)]
+        by_icon = read9([on(0.0, 36), off(0.5, 36), on(1.0, 38), off(1.5, 38)], True)
+        ok("the drums icon makes it drums, whatever channel the notes are on",
+           by_icon["drums"] is True and by_icon["rows"] == DRUM_ROWS
+           and set(by_icon) == {"drums", "rows", "notes"} and len(by_icon["notes"]) == 2)
+        ok("without the icon, notes on channel 10 are drums",
+           read9([on(0.0, 36, ch=9), off(0.1, 36, ch=9)])["drums"] is True)
+        piano = read9(keys_ch1)
+        ok("without the icon, notes on another channel are a piano roll",
+           piano["drums"] is False and set(piano) == {"drums", "low", "high", "notes"})
+        ok("channel 10 is decided on every note-on: one note-on on another channel and it is pitched",
+           read9([on(0.0, 36, ch=9), on(0.5, 60, ch=0), on(1.0, 38, ch=9)])["drums"] is False)
+        ok("and a release, or a note-on at velocity 0, on another channel is not a note-on",
+           read9([on(0.0, 36, ch=9), off(0.1, 36, ch=9), off(0.2, 60, ch=0),
+                  on(0.3, 60, vel=0, ch=0)])["drums"] is True)
+        ok("a file with no note-on at all is not channel 10's, controllers on channel 10 or not",
+           read9([cc(0.0, ch=9), cc(1.0, ch=9)])["drums"] is False and read9([])["drums"] is False)
+        nothing = read9([cc(0.0, ch=9)], True)
+        ok("a drums icon with no notes in the file is an empty grid",
+           nothing == {"drums": True, "rows": DRUM_ROWS, "notes": []})
+
+        # The rows.
+        hits = sorted(DRUM_MAP) + [99, 0, 127]
+        grid = read9([e for k, n in enumerate(hits) for e in (on(k * 0.1, n, ch=9), off(k * 0.1 + 0.05, n, ch=9))])
+        ok("every note of the map lands on its row, and every other note on Other, the row after Kick",
+           [row for _, _, row, _ in grid["notes"]]
+           == [DRUM_MAP.get(n, len(DRUM_ROWS)) for n in hits] and len(grid["notes"]) == len(hits))
+        ok("Other is a row, the last, when a note outside the map is used",
+           grid["rows"] == DRUM_ROWS + ["Other"] and len(DRUM_ROWS) == 6)
+        ok("and it is not a row when every note is in the map",
+           read9([on(0.0, n, ch=9) for n in DRUM_MAP], True)["rows"] == DRUM_ROWS)
+        ok("reading a take with Other leaves the list of rows as it was",
+           DRUM_ROWS == ["Crash", "Ride", "Hi-hat", "Toms", "Snare", "Kick"]
+           and read9([on(0.0, 99, ch=9)], True)["rows"] is not DRUM_ROWS)
+        ok("a note's row for a hit is the index into the rows: Kick 5, Snare 4, Crash 0",
+           [row for _, _, row, _ in read9([on(0.0, 36), on(0.1, 38), on(0.2, 49)], True)["notes"]] == [5, 4, 0])
+
+        # Pairing: a roll on one note, each release 0.1 s after its hit.
+        roll = read9([e for k in range(6) for e in (on(k * 0.05, 38, 90 + k, ch=9), off(k * 0.05 + 0.1, 38, ch=9))])
+        ok("a roll on 38 with hits 0.05 s apart and each release 0.1 s later: six notes, each 0.1 s long",
+           [n[1] for n in roll["notes"]] == [0.1] * 6 and len(roll["notes"]) == 6)
+        ok("their starts are the hits', their row Snare and their velocities their own",
+           [n[0] for n in roll["notes"]] == [0.0, 0.05, 0.1, 0.15, 0.2, 0.25]
+           and {n[2] for n in roll["notes"]} == {DRUM_MAP[38]}
+           and [n[3] for n in roll["notes"]] == [90, 91, 92, 93, 94, 95])
+        # Newest-first would have closed the second hit at 0.1 s for 0.05 s.
+        ok("a release closes the oldest hit still sounding on that note",
+           read9([on(0.0, 60), on(0.2, 60), off(0.5, 60), off(0.9, 60)])["notes"]
+           == [[0.0, 0.5, 60, 100], [0.2, 0.7, 60, 100]])
+        ok("a note-on at velocity 0 is a release",
+           read9([on(0.0, 60), on(0.5, 60, vel=0), on(1.0, 62, vel=64), on(1.25, 62, vel=0)])["notes"]
+           == [[0.0, 0.5, 60, 100], [1.0, 0.25, 62, 64]])
+        ok("and it is no note of its own: a take of nothing else has none",
+           read9([on(0.0, 60, vel=0), on(0.5, 60, vel=0)])["notes"] == [])
+        ok("a release with nothing sounding is passed over, and the release velocity is not the note's",
+           read9([off(0.0, 60), on(0.5, 60, vel=70), off(1.0, 60, vel=127), off(1.5, 60)])["notes"]
+           == [[0.5, 0.5, 60, 70]])
+        ok("the same note on two channels is two notes: a release closes the oldest of its own channel",
+           read9([on(0.0, 60, ch=0), on(0.1, 60, ch=1), off(0.2, 60, ch=1), off(0.5, 60, ch=0)])["notes"]
+           == [[0.0, 0.5, 60, 100], [0.1, 0.1, 60, 100]])
+        ok("notes come in the order they began, and a note held while others come and go is one note",
+           [(n[0], n[1], n[2]) for n in read9([on(0.0, 60), on(0.1, 64), off(0.2, 64), on(0.3, 67),
+                                               off(0.4, 67), off(1.0, 60)])["notes"]]
+           == [(0.0, 1.0, 60), (0.1, 0.1, 64), (0.3, 0.1, 67)])
+        ok("a note never released lasts to the file's last event, a controller's included",
+           read9([on(0.5, 60), cc(2.0)])["notes"] == [[0.5, 1.5, 60, 100]])
+        ok("and one struck as the file's last event is no longer than 0",
+           read9([on(0.5, 60), off(1.0, 60), on(2.0, 62)])["notes"] == [[0.5, 0.5, 60, 100], [2.0, 0.0, 62, 100]])
+        ok("velocity is the note-on's, 1 to 127",
+           [n[3] for n in read9([on(0.0, 60, 1), off(0.1, 60), on(0.2, 61, 127), off(0.3, 61)])["notes"]] == [1, 127])
+        ok("a time is in seconds and a note is [t, d, pitch, velocity], plain numbers",
+           all(len(n) == 4 and isinstance(n, list) and isinstance(n[0], float) and isinstance(n[1], float)
+               and isinstance(n[2], int) and isinstance(n[3], int) for n in roll["notes"] + piano["notes"])
+           and json.loads(json.dumps(roll)) == roll)
+        ok("a pitched note is its note number, the channel not part of it",
+           [n[2] for n in read9([on(0.0, 60, ch=3), off(0.1, 60, ch=3), on(0.2, 72, ch=5), off(0.3, 72, ch=5)])["notes"]]
+           == [60, 72])
+
+        # The roll's range: whole octaves, C to B.
+        def span9(*pitches):
+            """(low, high) of a take that strikes these notes, one every 0.1 s."""
+            got = read9([on(k * 0.1, n) for k, n in enumerate(pitches)])
+            return got["low"], got["high"]
+
+        ok("notes 61 and 74 give low 60 and high 83, whole octaves from C to B", span9(61, 74) == (60, 83))
+        ok("a note on a C starts its octave, and a B ends it",
+           span9(60, 71) == (60, 71) and span9(59, 72) == (48, 83))
+        ok("a single note gives its octave", span9(66) == (60, 71))
+        ok("the bottom of MIDI is C-1 to B-1, and the top ends at 127 and not at a B that no key sends",
+           span9(0) == (0, 11) and span9(127) == (120, 127))
+        ok("a take with no notes gets middle C's octave, 60 to 71, and no notes",
+           read9([]) == {"drums": False, "low": 60, "high": 71, "notes": []}
+           and read9([cc(0.0), cc(1.0)]) == {"drums": False, "low": 60, "high": 71, "notes": []})
+
+        # The file's own seconds, as a DAW saved it: 480 ticks to the beat and a slower tempo from the second beat on.
+        daw = mido.MidiFile(type=0, ticks_per_beat=480)
+        daw.tracks.append(mido.MidiTrack([
+            mido.MetaMessage("set_tempo", tempo=500_000, time=0),
+            mido.Message("note_on", note=60, velocity=80, time=0),
+            mido.MetaMessage("set_tempo", tempo=1_000_000, time=480),
+            mido.Message("note_off", note=60, velocity=0, time=480)]))
+        daw.save(folder9 / "daw.mid")
+        ok("the seconds are the file's own, through its ticks to the beat and its tempo changes",
+           read_notes(folder9 / "daw.mid", False)["notes"] == [[0.0, 1.5, 60, 80]])
+
+        # A long take: an hour of 40000 notes. The player is sent all of it at once.
+        hour = [e for k in range(40000) for e in (on(k * 0.09, 36 + k % 40, 1 + k % 127, ch=9),
+                                                  off(k * 0.09 + 0.05, 36 + k % 40, ch=9))]
+        long_take = read9(hour)
+        ok("a take of an hour and 40000 notes reads in full, each as long as it was held",
+           long_take["drums"] is True and len(long_take["notes"]) == 40000
+           and {n[1] for n in long_take["notes"]} == {0.05}
+           and abs(long_take["notes"][-1][0] - 39999 * 0.09) < 0.001)
+        ok("and its answer is a megabyte or so of JSON, not tens",
+           len(json.dumps(long_take)) < 2_000_000)
+
+        notes_source = Path(sys.modules[read_notes.__module__].__file__).read_text(encoding="utf-8")
+        notes_imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
+                         for n in ast.walk(ast.parse(notes_source)) if isinstance(n, (ast.Import, ast.ImportFrom))}
+        ok("notes reads through smf and imports neither the MIDI library nor mido",
+           not notes_imports & {"pylibremidi", "mido"})
 
     print("\n" + "=" * 60)
     if problems:

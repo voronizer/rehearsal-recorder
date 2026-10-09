@@ -7782,6 +7782,84 @@ def main():
 
     apimod66.open_midi_system = real_open66
 
+    print("\n[70] take_notes")
+    # The player draws a take's notes from its .mid files. A take knows them only
+    # by name and file, and whether a lane is a drum grid is the band's icon, found
+    # by that name as take_media finds a track's.
+    from rehearsal_recorder.midi.notes import DRUM_ROWS as DRUM_ROWS70
+    from rehearsal_recorder.midi.smf import write_mid as write_mid70
+
+    def hits70(path, channel, notes):
+        """A .mid of these notes struck 0.25 s apart on `channel` (0-based), each let go 0.1 s later."""
+        events = [e for k, note in enumerate(notes)
+                  for e in ((k * 0.25, bytes((0x90 | channel, note, 100))),
+                            (k * 0.25 + 0.1, bytes((0x80 | channel, note, 0))))]
+        write_mid70(path, track_name=path.stem, port_name="Port", start=[], events=events)
+        return str(path)
+
+    folder70 = Path(tempfile.mkdtemp())
+    apimod70, a70 = fresh_api(folder70)
+    a70._config["tracks"] = [
+        {"name": "Drums", "mode": "both", "icon": "drums", "midi_port": {"name": "TD-17"}},
+        {"name": "Keys", "mode": "midi", "icon": "keys", "midi_port": {"name": "Launchkey"}},
+        {"name": "Bass"}]
+    drums70 = hits70(folder70 / "Drums.mid", 0, [36, 38, 42, 99])   # on channel 1: only the icon says a kit
+    keys70 = hits70(folder70 / "Keys.mid", 0, [61, 74])
+    pad70 = hits70(folder70 / "Pad.mid", 9, [36, 38])               # not in the band, but on channel 10
+    answered = a70.take_notes([{"name": "Drums", "file": drums70}, {"name": "Keys", "file": keys70},
+                               {"name": "Pad", "file": pad70}])
+    ok("a Both track named Drums with the drums icon in the band reads as drums, the rows in the order they are drawn",
+       answered[0]["name"] == "Drums" and answered[0]["drums"] is True
+       and answered[0]["rows"] == DRUM_ROWS70 + ["Other"]
+       and [n[2] for n in answered[0]["notes"]] == [5, 4, 2, 6])
+    ok("every note comes with its start, length and velocity in seconds and 1 to 127",
+       [n[:2] for n in answered[0]["notes"]] == [[0.0, 0.1], [0.25, 0.1], [0.5, 0.1], [0.75, 0.1]]
+       and {n[3] for n in answered[0]["notes"]} == {100})
+    ok("a track whose icon is not the drums' is a piano roll: whole octaves around its notes",
+       answered[1]["name"] == "Keys" and answered[1]["drums"] is False
+       and (answered[1]["low"], answered[1]["high"]) == (60, 83)
+       and [n[2] for n in answered[1]["notes"]] == [61, 74])
+    ok("a name the band does not have is judged by its file alone: notes on channel 10 are drums",
+       answered[2]["name"] == "Pad" and answered[2]["drums"] is True and answered[2]["rows"] == DRUM_ROWS70)
+    ok("each file is answered, in the order it was asked", [a["name"] for a in answered] == ["Drums", "Keys", "Pad"])
+    ok("what the player is sent can go over the bridge as JSON", json.loads(json.dumps(answered)) == answered)
+
+    gone70 = str(folder70 / "Gone.mid")
+    (folder70 / "Torn.mid").write_bytes(b"MThd\x00\x00\x00\x06\x00")
+    (folder70 / "Empty.mid").write_bytes(b"")
+    import contextlib
+    import io
+
+    said70 = io.StringIO()  # what take_notes says on the console for a file it cannot read
+    with contextlib.redirect_stdout(said70):
+        mixed = a70.take_notes([{"name": "Bass", "file": gone70}, {"name": "Drums", "file": drums70},
+                                {"name": "Keys", "file": str(folder70 / "Torn.mid")},
+                                {"name": "Pad", "file": str(folder70 / "Empty.mid")},
+                                {"name": "Folder", "file": str(folder70)},
+                                {"name": "Keys", "file": keys70}])
+    ok("a missing file is reported as not found, and the others still answer",
+       mixed[0] == {"name": "Bass", "error": "Notes file not found"}
+       and mixed[1]["drums"] is True and len(mixed[1]["notes"]) == 4
+       and mixed[5]["drums"] is False and len(mixed[5]["notes"]) == 2)
+    ok("a file that is no .mid, or is cut short, or empty, or a folder, is reported as not readable, and the rest answer",
+       [m.get("error") for m in mixed[2:5]] == ["Notes file not readable"] * 3
+       and [m["name"] for m in mixed[2:5]] == ["Keys", "Pad", "Folder"] and len(mixed) == 6)
+    ok("and it says on the console which files, once each, and not the one that was only missing",
+       [line.split(":")[0] for line in said70.getvalue().splitlines()] == ["[notes] Torn.mid", "[notes] Empty.mid",
+                                                                           f"[notes] {folder70.name}"])
+    ok("no files, no answers", a70.take_notes([]) == [])
+
+    (folder70 / "Pad.mid").unlink()
+    ok("a file that goes between two calls is not found the second time",
+       a70.take_notes([{"name": "Pad", "file": pad70}]) == [{"name": "Pad", "error": "Notes file not found"}])
+    a70._config["tracks"] = [{"name": "Pad", "icon": "drums"}]
+    ok("the icon is read from the band as it is now",
+       a70.take_notes([{"name": "Keys", "file": keys70}])[0]["drums"] is False
+       and a70.take_notes([{"name": "Pad", "file": drums70}])[0]["drums"] is True)
+    a70._config["tracks"] = None
+    ok("a band that is not set yet leaves every file to its channel",
+       a70.take_notes([{"name": "Drums", "file": drums70}])[0]["drums"] is False)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

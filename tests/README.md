@@ -13,11 +13,14 @@ questions.
 
 Mixing, seeking, A–B looping, disk estimates, crash recovery (a crashed take
 that was recording notes comes back with a `.mid` too), take naming, renaming,
-markers, both bit depths, and compressing cloud copies. The MIDI ports before a
-take run here too, through the Api on a fake port system: the signal check
-opens them (a band of nothing but MIDI is checked all the same), Start keeps
-what the check had open and opens what the final tracks say, Finish and closing
-the app let them go, and Under the hood and Copy details say what MIDI there is.
+markers, both bit depths, compressing cloud copies, and the notes the player
+is sent for a take (`take_notes`: a drum grid by the band's icon, a missing
+file or one that cannot be read answered with an error while the others
+answer). The MIDI ports before a take run here too, through the Api on a fake
+port system: the signal check opens them (a band of nothing but MIDI is
+checked all the same), Start keeps what the check had open and opens what the
+final tracks say, Finish and closing the app let them go, and Under the hood
+and Copy details say what MIDI there is.
 
 No sound card and no browser: `sounddevice` is replaced by a stub before
 anything imports it, the renderer is called directly, and the samples that
@@ -103,7 +106,14 @@ events, a recorder whose disk refuses, abandon_take, a take begun over one
 still recording, Look again when the observer missed a change (`fake.notify =
 False`), release, notes still waiting when the counts start again, two failures
 that take turns said once each and again once they have worked, and the rig on
-its own two threads, ticking on its own clock. Later tasks add to it.
+its own two threads, ticking on its own clock; and a take's `.mid` read back as
+the notes the player draws (`midi/notes.py`): a drum grid when the track has the
+drums icon or every note is on channel 10, a piano roll rounded out to whole
+octaves otherwise, the General MIDI drum map with the e-kits' extra notes and
+an Other row only when a note outside it is used, a roll on one note paired
+oldest first, a note-on at velocity 0 as a release, a note never released
+lasting to the file's last event, a file with no notes, and a take of an hour
+and 40000 notes. Later tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 
