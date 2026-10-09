@@ -94,7 +94,7 @@ the e-kit goes with the drummer, whatever interface is on the desk.
 - `remember` stores no channel for a *MIDI* member.
 - The per-interface `inputs` map is unchanged.
 
-**The database** (migration 0006):
+**The database** (migration 0007; 0006 is song sets):
 
 - `track.channel` becomes nullable. A *MIDI* track has no channel.
   SQLite needs Alembic's batch mode for this.
@@ -564,7 +564,7 @@ sounddevice is):
 
 - the band and layouts with modes and ports: a *MIDI* member gets no
   channel, and an old band reads as *Audio*;
-- migration 0006 on an existing library, with old tracks reading as *Audio*;
+- migration 0007 on an existing library, with old tracks reading as *Audio*;
 - `channels_available`:
   - a *MIDI* track accepted without an input;
   - P2 and P3 refusing a shared port and a missing port;
