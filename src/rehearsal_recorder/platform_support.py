@@ -12,10 +12,12 @@ and says which way it went, so the interface can tell the truth rather than
 promising a Trash that is not there.
 """
 
+import ctypes
 import os
 import re
 import shutil
 import sys
+import threading
 from pathlib import Path
 
 # Where deleted things go when the system offers no recycle bin we can reach.
@@ -468,4 +470,415 @@ def enter_com_apartment(platform=sys.platform, ole32=None):
             "This thread could not join a COM apartment "
             f"(0x{result & 0xFFFFFFFF:08X}), so ASIO cards will not open."
         )
+    return None
+
+
+# ---------- awake during a take ----------
+
+# NSActivityUserInitiated | NSActivityIdleDisplaySleepDisabled, from
+# Foundation's NSProcessInfo.h: the first keeps the system awake and App Nap
+# off, the second the screen on. Written out so the module loads without
+# PyObjC; the suite checks it against PyObjC's own names on a Mac.
+MAC_AWAKE_OPTIONS = 0x00FFFFFF | (1 << 40)
+MAC_AWAKE_REASON = "Recording a take"
+WINDOWS_AWAKE_REASON = "РЭХА is recording a take"
+
+# POWER_REQUEST_TYPE, from winnt.h: PowerRequestDisplayRequired,
+# PowerRequestSystemRequired and PowerRequestExecutionRequired. Away mode (2)
+# is for media centres and is left alone.
+WINDOWS_AWAKE_REQUESTS = (0, 1, 3)
+POWER_REQUEST_CONTEXT_VERSION = 0
+POWER_REQUEST_CONTEXT_SIMPLE_STRING = 0x1
+
+
+class _ReasonDetailed(ctypes.Structure):
+    _fields_ = [
+        ("LocalizedReasonModule", ctypes.c_void_p),
+        ("LocalizedReasonId", ctypes.c_ulong),
+        ("ReasonStringCount", ctypes.c_ulong),
+        ("ReasonStrings", ctypes.c_void_p),
+    ]
+
+
+class _Reason(ctypes.Union):
+    _fields_ = [
+        ("Detailed", _ReasonDetailed),
+        ("SimpleReasonString", ctypes.c_wchar_p),
+    ]
+
+
+class REASON_CONTEXT(ctypes.Structure):
+    """minwinbase.h's REASON_CONTEXT. Only the plain string is used, but the
+    union is declared whole so the structure has the size Windows reads."""
+    _fields_ = [
+        ("Version", ctypes.c_ulong),
+        ("Flags", ctypes.c_ulong),
+        ("Reason", _Reason),
+    ]
+
+
+def _windows_kernel32():
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.PowerCreateRequest.argtypes = [ctypes.POINTER(REASON_CONTEXT)]
+    kernel32.PowerCreateRequest.restype = wintypes.HANDLE
+    for name in ("PowerSetRequest", "PowerClearRequest"):
+        getattr(kernel32, name).argtypes = [wintypes.HANDLE, ctypes.c_int]
+        getattr(kernel32, name).restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    return kernel32
+
+
+class KeepAwake:
+    """
+    Keeps the laptop and its screen awake while a take records: held from
+    the start of a take to the end of Stop, let go when the window closes.
+    If the app dies, the system drops it by itself.
+
+    Nobody touches the laptop while the band plays, and neither system
+    promises to stay awake for a stream that only records. Each is asked
+    the way its maker documents:
+
+    - macOS: NSProcessInfo's beginActivityWithOptions:reason: with
+      NSActivityUserInitiated, which keeps the system awake and App Nap off
+      even with the window hidden, and NSActivityIdleDisplaySleepDisabled,
+      which keeps the screen on: a Mac usually locks when its screen goes
+      dark, and a locked laptop takes neither Stop nor Space.
+    - Windows: a power request (PowerCreateRequest) set for the display, the
+      system, which Microsoft says a display request needs beside it, and
+      execution, which keeps a hidden app running. A request is made for
+      each take and closed with it: a closed lid, the power button or Sleep
+      in Start ends every request (PowerSetRequest's remarks).
+
+    Elsewhere it does nothing. Holding twice holds once; letting go of
+    nothing does nothing. A call the system refuses is printed and never
+    raises: recording matters more than the lock.
+    """
+
+    def __init__(self, system=sys.platform, process_info=None, kernel32=None):
+        self._system = system
+        self._process_info = process_info
+        self._kernel32 = kernel32
+        self._lock = threading.Lock()
+        self._token = None  # macOS: the activity
+        self._handle = None  # Windows: the request
+        self._set = []  # Windows: the request types it holds
+        self._reason = None  # Windows: kept alive while the request is
+
+    @property
+    def held(self):
+        return self._token is not None or self._handle is not None
+
+    def hold(self):
+        with self._lock:
+            if self.held:
+                return
+            try:
+                if self._system == "darwin":
+                    self._hold_mac()
+                elif self._system == "win32":
+                    self._hold_windows()
+            except Exception as e:  # noqa: BLE001 — never a reason to stop a take
+                print(f"[awake] could not keep the laptop awake: {e}")
+
+    def release(self):
+        with self._lock:
+            try:
+                if self._token is not None:
+                    token, self._token = self._token, None
+                    self._process_info.endActivity_(token)
+                if self._handle is not None:
+                    self._close_windows()
+            except Exception as e:  # noqa: BLE001
+                print(f"[awake] could not let go: {e}")
+
+    def _hold_mac(self):
+        if self._process_info is None:
+            from Foundation import NSProcessInfo
+
+            self._process_info = NSProcessInfo.processInfo()
+        self._token = self._process_info.beginActivityWithOptions_reason_(
+            MAC_AWAKE_OPTIONS, MAC_AWAKE_REASON
+        )
+
+    def _hold_windows(self):
+        if self._kernel32 is None:
+            self._kernel32 = _windows_kernel32()
+        reason = REASON_CONTEXT(
+            POWER_REQUEST_CONTEXT_VERSION, POWER_REQUEST_CONTEXT_SIMPLE_STRING
+        )
+        reason.Reason.SimpleReasonString = WINDOWS_AWAKE_REASON
+        handle = self._kernel32.PowerCreateRequest(ctypes.byref(reason))
+        if not handle or handle in (-1, ctypes.c_void_p(-1).value):
+            print(f"[awake] no power request: error {ctypes.get_last_error()}")
+            return
+        self._handle, self._reason = handle, reason
+        # Each type on its own: one the system refuses still leaves the rest.
+        for kind in WINDOWS_AWAKE_REQUESTS:
+            try:
+                if self._kernel32.PowerSetRequest(handle, kind):
+                    self._set.append(kind)
+                else:
+                    error = ctypes.get_last_error()
+                    print(f"[awake] request {kind} refused: error {error}")
+            except Exception as e:  # noqa: BLE001
+                print(f"[awake] request {kind} refused: {e}")
+        if not self._set:
+            self._close_windows()
+
+    def _close_windows(self):
+        handle, self._handle = self._handle, None
+        kinds, self._set = self._set, []
+        try:
+            for kind in kinds:
+                self._kernel32.PowerClearRequest(handle, kind)
+        finally:
+            self._kernel32.CloseHandle(handle)
+            self._reason = None
+
+
+# The system going to sleep: AppKit's NSWorkspaceWillSleepNotification, and
+# from winuser.h DEVICE_NOTIFY_CALLBACK and PBT_APMSUSPEND.
+MAC_WILL_SLEEP = "NSWorkspaceWillSleepNotification"
+DEVICE_NOTIFY_CALLBACK = 2
+PBT_APMSUSPEND = 4
+
+# ULONG CALLBACK DeviceNotifyCallbackRoutine(PVOID Context, ULONG Type,
+# PVOID Setting). WINFUNCTYPE is Windows-only; elsewhere the suite drives the
+# same code through a C callback of the same shape.
+_SUSPEND_CALLBACK = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)(
+    ctypes.c_ulong, ctypes.c_void_p, ctypes.c_ulong, ctypes.c_void_p
+)
+
+
+class DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS(ctypes.Structure):
+    _fields_ = [("Callback", _SUSPEND_CALLBACK), ("Context", ctypes.c_void_p)]
+
+
+def _windows_powrprof():
+    from ctypes import wintypes
+
+    powrprof = ctypes.WinDLL("powrprof")
+    powrprof.PowerRegisterSuspendResumeNotification.argtypes = [
+        wintypes.DWORD,
+        ctypes.POINTER(DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    powrprof.PowerRegisterSuspendResumeNotification.restype = wintypes.DWORD
+    powrprof.PowerUnregisterSuspendResumeNotification.argtypes = [ctypes.c_void_p]
+    powrprof.PowerUnregisterSuspendResumeNotification.restype = wintypes.DWORD
+    return powrprof
+
+
+class SleepWatch:
+    """
+    Tells `on_sleep` when the system is about to go to sleep: a closed lid,
+    Sleep from the menu, a battery about to run out. No app can stop those;
+    a take can only end where the laptop slept and say so.
+
+    - macOS: NSWorkspaceWillSleepNotification, from NSWorkspace's own
+      notification centre. It is posted on the main thread, where pywebview
+      runs the app, so the handler runs there.
+    - Windows: PowerRegisterSuspendResumeNotification with a callback,
+      which hears PBT_APMSUSPEND (Windows 8 and later). Windows gives an app
+      about two seconds for it, so `on_sleep` only notes it.
+
+    Microsoft does not say whether a desktop app hears it on a laptop with
+    Modern Standby before it is paused, so the take does not rely on this
+    alone (see audio/capture.py). `on_sleep` must not raise into the
+    system; whatever it raises is printed. Elsewhere there is nothing to
+    listen to, and start() says so with False.
+    """
+
+    def __init__(self, on_sleep, system=sys.platform, center=None, powrprof=None):
+        self._on_sleep = on_sleep
+        self._system = system
+        self._center = center
+        self._powrprof = powrprof
+        self._observer = None  # macOS
+        self._callback = self._params = self._handle = None  # Windows
+
+    def _heard(self):
+        try:
+            self._on_sleep()
+        except Exception as e:  # noqa: BLE001 — never into the system's call
+            print(f"[sleep] {e}")
+
+    def start(self):
+        """Listens from now on. True when the system took it."""
+        if self._observer is not None or self._handle is not None:
+            return True
+        try:
+            if self._system == "darwin":
+                return self._start_mac()
+            if self._system == "win32":
+                return self._start_windows()
+        except Exception as e:  # noqa: BLE001 — the app works without it
+            print(f"[sleep] not listening for sleep: {e}")
+        return False
+
+    def stop(self):
+        try:
+            if self._observer is not None:
+                observer, self._observer = self._observer, None
+                self._center.removeObserver_(observer)
+            if self._handle is not None:
+                handle, self._handle = self._handle, None
+                # The callback stays alive with the watch: Microsoft does not
+                # say that unregistering waits for one already under way.
+                self._powrprof.PowerUnregisterSuspendResumeNotification(handle)
+        except Exception as e:  # noqa: BLE001
+            print(f"[sleep] {e}")
+
+    def _start_mac(self):
+        if self._center is None:
+            from AppKit import NSWorkspace
+
+            self._center = NSWorkspace.sharedWorkspace().notificationCenter()
+        self._observer = self._center.addObserverForName_object_queue_usingBlock_(
+            MAC_WILL_SLEEP, None, None, lambda notification: self._heard()
+        )
+        return True
+
+    def _start_windows(self):
+        if self._powrprof is None:
+            self._powrprof = _windows_powrprof()
+
+        def callback(context, kind, setting):
+            if kind == PBT_APMSUSPEND:
+                self._heard()
+            return 0
+
+        # Kept on self while registered: ctypes frees a callback nobody
+        # holds, and Windows would call into freed memory.
+        self._callback = _SUSPEND_CALLBACK(callback)
+        self._params = DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS(self._callback, None)
+        handle = ctypes.c_void_p()
+        error = self._powrprof.PowerRegisterSuspendResumeNotification(
+            DEVICE_NOTIFY_CALLBACK, ctypes.byref(self._params), ctypes.byref(handle)
+        )
+        if error:
+            print(f"[sleep] not listening for sleep: error {error}")
+            self._callback = self._params = None
+            return False
+        self._handle = handle
+        return True
+
+
+# ---------- the battery ----------
+
+
+def mac_battery(descriptions):
+    """The charge of a Mac's own battery from IOKit's power source
+    descriptions, 0 to 100, while the Mac runs on it; None on mains, with no
+    battery, or when the battery cannot say how full it can be. A UPS is not
+    the laptop's battery."""
+    for d in descriptions:
+        if d.get("Type") != "InternalBattery":
+            continue
+        if d.get("Power Source State") != "Battery Power":
+            return None
+        most = d.get("Max Capacity")
+        current = d.get("Current Capacity")
+        if not most or current is None:
+            return None
+        return round(current * 100 / most)
+    return None
+
+
+def windows_battery(ac_line, flag, percent):
+    """The charge from GetSystemPowerStatus's SYSTEM_POWER_STATUS, while
+    the laptop runs on its battery; None on mains (ACLineStatus not 0), with
+    no battery (BatteryFlag 128), or when Windows cannot tell (255)."""
+    if ac_line != 0 or flag == 255 or flag & 128 or percent == 255:
+        return None
+    return percent
+
+
+class SYSTEM_POWER_STATUS(ctypes.Structure):
+    _fields_ = [
+        ("ACLineStatus", ctypes.c_ubyte),
+        ("BatteryFlag", ctypes.c_ubyte),
+        ("BatteryLifePercent", ctypes.c_ubyte),
+        ("SystemStatusFlag", ctypes.c_ubyte),
+        ("BatteryLifeTime", ctypes.c_ulong),
+        ("BatteryFullLifeTime", ctypes.c_ulong),
+    ]
+
+
+# IOKit's power source functions, loaded once. The two Copy functions hand
+# over an object the caller owns, and are declared so: asked every couple of
+# seconds through a take, a leak would add up.
+_iokit = {}
+
+
+def _mac_power_sources():
+    if not _iokit:
+        import objc
+        from Foundation import NSBundle
+
+        bundle = NSBundle.bundleWithIdentifier_(
+            "com.apple.framework.IOKit"
+        ) or NSBundle.bundleWithPath_("/System/Library/Frameworks/IOKit.framework")
+        objc.loadBundleFunctions(bundle, _iokit, [
+            ("IOPSCopyPowerSourcesInfo", b"@", "",
+             {"retval": {"already_cfretained": True}}),
+            ("IOPSCopyPowerSourcesList", b"@@", "",
+             {"retval": {"already_cfretained": True}}),
+            ("IOPSGetPowerSourceDescription", b"@@@"),
+        ])
+    blob = _iokit["IOPSCopyPowerSourcesInfo"]()
+    if blob is None:
+        return []
+    sources = _iokit["IOPSCopyPowerSourcesList"](blob) or []
+    found = []
+    for source in sources:
+        description = _iokit["IOPSGetPowerSourceDescription"](blob, source)
+        if description is not None:
+            found.append(dict(description))
+    return found
+
+
+_power_status = []  # kernel32 with GetSystemPowerStatus declared, once
+
+
+def _windows_power_status():
+    if not _power_status:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetSystemPowerStatus.argtypes = [
+            ctypes.POINTER(SYSTEM_POWER_STATUS)
+        ]
+        _power_status.append(kernel32)
+    kernel32 = _power_status[0]
+    status = SYSTEM_POWER_STATUS()
+    if not kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+        raise OSError(f"GetSystemPowerStatus: error {ctypes.get_last_error()}")
+    return status
+
+
+_battery_said = False
+
+
+def battery_percent(system=sys.platform):
+    """
+    The laptop's charge, 0 to 100, only while it runs on its battery; None
+    on mains, with no battery, or when the system cannot say. Never raises:
+    asked by the recording screen's health check, which must answer anyway.
+    A failure is printed once, not on every poll.
+    """
+    global _battery_said
+    try:
+        if system == "darwin":
+            return mac_battery(_mac_power_sources())
+        if system == "win32":
+            s = _windows_power_status()
+            return windows_battery(
+                s.ACLineStatus, s.BatteryFlag, s.BatteryLifePercent
+            )
+    except Exception as e:  # noqa: BLE001
+        if not _battery_said:
+            _battery_said = True
+            print(f"[battery] cannot read the battery: {e}")
     return None

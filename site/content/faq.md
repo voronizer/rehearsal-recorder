@@ -31,6 +31,13 @@ another place.
 The take is written to disk as it records and forced out every 30 seconds, so
 you lose seconds. The next launch offers it back.
 
+## Will the laptop fall asleep in the middle of a take?
+
+No: while a take records, РЭХА keeps the laptop and its screen awake.
+Closing the lid still puts it to sleep, and the take ends there, with
+everything before it kept. On battery, the recording screen asks for the
+charger at 20%.
+
 ## How does the band get the takes?
 
 Pick the good ones, or switch on automatic sending, and they are copied to a

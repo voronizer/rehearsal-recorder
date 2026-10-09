@@ -670,7 +670,8 @@ window.__MAKE_API__ = () => ({
   }),
   recording_health: async () => ({recording:true, error: window.__IFACE_GONE__ || null,
     active: !window.__IFACE_GONE__, free_bytes:1e11,
-    minutes_left: window.__LOW_SPACE__ ? 5 : 640, low_space: !!window.__LOW_SPACE__}),
+    minutes_left: window.__LOW_SPACE__ ? 5 : 640, low_space: !!window.__LOW_SPACE__,
+    battery_percent: window.__BATTERY__ ?? null}),
 
   start_monitor: track('start_monitor', async () => ({ok:true})),
   monitor_levels: track('monitor_levels', async () =>

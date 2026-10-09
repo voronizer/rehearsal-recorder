@@ -703,12 +703,14 @@ def main():
     rec = AudioRecorder.__new__(AudioRecorder)
     rec.error = None
     rec._stopping = False
+    rec._seen_wall = None  # not started: no sleep to tell (see [63])
     rec._finished()  # as if the stream stopped by itself
     ok("an unrequested stop is flagged as an error", rec.error is not None)
 
     rec2 = AudioRecorder.__new__(AudioRecorder)
     rec2.error = None
     rec2._stopping = True
+    rec2._seen_wall = None
     rec2._finished()  # this one we asked for
     ok("our own stop is not an error", rec2.error is None)
 
@@ -6779,7 +6781,240 @@ def main():
     ok("a set that is not there starts with none", p62.session_state()["set"] is None)
     p62.finish_rehearsal()
 
-    print("\n[63] A track records audio, both or MIDI")
+    print("\n[63] Awake during a take")
+    # A laptop that sleeps anyway (a closed lid, the battery) ends the take
+    # where it slept: everything before kept, nothing after added, and the
+    # screen told why once it wakes.
+    import time as _t63
+
+    import rehearsal_recorder.audio.capture as capmod
+    from rehearsal_recorder.audio import heartbeat as hb63
+
+    tmp63 = Path(tempfile.mkdtemp())
+    one63 = [{"name": "Gtr", "channel": 1}]
+    # The checks move _seen_wall back by hand; a real tick landing in between
+    # would move it on again, so the tick waits out the section unless a
+    # check asks for it.
+    tick_was = capmod.TICK_SEC
+    capmod.TICK_SEC = 3600
+    block63 = np.full((256, 1), 900, dtype=np.int16)
+
+    def recorder63(name):
+        rec = capmod.AudioRecorder(0, SR, one63, tmp63 / name)
+        rec.start()
+        return rec
+
+    def raw63(rec):
+        rec.flush()  # written through Python's buffer until then
+        return (rec.out_dir / "Gtr.raw").stat().st_size
+
+    at63 = _t63.time() - 120
+    ok("the notice says when the laptop went to sleep",
+       capmod.slept_notice(at63)
+       == f"The laptop went to sleep at {_t63.strftime('%H:%M', _t63.localtime(at63))}, "
+          "so the take ends there. Everything up to that moment is saved.")
+
+    told = recorder63("told")
+    told._callback(block63, 256, None, None)
+    told._callback(block63, 256, None, None)
+    told.fell_asleep(at63)
+    ok("a take told the laptop is going to sleep says so",
+       told.problem() == capmod.slept_notice(at63))
+    told._callback(block63, 256, None, None)
+    ok("and writes nothing after it", raw63(told) == 2 * 256 * 2)
+    first63 = told.stop()
+    ok("so the take ends where the laptop slept",
+       first63["duration_sec"] == 512 / SR)
+    second63 = told.stop()
+    with wave.open(first63["tracks"][0]["file"], "rb") as w63:
+        frames63 = w63.getnframes()
+    ok("stopping twice as the laptop wakes writes the take once",
+       second63 == first63 and frames63 == 512)
+
+    gap = recorder63("gap")
+    gap._callback(block63, 256, None, None)
+    gap._seen_wall -= 12
+    before63 = gap._seen_wall
+    gap._callback(block63, 256, None, None)
+    ok("two blocks more than ten seconds apart mean the laptop slept between them",
+       gap.problem() == capmod.slept_notice(before63) and raw63(gap) == 256 * 2)
+    gap.stop()
+
+    soon = recorder63("soon")
+    soon._callback(block63, 256, None, None)
+    soon._seen_wall -= 9
+    soon._callback(block63, 256, None, None)
+    ok("a block soon after the last is just a block",
+       soon.problem() is None and raw63(soon) == 2 * 256 * 2)
+    soon.stop()
+
+    tick = recorder63("tick")
+    tick._seen_wall -= 12
+    before63 = tick._seen_wall
+    tick._seen(_t63.time())
+    ok("a tick after a long gap means the same",
+       tick.problem() == capmod.slept_notice(before63))
+    tick.stop()
+
+    woke = recorder63("woke")
+    woke._callback(block63, 256, None, None)
+    woke._seen_wall -= 12
+    woke._heartbeat._last -= 12
+    before63 = woke._seen_wall
+    ok("nothing at all since the laptop woke says it slept, not that the card went",
+       woke.problem() == capmod.slept_notice(before63))
+    woke.stop()
+
+    gone = recorder63("gone")
+    gone._callback(block63, 256, None, None)
+    gone._heartbeat._last -= 15
+    said63 = gone.problem() or ""
+    ok("a card unplugged while nobody asked says the interface, not sleep",
+       "interface" in said63 and "sleep" not in said63)
+    gone.fell_asleep(_t63.time())
+    gone._callback(block63, 256, None, None)
+    ok("a card already gone stays gone",
+       gone.problem() == said63 and raw63(gone) == 256 * 2)
+    gone.stop()
+
+    # A driver that ends its stream on waking (WASAPI can) says so through
+    # PortAudio's finished callback, which may come before the tick or the
+    # poll: a sleep must still be told as the sleep it was.
+    ended = recorder63("ended")
+    ended._callback(block63, 256, None, None)
+    ended._seen_wall -= 60
+    before63 = ended._seen_wall
+    ended._finished()
+    ok("a stream that ends as the laptop wakes is the sleep, not the interface",
+       ended.problem() == capmod.slept_notice(before63))
+    ended.stop()
+    awake63 = recorder63("awake")
+    awake63._callback(block63, 256, None, None)
+    awake63._finished()
+    ok("and one that ends while it is awake is still the interface",
+       "interface stopped responding" in (awake63.problem() or ""))
+    awake63.stop()
+
+    short = recorder63("short")
+    short._callback(block63, 256, None, None)
+    short._seen_wall -= 4
+    short._heartbeat._last -= 4
+    ok("a short silence is the silent card, as today",
+       short.problem() == capmod.STALLED)
+    short.stop()
+
+    capmod.TICK_SEC = 0.05
+    try:
+        ticking = recorder63("ticking")
+        started63 = ticking._seen_wall
+        _t63.sleep(0.5)
+        moved63 = ticking._seen_wall > started63
+        ticking.stop()
+        ok("the take ticks while it records, and stops ticking with it",
+           moved63 and not ticking._tick_thread.is_alive())
+    finally:
+        capmod.TICK_SEC = 3600
+    ok("the silent-card rule is the one it was",
+       hb63.SILENCE_SEC == 3.0 and capmod.SLEPT_GAP_SEC == 10.0)
+
+    # The app holds the laptop awake from a take's start to the end of Stop.
+    class Lock63:
+        def __init__(self, fail=False):
+            self.calls, self.fail = [], fail
+
+        def hold(self):
+            self.calls.append("hold")
+            if self.fail:
+                raise RuntimeError("refused")
+
+        def release(self):
+            self.calls.append("release")
+
+    api63, a63 = fresh_api(tmp63)
+    lock63 = Lock63()
+    a63._awake = lock63
+    a63.start_rehearsal("Late night", 0, SR, one63)
+    a63.start_take()
+    ok("a take that starts holds the laptop awake", lock63.calls == ["hold"])
+    a63.stop_take()
+    ok("and lets go once it is written", lock63.calls == ["hold", "release"])
+
+    lock63.calls.clear()
+    a63.start_take()
+    broken63 = a63._recorder
+
+    def no_disk(progress=None):
+        raise OSError("the disk is full")
+
+    broken63.stop = no_disk
+    try:
+        a63.stop_take()
+        raised63 = False
+    except OSError:
+        raised63 = True
+    ok("even when writing it fails",
+       raised63 and lock63.calls == ["hold", "release"])
+    broken63.abandon()
+
+    class NoCard(capmod.AudioRecorder):
+        def start(self):
+            raise RuntimeError("no card")
+
+    lock63.calls.clear()
+    real_recorder63 = api63.AudioRecorder
+    api63.AudioRecorder = NoCard
+    try:
+        refused63 = a63.start_take()
+    finally:
+        api63.AudioRecorder = real_recorder63
+    ok("a take that cannot start holds nothing",
+       refused63["ok"] is False and lock63.calls == [])
+
+    a63._awake = Lock63(fail=True)
+    started63 = a63.start_take()
+    ok("a lock the system refuses does not stop the take",
+       started63["ok"] is True and a63._recorder is not None)
+    a63._awake = lock63
+
+    a63._laptop_sleeping()
+    ok("the laptop going to sleep reaches the take being recorded",
+       (a63.recording_health()["error"] or "").startswith("The laptop went to sleep at "))
+    a63.stop_take()
+    try:
+        a63._laptop_sleeping()
+        quiet63 = True
+    except Exception:  # noqa: BLE001
+        quiet63 = False
+    a63.start_take()
+    ok("between takes it changes nothing",
+       quiet63 and a63.recording_health()["error"] is None)
+
+    battery_was63 = api63.battery_percent
+    try:
+        api63.battery_percent = lambda: 14
+        ok("the health check says the charge on battery",
+           a63.recording_health()["battery_percent"] == 14)
+        api63.battery_percent = lambda: None
+        health63 = a63.recording_health()
+        ok("and none on mains",
+           "battery_percent" in health63 and health63["battery_percent"] is None)
+
+        def unreadable():
+            raise OSError("no IOKit")
+
+        api63.battery_percent = unreadable
+        health63 = a63.recording_health()
+        ok("a battery that cannot be read leaves the health check working",
+           health63["battery_percent"] is None and "error" in health63)
+    finally:
+        api63.battery_percent = battery_was63
+
+    lock63.calls.clear()
+    a63.shutdown()
+    ok("closing the window lets go", lock63.calls[-1:] == ["release"])
+    capmod.TICK_SEC = tick_was
+
+    print("\n[63b] A track records audio, both or MIDI")
     # The mode and the port belong to the band, as stereo and the icon do:
     # the e-kit goes with the drummer whatever interface is on the desk. A
     # MIDI track has no input, and takes none from anybody else.

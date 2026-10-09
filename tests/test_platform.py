@@ -544,6 +544,234 @@ def main():
     ok("on a Mac it is Downloads in the home folder",
        ps.downloads_folder(system="darwin") == Path.home() / "Downloads")
 
+    print("\n[awake] A take keeps the laptop and its screen awake")
+    # Nobody touches the laptop while the band plays. Each system has its own
+    # documented call for it; the fakes stand in for the system so that both
+    # branches run here, and the real calls run on CI's Mac and Windows.
+
+    class FakeMac:
+        def __init__(self):
+            self.calls = []
+
+        def beginActivityWithOptions_reason_(self, options, reason):
+            self.calls.append(("begin", options, reason))
+            return "token"
+
+        def endActivity_(self, token):
+            self.calls.append(("end", token))
+
+    class FakeKernel:
+        def __init__(self, fail=False):
+            self.calls, self.fail = [], fail
+
+        def PowerCreateRequest(self, ref):
+            self.calls.append(("create", ref._obj.Reason.SimpleReasonString))
+            return 7
+
+        def PowerSetRequest(self, h, kind):
+            if self.fail:
+                raise OSError("refused")
+            self.calls.append(("set", h, kind))
+            return 1
+
+        def PowerClearRequest(self, h, kind):
+            self.calls.append(("clear", h, kind))
+            return 1
+
+        def CloseHandle(self, h):
+            self.calls.append(("close", h))
+            return 1
+
+    mac = FakeMac()
+    awake = ps.KeepAwake("darwin", process_info=mac)
+    awake.hold()
+    ok("on a Mac a take holds one activity that keeps the system and the screen awake",
+       mac.calls == [("begin", ps.MAC_AWAKE_OPTIONS, "Recording a take")]
+       and awake.held)
+    awake.hold()
+    ok("holding twice holds once", len(mac.calls) == 1)
+    awake.release()
+    ok("letting go ends that activity",
+       mac.calls[-1] == ("end", "token") and not awake.held)
+    idle = FakeMac()
+    ps.KeepAwake("darwin", process_info=idle).release()
+    ok("letting go with nothing held does nothing", idle.calls == [])
+
+    kernel = FakeKernel()
+    awake = ps.KeepAwake("win32", kernel32=kernel)
+    awake.hold()
+    ok("on Windows a take asks for the display, the system and the process",
+       kernel.calls == [("create", "РЭХА is recording a take"),
+                        ("set", 7, 0), ("set", 7, 1), ("set", 7, 3)])
+    awake.release()
+    ok("and lets go of all three and the handle",
+       kernel.calls[-4:] == [("clear", 7, 0), ("clear", 7, 1),
+                             ("clear", 7, 3), ("close", 7)]
+       and not awake.held)
+
+    refusing = FakeKernel(fail=True)
+    awake = ps.KeepAwake("win32", kernel32=refusing)
+    try:
+        awake.hold()
+        awake.release()
+        raised = False
+    except Exception:  # noqa: BLE001
+        raised = True
+    ok("a refusing system does not raise",
+       not raised and refusing.calls[-1] == ("close", 7))
+
+    awake = ps.KeepAwake("linux")
+    try:
+        awake.hold()
+        held_on_linux = awake.held
+        awake.release()
+        raised = False
+    except Exception:  # noqa: BLE001
+        raised = True
+    ok("on Linux it does nothing", not raised and not held_on_linux)
+
+    if sys.platform == "darwin":
+        from Foundation import (
+            NSActivityIdleDisplaySleepDisabled,
+            NSActivityUserInitiated,
+        )
+        ok("the Mac's own names add up to the options used",
+           NSActivityUserInitiated | NSActivityIdleDisplaySleepDisabled
+           == ps.MAC_AWAKE_OPTIONS)
+    if sys.platform in ("darwin", "win32"):
+        real = ps.KeepAwake()
+        real.hold()
+        held = real.held
+        real.release()
+        ok(f"a real hold and release on this {'Mac' if sys.platform == 'darwin' else 'Windows'}",
+           held and not real.held)
+
+    print("\n[sleep] The take hears the system say it is going to sleep")
+    # A closed lid cannot be stopped; the take can only end there honestly.
+
+    class FakeCenter:
+        def __init__(self):
+            self.added, self.removed = [], []
+
+        def addObserverForName_object_queue_usingBlock_(self, name, obj, queue, block):
+            self.added.append((name, block))
+            return "obs"
+
+        def removeObserver_(self, observer):
+            self.removed.append(observer)
+
+    class FakePowrprof:
+        def __init__(self):
+            self.flags = self.callback = None
+            self.unregistered = []
+
+        def PowerRegisterSuspendResumeNotification(self, flags, params_ref, handle_ref):
+            self.flags = flags
+            self.callback = params_ref._obj.Callback
+            return 0
+
+        def PowerUnregisterSuspendResumeNotification(self, handle):
+            self.unregistered.append(handle)
+            return 0
+
+    heard = []
+    center = FakeCenter()
+    watch = ps.SleepWatch(lambda: heard.append(1), "darwin", center=center)
+    started = watch.start()
+    ok("on a Mac it listens for the system going to sleep",
+       started and center.added[0][0] == "NSWorkspaceWillSleepNotification")
+    center.added[0][1](None)
+    ok("and the take hears it", heard == [1])
+    watch.stop()
+    ok("and stops listening when asked", center.removed == ["obs"])
+
+    heard.clear()
+    powrprof = FakePowrprof()
+    watch = ps.SleepWatch(lambda: heard.append(1), "win32", powrprof=powrprof)
+    started = watch.start()
+    ok("on Windows it registers a callback for suspend and resume",
+       started and powrprof.flags == 2)
+    ok("going to sleep reaches the take",
+       powrprof.callback(None, 4, None) == 0 and heard == [1])
+    powrprof.callback(None, 18, None)
+    powrprof.callback(None, 7, None)
+    ok("waking does not", heard == [1])
+    watch.stop()
+    ok("and it unregisters when asked", len(powrprof.unregistered) == 1)
+    # Microsoft does not say that unregistering waits for a callback already
+    # under way, so the callback stays alive with the watch, not freed then.
+    ok("a callback already under way as it stops is not freed under it",
+       watch._callback is not None)
+
+    def broken():
+        raise RuntimeError("the take is gone")
+
+    powrprof = FakePowrprof()
+    ps.SleepWatch(broken, "win32", powrprof=powrprof).start()
+    try:
+        answered = powrprof.callback(None, 4, None)
+    except Exception:  # noqa: BLE001
+        answered = None
+    ok("a failing handler never reaches the system", answered == 0)
+
+    ok("on Linux there is nothing to listen to",
+       ps.SleepWatch(lambda: None, "linux").start() is False)
+
+    if sys.platform == "darwin":
+        import AppKit
+        ok("the Mac's notification is the one listened for",
+           AppKit.NSWorkspaceWillSleepNotification == ps.MAC_WILL_SLEEP)
+    if sys.platform in ("darwin", "win32"):
+        real = ps.SleepWatch(lambda: None)
+        started = real.start()
+        try:
+            real.stop()
+            stopped = True
+        except Exception:  # noqa: BLE001
+            stopped = False
+        ok(f"a real start and stop on this {'Mac' if sys.platform == 'darwin' else 'Windows'}",
+           started and stopped)
+
+    print("\n[battery] The battery's charge, only while the laptop runs on it")
+
+    def internal(state, current, most):
+        return {"Type": "InternalBattery", "Power Source State": state,
+                "Current Capacity": current, "Max Capacity": most}
+
+    ok("a Mac on its battery says its charge",
+       ps.mac_battery([internal("Battery Power", 14, 100)]) == 14)
+    ok("worked out from the capacity when it is not out of 100",
+       ps.mac_battery([internal("Battery Power", 2800, 4000)]) == 70)
+    ok("a Mac on mains says nothing",
+       ps.mac_battery([internal("AC Power", 14, 100)]) is None)
+    ups = dict(internal("Battery Power", 14, 100), Type="UPS")
+    ok("nor a Mac with no battery",
+       ps.mac_battery([]) is None and ps.mac_battery([ups]) is None)
+    ok("nor one that cannot say how full it can be",
+       ps.mac_battery([internal("Battery Power", 14, 0)]) is None
+       and ps.mac_battery([{"Type": "InternalBattery",
+                            "Power Source State": "Battery Power"}]) is None)
+    ok("Windows on its battery says its charge",
+       ps.windows_battery(0, 0, 14) == 14 and ps.windows_battery(0, 2, 64) == 64)
+    ok("Windows on mains says nothing", ps.windows_battery(1, 8, 64) is None)
+    ok("nor without a battery, or when it cannot tell",
+       ps.windows_battery(0, 128, 255) is None
+       and ps.windows_battery(0, 255, 50) is None
+       and ps.windows_battery(0, 1, 255) is None)
+    ok("on Linux there is no answer", ps.battery_percent("linux") is None)
+    # battery_percent() swallows a failure, so the system's call is asked
+    # directly too: a call that is wrong for the system must fail here.
+    if sys.platform == "darwin":
+        ok("IOKit's power sources can be read on this Mac",
+           isinstance(ps._mac_power_sources(), list))
+    if sys.platform == "win32":
+        ok("Windows says what it runs on",
+           ps._windows_power_status().ACLineStatus in (0, 1, 255))
+    if sys.platform in ("darwin", "win32"):
+        charge = ps.battery_percent()
+        ok("this machine's answer is a charge or none",
+           charge is None or (isinstance(charge, int) and 0 <= charge <= 100))
+
     print("\n" + "=" * 60)
 
     if problems:

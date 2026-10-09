@@ -224,7 +224,13 @@ laptop.
   is not playing.
 
 The top corner says that the interface is connected and how much recording
-time the disk has left. It turns yellow when the disk is about to run out.
+time the disk has left. It turns yellow when the disk is about to run out,
+and when the laptop runs on its battery with 20% or less left: "Battery 14%:
+plug the laptop in".
+
+While a take records, the laptop does not go to sleep and its screen does
+not go dark or lock, whatever the system's own settings say. After Stop,
+once the take is written, they apply again.
 
 Every track is written to disk while you play, so there is nothing to save
 during a take. Press **Stop**, or Space, when the song is over.
@@ -761,6 +767,16 @@ Sometimes a driver does not recover after its interface disappears. The take
 is still saved, after about fifteen seconds, and until the driver responds
 again the app says "The audio driver has stopped answering". Unplug the
 interface and plug it back in. If that does not help, restart the app.
+
+### The laptop goes to sleep during a take
+
+The app keeps the laptop awake while a take records, but closing the lid,
+choosing Sleep, or a battery about to run out still put it to sleep: no app
+can stop that. The take then ends where the laptop went to sleep. Everything
+recorded until then is kept, and nothing from after waking is added to it.
+Once the laptop is awake, the take opens as usual, with a note saying why it
+stopped: "The laptop went to sleep at 21:14, so the take ends there.
+Everything up to that moment is saved." Record the next take as usual.
 
 ### The app closed during a take
 
