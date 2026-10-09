@@ -1,9 +1,9 @@
 """
 Recording notes beside the audio. So far this is what stops Start (A1, P2 and
 P3), what the audio card check then holds, which saved port is found again
-(P1), the order a device's ports are listed in (P7), and the .mid file (F2 and
-F4): what one can hold, written and read back; later sections are added here
-as the rest of it is built.
+(P1), the order a device's ports are listed in (P7), the .mid file (F2 and
+F4): what one can hold, written and read back, and what a port has set and
+holds (F6 and F7); later sections are added here as the rest of it is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
@@ -57,6 +57,7 @@ from rehearsal_recorder.midi import smf  # noqa: E402
 from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
 from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
 from rehearsal_recorder.midi.rules import notes_problem  # noqa: E402
+from rehearsal_recorder.midi.state import PortState  # noqa: E402
 from rehearsal_recorder.midi.smf import read_events, storable, write_mid  # noqa: E402
 
 problems = []
@@ -80,6 +81,14 @@ def read_back(path):
         tick += msg.time
         timed.append((tick, msg))
     return mid, timed
+
+
+def port_state(*messages):
+    """A PortState that has been fed these messages, one by one."""
+    state = PortState()
+    for message in messages:
+        state.feed(message)
+    return state
 
 
 def played(timed):
@@ -523,6 +532,165 @@ def main():
        isinstance(smf.library_version(), str) and smf.library_version()[:1].isdigit())
     ok("storable takes any bytes-like thing",
        storable(bytearray(b"\x99\x24\x64")) and storable(memoryview(b"\xF0\x41\xF7")))
+
+    # What a port has set on each channel, so a take's file can begin with it
+    # (the pedal, the patch, the hi-hat), and which keys and pedals it holds, so
+    # nothing is left ringing when the take ends. Bytes in, bytes out.
+    print("\n[4] Where everything was when the take started")
+    s = PortState()
+    for m in [b"\xB0\x00\x01", b"\xB0\x20\x02", b"\xC0\x05", b"\xB9\x04\x5A", b"\xE0\x00\x50", b"\xD0\x30",
+              b"\xB0\x07\x64", b"\xB0\x79\x00", b"\xB0\x58\x10", b"\xB0\x06\x01", b"\xB0\x26\x01",
+              b"\xB0\x62\x01", b"\xB0\x40\x7F", b"\x90\x3C\x40", b"\xA9\x31\x7F"]:
+        s.feed(m)
+    start = s.start_messages()
+    ok("the bank comes before the program",
+       start.index(b"\xB0\x00\x01") < start.index(b"\xB0\x20\x02") < start.index(b"\xC0\x05"))
+    ok("the hi-hat, volume, sustain, bend and pressure are set",
+       all(m in start for m in [b"\xB9\x04\x5A", b"\xB0\x07\x64", b"\xB0\x40\x7F", b"\xE0\x00\x50", b"\xD0\x30"]))
+    ok("commands and parameter numbers are not repeated",
+       not any(m[0] & 0xF0 == 0xB0 and m[1] in (0x79, 0x58, 0x06, 0x26, 0x62) for m in start))
+    ok("nothing about keys: no note, no choke", not any(m[0] & 0xF0 in (0x90, 0xA0) for m in start))
+    ok("only what arrived", not any(m[0] & 0x0F == 1 for m in start))
+    ok("a held key is let go", s.releases()[0] == b"\x80\x3C\x00")
+    ok("and the sustain let up", b"\xB0\x40\x00" in s.releases())
+    s.feed(b"\x90\x3C\x00")
+    ok("a note-on at velocity 0 is a release", b"\x80\x3C\x00" not in s.releases())
+    ok("and the sustain is all that is left to let up", s.releases() == [b"\xB0\x40\x00"])
+
+    s = port_state(b"\xB0\x00\x01", b"\xB0\x20\x02", b"\xC0\x05", b"\xB9\x04\x5A", b"\xE0\x00\x50", b"\xD0\x30",
+                   b"\xB0\x07\x64", b"\xB0\x79\x00", b"\xB0\x40\x7F", b"\x90\x3C\x40")
+    ok("a channel at a time, channels ascending: bank, program, controllers, bend, pressure",
+       s.start_messages() == [b"\xB0\x00\x01", b"\xB0\x20\x02", b"\xC0\x05", b"\xB0\x07\x64", b"\xB0\x40\x7F",
+                             b"\xE0\x00\x50", b"\xD0\x30", b"\xB9\x04\x5A"])
+    ok("a port that has sent nothing has nothing to start with or let go",
+       PortState().start_messages() == [] and PortState().releases() == [])
+    ok("channels come in order whatever the order they were heard in",
+       port_state(b"\xBF\x07\x01", b"\xB2\x07\x02", b"\xC5\x01").start_messages()
+       == [b"\xB2\x07\x02", b"\xC5\x01", b"\xBF\x07\x01"])
+    ok("the bank is written first even when it was heard last, the program before the other controllers",
+       port_state(b"\xB2\x07\x64", b"\xB2\x20\x03", b"\xB2\x00\x01", b"\xC2\x09", b"\xB2\x01\x30").start_messages()
+       == [b"\xB2\x00\x01", b"\xB2\x20\x03", b"\xC2\x09", b"\xB2\x01\x30", b"\xB2\x07\x64"])
+    ok("a bank with no program, and a program with no bank, are written as they came",
+       port_state(b"\xB2\x20\x03", b"\xB2\x00\x01").start_messages() == [b"\xB2\x00\x01", b"\xB2\x20\x03"]
+       and port_state(b"\xC2\x07").start_messages() == [b"\xC2\x07"])
+    ok("the last value is the one kept: a controller, the program, the bend with both its bytes, the pressure",
+       port_state(b"\xB3\x0B\x20", b"\xB3\x0B\x7F", b"\xC3\x01", b"\xC3\x02", b"\xE3\x01\x02", b"\xE3\x05\x60",
+                  b"\xD3\x10", b"\xD3\x11").start_messages()
+       == [b"\xC3\x02", b"\xB3\x0B\x7F", b"\xE3\x05\x60", b"\xD3\x11"])
+    ok("key pressure is about a key, not a state: it sets nothing and holds nothing",
+       port_state(b"\xA3\x3C\x40", b"\xA0\x3C\x00").start_messages() == []
+       and port_state(b"\xA3\x3C\x40").releases() == [])
+    ok("the same controller on two channels is two values",
+       port_state(b"\xB0\x07\x10", b"\xB1\x07\x20").start_messages() == [b"\xB0\x07\x10", b"\xB1\x07\x20"])
+
+    # Not a state, never repeated: all of 120-127 (sound off, reset, local control, ...),
+    # 88, and the data entry and parameter numbers (6, 38, 96-101).
+    never = [*range(96, 102), 6, 38, 88, *range(120, 128)]
+    kept = [5, 7, 37, 39, 87, 89, 95, 102, 119]
+    ok("controllers 6, 38, 88, 96-101 and 120-127 are never kept, on any channel",
+       port_state(*[bytes((0xB0 | n % 16, n, 0x10)) for n in never]).start_messages() == [])
+    ok("and the ones beside them are",
+       port_state(*[bytes((0xB0, n, 0x10)) for n in kept]).start_messages() == [bytes((0xB0, n, 0x10)) for n in kept])
+    ok("not applied either: all notes off and reset all controllers change nothing that was set",
+       port_state(b"\xB0\x07\x64", b"\xE0\x00\x50", b"\xD0\x30", b"\xB0\x7B\x00", b"\xB0\x79\x00",
+                  b"\xB0\x78\x00").start_messages() == [b"\xB0\x07\x64", b"\xE0\x00\x50", b"\xD0\x30"])
+    ok("the key stays held through all notes off: a note-off too many costs nothing, a missing one rings for ever",
+       port_state(b"\x90\x3C\x40", b"\xB0\x7B\x00", b"\xB0\x78\x00").releases() == [b"\x80\x3C\x00"])
+
+    # Releases: the keys in the order they were pressed, then the pedals that are down.
+    ok("keys are let go in the order pressed, across channels",
+       port_state(b"\x90\x3C\x40", b"\x91\x40\x40", b"\x90\x30\x40").releases()
+       == [b"\x80\x3C\x00", b"\x81\x40\x00", b"\x80\x30\x00"])
+    ok("a key struck twice and not let go is one release, where it was first struck",
+       port_state(b"\x90\x3C\x40", b"\x90\x40\x40", b"\x90\x3C\x50").releases() == [b"\x80\x3C\x00", b"\x80\x40\x00"])
+    ok("a key struck again after it was let go goes to the back of the line",
+       port_state(b"\x90\x3C\x40", b"\x90\x40\x40", b"\x80\x3C\x00", b"\x90\x3C\x40").releases()
+       == [b"\x80\x40\x00", b"\x80\x3C\x00"])
+    ok("a note-off at any velocity lets a key go, and one for a key never struck does nothing",
+       port_state(b"\x90\x3C\x40", b"\x90\x40\x40", b"\x80\x3C\x40", b"\x80\x50\x00", b"\x90\x51\x00").releases()
+       == [b"\x80\x40\x00"])
+    ok("the same key on another channel is another key",
+       port_state(b"\x90\x3C\x40", b"\x81\x3C\x00").releases() == [b"\x80\x3C\x00"])
+    ok("the pedals come after the keys: sustain, sostenuto, soft, a channel at a time",
+       port_state(b"\xB1\x43\x40", b"\xB0\x42\x7F", b"\xB0\x40\x40", b"\xB0\x43\x7F", b"\x92\x3C\x40").releases()
+       == [b"\x82\x3C\x00", b"\xB0\x40\x00", b"\xB0\x42\x00", b"\xB0\x43\x00", b"\xB1\x43\x00"])
+    ok("a pedal is down from 64: 63 is up, and a pedal already let up is not let up again",
+       port_state(b"\xB0\x40\x3F", b"\xB0\x42\x7F", b"\xB0\x42\x00").releases() == []
+       and port_state(b"\xB0\x40\x40").releases() == [b"\xB0\x40\x00"])
+    ok("the last value of a pedal still starts the take: it is a controller like the others",
+       port_state(b"\xB0\x42\x7F", b"\xB0\x42\x00").start_messages() == [b"\xB0\x42\x00"])
+    ok("only sustain, sostenuto and soft are let up: portamento and the other switches are left as they are",
+       port_state(b"\xB0\x41\x7F", b"\xB0\x44\x7F", b"\xB0\x45\x7F").releases() == [])
+
+    # Asking changes nothing; a copy is its own.
+    s = port_state(b"\xB0\x40\x7F", b"\xC0\x05", b"\x90\x3C\x40", b"\x91\x40\x40")
+    start, releases = s.start_messages(), s.releases()
+    start.clear()
+    releases.clear()
+    ok("what start_messages and releases give is the caller's: emptying it empties nothing of the state",
+       s.start_messages() == [b"\xC0\x05", b"\xB0\x40\x7F"]
+       and s.releases() == [b"\x80\x3C\x00", b"\x81\x40\x00", b"\xB0\x40\x00"])
+    s.releases()
+    s.start_messages()
+    ok("asking for the start and the releases, again and again, changes neither",
+       s.start_messages() == [b"\xC0\x05", b"\xB0\x40\x7F"]
+       and s.releases() == [b"\x80\x3C\x00", b"\x81\x40\x00", b"\xB0\x40\x00"])
+    c = s.copy()
+    ok("a copy starts and lets go as the original does",
+       isinstance(c, PortState) and c is not s and c.start_messages() == s.start_messages() and c.releases() == s.releases())
+    original = (s.start_messages(), s.releases())
+    for m in [b"\xB0\x40\x00", b"\xC0\x06", b"\x80\x3C\x00", b"\x91\x20\x40", b"\xE0\x00\x50", b"\xD2\x01"]:
+        c.feed(m)
+    ok("what a copy is fed does not reach the original", (s.start_messages(), s.releases()) == original)
+    changed = (c.start_messages(), c.releases())
+    for m in [b"\xB0\x07\x01", b"\x90\x50\x40", b"\x81\x40\x00", b"\xC0\x01"]:
+        s.feed(m)
+    ok("and what the original is fed does not reach the copy", (c.start_messages(), c.releases()) == changed)
+    ok("a copy made after the original had been asked is the same", s.copy().releases() == s.releases())
+
+    # A port sends all sorts, and a library may hand over a message cut short.
+    cut = [b"", b"\x90", b"\x90\x3C", b"\xB0\x07", b"\xC0", b"\xD0", b"\xE0\x00", b"\xA0\x3C"]
+    high = [b"\x90\x80\x40", b"\x90\x3C\x80", b"\xB0\x07\x80", b"\xB0\x80\x07", b"\xC0\x80", b"\xE0\x00\x80", b"\xD0\xFF"]
+    long = [b"\x90\x3C\x40\x40", b"\xC0\x05\x05", b"\xB0\x07\x64\x00"]
+    nostatus = [b"\x3C\x40\x40", b"\x40", b"\x00\x00\x00"]
+    s = port_state(*cut, *high, *long, *nostatus)
+    ok("a message cut short, run on, with no status or with a data byte of 0x80 or more is ignored",
+       s.start_messages() == [] and s.releases() == [])
+    s = port_state(b"\x90\x3C\x40", b"\xB0\x07\x64", b"\x80\x3C", b"\x80\x3C\x80", b"\xB0\x07\x65\x66", b"\xB0\x07")
+    ok("and it does not disturb what was kept",
+       s.start_messages() == [b"\xB0\x07\x64"] and s.releases() == [b"\x80\x3C\x00"])
+    raised = []
+    for junk in (None, "abc", 3.5, [300], [-1], object()):
+        try:
+            PortState().feed(junk)
+        except Exception as e:
+            raised.append(repr(e))
+    ok("and what is not even bytes is ignored too, never raised", raised == [])
+    system = [b"\xF0\x41\x10\x42\xF7", b"\xF0\xF7", b"\xF0\x7F\x7F\x04\x01\x00\x7F\xF7", b"\xF1\x20", b"\xF2\x00\x10", b"\xF3\x01",
+              b"\xF4", b"\xF5", b"\xF6", b"\xF7", b"\xF8", b"\xF9", b"\xFA", b"\xFB", b"\xFC", b"\xFD", b"\xFE", b"\xFF"]
+    s = port_state(b"\x90\x3C\x40", b"\xB0\x40\x7F", b"\xC0\x05")
+    before = (s.start_messages(), s.releases())
+    for m in system:
+        s.feed(m)
+    ok("SysEx, realtime and system messages change nothing, a reset among them (it is not a channel's)",
+       (s.start_messages(), s.releases()) == before)
+    ok("and on a port that sent only those there is nothing",
+       port_state(*system).start_messages() == [] and port_state(*system).releases() == [])
+    s = port_state(bytearray(b"\x90\x3C\x40"), memoryview(b"\xC0\x05"))
+    ok("it takes any bytes-like thing", s.start_messages() == [b"\xC0\x05"] and s.releases() == [b"\x80\x3C\x00"])
+
+    # What it gives goes into a .mid as it is: the start at tick 0, the releases at the end.
+    s = port_state(b"\xB0\x00\x01", b"\xB0\x20\x02", b"\xC0\x05", b"\xB9\x04\x5A", b"\xE0\x00\x50", b"\xD0\x30",
+                   b"\xB0\x40\x7F", b"\x90\x3C\x40", b"\x93\x30\x40")
+    ok("every message it gives is bytes that a .mid can hold",
+       all(type(m) is bytes and storable(m) for m in s.start_messages() + s.releases()))
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "state.mid"
+        left_out = write_mid(path, track_name="Keys", port_name="Port", start=s.start_messages(),
+                             events=[(2.0, m) for m in s.releases()])
+        _, back = read_events(path)
+        ok("written as a take's start and its end, none is left out and all come back",
+           left_out == 0 and back == [(0.0, m) for m in s.start_messages()] + [(2.0, m) for m in s.releases()])
 
     print("\n" + "=" * 60)
     if problems:

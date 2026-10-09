@@ -63,7 +63,9 @@ saved port is found again after a replug, with a device's playing port listed
 first, and the `.mid` file: what a Standard MIDI File can hold, written with
 `midi/smf.py` and read back with mido (the test imports mido for that), names
 in UTF-8, ticks that do not drift over a long take, and a file a DAW saved
-again at other ticks to the beat and with tempo changes. Later tasks add to it.
+again at other ticks to the beat and with tempo changes; and what a port has
+set and holds, from the bytes it sent: the state a take's `.mid` starts with
+and the keys and pedals let go when it ends. Later tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 

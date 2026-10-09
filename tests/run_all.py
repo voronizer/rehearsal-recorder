@@ -29,9 +29,11 @@ things to be true:
                        port, two on one port), that the card check then
                        holds only the tracks that record audio, which saved
                        port is found again after a replug, the order a
-                       device's ports are listed in, and the .mid file (what
+                       device's ports are listed in, the .mid file (what
                        one can hold, written with mido and read back, names
-                       in UTF-8, a DAW's own ticks and tempo read right).
+                       in UTF-8, a DAW's own ticks and tempo read right), and
+                       what a port has set and holds (the state a take starts
+                       with, the keys and pedals let go at its end).
                        Later tasks add to it. No port is opened: the library
                        is blocked and the rules are plain functions.
 
