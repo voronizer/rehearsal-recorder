@@ -39,7 +39,11 @@ Three kinds of thread meet here:
     recorder. Which tracks a port feeds, and its coming and going, reach the
     writer on the same queue, as markers, so a port's events that were already
     waiting are written for the tracks it fed when they came, before it is
-    said to be gone, and none of them is lost for arriving after;
+    said to be gone, and none of them is lost for arriving after. So do a
+    take's beginning and end, and the counts starting again: an event that
+    came before Start is in the state the take begins from, one after it is
+    in the take, and a note that came before the counts started again is not
+    counted after;
   - the watcher, every TICK_SEC of the rig's clock: a port that has gone quiet,
     the list of ports, each port's clock, and the recorder's flush with the
     audio's.
@@ -143,16 +147,13 @@ class _Track:
     as saved, what the screen says of it, and its meters.
     """
 
-    __slots__ = ("name", "saved", "index", "status", "found", "last", "port",
-                 "notes", "vel", "echo", "recent")
+    __slots__ = ("name", "saved", "index", "status", "port", "notes", "vel", "echo", "recent")
 
     def __init__(self, name):
         self.name = name
         self.saved = None  # the saved port (rules.port_of), None when none is picked
         self.index = 0  # its place in the band, for P8's "the later card"
         self.status = "none"  # what the screen says when no port is open for it
-        self.found = None  # the PortInfo its saved port is now, if one
-        self.last = None  # the last PortInfo it was found as, whose state a take begins with
         self.port = None  # the _Port it takes notes from
         self.notes = 0
         self.vel = 0  # the loudest note-on since activity() last read it
@@ -161,20 +162,32 @@ class _Track:
 
 
 class _Take:
-    """One take's recorder, and what the writer has told it."""
+    """
+    One take: what it begins from, its recorder once the writer has begun it,
+    and what the writer has told that recorder.
+    """
 
-    __slots__ = ("recorder", "begun", "here", "flush_at", "said")
+    __slots__ = ("out_dir", "anchor", "tracks", "ports", "recorder", "begun", "here", "flush_at", "said", "over")
 
-    def __init__(self, recorder, begun, flush_at):
-        self.recorder = recorder
-        # When it began on the rig's clock: a track that a marker put on the
-        # queue before then makes present is present from then.
+    def __init__(self, out_dir, anchor, tracks, ports, begun, flush_at):
+        self.out_dir = out_dir
+        self.anchor = anchor
+        # (name, saved port's name, the _Port it takes notes from or None, the
+        # kept PortState it begins from or None), in the band's order.
+        self.tracks = tracks
+        self.ports = ports  # the _Ports that tracks took notes from as it began
+        # Made by the writer when it reaches the take's beginning on the queue,
+        # set under the rig's lock; None until then, and for good if it never does.
+        self.recorder = None
+        # When it began on the rig's clock: the ports there then are present
+        # from then.
         self.begun = begun
         # Track name -> the _Port it is present through, as far as the recorder
         # has been told. The writer's alone.
         self.here = {}
         self.flush_at = flush_at
         self.said = False  # a disk that refused has been said in the log
+        self.over = False  # ended: a writer that has not begun it yet never will
 
 
 class MidiRig:
@@ -200,7 +213,9 @@ class MidiRig:
         self._counted = {}  # PortInfo -> note-ons heard on it, for the picker (P7)
         self._check = False
         self._echoes = {}  # (first track, later track) -> times the same note came on both
-        self._take = None
+        self._take = None  # the take begun and not yet ended, as the app sees it
+        self._writing = None  # the take the writer feeds: between its beginning and its end on the queue
+        self._zeroing = 0  # times the counts started again that the writer has not yet reached
         self._ticks = 0
         self._changed = False  # the observer said the list changed
         self._closed = False
@@ -318,10 +333,15 @@ class MidiRig:
         """
         A take has started, its audio on `anchor` (its AudioClock, already
         started). Its recorder gets every track that takes notes, each starting
-        from a copy of its port's state as it is now (F6), and every track whose
-        port is open and heard as there is present from now. The check's other
-        ports close, and the counts start again. A take still recording is
-        abandoned first, as abandon_take would: its notes stay for the drafts.
+        from a copy of the state of the port its saved port names (F6), and
+        every track whose port is open and heard as there is present from now.
+        The copies are made by the writer when it reaches the take's beginning
+        on the queue, so every event that arrived before Start is in them and
+        every one after goes to the take; this does not wait for that. A track
+        whose port is not open, or is quiet, begins with what the port held let
+        go (F7). The check's other ports close, and the counts start again. A
+        take still recording is abandoned first, as abandon_take would: its
+        notes stay for the drafts.
         """
         with self._manage:
             if self._closed:
@@ -336,32 +356,25 @@ class MidiRig:
             now = self._now()
             with self._lock:
                 self._zero()
-                tracks = list(self._tracks.values())
-                states = {}
-                for track in tracks:
-                    port = track.port
-                    info = port.info if port is not None else track.last
-                    if info not in self._states:
-                        continue
-                    state = self._states[info].copy()
-                    if port is None or port.silent_at is not None:
-                        # Not there as the take begins: what its port held was
-                        # let go when it went (F7), whether or not the writer
-                        # has reached that yet.
-                        for message in state.releases():
-                            state.feed(message)
-                    states[track.name] = state
-                # The copies and the take begin under the one lock the writer
-                # holds for each event, so an event is either in a copy or in
-                # the take, and never neither.
-                recorder = MidiRecorder(out_dir, anchor,
-                                        [{"name": t.name, "port": t.saved["name"] if t.saved else ""}
-                                         for t in tracks],
-                                        states)
-                self._take = _Take(recorder, now, now + int(FLUSH_INTERVAL_SEC * _NS))
-                for port in self._live.values():
-                    if port.tracks and port.silent_at is None:
-                        self._queue.put((None, "present", port, None, now))
+                tracks = []
+                for track in self._tracks.values():
+                    # The state is the port's, and the port is the one the
+                    # track's saved port names: the one it takes notes from,
+                    # else the one kept this rehearsal that the saved port
+                    # finds (two alike are neither), else none heard yet.
+                    port, kept = track.port, None
+                    if port is not None:
+                        kept = port.state
+                    elif track.saved is not None:
+                        info, _ = find_port(track.saved, list(self._states))
+                        kept = self._states.get(info) if info is not None else None
+                    tracks.append((track.name, track.saved["name"] if track.saved else "", port, kept))
+                ports = [port for port in self._live.values() if port.tracks]
+                take = _Take(out_dir, anchor, tracks, ports, now, now + int(FLUSH_INTERVAL_SEC * _NS))
+                self._take = take
+                # After every marker for the band as it is now, and after every
+                # event that came before.
+                self._queue.put((None, "begin", take, None, now))
 
     def end_take(self, duration_sec) -> list[dict]:
         """
@@ -372,6 +385,9 @@ class MidiRig:
         """
         take = self._end()
         if take is None:
+            return []
+        if take.recorder is None:
+            log.error("The take's notes were never begun: the MIDI writer did not reach its start")
             return []
         try:
             return take.recorder.stop(duration_sec)
@@ -386,7 +402,7 @@ class MidiRig:
         for the drafts to finish.
         """
         take = self._end()
-        if take is not None:
+        if take is not None and take.recorder is not None:
             try:
                 take.recorder.abandon()
             except Exception as e:
@@ -454,6 +470,8 @@ class MidiRig:
                 self._event(*item)
         except Exception:
             self._failed("the MIDI writer")
+        else:
+            self._fine("the MIDI writer")
 
     def _event(self, port, ns, data):
         """One message from a port, in the order the ports sent them."""
@@ -468,8 +486,10 @@ class MidiRig:
                 port.sensing = True
             else:
                 port.state.feed(data)
-            take = self._take
-            if note_on:
+            take = self._writing
+            # A note that arrived before the counts last started again, and
+            # that the writer reaches after, is not counted.
+            if note_on and not self._zeroing:
                 # Once for the port, whichever tracks it feeds.
                 self._counted[port.info] = self._counted.get(port.info, 0) + 1
                 for track in port.tracks:
@@ -480,10 +500,9 @@ class MidiRig:
             if take is None:
                 return
             # A track the port feeds that is not yet present is made so by the
-            # port's first event, unless the port is quiet: its marker may be
-            # behind the event on the queue (an event that was waiting when the
-            # take began, or one from a port that has just opened), or it went
-            # quiet and has just been heard again.
+            # port's first event, unless the port is quiet: it went quiet and
+            # has just been heard again, or a present that the disk refused is
+            # tried again.
             names = [name for name in port.fed
                      if take.here.get(name) is port or (take.here.get(name) is None and port.silent_at is None)]
         for name in names:
@@ -495,17 +514,24 @@ class MidiRig:
 
     def _marker(self, item):
         """
-        A port that a track began or stopped taking notes from, that closed, that
-        went quiet or that is present as a take begins, or the take's end, each in
-        its place among the events.
+        A port that a track began or stopped taking notes from, that closed or
+        that went quiet; a take's beginning or end; the counts started again:
+        each in its place among the events.
         """
         _, kind, port, name, ns = item
+        if kind == "begin":
+            self._begin(port, ns)
+            return
         if kind == "end":
             take, done = port, name
             with self._lock:
-                if self._take is take:
-                    self._take = None
+                if self._writing is take:
+                    self._writing = None
             done.set()
+            return
+        if kind == "zeroed":
+            with self._lock:
+                self._zeroing -= 1
             return
         present, gone = [], []
         with self._lock:
@@ -520,11 +546,11 @@ class MidiRig:
                 port.fed.append(name)
             elif kind == "detach" and name in port.fed:
                 port.fed.remove(name)
-            take = self._take
+            take = self._writing
             if take is not None:
-                if kind in ("attach", "present"):
-                    if not port.done and port.silent_at is None:
-                        present = [n for n in ([name] if kind == "attach" else port.fed) if take.here.get(n) is None]
+                if kind == "attach":
+                    if not port.done and port.silent_at is None and take.here.get(name) is None:
+                        present = [name]
                 elif kind == "detach":
                     gone = [name] if take.here.get(name) is port else []
                 else:
@@ -532,10 +558,50 @@ class MidiRig:
             if kind == "closed":
                 port.fed = []
         for n in present:
-            self._present(take, port, n, max(ns, take.begun))
+            self._present(take, port, n, ns)
         for n in gone:
             del take.here[n]
             self._tell(take, take.recorder.gone, n, ns)
+
+    def _begin(self, take, ns):
+        """
+        The take's beginning, reached on the queue: every event that came before
+        it is in the ports' states, so the copies the recorder begins from are
+        made now, and every event after it goes to the take. A port that was
+        quiet at Start, by when it was last heard, is not there: its track
+        begins with what the port held let go (F7), even when the watcher saw
+        the silence only after Start and its marker is still behind this one.
+        A port open and heard at Start is there, though it may have gone quiet
+        since: the marker that says so comes after this one.
+        """
+        with self._lock:
+            if take.over:
+                return
+            states = {}
+            for name, _, port, kept in take.tracks:
+                if kept is None:
+                    continue
+                state = kept.copy()
+                if port is None or not self._there(port, take):
+                    for message in state.releases():
+                        state.feed(message)
+                states[name] = state
+        recorder = MidiRecorder(take.out_dir, take.anchor,
+                                [{"name": name, "port": saved} for name, saved, _, _ in take.tracks], states)
+        with self._lock:
+            if take.over:
+                return
+            take.recorder = recorder
+            self._writing = take
+            present = [(port, name) for port in take.ports if self._there(port, take) for name in port.fed]
+        for port, name in present:
+            if take.here.get(name) is None:
+                self._present(take, port, name, ns)
+
+    @staticmethod
+    def _there(port, take):
+        """Whether a port was there as a take began. Under the lock."""
+        return not port.done and (port.silent_at is None or port.silent_at > take.begun)
 
     def _let_go(self, port):
         """A port that went lets go of what it held, in its state as in the take
@@ -621,7 +687,7 @@ class MidiRig:
                         self._queue.put((None, "silent", port, None, heard))
                         quiet.append(port.info.name)
                 take = self._take
-                if take is not None and now >= take.flush_at:
+                if take is not None and take.recorder is not None and now >= take.flush_at:
                     take.flush_at = now + int(FLUSH_INTERVAL_SEC * _NS)
                     flush = take
             for name in quiet:
@@ -651,12 +717,16 @@ class MidiRig:
                         self.refresh()
                     except Exception:
                         self._failed("the MIDI watcher")
+                    else:
+                        self._fine("the MIDI watcher")
             now = self._now()
             if now >= due:
                 try:
                     self.tick()
                 except Exception:
                     self._failed("the MIDI watcher")
+                else:
+                    self._fine("the MIDI watcher")
                 due += step
                 if due <= now:
                     due = now + step
@@ -676,11 +746,13 @@ class MidiRig:
         if self._system is None:
             return []
         try:
-            return list(self._system.inputs())
+            listing = list(self._system.inputs())
         except Exception:
             self._failed("listing the MIDI ports")
             with self._lock:
                 return list(self._ports)
+        self._fine("listing the MIDI ports")
+        return listing
 
     def _settle(self, listing):
         """
@@ -746,9 +818,6 @@ class MidiRig:
                     said.append((track.name, info.name if info is not None else
                                  track.saved["name"] if track.saved is not None else "no port", status))
                 track.status = status
-                track.found = info
-                if info is not None:
-                    track.last = info
         for name, where, status in said:
             log.info("%s: %s, %s", name, where, status)
 
@@ -768,6 +837,7 @@ class MidiRig:
         except Exception:
             self._failed(f"opening the MIDI port {info.name}")
             return None
+        self._fine(f"opening the MIDI port {info.name}")
         with self._lock:
             self._live[info] = port
         return port
@@ -800,6 +870,8 @@ class MidiRig:
             port.port.close()
         except Exception:
             self._failed(f"closing the MIDI port {port.info.name}")
+        else:
+            self._fine(f"closing the MIDI port {port.info.name}")
         self._queue.put((None, "closed", port, None, self._now() if connected else port.heard_ns))
 
     def _connected(self, port):
@@ -816,6 +888,8 @@ class MidiRig:
                 port.port.resync()
             except Exception:
                 self._failed(f"the clock of MIDI port {port.info.name}")
+            else:
+                self._fine(f"the clock of MIDI port {port.info.name}")
 
     def _end(self):
         """
@@ -836,8 +910,11 @@ class MidiRig:
             else:
                 self.drain()
             with self._lock:
+                take.over = True
                 if self._take is take:
                     self._take = None
+                if self._writing is take:
+                    self._writing = None
             return take
 
     def _release(self):
@@ -851,9 +928,17 @@ class MidiRig:
             self._close(port)
         with self._lock:
             self._states = {}
+        with self._failures_lock:
+            self._failures = {}
 
     def _zero(self):
-        """The counts start again. Under the lock."""
+        """
+        The counts start again. Under the lock. The note-ons already on the
+        queue are not counted: the writer counts nothing until it reaches the
+        marker put here.
+        """
+        self._zeroing += 1
+        self._queue.put((None, "zeroed", None, None, None))
         self._counted = {}
         self._echoes = {}
         for track in self._tracks.values():
@@ -867,7 +952,9 @@ class MidiRig:
         Something nothing here expected, said in the log with its traceback, as
         the app's log keeps errors. Each kind of failure is said once while it
         keeps coming back the same way, so one that comes back with every event
-        or every tick does not fill the log, nor two that take turns.
+        or every tick does not fill the log, nor two that take turns. Once the
+        same thing has worked (`_fine`), or the rehearsal is over, it is said
+        again the next time.
         """
         how = repr(sys.exc_info()[1])
         with self._failures_lock:
@@ -875,3 +962,11 @@ class MidiRig:
                 return
             self._failures[what] = how
         log.exception("%s", what)
+
+    def _fine(self, what):
+        """What `_failed` was told of has worked: the next failure is said."""
+        # Read without the lock first: this runs with every event, and is
+        # almost always nothing to do.
+        if what in self._failures:
+            with self._failures_lock:
+                self._failures.pop(what, None)

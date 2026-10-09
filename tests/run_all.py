@@ -44,9 +44,10 @@ things to be true:
                        waits, comes, goes, is held by another app or goes
                        quiet, the same notes on two ports, a port kept open
                        with what it set through a rename or a re-pick and on
-                       a system that opens a port once, a pedal let up when
-                       its port goes, a take fed through the rig's own
-                       threads).
+                       a system that opens a port once, a track starting from
+                       its port's state while the port is away, a pedal let
+                       up when its port goes, a take fed through the rig's
+                       own threads).
                        Later tasks add to it. No port is opened: the library
                        is blocked and the rules are plain functions.
 

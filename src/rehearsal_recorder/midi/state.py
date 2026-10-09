@@ -58,8 +58,9 @@ class PortState:
     `start_messages` is what a take's .mid begins with, `releases` what it ends
     with. Neither changes the state, so a take can ask for them at any time,
     and both give a new list each call. A `copy` is its own: a rig keeps one
-    PortState per track through the whole rehearsal and hands each take a copy
-    to carry on from, without the take's notes reaching back into the rig's.
+    PortState per port through the whole rehearsal, whichever tracks take notes
+    from it, and hands each take a copy to carry on from, without the take's
+    notes reaching back into the rig's.
     """
 
     def __init__(self):

@@ -1890,11 +1890,11 @@ def main():
                rig.activity()["Drums"]["state"] == "ok" and fake.opens["TD-17"] == 2)
             fake.send("TD-17", T2 + 1500 * MS, b"\x99\x28\x40")     # 40
             rig.drain()
-            ok("the recorder was told in order: present with the event that was on the queue at Start, the events, "
-               "gone when the port was last heard, after its events, present again, the next event (R33)",
-               told("Drums") == [("present", 119 * S), ("feed", 119 * S), ("feed", T2 + 500 * MS),
-                                 ("feed", T2 + 800 * MS), ("gone", T2 + 800 * MS), ("present", T2 + 1 * S),
-                                 ("feed", T2 + 1500 * MS)])
+            ok("the recorder was told in order: present at Start (the event that was on the queue then is in the "
+               "state it begins from), the events, gone when the port was last heard, after its events, present "
+               "again, the next event (R33)",
+               told("Drums") == [("present", T2), ("feed", T2 + 500 * MS), ("feed", T2 + 800 * MS),
+                                 ("gone", T2 + 800 * MS), ("present", T2 + 1 * S), ("feed", T2 + 1500 * MS)])
             made = rig.end_take(3.0)
             ok("a port pulled and plugged back is one file", files_in(two) == ["Drums.mid", "Keys.mid"]
                and [m["name"] for m in made] == ["Drums", "Keys"])
@@ -2247,6 +2247,144 @@ def main():
                and in_ticks(swapped / "Keys.mid") == [(0, b"\xc9\x05"), (0, b"\xb9\x04\x5a")]
                and in_ticks(swapped / "Kit.mid") == [(0, b"\xc0\x07")])
 
+            # A track whose port is not there as the take begins starts from what that
+            # port set, and not from what its old port did (F6, R36).
+            away_fake, away = a_rig(td17, launchkey)
+            away.use([gtr, drums, keys])
+            T12 = now[0] = 1600 * S
+            away_fake.send("Launchkey Mini MK3", T12, b"\xc0\x07")         # program 8 on the Launchkey
+            away_fake.send("Launchkey Mini MK3", T12, b"\xb0\x07\x00")     # and its volume at 0
+            away_fake.send("TD-17", T12, b"\xc9\x05")
+            away.drain()
+            away.use([gtr, drums, {**keys, "midi_port": {"name": "Nord Stage 3 MIDI"}}])  # not plugged in
+            repicked = folder("repicked")
+            now[0] = T12 + 1 * S
+            away.begin_take(repicked, take_clock(now[0]))
+            away_fake.plug(nord)
+            away.tick()
+            away_fake.send("Nord Stage 3 MIDI", now[0] + 200 * MS, b"\x90\x3c\x40")
+            away.drain()
+            away.end_take(1.0)
+            ok("a track re-picked to a port not plugged in starts from that port, not from the one it had",
+               in_ticks(repicked / "Keys.mid") == [(384, b"\x90\x3c\x40"), (1920, b"\x80\x3c\x00")])
+            away_fake.send("Nord Stage 3 MIDI", now[0] + 2 * S, b"\xc1\x10")
+            away.drain()
+            away_fake.pull("TD-17")
+            away.tick()
+            away.drain()
+            away.use([gtr, {**drums, "midi_port": {"name": "Nord Stage 3 MIDI"}},
+                      {**keys, "midi_port": {"name": "TD-17"}}])
+            crossed = folder("crossed")
+            now[0] += 3 * S
+            away.begin_take(crossed, take_clock(now[0]))
+            away_fake.plug(td17)
+            away.tick()
+            away_fake.send("TD-17", now[0] + 200 * MS, b"\x99\x26\x40")
+            away.drain()
+            away.end_take(1.0)
+            ok("two tracks that swap ports, one of them not plugged in, each start from the port it now has",
+               in_ticks(crossed / "Drums.mid") == [(0, b"\xc1\x10")]
+               and in_ticks(crossed / "Keys.mid") == [(0, b"\xc9\x05"), (384, b"\x99\x26\x40"),
+                                                      (1920, b"\x89\x26\x00")])
+
+            # Renamed while its port is not plugged in: the port's state is still the track's (F6).
+            pulled_fake, pulled_rig = a_rig(td17)
+            pulled_rig.use([gtr, drums])
+            T13 = now[0] = 1700 * S
+            pulled_fake.send("TD-17", T13, b"\xc9\x05")
+            pulled_rig.drain()
+            pulled_fake.pull("TD-17")
+            pulled_rig.tick()
+            pulled_rig.drain()
+            pulled_rig.use([gtr, {**drums, "name": "Kit"}])
+            absent = folder("renamed-absent")
+            now[0] = T13 + 1 * S
+            pulled_rig.begin_take(absent, take_clock(now[0]))
+            pulled_fake.plug(td17)
+            pulled_rig.tick()
+            pulled_fake.send("TD-17", now[0] + 200 * MS, b"\x99\x26\x40")
+            pulled_rig.drain()
+            pulled_rig.end_take(1.0)
+            ok("a track renamed while its port is not plugged in still starts from that port's state",
+               in_ticks(absent / "Kit.mid") == [(0, b"\xc9\x05"), (384, b"\x99\x26\x40"), (1920, b"\x89\x26\x00")])
+
+            # An event still waiting on the queue as the band changes and Start is
+            # pressed is where the take begins from (F6).
+            waiting_events = []
+            for rename in (False, True):
+                queued_fake, queued = a_rig(td17)
+                queued.use([gtr, drums])
+                queued.drain()
+                T14 = now[0] = 1800 * S
+                queued_fake.send("TD-17", T14 - 10 * MS, b"\xb9\x07\x40")   # the volume, not yet written
+                queued.use([gtr, {**drums, "name": "Kit" if rename else "Drums"}])
+                inflight = folder("inflight-kit" if rename else "inflight")
+                queued.begin_take(inflight, take_clock(T14))
+                queued_fake.send("TD-17", T14 + 100 * MS, b"\x99\x26\x40")
+                queued.drain()
+                queued.end_take(1.0)
+                waiting_events.append(in_ticks(inflight / ("Kit.mid" if rename else "Drums.mid")))
+            ok("an event still waiting as Start is pressed is in the take's start, renamed or not",
+               waiting_events == [[(0, b"\xb9\x07\x40"), (192, b"\x99\x26\x40"), (1920, b"\x89\x26\x00")]] * 2)
+
+            # Whether a port was there at Start goes by when it was last heard, also
+            # when the watcher sees its silence only after Start (F7): one quiet
+            # before it begins the take with what it held let go, and one heard
+            # after it is in the take until it went quiet.
+            lag_fake, lag = a_rig(td17)
+            lag.use([gtr, drums])
+            T15 = now[0] = 2000 * S
+            lag_fake.send("TD-17", T15, b"\xfe")
+            lag_fake.send("TD-17", T15 + 50 * MS, b"\xb9\x40\x7f")         # the pedal down, the last it says
+            lag.drain()
+            quiet_start = folder("quiet-at-start")
+            now[0] = T15 + 200 * MS
+            lag.begin_take(quiet_start, take_clock(now[0]))
+            now[0] = T15 + 400 * MS
+            lag.tick()                                                     # quiet since T15 + 50 ms, seen now
+            lag.drain()
+            lag_fake.send("TD-17", T15 + 1 * S, b"\xfe")
+            lag_fake.send("TD-17", T15 + 1200 * MS, b"\x99\x26\x40")
+            lag.drain()
+            lag.end_take(2.0)
+            ok("a port quiet since before Start, seen so only after, begins the take with its pedal let up",
+               in_ticks(quiet_start / "Drums.mid") == [(0, b"\xb9\x40\x00"), (1920, b"\x99\x26\x40"),
+                                                         (3840, b"\x89\x26\x00")])
+            heard_after = folder("quiet-after-start")
+            T16 = now[0] = 2100 * S
+            lag_fake.send("TD-17", T16 - 100 * MS, b"\xfe")
+            lag.drain()
+            lag.begin_take(heard_after, take_clock(T16))
+            lag_fake.send("TD-17", T16 + 100 * MS, b"\x99\x24\x40")      # after Start, the last it says
+            now[0] = T16 + 500 * MS
+            lag.tick()                                                     # quiet, before the writer reaches Start
+            lag.drain()
+            lag.end_take(1.0)
+            ok("a port heard after Start that goes quiet before the writer reaches Start is in the take until then",
+               (heard_after / "Drums.mid").exists()
+               and in_ticks(heard_after / "Drums.mid") == [(0, b"\xb9\x40\x00"), (192, b"\x99\x24\x40"),
+                                                         (192, b"\x89\x24\x00")])
+
+            # Notes still waiting on the queue when the counts start again, or when
+            # the rehearsal ends, are not counted.
+            count_fake, counting = a_rig(td17)
+            counting.use([gtr, drums])
+            counting.drain()
+            for i in range(3):
+                count_fake.send("TD-17", 1900 * S + i * MS, b"\x99\x26\x40")
+            counting.reset_counts()
+            counting.drain()
+            reset_to = (counting.ports()["ports"][0]["notes"], counting.activity()["Drums"]["notes"])
+            count_fake.send("TD-17", 1900 * S + 10 * MS, b"\x99\x26\x40")
+            counting.drain()
+            one_more = (counting.ports()["ports"][0]["notes"], counting.activity()["Drums"]["notes"])
+            for i in range(3):
+                count_fake.send("TD-17", 1900 * S + (20 + i) * MS, b"\x99\x26\x40")
+            counting.release()
+            counting.drain()
+            ok("notes still waiting when the counts start again, or when the rehearsal ends, are not counted",
+               reset_to == (0, 0) and one_more == (1, 1) and counting.ports()["ports"][0]["notes"] == 0)
+
             # Two tracks on one port: one port open, counted once, and no echo between them.
             shared_fake = FakePortSystem([td17], exclusive=True)
             shared = MidiRig(shared_fake, threads=False, now_ns=lambda: now[0])
@@ -2392,6 +2530,24 @@ def main():
                 spare.tick()
             ok("two failures that alternate are each said once in the log, not once each time",
                len(said7) - said_before == 2 and all(r.levelno == logging.ERROR for r in said7[said_before:]))
+            for port in spare_fake.open_ports:
+                del port.resync                                                      # it works again
+            del spare_fake.inputs
+            for _ in range(4):
+                spare.tick()
+            for port in spare_fake.open_ports:
+                port.resync = broken_clock
+            for _ in range(4):
+                spare.tick()
+            back_again = len(said7) - said_before
+            spare.release()
+            spare.use([gtr, drums])
+            for port in spare_fake.open_ports:
+                port.resync = broken_clock
+            for _ in range(4):
+                spare.tick()
+            ok("a failure is said again once the same thing has worked in between, and after release",
+               back_again == 3 and len(said7) - said_before == 4)
             spare.shutdown()
 
             # With its own threads, as the app runs it.
