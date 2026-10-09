@@ -62,6 +62,9 @@ from rehearsal_recorder.midi.clock import MARK_EVERY_SEC, fit, load, save_line
 from rehearsal_recorder.midi.smf import read_events, write_mid
 from rehearsal_recorder.midi.state import PortState
 
+# The app's log keeps ERROR and above (app.py). What the spec says goes there is
+# logged at ERROR: lines being dropped, and a .mid that could not be made. What
+# is said below that stays out of it.
 log = logging.getLogger(__name__)
 
 MIDRAW_SUFFIX = ".midraw"
@@ -127,8 +130,8 @@ class _Sink:
             if len(self.waiting) >= _WAITING_MAX:
                 if not self.dropping:
                     self.dropping = True
-                    log.warning("%s: the disk has refused writes for so long that new lines are being dropped",
-                                self.path.name)
+                    log.error("%s: the disk has refused writes for so long that new lines are being dropped",
+                              self.path.name)
                 raise NotesDropped(f"{self.path.name}: the disk has refused writes for too long")
         self.waiting += data
 
@@ -374,8 +377,8 @@ class MidiRecorder:
                     _make_mid(track.path, mid, track.name, track.port, marks,
                               self._anchor.samplerate, duration_sec)
                 except Exception as e:
-                    log.warning("%s: its notes could not be made into a .mid, and are kept as %s: %r",
-                                track.name, track.path.name, e)
+                    log.error("%s: its notes could not be made into a .mid, and are kept as %s: %r",
+                              track.name, track.path.name, e)
                     unfinished = True
                     continue
                 made.append({"name": track.name, "file": str(mid), "port": track.port})
@@ -529,7 +532,7 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
         try:
             _make_mid(raw, mid, raw.stem, port, marks, rate, duration_sec)
         except Exception as e:
-            log.warning("%s: its notes could not be made into a .mid, and are kept: %r", raw.name, e)
+            log.error("%s: its notes could not be made into a .mid, and are kept: %r", raw.name, e)
             unfinished = True
             continue
         found.append({"name": raw.stem, "file": str(mid), "port": port})

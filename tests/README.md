@@ -22,14 +22,21 @@ ports before a take run here too, through the Api on a fake port system: the
 signal check opens them (a band of nothing but MIDI is checked all the same),
 Start keeps what the check had open and opens what the final tracks say,
 Finish and closing the app let them go, and Under the hood and Copy details
-say what MIDI there is. A take's notes follow its files:
-renaming a take, merging its song and the pass that puts names right move the
-`.mid` files with the folder (a take of nothing but notes, which has no `.wav`
-to find its folder by, included, and an unconverted `.midraw` goes along),
-deleting finds the folder through them, and cropping cuts them with the audio,
-a draft's too, with the originals of both kinds put aside together and put
-back together when a move fails, when the new `.mid` cannot take its name or
-when one cannot be read.
+say what MIDI there is. A take with notes runs here as well, driven by the
+recorder's own callback and a fake port system: Start gives the card only the
+tracks that record sound (a MIDI track has no input) and begins the notes on
+the audio's clock, Stop stops the audio and then makes the `.mid` files and
+says which tracks have none, Keep and Recover move them beside the WAVs, a
+`.midraw` the disk would not let become a `.mid` is moved with the take rather
+than thrown away with the drafts, a kit pulled mid-take costs the take
+nothing, and a rig that fails costs it no audio. A take's notes follow its
+files: renaming a take, merging its song and the pass that puts names right
+move the `.mid` files with the folder (a take of nothing but notes, which has
+no `.wav` to find its folder by, included, and an unconverted `.midraw` goes
+along), deleting finds the folder through them, and cropping cuts them with
+the audio, a draft's too, with the originals of both kinds put aside together
+and put back together when a move fails, when the new `.mid` cannot take its
+name or when one cannot be read.
 
 No sound card and no browser: `sounddevice` is replaced by a stub before
 anything imports it, the renderer is called directly, and the samples that

@@ -530,8 +530,12 @@ class AudioRecorder:
             })
 
         # The record has done its job: every wav now carries its own header.
-        # Left behind it would ride along into the saved take.
-        (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
+        # Left behind it would ride along into the saved take. A take with
+        # notes keeps it a little longer: the .mid files are made after this,
+        # and it says which port each came from (midi/capture.finish_draft).
+        # The app removes it once no notes file is left that needs it.
+        if not self._notes:
+            (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
 
         self._result = {"duration_sec": duration, "tracks": finalized}
         return self._result

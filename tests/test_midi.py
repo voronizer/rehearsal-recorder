@@ -1417,8 +1417,8 @@ def main():
         ok("a .mid is written under another name than its own", len(seen) == 2 and "Drums.mid" not in seen)
         ok("one that could not be written leaves no half file, keeps its .midraw, and stop still answers",
            made == [] and files(half) == ["Drums.midraw", "Keys.midraw"])
-        ok("and each is said in the log, once, by its track's name",
-           [r.levelno for r in said6] == [logging.WARNING] * 2
+        ok("and each is said in the log, once, by its track's name, at ERROR which the app's log keeps (R37)",
+           [r.levelno for r in said6] == [logging.ERROR] * 2
            and [r.getMessage().split(":")[0] for r in said6] == ["Drums", "Keys"])
         ok("and is made from the .midraw later, as after a crash",
            [m["name"] for m in finish_draft(half, 3.0)] == ["Drums", "Keys"] and files(half) == ["Drums.mid", "Keys.mid"]
@@ -1594,8 +1594,8 @@ def main():
            kinds[0] is OSError and kinds[-1] is NotesDropped and 20 < queued < 30
            and kinds == [OSError] * queued + [NotesDropped] * (40 - queued) and issubclass(NotesDropped, OSError))
         dropped_said = [r for r in said6[said_before:] if "dropped" in r.getMessage()]
-        ok("and the log says so once for the file, not once for each line",
-           len(dropped_said) == 1 and dropped_said[0].levelno == logging.WARNING and "Pad.midraw" in dropped_said[0].getMessage())
+        ok("and the log says so once for the file, not once for each line, at ERROR (R37)",
+           len(dropped_said) == 1 and dropped_said[0].levelno == logging.ERROR and "Pad.midraw" in dropped_said[0].getMessage())
         rec.stop(3.0)
         notes_in = read_events(capped / "Pad.mid")[1]
         ok("the lines that waited are in the .mid once the disk takes them, the dropped ones are not, and the note after is",

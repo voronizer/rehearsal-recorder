@@ -12,11 +12,12 @@ things to be true:
                        cloud with the original tracks, the notes the player
                        is sent for a take (take_notes), the MIDI ports
                        before a take (the check, Start, Finish, Under the
-                       hood), and a take's notes following its files
-                       (renamed, merged, deleted and cropped with the audio,
-                       a take of nothing but notes too). No browser, no
-                       sound card: PortAudio is stubbed and the samples are
-                       inspected directly.
+                       hood), a take with notes (Start, Stop, Keep and
+                       Recover, through the Api on a fake port system), and
+                       a take's notes following its files (renamed, merged,
+                       deleted and cropped with the audio, a take of nothing
+                       but notes too). No browser, no sound card: PortAudio
+                       is stubbed and the samples are inspected directly.
 
     test_platform.py   the places macOS, Windows and Linux differ. Only one
                        of them is here, so the code is driven into each shape
