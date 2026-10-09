@@ -580,6 +580,12 @@ function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); 
 //   window.__MIDI_ECHO__  = ['Keys', 'Synth']  two tracks, the second getting
 //                                         the first's notes: Synth says
 //                                         echo: 'Keys', as Python's does.
+//   window.__MIDI_PLAYED__ = ['Launchkey Mini MK3 MIDI Port']  ports somebody
+//                                         plays, as the kit does, whichever
+//                                         track has them. A check opens the
+//                                         other ports of a picked port's
+//                                         device too, and counts a played one
+//                                         among them (P7).
 // and a test can change them while it runs, as it can the others.
 // A track that takes notes is one on Both or MIDI (rules.records_notes);
 // one with no mode records audio.
@@ -595,12 +601,29 @@ const midiPortNames = () => (window.__MIDI_PORTS__ || ['TD-17', 'Launchkey Mini 
 // What the system says of a port besides its name: the maker where it is
 // known, and an id that is the same every time.
 const MIDI_MAKERS = {'TD-17': 'Roland', 'Launchkey Mini MK3': 'Novation'};
+// A keyboard lists its ports under its own name: "Launchkey Mini MK3 MIDI
+// Port" and "Launchkey Mini MK3 DAW Port" are one device's.
+const midiDeviceOf = (name) => name.replace(/\s+(MIDI|DAW)\s+Port\b.*$/, '') || name;
 // A name the system lists twice gets a different id each time (`copy`, from 1).
 function midiPortInfo(name, copy = 0) {
   let id = 1000 + copy * 7919;
   for (const c of name) id = (id * 31 + c.codePointAt(0)) % 1000003;
-  return {name, device: name, ...(MIDI_MAKERS[name] ? {maker: MIDI_MAKERS[name]} : {}), id: String(id)};
+  const device = midiDeviceOf(name);
+  return {name, device, ...(MIDI_MAKERS[device] ? {maker: MIDI_MAKERS[device]} : {}), id: String(id)};
 }
+// identity.in_order: a device's ports together, in the order the devices
+// first come, and within one its control or DAW port after the others.
+function midiInOrder(ports) {
+  const groups = [], byDevice = new Map();
+  for (const p of ports) {
+    if (byDevice.has(p.device)) byDevice.get(p.device).push(p);
+    else { const group = [p]; byDevice.set(p.device, group); groups.push(group); }
+  }
+  const control = (p) => /daw|midiin2|control|ctrl/
+    .test(p.name.toLowerCase().split(p.device.toLowerCase()).join(' '));
+  return groups.flatMap(g => [...g.filter(p => !control(p)), ...g.filter(control)]);
+}
+const isPlayed = (name) => Boolean(name) && (window.__MIDI_PLAYED__ || []).includes(name);
 // How a track's port stands (midi.rig's activity states).
 function midiPortState(t) {
   const name = portNameOf(t);
@@ -730,7 +753,7 @@ function midiActivity(read) {
     const first = echo[1] === t.name && state === 'ok'
       ? tracks.find(o => o.name === echo[0] && midiPortState(o) === 'ok') : null;
     const source = first || t;
-    const plays = state === 'ok' && run && isKit(source);
+    const plays = state === 'ok' && run && (isKit(source) || isPlayed(portNameOf(source)));
     let vel = 0;
     if (plays && run.ended === null) {
       const since = run.read[t.name] ?? 0;
@@ -886,9 +909,17 @@ window.__MAKE_API__ = () => ({
     const counts = Object.fromEntries(Object.entries(midiActivity(false)).map(([n, a]) => [n, a.notes]));
     const held = (name) => midiTracks().filter(t => portNameOf(t) === name && midiPortState(t) === 'ok')
       .reduce((sum, t) => sum + (counts[t.name] || 0), 0);
+    // A check also opens the other ports of each picked port's device, only
+    // to count them (P7): a played one among them counts what is played.
+    const open = midiTracks().filter(t => midiPortState(t) === 'ok').map(portNameOf);
+    const beside = new Set(!session && midiCheck ? open.map(midiDeviceOf) : []);
+    const run = midiRun();
+    const elapsed = run ? (run.ended ?? clock() - run.since) : 0;
+    const notes = (name) => open.includes(name) ? held(name)
+      : isPlayed(name) && beside.has(midiDeviceOf(name)) ? kitCount(elapsed) : 0;
     return {system:'Fake MIDI', error:null,
-            ports: midiPortNames().map((name, i, all) => ({
-              ...midiPortInfo(name, all.filter(n => n === name).length > 1 ? i + 1 : 0), notes: held(name)}))};
+            ports: midiInOrder(midiPortNames().map((name, i, all) => ({
+              ...midiPortInfo(name, all.filter(n => n === name).length > 1 ? i + 1 : 0), notes: notes(name)})))};
   },
   midi_activity: async () => midiActivity(true),
   // The notes of a take's tracks, a kit pattern for the drums and a keyboard

@@ -30,7 +30,7 @@ test("says the app's name with its logo, and fills the band in from the template
       })
     )
     .toBe(true)
-  await expect(page.locator("input[aria-label='Track 1 name']")).toHaveValue("Guitar")
+  await expect(page.locator("textarea[aria-label='Track 1 name']")).toHaveValue("Guitar")
   // Free space is always on screen. The fake's disk lasts for weeks: past
   // two days the estimate is "many hours", which "about" does not go in
   // front of.
@@ -215,7 +215,7 @@ test.describe("an interface switched on after the app", () => {
     await expect(startButton(page)).toBeDisabled()
 
     // Edited while the desk boots, which is when people do it.
-    await page.fill("input[aria-label='Track 2 name']", "Bass")
+    await page.fill("textarea[aria-label='Track 2 name']", "Bass")
     await page.getByRole("button", { name: "Look again" }).click()
     await expect(page.getByText("Still not there")).toBeVisible()
     expect(await callCount(page, "rescan_devices")).toBe(1)
@@ -228,7 +228,7 @@ test.describe("an interface switched on after the app", () => {
     await expect(page.getByText("Still not there")).toHaveCount(0)
     // A name edited meanwhile is kept, because the band on screen is what
     // gets placed on the desk's inputs.
-    await expect(page.locator("input[aria-label='Track 2 name']")).toHaveValue("Bass")
+    await expect(page.locator("textarea[aria-label='Track 2 name']")).toHaveValue("Bass")
     const placed = (await calls(page, "load_default_tracks")).at(-1)?.args[0] as { name: string }[]
     expect(placed.map((t) => t.name)).toEqual(["Guitar", "Bass"])
     await expect(page.locator("[aria-label='Track 2 input']")).toHaveText("Input 2")
