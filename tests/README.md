@@ -36,7 +36,8 @@ no `.wav` to find its folder by, included, and an unconverted `.midraw` goes
 along), deleting finds the folder through them, and cropping cuts them with
 the audio, a draft's too, with the originals of both kinds put aside together
 and put back together when a move fails, when the new `.mid` cannot take its
-name or when one cannot be read.
+name or when one cannot be read. An unconverted `.midraw`, with its clock and
+its record, goes aside with the originals, and the cropped take keeps none.
 
 No sound card and no browser: `sounddevice` is replaced by a stub before
 anything imports it, the renderer is called directly, and the samples that
@@ -132,7 +133,8 @@ lasting to the file's last event, a file with no notes, and a take of an hour
 and 40000 notes; and a `.mid` cropped (`crop_mid`): what was set before the
 start written at tick 0, a key held across the start left out with its release
 (on its own channel, a note-on at velocity 0 too), a key held across the end let
-go there with the pedals that are down, a SysEx kept whole, the names kept,
+go there with the pedals that are down, a key's pressure going the way its key
+does, a SysEx kept whole, the names kept,
 every tick `round(seconds * 1920)` from the new start over 20000 events and from
 a start that is not on a tick, a file a DAW saved again at other ticks and
 another tempo, and a file that cannot be read or written answered, never

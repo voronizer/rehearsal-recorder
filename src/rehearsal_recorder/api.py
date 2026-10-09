@@ -2984,8 +2984,11 @@ class Api:
         Rewrites every track shorter, and every notes file (a .mid) with them,
         and puts the originals in the Trash as one folder named after the take
         — what turns up there is then a recognisable thing rather than eight
-        loose files called Gtr.wav. Anything else in the take's folder, an
-        unconverted .midraw among it, is not the crop's to touch.
+        loose files called Gtr.wav. An unconverted .midraw (R40), with the
+        clock and the record that a later try would make it from, is timed
+        from the uncropped take's start and belongs to the take as it was: it
+        goes aside with the originals and the cropped take keeps none. Anything
+        else in the take's folder is not the crop's to touch.
 
         The order matters, because the app can be killed in the middle of it.
         Every new file is written under WRITING_PREFIX first, so nothing is
@@ -3038,6 +3041,12 @@ class Api:
                 return {"ok": False, "error": f"{source.name}: {res['error']}"}
             written.append(target)
 
+        # The clock and the record go with a .midraw only when there is one, as
+        # _move_unmade_notes has it.
+        left = sorted(take_dir.glob(f"*{MIDRAW_SUFFIX}"))
+        if left:
+            left += [p for p in (take_dir / CLOCK_FILE, take_dir / TAKE_RECORD) if p.exists()]
+
         aside = _unique_path(take_dir.with_name(f"{take_dir.name} (before crop)"))
         # Every original that reached the aside folder, oldest first. On
         # Windows, renaming a file another process has open raises, and a move
@@ -3047,8 +3056,7 @@ class Api:
         moved = []
         try:
             aside.mkdir(parents=True)
-            for f in files:
-                source = Path(f["file"])
+            for source in [*(Path(f["file"]) for f in files), *left]:
                 shutil.move(str(source), str(aside / source.name))
                 moved.append((aside / source.name, source))
             for f, target in zip(files, written):

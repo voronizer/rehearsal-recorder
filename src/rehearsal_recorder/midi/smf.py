@@ -256,7 +256,7 @@ def crop_mid(source, target, start_sec: float, end_sec: float) -> dict:
     own start is (F6), not by replaying what came before. A key held across the
     start is left out with its release: a release for a key the file never
     struck is dropped, on its channel, whether a note-off or a note-on at
-    velocity 0. A key still held at the end is let go there, and so is a pedal
+    velocity 0, and so is that key's pressure (0xA0). A key still held at the end is let go there, and so is a pedal
     still down (F7). The track's name and the port's name are kept, and a SysEx
     inside the range whole. Each event's tick is round(seconds * 1920) from the
     new start, as write_mid does it, so a long take is not off by a tick.
@@ -286,6 +286,8 @@ def crop_mid(source, target, start_sec: float, end_sec: float) -> dict:
                 if key not in struck:
                     continue
                 struck.discard(key)
+            elif kind == 0xA0 and key not in struck:
+                continue  # a key's pressure goes with its key
             shifted.append((seconds - start_sec, data))
             after.feed(data)
         end = end_sec - start_sec

@@ -8640,13 +8640,14 @@ def main():
     (gone_dir68 / "Gtr.wav").unlink()
     (gone_dir68 / "Keys.midraw").write_bytes(b"t 1\n")
     res = a68.delete_take(str(folder68), 8)
-    ok("a take whose .wav files were deleted by hand still trashes its folder, found through its notes",
+    ok("(a guard, as it passed before: the take still names its .wav files) a take whose .wav files "
+       "were deleted by hand is trashed with its folder",
        res["ok"] and not gone_dir68.exists() and a68._lib.take(folder68, 8) is None
        and res["trashed"] is True)
     make68(9, "Only notes", audio=())
     only_dir68 = folder68 / "09 - Only notes 1"
     res = a68.delete_take(str(folder68), 9)
-    ok("and so does a take of nothing but notes",
+    ok("a take of nothing but notes has its folder found through its notes, and trashed",
        res["ok"] and not only_dir68.exists() and a68._lib.take(folder68, 9) is None)
     make68(10, "Plain", notes=())
     plain_dir68 = folder68 / "10 - Plain 1"
@@ -8658,7 +8659,15 @@ def main():
     # is a Both track here: a .wav and a .mid of one name.
     made68 = make68(11, "Cut", audio=("Gtr", "Drums"))
     cut_dir68 = Path(made68["notes"][0]["file"]).parent
-    (cut_dir68 / "Keys.midraw").write_bytes(b"t 1\n")
+
+    def leave68(take_dir):
+        """What a notes file the disk would not turn into a .mid leaves in a take's folder (R40): the .midraw,
+        and the clock and the record that a later try needs to make it."""
+        for name in ("Keys.midraw", "take.clock", "take.json"):
+            (take_dir / name).write_bytes(b"t 1\n")
+
+    left68 = ["Keys.midraw", "take.clock", "take.json"]
+    leave68(cut_dir68)
     real_trash68 = apimod68.move_to_trash
     apimod68.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
     try:
@@ -8675,20 +8684,25 @@ def main():
            (2880, b"\x99\x24\x64"), (3072, b"\x89\x24\x00")])
     aside68 = Path(res["location"])
     ok("the originals, .mid and .wav, are in the (before crop) folder together, as they were",
-       aside68.name.endswith("(before crop)") and files68(aside68) == ["Drums.mid", "Drums.wav", "Gtr.wav"]
+       aside68.name.endswith("(before crop)")
+       and [n for n in files68(aside68) if n not in left68] == ["Drums.mid", "Drums.wav", "Gtr.wav"]
        and kit_ticks68(aside68 / "Drums.mid") == whole68 and wav_frames(aside68 / "Gtr.wav") == 4 * SR
        and wav_frames(aside68 / "Drums.wav") == 4 * SR)
-    ok("the take's folder has the cropped files and what was not the crop's to touch, no .writing- file",
-       files68(cut_dir68) == ["Drums.mid", "Drums.wav", "Gtr.wav", "Keys.midraw"])
+    ok("the unconverted .midraw, with its clock and its record, is aside with the originals it was timed from",
+       files68(aside68) == ["Drums.mid", "Drums.wav", "Gtr.wav", *left68]
+       and all((aside68 / name).read_bytes() == b"t 1\n" for name in left68))
+    ok("and the cropped take keeps none of them, nor a .writing- file",
+       files68(cut_dir68) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
 
-    # A crop that stops half way leaves the take exactly as it was, both kinds of file.
+    # A crop that stops half way leaves the take exactly as it was, every kind of file.
+    leave68(cut_dir68)
     before68 = {p.name: p.read_bytes() for p in cut_dir68.iterdir()}
     beside68 = sorted(p.name for p in cut_dir68.parent.iterdir())
     real_move68, moves68 = apimod68.shutil.move, {"n": 0}
 
     def flaky_move68(src, dst):
         moves68["n"] += 1
-        if moves68["n"] == 3:        # the .mid, after both .wav files are aside
+        if moves68["n"] == 5:        # the clock, with the .wav files, the .mid and the .midraw aside
             raise PermissionError("the file is open in another process")
         return real_move68(src, dst)
 
@@ -8697,7 +8711,7 @@ def main():
         half68 = a68.crop_take(str(folder68), 11, 0.5, 1.5)
     finally:
         apimod68.shutil.move = real_move68
-    ok("a move that fails after the .wav files are aside puts them and the .mid back as they were",
+    ok("a move that fails with the .wav files, the .mid and the .midraw aside puts every one of them back",
        not half68["ok"] and {p.name: p.read_bytes() for p in cut_dir68.iterdir()} == before68
        and sorted(p.name for p in cut_dir68.parent.iterdir()) == beside68)
 
@@ -8713,7 +8727,8 @@ def main():
         late68 = a68.crop_take(str(folder68), 11, 0.5, 1.5)
     finally:
         apimod68.os.replace = real_replace68
-    ok("and one that fails when the new .mid takes its name puts both originals back, and leaves no .writing- file",
+    ok("and one that fails when the new .mid takes its name puts every original and leftover back, and leaves "
+       "no .writing- file",
        not late68["ok"] and {p.name: p.read_bytes() for p in cut_dir68.iterdir()} == before68
        and sorted(p.name for p in cut_dir68.parent.iterdir()) == beside68)
 
@@ -8722,17 +8737,19 @@ def main():
     ok("a .mid that cannot be read costs the crop and nothing else: the .wav is as long as it was",
        not torn68["ok"] and wav_frames(cut_dir68 / "Gtr.wav") == 2 * SR
        and (cut_dir68 / "Drums.mid").read_bytes() == b"not a midi file"
-       and files68(cut_dir68) == ["Drums.mid", "Drums.wav", "Gtr.wav", "Keys.midraw"]
+       and files68(cut_dir68) == ["Drums.mid", "Drums.wav", "Gtr.wav", *left68]
        and sorted(p.name for p in cut_dir68.parent.iterdir()) == beside68)
 
-    # A take of notes alone is cropped by its length, and the .mid is a file like any.
+    # A take of notes alone is cropped by its length, and the .mid is a file like any. A record with no
+    # .midraw beside it is not a leftover of the kind that goes aside: it stays.
     make68(12, "Notes cut", audio=())
     notes_dir68 = folder68 / "12 - Notes cut 1"
+    (notes_dir68 / "take.json").write_bytes(b"{}")
     res = a68.crop_take(str(folder68), 12, 1.0, 3.0)
     ok("a take of nothing but notes is cropped: two seconds long, its .mid cut",
        res["ok"] and abs(res["take"]["duration_sec"] - 2.0) < 0.01
        and kit_ticks68(notes_dir68 / "Drums.mid")[1:3] == [(960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00")]
-       and files68(notes_dir68) == ["Drums.mid"])
+       and files68(notes_dir68) == ["Drums.mid", "take.json"])
     ok("a region shorter than a second is refused for notes too", not a68.crop_take(str(folder68), 12, 0.1, 0.4)["ok"])
     make68(13, "Wav gone")
     wav_gone_dir68 = folder68 / "13 - Wav gone 1"
@@ -8769,6 +8786,19 @@ def main():
     ok("a draft with no files left at all is refused as it was",
        a68.crop_draft(str(draft_notes68), [], 1.0, 3.0, notes=[ghost68])
        == {"ok": False, "error": "The take has no files left on disk"})
+    left_draft68 = folder68 / "_drafts" / "take 16"
+    write_wav(left_draft68 / "Gtr.wav", 1000, seconds=4.0)
+    left_note68 = kit68(left_draft68 / "Drums.mid")
+    leave68(left_draft68)
+    apimod68.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
+    try:
+        res = a68.crop_draft(str(left_draft68), [{"name": "Gtr", "file": str(left_draft68 / "Gtr.wav")}],
+                             1.0, 3.0, notes=[left_note68])
+    finally:
+        apimod68.move_to_trash = real_trash68
+    ok("a draft's unconverted leftovers go aside with its originals, and the cropped draft keeps none",
+       res["ok"] and files68(left_draft68) == ["Drums.mid", "Gtr.wav"]
+       and files68(Path(res["location"])) == ["Drums.mid", "Gtr.wav", *left68])
 
     print("\n[69] Notes go to the cloud with the tracks")
     # A take's notes are .mid files beside its WAVs. The original tracks and Both copy each one as it is, under its

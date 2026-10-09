@@ -2676,20 +2676,26 @@ def main():
         ok("a crop of all of it gives the same names and the same events",
            smf.crop_mid(source8, whole8, 0.0, 100.0) == {"ok": True} and read_events(whole8) == read_events(source8))
 
-        # Keys by channel; a key struck again while held; a release as a note-on at velocity 0.
+        # Keys by channel; a key struck again while held; a release as a note-on at velocity 0; a key's pressure.
         edge8 = folder8 / "edge.mid"
         write_mid(edge8, track_name="T", port_name="P", start=[], events=[
             struck8(0.5, 60, ch=0), struck8(0.6, 60, ch=1), struck8(0.7, 61),
+            (2.2, b"\xA0\x3c\x30"),                             # pressure on a key held across the start
             struck8(2.5, 60, ch=0),                              # struck again before it was let go
             freed8(2.6, 60, ch=1),                               # channel 2's key, held across the start
             struck8(2.7, 61, vel=0),                             # the release of a key held across the start
+            (2.8, b"\xA0\x3c\x31"),                             # pressure on the key struck again: kept
+            (2.9, b"\xA1\x3c\x32"),                             # pressure on channel 2's key, never struck here
             freed8(3.0, 60, ch=0),
         ])
         edge_cut8 = folder8 / "edge cut.mid"
         smf.crop_mid(edge8, edge_cut8, 2.0, 5.0)
         ok("a key struck again after the start keeps its release; one the file never struck has none, "
            "on its own channel or as a note-on at velocity 0",
-           ticks8(edge_cut8) == [(960, b"\x90\x3c\x64"), (1920, b"\x80\x3c\x40")])
+           [(t, d) for t, d in ticks8(edge_cut8) if d[0] & 0xF0 != 0xA0]
+           == [(960, b"\x90\x3c\x64"), (1920, b"\x80\x3c\x40")])
+        ok("a key's pressure goes the way its key does: kept for a key the file struck, left out for one it did not",
+           [(t, d) for t, d in ticks8(edge_cut8) if d[0] & 0xF0 == 0xA0] == [(1536, b"\xA0\x3c\x31")])
 
         # Let go at the end: the keys, in the order they were struck, then the pedals.
         ends8 = folder8 / "ends.mid"
