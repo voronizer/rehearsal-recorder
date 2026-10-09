@@ -621,7 +621,8 @@ class KeepAwake:
                 if self._kernel32.PowerSetRequest(handle, kind):
                     self._set.append(kind)
                 else:
-                    print(f"[awake] request {kind} refused: error {ctypes.get_last_error()}")
+                    error = ctypes.get_last_error()
+                    print(f"[awake] request {kind} refused: error {error}")
             except Exception as e:  # noqa: BLE001
                 print(f"[awake] request {kind} refused: {e}")
         if not self._set:
@@ -725,8 +726,9 @@ class SleepWatch:
                 self._center.removeObserver_(observer)
             if self._handle is not None:
                 handle, self._handle = self._handle, None
+                # The callback stays alive with the watch: Microsoft does not
+                # say that unregistering waits for one already under way.
                 self._powrprof.PowerUnregisterSuspendResumeNotification(handle)
-                self._callback = self._params = None
         except Exception as e:  # noqa: BLE001
             print(f"[sleep] {e}")
 
@@ -839,10 +841,18 @@ def _mac_power_sources():
     return found
 
 
+_power_status = []  # kernel32 with GetSystemPowerStatus declared, once
+
+
 def _windows_power_status():
+    if not _power_status:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetSystemPowerStatus.argtypes = [
+            ctypes.POINTER(SYSTEM_POWER_STATUS)
+        ]
+        _power_status.append(kernel32)
+    kernel32 = _power_status[0]
     status = SYSTEM_POWER_STATUS()
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.GetSystemPowerStatus.argtypes = [ctypes.POINTER(SYSTEM_POWER_STATUS)]
     if not kernel32.GetSystemPowerStatus(ctypes.byref(status)):
         raise OSError(f"GetSystemPowerStatus: error {ctypes.get_last_error()}")
     return status

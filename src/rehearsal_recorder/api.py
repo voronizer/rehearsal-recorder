@@ -1383,8 +1383,9 @@ class Api:
         }
 
     def recording_health(self):
-        """Polled every couple of seconds while recording: is the stream alive
-        and is the disk filling up."""
+        """Polled every couple of seconds while recording: is the stream alive,
+        is the disk filling up, and how charged is the battery if the laptop
+        runs on it."""
         if self._recorder is None:
             return {"recording": False}
 

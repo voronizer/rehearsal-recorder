@@ -681,6 +681,10 @@ def main():
     ok("waking does not", heard == [1])
     watch.stop()
     ok("and it unregisters when asked", len(powrprof.unregistered) == 1)
+    # Microsoft does not say that unregistering waits for a callback already
+    # under way, so the callback stays alive with the watch, not freed then.
+    ok("a callback already under way as it stops is not freed under it",
+       watch._callback is not None)
 
     def broken():
         raise RuntimeError("the take is gone")

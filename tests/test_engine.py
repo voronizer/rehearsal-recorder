@@ -698,12 +698,14 @@ def main():
     rec = AudioRecorder.__new__(AudioRecorder)
     rec.error = None
     rec._stopping = False
+    rec._seen_wall = None  # not started: no sleep to tell (see [63])
     rec._finished()  # as if the stream stopped by itself
     ok("an unrequested stop is flagged as an error", rec.error is not None)
 
     rec2 = AudioRecorder.__new__(AudioRecorder)
     rec2.error = None
     rec2._stopping = True
+    rec2._seen_wall = None
     rec2._finished()  # this one we asked for
     ok("our own stop is not an error", rec2.error is None)
 
@@ -6785,6 +6787,11 @@ def main():
 
     tmp63 = Path(tempfile.mkdtemp())
     one63 = [{"name": "Gtr", "channel": 1}]
+    # The checks move _seen_wall back by hand; a real tick landing in between
+    # would move it on again, so the tick waits out the section unless a
+    # check asks for it.
+    tick_was = capmod.TICK_SEC
+    capmod.TICK_SEC = 3600
     block63 = np.full((256, 1), 900, dtype=np.int16)
 
     def recorder63(name):
@@ -6865,6 +6872,24 @@ def main():
        gone.problem() == said63 and raw63(gone) == 256 * 2)
     gone.stop()
 
+    # A driver that ends its stream on waking (WASAPI can) says so through
+    # PortAudio's finished callback, which may come before the tick or the
+    # poll: a sleep must still be told as the sleep it was.
+    ended = recorder63("ended")
+    ended._callback(block63, 256, None, None)
+    ended._seen_wall -= 60
+    before63 = ended._seen_wall
+    ended._finished()
+    ok("a stream that ends as the laptop wakes is the sleep, not the interface",
+       ended.problem() == capmod.slept_notice(before63))
+    ended.stop()
+    awake63 = recorder63("awake")
+    awake63._callback(block63, 256, None, None)
+    awake63._finished()
+    ok("and one that ends while it is awake is still the interface",
+       "interface stopped responding" in (awake63.problem() or ""))
+    awake63.stop()
+
     short = recorder63("short")
     short._callback(block63, 256, None, None)
     short._seen_wall -= 4
@@ -6873,7 +6898,6 @@ def main():
        short.problem() == capmod.STALLED)
     short.stop()
 
-    tick_was = capmod.TICK_SEC
     capmod.TICK_SEC = 0.05
     try:
         ticking = recorder63("ticking")
@@ -6884,7 +6908,7 @@ def main():
         ok("the take ticks while it records, and stops ticking with it",
            moved63 and not ticking._tick_thread.is_alive())
     finally:
-        capmod.TICK_SEC = tick_was
+        capmod.TICK_SEC = 3600
     ok("the silent-card rule is the one it was",
        hb63.SILENCE_SEC == 3.0 and capmod.SLEPT_GAP_SEC == 10.0)
 
@@ -6983,6 +7007,7 @@ def main():
     lock63.calls.clear()
     a63.shutdown()
     ok("closing the window lets go", lock63.calls[-1:] == ["release"])
+    capmod.TICK_SEC = tick_was
 
     print("\n" + "=" * 60)
     if problems:

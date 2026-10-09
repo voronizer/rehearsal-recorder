@@ -76,6 +76,7 @@ def slept_notice(at):
         "Everything up to that moment is saved."
     )
 
+
 # Capture block size. This used to be half a second, which made the level
 # meters visibly lag: a peak arrived only twice per second and was averaged
 # over the whole block. ~21 ms at 48 kHz keeps the meters lively and costs
@@ -180,8 +181,10 @@ class AudioRecorder:
 
     def _finished(self):
         """PortAudio calls this when the stream stops. If we did not ask for
-        the stop, the device went away."""
-        if not self._stopping and self.error is None:
+        the stop, the device went away, unless the laptop slept: a driver
+        can end its stream on waking, before the tick or the screen's poll
+        has noticed the sleep."""
+        if not self._stopping and self.error is None and not self._slept():
             self.error = (
                 "Recording stopped: the audio interface stopped responding. "
                 "Everything captured up to that point has been saved."
@@ -199,12 +202,18 @@ class AudioRecorder:
         said, either stays said.
         """
         if self.error is None and not self._stopping:
-            seen = self._seen_wall
-            if seen is not None and time.time() - seen > SLEPT_GAP_SEC:
-                self.fell_asleep(seen)
-            elif self._heartbeat.silent():
+            if not self._slept() and self._heartbeat.silent():
                 self.error = STALLED
         return self.error
+
+    def _slept(self):
+        """Whether the take has seen no sign of life for SLEPT_GAP_SEC, which
+        means the laptop slept (see _seen); if so, it fell asleep then."""
+        seen = self._seen_wall
+        if seen is not None and time.time() - seen > SLEPT_GAP_SEC:
+            self.fell_asleep(seen)
+            return True
+        return False
 
     def fell_asleep(self, at):
         """
