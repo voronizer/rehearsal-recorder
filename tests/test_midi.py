@@ -781,13 +781,17 @@ def main():
     interval = sys.getswitchinterval()
     sys.setswitchinterval(1e-6)
     try:
-        threads = [threading.Thread(target=feeder), threading.Thread(target=reader)]
+        # Daemon threads, joined with a limit: a lock that deadlocked would
+        # fail the check below instead of keeping the suite from exiting.
+        threads = [threading.Thread(target=feeder, daemon=True),
+                   threading.Thread(target=reader, daemon=True)]
         for t in threads:
             t.start()
         for t in threads:
             t.join(60)
     finally:
         sys.setswitchinterval(interval)
+    ok("both threads finish within a minute", not any(t.is_alive() for t in threads))
     ok("one thread feeding 20000 messages while another copies and reads ends with no error", errors == [])
     alone = port_state(*traffic)
     ok("and nothing it was fed is lost",

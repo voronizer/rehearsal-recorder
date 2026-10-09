@@ -23,9 +23,9 @@ rings for ever. And a pedal that was down when a reset-all-controllers arrived
 is still recorded as down, so the next take starts with it down until the
 player moves it.
 
-A PortState has a lock of its own, held for the length of `feed`, `copy`,
-`start_messages` and `releases`, so a port's thread can feed it while another
-thread copies it or reads it. Each call is one step; two calls in a row are
+A PortState has a lock of its own, taken by `feed` (while it changes the
+state), `copy`, `start_messages` and `releases`, so a port's thread can feed it
+while another thread copies it or reads it. Each call is one step; two calls in a row are
 not, and a caller that needs two to follow each other (a copy, then the next
 message) holds a lock of its own around both.
 """
@@ -72,8 +72,8 @@ class PortState:
 
     def feed(self, data) -> None:
         """
-        Takes one message from the port: bytes, or anything else made of bytes
-        (a bytearray, a memoryview), or a list or tuple of ints. Anything else
+        Takes one message from the port: bytes, a bytearray or a memoryview,
+        or a list or tuple of ints. Anything else, other buffers included,
         is ignored without being turned into bytes, a number included: bytes(5)
         is five zero bytes, and bytes(10**9) would be a gigabyte of them.
 
