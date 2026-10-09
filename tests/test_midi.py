@@ -1,8 +1,9 @@
 """
 Recording notes beside the audio. So far this is what stops Start (A1, P2 and
-P3), what the audio card check then holds, and which saved port is found again
-(P1) and the order a device's ports are listed in (P7); later sections are added
-here as the rest of it is built.
+P3), what the audio card check then holds, which saved port is found again
+(P1), the order a device's ports are listed in (P7), and the .mid file (F2 and
+F4): what one can hold, written and read back; later sections are added here
+as the rest of it is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
@@ -11,6 +12,9 @@ directly.
 """
 
 import sys
+import tempfile
+import threading
+import time
 import types
 from pathlib import Path
 
@@ -45,10 +49,14 @@ sys.modules["sounddevice"] = _sd
 # not available" — whatever is plugged into the machine running them.
 sys.modules["pylibremidi"] = None
 
+import mido  # noqa: E402  (to read the files back; src imports it only in midi/smf.py)
+
 from rehearsal_recorder.audio.devices import channels_available  # noqa: E402
+from rehearsal_recorder.midi import smf  # noqa: E402
 from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
 from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
 from rehearsal_recorder.midi.rules import notes_problem  # noqa: E402
+from rehearsal_recorder.midi.smf import read_events, storable, write_mid  # noqa: E402
 
 problems = []
 
@@ -60,6 +68,22 @@ def ok(label, cond):
     print(("  ok   " if cond else "  FAIL ") + label)
     if not cond:
         problems.append(label)
+
+
+def read_back(path):
+    """The file as mido reads it (names in UTF-8), and its messages with the
+    tick each is on, counted from the start of the file."""
+    mid = mido.MidiFile(path, charset="utf-8")
+    timed, tick = [], 0
+    for msg in mid.tracks[0]:
+        tick += msg.time
+        timed.append((tick, msg))
+    return mid, timed
+
+
+def played(timed):
+    """The channel messages and SysEx among a file's messages: all but the metas."""
+    return [(tick, msg) for tick, msg in timed if not msg.is_meta]
 
 
 def main():
@@ -231,6 +255,175 @@ def main():
        find_port({"name": "KeyLab 49", "device": "KeyLab 49"}, [P("KeyLab 61", "KeyLab 61")]) == (None, False))
     ok("Windows' renumbered name is still found on its own device",
        find_port({"name": "TD-17 1", "device": "TD-17"}, [P("TD-17 2", "TD-17")])[0].name == "TD-17 2")
+
+    # What a Standard MIDI File can hold (F2) and how it is written (F4): format
+    # 0, 960 ticks to the beat, 120 bpm, every name in UTF-8, every event on the
+    # tick its own time gives. Read back with mido, which is not this module's
+    # to trust: the files are opened here the way a DAW would open them.
+    print("\n[3] The .mid file")
+    ok("960 ticks to the beat, 120 bpm, 1920 ticks a second",
+       (smf.TICKS_PER_BEAT, smf.TEMPO, smf.TICKS_PER_SEC) == (960, 500_000, 1920))
+    events = [(0.0, b"\x99\x24\x64"), (0.1, b"\x89\x24\x00"), (0.5, b"\xB9\x04\x5A"),
+              (1.0, b"\xF0\x41\x10\x42\xF7"), (1.2, b"\xF8"), (1.3, b"\xFE"), (1.4, b"\xFF"),
+              (1.5, b"\xF2\x00\x10"), (1.6, b"\xF1\x20"), (1.7, b"\xF6"), (1.8, b"\x90\x40"),
+              (1.9, b"\xF0\x41\x10"), (2.0, b"\x99\x26\x50")]
+    start = [b"\xB9\x04\x5A"]
+    with tempfile.TemporaryDirectory() as folder:
+        folder = Path(folder)
+        path = folder / "take.mid"
+        skipped = write_mid(path, track_name="Pałyn", port_name="TD-17", start=start, events=events)
+        mid, timed = read_back(path)
+        ok("it is a format 0 file with 960 ticks to the beat",
+           mid.type == 0 and mid.ticks_per_beat == 960 and len(mid.tracks) == 1)
+        ok("120 bpm is stated at tick 0",
+           any(tick == 0 and msg.type == "set_tempo" and msg.tempo == 500_000 for tick, msg in timed))
+        ok("the track is named in UTF-8", mid.tracks[0].name == "Pałyn")
+        ok("the port's name is the device name",
+           [msg.name for _, msg in timed if msg.type == "device_name"] == ["TD-17"])
+        ok("at tick 0 come the track name, the device name and the tempo, then the start",
+           [(tick, msg.type) for tick, msg in timed[:4]] ==
+           [(0, "track_name"), (0, "device_name"), (0, "set_tempo"), (0, "control_change")])
+        ok("the channel messages and SysEx are there in order",
+           [msg.type for _, msg in played(timed)] ==
+           ["control_change", "note_on", "note_off", "control_change", "sysex", "note_on"])
+        ok("what the file cannot hold is skipped and counted: clock, sensing, reset, song position, "
+           "time code, tune request, a cut note, a cut SysEx", skipped == 8)
+        ok("the notes are on channel 9 as the device sent them",
+           {msg.channel for _, msg in played(timed) if msg.type.startswith("note")} == {9})
+        ok("each event is on the tick of its time: 0.1 s is 192, 2.0 s is 3840",
+           [tick for tick, _ in played(timed)] == [0, 0, 192, 960, 1920, 3840])
+        ok("a SysEx is kept whole", [msg.data for _, msg in played(timed) if msg.type == "sysex"] == [(0x41, 0x10, 0x42)])
+
+        # Read back by this module: the same bytes, the same seconds.
+        meta, back = read_events(path)
+        ok("read_events gives the names", meta == {"track_name": "Pałyn", "device_name": "TD-17"})
+        ok("read_events gives every event with the start first, the SysEx whole",
+           [data for _, data in back] ==
+           [b"\xB9\x04\x5A", b"\x99\x24\x64", b"\x89\x24\x00", b"\xB9\x04\x5A",
+            b"\xF0\x41\x10\x42\xF7", b"\x99\x26\x50"])
+        ok("and the seconds within one tick of what was written",
+           all(abs(got - want) <= 1 / 1920 for (got, _), want in zip(back, [0.0, 0.0, 0.1, 0.5, 1.0, 2.0])))
+
+        # Names that are not Latin-1: mido's own default fails the save on them.
+        cyrillic = folder / "drums.mid"
+        write_mid(cyrillic, track_name="Барабаны", port_name="Электронная установка", start=[], events=[])
+        ok("a Cyrillic name is saved and read back",
+           mido.MidiFile(cyrillic, charset="utf-8").tracks[0].name == "Барабаны"
+           and read_events(cyrillic)[0] == {"track_name": "Барабаны", "device_name": "Электронная установка"})
+
+        # A port that sent nothing still leaves a file: its name and tempo.
+        empty = folder / "empty.mid"
+        ok("nothing played writes a file with its name and tempo, and skips nothing",
+           write_mid(empty, track_name="Keys", port_name="Launchkey", start=[], events=[]) == 0
+           and [msg.type for _, msg in read_back(empty)[1]] ==
+           ["track_name", "device_name", "set_tempo", "end_of_track"]
+           and read_events(empty) == ({"track_name": "Keys", "device_name": "Launchkey"}, []))
+
+        # Ticks come from the time since the start, not from the one before.
+        late = folder / "late.mid"
+        write_mid(late, track_name="T", port_name="P", start=[], events=[(3600.0005, b"\x99\x24\x64")])
+        ok("a note at 3600.0005 s is on tick 6912001",
+           [tick for tick, _ in played(read_back(late)[1])] == [6912001])
+        many = folder / "many.mid"
+        long_take = [(i * 0.037, b"\x99\x24\x64" if i % 2 == 0 else b"\x89\x24\x00") for i in range(100_000)]
+        began = time.monotonic()
+        skipped_many = write_mid(many, track_name="T", port_name="P", start=[], events=long_take)
+        meta_many, back_many = read_events(many)
+        took = time.monotonic() - began
+        ok("100000 events 0.037 s apart are each on round(t * 1920), none off by the rounding of the ones before",
+           skipped_many == 0
+           and [tick for tick, _ in played(read_back(many)[1])] == [round(t * 1920) for t, _ in long_take])
+        ok("and read_events gives them back within one tick, in the same order",
+           len(back_many) == 100_000
+           and all(abs(got - t) <= 1 / 1920 and data == sent
+                   for (got, data), (t, sent) in zip(back_many, long_take)))
+        ok("writing and reading 100000 events is quick (under 20 s; a quadratic one takes minutes)", took < 20)
+
+        # Edges: what a caller can get wrong must not cost the take its file.
+        odd = folder / "odd.mid"
+        skipped_odd = write_mid(odd, track_name="T", port_name="P", start=[b"\xFA", b"\xB9\x04\x5A"],
+                                events=[(-0.5, b"\x99\x24\x64"), (1.0, b"\x89\x24\x00"),
+                                        (0.9, b"\x99\x26\x50")])
+        odd_events = read_events(odd)[1]
+        ok("a start message the file cannot hold is skipped and counted too", skipped_odd == 1)
+        ok("a time before the start is put at the start",
+           odd_events[1] == (0.0, b"\x99\x24\x64"))
+        ok("an event that comes out of order is held at the one before, so the file still saves",
+           [seconds for seconds, _ in odd_events] == [0.0, 0.0, 1.0, 1.0])
+        ok("and no event is lost for it", [data for _, data in odd_events] ==
+           [b"\xB9\x04\x5A", b"\x99\x24\x64", b"\x89\x24\x00", b"\x99\x26\x50"])
+
+        # If storable ever lets through what mido then refuses, that event is
+        # one more skipped. Made to by letting everything through.
+        real_storable = smf.storable
+        smf.storable = lambda data: True
+        try:
+            refused = write_mid(folder / "refused.mid", track_name="T", port_name="P", start=[b"\x90\x40"],
+                                events=[(0.0, b"\x99\x24\x64"), (0.1, b"\x90\x40"), (0.2, b"\x90\x40\xFF"),
+                                        (0.3, b"\xF0\x41\x90\xF7"), (0.4, b"\x89\x24\x00")])
+        finally:
+            smf.storable = real_storable
+        ok("an event mido refuses is skipped and the rest are kept",
+           refused == 4 and [data for _, data in read_events(folder / "refused.mid")[1]] ==
+           [b"\x99\x24\x64", b"\x89\x24\x00"])
+
+        # The file is opened by a name that is not ASCII, too.
+        ok("a file named in Cyrillic is written", write_mid(folder / "Барабаны.mid", track_name="T", port_name="P",
+                                                          start=[], events=[(0.0, b"\x99\x24\x64")]) == 0
+           and (folder / "Барабаны.mid").stat().st_size > 0)
+
+        # A name no encoding holds, and a time that is no time: neither costs the file.
+        lone = folder / "lone.mid"
+        skipped_lone = write_mid(lone, track_name="A\ud800B", port_name="P", start=[],
+                                  events=[(0.0, b"\x99\x24\x64"), (None, b"\x89\x24\x00"),
+                                          (float("nan"), b"\x89\x24\x00"), (float("inf"), b"\x89\x24\x00"),
+                                          ("1", b"\x89\x24\x00"), (0.1, b"\x89\x24\x00")])
+        ok("a lone surrogate in a name is written as a question mark",
+           read_events(lone)[0]["track_name"] == "A?B")
+        ok("a time that is not a number is one more skipped",
+           skipped_lone == 4 and [seconds for seconds, _ in read_events(lone)[1]] == [0.0, 0.1])
+
+        # mido keeps the charset in one variable for the length of a save: ports'
+        # files written at the same time must not put it back under each other.
+        errors = []
+
+        def write_some(n):
+            try:
+                for k in range(15):
+                    one = folder / f"thread{n}-{k}.mid"
+                    write_mid(one, track_name="Пałyn Барабаны", port_name="P", start=[],
+                              events=[(0.0, b"\x99\x24\x64")])
+                    if read_events(one)[0]["track_name"] != "Пałyn Барабаны":
+                        errors.append(n)
+            except Exception as e:
+                errors.append(repr(e))
+
+        threads = [threading.Thread(target=write_some, args=(n,)) for n in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        ok("files written and read at the same time keep their names in UTF-8", errors == [])
+
+    ok("storable: every channel message of the right length",
+       all(storable(data) for data in (b"\x80\x40\x00", b"\x99\x24\x64", b"\xA0\x40\x20", b"\xB9\x04\x5A",
+                                       b"\xC0\x05", b"\xCF\x7F", b"\xD0\x40", b"\xDF\x00",
+                                       b"\xE0\x00\x40", b"\xEF\x7F\x7F")))
+    ok("storable: whole SysEx, empty or not",
+       all(storable(data) for data in (b"\xF0\xF7", b"\xF0\x41\x10\x42\xF7", b"\xF0" + bytes(range(128)) + b"\xF7")))
+    ok("storable: nothing else a port sends",
+       not any(storable(data) for data in (b"", b"\xF8", b"\xFA", b"\xFB", b"\xFC", b"\xFE", b"\xFF",
+                                           b"\xF1\x20", b"\xF2\x00\x10", b"\xF3\x01", b"\xF4", b"\xF5",
+                                           b"\xF6", b"\xF7")))
+    ok("storable: not a message cut short, or run on, or with a high data byte",
+       not any(storable(data) for data in (b"\x90", b"\x90\x40", b"\x90\x40\x40\x40", b"\xC0", b"\xC0\x05\x05",
+                                           b"\xE0\x00", b"\x90\x80\x40", b"\x90\x40\x80", b"\xC0\x80",
+                                           b"\x40\x40", b"\x40")))
+    ok("storable: not a SysEx that is cut, never ended, or has a status byte inside",
+       not any(storable(data) for data in (b"\xF0", b"\xF0\x41\x10", b"\xF0\x41\x80\xF7", b"\xF0\xF0\xF7",
+                                           b"\xF0\x41\xF8\x42\xF7", b"\x41\x10\xF7")))
+    ok("storable takes any bytes-like thing",
+       storable(bytearray(b"\x99\x24\x64")) and storable(memoryview(b"\xF0\x41\xF7")))
 
     print("\n" + "=" * 60)
     if problems:

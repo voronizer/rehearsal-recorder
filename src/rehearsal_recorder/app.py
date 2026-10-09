@@ -171,6 +171,27 @@ def selftest():
         finally:
             system.close()
 
+    def midi_files():
+        # Writes a two-note .mid under a name Latin-1 cannot hold and reads it
+        # back: a build that lost mido, or whose text handling differs, fails
+        # here, in CI, not when a take ends. The label and message stay in
+        # ASCII (a Windows console is cp1252); the name lives in the file.
+        import tempfile
+        from pathlib import Path
+
+        import mido
+
+        from rehearsal_recorder.midi import smf
+
+        notes = [(0.0, b"\x99\x24\x64"), (0.25, b"\x89\x24\x00")]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "check.mid"
+            skipped = smf.write_mid(path, track_name="Pałyn", port_name="TD-17", start=[], events=notes)
+            meta, back = smf.read_events(path)
+        if skipped or meta != {"track_name": "Pałyn", "device_name": "TD-17"} or back != notes:
+            raise RuntimeError(f"wrote {len(notes)} notes, got back {len(back)}: {meta}")
+        return f"mido {mido.version_info}, a .mid written and read back"
+
     def encoder():
         from rehearsal_recorder.audio.encode import available
 
@@ -238,6 +259,7 @@ def selftest():
     if sys.platform == "win32":
         check("ASIO", asio)
     check("MIDI", midi_up)
+    check("MIDI files", midi_files)
     check("sample formats", encoder)
     check("numpy", numpy_works)
     check("history database", database)

@@ -60,8 +60,11 @@ So far: the three sentences that stop Start (no track that records sound, a
 track that takes notes with no port, two on one port), that the card check
 then holds only the tracks that record audio to the card's inputs, and that a
 saved port is found again after a replug, with a device's playing port listed
-first. Later tasks add to it. Plain functions over plain dictionaries: no port
-is opened, and the MIDI library is blocked as in the other suites.
+first, and the `.mid` file: what a Standard MIDI File can hold, written with
+`midi/smf.py` and read back with mido (the test imports mido for that), names
+in UTF-8, ticks that do not drift over a long take. Later tasks add to it.
+Plain functions over plain dictionaries and files in a temporary folder: no
+port is opened, and the MIDI library is blocked as in the other suites.
 
 ## The interface — in ui/, in TypeScript
 

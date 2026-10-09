@@ -28,10 +28,12 @@ things to be true:
                        Start (no track that records sound, a track with no
                        port, two on one port), that the card check then
                        holds only the tracks that record audio, which saved
-                       port is found again after a replug, and the order a
-                       device's ports are listed in. Later tasks add to it.
-                       No port is opened: the library is blocked and the
-                       rules are plain functions.
+                       port is found again after a replug, the order a
+                       device's ports are listed in, and the .mid file (what
+                       one can hold, written with mido and read back, names
+                       in UTF-8). Later tasks add to it. No port is opened:
+                       the library is blocked and the rules are plain
+                       functions.
 
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.
