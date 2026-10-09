@@ -73,9 +73,14 @@ describe("the site's content", () => {
     )
   })
 
-  it("has seven questions, each with an answer, the name's first", () => {
-    expect(content.faq.questions).toHaveLength(7)
+  it("has eight questions, each with an answer, the name's first", () => {
+    expect(content.faq.questions).toHaveLength(8)
     expect(content.faq.questions[0].body).toContain("Belarusian for “echo”")
+    // Sleep follows the laptop dying, the question it answers next.
+    expect(content.faq.questions[5].title).toBe("What if the laptop dies in the middle of a take?")
+    expect(content.faq.questions[6].title).toBe(
+      "Will the laptop fall asleep in the middle of a take?"
+    )
     for (const q of content.faq.questions) expect(q.body).not.toBe("")
   })
 

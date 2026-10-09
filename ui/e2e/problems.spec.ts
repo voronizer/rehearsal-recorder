@@ -82,6 +82,25 @@ test("a card that goes away mid-take stops it, and says why", async ({ page }) =
   await expect(said).toHaveCount(0)
 })
 
+test("a laptop that went to sleep ends the take, and says when", async ({ page }) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await page.getByRole("button", { name: /Record take 1/ }).click()
+  await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
+  // What the take says once the laptop is awake again.
+  await setFake(
+    page,
+    "__IFACE_GONE__",
+    "The laptop went to sleep at 21:14, so the take ends there. " +
+      "Everything up to that moment is saved."
+  )
+  await expect(page.getByRole("button", { name: /Save take/ })).toBeVisible()
+  expect(await callCount(page, "stop_take")).toBe(1)
+  const said = notices(page, "warning")
+  await expect(said).toHaveCount(1)
+  await expect(said).toContainText("went to sleep at 21:14")
+})
+
 test("a card gone quiet during the signal check stops it, and says so in place", async ({
   page,
 }) => {
