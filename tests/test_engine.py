@@ -8878,6 +8878,7 @@ def main():
        sorted(asked69["mixdown"]) == ["Bass.wav", "Drums.wav"])
     ok("encode was never given a .mid",
        len(asked69["encode"]) == 3 and not any(n.endswith(".mid") for n in asked69["encode"]))
+    ok("and its record names the notes", res["cloud"]["source"].get("notes") == ["Drums", "Keys"])
 
     print("  The mix")
     res = copy69(1, "mix")
@@ -8886,6 +8887,7 @@ def main():
        and not [c for c in asked69["copy"] if c[0].endswith(".mid")])
     ok("mixdown was given the two WAVs and nothing else",
        sorted(asked69["mixdown"]) == ["Bass.wav", "Drums.wav"])
+    ok("and the mix's record leaves the notes out, as the mix does", "notes" not in res["cloud"]["source"])
 
     print("  What the record says")
     where69 = a69._cloud_target(folder69)
@@ -8917,6 +8919,17 @@ def main():
     older = {**take1, "cloud": {**take1["cloud"], "source": {
         k: v for k, v in take1["cloud"]["source"].items() if k != "notes"}}}
     ok("and not with a copy made without them", not cloudmod69.is_current(older, "tracks", volumes69, "flac", where69))
+    ok("both records name the notes: Both carries the .mid files like the tracks do",
+       cloudmod69.source_of(take1, "both", volumes69, "flac", where69).get("notes") == ["Drums", "Keys"])
+    # A mix holds no notes, so what a take has of them cannot make a mix copy stale: one made before the take had
+    # notes, or by a build that did not record them, is not mixed and sent again for nothing.
+    mix_record69 = {"what": "mix", "name": take1["name"], "format": "flac", "dir": str(where69),
+                    "volumes": {"Drums": 1.0, "Bass": 1.0}, "duration_sec": take1["duration_sec"]}
+    ok("source_of for a mix of a take that has notes has no notes key",
+       cloudmod69.source_of(take1, "mix", volumes69, "flac", where69) == mix_record69)
+    mixed69 = {**take1, "cloud": {"mix": take1["cloud"]["tracks"], "source": mix_record69}}
+    ok("so a mix copy whose record has none is current for a take with notes",
+       cloudmod69.is_current(mixed69, "mix", volumes69, "flac", where69))
 
     print("  A crop")
     cropped69 = a69.crop_take(str(folder69), 1, 0.5, 1.5)
@@ -8940,6 +8953,42 @@ def main():
        res["ok"] and sorted(f.name for f in Path(res["cloud"]["tracks"]).iterdir()) == [f"Drums{ext69}", "Drums.mid"]
        and same69(Path(res["cloud"]["tracks"]) / "Drums.mid", mids69(3)["Drums"]))
     ok("with nothing half-written left", not list(target69.rglob(apimod69.WRITING_PREFIX + "*")))
+
+    print("  A .mid the disk refuses")
+    keep69(4, {"Drums": 700}, {"Drums": [36, 38]})
+    for which69 in ("copy2", "os.replace"):
+        real69 = apimod69.shutil.copy2, apimod69.os.replace
+
+        def refuse69(real, which=which69):
+            def refusing(src, dst, *args, **kwargs):
+                if str(src).endswith(".mid"):
+                    raise OSError(28, f"No space left on device ({which})")
+                return real(src, dst, *args, **kwargs)
+            return refusing
+
+        if which69 == "copy2":
+            apimod69.shutil.copy2 = refuse69(real69[0])
+        else:
+            apimod69.os.replace = refuse69(real69[1])
+        try:
+            try:
+                res = a69._copy_to_cloud(str(folder69), 4, "tracks")
+            except OSError as e:
+                res = {"ok": "raised", "error": str(e)}
+        finally:
+            apimod69.shutil.copy2, apimod69.os.replace = real69
+        ok(f"{which69} refusing a .mid: the copy fails with the error text, and does not raise",
+           res["ok"] is False and res["error"].startswith("Could not copy the tracks: ")
+           and f"No space left on device ({which69})" in res["error"])
+        ok(f"{which69} refusing a .mid: no half-written file is left, and no .mid under its real name",
+           not list(target69.rglob(apimod69.WRITING_PREFIX + "*"))
+           and not [p for p in target69.rglob("*.mid") if p.parent.name.startswith("04 - ")])
+        ok(f"{which69} refusing a .mid: nothing is recorded for the take",
+           not (a69._lib.take(folder69, 4).get("cloud") or {}).get("tracks"))
+    res = a69._copy_to_cloud(str(folder69), 4, "tracks")
+    ok("and the next try, with the disk back, copies the take whole",
+       res["ok"] and (Path(res["cloud"]["tracks"]) / "Drums.mid").is_file())
+    a69.unshare_take(str(folder69), 4)
 
     print("  A rename")
     renamed69 = a69.rename_take(str(folder69), 3, "Chorus")

@@ -3938,7 +3938,9 @@ class Api:
         # with, and the take would then report itself current for a mix that
         # is wrong — for good, since the fingerprint suppresses its own repair.
         volumes = dict(self._config.get("volumes", {}))
-        notes = []
+        # What the encoder had to say, for the person (an encode that fell back
+        # to WAV); not the take's notes, which are the .mid files below.
+        encoder_notes = []
 
         # How far along it is, in frames of audio: the mixdown reads the
         # longest track twice, its encode once more; each track's copy is its
@@ -3965,7 +3967,7 @@ class Api:
                 return res
             packed = encode(res["file"], fmt, progress=stages.part(1))
             if packed.get("note"):
-                notes.append(packed["note"])
+                encoder_notes.append(packed["note"])
             mix = target / f"{base}{extension(packed['format'])}"
             os.replace(packed["file"], mix)
             shared["mix"] = str(mix)
@@ -3993,20 +3995,20 @@ class Api:
                         dest / f"{source.stem}{extension(packed['format'])}",
                     )
                     writing = None
-                    if packed.get("note") and packed["note"] not in notes:
-                        notes.append(packed["note"])
+                    if packed.get("note") and packed["note"] not in encoder_notes:
+                        encoder_notes.append(packed["note"])
                 # The take's notes go beside the tracks as they are: a .mid is
                 # not audio, so it is never encoded (which would rename it
                 # <stem>.wav) and is not part of the mix. One that is not on
                 # disk any more is left out, as a missing track is. They weigh
                 # nothing in the stages: a few kilobytes beside the audio.
-                for midi in take.get("notes") or []:
-                    source = Path(midi.get("file") or "")
-                    if not source.is_file():
+                for row in take.get("notes") or []:
+                    mid = Path(row.get("file") or "")
+                    if not mid.is_file():
                         continue
-                    writing = _writing_path(dest / source.name)
-                    shutil.copy2(source, writing)
-                    os.replace(writing, dest / source.name)
+                    writing = _writing_path(dest / mid.name)
+                    shutil.copy2(mid, writing)
+                    os.replace(writing, dest / mid.name)
                     writing = None
             except OSError as e:
                 if writing is not None:
@@ -4036,7 +4038,7 @@ class Api:
             "ok": True,
             "take": take,
             "cloud": shared,
-            **({"note": " ".join(notes)} if notes else {}),
+            **({"note": " ".join(encoder_notes)} if encoder_notes else {}),
         }
 
     def unshare_take(self, folder, take_number):
