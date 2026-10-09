@@ -2173,6 +2173,9 @@ def main():
 
             class Unfinished(MidiRecorder):
                 def stop(self, duration_sec):
+                    # A real stop lets go of its files before anything that can
+                    # fail; Windows would not let the folder go otherwise.
+                    self.abandon()
                     raise OSError(5, "Input/output error")
 
             rig_mod.MidiRecorder = Unfinished
