@@ -11,8 +11,9 @@ questions.
 
 ## test_engine.py — the audio
 
-Mixing, seeking, A–B looping, disk estimates, crash recovery, take naming,
-renaming, markers, both bit depths, and compressing cloud copies.
+Mixing, seeking, A–B looping, disk estimates, crash recovery (a crashed take
+that was recording notes comes back with a `.mid` too), take naming, renaming,
+markers, both bit depths, and compressing cloud copies.
 
 No sound card and no browser: `sounddevice` is replaced by a stub before
 anything imports it, the renderer is called directly, and the samples that
@@ -68,7 +69,13 @@ set and holds, from the bytes it sent: the state a take's `.mid` starts with
 and the keys and pedals let go when it ends; and the audio's own clock: fake
 audio blocks in, a note's time on the computer's clock turned into seconds on
 the audio, an interface 200 ppm fast included (the recorder marking it is in
-`test_engine.py`). Later tasks add to it.
+`test_engine.py`); and one take's notes on disk: a `.midraw` written as the
+events are played, the `.mid` made from it at Stop, and the same `.mid` made
+from a take whose app died (a torn last line, hex that does not read, a first
+line that never reached the disk), keys held before the take and held at its
+end, a port that goes and comes back, a burst of 40000 events, a disk that
+refuses a write, and two threads driving one recorder. The disk is refused by
+a stand-in for the file, not by a full disk. Later tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 

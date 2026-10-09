@@ -4,7 +4,9 @@ P3), what the audio card check then holds, which saved port is found again
 (P1), the order a device's ports are listed in (P7), the .mid file (F2 and
 F4): what one can hold, written and read back, and what a port has set and
 holds (F6 and F7); the audio's own clock, which puts a note on its sample (F1);
-later sections are added here as the rest of it is built.
+one take's notes on disk, written as they are played and made a .mid at Stop or
+after a crash (F3, F5 and F7); later sections are added here as the rest of it
+is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
@@ -13,9 +15,14 @@ directly.
 """
 
 import ast
+import builtins
 import itertools
+import json
 import logging
+import os
 import random
+import re
+import shutil
 import sys
 import tempfile
 import threading
@@ -58,7 +65,9 @@ sys.modules["pylibremidi"] = None
 import mido  # noqa: E402  (to read the files back; src imports it only in midi/smf.py)
 
 from rehearsal_recorder.audio.devices import channels_available  # noqa: E402
+from rehearsal_recorder.midi import capture as notes_capture  # noqa: E402
 from rehearsal_recorder.midi import smf  # noqa: E402
+from rehearsal_recorder.midi.capture import CLOCK_FILE, MIDRAW_SUFFIX, MidiRecorder, finish_draft  # noqa: E402
 from rehearsal_recorder.midi.clock import AudioClock, MARK_EVERY_SEC, fit, load, save_line  # noqa: E402
 from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
 from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
@@ -1029,6 +1038,485 @@ def main():
                if isinstance(n, (ast.Import, ast.ImportFrom))}
     ok("the clock imports neither the MIDI library nor mido nor sounddevice",
        not imports & {"mido", "pylibremidi", "sounddevice", "rehearsal_recorder.midi.ports"})
+
+    print("\n[6] A take's notes on disk")
+    said6 = []  # what the recorder says to the log, so that it is checked and not printed
+    catcher6 = logging.Handler(level=logging.INFO)
+    catcher6.emit = said6.append
+    logging.getLogger(notes_capture.__name__).addHandler(catcher6)
+    S, MS, SR = 1_000_000_000, 1_000_000, 48000
+    T0 = 5_000_000_000
+    band = [{"name": "Drums", "port": "TD-17"},
+            {"name": "Keys", "port": "Launchkey Mini MK3"},
+            {"name": "Synth", "port": "Gone"}]
+    kit_start = port_state(b"\xb9\x04\x5a")  # controller 4 at 90 on channel 10: the hi-hat pedal half down
+
+    def clock_from(t0):
+        c = AudioClock(SR)
+        c.started_ns = t0
+        return c
+
+    def blocks(c, first, last):
+        """Audio blocks `first` to `last` - 1 of 1024 frames, from an interface that keeps time exactly."""
+        for k in range(first, last):
+            at = k * 1024
+            c.mark(T0 + int(at / SR * 1e9) + 10 * MS, at + 1024, 1024, 0.010)
+
+    def in_ticks(path):
+        """The channel messages of a .mid, each with its tick and its bytes."""
+        return [(tick, bytes(msg.bytes())) for tick, msg in played(read_back(path)[1])]
+
+    def play_kit(rec):
+        rec.present("Drums", T0)
+        rec.present("Keys", T0)
+        rec.feed("Drums", T0 - 50 * MS, b"\x99\x24\x64")          # 36 on, 50 ms before the take
+        rec.feed("Drums", T0 + 20 * MS, b"\x89\x24\x00")          # and off, 20 ms after its start
+        rec.feed("Drums", T0 + 1 * S, b"\x99\x26\x50")            # 38 on
+        rec.feed("Drums", T0 + 1 * S + 100 * MS, b"\x89\x26\x00")
+        rec.feed("Drums", T0 + 2 * S, b"\x99\x2a\x40")            # 42 on, and never let go
+        rec.feed("Synth", T0 + 2 * S, b"\x90\x3c\x40")            # a port that never appeared
+        rec.feed("Nobody", T0 + 2 * S, b"\x90\x3c\x40")           # a track this take does not have
+        rec.present("Nobody", T0)
+        rec.gone("Nobody", T0)
+        rec.gone("Synth", T0)                                     # it never came, so it cannot go
+        for junk in (b"", 5, None, "text"):
+            rec.feed("Drums", T0 + 2 * S, junk)                   # nothing a port sends
+
+    with tempfile.TemporaryDirectory() as tmp:
+        def fresh(name):
+            folder = Path(tmp) / name
+            folder.mkdir()
+            return folder
+
+        def files(folder):
+            return sorted(p.name for p in folder.iterdir())
+
+        one = fresh("one")
+        rec = MidiRecorder(one, clock_from(T0), band, {"Drums": kit_start})
+        ok("a recorder with no port there yet has made no file", files(one) == [])
+        play_kit(rec)
+        ok("a .midraw is made for each port that appeared, and for no other (F5)",
+           files(one) == ["Drums.midraw", "Keys.midraw"])
+        rec.flush()
+        ok("flush leaves what was played on disk", (one / "Drums.midraw").stat().st_size > 0)
+        lines = (one / "Drums.midraw").read_bytes().decode("ascii").split("\n")
+        ok("a .midraw says when the take began, the state the port was in, then each event as it came",
+           lines[:3] == [f"t {T0}", "s b9045a", f"n {T0 - 50 * MS} 992464"]
+           and lines[-2] == f"n {T0 + 2 * S} 992a40" and lines[-1] == "" and len(lines) == 8)
+        ok("a port that has sent nothing has only the first line",
+           (one / "Keys.midraw").read_bytes() == f"t {T0}\n".encode())
+        ok("with no mark on the clock there is no clock file", not (one / CLOCK_FILE).exists())
+        made = rec.stop(3.0)
+        ok("stop leaves the two .mid files and nothing else: no .midraw, no take.clock, no temporary",
+           files(one) == ["Drums.mid", "Keys.mid"])
+        ok("and says which, in the band's order, with their ports",
+           made == [{"name": "Drums", "file": str(one / "Drums.mid"), "port": "TD-17"},
+                    {"name": "Keys", "file": str(one / "Keys.mid"), "port": "Launchkey Mini MK3"}])
+        names, events = read_events(one / "Keys.mid")
+        ok("a port that was there and sent nothing has its .mid, with its names and no events (F5)",
+           names == {"track_name": "Keys", "device_name": "Launchkey Mini MK3"} and events == [])
+        kit = in_ticks(one / "Drums.mid")
+        ok("Drums.mid has the track's name and its port's",
+           read_events(one / "Drums.mid")[0] == {"track_name": "Drums", "device_name": "TD-17"})
+        ok("it begins with the pedal as it was, on channel 9, at tick 0 (F6)", kit[0] == (0, b"\xb9\x04\x5a"))
+        ok("a key struck before the take began is not in it, nor is its release (36)",
+           all(data[1] != 0x24 for _, data in kit))
+        ok("38 is on at tick 1920 and off at 2112", kit[1:3] == [(1920, b"\x99\x26\x50"), (2112, b"\x89\x26\x00")])
+        ok("42 is on at 3840 and, held when the take stopped at 3 s, off at tick 5760 (F7)",
+           kit[3:] == [(3840, b"\x99\x2a\x40"), (5760, b"\x89\x2a\x00")])
+        rec.feed("Drums", T0 + 2500 * MS, b"\x99\x2c\x40")
+        ok("a recorder that has stopped takes nothing more, and stopping again gives the same answer",
+           files(one) == ["Drums.mid", "Keys.mid"] and rec.stop(3.0) == made)
+
+        # A port that goes and comes back is one file, and what it held is let go
+        # when it went.
+        two = fresh("two")
+        rec = MidiRecorder(two, clock_from(T0), band, {})
+        rec.present("Drums", T0)
+        rec.feed("Drums", T0 + 2 * S, b"\x99\x2a\x40")
+        rec.gone("Drums", T0 + 2500 * MS)
+        rec.feed("Drums", T0 + 2600 * MS, b"\x99\x2c\x40")        # the port is not there: nothing is heard
+        rec.gone("Drums", T0 + 2700 * MS)                         # nor can it go twice
+        rec.present("Drums", T0 + 2800 * MS)
+        rec.feed("Drums", T0 + 2900 * MS, b"\x99\x28\x40")        # 40
+        ok("a port that went and came back is one file", files(two) == ["Drums.midraw"])
+        rec.stop(3.0)
+        ok("42 is let go when its port went, at tick 4800, and 40 is there, let go at the end",
+           in_ticks(two / "Drums.mid") == [(3840, b"\x99\x2a\x40"), (4800, b"\x89\x2a\x00"),
+                                           (5568, b"\x99\x28\x40"), (5760, b"\x89\x28\x00")])
+
+        # The state a port was in, the keys it was holding, and where the take ends.
+        three = fresh("three")
+        before_take = port_state(b"\xc0\x05", b"\x90\x3d\x40")    # program 5, and key 61 held down
+        rec = MidiRecorder(three, clock_from(T0), band, {"Keys": before_take})
+        rec.present("Keys", T0)
+        for ns, data in ((T0 - 10 * MS, b"\xb0\x40\x7f"),          # the sustain pedal down just before the take
+                         (T0 - 5 * MS, b"\x90\x3c\x40"),           # key 60 struck just before it
+                         (T0 + 200 * MS, b"\x80\x3d\x00"),         # 61, held since long before, let go
+                         (T0 + 500 * MS, b"\x80\x3c\x00"),         # 60 let go
+                         (T0 + 1 * S, b"\x90\x3e\x40"),            # 62
+                         (T0 + 2900 * MS, b"\x90\x40\x40"),        # 64
+                         (T0 + 3 * S, b"\x90\x41\x40"),            # at the end: not in the take
+                         (T0 + 3500 * MS, b"\x90\x42\x40")):       # after it
+            rec.feed("Keys", ns, data)
+        rec.stop(3.0)
+        ok("the program is at tick 0 and the pedal that was down is down, as the port was at the start (F6)",
+           in_ticks(three / "Keys.mid")[:2] == [(0, b"\xc0\x05"), (0, b"\xb0\x40\x7f")])
+        ok("keys held before the take began, or struck just before it, are not in it, nor are their releases",
+           b"\x80\x3d\x00" not in [d for _, d in in_ticks(three / "Keys.mid")]
+           and b"\x80\x3c\x00" not in [d for _, d in in_ticks(three / "Keys.mid")])
+        ok("at 3 s the keys the take pressed are let go in the order they were pressed, then the pedal (F7)",
+           in_ticks(three / "Keys.mid")[2:] == [(1920, b"\x90\x3e\x40"), (5568, b"\x90\x40\x40"),
+                                                (5760, b"\x80\x3e\x00"), (5760, b"\x80\x40\x00"),
+                                                (5760, b"\xb0\x40\x00")])
+
+        # A burst: 20000 notes on and off inside a second, none lost.
+        four = fresh("four")
+        rec = MidiRecorder(four, clock_from(T0), [{"name": "Pad", "port": "Pad"}], {})
+        rec.present("Pad", T0)
+        burst = []
+        began = time.perf_counter()
+        for i in range(20000):
+            on, off = bytes((0x90, i % 128, 1 + i % 127)), bytes((0x80, i % 128, 0))
+            at = T0 + 1 * S + i * 40_000
+            rec.feed("Pad", at, on)
+            rec.feed("Pad", at + 20_000, off)
+            burst += [on, off]
+        fed = time.perf_counter() - began
+        began = time.perf_counter()
+        rec.stop(3.0)
+        stopped = time.perf_counter() - began
+        got = [data for _, data in read_events(four / "Pad.mid")[1]]
+        ok("all 40000 events of the burst are in the .mid, in order", got == burst)
+        ok("and writing them as they came, and then the file, are quick (a limit that only a hang would pass)",
+           fed < 10 and stopped < 60)
+
+        # Review focus 2: the app dies. What is on disk becomes the same file stop would have made.
+        stopped_at = fresh("stopped")
+        rec = MidiRecorder(stopped_at, clock_from(T0), band, {"Drums": kit_start})
+        play_kit(rec)
+        rec.stop(3.0)
+        crashed = fresh("crashed")
+        rec = MidiRecorder(crashed, clock_from(T0), band, {"Drums": kit_start})
+        play_kit(rec)
+        rec.flush()
+        rec.abandon()
+        rec.feed("Drums", T0 + 2200 * MS, b"\x99\x2c\x40")
+        ok("a recorder given up leaves its files as they are, and takes nothing more",
+           files(crashed) == ["Drums.midraw", "Keys.midraw"])
+        (crashed / CLOCK_FILE).unlink(missing_ok=True)
+        (crashed / "take.json").write_text(json.dumps({
+            "samplerate": SR, "bit_depth": 16, "tracks": [],
+            "notes": [{"file": "Drums", "port": "TD-17"}, {"file": "Keys", "port": "Launchkey Mini MK3"}]}),
+            encoding="utf-8")
+        found = finish_draft(crashed, 3.0)
+        ok("a crashed take is made the same files stop makes, byte for byte, from the take's start",
+           all((stopped_at / f).read_bytes() == (crashed / f).read_bytes() for f in ("Drums.mid", "Keys.mid")))
+        ok("and the list says which, with the ports take.json has",
+           found == [{"name": "Drums", "file": str(crashed / "Drums.mid"), "port": "TD-17"},
+                     {"name": "Keys", "file": str(crashed / "Keys.mid"), "port": "Launchkey Mini MK3"}])
+        ok("the .midraw files are gone and take.json is left for the audio to use",
+           files(crashed) == ["Drums.mid", "Keys.mid", "take.json"])
+        ok("a second go finds nothing left to do", finish_draft(crashed, 3.0) == [])
+
+        unnamed = fresh("unnamed")
+        rec = MidiRecorder(unnamed, clock_from(T0), band, {"Drums": kit_start})
+        play_kit(rec)
+        rec.abandon()
+        ok("with no take.json a port is called what its file is",
+           [m["port"] for m in finish_draft(unnamed, 3.0)] == ["Drums", "Keys"]
+           and read_events(unnamed / "Keys.mid")[0]["device_name"] == "Keys")
+        ok("and the notes are the same", read_events(unnamed / "Drums.mid")[1] == read_events(stopped_at / "Drums.mid")[1])
+
+        # On the audio's own clock: an interface 1 percent fast, so that where a note
+        # lands says which clock placed it.
+        fast = AudioClock(SR)
+        fast.started_ns = T0
+        for k in range(4 * SR // 1024):
+            at = k * 1024
+            fast.mark(T0 + int(at / (SR * 1.01) * 1e9) + 10 * MS, at + 1024, 1024, 0.010)
+        plays = [T0 + 500 * MS, T0 + 2 * S, T0 + 3400 * MS]
+
+        def play_fast(folder):
+            rec = MidiRecorder(folder, fast, band[1:2], {})
+            rec.present("Keys", T0)
+            for i, ns in enumerate(plays):
+                rec.feed("Keys", ns, bytes((0x90, 60 + i, 64)))
+            return rec
+
+        live = fresh("live")
+        play_fast(live).stop(3.9)
+        ticks = [tick for tick, data in in_ticks(live / "Keys.mid") if data[0] == 0x90]
+        ok("stop places a note on the sample the audio was at: each tick is the clock's second times 1920",
+           ticks == [round(fast.to_seconds(ns) * 1920) for ns in plays])
+        ok("which is not where the computer's own seconds would have put it",
+           ticks != [round((ns - T0) / S * 1920) for ns in plays] and ticks[2] - round(3.4 * 1920) > 40)
+        keys_note = [{"file": "Keys", "port": "Launchkey Mini MK3"}]
+        for n, (label, record, kwarg, as_stop) in enumerate((
+                ("take.json gives the samplerate: the marks on disk place the notes as stop did",
+                 {"samplerate": SR}, None, True),
+                ("take.json has none and the caller gives it: the same",
+                 {}, SR, True),
+                ("take.json and the caller disagree: take.json is believed",
+                 {"samplerate": SR}, 12345, True),
+                ("no samplerate anywhere: the notes are placed by the take's start alone",
+                 {}, None, False))):
+            draft = fresh(f"draft{n}")
+            rec = play_fast(draft)
+            rec.flush()
+            rec.abandon()
+            (draft / "take.json").write_text(json.dumps({**record, "notes": keys_note}), encoding="utf-8")
+            finish_draft(draft, 3.9, samplerate=kwarg)
+            ok("a crashed take: " + label, ((draft / "Keys.mid").read_bytes() == (live / "Keys.mid").read_bytes()) is as_stop)
+
+        # What reaches take.clock, and how often (R25).
+        class Watched(AudioClock):
+            looked = 0
+
+            def marks(self):
+                Watched.looked += 1
+                return super().marks()
+
+        watched = Watched(SR)
+        watched.started_ns = T0
+        blocks(watched, 0, 20)                                     # 0.43 s of audio
+        five = fresh("clock")
+        rec = MidiRecorder(five, watched, [{"name": "Pad", "port": "Pad"}], {})
+        rec.present("Pad", T0 + 430 * MS)
+        asked = Watched.looked
+        ok("the first call looks at the clock once and has the marks so far on disk",
+           asked == 1 and load(five / CLOCK_FILE) == watched.marks())
+        asked = Watched.looked
+        for i in range(20000):
+            rec.feed("Pad", T0 + 430 * MS + i * 20_000, b"\x90\x3c\x40" if i % 2 == 0 else b"\x80\x3c\x00")
+        ok("20000 events inside a second do not look at the clock again", Watched.looked == asked)
+        blocks(watched, 20, 70)
+        rec.feed("Pad", T0 + 1500 * MS, b"\x90\x3c\x40")
+        ok("the first event more than a second later brings the marks made since, once",
+           Watched.looked == asked + 1 and load(five / CLOCK_FILE)[-1] == watched.marks()[-1])
+        blocks(watched, 70, 90)
+        rec.flush()
+        on_disk = load(five / CLOCK_FILE)
+        ok("flush brings the rest: every kept mark is there, once, the frames going up, ending at the latest",
+           set(watched.marks()) <= set(on_disk) and on_disk[-1] == watched.marks()[-1]
+           and [f for _, f in on_disk] == sorted({f for _, f in on_disk}))
+        ok("and the clock file is whole lines, an ns, a space and a frame",
+           re.fullmatch(r"(-?[0-9]+ [0-9]+\n)+", (five / CLOCK_FILE).read_bytes().decode("ascii")) is not None)
+        rec.stop(2.0)
+        ok("stop puts no more marks in it, and deletes it", not (five / CLOCK_FILE).exists())
+
+        # A crash, a torn last line, and what else a .midraw may have in it.
+        odd = fresh("odd")
+        cut = "\n".join([
+            f"n {T0 + 1 * S} 903c40",             # an event before the first line
+            f"t {T0}",
+            "s b0045a",
+            f"n {T0 + 2 * S} zz",                 # hex that is not hex
+            f"n {T0 + 2 * S} 903",                # an odd number of digits
+            "n abc 903c40",                       # a time that is not a number
+            f"n {T0 + 3 * S}",                    # no bytes
+            "g",                                  # no time
+            "x 1 2 3",                            # no such line
+            "",
+            f"n {T0 + 1500 * MS} 803c00",
+            f"n {T0 + 2900 * MS} 9040"])          # cut short by the crash: it has no newline
+        (odd / "Keys.midraw").write_bytes(cut.encode("ascii"))
+        finish_draft(odd, 3.0)
+        ok("a line that is not a line is passed over, an event before the first line is kept, and a last line with no newline is not",
+           read_events(odd / "Keys.mid")[1] == [(0.0, b"\xb0\x04\x5a"), (1.0, b"\x90\x3c\x40"), (1.5, b"\x80\x3c\x00")])
+        wrong = []
+        for n, tail in enumerate((b"\x00" * 16, b"n 123", b"\xff\xfe junk", b"\r", b"n 1 90\x00")):
+            torn_dir = fresh(f"torn{n}")
+            (torn_dir / "Keys.midraw").write_bytes(f"t {T0}\nn {T0 + 1 * S} 903c40\n".encode("ascii") + tail)
+            finish_draft(torn_dir, 3.0)
+            if read_events(torn_dir / "Keys.mid")[1] != [(1.0, b"\x90\x3c\x40"), (3.0, b"\x80\x3c\x00")]:
+                wrong.append(tail)
+        ok("a file the crash left ending in NUL bytes, a cut line or something that is not text loads the rest",
+           wrong == [])
+        headless = fresh("headless")
+        (headless / "Keys.midraw").write_bytes(f"n {T0 + 7 * S} 903c40\nn {T0 + 8 * S} 803c00\n".encode("ascii"))
+        finish_draft(headless, 9.0)
+        ok("a file whose first line never reached the disk keeps its notes, counted from the first",
+           read_events(headless / "Keys.mid")[1] == [(0.0, b"\x90\x3c\x40"), (1.0, b"\x80\x3c\x00")])
+        empty = fresh("empty")
+        (empty / "Keys.midraw").write_bytes(b"")
+        ok("and an empty one is a .mid with its names and nothing else",
+           finish_draft(empty, 3.0)[0]["name"] == "Keys" and read_events(empty / "Keys.mid")[1] == [])
+
+        # A draft with no audio frames keeps everything and lets go at the last event (R24).
+        bare = fresh("bare")
+        rec = MidiRecorder(bare, clock_from(T0), band[:1], {})
+        rec.present("Drums", T0)
+        for ns, data in ((500, b"\x90\x3c\x40"), (1000, b"\x90\x3e\x40"), (1500, b"\x80\x3c\x00"),
+                         (2000, b"\x90\x40\x40"), (2500, b"\xb0\x40\x7f")):
+            rec.feed("Drums", T0 + ns * MS, data)
+        rec.abandon()
+        bare2 = Path(tmp) / "bare2"
+        shutil.copytree(bare, bare2)
+        finish_draft(bare, 0)
+        finish_draft(bare2, None)
+        ok("a draft with no audio frames keeps every event, and lets go of what is held at the last one",
+           in_ticks(bare / "Drums.mid") == [(960, b"\x90\x3c\x40"), (1920, b"\x90\x3e\x40"), (2880, b"\x80\x3c\x00"),
+                                            (3840, b"\x90\x40\x40"), (4800, b"\xb0\x40\x7f"),
+                                            (4800, b"\x80\x3e\x00"), (4800, b"\x80\x40\x00"), (4800, b"\xb0\x40\x00")]
+           and (bare / "Drums.mid").read_bytes() == (bare2 / "Drums.mid").read_bytes())
+
+        # Names that make one file name each get a file of their own.
+        same = fresh("same")
+        rec = MidiRecorder(same, clock_from(T0), [{"name": "A/B", "port": "P1"}, {"name": "A:B", "port": "P2"},
+                                                  {"name": "a_b", "port": "P3"}], {})
+        for name, note in (("A/B", 60), ("A:B", 62), ("a_b", 64)):
+            rec.present(name, T0)
+            rec.feed(name, T0 + 1 * S, bytes((0x90, note, 64)))
+        made = rec.stop(2.0)
+        ok("tracks whose names make one file name each get a file, and none writes over another",
+           set(files(same)) == {"A_B.mid", "A_B (2).mid", "a_b (3).mid"} and len({m["file"] for m in made}) == 3)
+        ok("each has its own notes", [[d for _, d in in_ticks(m["file"]) if d[0] == 0x90][0][1] for m in made] == [60, 62, 64]
+           and [m["port"] for m in made] == ["P1", "P2", "P3"])
+
+        ok("all of that was done without a word in the log", said6 == [])
+
+        # The .mid is written under another name and moved into place, so a crash cannot leave half of it.
+        half = fresh("half")
+        rec = MidiRecorder(half, clock_from(T0), band[:2], {"Drums": kit_start})
+        play_kit(rec)
+        real_write, seen = notes_capture.write_mid, []
+
+        def torn_write(path, **kw):
+            seen.append(Path(path).name)
+            Path(path).write_bytes(b"MThd half a file")
+            raise OSError(28, "No space left on device")
+
+        notes_capture.write_mid = torn_write
+        try:
+            made = rec.stop(3.0)
+        finally:
+            notes_capture.write_mid = real_write
+        ok("a .mid is written under another name than its own", len(seen) == 2 and "Drums.mid" not in seen)
+        ok("one that could not be written leaves no half file, keeps its .midraw, and stop still answers",
+           made == [] and files(half) == ["Drums.midraw", "Keys.midraw"])
+        ok("and each is said in the log, once, by its track's name",
+           [r.levelno for r in said6] == [logging.WARNING] * 2
+           and [r.getMessage().split(":")[0] for r in said6] == ["Drums", "Keys"])
+        ok("and is made from the .midraw later, as after a crash",
+           [m["name"] for m in finish_draft(half, 3.0)] == ["Drums", "Keys"] and files(half) == ["Drums.mid", "Keys.mid"]
+           and in_ticks(half / "Drums.mid")[-1] == (5760, b"\x89\x2a\x00") and len(said6) == 2)
+
+        # Review focus 4: a disk that refuses. The error comes out of the call that met it, and the recorder carries on.
+        class Refusing:
+            refusing = False
+
+            def __init__(self, real):
+                self.real = real
+
+            def write(self, data):
+                if Refusing.refusing:
+                    raise OSError(28, "No space left on device")
+                return self.real.write(data)
+
+            def __getattr__(self, name):
+                return getattr(self.real, name)
+
+        full = fresh("full")
+        rec = MidiRecorder(full, clock_from(T0), band[:2], {})
+        notes_capture.open = lambda *a, **k: Refusing(builtins.open(*a, **k))
+        real_fsync = os.fsync
+
+        def broken_fsync(fd):
+            raise OSError(5, "Input/output error")
+
+        try:
+            Refusing.refusing = True
+            try:
+                rec.present("Keys", T0)
+                met = None
+            except OSError as e:
+                met = e
+            Refusing.refusing = False
+            ok("a file that cannot be made says so, leaves nothing behind, and is made the next time",
+               met is not None and files(full) == [])
+            rec.present("Keys", T0)
+            rec.present("Drums", T0)
+            rec.feed("Drums", T0 + 1 * S, b"\x99\x26\x50")
+            Refusing.refusing = True
+            try:
+                rec.feed("Drums", T0 + 1100 * MS, b"\x89\x26\x00")        # this one is lost
+                met = None
+            except OSError as e:
+                met = e
+            Refusing.refusing = False
+            ok("a write the disk refuses is an OSError", isinstance(met, OSError))
+            rec.feed("Drums", T0 + 1200 * MS, b"\x99\x2a\x40")
+            os.fsync = broken_fsync
+            try:
+                rec.flush()
+                met = None
+            except OSError as e:
+                met = e
+            finally:
+                os.fsync = real_fsync
+            ok("so is a flush the disk refuses", isinstance(met, OSError))
+            rec.flush()
+            rec.feed("Drums", T0 + 1300 * MS, b"\x99\x2c\x40")
+        finally:
+            del notes_capture.open
+        made = rec.stop(3.0)
+        ok("the recorder was usable after each: stop gives a .mid of what reached the disk, and lets go of what it left held",
+           in_ticks(full / "Drums.mid") == [(1920, b"\x99\x26\x50"), (2304, b"\x99\x2a\x40"), (2496, b"\x99\x2c\x40"),
+                                            (5760, b"\x89\x26\x00"), (5760, b"\x89\x2a\x00"), (5760, b"\x89\x2c\x00")])
+        ok("and for both ports", [m["name"] for m in made] == ["Drums", "Keys"] and files(full) == ["Drums.mid", "Keys.mid"])
+
+        # Review focus: the writer thread feeds while the watcher thread comes and goes and flushes (R26).
+        busy = fresh("busy")
+        rec = MidiRecorder(busy, clock_from(T0), [{"name": "A", "port": "A"}, {"name": "B", "port": "B"}], {})
+        rec.present("A", T0)
+        rec.present("B", T0)
+        errors, finished = [], threading.Event()
+
+        def writer():
+            try:
+                for i in range(20000):
+                    rec.feed("A" if i % 2 else "B", T0 + i * 1000, b"\x90\x3c\x40" if i % 4 < 2 else b"\x80\x3c\x00")
+            except Exception as e:
+                errors.append("feed " + repr(e))
+            finally:
+                finished.set()
+
+        def watcher():
+            try:
+                for i in range(40):
+                    rec.gone("A", T0 + i * 500_000)
+                    rec.present("A", T0 + i * 500_000)
+                    rec.flush()
+                    if finished.is_set():
+                        break
+            except Exception as e:
+                errors.append("watch " + repr(e))
+
+        interval = sys.getswitchinterval()
+        sys.setswitchinterval(1e-6)
+        try:
+            threads = [threading.Thread(target=writer, daemon=True), threading.Thread(target=watcher, daemon=True)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(60)
+        finally:
+            sys.setswitchinterval(interval)
+        ok("both threads finish within a minute, with no error", not any(t.is_alive() for t in threads) and errors == [])
+        rec.flush()
+        line = re.compile(r"t -?[0-9]+|s ([0-9a-f]{2})+|n -?[0-9]+ ([0-9a-f]{2})+|g -?[0-9]+")
+        texts = [(busy / f"{n}{MIDRAW_SUFFIX}").read_bytes().decode("ascii") for n in "AB"]
+        ok("what reached each file is whole lines, none cut or mixed with another's",
+           all(t.endswith("\n") and all(line.fullmatch(x) for x in t[:-1].split("\n")) for t in texts))
+        ok("every event fed to B while it was there is in its file", texts[1].count("\nn ") == 10000)
+        rec.stop(1.0)
+        ok("and stop makes both files", files(busy) == ["A.mid", "B.mid"])
+
+    capture_source = Path(sys.modules[MidiRecorder.__module__].__file__).read_text(encoding="utf-8")
+    capture_imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
+                       for n in ast.walk(ast.parse(capture_source)) if isinstance(n, (ast.Import, ast.ImportFrom))}
+    ok("the recorder goes through smf for the .mid and never imports mido", "mido" not in capture_imports)
 
     print("\n" + "=" * 60)
     if problems:

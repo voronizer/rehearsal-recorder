@@ -7064,6 +7064,90 @@ def main():
         _sd.InputStream = stock
     ok("start() set started_ns whatever the stream", started.started_ns is not None)
 
+    print("\n[65] A crashed take with notes")
+    # A take whose app died leaves its notes as a .midraw beside the raw audio
+    # (spec F3). The drafts count it as a take's recording, list it, and turn it
+    # into a .mid when the take is recovered.
+    from rehearsal_recorder.audio.drafts import describe as describe65
+    from rehearsal_recorder.audio.drafts import draft_dirs as draft_dirs65
+    from rehearsal_recorder.audio.drafts import finalize as finalize65
+    from rehearsal_recorder.audio.drafts import has_audio as has_audio65
+    from rehearsal_recorder.midi.clock import save_line as save_line65
+    from rehearsal_recorder.midi.smf import read_events as read_events65
+
+    ms65, t65 = 1_000_000, 9_000_000_000
+    folder65 = tmp / "notes crash"
+    draft = folder65 / "_drafts" / "take 1"
+    draft.mkdir(parents=True)
+    (draft / "take.json").write_text(json.dumps({
+        "samplerate": SR, "bit_depth": 16,
+        "tracks": [{"file": "Drums", "channels": 1}],
+        "notes": [{"file": "Keys", "port": "Launchkey Mini MK3"}]}), encoding="utf-8")
+    ok("a draft with nothing but its record is not a take",
+       not has_audio65(draft) and draft_dirs65(folder65) == [])
+    (draft / "Keys.midraw").write_bytes("".join([
+        f"t {t65}\n",
+        "s c00a\n",                                # the program the keyboard was on
+        f"n {t65 + 250 * ms65} 903c40\n",          # 60 on at a quarter second
+        f"n {t65 + 500 * ms65} 803c00\n",          # and off at half
+        f"n {t65 + 900 * ms65} 904040\n",          # 64 on, held when the app died
+        f"n {t65 + 1500 * ms65} 904140\n",         # after the audio ended
+    ]).encode("ascii"))
+    ok("a draft whose only recording is notes is a take, not an empty folder",
+       has_audio65(draft) and draft_dirs65(folder65) == [draft])
+    info = describe65(draft, SR)
+    ok("describe lists the notes beside the tracks, which are the audio alone",
+       info["notes"] == ["Keys"] and info["tracks"] == [] and info["duration_sec"] == 0)
+    (draft / "Drums.raw").write_bytes(struct.pack("<h", 100) * SR)
+    info = describe65(draft, SR)
+    ok("with audio beside it, both are listed and the length is the audio's",
+       info["notes"] == ["Keys"] and info["tracks"] == ["Drums"] and abs(info["duration_sec"] - 1.0) < 1e-6)
+
+    done = finalize65(draft, SR, 16)
+    ok("finalize makes the .wav and the .mid, and lists the audio and the notes apart",
+       [t["name"] for t in done["tracks"]] == ["Drums"]
+       and [(n["name"], n["file"]) for n in done["notes"]] == [("Keys", str(draft / "Keys.mid"))]
+       and (draft / "Keys.mid").exists() and (draft / "Drums.wav").exists())
+    ok("the notes carry the port take.json named, which finalize reads before it deletes take.json",
+       done["notes"][0]["port"] == "Launchkey Mini MK3" and not (draft / "take.json").exists())
+    ok("nothing but the .wav and the .mid is left, and the take is as long as its audio",
+       sorted(p.name for p in draft.iterdir()) == ["Drums.wav", "Keys.mid"]
+       and abs(done["duration_sec"] - 1.0) < 1e-6)
+    names65, events65 = read_events65(draft / "Keys.mid")
+    ok("the .mid has the names, the program at the start, the keys, and the key held at the crash let go at the end",
+       names65 == {"track_name": "Keys", "device_name": "Launchkey Mini MK3"}
+       and [(round(sec * 1920), data) for sec, data in events65]
+       == [(0, b"\xc0\x0a"), (480, b"\x90\x3c\x40"), (960, b"\x80\x3c\x00"),
+           (1728, b"\x90\x40\x40"), (1920, b"\x80\x40\x00")])
+
+    # No audio at all, notes placed by the marks that reached the disk, and a
+    # record that lists no notes: the port is called by its file.
+    marks_only = folder65 / "_drafts" / "take 2"
+    marks_only.mkdir(parents=True)
+    (marks_only / "take.json").write_text(json.dumps({"samplerate": SR, "tracks": [], "notes": []}), encoding="utf-8")
+    (marks_only / "Keys.midraw").write_bytes("".join([
+        f"t {t65}\n", f"n {t65 + 600 * ms65} 903c40\n", f"n {t65 + 1100 * ms65} 803c00\n"]).encode("ascii"))
+    (marks_only / "take.clock").write_bytes("".join(
+        save_line65(m) for m in [(t65 + 100 * ms65, 0), (t65 + 1100 * ms65, SR)]).encode("ascii"))
+    done = finalize65(marks_only, SR, 16)
+    names65, events65 = read_events65(marks_only / "Keys.mid")
+    ok("a draft of notes alone is recovered, with no audio and no tracks",
+       done["tracks"] == [] and [n["name"] for n in done["notes"]] == ["Keys"] and done["duration_sec"] == 0)
+    ok("its notes are placed by take.clock: the first frame was heard 100 ms after the take began",
+       [(round(sec * 1920), data) for sec, data in events65] == [(960, b"\x90\x3c\x40"), (1920, b"\x80\x3c\x00")])
+    ok("and the port is called what its file is, and take.clock is gone",
+       names65["device_name"] == "Keys" and done["notes"][0]["port"] == "Keys"
+       and sorted(p.name for p in marks_only.iterdir()) == ["Keys.mid"])
+
+    # A take with no notes is recovered as it always was.
+    plain65 = folder65 / "_drafts" / "take 3"
+    plain65.mkdir(parents=True)
+    (plain65 / "Gtr.raw").write_bytes(struct.pack("<h", 100) * SR)
+    info = describe65(plain65, SR)
+    done = finalize65(plain65, SR, 16)
+    ok("a draft with no notes lists none and recovers none",
+       info["notes"] == [] and done["notes"] == [] and [t["name"] for t in done["tracks"]] == ["Gtr"])
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
