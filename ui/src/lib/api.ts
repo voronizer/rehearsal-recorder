@@ -206,6 +206,9 @@ export type Draft = {
   dir: string
   name: string
   tracks: string[]
+  /** The tracks that took notes, by name like `tracks`: the take's .mid
+   *  files, made or still to be made when it is recovered. */
+  notes?: string[]
   duration_sec: number
   rehearsal_folder: string
   rehearsal_name: string
@@ -549,8 +552,8 @@ export type MidiActivity = Record<string, MidiTrackActivity>
  * Times are seconds from the take's start. Drums come as the six rows (plus
  * "Other" when a note falls outside them) and a note's third figure is its
  * row, counted from 0 at the top; anything else comes by pitch, from `low` to
- * `high` (whole octaves, C to B). The fourth is the velocity as the .mid has
- * it.
+ * `high` (whole octaves, C to B). The fourth is the note-on's velocity, 1 to
+ * 127 as the .mid has it, unlike `MidiTrackActivity.vel` (0 to 1).
  */
 export type TakeNotes =
   | { name: string; error: string }
@@ -783,8 +786,8 @@ type PyApi = {
   list_input_devices(): Promise<Device[]>
   list_output_devices(): Promise<OutputDevice[]>
   /** The band placed on the interface in force. Without `band`, the saved
-   *  one; with it, those names, stereo switches and icons — what is on
-   *  screen. */
+   *  one; with it, those names, stereo switches, icons, modes and MIDI ports
+   *  — what is on screen. */
   load_default_tracks(
     band?: Pick<Track, "name" | "stereo" | "icon" | "mode" | "midi_port">[]
   ): Promise<TrackTemplate | null>

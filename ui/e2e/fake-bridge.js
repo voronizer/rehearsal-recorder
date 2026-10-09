@@ -593,8 +593,9 @@ const midiPortNames = () => (window.__MIDI_PORTS__ || ['TD-17', 'Launchkey Mini 
 // What the system says of a port besides its name: the maker where it is
 // known, and an id that is the same every time.
 const MIDI_MAKERS = {'TD-17': 'Roland', 'Launchkey Mini MK3': 'Novation'};
-function midiPortInfo(name) {
-  let id = 1000;
+// A name the system lists twice gets a different id each time (`copy`, from 1).
+function midiPortInfo(name, copy = 0) {
+  let id = 1000 + copy * 7919;
   for (const c of name) id = (id * 31 + c.codePointAt(0)) % 1000003;
   return {name, device: name, ...(MIDI_MAKERS[name] ? {maker: MIDI_MAKERS[name]} : {}), id: String(id)};
 }
@@ -644,25 +645,27 @@ const KIT_BLOCK = [0, 1, 2, 3].flatMap((b) => {
   if (b === 0) hit(0, 0, 118);
   return hits;
 }).sort((a, b) => a[0] - b[0]);
-// The kit's hits with a start in (from, to], seconds from the run's start,
-// as [start, length, row, velocity]. Looks back no more than two blocks, for
-// a run that was not looked at for a long while.
+// The kit's hits with a start in [from, to), seconds from the run's start,
+// as [start, length, row, velocity]: windows that follow one another count
+// every hit once. Looks back no more than two blocks, for a run that was not
+// looked at for a long while.
 function kitHits(from, to) {
   const out = [];
   const lo = Math.max(from, to - 2 * KIT_BLOCK_SEC) - KIT_FROM;
   for (let k = Math.max(0, Math.floor(lo / KIT_BLOCK_SEC)); k * KIT_BLOCK_SEC <= to - KIT_FROM; k++)
     for (const [t, d, row, vel] of KIT_BLOCK) {
       const at = KIT_FROM + k * KIT_BLOCK_SEC + t;
-      if (at > from && at <= to) out.push([at, d, row, vel]);
+      if (at >= from && at < to) out.push([at, d, row, vel]);
     }
   return out;
 }
-// How many hits there have been by `to`.
+// How many hits started before `to`: what kitHits(0, to) and kitPattern(to)
+// hold.
 function kitCount(to) {
   const x = to - KIT_FROM;
   if (x < 0) return 0;
   const k = Math.floor(x / KIT_BLOCK_SEC), r = x - k * KIT_BLOCK_SEC;
-  return k * KIT_BLOCK.length + KIT_BLOCK.filter(h => h[0] <= r).length;
+  return k * KIT_BLOCK.length + KIT_BLOCK.filter(h => h[0] < r).length;
 }
 // A take's worth of the kit, and a keyboard line (C minor, up and down, a
 // bass note under each bar of eight), both as take_notes sends notes:
@@ -700,7 +703,9 @@ function notesOfFile(name, seconds) {
 // What is being counted: a check of the tracks on the setup screen, or, once
 // a rehearsal is on, its take. Each is {since, ended, read}: when it began (the
 // clock's seconds), how long it ran if it has stopped, and how far each
-// track's loudest note has been read.
+// track's loudest note has been read. A take also has `heard`: the tracks
+// whose port was there at any look since it began, which are the ones that
+// keep a .mid (a port pulled mid-take keeps the notes it was writing).
 let midiCheck = null;
 let midiTake = null;
 // The tracks whose ports are open now, and the run that counts their notes.
@@ -718,6 +723,7 @@ function midiActivity(read) {
   const out = {};
   for (const t of tracks) {
     const state = midiPortState(t);
+    if (state === 'ok' && run && run.heard && run.ended === null) run.heard.add(t.name);
     // An echo plays what the track before it plays, when both are heard.
     const first = echo[1] === t.name && state === 'ok'
       ? tracks.find(o => o.name === echo[0] && midiPortState(o) === 'ok') : null;
@@ -812,9 +818,16 @@ window.__MAKE_API__ = () => ({
   load_default_tracks: track('load_default_tracks', async (band) => window.__PLUGGED_IN_LATE__ ? ({
     // Like layouts.for_device: with no card there is one input to go round;
     // with the desk, every name gets its own.
-    tracks: (band || [{name:'Guitar'}, {name:'Vocals'}]).map((t, i) => ({
-      name: t.name, stereo: !!t.stereo, ...(t.icon ? {icon: t.icon} : {}),
-      channel: pluggedIn ? i + 1 : (i === 0 ? 1 : null)}))}) : ({
+    // A track on MIDI only takes no input from anybody (layouts.for_device),
+    // and keeps its mode and port, as layouts.band_member does.
+    tracks: (band || [{name:'Guitar'}, {name:'Vocals'}]).map((t, i, all) => {
+      const midiOnly = t.mode === 'midi';
+      const nth = all.slice(0, i).filter(o => o.mode !== 'midi').length;
+      return {
+        name: t.name, stereo: !midiOnly && !!t.stereo, ...(t.icon ? {icon: t.icon} : {}),
+        ...(t.mode ? {mode: t.mode} : {}), ...(t.midi_port ? {midi_port: t.midi_port} : {}),
+        channel: midiOnly ? null : pluggedIn ? nth + 1 : (nth === 0 ? 1 : null)};
+    })}) : ({
     tracks: (window.__TRACKS_FROM_A_BIGGER_CARD__
       ? [{name:'Guitar', channel:1}, {name:'Vocals', channel:12}]
       : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]).map(withIcon)})),
@@ -872,7 +885,8 @@ window.__MAKE_API__ = () => ({
     const held = (name) => midiTracks().filter(t => portNameOf(t) === name && midiPortState(t) === 'ok')
       .reduce((sum, t) => sum + (counts[t.name] || 0), 0);
     return {system:'Fake MIDI', error:null,
-            ports: midiPortNames().map(name => ({...midiPortInfo(name), notes: held(name)}))};
+            ports: midiPortNames().map((name, i, all) => ({
+              ...midiPortInfo(name, all.filter(n => n === name).length > 1 ? i + 1 : 0), notes: held(name)}))};
   },
   midi_activity: async () => midiActivity(true),
   // The notes of a take's tracks, a kit pattern for the drums and a keyboard
@@ -915,9 +929,9 @@ window.__MAKE_API__ = () => ({
     const tonight = (window.__TONIGHT__ || []).map((t, i) => ({take_number:i + 1, markers:[],
       tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));
     for (const t of tonight) fileDurations[t.tracks[0].file] = t.duration_sec;
+    for (const t of tonight) for (const n of t.notes || []) fileDurations[n.file] = t.duration_sec;
     // The set as it is now: the rehearsal keeps its own copy (Library.set_of).
     const byIt = sets.find(st => st.id === setId);
-    for (const t of tonight) for (const n of t.notes || []) fileDurations[n.file] = t.duration_sec;
     // A band with MIDI in it is the band that was started with, as Python
     // places it; any other is the pair the tests have always had.
     const placed = (tracksIn || []).some(takesNotes) ? tracksIn.map(t => ({
@@ -964,7 +978,9 @@ window.__MAKE_API__ = () => ({
 
   start_take: track('start_take', async () => {
     takeCounter += 1;
-    midiTake = {since: clock(), ended: null, read: {}};
+    midiTake = {since: clock(), ended: null, read: {},
+      heard: new Set((session ? session.tracks : []).filter(t => takesNotes(t) && midiPortState(t) === 'ok')
+        .map(t => t.name))};
     return {ok:true, take_number:takeCounter};
   }),
   set_next_take_name: track('set_next_take_name', async (name) => {
@@ -1009,7 +1025,10 @@ window.__MAKE_API__ = () => ({
       tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]};
     if (!band.some(takesNotes)) return take;
     take.tracks = band.filter(takesSound).map(t => ({name:t.name, file:`/rec/${t.name}.wav`}));
-    const heard = band.filter(t => takesNotes(t) && midiPortState(t) === 'ok').map(t => t.name);
+    // A port that was there at any point of the take has its notes; one gone
+    // the whole take has none.
+    const heard = band.filter(t => takesNotes(t)
+      && (midiPortState(t) === 'ok' || (midiTake && midiTake.heard.has(t.name)))).map(t => t.name);
     return {...take, ...notesOfTake(band, take.tracks, heard)};
   }),
   keep_take: track('keep_take', async (n, _t, name, dur, tracks, markers, _cloud, notes) => {
