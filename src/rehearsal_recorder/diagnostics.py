@@ -11,6 +11,7 @@ machine from the one in trouble.
 import platform as _platform
 
 from rehearsal_recorder.audio.probe import SIGNAL_PEAK
+from rehearsal_recorder.midi.rules import port_of, records_audio, records_notes
 from rehearsal_recorder.platform_support import APP_NAME
 
 # Windows' own names for its editions, as its About box says them.
@@ -62,16 +63,27 @@ def audio_systems(host_apis, devices):
 
 def tracks_line(tracks):
     """ "Drums on input 1, Keys on inputs 4–5 (stereo)". The input is said
-    in words: a track called "Guitar 1" on input 1 read as "Guitar 1 1"."""
+    in words: a track called "Guitar 1" on input 1 read as "Guitar 1 1".
+    A track that records notes says its MIDI port as well: "Drums on input 2
+    and MIDI port TD-17", and a MIDI track only its port. A track with no
+    "channel" at all is one the card could not place, not one with no input."""
     said = []
     for t in tracks:
-        channel = t.get("channel")
-        if channel is None:
-            said.append(f"{t['name']} on no input")
-        elif t.get("stereo"):
-            said.append(f"{t['name']} on inputs {channel}–{channel + 1} (stereo)")
-        else:
-            said.append(f"{t['name']} on input {channel}")
+        where = []
+        if records_audio(t):
+            channel = t.get("channel")
+            if "channel" not in t:
+                where.append("an unknown input")
+            elif channel is None:
+                where.append("no input")
+            elif t.get("stereo"):
+                where.append(f"inputs {channel}–{channel + 1} (stereo)")
+            else:
+                where.append(f"input {channel}")
+        if records_notes(t):
+            port = port_of(t)
+            where.append(f"MIDI port {port['name']}" if port else "no MIDI port")
+        said.append(f"{t['name']} on {' and '.join(where)}")
     return ", ".join(said) or "none"
 
 

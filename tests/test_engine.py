@@ -100,11 +100,15 @@ sys.modules["pylibremidi"] = None
 
 import numpy as np  # noqa: E402
 
+import rehearsal_recorder.api as _api_at_start  # noqa: E402
 from rehearsal_recorder.api import _is_inside  # noqa: E402
 from rehearsal_recorder.audio.player import TakePlayer  # noqa: E402
 
 SR = 48000
 problems = []
+# The rig's two threads stay off in every Api this suite builds, however it builds
+# it: most sections never touch MIDI, and a section that does asks for them.
+_api_at_start.MIDI_THREADS = False
 
 
 def ok(label, cond):
@@ -7498,6 +7502,21 @@ def main():
         with urllib.request.urlopen(api.ui_url + "api/" + name, timeout=5) as r:
             return json.loads(r.read().decode())
 
+    def rescan66(api):
+        # Look again, with PortAudio's private calls stood in for as the section above does.
+        saved = {n: getattr(_sd, n, None) for n in ("_initialized", "_terminate", "_initialize")}
+        _sd._initialized = 1
+        _sd._terminate = _sd._initialize = lambda: None
+        try:
+            return api.rescan_devices()
+        finally:
+            for n, value in saved.items():
+                if value is None:
+                    if hasattr(_sd, n):
+                        delattr(_sd, n)
+                else:
+                    setattr(_sd, n, value)
+
     def scenario66(what):
         # A scenario that breaks says so as a failed check, and the rest still run.
         def run(fn):
@@ -7508,6 +7527,8 @@ def main():
             return fn
         return run
 
+    import contextlib as contextlib66
+    import io as io66
     import urllib.request
 
     @scenario66("the ports")
@@ -7624,6 +7645,100 @@ def main():
         ok("and the activity is keyed by the name the track has now",
            list(seen) == ["Kit"] and seen["Kit"]["state"] == "ok")
 
+        # Drums set back to Audio between the check and Start: no track takes notes, so every port closes.
+        fake = Fake66([td17, lkm])
+        d2 = api66(fake)
+        d2.start_monitor(0, SR, [gtr66, drums66])
+        d2.stop_monitor(keep_ports=True)
+        res = d2.start_rehearsal("Jam", 0, SR, [gtr66, {**drums66, "mode": "audio"}])
+        ok("Drums set back to Audio between the check and Start: every port is closed and nothing is listened to",
+           res["ok"] and not fake.open_ports and d2.midi_activity() == {})
+
+        # The check opens a keyboard's other port to count it (P7); Start lets it go.
+        daw = Port66("Launchkey Mini MK3 DAW Port", "Launchkey Mini MK3", "Novation")
+        fake = Fake66([lkm, daw])
+        d3 = api66(fake)
+        d3.start_monitor(0, SR, [gtr66, keys66])
+        counted = open66(fake)
+        d3.stop_monitor(keep_ports=True)
+        res = d3.start_rehearsal("Jam", 0, SR, [gtr66, keys66])
+        ok("the check counts a keyboard's other port too, and Start closes it but keeps the picked one",
+           counted == sorted([lkm.name, daw.name]) and res["ok"] and open66(fake) == [lkm.name]
+           and fake.opens == {lkm.name: 1, daw.name: 1})
+
+        # The notes played during the check are not the rehearsal's: Start counts from nothing.
+        fake = Fake66([td17, lkm])
+        d4 = api66(fake)
+        d4.start_monitor(0, SR, [gtr66, drums66])
+        fake.send("TD-17", time.perf_counter_ns(), bytes([0x99, 38, 100]))
+        d4._midi.drain()
+        heard = d4.list_midi_ports()["ports"][0]["notes"]
+        d4.stop_monitor(keep_ports=True)
+        d4.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        d4._midi.drain()
+        seen = d4.midi_activity()
+        ok("notes played during the check do not show once the rehearsal has started",
+           heard == 1 and seen["Drums"]["notes"] == 0 and seen["Drums"]["vel"] == 0
+           and d4.list_midi_ports()["ports"][0]["notes"] == 0)
+
+        # A Start that fails lets the check's ports go; the audio check is stopped, so the MIDI one is over too.
+        real_unique = apimod66._unique_path
+
+        def failing_unique(path):
+            raise OSError("no room for a folder")
+
+        fake = Fake66([td17, lkm])
+        d5 = api66(fake)
+        d5.start_monitor(0, SR, [gtr66, drums66])
+        apimod66._unique_path = failing_unique
+        try:
+            d5.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+            raised = False
+        except OSError:
+            raised = True
+        finally:
+            apimod66._unique_path = real_unique
+        d5._midi.drain()
+        ok("a Start that cannot make its folder raises, and the check's port is closed with its tracks forgotten",
+           raised and d5._session is None and d5._monitor is None
+           and not fake.open_ports and d5.midi_activity() == {})
+
+        fake = Fake66([td17, lkm])
+        d6 = api66(fake)
+        d6.start_monitor(0, SR, [gtr66, drums66])
+        real_create = d6._lib.create_rehearsal
+
+        def failing_create(*args, **kwargs):
+            raise OSError("the database refused")
+
+        d6._lib.create_rehearsal = failing_create
+        try:
+            d6.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+            raised = False
+        except OSError:
+            raised = True
+        finally:
+            d6._lib.create_rehearsal = real_create
+        ok("and so does one the database refuses",
+           raised and d6._session is None and not fake.open_ports and d6.midi_activity() == {})
+
+        # A rehearsal under way is not undone by a second Start that fails before it begins.
+        fake = Fake66([td17, lkm])
+        d7 = api66(fake)
+        d7.start_rehearsal("First", 0, SR, [gtr66, drums66])
+        held = next(iter(fake.open_ports))
+        first = d7._session
+        apimod66._unique_path = failing_unique
+        try:
+            d7.start_rehearsal("Second", 0, SR, [gtr66, drums66])
+        except OSError:
+            pass
+        finally:
+            apimod66._unique_path = real_unique
+        ok("a second Start that fails before it begins leaves the first rehearsal and its ports as they were",
+           d7._session is first and held in fake.open_ports and not held.closed
+           and d7.midi_activity()["Drums"]["state"] == "ok")
+
         # What Start refuses, in the spec's words, before any folder is made.
         fake = Fake66([td17, lkm])
         e = api66(fake)
@@ -7688,6 +7803,46 @@ def main():
            not any(th.is_alive() for th in threads) and not fake.open_ports and fake.inputs() == [])
         ok("and nothing is listed afterwards", t.list_midi_ports()["ports"] == [])
 
+        # A rig that fails to let go of a take must not stop the rest of closing.
+        fake = Fake66([td17, lkm])
+        w = api66(fake)
+        w.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        order = []
+        real_shutdown, real_abandon = w._midi.shutdown, w._midi.abandon_take
+
+        def failing_abandon():
+            # The Api's call fails; the rig's own, inside its shutdown, is the real one.
+            order.append("abandon_take")
+            if order.count("abandon_take") == 1:
+                raise RuntimeError("the take would not let go")
+            real_abandon()
+
+        w._midi.abandon_take = failing_abandon
+        w._midi.shutdown = lambda: (order.append("shutdown"), real_shutdown())[1]
+        said = io66.StringIO()
+        with contextlib66.redirect_stdout(said):
+            w.shutdown()
+        ok("a take that will not be let go of does not keep the rig from closing its ports and system",
+           order[:2] == ["abandon_take", "shutdown"] and not fake.open_ports and fake.inputs() == []
+           and "the take would not let go" in said.getvalue())
+
+        # And a rig that fails to release does not keep Finish from clearing up the empty folder.
+        fake = Fake66([td17, lkm])
+        v = api66(fake)
+        v.start_rehearsal("Empty", 0, SR, [gtr66, drums66])
+        folder = Path(v._session["folder"])
+
+        def failing_release():
+            raise RuntimeError("a port would not close")
+
+        v._midi.release = failing_release
+        said = io66.StringIO()
+        with contextlib66.redirect_stdout(said):
+            res = v.finish_rehearsal()
+        ok("a port that will not close does not keep Finish from finishing: the empty folder still goes",
+           res["ok"] is True and v._session is None and res["folder_removed"] is True and not folder.exists()
+           and "a port would not close" in said.getvalue())
+
     @scenario66("a rehearsal under way")
     def _():
         print("  a rehearsal under way")
@@ -7698,6 +7853,10 @@ def main():
         a.stop_monitor()
         ok("stop_monitor() between takes (a screen being left) does not close the rehearsal's ports",
            held in fake.open_ports and not held.closed and list(a.midi_activity()) == ["Drums"])
+        res = rescan66(a)
+        ok("Look again between takes reads the ports and leaves the rehearsal's open",
+           res.get("ok") is True and held in fake.open_ports and not held.closed
+           and a.midi_activity()["Drums"]["state"] == "ok")
         a._recorder = types.SimpleNamespace(abandon=lambda: None)
         try:
             res = a.start_rehearsal("Other", 0, SR, [gtr66, {**drums66, "name": "Kit"}])
@@ -7728,6 +7887,35 @@ def main():
             apimod66.shutil.disk_usage = real_usage
         ok("while recording, the disk estimate counts the audio channels only (Keys writes none)",
            abs(health["minutes_left"] - 100) < 0.01)
+
+    @scenario66("Copy details names the ports")
+    def _():
+        print("  Copy details")
+        a = api66(Fake66([td17, lkm]))
+        a._remember_device("device", 0)
+        a._config["tracks"] = [
+            {"name": "Gtr"},
+            {"name": "Drums", "mode": "both", "midi_port": td17.saved()},
+            {"name": "Keys", "mode": "midi", "midi_port": lkm.saved()},
+            {"name": "Pad", "mode": "midi"}]
+        text = a.bug_report()["text"]
+        ok("a MIDI track is said by its port, a Both track by its input and its port, and no port as none",
+           "Tracks: Gtr on input 1, Drums on input 2 and MIDI port TD-17, "
+           "Keys on MIDI port Launchkey Mini MK3 MIDI Port, Pad on no MIDI port" in text)
+        ok("and a MIDI track is not said to be on no input", "Keys on no input" not in text)
+        real_tracks_for = apimod66.tracks_for
+
+        def cannot_place(*args, **kwargs):
+            raise RuntimeError("the card cannot be asked")
+
+        apimod66.tracks_for = cannot_place
+        try:
+            text = a.bug_report()["text"]
+        finally:
+            apimod66.tracks_for = real_tracks_for
+        ok("when the card cannot be asked, the inputs are unknown, not none, and the ports are still said",
+           "Tracks: Gtr on an unknown input, Drums on an unknown input and MIDI port TD-17, "
+           "Keys on MIDI port Launchkey Mini MK3 MIDI Port, Pad on no MIDI port" in text)
 
     @scenario66("no MIDI system")
     def _():
@@ -7765,22 +7953,12 @@ def main():
         a = api66(fake)
         fake.plug(lkm)
         ok("a port the system did not tell us of is not listed yet", len(a.list_midi_ports()["ports"]) == 1)
-        saved = {n: getattr(_sd, n, None) for n in ("_initialized", "_terminate", "_initialize")}
-        _sd._initialized = 1
-        _sd._terminate = _sd._initialize = lambda: None
-        try:
-            res = a.rescan_devices()
-        finally:
-            for n, value in saved.items():
-                if value is None:
-                    if hasattr(_sd, n):
-                        delattr(_sd, n)
-                else:
-                    setattr(_sd, n, value)
+        res = rescan66(a)
         ok("Look again reads the MIDI ports too", res.get("ok") is True
            and [p["name"] for p in a.list_midi_ports()["ports"]] == ["TD-17", lkm.name])
 
     apimod66.open_midi_system = real_open66
+    apimod66.MIDI_THREADS = False
 
     print("\n[70] take_notes")
     # The player draws a take's notes from its .mid files. A take knows them only

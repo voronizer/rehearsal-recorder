@@ -135,6 +135,8 @@ def main():
 
     apimod.RECORDINGS_ROOT = tmp / "Rec2"
     apimod.CONFIG_PATH = tmp / "config.json"
+    # The MIDI rig's two threads stay off: nothing here touches a port.
+    apimod.MIDI_THREADS = False
     a = apimod.Api.__new__(apimod.Api)
     apimod.Api.__init__(a)
     settings = a.get_settings()

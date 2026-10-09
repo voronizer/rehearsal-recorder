@@ -561,11 +561,12 @@ class Api:
         self.stop_monitor()
         # A take's notes stay for the drafts, as its audio does; then the
         # ports close, the rig's threads stop and the MIDI system is let go.
-        try:
-            self._midi.abandon_take()
-            self._midi.shutdown()
-        except Exception as e:
-            print(f"[shutdown] letting go of the MIDI ports: {e}")
+        # Each on its own: one that fails does not keep the other from running.
+        for let_go in (self._midi.abandon_take, self._midi.shutdown):
+            try:
+                let_go()
+            except Exception as e:
+                print(f"[shutdown] letting go of the MIDI ports: {e}")
         self.player_close()
         self._cloud_queue.stop()
         self._names_pass.stop()
@@ -817,7 +818,9 @@ class Api:
             max_inputs = sd.query_devices(index)["max_input_channels"] if index is not None else 0
             tracks = tracks_for(self._config, device_identity(index), max_inputs)
         except Exception:  # noqa: BLE001
-            tracks = [{"name": t.get("name", "?"), "channel": None}
+            # No card to place them on: the inputs are unknown (no "channel"
+            # at all), but the mode and the port are the band's own.
+            tracks = [{"name": t.get("name", "?"), **{k: t[k] for k in ("mode", "midi_port") if k in t}}
                       for t in self._config.get("tracks", [])]
         if not self._config.get("cloud_dir"):
             cloud = "no cloud folder"
@@ -1556,39 +1559,49 @@ class Api:
         # Its MIDI ports are kept: the rehearsal takes them over below.
         self.stop_monitor(keep_ports=True)
 
-        played_by = library.set_of(set_id) if set_id is not None else None
-
-        created_at = time.strftime("%Y-%m-%dT%H:%M:%S")
-        folder = _unique_path(
-            self._recordings_dir
-            / f"{_safe_name(name)} - {_timestamp_suffix(created_at)}"
-        )
-        folder.mkdir(parents=True, exist_ok=True)
-
-        self._session = {
-            "name": name,
-            "folder": folder,
-            "created_at": created_at,
-            "device_index": device_index,
-            "samplerate": samplerate,
-            "bit_depth": bit_depth,
-            "tracks": tracks,
-            "take_counter": 0,
-            "set": played_by,
-        }
-        # In the database from the start, so History can read the take list
-        # even after a restart.
         try:
-            library.create_rehearsal(
-                folder, name, created_at, samplerate, bit_depth, tracks,
-                set_copy=played_by,
+            played_by = library.set_of(set_id) if set_id is not None else None
+
+            created_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+            folder = _unique_path(
+                self._recordings_dir
+                / f"{_safe_name(name)} - {_timestamp_suffix(created_at)}"
             )
+            folder.mkdir(parents=True, exist_ok=True)
+
+            self._session = {
+                "name": name,
+                "folder": folder,
+                "created_at": created_at,
+                "device_index": device_index,
+                "samplerate": samplerate,
+                "bit_depth": bit_depth,
+                "tracks": tracks,
+                "take_counter": 0,
+                "set": played_by,
+            }
+            # In the database from the start, so History can read the take list
+            # even after a restart.
+            try:
+                library.create_rehearsal(
+                    folder, name, created_at, samplerate, bit_depth, tracks,
+                    set_copy=played_by,
+                )
+            except Exception:
+                self._session = None
+                raise
         except Exception:
-            self._session = None
+            # The audio check is over and no rehearsal has begun, so the MIDI
+            # check is too: its ports were only kept for this Start. A
+            # rehearsal already under way keeps its own.
+            if self._session is None:
+                self._midi.release()
             raise
         # Exactly the ports the final tracks name: one the check had open that
         # they still name stays open as it is; the rest of the check's close.
+        # What was played during the check is not the rehearsal's.
         self._midi.use(tracks)
+        self._midi.reset_counts()
         return {"ok": True, "folder": str(folder)}
 
     def _session_rehearsal(self):
@@ -1825,7 +1838,11 @@ class Api:
         rehearsal = self._lib.rehearsal(folder)
         take_count = len(rehearsal["takes"]) if rehearsal else 0
         self._session = None
-        self._midi.release()
+        try:
+            self._midi.release()
+        except Exception as e:
+            # The rehearsal is over whether or not a port would close.
+            print(f"[finish] letting go of the MIDI ports: {e}")
 
         # A rehearsal where nothing was saved should not leave a folder behind.
         removed = False
