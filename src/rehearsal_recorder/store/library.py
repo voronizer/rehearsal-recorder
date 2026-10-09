@@ -20,7 +20,8 @@ from sqlalchemy.orm import object_session, selectinload, sessionmaker
 from rehearsal_recorder.midi import rules
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
-    CloudCopy, Label, Marker, Rehearsal, Song, SongName, SongSet, Take, TakeFile, Track,
+    AUDIO_FILE, NOTES_FILE, CloudCopy, Label, Marker, Rehearsal, Song, SongName, SongSet,
+    Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
 
@@ -196,8 +197,8 @@ class Library:
         band = [{"name": t.name, "mode": t.mode, "midi_port": t.midi_port}
                 for t in take.rehearsal.tracks]
         ports = {t["name"]: t["midi_port"] for t in band}
-        audio = [f for f in take.files if f.kind != "midi"]
-        notes = [f for f in take.files if f.kind == "midi"]
+        audio = [f for f in take.files if f.kind != NOTES_FILE]
+        notes = [f for f in take.files if f.kind == NOTES_FILE]
         heard = {f.name for f in audio}
         written = {f.name for f in notes}
         out = {
@@ -271,8 +272,8 @@ class Library:
 
     @staticmethod
     def _files(folder, files, kind, start=0):
-        """[{"name", "file": absolute}] → rows of that kind ("audio" or
-        "midi") relative to the rehearsal, numbered from `start`."""
+        """[{"name", "file": absolute}] → rows of that kind (AUDIO_FILE or
+        NOTES_FILE) relative to the rehearsal, numbered from `start`."""
         return [
             TakeFile(position=start + i, name=f["name"], kind=kind,
                      file=_relative(f["file"], folder))
@@ -283,25 +284,24 @@ class Library:
     def _take_files(cls, folder, take):
         """A new take's rows: its "tracks" as audio, then its "notes" as MIDI,
         one sequence of positions."""
-        audio = cls._files(folder, take.get("tracks") or [], "audio")
-        return audio + cls._files(folder, take.get("notes") or [], "midi", start=len(audio))
+        audio = cls._files(folder, take.get("tracks") or [], AUDIO_FILE)
+        return audio + cls._files(folder, take.get("notes") or [], NOTES_FILE, start=len(audio))
 
     @staticmethod
     def _track_rows(tracks):
         """The band as rows: each with its mode and the name of its port (a
-        track that records only audio has none), and the input it was on —
-        none for a track that records only MIDI."""
+        track that records only audio has none), and the input it was on. A
+        track that records audio has to have one, and raises without; one that
+        records only MIDI is on none."""
         rows = []
         for i, t in enumerate(tracks):
-            mode = rules.mode_of(t)
-            port = rules.port_ref(t.get("midi_port"))
-            channel = t.get("channel")
+            port = rules.port_of(t)
             rows.append(Track(
                 position=i,
                 name=t["name"],
-                channel=None if mode == "midi" or channel is None else int(channel),
-                mode=mode,
-                midi_port=port["name"] if port and mode != "audio" else None,
+                channel=int(t["channel"]) if rules.records_audio(t) else None,
+                mode=rules.mode_of(t),
+                midi_port=port["name"] if port else None,
             ))
         return rows
 
@@ -947,10 +947,10 @@ class Library:
             if duration_sec is not None:
                 row.duration_sec = float(duration_sec)
             if tracks is not None or notes is not None:
-                audio = ([f for f in row.files if f.kind != "midi"] if tracks is None
-                         else self._files(folder, tracks, "audio"))
-                midi = ([f for f in row.files if f.kind == "midi"] if notes is None
-                        else self._files(folder, notes, "midi"))
+                audio = ([f for f in row.files if f.kind != NOTES_FILE] if tracks is None
+                         else self._files(folder, tracks, AUDIO_FILE))
+                midi = ([f for f in row.files if f.kind == NOTES_FILE] if notes is None
+                        else self._files(folder, notes, NOTES_FILE))
                 for position, f in enumerate(audio + midi):
                     f.position = position
                 row.files = audio + midi

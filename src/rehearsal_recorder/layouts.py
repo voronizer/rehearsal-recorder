@@ -42,12 +42,12 @@ def band_member(track):
     it. One it does not know is drawn as the neutral one there."""
     icon = track.get("icon")
     mode = rules.mode_of(track)
-    port = rules.port_ref(track.get("midi_port")) if mode != "audio" else None
+    port = rules.port_of(track)
     return {
         "name": track["name"],
         **({"stereo": True} if track.get("stereo") else {}),
         **({"icon": icon} if isinstance(icon, str) and icon else {}),
-        **({"mode": mode} if mode != "audio" else {}),
+        **({"mode": mode} if rules.records_notes(track) else {}),
         **({"midi_port": port} if port else {}),
     }
 
@@ -164,7 +164,7 @@ def remember(layouts, identity, tracks):
                 keep = dict(entry.get("inputs") or {})
                 break
     for t in tracks:
-        if t.get("channel") is not None and rules.mode_of(t) != "midi":
+        if t.get("channel") is not None and rules.records_audio(t):
             keep[t["name"]] = t["channel"]
 
     rest = [
@@ -204,7 +204,7 @@ def for_device(band, layouts, identity, max_inputs):
     placed = {}
     taken = set()
     for member in members:
-        if rules.mode_of(member) == "midi":
+        if not rules.records_audio(member):
             continue
         width = wants(member)
         channel = known.get(member["name"])
@@ -214,10 +214,10 @@ def for_device(band, layouts, identity, max_inputs):
 
     out = []
     for member in members:
-        mode = rules.mode_of(member)
+        takes_input = rules.records_audio(member)
         width = wants(member)
         channel = None
-        if mode != "midi":
+        if takes_input:
             channel = placed.get(member["name"])
             if channel is None:
                 channel = next(
@@ -226,12 +226,12 @@ def for_device(band, layouts, identity, max_inputs):
                 )
                 if channel is not None:
                     taken.update(range(channel, channel + width))
-        port = rules.port_ref(member.get("midi_port")) if mode != "audio" else None
+        port = rules.port_of(member)
         out.append({
             "name": member["name"],
             "channel": channel,
-            "stereo": bool(member.get("stereo")) and mode != "midi",
-            "mode": mode,
+            "stereo": bool(member.get("stereo")) and takes_input,
+            "mode": rules.mode_of(member),
             **({"icon": member["icon"]} if member.get("icon") else {}),
             **({"midi_port": port} if port else {}),
         })

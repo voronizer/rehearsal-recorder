@@ -13,7 +13,10 @@ every band, template and rehearsal saved before MIDI reads, so none of them
 changes meaning.
 """
 
-MODES = ("audio", "both", "midi")
+# The modes, as they are stored in the band's config and in the database: the
+# words never change.
+AUDIO, BOTH, MIDI = "audio", "both", "midi"
+MODES = (AUDIO, BOTH, MIDI)
 
 # What a saved port may keep of the OS's description of it, name first
 # (ports.PortInfo.saved).
@@ -24,17 +27,17 @@ def mode_of(track):
     """The track's mode: "audio", "both" or "midi". "audio" when it has none
     or one that is not a mode."""
     mode = track.get("mode")
-    return mode if mode in MODES else "audio"
+    return mode if mode in MODES else AUDIO
 
 
 def records_audio(track):
     """Whether the track's input goes to a WAV: audio and both."""
-    return mode_of(track) != "midi"
+    return mode_of(track) != MIDI
 
 
 def records_notes(track):
     """Whether the track's port goes to a .mid: both and midi."""
-    return mode_of(track) != "audio"
+    return mode_of(track) != AUDIO
 
 
 def port_ref(value):
@@ -50,6 +53,12 @@ def port_ref(value):
     kept = {key: value[key] for key in _PORT_FIELDS
             if isinstance(value.get(key), str) and value[key].strip()}
     return kept if "name" in kept else None
+
+
+def port_of(track):
+    """The port a track keeps (port_ref of its `midi_port`): only a track that
+    records notes has one, whatever an audio track is handed."""
+    return port_ref(track.get("midi_port")) if records_notes(track) else None
 
 
 def lane_after(band, audio_names, name):

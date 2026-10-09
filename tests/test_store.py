@@ -1190,6 +1190,16 @@ def main():
         engine.dispose()
         return out
 
+    def shape16():
+        """What models.py is compared with, and the index `track` must keep,
+        read from the file as it is now."""
+        engine = db.make_engine(db.database_path(rec16))
+        with engine.connect() as c:
+            drift = compare_metadata(MigrationContext.configure(c), Base.metadata)
+            indexes = {i["name"] for i in inspect(c).get_indexes("track")}
+        engine.dispose()
+        return drift, indexes
+
     def files16(number):
         return rows16(
             "SELECT f.kind, f.name, f.position FROM take_file f JOIN take t ON t.id = f.take_id "
@@ -1201,11 +1211,9 @@ def main():
     ok("a database at 0006 is moved on to the newest migration",
        db.current_revision(engine) == HEAD)
     ok("after it was copied aside", (rec16 / "library.sqlite.bak-0006").exists())
-    with engine.connect() as c:
-        drift = compare_metadata(MigrationContext.configure(c), Base.metadata)
-        indexes16 = {i["name"] for i in inspect(c).get_indexes("track")}
     engine.dispose()
-    ok("and it is then what models.py describes", drift == [])
+    drift16, indexes16 = shape16()
+    ok("and it is then what models.py describes", drift16 == [])
     ok("a track keeps its place under its rehearsal", "ix_track_rehearsal_id" in indexes16)
     ok("every track reads as audio, on the input it had",
        rows16("SELECT name, channel, mode, midi_port FROM track ORDER BY position")
@@ -1241,6 +1249,30 @@ def main():
            {"name": "Drums", "channel": 1, "mode": "both", "midi_port": "TD-17"},
            {"name": "Bass", "channel": 3, "mode": "audio", "midi_port": None},
            {"name": "Keys", "channel": None, "mode": "midi", "midi_port": "Launchkey Mini MK3"}])
+
+    def made16(tracks, how="create"):
+        """Whether a rehearsal with these tracks was made."""
+        folder = rec16 / "Refused"
+        try:
+            if how == "create":
+                lib.create_rehearsal(folder, "Refused", "2026-09-03T19:00:00", 48000, 24, tracks)
+            else:
+                lib.import_rehearsal(folder, name="Refused", created_at="2026-09-03T19:00:00",
+                                     samplerate=48000, bit_depth=24, tracks=tracks, takes=[],
+                                     cloud={}, cloud_errors={}, cloud_dir=None)
+        except Exception:
+            return False
+        return True
+
+    ok("a track that records audio needs an input, as it always did",
+       made16([{"name": "Gtr", "channel": None}]) is False
+       and made16([{"name": "Gtr"}]) is False
+       and made16([{"name": "Drums", "mode": "both", "channel": None,
+                    "midi_port": {"name": "TD-17"}}]) is False)
+    ok("and so does one that is imported",
+       made16([{"name": "Gtr", "channel": None}], "import") is False
+       and made16([{"name": "Drums", "mode": "both"}], "import") is False)
+    ok("none of them left a rehearsal behind", lib.has(rec16 / "Refused") is False)
     here16 = night16 / "01 - Polyn 1"
     wavs16 = [{"name": "Drums", "file": str(here16 / "Drums.wav")},
               {"name": "Bass", "file": str(here16 / "Bass.wav")}]
@@ -1310,9 +1342,17 @@ def main():
     ok("an empty list of notes takes them away, and the track is missing again",
        lib.update_take(night16, 1, notes=[])["notes"] == []
        and [m["name"] for m in lib.take(night16, 1)["notes_missing"]] == ["Drums", "Keys"])
-    ok("an empty list of audio takes the audio away and leaves the notes",
-       lib.update_take(night16, 3, tracks=[])["notes"] == lonely16["notes"])
-    lib.update_take(night16, 1, notes=[mid16])
+    lib.update_take(night16, 1, notes=after_notes16["notes"])
+    no_audio16 = lib.update_take(night16, 1, tracks=[])
+    ok("an empty list of audio takes the audio away and leaves the notes, now with no lane before",
+       no_audio16["tracks"] == []
+       and no_audio16["notes"] == [{"name": "Drums", "file": str(moved16 / "Drums.mid"),
+                                    "port": "TD-17", "after": None}]
+       and files16(1) == [("midi", "Drums", 0)])
+    lib.update_take(night16, 1, tracks=to_wav16)
+    ok("and the audio put back goes before the notes again",
+       files16(1) == [("audio", "Drums", 0), ("audio", "Bass", 1), ("midi", "Drums", 2)]
+       and lib.take(night16, 1)["notes"] == after_notes16["notes"])
 
     print("  an imported rehearsal")
     imp16 = rec16 / "Imported"
@@ -1388,6 +1428,9 @@ def main():
        and [r[0] for r in rows16("SELECT name FROM pragma_table_info('take_file') ORDER BY cid")]
        == ["id", "take_id", "position", "name", "file"])
     db.open_engine(rec16).dispose()
+    drift16, indexes16 = shape16()
+    ok("coming back to the newest is what models.py describes again, the index back",
+       drift16 == [] and "ix_track_rehearsal_id" in indexes16)
     ok("coming back to the newest keeps them, all reading as audio",
        rows16("SELECT (SELECT COUNT(*) FROM rehearsal), (SELECT COUNT(*) FROM take), "
               "(SELECT COUNT(*) FROM take_file WHERE kind = 'audio'), (SELECT COUNT(*) FROM marker), "
@@ -1399,6 +1442,12 @@ def main():
        [t["name"] for t in back16["tracks"]] == ["Drums", "Bass"]
        and back16["notes"] == [] and back16["notes_missing"] == []
        and [t["mode"] for t in lib.rehearsal(night16)["tracks"]] == ["audio", "audio"])
+    ok("and the track table rebuilt again still cascades from its rehearsal",
+       rows16("SELECT COUNT(*) FROM track") == [(4,)]
+       and lib.forget_rehearsal(night16) is True
+       and rows16("SELECT COUNT(*) FROM track") == [(2,)]
+       and rows16("SELECT COUNT(*) FROM track WHERE rehearsal_id NOT IN "
+                  "(SELECT id FROM rehearsal)") == [(0,)])
     lib.close()
 
     print()

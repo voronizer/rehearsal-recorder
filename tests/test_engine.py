@@ -6865,6 +6865,18 @@ def main():
        and rules.port_ref(["TD-17"]) is None and rules.port_ref({"name": 5}) is None)
     ok("a saved port is a copy, not the dictionary it was read from",
        rules.port_ref(port) == port and rules.port_ref(port) is not port)
+    ok("a track that records notes keeps the port it was given",
+       rules.port_of({"mode": "both", "midi_port": "TD-17"}) == {"name": "TD-17"}
+       and rules.port_of({"mode": "midi", "midi_port": port}) == port)
+    ok("a track that records audio keeps none, whatever it is handed",
+       rules.port_of({"mode": "audio", "midi_port": port}) is None
+       and rules.port_of({"name": "Bass", "midi_port": port}) is None)
+    ok("and one that records notes with no port to speak of keeps none",
+       rules.port_of({"mode": "both"}) is None
+       and rules.port_of({"mode": "midi", "midi_port": {"device": "TD-17"}}) is None)
+    ok("the modes are stored under these words, which never change",
+       (rules.AUDIO, rules.BOTH, rules.MIDI) == ("audio", "both", "midi")
+       and rules.MODES == (rules.AUDIO, rules.BOTH, rules.MIDI))
 
     lanes = [{"name": "Gtr"}, {"name": "Keys", "mode": "midi"}, {"name": "Drums", "mode": "both"},
              {"name": "Bass"}, {"name": "Pad", "mode": "midi"}]
