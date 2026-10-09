@@ -5,13 +5,16 @@ P3), what the audio card check then holds, which saved port is found again
 F4): what one can hold, written and read back, and what a port has set and
 holds (F6 and F7); the audio's own clock, which puts a note on its sample (F1);
 one take's notes on disk, written as they are played and made a .mid at Stop or
-after a crash (F3, F5 and F7); later sections are added here as the rest of it
-is built.
+after a crash (F3, F5 and F7); the rehearsal's ports, which wait, come and go,
+are held by another app or alike, go quiet, send the same notes twice and feed
+a take (D7, P1, P4, P5, P7, P8, F7); later sections are added here as the rest
+of it is built.
 
 Python side, no browser, no MIDI: nothing here opens a port. The MIDI library
 is blocked the way the other suites block it, and the pieces that decide what
 is allowed are plain functions over plain dictionaries, so they are called
-directly.
+directly. The rig runs on fake_midi.py, a port system with nothing behind it
+whose ports the checks plug in, pull out and play.
 """
 
 import ast
@@ -36,6 +39,7 @@ PROJECT = Path(__file__).resolve().parent.parent
 # repository root. This means the suites run from a clone without the
 # package having been installed first.
 sys.path.insert(0, str(PROJECT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Stub sounddevice: there is no real card here.
 _sd = types.ModuleType("sounddevice")
@@ -63,15 +67,18 @@ sys.modules["sounddevice"] = _sd
 sys.modules["pylibremidi"] = None
 
 import mido  # noqa: E402  (to read the files back; src imports it only in midi/smf.py)
+from fake_midi import FakePortSystem  # noqa: E402
 
 from rehearsal_recorder.audio.devices import channels_available  # noqa: E402
 from rehearsal_recorder.midi import capture as notes_capture  # noqa: E402
+from rehearsal_recorder.midi import rig as rig_mod  # noqa: E402
 from rehearsal_recorder.midi import smf  # noqa: E402
 from rehearsal_recorder.midi.capture import (  # noqa: E402
     CLOCK_FILE, MIDRAW_SUFFIX, MidiRecorder, NotesDropped, finish_draft, note_stems)
 from rehearsal_recorder.midi.clock import AudioClock, MARK_EVERY_SEC, fit, load, save_line  # noqa: E402
 from rehearsal_recorder.midi.identity import bare_name, find_port, in_order  # noqa: E402
 from rehearsal_recorder.midi.ports import PortInfo  # noqa: E402
+from rehearsal_recorder.midi.rig import MidiRig  # noqa: E402
 from rehearsal_recorder.midi.rules import notes_problem  # noqa: E402
 from rehearsal_recorder.midi.smf import read_events, storable, write_mid  # noqa: E402
 from rehearsal_recorder.midi.state import PortState  # noqa: E402
@@ -1744,6 +1751,471 @@ def main():
     capture_imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
                        for n in ast.walk(ast.parse(capture_source)) if isinstance(n, (ast.Import, ast.ImportFrom))}
     ok("the recorder goes through smf for the .mid and never imports mido", "mido" not in capture_imports)
+
+    print("\n[7] The rehearsal's ports")
+    said7 = []  # what the rig says to the log, so that it is checked and not printed
+    catcher7 = logging.Handler(level=logging.INFO)
+    catcher7.emit = said7.append
+    logging.getLogger(rig_mod.__name__).addHandler(catcher7)
+    TICK = int(rig_mod.TICK_SEC * S)
+    now = [100 * S]  # the rig's clock, which the checks move
+
+    gtr = {"name": "Gtr", "channel": 1}
+    drums = {"name": "Drums", "mode": "both", "channel": 2, "midi_port": {"name": "TD-17"}}
+    keys = {"name": "Keys", "mode": "midi", "channel": None, "midi_port": {"name": "Launchkey Mini MK3"}}
+    synth = {"name": "Synth", "mode": "midi", "channel": None, "midi_port": {"name": "Nord Stage 3 MIDI"}}
+    td17 = PortInfo("TD-17", "TD-17", "Roland")
+    launchkey = PortInfo("Launchkey Mini MK3", "Launchkey Mini MK3", "Novation")
+    nord = PortInfo("Nord Stage 3 MIDI", "Nord Stage 3", "Clavia")
+
+    def a_rig(*plugged):
+        fake = FakePortSystem(list(plugged))
+        return fake, MidiRig(fake, threads=False, now_ns=lambda: now[0])
+
+    def open_now(fake):
+        return sorted(port.info.name for port in fake.open_ports)
+
+    def take_clock(t):
+        c = AudioClock(SR)
+        c.started_ns = t
+        return c
+
+    heard = []  # what the take's recorder was asked, in order
+
+    class Spy(MidiRecorder):
+        """The take's recorder, which says what it is asked before doing it."""
+
+        def present(self, name, ns):
+            heard.append(("present", name, ns))
+            return super().present(name, ns)
+
+        def feed(self, name, ns, data):
+            heard.append(("feed", name, ns, bytes(data)))
+            return super().feed(name, ns, data)
+
+        def gone(self, name, ns):
+            heard.append(("gone", name, ns))
+            return super().gone(name, ns)
+
+        def flush(self):
+            heard.append(("flush",))
+            return super().flush()
+
+    def told(name):
+        """What the recorder was asked about one track: (what, when)."""
+        return [(call[0], call[2]) for call in heard if call[0] != "flush" and call[1] == name]
+
+    real_recorder = rig_mod.MidiRecorder
+    rig_mod.MidiRecorder = Spy
+    try:
+        with tempfile.TemporaryDirectory() as tmp7:
+            def folder(name):
+                made = Path(tmp7) / name
+                made.mkdir()
+                return made
+
+            def files_in(path):
+                return sorted(p.name for p in path.iterdir())
+
+            # A port that is there and one that is not yet (D7).
+            fake, rig = a_rig(td17)
+            rig.use([gtr, drums, keys])
+            act = rig.activity()
+            ok("Drums on TD-17, which is plugged in, is ok and connected",
+               act["Drums"]["state"] == "ok" and act["Drums"]["connected"] is True)
+            ok("Keys on a Launchkey that is not plugged in is missing and not connected, and stops nothing (D7)",
+               act["Keys"]["state"] == "missing" and act["Keys"]["connected"] is False)
+            ok("a track that only records audio is not the rig's, and only TD-17 is open",
+               sorted(act) == ["Drums", "Keys"] and open_now(fake) == ["TD-17"])
+            fake.send("TD-17", now[0] + 10 * MS, b"\x99\x26\x64")
+            rig.drain()
+            act = rig.activity()
+            ok("a note-on at velocity 100 is one note, and the meter shows 100/127",
+               act["Drums"]["notes"] == 1 and act["Drums"]["vel"] == 100 / 127 and act["Keys"]["notes"] == 0)
+            act = rig.activity()
+            ok("read again, the meter is back at 0 and the count stays",
+               act["Drums"]["vel"] == 0 and act["Drums"]["notes"] == 1)
+            fake.send("TD-17", now[0] + 20 * MS, b"\x89\x26\x00")
+            fake.send("TD-17", now[0] + 30 * MS, b"\x99\x26\x00")
+            rig.drain()
+            ok("a note-off, and a note-on at velocity 0, are not notes", rig.activity()["Drums"]["notes"] == 1)
+            ok("ports() names the system and lists each port with the notes it sent, and no error",
+               rig.ports() == {"system": "Fake MIDI", "error": None,
+                               "ports": [{"name": "TD-17", "device": "TD-17", "maker": "Roland", "notes": 1}]})
+
+            # A port plugged in during a take records from then on (D7, P4).
+            one = folder("one")
+            T1 = now[0] = 110 * S
+            rig.begin_take(one, take_clock(T1))
+            ok("the counts start again when a take begins",
+               rig.activity()["Drums"]["notes"] == 0 and rig.ports()["ports"][0]["notes"] == 0)
+            fake.plug(launchkey)
+            now[0] += TICK
+            rig.tick()
+            ok("the Launchkey plugged in mid-take is opened at the next tick, and Keys is ok (D7, P4)",
+               rig.activity()["Keys"]["state"] == "ok" and open_now(fake) == ["Launchkey Mini MK3", "TD-17"])
+            fake.send("Launchkey Mini MK3", T1 + 500 * MS, b"\x90\x3c\x50")
+            fake.send("Launchkey Mini MK3", T1 + 750 * MS, b"\x80\x3c\x00")
+            fake.send("TD-17", T1 + 1 * S, b"\x99\x26\x40")
+            made = rig.end_take(3.0)                                # what is still on the queue is written first
+            ok("end_take lists Drums and Keys, each with the port it was saved with",
+               made == [{"name": "Drums", "file": str(one / "Drums.mid"), "port": "TD-17"},
+                        {"name": "Keys", "file": str(one / "Keys.mid"), "port": "Launchkey Mini MK3"}])
+            ok("Keys has what was played on it once it was there",
+               in_ticks(one / "Keys.mid") == [(960, b"\x90\x3c\x50"), (1440, b"\x80\x3c\x00")])
+            ok("and Drums its note, let go when the take stopped (F7)",
+               in_ticks(one / "Drums.mid") == [(1920, b"\x99\x26\x40"), (5760, b"\x89\x26\x00")])
+
+            # What was set between two takes (F6), and a port pulled mid-take and plugged back.
+            fake.send("TD-17", 112 * S, b"\xb9\x04\x5a")           # the hi-hat pedal half down
+            rig.drain()
+            fake.send("TD-17", 119 * S, b"\xb9\x07\x64")           # the volume, still on the queue at Start
+            two = folder("two")
+            T2 = now[0] = 120 * S
+            heard.clear()
+            rig.begin_take(two, take_clock(T2))
+            fake.send("TD-17", T2 + 500 * MS, b"\x99\x2a\x40")      # 42, held
+            fake.send("TD-17", T2 + 800 * MS, b"\xb9\x04\x14")      # the pedal: the last the port said
+            now[0] = T2 + 900 * MS
+            fake.pull("TD-17")                                     # with its events still on the queue
+            rig.tick()
+            rig.drain()
+            ok("pulled mid-take, Drums is missing and its port is closed",
+               rig.activity()["Drums"]["state"] == "missing" and "TD-17" not in open_now(fake))
+            ok("and nothing it would send is heard", fake.send("TD-17", T2 + 950 * MS, b"\x99\x2b\x40") is False)
+            now[0] = T2 + 1 * S
+            fake.plug(td17)
+            rig.tick()
+            ok("plugged back, it is opened again and Drums is ok",
+               rig.activity()["Drums"]["state"] == "ok" and fake.opens["TD-17"] == 2)
+            fake.send("TD-17", T2 + 1500 * MS, b"\x99\x28\x40")     # 40
+            rig.drain()
+            ok("the recorder was told in order: present with the event that was on the queue at Start, the events, "
+               "gone when the port was last heard, after its events, present again, the next event (R33)",
+               told("Drums") == [("present", 119 * S), ("feed", 119 * S), ("feed", T2 + 500 * MS),
+                                 ("feed", T2 + 800 * MS), ("gone", T2 + 800 * MS), ("present", T2 + 1 * S),
+                                 ("feed", T2 + 1500 * MS)])
+            made = rig.end_take(3.0)
+            ok("a port pulled and plugged back is one file", files_in(two) == ["Drums.mid", "Keys.mid"]
+               and [m["name"] for m in made] == ["Drums", "Keys"])
+            kit = in_ticks(two / "Drums.mid")
+            ok("the take begins with the pedal as it was sent between the takes, and the volume sent as it began (F6)",
+               kit[:2] == [(0, b"\xb9\x04\x5a"), (0, b"\xb9\x07\x64")])
+            ok("42 is let go when the port was last heard before the pull, and 40 after the replug is there (F7)",
+               kit[2:] == [(960, b"\x99\x2a\x40"), (1536, b"\xb9\x04\x14"), (1536, b"\x89\x2a\x00"),
+                           (2880, b"\x99\x28\x40"), (5760, b"\x89\x28\x00")])
+            ok("Keys, there all along and silent, has its .mid with no notes (F5)", in_ticks(two / "Keys.mid") == [])
+
+            now[0] = 130 * S
+            fake.pull("TD-17")
+            fake.plug(td17)
+            rig.tick()
+            ok("pulled and plugged back between two ticks, the port is opened again, once",
+               rig.activity()["Drums"]["state"] == "ok" and fake.opens["TD-17"] == 3
+               and open_now(fake).count("TD-17") == 1)
+
+            # Busy, alike, and no system (P5, P1).
+            busy_fake, busy = a_rig(td17)
+            busy_fake.refuse.add("TD-17")
+            busy.use([gtr, drums])
+            act = busy.activity()["Drums"]
+            ok("a port another app holds is in use and not connected, and Start is not stopped (P5)",
+               act["state"] == "in_use" and act["connected"] is False and notes_problem([gtr, drums]) is None)
+            busy_take = folder("busy")
+            busy.begin_take(busy_take, take_clock(now[0]))
+            ok("a take begins and ends without it, and has no notes file for it (F5)",
+               busy.end_take(1.0) == [] and files_in(busy_take) == [])
+            busy_fake.refuse.clear()
+            for _ in range(4):
+                now[0] += TICK
+                busy.tick()
+            ok("once the other app lets go of it, the rig's next look opens it", busy.activity()["Drums"]["state"] == "ok")
+
+            alike_fake, alike = a_rig(td17, td17)
+            alike.use([gtr, drums])
+            act = alike.activity()["Drums"]
+            ok("two ports that nothing tells apart: ambiguous, not connected, and neither opened (P1)",
+               act["state"] == "ambiguous" and act["connected"] is False and alike_fake.open_ports == set())
+
+            nothing = MidiRig(None, "MIDI is not available: test", threads=False, now_ns=lambda: now[0])
+            ok("with no MIDI system, ports() says why and lists nothing",
+               nothing.ports() == {"system": None, "ports": [], "error": "MIDI is not available: test"})
+            nothing.use([gtr, drums, {**keys, "midi_port": None}])
+            act = nothing.activity()
+            ok("and a track with a port is missing, one with none is none, neither connected",
+               (act["Drums"]["state"], act["Drums"]["connected"], act["Keys"]["state"], act["Keys"]["connected"])
+               == ("missing", False, "none", False))
+            nothing_take = folder("nothing")
+            nothing.begin_take(nothing_take, take_clock(now[0]))
+            nothing.tick()
+            ok("a take with it records no notes, and nothing raises",
+               nothing.end_take(1.0) == [] and files_in(nothing_take) == [])
+            nothing.shutdown()
+
+            # Active sensing: a device behind an interface switched off (F7, R32).
+            sense_fake, sense = a_rig(td17, launchkey)
+            sense.use([gtr, drums, keys])
+            sensing = folder("sensing")
+            T3 = now[0] = 300 * S
+            heard.clear()
+            sense.begin_take(sensing, take_clock(T3))
+            for at, data in ((0, b"\xfe"), (250, b"\xfe"), (300, b"\x99\x26\x40"), (500, b"\xfe"), (750, b"\xfe")):
+                sense_fake.send("TD-17", T3 + at * MS, data)
+            sense_fake.send("Launchkey Mini MK3", T3 + 100 * MS, b"\x90\x3c\x40")
+            sense.drain()
+            sense_fake.send("TD-17", T3 + 1 * S, b"\xfe")            # heard, and not yet drained
+            now[0] = T3 + 1300 * MS
+            sense.tick()
+            ok("300 ms after the last active sensing the TD-17 is still there", sense.activity()["Drums"]["state"] == "ok")
+            now[0] = T3 + 1400 * MS
+            sense.tick()
+            act = sense.activity()
+            ok("400 ms after it, it counts as gone: missing and not connected (F7)",
+               act["Drums"]["state"] == "missing" and act["Drums"]["connected"] is False)
+            ok("a port that never sent active sensing is not gone for saying nothing", act["Keys"]["state"] == "ok")
+            sense.drain()
+            sense_fake.send("TD-17", T3 + 2 * S, b"\xfe")
+            sense.drain()
+            ok("heard again, it is ok", sense.activity()["Drums"]["state"] == "ok")
+            sense_fake.send("TD-17", T3 + 2100 * MS, b"\x99\x24\x40")
+            sense_fake.send("TD-17", T3 + 2250 * MS, b"\xfe")
+            sense_fake.send("TD-17", T3 + 2500 * MS, b"\xfe")
+            now[0] = T3 + 2700 * MS
+            sense.tick()
+            ok("a port whose events wait on the queue is not quiet: it is when it was last heard that counts",
+               sense.activity()["Drums"]["state"] == "ok")
+            sense.drain()
+            sense.end_take(3.0)
+            later = folder("sensing-later")
+            now[0] = T3 + 10 * S
+            sense.tick()
+            sense.begin_take(later, take_clock(now[0]))
+            ok("a take that begins while the TD-17 is quiet has no file for it until it is heard (F5)",
+               [m["name"] for m in sense.end_take(1.0)] == ["Keys"])
+            ok("38 is let go at the last active sensing, and 36 played after it came back is there",
+               in_ticks(sensing / "Drums.mid") == [(576, b"\x99\x26\x40"), (1920, b"\x89\x26\x00"),
+                                                     (4032, b"\x99\x24\x40"), (5760, b"\x89\x24\x00")])
+            ok("the recorder was told gone at the last sensing and present when heard again, and never handed "
+               "an active sensing (R32)",
+               told("Drums") == [("present", T3), ("feed", T3 + 300 * MS), ("gone", T3 + 1 * S),
+                                 ("present", T3 + 2 * S), ("feed", T3 + 2100 * MS)]
+               and not any(call[0] == "feed" and call[3] == b"\xfe" for call in heard))
+
+            # The same notes on two ports (P8).
+            twice_fake, twice = a_rig(launchkey, nord)
+            twice.use([gtr, keys, synth])
+
+            def both_ports(start, times, gap, nord_first=False, nord_velocity=100):
+                """The same notes on the Launchkey and the Nord, `gap` apart, one note every 200 ms."""
+                for i in range(times):
+                    at = start + i * 200 * MS
+                    sent = {"Launchkey Mini MK3": bytes((0x90, 60 + i, 100)),
+                            "Nord Stage 3 MIDI": bytes((0x90, 60 + i, nord_velocity))}
+                    order = sorted(sent, reverse=nord_first)
+                    twice_fake.send(order[0], at, sent[order[0]])
+                    twice_fake.send(order[1], at + gap, sent[order[1]])
+                twice.drain()
+
+            both_ports(400 * S, 3, 2 * MS)
+            ok("the same note at the same velocity within 2 ms, three times, is not yet the same notes twice",
+               "echo" not in twice.activity()["Synth"])
+            both_ports(401 * S, 1, 2 * MS)
+            act = twice.activity()
+            ok("the fourth time Synth's card names Keys, and Keys' card names nobody (P8)",
+               act["Synth"].get("echo") == "Keys" and "echo" not in act["Keys"])
+            twice.reset_counts()
+            act = twice.activity()
+            ok("reset_counts starts the counts again, and the echo with them",
+               "echo" not in act["Synth"] and act["Keys"]["notes"] == 0 and twice.ports()["ports"][0]["notes"] == 0)
+            both_ports(410 * S, 4, 6 * MS)
+            ok("6 ms apart, four times, is not the same notes", "echo" not in twice.activity()["Synth"])
+            both_ports(420 * S, 4, 1 * MS, nord_velocity=99)
+            both_ports(430 * S, 4, 1 * MS, nord_first=True, nord_velocity=101)
+            ok("nor are notes whose velocities differ", "echo" not in twice.activity()["Synth"])
+            twice.reset_counts()
+            both_ports(440 * S, 4, 2 * MS, nord_first=True)
+            ok("whichever port is a hair faster, the later card in the band names the first",
+               twice.activity()["Synth"].get("echo") == "Keys")
+            twice.reset_counts()
+            echo_take = folder("echo")
+            twice.begin_take(echo_take, take_clock(450 * S))
+            both_ports(450 * S, 4, 2 * MS)
+            ok("while a take records the notes are not compared", "echo" not in twice.activity()["Synth"])
+            twice.end_take(1.0)
+
+            # A device's other ports during the check (P7).
+            midi_port = PortInfo("Launchkey Mini MK3 MIDI Port", "Launchkey Mini MK3", "Novation")
+            daw_port = PortInfo("Launchkey Mini MK3 DAW Port", "Launchkey Mini MK3", "Novation")
+            check_fake, check = a_rig(daw_port, midi_port, td17)
+            on_daw = {**keys, "midi_port": daw_port.saved()}
+            check.use([gtr, on_daw], check=True)
+            ok("checking Keys on the DAW Port opens it and the device's MIDI Port, and nothing else (P7)",
+               open_now(check_fake) == ["Launchkey Mini MK3 DAW Port", "Launchkey Mini MK3 MIDI Port"])
+            for i in range(3):
+                check_fake.send("Launchkey Mini MK3 MIDI Port", 500 * S + i * 100 * MS, b"\x90\x3c\x40")
+            check.drain()
+            ok("notes played on the MIDI Port are counted on it, and not on the DAW Port, listed after it",
+               [(p["name"], p["notes"]) for p in check.ports()["ports"]] ==
+               [("Launchkey Mini MK3 MIDI Port", 3), ("Launchkey Mini MK3 DAW Port", 0), ("TD-17", 0)])
+            ok("and Keys, on the DAW Port, has heard none", check.activity()["Keys"]["notes"] == 0)
+            check.use([gtr, on_daw])
+            ok("when the check ends the MIDI Port is closed, and the DAW Port stays open, opened once",
+               open_now(check_fake) == ["Launchkey Mini MK3 DAW Port"]
+               and check_fake.opens["Launchkey Mini MK3 DAW Port"] == 1)
+            check.use([gtr, on_daw], check=True)
+            check_take = folder("check")
+            check.begin_take(check_take, take_clock(510 * S))
+            ok("and when a take begins", open_now(check_fake) == ["Launchkey Mini MK3 DAW Port"])
+            check.end_take(1.0)
+
+            # The flush, the clocks, and a track set back to Audio.
+            flushing = folder("flushing")
+            T4 = now[0] = 600 * S
+            heard.clear()
+            rig.begin_take(flushing, take_clock(T4))
+            fake.send("TD-17", T4 + 500 * MS, b"\x99\x26\x40")
+            rig.drain()
+            resyncs = {port.info.name: port.resyncs for port in fake.open_ports}
+            flushes, on_disk = [], []
+            for k in range(1, 61):
+                now[0] = T4 + k * S
+                rig.tick()
+                flushes.append(heard.count(("flush",)))
+                on_disk.append(f"n {T4 + 500 * MS} 99264" in (flushing / "Drums.midraw").read_text("ascii"))
+            ok("a take's notes are flushed every 30 seconds of ticks, as the audio is",
+               flushes[28] == 0 and flushes[29] == 1 and flushes[58] == 1 and flushes[59] == 2)
+            ok("and what was played is on disk from the first flush", not on_disk[28] and on_disk[29])
+            ok("every open port's clock is measured again every fourth tick",
+               all(port.resyncs - resyncs[port.info.name] == 15 for port in fake.open_ports))
+            rig.end_take(60.0)
+            leaving = next(port for port in fake.open_ports if port.info.name == "Launchkey Mini MK3")
+            rig.use([gtr, drums, {**keys, "mode": "audio"}])
+            ok("Keys set back to Audio: its port is closed and it is no longer the rig's",
+               open_now(fake) == ["TD-17"] and "Keys" not in rig.activity())
+            leaving.on_event(T4 + 61 * S, b"\x90\x3c\x40")         # a port's thread that outlived its closing
+            rig.drain()
+            ok("and what a closed port says after its closing is not heard",
+               [p["notes"] for p in rig.ports()["ports"] if p["name"] == "Launchkey Mini MK3"] == [0])
+
+            # A band changed while a take records.
+            moving = folder("moving")
+            T5 = now[0] = 700 * S
+            heard.clear()
+            rig.use([gtr, drums, keys])
+            rig.begin_take(moving, take_clock(T5))
+            fake.send("Launchkey Mini MK3", T5 + 500 * MS, b"\x90\x3c\x40")
+            rig.drain()
+            fake.plug(nord)
+            now[0] = T5 + 1 * S
+            rig.use([gtr, drums, {**keys, "midi_port": nord.saved()}])
+            fake.send("Nord Stage 3 MIDI", T5 + 1500 * MS, b"\x90\x3e\x40")
+            rig.drain()
+            made = rig.end_take(3.0)
+            ok("Keys moved to another port mid-take: the old one is closed, the new one open",
+               open_now(fake) == ["Nord Stage 3 MIDI", "TD-17"])
+            ok("and Keys is one file, what it held let go when its port changed, not when it was last heard",
+               [m["name"] for m in made] == ["Drums", "Keys"]
+               and in_ticks(moving / "Keys.mid") == [(960, b"\x90\x3c\x40"), (1920, b"\x80\x3c\x00"),
+                                                     (2880, b"\x90\x3e\x40"), (5760, b"\x80\x3e\x00")])
+
+            # A burst between takes.
+            rig.reset_counts()
+            for i in range(10000):
+                fake.send("TD-17", 800 * S + i * 100_000, bytes((0x99, i % 128, 1 + i % 127)))
+            began = time.perf_counter()
+            rig.drain()
+            spent = time.perf_counter() - began
+            ok("10000 notes from one port in one drain are all counted, quickly (a limit only a hang would pass)",
+               rig.activity()["Drums"]["notes"] == 10000 and spent < 10
+               and [p["notes"] for p in rig.ports()["ports"] if p["name"] == "TD-17"] == [10000])
+            ok("all of that was done without a word in the log", said7 == [])
+
+            # Review focus 4: a disk that refuses the take's notes.
+            refused = {"present": {"Keys"}}
+
+            class Refusing(MidiRecorder):
+                """Refuses Keys' first present, and every line of Drums: half as if waiting, half dropped."""
+
+                def present(self, name, ns):
+                    if name in refused["present"]:
+                        refused["present"].discard(name)
+                        raise OSError(28, "No space left on device")
+                    return super().present(name, ns)
+
+                def feed(self, name, ns, data):
+                    if name == "Drums":
+                        raise (NotesDropped if ns % 2 else OSError)(28, "No space left on device")
+                    return super().feed(name, ns, data)
+
+            rig_mod.MidiRecorder = Refusing
+            full = folder("full")
+            T6 = now[0] = 900 * S
+            rig.begin_take(full, take_clock(T6))
+            rig.drain()
+            for i in range(10):
+                fake.send("TD-17", T6 + i * 100 * MS + i % 2, b"\x99\x26\x40")
+                fake.send("Nord Stage 3 MIDI", T6 + i * 100 * MS, b"\x90\x3c\x40")
+                fake.send("Nord Stage 3 MIDI", T6 + i * 100 * MS + 50 * MS, b"\x80\x3c\x00")
+            rig.drain()
+            act = rig.activity()
+            ok("the writer goes on through a disk that refuses, and the counts go on",
+               act["Drums"]["notes"] == 10 and act["Keys"]["notes"] == 10)
+            made = rig.end_take(3.0)
+            ok("Stop keeps what can still be made: Drums' file with no notes, and Keys' with every one, "
+               "its present tried again",
+               [m["name"] for m in made] == ["Drums", "Keys"]
+               and not any(d[0] & 0xF0 == 0x90 for _, d in in_ticks(full / "Drums.mid"))
+               and len(in_ticks(full / "Keys.mid")) == 20)
+            ok("and the trouble is said once in the log, as an error the app's log keeps",
+               len(said7) == 1 and said7[0].levelno == logging.ERROR)
+
+            class Unfinished(MidiRecorder):
+                def stop(self, duration_sec):
+                    raise OSError(5, "Input/output error")
+
+            rig_mod.MidiRecorder = Unfinished
+            rig.begin_take(folder("unfinished"), take_clock(now[0]))
+            ok("a stop that fails gives no notes, and is said in the log",
+               rig.end_take(1.0) == [] and len(said7) == 2)
+            rig_mod.MidiRecorder = Spy
+            rig.shutdown()
+            ok("shutdown closes every port and the system", fake.open_ports == set() and fake.inputs() == [])
+
+            # With its own threads, as the app runs it.
+            live_fake = FakePortSystem([td17])
+            live = MidiRig(live_fake)
+            try:
+                live.use([gtr, drums, keys])
+                started = time.perf_counter_ns()
+                live_take = folder("live")
+                live.begin_take(live_take, take_clock(started))
+                live_fake.plug(launchkey)
+                deadline = time.monotonic() + 10
+                while live.activity()["Keys"]["state"] != "ok" and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                ok("with its own threads, a port plugged in is opened by the watcher as it is told (P4)",
+                   live.activity()["Keys"]["state"] == "ok")
+                at = time.perf_counter_ns()
+                for k in range(5):
+                    live_fake.send("TD-17", at + k * MS, bytes((0x99, 38 + k, 64)))
+                    live_fake.send("Launchkey Mini MK3", at + k * MS, bytes((0x90, 60 + k, 64)))
+                made = live.end_take(60.0)
+                ok("the writer's thread has written every event that came before Stop",
+                   [m["name"] for m in made] == ["Drums", "Keys"]
+                   and [d[1] for _, d in in_ticks(live_take / "Drums.mid") if d[0] == 0x99] == [38, 39, 40, 41, 42]
+                   and [d[1] for _, d in in_ticks(live_take / "Keys.mid") if d[0] == 0x90] == [60, 61, 62, 63, 64])
+            finally:
+                live.shutdown()
+            left = [t.name for t in threading.enumerate() if t.name.startswith("midi-rig")]
+            ok("shutdown stops both of its threads and closes every port and the system",
+               left == [] and live_fake.open_ports == set() and live_fake.inputs() == [])
+    finally:
+        rig_mod.MidiRecorder = real_recorder
+
+    rig_source = Path(rig_mod.__file__).read_text(encoding="utf-8")
+    rig_imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
+                   for n in ast.walk(ast.parse(rig_source)) if isinstance(n, (ast.Import, ast.ImportFrom))}
+    ok("the rig imports neither the MIDI library nor mido", not rig_imports & {"pylibremidi", "mido"})
 
     print("\n" + "=" * 60)
     if problems:

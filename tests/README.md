@@ -81,8 +81,15 @@ it only in part, a disk that refuses for so long that lines are dropped (a
 must not hold the other thread up while it waits for the disk. The disk is
 refused by a stand-in for the file, not by a full disk. In `test_engine.py`, a
 draft that `stop` had already made `.mid` files in comes back with them, and one
-whose `.midraw` could not be made keeps its `take.json` for the next try. Later
-tasks add to it.
+whose `.midraw` could not be made keeps its `take.json` for the next try. And
+the rehearsal's ports, on `fake_midi.py`: a track whose port is not plugged in
+waits and records from the moment it is, a port pulled mid-take and plugged
+back is one file with its held notes let go when it was last heard, a port
+another app holds, two that nothing tells apart, no MIDI system at all, a
+device that stops sending active sensing, the same notes on two ports, a
+keyboard's other port counted during the check, the flush, a band changed
+during a take, a burst of 10000 events, a recorder whose disk refuses, and the
+rig on its own two threads. Later tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 

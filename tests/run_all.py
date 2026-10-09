@@ -39,7 +39,11 @@ things to be true:
                        included), and one take's notes on disk (a .midraw
                        written as they are played, the .mid made at Stop or
                        after a crash, a disk that refuses a write or takes it
-                       in part, a recorder two threads drive).
+                       in part, a recorder two threads drive), and the
+                       rehearsal's ports on a fake port system (a port that
+                       waits, comes, goes, is held by another app or goes
+                       quiet, the same notes on two ports, a take fed through
+                       the rig's own threads).
                        Later tasks add to it. No port is opened: the library
                        is blocked and the rules are plain functions.
 
