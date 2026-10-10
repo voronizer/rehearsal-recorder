@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build --quiet --disable-telemetry"
   },
   "dependencies": {
     "@dnd-kit/react": "0.5.0",
@@ -26,11 +28,13 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@storybook/react-vite": "10.6.1",
     "@types/node": "^26.6.4",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.86.0",
+    "storybook": "10.6.1",
     "typescript": "~7.0.2",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"

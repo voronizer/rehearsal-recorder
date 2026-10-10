@@ -4,7 +4,8 @@
     "target": "es2023",
     // DOM for e2e/: what a test runs inside the page is browser code.
     "lib": ["ES2023", "DOM"],
-    "types": ["node"],
+    // vite/client: .storybook/preview.tsx imports a .css file.
+    "types": ["node", "vite/client"],
     "skipLibCheck": true,
 
     /* Bundler mode */
@@ -13,6 +14,8 @@
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
+    // .storybook/preview.tsx is JSX.
+    "jsx": "react-jsx",
 
     /* Linting */
     "noUnusedLocals": true,
@@ -20,5 +23,10 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "playwright.config.ts", "e2e/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "playwright.config.ts",
+    "e2e/**/*.ts",
+    ".storybook/**/*.ts*"
+  ]
 }

@@ -27,3 +27,6 @@ dist-ssr
 test-results/
 playwright-report/
 blob-report/
+
+# What the showcase build leaves behind
+storybook-static/

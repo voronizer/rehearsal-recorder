@@ -104,6 +104,7 @@ jobs:
   interface:
     name: interface
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: ui
@@ -126,8 +127,17 @@ jobs:
       - name: Vitest
         run: npm test
 
+      # The showcase: every component's stories, built. A story that imports
+      # something that is gone, or has a syntax error, fails here. Node only,
+      # so it runs before the browser install and does not depend on apt.
+      - name: Showcase
+        run: npm run build-storybook
+
       # --with-deps: on Linux the browser needs system libraries and fonts.
+      # The apt step it runs sometimes hangs on a stuck mirror, so it gets
+      # a limit of its own.
       - name: Install the browser
+        timeout-minutes: 10
         run: npx playwright install --with-deps chromium
 
       - name: Playwright
