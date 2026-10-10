@@ -690,8 +690,12 @@ At the top right of every track card is a switch.
   input. This is the setting for an e-kit.
 - **MIDI** records a port alone, for a keyboard. The track has no input.
 
-Pick the port in the list on its line. The mode and the port stay with the
-musician, as the icon and **Stereo** do.
+Pick the port in the list on its line; a MIDI cable into the interface
+shows up there too. On a keyboard with two ports, the list puts the one you
+play first, and during **Check signal** says "✓ notes" beside the one that
+is played. Two identical devices are both listed, and the track says "not
+connected" until you pick one. The mode and the port stay with the musician,
+as the icon and **Stereo** do.
 
 **Start rehearsal** stays off, and the screen says why, when a track on
 **Both** or **MIDI** has no port yet, when two tracks take notes from one
@@ -749,6 +753,9 @@ notes drift from the audio.
   project's own tempo.
 - **Ableton Live** puts every channel of a file in one clip.
 
+A Polish or Cyrillic track name is saved as it is. Some DAWs still show it
+garbled; the file's own name is right.
+
 ### Bluetooth, and Windows
 
 **Bluetooth MIDI** adds a few milliseconds of uneven delay, so its notes sit
@@ -758,12 +765,12 @@ such as the kit, use a cable.
 **Settings → Under the hood** has a **MIDI** row, under Audio engine, that
 says which MIDI the app is using: on Windows, "Windows MIDI Services" or
 "Windows MIDI"; the bug report has it too. On "Windows MIDI" a Bluetooth
-MIDI device cannot be seen: if yours is not in the list, use a cable. It
-also lets only one program have a port at a time. If a DAW or a drum-sound
-program has it, the amber note during **Check signal** says "“TD-17” is in
-use by another app."; while you record, the tile reads "not connected" and
-its tooltip says why. Close the other program. The app holds a port too,
-during **Check signal** and in a rehearsal.
+MIDI device cannot be seen: if yours is not in the list, use a cable.
+"Windows MIDI" also lets only one program have a port at a time. If a DAW
+or a drum-sound program has it, the amber note during **Check signal** says
+"“TD-17” is in use by another app."; while you record, the tile reads "not
+connected" and its tooltip says why. Close the other program. The app holds
+a port too, during **Check signal** and in a rehearsal.
 
 ## Keyboard
 
