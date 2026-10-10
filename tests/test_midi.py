@@ -2700,6 +2700,22 @@ def main():
         ok("a key's pressure goes the way its key does: kept for a key the file struck, left out for one it did not",
            [(t, d) for t, d in ticks8(edge_cut8) if d[0] & 0xF0 == 0xA0] == [(1536, b"\xA0\x3c\x31")])
 
+        # A fast roll on a pad: the key is struck again before the first strike is let go. Its
+        # strikes are counted, as a take's are (R29), so nothing is left hanging (F7).
+        roll8 = folder8 / "roll.mid"
+        write_mid(roll8, track_name="Kit", port_name="TD-17", start=[], events=[
+            struck8(1.0, 38, ch=9), struck8(1.05, 38, ch=9), freed8(1.1, 38, ch=9), freed8(1.15, 38, ch=9),
+            struck8(2.0, 40, ch=9), struck8(2.05, 40, ch=9), freed8(3.0, 40, ch=9), freed8(3.05, 40, ch=9),
+        ])
+        roll_cut8 = folder8 / "roll cut.mid"
+        smf.crop_mid(roll8, roll_cut8, 0.5, 3.0)
+        ok("a key struck twice before it is let go keeps both its releases",
+           key8(ticks8(roll_cut8), 38) == [(960, b"\x99\x26\x64"), (1056, b"\x99\x26\x64"),
+                                           (1152, b"\x89\x26\x40"), (1248, b"\x89\x26\x40")])
+        ok("and one struck twice and held across the end is let go twice there",
+           key8(ticks8(roll_cut8), 40) == [(2880, b"\x99\x28\x64"), (2976, b"\x99\x28\x64"),
+                                           (4800, b"\x89\x28\x00"), (4800, b"\x89\x28\x00")])
+
         # Let go at the end: the keys, in the order they were struck, then the pedals.
         ends8 = folder8 / "ends.mid"
         smf.crop_mid(source8, ends8, 1.0, 2.0)

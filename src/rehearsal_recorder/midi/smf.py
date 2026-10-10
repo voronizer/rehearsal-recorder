@@ -256,10 +256,14 @@ def crop_mid(source, target, start_sec: float, end_sec: float) -> dict:
     own start is (F6), not by replaying what came before. A key held across the
     start is left out with its release: a release for a key the file never
     struck is dropped, on its channel, whether a note-off or a note-on at
-    velocity 0, and so is that key's pressure (0xA0). A key still held at the end is let go there, and so is a pedal
-    still down (F7). The track's name and the port's name are kept, and a SysEx
-    inside the range whole. Each event's tick is round(seconds * 1920) from the
-    new start, as write_mid does it, so a long take is not off by a tick.
+    velocity 0, and so is that key's pressure (0xA0). The strikes of each key
+    are counted, as a take's are (capture._place): a key struck again while
+    down keeps a release for each strike. A key still held at the end is let go
+    there, once for each strike not yet let go, in the order the keys were
+    first pressed, and then a pedal still down (F7). The track's name and the
+    port's name are kept, and a SysEx inside the range whole. Each event's tick
+    is round(seconds * 1920) from the new start, as write_mid does it, so a
+    long take is not off by a tick.
     """
     try:
         names, events = read_events(source)
@@ -276,22 +280,28 @@ def crop_mid(source, target, start_sec: float, end_sec: float) -> dict:
         after = PortState()
         for data in start:
             after.feed(data)
-        struck = set()
+        struck = {}  # (channel, key) -> strikes of it not yet let go, the keys in the order first pressed
         shifted = []
         for seconds, data in kept:
             kind, key = data[0] & 0xF0, (data[0] & 0x0F, data[1])
             if kind == 0x90 and data[2]:
-                struck.add(key)
+                struck[key] = struck.get(key, 0) + 1
             elif kind in (0x80, 0x90):
                 if key not in struck:
                     continue
-                struck.discard(key)
+                if struck[key] > 1:
+                    struck[key] -= 1
+                else:
+                    del struck[key]
             elif kind == 0xA0 and key not in struck:
                 continue  # a key's pressure goes with its key
             shifted.append((seconds - start_sec, data))
             after.feed(data)
         end = end_sec - start_sec
-        shifted.extend((end, data) for data in after.releases())
+        for (channel, key), strikes in struck.items():
+            shifted.extend((end, bytes((0x80 | channel, key, 0))) for _ in range(strikes))
+        # Then the pedals: the keys were just let go.
+        shifted.extend((end, data) for data in after.releases() if data[0] & 0xF0 == 0xB0)
         write_mid(target, track_name=names["track_name"], port_name=names["device_name"],
                   start=start, events=shifted)
     except Exception as e:
