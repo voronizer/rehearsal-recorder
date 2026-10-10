@@ -21,6 +21,11 @@ function makeSiteNotes() {
     at += count * BAR;
   }
   const bridge = bars.findIndex(b => b.kind === 'bridge');
+  // Named, since a form without them would only fail further on, in a line
+  // that says nothing of the song.
+  if (bridge < 4)
+    throw new Error("band.js's song has no four bars before a bridge, and the site's MIDI tile " +
+                    "shows the end of the chorus into the bridge (stage/notes.js)");
   const shown = bars.slice(bridge - 4, bridge + 4);
 
   // MIDI's velocities are 1 to 127: the softest still sounds.

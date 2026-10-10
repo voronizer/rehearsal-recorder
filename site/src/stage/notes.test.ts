@@ -143,6 +143,22 @@ describe("the site's notes", () => {
   })
 })
 
+describe("a song the notes cannot be made from", () => {
+  it("says so by name when the form has no bridge", () => {
+    const none = band.replace("['bridge', 8]", "['chorus', 8]")
+    expect(none).not.toBe(band)
+    expect(() => run(none)).toThrow(/no four bars before a bridge/)
+  })
+
+  it("says so by name when the bridge comes too soon for four bars before it", () => {
+    const soon = band.replace("['intro', 8]", "['intro', 3]")
+    expect(soon).not.toBe(band)
+    expect(() => run(soon.replace("['verse', 16]", "['bridge', 8], ['verse', 16]"))).toThrow(
+      /no four bars before a bridge/
+    )
+  })
+})
+
 describe("the band, with the notes laid over it", () => {
   const { api } = run().pywebview
 

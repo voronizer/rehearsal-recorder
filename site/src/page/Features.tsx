@@ -1,6 +1,7 @@
 import { content, TILES } from "../content"
 import { Paragraphs } from "./Md"
 import { shots, type PieceData } from "./pieces"
+import { titleParts } from "./title"
 
 type Id = (typeof TILES)[number]
 
@@ -24,12 +25,17 @@ const LAYOUT: Record<Id, string> = {
 /** The tiles with their words beside the piece, not over it. */
 const SPLIT = new Set<Id>(["health", "midi", "sets"])
 
-/** A tile's title with each hyphenated word kept whole: on a phone, "e-kit"
- *  would otherwise end a line on "e-". */
+/** A tile's title, its short hyphenated words kept whole (see titleParts). */
 function Title({ text }: { text: string }) {
-  return text
-    .split(/(\S+-\S+)/)
-    .map((part, i) => (i % 2 ? <span key={i} className="whole">{part}</span> : part))
+  return titleParts(text).map((part, i) =>
+    part.whole ? (
+      <span key={i} className="whole">
+        {part.text}
+      </span>
+    ) : (
+      part.text
+    )
+  )
 }
 
 export function Features({ data }: { data: PieceData }) {

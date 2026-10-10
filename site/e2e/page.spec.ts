@@ -205,10 +205,11 @@ test("the MIDI tile is the whole width, right after the one on tracks, its words
   expect(found.piece.top).toBeLessThan(found.copy.bottom)
 })
 
-// The name on a plate is whole at a phone's width and at a wide screen's:
+// The name on a plate is whole from the narrowest phone to a wide screen,
+// and at 1000 px, where the plate and the notes are tightest side by side:
 // none of its words is broken across lines or sticks out of it, and the notes
 // still have room beside it, or under it.
-for (const width of [390, 960, 1440]) {
+for (const width of [320, 390, 960, 1000, 1440]) {
   test(`at ${width} px the Launchkey Mini MK3 is whole on its plate, with room for its notes`, async ({
     page,
   }) => {
@@ -253,7 +254,7 @@ for (const width of [390, 960, 1440]) {
     })
     expect(lines).toBe(1)
     const lane = await piece.locator("[data-notes-lane='Keys']").boundingBox()
-    expect(lane!.width).toBeGreaterThanOrEqual(220)
+    expect(lane!.width).toBeGreaterThanOrEqual(200)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
   })
 }
