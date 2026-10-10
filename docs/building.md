@@ -4,9 +4,26 @@ How the app becomes something you double-click, and how the GitHub
 release builds work.
 ## Packaging
 
-    pip install pyinstaller
-    pyinstaller packaging/rehearsal-recorder.spec
-    dist/Reha/Reha --selftest
+`build.command` on macOS and `build.bat` on Windows do all of this in one
+double-click. By hand, from the repository root:
+
+    cd ui && npm ci && npm run build && cd ..
+    python3 -m venv venv
+    source venv/bin/activate          # Windows: venv\Scripts\activate
+    pip install -e . pyinstaller
+    pyinstaller packaging/rehearsal-recorder.spec --noconfirm
+    dist/Reha.app/Contents/MacOS/Reha --selftest   # Windows: dist\Reha\Reha.exe --selftest
+
+`pip install -e .` is the step that is easy to leave out. PyInstaller copies
+in what is installed in the Python it runs in, and nothing else. With only
+PyInstaller there, the build stops at `No package metadata was found for
+mido`. Get past that one and the app it makes still cannot open a window
+(`No module named 'webview'`) or reach the sound card, because pywebview,
+numpy and sounddevice were never there to copy.
+
+On macOS the self-test to run is the one inside the `.app`. `dist/Reha/Reha`
+is the same program before it is wrapped, with no Info.plist beside it, so
+its "version on the file" check fails though nothing else is wrong.
 
 One folder you open, with everything inside: Python, numpy, PortAudio through
 sounddevice, libsndfile through soundfile, the window toolkit and the built

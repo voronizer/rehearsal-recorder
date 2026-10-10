@@ -2,9 +2,13 @@
 """
 Packaging: one file you double-click, nothing to install.
 
-    pip install pyinstaller
+    pip install -e . pyinstaller
     pyinstaller packaging/rehearsal-recorder.spec
-    dist/Reha/Reha --selftest      # or the .app / .exe
+    dist/Reha.app/Contents/MacOS/Reha --selftest   # Windows: dist/Reha/Reha.exe
+
+`-e .` is not optional: PyInstaller bundles only what is installed in the
+Python it runs in, so without the app's own libraries there is nothing to
+put in. docs/building.md has the whole sequence.
 
 Run it from the repository root, not from this folder: dist/ and build/ are
 written next to where pyinstaller is invoked, and the paths below are
