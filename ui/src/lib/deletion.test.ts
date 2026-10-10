@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { croppedText, setDeletionKind, trashName, wentTo } from "@/lib/deletion"
+import {
+  croppedText,
+  goesTo,
+  goPlural,
+  setDeletionKind,
+  trashName,
+  wentTo,
+} from "@/lib/deletion"
 import { setSystem } from "@/lib/platform"
 
 beforeEach(() => setDeletionKind({ kind: "system", folder: "_deleted" }))
@@ -68,5 +75,30 @@ describe("trashName", () => {
   it("is the folder where there is no Trash", () => {
     setDeletionKind({ kind: "folder", folder: "_deleted" })
     expect(trashName()).toBe("the _deleted folder")
+  })
+})
+
+describe("goesTo and goPlural", () => {
+  it("say the Trash on a Mac and anywhere else", () => {
+    setSystem("mac")
+    expect(goesTo()).toBe("goes to the Trash")
+    expect(goPlural()).toBe("go to the Trash")
+    setSystem("other")
+    expect(goesTo()).toBe("goes to the Trash")
+    expect(goPlural()).toBe("go to the Trash")
+  })
+
+  it("say the Recycle Bin on Windows, as the question above them does", () => {
+    setSystem("windows")
+    expect(goesTo()).toBe("goes to the Recycle Bin")
+    expect(goPlural()).toBe("go to the Recycle Bin")
+    expect(trashName()).toBe("the Recycle Bin")
+  })
+
+  it("name the folder in your recordings where there is no Trash", () => {
+    setDeletionKind({ kind: "folder", folder: "_deleted" })
+    setSystem("windows")
+    expect(goesTo()).toBe("moves to the _deleted folder in your recordings")
+    expect(goPlural()).toBe("move to the _deleted folder in your recordings")
   })
 })

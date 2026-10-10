@@ -14,7 +14,7 @@ let told: System | null = null
 const listeners = new Set<() => void>()
 
 function fromNavigator(): System {
-  // No navigator under node (the tests): nothing to go by.
+  // No navigator at all (a bare runtime): nothing to go by.
   if (typeof navigator === "undefined") return "other"
   const p = navigator.platform ?? ""
   if (/Mac|iPhone|iPad/.test(p)) return "mac"

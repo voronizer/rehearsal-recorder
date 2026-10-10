@@ -31,12 +31,13 @@ export async function loadDeletionKind() {
   }
 }
 
-/** "goes to the Trash" / "moves to the _deleted folder" — for a sentence. */
+/** "goes to the Trash" / "goes to the Recycle Bin" / "moves to the _deleted
+ *  folder" — for a sentence. */
 export function goesTo() {
   if (where?.kind === "folder") {
     return `moves to the ${where.folder} folder in your recordings`
   }
-  return "goes to the Trash"
+  return `goes to ${words().trash}`
 }
 
 /** The same, for several things at once. */
@@ -44,7 +45,7 @@ export function goPlural() {
   if (where?.kind === "folder") {
     return `move to the ${where.folder} folder in your recordings`
   }
-  return "go to the Trash"
+  return `go to ${words().trash}`
 }
 
 /** "the Trash" / "the Recycle Bin" / "the _deleted folder": where a question
