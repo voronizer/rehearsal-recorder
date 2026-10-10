@@ -1471,7 +1471,8 @@ class Api:
         `keep_ports`: Start keeps them, and hands them to the rehearsal. With
         a rehearsal under way they are its ports, not the check's, and they
         stay: leaving the setup screen, or Look again, must not close them
-        under a take. Finishing the rehearsal closes them."""
+        under a take. Finishing the rehearsal closes them. Never raises: it is
+        the first step of closing the app, and of a Start that failed."""
         if self._monitor is not None:
             try:
                 self._monitor.stop()
@@ -1479,7 +1480,11 @@ class Api:
                 print(f"[monitor] stop: {e}")
             self._monitor = None
         if not keep_ports and self._session is None:
-            self._midi.release()
+            try:
+                self._midi.release()
+            except Exception as e:
+                # The check is over whether or not a port would close.
+                print(f"[monitor] letting go of the MIDI ports: {e}")
         return {"ok": True}
 
     # ---------- MIDI ports ----------
@@ -1632,9 +1637,8 @@ class Api:
         except Exception:
             # The audio check is over and no rehearsal has begun, so the MIDI
             # check is too: its ports were only kept for this Start. A
-            # rehearsal already under way keeps its own.
-            if self._session is None:
-                self._midi.release()
+            # rehearsal already under way keeps its own (stop_monitor).
+            self.stop_monitor()
             raise
         # Exactly the ports the final tracks name: one the check had open that
         # they still name stays open as it is; the rest of the check's close.

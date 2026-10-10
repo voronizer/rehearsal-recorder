@@ -7753,6 +7753,29 @@ def main():
         ok("and so does one the database refuses",
            raised and d6._session is None and not fake.open_ports and d6.midi_activity() == {})
 
+        # And when letting go of the check's ports fails as well, the error that stopped Start is the one raised.
+        fake = Fake66([td17, lkm])
+        d8 = api66(fake)
+        d8.start_monitor(0, SR, [gtr66, drums66])
+
+        def stuck_release():
+            raise RuntimeError("a port would not close")
+
+        d8._midi.release = stuck_release
+        apimod66._unique_path = failing_unique
+        said = io66.StringIO()
+        try:
+            with contextlib66.redirect_stdout(said):
+                d8.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+            raised = None
+        except Exception as e:  # noqa: BLE001
+            raised = e
+        finally:
+            apimod66._unique_path = real_unique
+        ok("a Start that cannot make its folder and cannot let go of the ports raises the folder's error",
+           isinstance(raised, OSError) and "no room for a folder" in str(raised)
+           and "a port would not close" in said.getvalue())
+
         # A rehearsal under way is not undone by a second Start that fails before it begins.
         fake = Fake66([td17, lkm])
         d7 = api66(fake)
@@ -7873,6 +7896,21 @@ def main():
         ok("a port that will not close does not keep Finish from finishing: the empty folder still goes",
            res["ok"] is True and v._session is None and res["folder_removed"] is True and not folder.exists()
            and "a port would not close" in said.getvalue())
+
+        # Nor keeps the app from closing during the check: the rig, its ports and its system are still let go.
+        fake = Fake66([td17, lkm])
+        u = api66(fake)
+        u.start_monitor(0, SR, [gtr66, drums66])
+        u._midi.release = failing_release
+        said = io66.StringIO()
+        try:
+            with contextlib66.redirect_stdout(said):
+                u.shutdown()
+            closed = True
+        except RuntimeError:
+            closed = False
+        ok("a port that will not close during the check does not keep the app from closing: the rig shuts",
+           closed and not fake.open_ports and fake.inputs() == [] and "a port would not close" in said.getvalue())
 
     @scenario66("a rehearsal under way")
     def _():
