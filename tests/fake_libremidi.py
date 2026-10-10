@@ -71,7 +71,10 @@ class World:
         self.made_on = []
         self._inputs = []
         self._observers = []
+        # Made by the library's constructors on any thread, read by alive():
+        # a WeakSet is not safe to walk while another thread adds to it.
         self._made = weakref.WeakSet()
+        self._made_lock = threading.Lock()
         # Callbacks, by the id of the configuration that holds them.
         self._hidden = {}
         # What happened, in order, as tuples whose first item says what:
@@ -89,10 +92,16 @@ class World:
         """The Observer objects that are still alive."""
         return [o for o in (r() for r in self._observers) if o is not None]
 
+    def made(self, obj):
+        """Write down an object of the library as made."""
+        with self._made_lock:
+            self._made.add(obj)
+
     def alive(self):
         """The kinds of the library's objects not yet let go of, sorted."""
         gc.collect()
-        return sorted(type(o).__name__ for o in self._made)
+        with self._made_lock:
+            return sorted(type(o).__name__ for o in self._made)
 
     def hold(self, owner, **callbacks):
         """Keep callbacks for `owner` where the collector cannot see them."""
@@ -178,7 +187,7 @@ def build(world):
 
     class ObserverConfiguration:
         def __init__(self):
-            world._made.add(self)
+            world.made(self)
             self.track_hardware = True
             self.track_virtual = False
             self.notify_in_constructor = True
@@ -235,15 +244,18 @@ def build(world):
                 api = API.ALSA_RAW if "ALSA_RAW" in world.present_apis else API.DUMMY
             elif api.name not in world.present_apis:
                 api = API.DUMMY
-            world._made.add(self)
+            world.made(self)
             self.conf = conf
             self.api = api
             self.q = queue.SimpleQueue()
             self.known = list(world.ports)
             world._observers.append(weakref.ref(self))
+            self._built = True
 
         def __del__(self):
-            world.order.append(("destroyed", "Observer", threading.current_thread()))
+            # One whose __init__ raised was never made: nothing to destroy.
+            if getattr(self, "_built", False):
+                world.order.append(("destroyed", "Observer", threading.current_thread()))
 
         def get_current_api(self):
             return self.api
@@ -281,7 +293,7 @@ def build(world):
         def __init__(self):
             if world.conf_raises:
                 raise RuntimeError("the input configuration could not be made")
-            world._made.add(self)
+            world.made(self)
             self.ignore_sysex = True
             self.ignore_timing = True
             self.ignore_sensing = True
@@ -307,7 +319,7 @@ def build(world):
         def __init__(self, conf, api=None):
             world.made_on.append(("MidiIn", threading.current_thread()))
             world.order.append(("minput",))
-            world._made.add(self)
+            world.made(self)
             self.conf = conf
             self.api = API.DUMMY if api.name in world.dummy_in else api
             self.q = queue.SimpleQueue()
@@ -315,9 +327,11 @@ def build(world):
             self.port = None
             self.origin = time.perf_counter_ns() - 7_000_000_000
             world._inputs.append(weakref.ref(self))
+            self._built = True
 
         def __del__(self):
-            world.order.append(("destroyed", "MidiIn", threading.current_thread()))
+            if getattr(self, "_built", False):
+                world.order.append(("destroyed", "MidiIn", threading.current_thread()))
 
         def get_current_api(self):
             return self.api

@@ -690,6 +690,9 @@ def main():
        system is not None and system.name == "Windows MIDI")
     ok("and only its own configuration is alive, not the failed attempt's",
        wait_for(lambda: world.alive().count("ObserverConfiguration") == 1))
+    # The fake's own word: an observer that was never made is never let go of.
+    ok("the observer that failed to be made is not said to be let go of",
+       not any(o[:2] == ("destroyed", "Observer") for o in world.order))
     finish()
     ok("and nothing after it closes", wait_for(lambda: world.alive() == []))
     world = fake_libremidi.install()
