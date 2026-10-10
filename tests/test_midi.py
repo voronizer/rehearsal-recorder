@@ -3203,11 +3203,12 @@ def main():
         # The other way: a hit must not be placed before it starts. A soft tone that
         # rings for 400 ms (0.18 loud), and 52 to 55 ms after it a hit five times as
         # loud: the ring is still over the level before the second hit, and it must
-        # not be taken for its start, which would put the onset up to 46 ms early.
+        # not be taken for its start, which would put the onset up to 46 ms early (it
+        # does, 46 ms, with the line at 1.5 times the level and this seed).
         pair_gaps = (0.052, 0.053, 0.054, 0.055, 0.052, 0.054)
         pair_at = np.array([(1.0 + 2.5 * k, 1.0 + 2.5 * k + gap) for k, gap in enumerate(pair_gaps)]).ravel()
         pair_at = np.round(pair_at * 48000) / 48000
-        pair_take = take10({"Drums.wav": (kit10(pair_at, [0.18, 0.9] * len(pair_gaps), 0.003, 0.4, seed=5, tone=200),
+        pair_take = take10({"Drums.wav": (kit10(pair_at, [0.18, 0.9] * len(pair_gaps), 0.003, 0.4, seed=101, tone=200),
                                          48000, "pcm24"),
                             "Drums.mid": list(pair_at)})
         got = windows10(run10(pair_take)[1])
@@ -3216,9 +3217,11 @@ def main():
 
         # A low rumble under soft hits: 60 Hz noise at -40 dBFS (0.01), about as loud
         # as the softest hits, and varying as slowly as their rise does, so that the
-        # rise was followed back into it. 60 hits, 0.05 to 0.9 loud. (Over twenty such
-        # takes the median worst is 3 ms, the same as before the rise was followed
-        # back; without the high-pass it was 5 ms, and 13 at the worst.)
+        # rise was followed back into it. 60 hits, 0.05 to 0.9 loud. This is one such
+        # take, a favourable one (1.5 ms), and the check is that the high-pass is
+        # there (without it, 6.6 ms). It is not the tool's figure for a rumble: over
+        # thirty other takes at this level the worst is 2.6 ms at the median and up
+        # to 5, with 11 of the 30 over 3; without the high-pass, 27 of the 30.
         rumble_amps = np.exp(np.random.default_rng(23).uniform(np.log(0.05), np.log(0.9), 60))
         rumble_amps[0] = 0.9
         rumble_at = np.round((0.5 + 0.7 * np.arange(60)) * 48000) / 48000
@@ -3226,7 +3229,7 @@ def main():
                                                    rumble=(60, 0.01)), 48000, "pcm24"),
                               "Drums.mid": list(rumble_at)})
         got = windows10(run10(rumble_take)[1])
-        ok("a 60 Hz rumble about as loud as the soft hits: nearly all are found, and the worst is within 3 ms, not 6 ms early",
+        ok("a 60 Hz rumble about as loud as the soft hits (one take): nearly all are found, and the worst is within 3 ms, as it is not without the high-pass",
            len(got) == 1 and got[0][0] >= 0.9 * got[0][1] and abs(got[0][3]) < 3.0)
 
         # How far a note may be from an onset and still be its own.

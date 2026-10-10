@@ -63,13 +63,18 @@ What it assumes, so a result can be read for what it is:
 - A stereo or wider WAV is read as its loudest channel at each sample, so two
   channels that are upside down against each other do not cancel out.
 - The audio is high-passed first: the mean of the last 5 ms is taken off each
-  sample (a corner at about 90 Hz), so that a steady low rumble, from a stage
-  floor or a passing lorry, does not pass for the rise of a soft hit. A rumble
-  as loud as the softest hits (-40 dBFS, 60 Hz) still costs a millisecond or so
-  (the worst of a take is 3 ms off, as before the rise was followed back), and
-  one twice as loud can put a soft hit 10 ms or more early. Hits pitched below
-  the corner that take long to rise are placed a little later for it: a 100 Hz
-  tone that takes 30 ms to rise, up to 4 ms after it starts.
+  sample. That is a gentle filter, 3 dB down at about 47 Hz and 10 dB down at
+  20 Hz, with 60 Hz only 1.4 dB down and a lift of 1 to 2 dB between 90 and 150
+  Hz, so a steady 50 or 60 Hz hum is hardly touched. What it takes out is the
+  band-limited rumble of a stage floor or a passing lorry, which would
+  otherwise pass for the rise of a soft hit. A rumble as loud as the softest
+  hits (-40 dBFS, 60 Hz) still costs something: the worst of a take is typically
+  3 ms off and up to 5 to 7, about what it was before the rise was followed back
+  (without the high-pass, typically 6 and up to 15), and one twice as loud
+  (-34 dBFS) can put a soft hit 10 ms or more early. Tones at 80 to 150 Hz that
+  take 10 to 30 ms to rise are placed 0.4 to 1.2 ms later for it, at the median:
+  a 100 Hz tone with a 30 ms rise about 4 ms after it starts, and soft ones up
+  to 7 ms.
 - A note is paired with the onset nearest it, if that is within 100 ms
   (`--max-ms`); a note with none is not matched. An onset goes to one note only,
   the nearest, so the second note of a chord, a note that makes no sound of its
@@ -138,9 +143,9 @@ SETTLE_SEC = 0.005
 BLOCK_FRAMES = 1 << 20
 
 # The audio is high-passed before anything else: at each sample, the mean of the
-# last HIGH_PASS_SEC is taken off (a corner at about 90 Hz). A low rumble under a
-# soft hit is as loud as the hit and varies as slowly as its rise, and the rise
-# was followed back into it.
+# last HIGH_PASS_SEC is taken off (gently: 3 dB down at about 47 Hz). A low
+# rumble under a soft hit is as loud as the hit and varies as slowly as its
+# rise, and the rise was followed back into it.
 HIGH_PASS_SEC = 0.005
 
 

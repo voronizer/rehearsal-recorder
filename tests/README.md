@@ -151,8 +151,11 @@ and 24-bit, 8 channels (read in blocks of whole frames, which a stand-in WAV tha
 records what it is asked for checks) and 32-bit float, drum hits that rise over
 3 ms hard and soft, soft hits (8% of the loudest) that rise over 10 ms, a ringing,
 irregular pattern, a ringing tone with a hit five times louder 52 to 55 ms after
-it and a 60 Hz rumble about as loud as the softest hits, each with its notes at
-the exact start of the hit and the worst within 3 ms (early as well as late), a
+it, each with its notes at the exact start of the hit and the worst within 3 ms
+(early as well as late), and one take under a 60 Hz rumble about as loud as the
+softest hits, within 3 ms as well, which shows the high-pass is there and is not
+the tool's figure for a rumble (over thirty other takes the worst is typically 3
+ms and up to 5, and without the high-pass 6 and up to 14), a
 note beyond the window left unmatched and said so, `--max-ms` widening
 it, two notes at one click (one matched), a `.mid` with no WAV of its name and
 `--wav`, a folder with no `.mid`, no `.wav` or no folder at all exiting
