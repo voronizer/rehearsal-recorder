@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.11.0
 
 - **Record what the e-kit plays, or the keyboard.** Every track card has an
   **Audio / Both / MIDI** switch, and a track on *Both* or *MIDI* has a MIDI
