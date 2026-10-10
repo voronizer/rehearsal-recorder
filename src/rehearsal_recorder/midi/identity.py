@@ -10,7 +10,10 @@ that block the library import this freely.
 
 A saved port is found again by what the OS said about it (spec P1): the same
 id where the system gives one, then the same name, then the same name with
-what Windows adds taken off.
+what Windows adds taken off, on the same device where both name one. A
+device's ports are listed with its playing port first; whether a port is a
+control port is read from its name with the device's own name taken out, as
+"Launch Control XL" is a device's name and not a control port's.
 """
 
 import re
@@ -93,7 +96,10 @@ def in_order(ports: list[PortInfo]) -> list[PortInfo]:
     A keyboard such as the Launchkey lists a DAW port and a control port
     beside the MIDI port you play, so a port whose name has one of the control
     words goes after the device's others, in the OS's order among themselves.
-    Every other port keeps the OS's order.
+    The words are looked for with the device's own name taken out of the
+    port's (see _is_control), so a device called "Launch Control XL" does not
+    have every one of its ports taken for a control port. Every other port
+    keeps the OS's order.
 
     A port with no device is a group of its own, not lumped with the other
     ports that have none, because two devices that do not say what they are

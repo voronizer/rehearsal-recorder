@@ -136,9 +136,11 @@ def write_mid(path, *, track_name: str, port_name: str, start: list[bytes],
     it follows (held), and the number held is logged once, as a warning. An
     event more than 0x0FFFFFFF ticks (about 38 hours) after the last one
     written has a delta a .mid cannot hold, and is skipped like a message that
-    is not storable, so one wild time costs only itself and drags no one after
-    it. A time that is not a number is skipped too. The bytes of an event are
-    kept as they are, the channel included.
+    is not storable: a time that wild costs only itself. One less wild is
+    written where it says, and drags every event after it that is earlier
+    than it onto its tick, held as above. A time that is not a number is
+    skipped too. The bytes of an event are kept as they are, the channel
+    included.
     """
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("track_name", name=_text(track_name)))

@@ -320,8 +320,10 @@ class OpenPort:
             while True:
                 # A sleep, not a wait on the stop event: on Windows a wait
                 # with a timeout is rounded up to the system's timer tick
-                # (15.6 ms), which time.sleep is not since Python 3.11, and a
-                # port stamped when read needs to look every few milliseconds.
+                # (15.6 ms), and a port stamped when read needs to look every
+                # few milliseconds. time.sleep is not rounded since Python
+                # 3.11; on 3.10 it is, and the interval is the tick. The
+                # builds and CI run 3.12.
                 time.sleep(interval)
                 if self._stop.is_set():
                     break
