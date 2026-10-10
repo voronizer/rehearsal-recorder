@@ -188,7 +188,8 @@ Not a suite: it checks nothing and `run_all.py` does not run it. It takes the
 pictures in the README and `docs/using-it.md` — the built bundle and the
 same `ui/e2e/fake-bridge.js`, with a band of four on an XR18 and waveforms
 worked out from a song, so the pictures look like a rehearsal rather than a
-test. It writes `docs/screenshots/*.png`. Run it after changing anything they
+test. The two MIDI pictures lay the drummer on Both, from the port "TD-17",
+over that band. It writes `docs/screenshots/*.png`. Run it after changing anything they
 show, and look at them before committing. Needs Playwright for Python:
 `pip install playwright && playwright install chromium`.
 
