@@ -1794,9 +1794,9 @@ def main():
     class Spy(MidiRecorder):
         """The take's recorder, which says what it is asked before doing it."""
 
-        def present(self, name, ns):
+        def present(self, name, ns, state=None):
             heard.append(("present", name, ns))
-            return super().present(name, ns)
+            return super().present(name, ns, state)
 
         def feed(self, name, ns, data):
             heard.append(("feed", name, ns, bytes(data)))
@@ -1911,8 +1911,10 @@ def main():
             ok("the take begins with the pedal as it was sent between the takes, and the volume sent as it began (F6)",
                kit[:2] == [(0, b"\xb9\x04\x5a"), (0, b"\xb9\x07\x64")])
             ok("42 is let go when the port was last heard before the pull, and 40 after the replug is there (F7)",
-               kit[2:] == [(960, b"\x99\x2a\x40"), (1536, b"\xb9\x04\x14"), (1536, b"\x89\x2a\x00"),
-                           (2880, b"\x99\x28\x40"), (5760, b"\x89\x28\x00")])
+               kit[2:5] == [(960, b"\x99\x2a\x40"), (1536, b"\xb9\x04\x14"), (1536, b"\x89\x2a\x00")]
+               and kit[7:] == [(2880, b"\x99\x28\x40"), (5760, b"\x89\x28\x00")])
+            ok("and what the port has set is said again where it came back, as it would say it plugged in (F6)",
+               kit[5:7] == [(1920, b"\xb9\x04\x14"), (1920, b"\xb9\x07\x64")])
             ok("Keys, there all along and silent, has its .mid with no notes (F5)", in_ticks(two / "Keys.mid") == [])
 
             now[0] = 130 * S
@@ -1922,6 +1924,49 @@ def main():
             ok("pulled and plugged back between two ticks, the port is opened again, once",
                rig.activity()["Drums"]["state"] == "ok" and fake.opens["TD-17"] == 3
                and open_now(fake).count("TD-17") == 1)
+
+            # A keyboard says its program as it is plugged in, before the rig has put the port on
+            # its track. Plugged in mid-take, its track begins with it (F6); plugged back after a
+            # pull, what it says then is in the take from that moment.
+            says_fake, says = a_rig(td17)
+            real_open = says_fake.open
+            program = [b"\xc0\x07"]
+
+            def open_and_say(info, on_event):
+                opened = real_open(info, on_event)
+                if info.name == launchkey.name:
+                    on_event(now[0], program[0])                      # as it connects
+                return opened
+
+            says_fake.open = open_and_say
+            says.use([gtr, drums, keys])
+            plugged = folder("plugged")
+            T12 = now[0] = 1700 * S
+            says.begin_take(plugged, take_clock(T12))
+            says.drain()
+            now[0] = T12 + 500 * MS
+            says_fake.plug(launchkey)
+            says.tick()
+            says.drain()
+            says_fake.send(launchkey.name, T12 + 600 * MS, b"\x90\x3c\x40")
+            says_fake.send(launchkey.name, T12 + 700 * MS, b"\x80\x3c\x00")
+            now[0] = T12 + 1 * S
+            says_fake.pull(launchkey.name)
+            says.tick()
+            says.drain()
+            program[0] = b"\xc0\x09"                                   # picked while it was unplugged
+            now[0] = T12 + 1500 * MS
+            says_fake.plug(launchkey)
+            says.tick()
+            says.drain()
+            says_fake.send(launchkey.name, T12 + 1600 * MS, b"\x90\x3e\x40")
+            says.end_take(3.0)
+            said_keys = in_ticks(plugged / "Keys.mid")
+            ok("a port plugged in mid-take begins its track with the program it said as it was plugged in (F6)",
+               said_keys[:3] == [(0, b"\xc0\x07"), (1152, b"\x90\x3c\x40"), (1344, b"\x80\x3c\x00")])
+            ok("and plugged back after a pull, the program it says then is in the take where it came back",
+               said_keys[3:] == [(2880, b"\xc0\x09"), (3072, b"\x90\x3e\x40"), (5760, b"\x80\x3e\x00")])
+            says.shutdown()
 
             # Busy, alike, and no system (P5, P1).
             busy_fake, busy = a_rig(td17)
@@ -2145,11 +2190,11 @@ def main():
             class Refusing(MidiRecorder):
                 """Refuses Keys' first present, and every line of Drums: half as if waiting, half dropped."""
 
-                def present(self, name, ns):
+                def present(self, name, ns, state=None):
                     if name in refused["present"]:
                         refused["present"].discard(name)
                         raise OSError(28, "No space left on device")
-                    return super().present(name, ns)
+                    return super().present(name, ns, state)
 
                 def feed(self, name, ns, data):
                     if name == "Drums":

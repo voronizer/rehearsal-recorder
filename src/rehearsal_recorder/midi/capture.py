@@ -256,15 +256,23 @@ class MidiRecorder:
         self._ended = False
         self._result = []
 
-    def present(self, name, ns):
+    def present(self, name, ns, state=None):
         """A port is there at `ns`: the first time, its file is made and begins
-        with the state it was in; later, it is heard again."""
+        with the state it was in; later, it is heard again. `state`, when
+        given, is the port's PortState as it is now, with what it said before
+        it was put on this track (a keyboard says its program as it is
+        plugged in): the file begins with it rather than with the state from
+        when the take began, and a file made already has its messages at
+        `ns`, which change nothing that is set as they say."""
         with self._lock:
             track = self._by_name.get(name)
             if self._ended or track is None:
                 return
             if not track.made:
-                self._create(track, ns)
+                self._create(track, ns, state)
+            elif state is not None:
+                track.sink.write("".join(f"n {int(ns)} {message.hex()}\n"
+                                         for message in state.start_messages()).encode("ascii"))
             track.here = True
             self._save_marks(ns)
 
@@ -401,13 +409,15 @@ class MidiRecorder:
                 log.warning("take.clock: the last marks could not be saved: %r", e)
             self._close()
 
-    def _create(self, track, ns):
+    def _create(self, track, ns, state=None):
         """Makes a track's .midraw with its first lines, which reach the OS at
         once: the file is never found without them. The take began when the
         clock says; a clock not started yet leaves this moment as the best
-        there is."""
+        there is. It begins with `state`, else the state from when the take
+        began."""
         started = self._anchor.started_ns
-        state = self._states.get(track.name)
+        if state is None:
+            state = self._states.get(track.name)
         if state is None:
             state = PortState()
         head = [f"t {started if started is not None else int(ns)}\n"]

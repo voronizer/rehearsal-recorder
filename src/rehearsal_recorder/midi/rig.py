@@ -533,7 +533,7 @@ class MidiRig:
             with self._lock:
                 self._zeroing -= 1
             return
-        present, gone = [], []
+        present, gone, state = [], [], None
         with self._lock:
             if kind == "closed":
                 port.done = True
@@ -551,6 +551,10 @@ class MidiRig:
                 if kind == "attach":
                     if not port.done and port.silent_at is None and take.here.get(name) is None:
                         present = [name]
+                        # What the port said before this marker, in the order it
+                        # said it: the program a keyboard says as it is plugged in
+                        # came before the track was put on it, and was not fed.
+                        state = port.state.copy()
                 elif kind == "detach":
                     gone = [name] if take.here.get(name) is port else []
                 else:
@@ -558,7 +562,7 @@ class MidiRig:
             if kind == "closed":
                 port.fed = []
         for n in present:
-            self._present(take, port, n, ns)
+            self._present(take, port, n, ns, state)
         for n in gone:
             del take.here[n]
             self._tell(take, take.recorder.gone, n, ns)
@@ -609,8 +613,8 @@ class MidiRig:
         for message in port.state.releases():
             port.state.feed(message)
 
-    def _present(self, take, port, name, ns):
-        if not self._tell(take, take.recorder.present, name, ns):
+    def _present(self, take, port, name, ns, state=None):
+        if not self._tell(take, take.recorder.present, name, ns, state):
             return False  # tried again with the port's next event
         take.here[name] = port
         return True
