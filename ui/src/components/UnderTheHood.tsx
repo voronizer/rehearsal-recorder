@@ -19,6 +19,7 @@ import {
 } from "@/lib/api"
 import { formatBytes } from "@/lib/format"
 import { QUIET_THRESHOLD } from "@/lib/levels"
+import { useSystem, words } from "@/lib/platform"
 import { cn } from "@/lib/utils"
 import { startDownload, switchUpdates, useUpdate } from "@/lib/update"
 
@@ -253,6 +254,7 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
 export function UnderTheHood() {
   const [hood, setHood] = useState<Hood | null>(null)
   const update = useUpdate()
+  const { trash } = words(useSystem())
 
   useEffect(() => {
     let alive = true
@@ -269,7 +271,6 @@ export function UnderTheHood() {
   }
 
   const rec = hood.audio.recording
-  const windows = hood.system.startsWith("Windows")
 
   return (
     <div className="flex flex-col gap-7">
@@ -421,9 +422,7 @@ export function UnderTheHood() {
           </Row>
           <Row label="Deleting">
             {hood.deleting === "system"
-              ? windows
-                ? "Goes to the Recycle Bin"
-                : "Goes to the Trash"
+              ? `Goes to ${trash}`
               : `Moves to the ${hood.fallback_trash} folder in your recordings`}
           </Row>
           <Row label="Cloud copies">

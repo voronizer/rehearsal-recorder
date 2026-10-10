@@ -1,4 +1,5 @@
 import { api, type Take } from "@/lib/api"
+import { words } from "@/lib/platform"
 
 /**
  * What deleting actually does on this machine, in words.
@@ -12,7 +13,14 @@ import { api, type Take } from "@/lib/api"
  * Nothing is ever destroyed either way. That part is the same everywhere, and
  * it is the part worth promising.
  */
-let where: { kind: string; folder: string } | null = null
+type Where = { kind: string; folder: string }
+let where: Where | null = null
+
+/** Says where deleting goes without asking the settings: for the tests,
+ *  and for the showcase. null forgets it, as before the settings are read. */
+export function setDeletionKind(w: Where | null) {
+  where = w
+}
 
 export async function loadDeletionKind() {
   try {
@@ -39,9 +47,29 @@ export function goPlural() {
   return "go to the Trash"
 }
 
-/** "the Trash" / "the _deleted folder": where a question says things go. */
+/** "the Trash" / "the Recycle Bin" / "the _deleted folder": where a question
+ *  says things go, in the words of the system. */
 export function trashName() {
-  return where?.kind === "folder" ? `the ${where.folder} folder` : "the Trash"
+  return where?.kind === "folder" ? `the ${where.folder} folder` : words().trash
+}
+
+/** How a sentence ends that says where a removed thing went. */
+function wentToEnd() {
+  return where?.kind === "folder"
+    ? `moved to the ${where.folder} folder.`
+    : `went to ${words().trash}.`
+}
+
+/** What the notice says when something has gone: "“Palyn 3” went to the
+ *  Trash." / "… the Recycle Bin." / "… moved to the _deleted folder." The
+ *  subject comes with its quotes, or its count, already on. */
+export function wentTo(subject: string): string {
+  return `${subject} ${wentToEnd()}`
+}
+
+/** The notice for a take that was cropped: the take as it was is what went. */
+export function croppedText(name: string): string {
+  return `“${name}” is cropped. The uncut take ${wentToEnd()}`
 }
 
 export function canBePutBack(several = false) {

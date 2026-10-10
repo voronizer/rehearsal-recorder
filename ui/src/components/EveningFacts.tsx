@@ -4,7 +4,7 @@ import { api, type Take } from "@/lib/api"
 import { eveningOf, lengthLabel, takesLine } from "@/lib/evening"
 import { formatBytes } from "@/lib/format"
 import { notify } from "@/lib/notices"
-import { FOLDER_BUTTON } from "@/lib/platform"
+import { useSystem, words } from "@/lib/platform"
 import { cn } from "@/lib/utils"
 
 function Fact({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
@@ -35,6 +35,7 @@ export function EveningFacts({
   folder: string
 }) {
   const f = eveningOf(takes)
+  const { folderButton } = words(useSystem())
   const show = async () => {
     const res = await api().show_rehearsal_folder(folder)
     if (!res.ok) notify({ key: "folder", kind: "error", text: res.error ?? "Could not open the folder" })
@@ -51,7 +52,7 @@ export function EveningFacts({
           it is there under the mouse for whoever wants it. */}
       <Button variant="outline" size="sm" title={folder} onClick={() => void show()}>
         <FolderOpen className="text-muted-foreground" />
-        {FOLDER_BUTTON}
+        {folderButton}
       </Button>
     </div>
   )

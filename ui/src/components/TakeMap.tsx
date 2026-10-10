@@ -2,7 +2,7 @@ import { useRef } from "react"
 import { MoveHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatMMSS } from "@/lib/format"
-import { ZOOM_KEY } from "@/lib/platform"
+import { useSystem, words } from "@/lib/platform"
 import { cn } from "@/lib/utils"
 
 /**
@@ -52,6 +52,7 @@ export function TakeMap({
   onMove: (from: number, to: number) => void
   onWhole: () => void
 }) {
+  const { mod } = words(useSystem())
   const stripRef = useRef<HTMLDivElement>(null)
   // Where in the frame the pointer took hold of it, in seconds, so the frame
   // does not jump to centre itself under the pointer when it is dragged.
@@ -113,7 +114,7 @@ export function TakeMap({
             </Button>
           </>
         ) : (
-          <span>{ZOOM_KEY} + wheel to zoom</span>
+          <span>{mod} + wheel to zoom</span>
         )}
       </div>
 
