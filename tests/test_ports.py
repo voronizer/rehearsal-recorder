@@ -348,16 +348,18 @@ def main():
     ok("SysEx and active sensing are kept", conf.ignore_sysex is False
        and conf.ignore_sensing is False)
     ok("the clock that only keeps time is not", conf.ignore_timing is True)
+    # Each time is measured against its send, from just before to just after
+    # it, and not against when the check runs: a loaded machine can be slow to
+    # hand an event over, and that is not its time.
     before = time.perf_counter_ns()
     world.send("TD-17", [0x90, 38, 100])
     world.send("TD-17", [0x80, 38, 0])
+    after = time.perf_counter_ns()
     ok("both arrive", wait_for(lambda: len(got) == 2))
     ok("with their bytes, in the order sent",
        [d for _, d in got] == [bytes([0x90, 38, 100]), bytes([0x80, 38, 0])])
-    ok("each time is Python's, within 5 ms of the send",
-       all(abs(ns - before) < 5_000_000 for ns, _ in got))
-    # Measured against the send, not against when the check runs: a loaded
-    # machine can be slow to hand the event over, and that is not its time.
+    ok("each time is Python's, within 1 ms of the send",
+       all(before - 1_000_000 <= ns <= after + 1_000_000 for ns, _ in got))
     before = time.perf_counter_ns()
     world.send("TD-17", [0x90, 39, 100], ago_ns=20_000_000)
     after = time.perf_counter_ns()
@@ -373,8 +375,9 @@ def main():
     rx.resync()
     before = time.perf_counter_ns()
     world.send("TD-17", [0xB0, 4, 91])
+    after = time.perf_counter_ns()
     wait_for(lambda: len(got) == 5)
-    ok("and resync() puts them right again", abs(got[4][0] - before) < 5_000_000)
+    ok("and resync() puts them right again", before - 1_000_000 <= got[4][0] <= after + 1_000_000)
     finish()
 
     print("\n[7] A callback that raises does not end the port")
@@ -535,8 +538,11 @@ def main():
     before = time.perf_counter_ns()
     world.send("Synth", [0x90, 60, 100])
     ok("an event arrives", wait_for(lambda: got))
+    arrived = time.perf_counter_ns()
+    # Read after it was sent and before it was handed over, however late the
+    # port's thread got to it.
     ok("stamped on Python's clock when it was read, though the library's is 0",
-       abs(got[0][0] - before) < 50_000_000)
+       before <= got[0][0] <= arrived)
     finish()
     # A wait on a lock with a timeout is rounded up to the system's timer tick
     # on Windows (15.6 ms); time.sleep is not, since Python 3.11. So a port
