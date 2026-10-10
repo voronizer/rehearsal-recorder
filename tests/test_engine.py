@@ -7,6 +7,7 @@ the renderer is called directly and the samples themselves are inspected.
 """
 
 import json
+import logging
 import re
 import struct
 import sys
@@ -97,6 +98,9 @@ sys.modules["sounddevice"] = _sd
 # library raises ImportError, which midi/ports.open_system() answers as "MIDI is
 # not available" — whatever is plugged into the machine running them.
 sys.modules["pylibremidi"] = None
+# The app's log says why it has no MIDI on every Api made, and unhandled
+# that would print here each time; nothing here reads it.
+logging.getLogger("rehearsal_recorder.midi.ports").addHandler(logging.NullHandler())
 
 import numpy as np  # noqa: E402
 
@@ -7968,7 +7972,22 @@ def main():
         fake = Fake66([])
         e = api66(fake)
         lines = [ln for ln in e.bug_report()["text"].splitlines() if ln.startswith("MIDI:")]
-        ok("a system with no ports says so in one line", lines == ["MIDI: no ports"])
+        ok("a system with no ports says so in one line, and which system it is", lines == ["MIDI: no ports, Fake MIDI"])
+        from rehearsal_recorder import diagnostics as diag66
+
+        port66 = {"name": "TD-17", "device": "TD-17", "maker": "Roland", "id": "7", "notes": 0}
+        ok("a port is said as it was, with its system after it",
+           diag66.midi_lines({"system": "CoreMIDI", "ports": [port66], "error": None})
+           == ["MIDI: TD-17 (Roland, id 7), CoreMIDI"])
+        ok("no ports on Windows MIDI Services says so, and the system",
+           diag66.midi_lines({"system": "Windows MIDI Services", "ports": [], "error": None})
+           == ["MIDI: no ports, Windows MIDI Services"])
+        ok("no system says why, as it did",
+           diag66.midi_lines({"system": None, "ports": [], "error": "MIDI is not available: test"})
+           == ["MIDI: MIDI is not available: test"])
+        ok("and with neither a system nor a reason, only that there are no ports",
+           diag66.midi_lines({"system": None, "ports": [], "error": None}) == ["MIDI: no ports"]
+           and diag66.midi_lines(None) == ["MIDI: no ports"])
 
     @scenario66("Look again")
     def _():

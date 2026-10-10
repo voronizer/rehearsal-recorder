@@ -8,6 +8,7 @@ Windows — nothing short of Windows proves that — but it does prove the code
 takes the right branch instead of reaching for something that is not there.
 """
 
+import logging
 import shutil
 import sys
 import tempfile
@@ -29,6 +30,9 @@ sys.modules["sounddevice"] = _sd
 # library raises ImportError, which midi/ports.open_system() answers as "MIDI is
 # not available" — whatever is plugged into the machine running them.
 sys.modules["pylibremidi"] = None
+# The app's log says why it has no MIDI on every Api made, and unhandled
+# that would print here each time; nothing here reads it.
+logging.getLogger("rehearsal_recorder.midi.ports").addHandler(logging.NullHandler())
 
 import rehearsal_recorder.platform_support as ps  # noqa: E402
 
@@ -189,7 +193,6 @@ def main():
     # to stderr — which a windowed build does not have. Save take and rename
     # both failed that way on Windows with nothing kept anywhere.
     import faulthandler
-    import logging
 
     import rehearsal_recorder.app as appmod
 
@@ -206,6 +209,14 @@ def main():
         logging.getLogger("pywebview").error("once")
         ok("arming twice does not write everything twice",
            appmod.CRASH_LOG.read_text(encoding="utf-8").count("once") == 1)
+        # The line that says which MIDI system the app is on, or why it has
+        # none, is the one thing P5 asks the app's log for. The library is
+        # blocked here, so it is the reason that is said.
+        from rehearsal_recorder.midi import ports as midi_ports
+
+        system, why = midi_ports.open_system()
+        ok("the MIDI system, or why there is none, is written to crash.log",
+           system is None and why in appmod.CRASH_LOG.read_text(encoding="utf-8"))
     finally:
         faulthandler.disable()
         logger = logging.getLogger("pywebview")

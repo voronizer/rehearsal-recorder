@@ -703,6 +703,8 @@ export type UnderTheHood = {
     } | null
     playback: string
   }
+  /** The MIDI system and its ports, as api.list_midi_ports has them. */
+  midi: MidiPorts
   files: OwnFile[]
   deleting: "system" | "folder"
   fallback_trash: string

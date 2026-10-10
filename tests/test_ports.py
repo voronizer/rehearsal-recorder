@@ -233,12 +233,27 @@ def main():
         finish()
 
     print("\n[4] Which MIDI system a machine gets")
+    # And that the app's log says which, once. The crash log is the only log a
+    # windowed build has and it keeps ERROR only (app.py), so that is the level.
+    def said():
+        # What the log says of the MIDI system since the last call. On a
+        # pretend Windows it says too that COM could not be joined, which is
+        # not about that.
+        lines = [(r.getMessage(), r.levelno) for r in logged.records
+                 if r.getMessage().startswith("MIDI")]
+        logged.records.clear()
+        return lines
+
+    logged.records.clear()
     world, system, why = start("darwin")
     ok("a Mac gets CoreMIDI", system is not None and system.name == "CoreMIDI")
+    ok("and the log says so in one line, at a level the crash log keeps",
+       said() == [("MIDI: CoreMIDI", logging.ERROR)])
     finish()
     world, system, why = start("win32")
     ok("Windows gets MIDI Services where it can be had",
        system is not None and system.name == "Windows MIDI Services")
+    ok("and the log names it", said() == [("MIDI: Windows MIDI Services", logging.ERROR)])
     finish()
     world = fake_libremidi.install()
     world.observer_raises.add("WINDOWS_MIDI_SERVICES")
@@ -248,6 +263,8 @@ def main():
     systems.append(system)
     ok("and the classic one where its observer will not start",
        system is not None and system.name == "Windows MIDI")
+    ok("the log names that one, and says nothing of the one that would not start",
+       said() == [("MIDI: Windows MIDI", logging.ERROR)])
     finish()
     world = fake_libremidi.install()
     world.present_apis.discard("WINDOWS_MIDI_SERVICES")
@@ -257,6 +274,7 @@ def main():
     systems.append(system)
     ok("and the classic one where the library quietly gives a dummy for it",
        system is not None and system.name == "Windows MIDI")
+    ok("and the log names it, once", said() == [("MIDI: Windows MIDI", logging.ERROR)])
     finish()
     world = fake_libremidi.install()
     world.present_apis.clear()
@@ -266,10 +284,12 @@ def main():
     ok("neither: no system, and why", system is None and why is not None)
     ok("the reason starts the same way every time", why.startswith("MIDI is not available: "))
     ok("and names both", "Windows MIDI Services" in why and "Windows MIDI is" in why)
+    ok("the log has the reason, in one line", said() == [(why, logging.ERROR)])
     finish()
     world, system, why = start("linux")
     ok("another system gets what the library picks",
        system is not None and system.name != "")
+    ok("and the log names it", said() == [(f"MIDI: {system.name}", logging.ERROR)])
     finish()
     world = fake_libremidi.install()
     world.present_apis.clear()
@@ -277,11 +297,13 @@ def main():
     system, why = ports.open_system()
     sys.platform = REAL_PLATFORM
     ok("another system with no MIDI API: none, and why", system is None and why is not None)
+    ok("and the log has the reason", said() == [(why, logging.ERROR)])
     finish()
     sys.modules["pylibremidi"] = None
     system, why = ports.open_system()
     ok("without the library: none, never an exception", system is None)
     ok("and the reason says so", why.startswith("MIDI is not available: "))
+    ok("and the log has that reason too", said() == [(why, logging.ERROR)])
     sys.modules.pop("pylibremidi", None)
 
     print("\n[5] The ports, as the app keeps them")

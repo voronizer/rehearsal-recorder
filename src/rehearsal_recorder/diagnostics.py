@@ -90,10 +90,13 @@ def tracks_line(tracks):
 def midi_lines(midi):
     """A line for each MIDI port the system lists, as the OS describes it, so
     that a port that cannot be found again can be seen for what it is; or one
-    line saying why there are none."""
+    line saying there are none, and which system that is of, or why there is
+    no system."""
     midi = midi or {}
     ports = midi.get("ports") or []
     if not ports:
+        if midi.get("system"):
+            return [f"MIDI: no ports, {midi['system']}"]
         return [f"MIDI: {midi.get('error') or 'no ports'}"]
     lines = []
     for port in ports:

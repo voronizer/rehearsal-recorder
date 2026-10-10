@@ -701,8 +701,21 @@ def open_system() -> tuple[PortSystem | None, str | None]:
     library is imported and used on threads of this module's, not the caller's.
 
     On Windows, Windows MIDI Services first (the newer, which lets apps share
-    a port) if its observer starts, else the classic one.
+    a port) if its observer starts, else the classic one. The app's log says
+    which, or why none.
     """
+    system, why = _choose_system()
+    # At ERROR, though it is news and not a fault: the crash log is the only
+    # log a windowed build has, and it keeps nothing below ERROR (app.py).
+    if system is not None:
+        log.error("MIDI: %s", system.name)
+    else:
+        log.error("%s", why)
+    return system, why
+
+
+def _choose_system() -> tuple[PortSystem | None, str | None]:
+    """open_system() without the log."""
     if sys.platform == "win32":
         asked = ["WINDOWS_MIDI_SERVICES", "WINDOWS_MM"]
     elif sys.platform == "darwin":

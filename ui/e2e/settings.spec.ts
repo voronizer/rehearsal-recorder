@@ -11,7 +11,7 @@ import {
   startRehearsal,
   test,
 } from "./app.ts"
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 
 // Settings: the card, the folders, the appearance, and Under the hood.
 
@@ -134,8 +134,8 @@ test.describe("Under the hood", () => {
     permissions: ["clipboard-read", "clipboard-write"],
   })
 
-  async function underTheHood(page: Page) {
-    await openApp(page, { before: "window.__CHECK_MS__ = 900;" })
+  async function underTheHood(page: Page, before = "") {
+    await openApp(page, { before: "window.__CHECK_MS__ = 900;" + before })
     await page.getByRole("button", { name: "Settings" }).click()
     await page.getByRole("button", { name: "Under the hood", exact: true }).first().click()
     await expect(page.locator("[aria-label='About this copy']")).toBeVisible()
@@ -157,6 +157,39 @@ test.describe("Under the hood", () => {
       "data-in-use"
     )
     await expect(page.locator("main")).toContainText("X32 USB")
+  })
+
+  // The Sound section's rows, and the value beside one of them.
+  const soundRows = (page: Page) => page.locator("dl").filter({ hasText: "Audio engine" })
+  const valueOf = (page: Page, label: string) =>
+    soundRows(page)
+      .locator("dt", { hasText: new RegExp(`^${label}$`) })
+      .locator("xpath=following-sibling::dd[1]")
+  const colorOf = (el: Locator) => el.evaluate((e) => getComputedStyle(e).color)
+
+  test("says which MIDI system the app is on, in a row after the audio engine", async ({ page }) => {
+    await underTheHood(page)
+    // Right after the audio engine, in the same list, and nothing else added.
+    await expect(soundRows(page).locator("dt")).toHaveText([
+      "Recording with",
+      "Playback",
+      "Audio systems",
+      "Audio engine",
+      "MIDI",
+    ])
+    await expect(valueOf(page, "MIDI")).toHaveText("Windows MIDI Services")
+    await expect(valueOf(page, "Audio engine")).toHaveText("PortAudio V19.7.0-devel")
+  })
+
+  test("says why there is no MIDI system, in muted grey", async ({ page }) => {
+    await underTheHood(page, "window.__MIDI_ERROR__ = 'MIDI is not available: the library is missing';")
+    const midi = valueOf(page, "MIDI")
+    await expect(midi).toHaveText("MIDI is not available: the library is missing")
+    // The grey of the label beside it, not the page's own text.
+    expect(await colorOf(midi.locator("span"))).toBe(
+      await colorOf(soundRows(page).locator("dt", { hasText: /^MIDI$/ }))
+    )
+    expect(await colorOf(midi.locator("span"))).not.toBe(await colorOf(valueOf(page, "Playback")))
   })
 
   test("copies a report for a bug, and opens what it points at", async ({ page }) => {
