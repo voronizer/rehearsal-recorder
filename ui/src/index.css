@@ -6,7 +6,8 @@
 /*
   System fonts only: the app has to look the same without an internet
   connection (a rehearsal room may not have one), so nothing is loaded from
-  Google Fonts. On macOS that is San Francisco, with SF Mono for figures.
+  Google Fonts. On macOS that is San Francisco; its figures are tabular (the
+  .tnum class below) rather than monospace.
 */
 @theme inline {
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -30,6 +31,14 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-panel: var(--panel);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  /* A selected tab, pill or row is neutral, not the accent (F2); Stop and
+     whatever is on is the text's own colour, "strong". */
+  --color-selected: var(--selected);
+  --color-strong: var(--strong);
+  --color-strong-foreground: var(--strong-foreground);
+  /* The veil behind a dialog. */
+  --color-overlay: var(--overlay);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -47,14 +56,96 @@
   --color-label-amber: var(--label-amber);
   --color-label-green: var(--label-green);
   --color-label-teal: var(--label-teal);
-  --color-label-blue: var(--label-blue);
+  /* Cobalt is the app's only blue, so what is stored as "blue" is drawn
+     orange (labels.ts). */
+  --color-label-orange: var(--label-orange);
   --color-label-violet: var(--label-violet);
   --color-label-pink: var(--label-pink);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Three by role: 4 for small things (key chips, tags, take bars), 8 for
+     controls (buttons, fields, menus), 12 for groups and dialogs; the bare
+     "rounded" is 4 too, and "rounded-full" is for round things. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 12px;
+}
+
+/*
+  Motion. Whatever appears rises 12 px and fades in over 250 ms, easing out;
+  a screen brings its groups in one after another (--i is a group's place in
+  the line, 40 ms apart). Dialogs, menus and notices take 220 ms, a hover's
+  colour 200 ms, and nothing takes longer than 400.
+*/
+@theme {
+  --ease-smooth: cubic-bezier(.2, .8, .2, 1);
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: var(--ease-smooth);
+}
+
+/* Inline, so that --i, and the duration a class sets, are read on the
+   element that animates and not once on :root. */
+@theme inline {
+  --animate-rise: rise 250ms var(--ease-smooth) calc(var(--i, 0) * 40ms) both;
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* tw-animate-css's own, with 220 ms where it has 150. It reads its
+     duration from --tw-animation-duration, then --tw-duration (what a
+     duration-* class sets), so a screen can still choose its own. */
+  --animate-in: enter var(--tw-animation-duration, var(--tw-duration, 220ms))
+    var(--tw-ease, var(--ease-smooth)) var(--tw-animation-delay, 0s)
+    var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
+    var(--tw-animation-fill-mode, none);
+  --animate-out: exit var(--tw-animation-duration, var(--tw-duration, 220ms))
+    var(--tw-ease, var(--ease-smooth)) var(--tw-animation-delay, 0s)
+    var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
+    var(--tw-animation-fill-mode, none);
+}
+
+/* In the sheet whether or not a screen has used it yet: the site and
+   Storybook import this file too. */
+@source inline("animate-rise");
+
+/* Motion gives way (F11). Under the system's Reduce motion, and while a take
+   is being recorded (Recording.tsx sets data-recording on <html>), these do
+   not play: a dialog is there at once, and a group is where it belongs.
+   Meters and the clock are readings, not motion, and keep moving.
+
+   The ones with a prefix (data-[state=open]:animate-in, which is how every
+   dialog and menu asks for it) are not .animate-in to a selector, hence the
+   second half of each list. Outside any layer, so these win over Tailwind's
+   utilities whatever their specificity. */
+@media (prefers-reduced-motion: reduce) {
+  :is(
+      .animate-rise,
+      .animate-in,
+      .animate-out,
+      [class*=":animate-rise"],
+      [class*=":animate-in"],
+      [class*=":animate-out"]
+    ) {
+    animation: none;
+  }
+}
+html[data-recording]
+  :is(
+    .animate-rise,
+    .animate-in,
+    .animate-out,
+    [class*=":animate-rise"],
+    [class*=":animate-in"],
+    [class*=":animate-out"]
+  ) {
+  animation: none;
 }
 
 :root {
@@ -64,31 +155,38 @@
      the player. */
   color-scheme: light;
 
-  /* 6 px: 12 made every block look soft. The others follow from it — a
-     button 4, a tile on the recording screen 10. */
-  --radius: 0.375rem;
-
-  --background: oklch(0.985 0 0);
+  /* A group is set apart from the page by its fill, with no border (F4):
+     white cards on a page a shade darker. A side panel is darker than the
+     page, and a hover or a pill fill darker still. */
+  --background: oklch(0.965 0.002 286.3);
   --foreground: oklch(0.21 0.006 285.9);
   --card: oklch(1 0 0);
   /* A side panel set back from the screen it is beside, darker than the
      background in both themes, with cards on it as they are elsewhere. */
-  --panel: oklch(0.955 0.003 286.3);
+  --panel: oklch(0.94 0.003 286.3);
   --card-foreground: oklch(0.21 0.006 285.9);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.006 285.9);
-  --primary: oklch(0.55 0.15 255);
+  /* One accent, cobalt, the same in both themes (F1): the one main action
+     and what plays. */
+  --primary: oklch(0.56 0.24 266);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.96 0.003 286.3);
+  --secondary: oklch(0.935 0.004 286.3);
   --secondary-foreground: oklch(0.21 0.006 285.9);
-  --muted: oklch(0.96 0.003 286.3);
+  --muted: oklch(0.935 0.004 286.3);
   --muted-foreground: oklch(0.55 0.014 285.9);
-  --accent: oklch(0.96 0.003 286.3);
+  --accent: oklch(0.935 0.004 286.3);
   --accent-foreground: oklch(0.21 0.006 285.9);
+  /* Selected is neutral (F2); strong is Stop and whatever is on. */
+  --selected: oklch(0.92 0.004 286.3);
+  --strong: oklch(0.21 0.006 285.9);
+  --strong-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.58 0.22 27.3);
+  --destructive-foreground: oklch(0.985 0 0);
+  --overlay: oklch(0 0 0 / 0.6);
   --border: oklch(0.92 0.004 286.3);
   --input: oklch(0.92 0.004 286.3);
-  --ring: oklch(0.55 0.15 255);
+  --ring: oklch(0.56 0.24 266);
   --signal: oklch(0.72 0.18 149);
   --warn: oklch(0.79 0.16 76);
   --warn-foreground: oklch(0.24 0.04 76);
@@ -101,7 +199,7 @@
   --label-amber: oklch(0.79 0.16 76);
   --label-green: oklch(0.72 0.18 149);
   --label-teal: oklch(0.66 0.12 195);
-  --label-blue: oklch(0.58 0.16 250);
+  --label-orange: oklch(0.68 0.17 48);
   --label-violet: oklch(0.56 0.2 300);
   --label-pink: oklch(0.64 0.2 350);
 }
@@ -117,18 +215,23 @@
   --card-foreground: oklch(0.93 0.003 286.3);
   --popover: oklch(0.24 0.007 285.9);
   --popover-foreground: oklch(0.93 0.003 286.3);
-  --primary: oklch(0.62 0.15 255);
-  --primary-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.56 0.24 266);
+  --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.27 0.008 286.3);
   --secondary-foreground: oklch(0.93 0.003 286.3);
   --muted: oklch(0.27 0.008 286.3);
   --muted-foreground: oklch(0.68 0.011 286.3);
   --accent: oklch(0.29 0.009 286.3);
   --accent-foreground: oklch(0.93 0.003 286.3);
+  --selected: oklch(0.31 0.009 286.3);
+  --strong: oklch(0.93 0.003 286.3);
+  --strong-foreground: oklch(0.18 0.006 285.9);
   --destructive: oklch(0.62 0.21 25.8);
+  --destructive-foreground: oklch(0.985 0 0);
+  --overlay: oklch(0 0 0 / 0.6);
   --border: oklch(0.3 0.009 286.3);
   --input: oklch(0.32 0.009 286.3);
-  --ring: oklch(0.62 0.15 255);
+  --ring: oklch(0.56 0.24 266);
   --signal: oklch(0.75 0.18 149);
   --warn: oklch(0.79 0.16 76);
   --warn-foreground: oklch(0.22 0.04 76);
@@ -138,7 +241,7 @@
   --label-amber: oklch(0.79 0.16 76);
   --label-green: oklch(0.75 0.18 149);
   --label-teal: oklch(0.74 0.12 195);
-  --label-blue: oklch(0.68 0.15 250);
+  --label-orange: oklch(0.7 0.17 45);
   --label-violet: oklch(0.68 0.17 300);
   --label-pink: oklch(0.72 0.17 350);
 }
@@ -153,7 +256,7 @@
     height: 100%;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-sans text-sm antialiased;
     /* Native desktop feel: a stray mouse drag does not select text, while
        selection still works in input fields. */
     user-select: none;
@@ -162,9 +265,9 @@
   textarea {
     user-select: text;
   }
-  /* Figures (timer, levels, durations) must not jitter */
+  /* Figures (timer, levels, durations) must not jitter: the same width for
+     every digit, in the system font like the rest. */
   .tnum {
     font-variant-numeric: tabular-nums;
-    @apply font-mono;
   }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { Label, Marker } from "@/lib/api"
 import {
   LABEL_COLOURS,
+  colourName,
   firstFreeColour,
   labelCounts,
   labelLook,
@@ -41,11 +42,21 @@ describe("labels", () => {
   it("has a look for every colour of the palette, each its own", () => {
     expect(LABEL_COLOURS).toEqual(["grey", "red", "amber", "green", "teal", "blue", "violet", "pink"])
     for (const c of LABEL_COLOURS) {
+      // The stored key "blue" is drawn orange: cobalt is the only blue.
+      const name = c === "blue" ? "orange" : c
       const look = labelLook(c)
-      expect(look.cssVar).toBe(`--label-${c}`)
-      expect(look.dot).toBe(`bg-label-${c}`)
-      expect(look.chip).toContain(`label-${c}`)
+      expect(look.cssVar).toBe(`--label-${name}`)
+      expect(look.dot).toBe(`bg-label-${name}`)
+      expect(look.chip).toContain(`label-${name}`)
+      expect(look.swatch).toBe(`bg-label-${name}`)
     }
+  })
+
+  it("keeps blue as the stored key but draws it, and names it, orange", () => {
+    expect(labelLook("blue").cssVar).toBe("--label-orange")
+    expect(colourName("blue")).toBe("Orange")
+    expect(colourName("teal")).toBe("Teal")
+    expect(colourName("grey")).toBe("Grey")
   })
 
   it("offers the first colour no label has, and grey once all are taken", () => {

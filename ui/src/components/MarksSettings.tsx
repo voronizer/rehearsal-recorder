@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils"
 import { dismiss, notify } from "@/lib/notices"
 import {
   LABEL_COLOURS,
+  colourName,
   firstFreeColour,
   labelLook,
   labelsChanged,
@@ -28,7 +29,6 @@ import { api, type Label, type LabelColour, type LabelsAnswer } from "@/lib/api"
 const SAID = "labels"
 
 const marksText = (n: number) => (n === 0 ? "no marks" : n === 1 ? "1 mark" : `${n} marks`)
-const colourName = (c: LabelColour) => c[0].toUpperCase() + c.slice(1)
 
 /**
  * Settings › Marks: the labels a mark can have, in the order the marker

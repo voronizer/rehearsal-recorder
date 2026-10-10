@@ -27,24 +27,30 @@ export const LABEL_COLOURS: readonly LabelColour[] = [
 
 // Written out colour by colour: Tailwind finds class names by reading the
 // source, and one put together at runtime ("bg-label-" + colour) would never
-// be built.
-const LOOK: Record<LabelColour, { dot: string; chip: string; swatch: string }> = {
-  grey: { dot: "bg-label-grey", chip: "border-label-grey/50 bg-label-grey/10", swatch: "bg-label-grey" },
-  red: { dot: "bg-label-red", chip: "border-label-red/50 bg-label-red/10", swatch: "bg-label-red" },
-  amber: { dot: "bg-label-amber", chip: "border-label-amber/50 bg-label-amber/10", swatch: "bg-label-amber" },
-  green: { dot: "bg-label-green", chip: "border-label-green/50 bg-label-green/10", swatch: "bg-label-green" },
-  teal: { dot: "bg-label-teal", chip: "border-label-teal/50 bg-label-teal/10", swatch: "bg-label-teal" },
-  blue: { dot: "bg-label-blue", chip: "border-label-blue/50 bg-label-blue/10", swatch: "bg-label-blue" },
-  violet: { dot: "bg-label-violet", chip: "border-label-violet/50 bg-label-violet/10", swatch: "bg-label-violet" },
-  pink: { dot: "bg-label-pink", chip: "border-label-pink/50 bg-label-pink/10", swatch: "bg-label-pink" },
+// be built. The stored key "blue" is drawn orange — cobalt is the app's only
+// blue (spec F3) — so a library written before the change needs no migration.
+const LOOK: Record<LabelColour, { cssVar: string; dot: string; chip: string; swatch: string }> = {
+  grey: { cssVar: "--label-grey", dot: "bg-label-grey", chip: "border-label-grey/50 bg-label-grey/10", swatch: "bg-label-grey" },
+  red: { cssVar: "--label-red", dot: "bg-label-red", chip: "border-label-red/50 bg-label-red/10", swatch: "bg-label-red" },
+  amber: { cssVar: "--label-amber", dot: "bg-label-amber", chip: "border-label-amber/50 bg-label-amber/10", swatch: "bg-label-amber" },
+  green: { cssVar: "--label-green", dot: "bg-label-green", chip: "border-label-green/50 bg-label-green/10", swatch: "bg-label-green" },
+  teal: { cssVar: "--label-teal", dot: "bg-label-teal", chip: "border-label-teal/50 bg-label-teal/10", swatch: "bg-label-teal" },
+  blue: { cssVar: "--label-orange", dot: "bg-label-orange", chip: "border-label-orange/50 bg-label-orange/10", swatch: "bg-label-orange" },
+  violet: { cssVar: "--label-violet", dot: "bg-label-violet", chip: "border-label-violet/50 bg-label-violet/10", swatch: "bg-label-violet" },
+  pink: { cssVar: "--label-pink", dot: "bg-label-pink", chip: "border-label-pink/50 bg-label-pink/10", swatch: "bg-label-pink" },
 }
 
 /** How a colour is drawn: the variable the waveform reads, and the classes
  *  for a dot, a chip and a swatch in the palette. */
 export function labelLook(colour: LabelColour) {
   // A colour this version does not know, from a newer one's library, is grey.
-  const known: LabelColour = colour in LOOK ? colour : "grey"
-  return { cssVar: `--label-${known}`, ...LOOK[known] }
+  return LOOK[colour in LOOK ? colour : "grey"]
+}
+
+/** A colour's name in Settings' picker: what it looks like, which for the
+ *  stored "blue" is orange. */
+export function colourName(colour: LabelColour): string {
+  return colour === "blue" ? "Orange" : colour[0].toUpperCase() + colour.slice(1)
 }
 
 // What a mark is drawn with in the moment before the labels have been read.

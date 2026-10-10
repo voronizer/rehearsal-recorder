@@ -18,7 +18,7 @@
   --page-app: #fafafa; /* the app's own light ground */
   --page-fg: #16181d;
   --page-muted: #6a707a;
-  --page-accent: oklch(0.55 0.15 255); /* the app's own primary, light theme */
+  --page-accent: var(--primary); /* the app's own accent, from its theme */
   --page-accent-fg: #ffffff;
   --page-rec: #e5484d; /* the red of the icon */
   --page-sans: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;

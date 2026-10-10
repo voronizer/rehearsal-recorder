@@ -120,6 +120,14 @@ export function Recording({
   // stands, and "Recording stopped" over a take that is recording is wrong.
   useEffect(() => dismiss(SAID), [])
 
+  // Nothing moves while a take is recording (spec F11): <html> says so for
+  // the stylesheet and for motionOff(), and stops saying so when this screen
+  // is gone.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-recording", "")
+    return () => document.documentElement.removeAttribute("data-recording")
+  }, [])
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       setElapsed((Date.now() - startedAt.current) / 1000)

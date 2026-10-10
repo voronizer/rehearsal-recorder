@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils"
 import type { Take } from "@/lib/api"
 import { formatDayIn, formatMMSS, goesLabel, takesLabel } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
+import { motionOff } from "@/lib/motion"
 import { hereFor, placed, type PlacedPlayback, type PlacedTake, type Rung } from "@/lib/songs"
 import { TakeRow } from "@/components/RehearsalOverview"
 
@@ -88,7 +89,8 @@ export function SongLadder({
             >
               <ChevronRight
                 className={cn(
-                  "size-3.5 text-muted-foreground transition-transform motion-reduce:transition-none",
+                  "size-3.5 text-muted-foreground",
+                  !motionOff() && "transition-transform",
                   isOpen && "rotate-90"
                 )}
               />
