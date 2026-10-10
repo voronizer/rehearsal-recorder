@@ -768,11 +768,12 @@ function midiActivity(read) {
 
 // What a take of these tracks leaves besides its audio: a .mid for each track
 // that takes notes and whose port was there, and the rest as missing, placed
-// by rules.lane_after over the band.
+// by rules.lane_after over the band, each with its place in it (rules.place_in).
 function notesOfTake(band, audio, saved) {
   const audioNames = audio.map(t => t.name);
   const noted = band.filter(takesNotes);
-  const where = (t) => ({name: t.name, port: portNameOf(t) || '', after: laneAfter(band, audioNames, t.name)});
+  const where = (t) => ({name: t.name, port: portNameOf(t) || '', after: laneAfter(band, audioNames, t.name),
+                         place: band.indexOf(t)});
   return {
     notes: noted.filter(t => saved.includes(t.name)).map(t => ({...where(t), file: `/rec/${t.name}.mid`})),
     notes_missing: noted.filter(t => !saved.includes(t.name)).map(where),

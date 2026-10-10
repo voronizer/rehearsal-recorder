@@ -30,11 +30,27 @@ const BAND = `
 `
 
 /** What stop_take answers for that band: a .mid for each track that took
- *  notes, each after the audio lane it follows. */
+ *  notes, each after the audio lane it follows, with its place in the band. */
 const NOTES = [
-  { name: "Drums", port: "TD-17", after: "Drums", file: "/rec/Drums.mid" },
-  { name: "Keys", port: "Launchkey Mini MK3", after: "Gtr", file: "/rec/Keys.mid" },
+  { name: "Drums", port: "TD-17", after: "Drums", place: 0, file: "/rec/Drums.mid" },
+  { name: "Keys", port: "Launchkey Mini MK3", after: "Gtr", place: 2, file: "/rec/Keys.mid" },
 ]
+
+/** Every plate and lane of the player, where it is. */
+async function layout(page: Page) {
+  return page
+    .locator("[data-plate], [data-lane], [data-notes-plate], [data-notes-lane]")
+    .evaluateAll((els) =>
+      els.map((e) => {
+        const r = e.getBoundingClientRect()
+        const what = ["data-plate", "data-lane", "data-notes-plate", "data-notes-lane"]
+          .filter((a) => e.hasAttribute(a))
+          .map((a) => `${a}=${e.getAttribute(a)}`)
+          .join(" ")
+        return `${what} ${r.x.toFixed(1)},${r.y.toFixed(1)} ${r.width.toFixed(1)}x${r.height.toFixed(1)}`
+      })
+    )
+}
 
 /** The first take of that band, stopped and up for review. */
 async function review(page: Page, before = "") {
@@ -159,6 +175,32 @@ test.describe("notes in the player", () => {
     expect(Math.abs(lane.y - (await box(keys)).y)).toBeLessThan(1)
   })
 
+  test("puts a missing and a saved MIDI lane after the same audio lane in band order", async ({
+    page,
+  }) => {
+    // Pads' port is not plugged in, Synth's is: both follow Gtr, and Pads
+    // stood first in the band.
+    await openApp(page, {
+      before: `
+        window.__SESSION_TRACKS__ = [
+          {name: 'Gtr', channel: 1, icon: 'guitar-electric', mode: 'audio'},
+          {name: 'Pads', channel: null, icon: 'keys', mode: 'midi', midi_port: {name: 'Pad box'}},
+          {name: 'Synth', channel: null, icon: 'keys', mode: 'midi', midi_port: {name: 'Synth port'}},
+          {name: 'Bass', channel: 2, icon: 'bass', mode: 'audio'},
+        ];
+        window.__BAND_ICONS__ = {Gtr: 'guitar-electric', Pads: 'keys', Synth: 'keys', Bass: 'bass'};
+        window.__MIDI_PORTS__ = ['Synth port'];`,
+    })
+    await startRehearsal(page)
+    await recordTake(page, 1)
+    await expect(notesPlate(page, "Pads")).toContainText("Not connected, no .mid saved")
+    await expect(notesPlate(page, "Synth")).toContainText("Saved as .mid, not played here")
+    const ys = []
+    for (const p of [plate(page, "Gtr"), notesPlate(page, "Pads"), notesPlate(page, "Synth"), plate(page, "Bass")])
+      ys.push((await box(p)).y)
+    expect([...ys].sort((x, y) => x - y)).toEqual(ys)
+  })
+
   test("says so when a track's port never appeared in the take", async ({ page }) => {
     await review(page, "window.__MIDI_GONE__ = ['Launchkey Mini MK3'];")
     await expect(notesLane(page, "Keys")).toContainText("No notes in this take")
@@ -176,6 +218,34 @@ test.describe("notes in the player", () => {
     // The drums' notes are there all the same.
     await expect(notesLane(page, "Drums")).not.toContainText("No notes")
     await expect(notesPlate(page, "Drums")).toContainText("Saved as .mid, not played here")
+  })
+
+  test("a Both track whose port never appeared keeps its sound, and its notes half says so", async ({
+    page,
+  }) => {
+    await review(page, "window.__MIDI_GONE__ = ['TD-17'];")
+    // The audio half is as it always is, its waveform drawn.
+    await expect(plate(page, "Drums").getByRole("button", { name: "Mute Drums" })).toBeVisible()
+    expect((await box(audioLane(page, "Drums"))).height).toBeGreaterThanOrEqual(91.5)
+    await expect
+      .poll(async () => (await drawnAlong(audioLane(page, "Drums"), 0.5)).length)
+      .toBeGreaterThan(0)
+    // The notes half is still the lower half of its card, and says why it
+    // is empty.
+    const midi = notesPlate(page, "Drums")
+    await expect(midi).toContainText("MIDI")
+    await expect(midi).toContainText("TD-17")
+    await expect(midi).toContainText("Not connected, no .mid saved")
+    await expect(notesLane(page, "Drums")).toContainText("No notes in this take")
+    expect(await midi.evaluate((e) => getComputedStyle(e).borderTopStyle)).toBe("dashed")
+    const a = await box(plate(page, "Drums"))
+    expect(Math.abs((await box(midi)).y - (a.y + a.height))).toBeLessThan(1)
+    const wave = await box(audioLane(page, "Drums"))
+    expect(Math.abs((await box(notesLane(page, "Drums"))).y - (wave.y + wave.height))).toBeLessThan(1)
+    expect((await calls(page, "take_notes"))[0].args[0]).toEqual([
+      { name: "Keys", file: "/rec/Keys.mid" },
+      { name: "Drums", file: null },
+    ])
   })
 
   test("a notes file that cannot be read says so in its lane, and the take still plays", async ({
@@ -222,6 +292,44 @@ test.describe("notes in the player", () => {
     await page.getByRole("button", { name: "Whole take" }).click()
     await page.waitForTimeout(300)
     expect(await callCount(page, "take_notes")).toBe(1)
+  })
+
+  test("nothing moves when the notes arrive", async ({ page }) => {
+    // take_notes is held back until the test lets it answer, as a slow disk
+    // would hold it.
+    await openApp(page, {
+      before: BAND,
+      after: `
+        const real = window.pywebview.api.take_notes;
+        let release;
+        const held = new Promise((r) => { release = r; });
+        window.__RELEASE_NOTES__ = () => release();
+        window.pywebview.api.take_notes = async (files) => {
+          const answer = await real(files);
+          await held;
+          window.__NOTES_LANDED__ = true;
+          return answer;
+        };`,
+    })
+    await startRehearsal(page)
+    await recordTake(page, 1)
+    await expect(plate(page, "Bass")).toBeVisible()
+    await expect.poll(() => callCount(page, "take_notes")).toBe(1)
+    await page.waitForTimeout(300)
+    const before = await layout(page)
+    // The notes' plates and lanes are there already, at their size, waiting:
+    // no notes drawn, and the keyboard's icon not known yet.
+    expect(before.filter((b) => b.startsWith("data-notes"))).toHaveLength(4)
+    expect(await page.evaluate(() => (window as { __NOTES_LANDED__?: boolean }).__NOTES_LANDED__)).toBeFalsy()
+    expect(await drawnAlong(notesLane(page, "Drums"), await rowMiddle(notesLane(page, "Drums"), 0))).toEqual([])
+    await expect(notesPlate(page, "Keys").locator("[data-icon]")).not.toHaveAttribute("data-icon", "keys")
+
+    await page.evaluate(() => (window as { __RELEASE_NOTES__?: () => void }).__RELEASE_NOTES__?.())
+    await expect(notesPlate(page, "Keys").locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
+    const crash = await rowMiddle(notesLane(page, "Drums"), 0)
+    await expect.poll(async () => (await drawnAlong(notesLane(page, "Drums"), crash)).length).toBe(1)
+    await page.waitForTimeout(300)
+    expect(await layout(page)).toEqual(before)
   })
 
   test("draws the notes along the view: zoom and the region go across them as across the audio", async ({
@@ -307,6 +415,33 @@ test.describe("notes in the player", () => {
       expect(runs.filter((r) => r.from > 0.55).every(grey)).toBe(true)
     }
     expect(played).toBeGreaterThan(0)
+  })
+
+  test("a note 0 long is still drawn, 2 px wide", async ({ page }) => {
+    // A key struck as the take's very last event has no length in the .mid.
+    await page.setViewportSize({ width: 1280, height: 1000 })
+    await openApp(page, {
+      before: BAND,
+      after: `
+        const real = window.pywebview.api.take_notes;
+        window.pywebview.api.take_notes = async (files) => (await real(files)).map((a) =>
+          a.name === 'Keys'
+            ? {name: 'Keys', icon: 'keys', drums: false, low: 60, high: 71, notes: [[${TAKE_SECONDS / 2}, 0, 64, 1]]}
+            : a);`,
+    })
+    await startRehearsal(page)
+    await recordTake(page, 1)
+    const keys = notesLane(page, "Keys")
+    await expect(keys).toBeVisible()
+    // The middle of E4's row, an octave of rows between 3 px at either end.
+    const h = (await box(keys.locator("canvas"))).height
+    const e4 = (3 + (71 - 64 + 0.45) * ((h - 6) / 12)) / h
+    await expect.poll(async () => (await drawnAlong(keys, e4)).length).toBe(1)
+    const [note] = await drawnAlong(keys, e4)
+    const width = await keys.locator("canvas").evaluate((c: HTMLCanvasElement) => c.width)
+    // Pixels from the first drawn to the last, both counted.
+    expect(Math.round((note.to - note.from) * width) + 1).toBeGreaterThanOrEqual(2)
+    expect(Math.abs(note.from - 0.5)).toBeLessThan(0.005)
   })
 
   test("audio lanes keep their 92 px, and a notes lane is as tall as its plate", async ({

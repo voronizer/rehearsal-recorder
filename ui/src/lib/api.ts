@@ -82,20 +82,25 @@ export type TrackFile = {
  *  the name of the port they came from. `after` is the audio track whose lane
  *  this one follows in the player (a Both track's own name), or null to go
  *  first; Python works it out from the band's order (rules.lane_after) and
- *  lib/midi.ts laneOrder lays the lanes out by it. */
+ *  lib/midi.ts laneOrder lays the lanes out by it. `place` is the track's
+ *  index in the rehearsal's band (rules.place_in), which orders two lanes
+ *  that follow the same one; none for a track the band does not have. */
 export type NotesFile = {
   name: string
   file: string
   port: string
   after: string | null
+  place?: number
 }
 
 /** A track that takes notes and has no .mid in this take: its port was not
- *  plugged in the whole take. Placed by `after` as a NotesFile is. */
+ *  plugged in the whole take. Placed by `after` and `place` as a NotesFile
+ *  is. */
 export type MissingNotes = {
   name: string
   port: string
   after: string | null
+  place?: number
 }
 
 /** A take already saved to disk. */

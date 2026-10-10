@@ -127,3 +127,14 @@ def lane_after(band, audio_names, name):
         if earlier in audio_names:
             return earlier
     return None
+
+
+def place_in(band, name):
+    """
+    {"place": <index>} for a track of the band, the 0-based index of `name`
+    in it, and {} for a name the band does not have: spread into a notes
+    lane, it tells the player the band's order of two lanes that follow the
+    same audio lane, which `after` alone does not.
+    """
+    names = [member["name"] for member in band]
+    return {"place": names.index(name)} if name in names else {}

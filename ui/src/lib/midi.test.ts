@@ -269,6 +269,62 @@ describe("laneOrder: the lanes of a take, top to bottom", () => {
     ).toEqual(["audio:Gtr", "audio:Drums", "notes:Drums", "notes:Keys"])
   })
 
+  it("puts a missing and a saved lane after the same audio lane in band order, by their places", () => {
+    // Gtr, Pads (MIDI, its port gone), Synth (MIDI, saved), Bass: both
+    // follow Gtr, and only their places say Pads stood first.
+    const pads = { ...gone("Pads", "Gtr", "Pad box"), place: 1 }
+    const synth = { ...notes("Synth", "Gtr", "Synth port"), place: 2 }
+    expect(spell(laneOrder(audio("Gtr", "Bass"), [synth], [pads]))).toEqual([
+      "audio:Gtr",
+      "missing:Pads",
+      "notes:Synth",
+      "audio:Bass",
+    ])
+  })
+
+  it("keeps the band's order in every take, whichever port was there", () => {
+    const savedPads = { ...notes("Pads", "Gtr", "Pad box"), place: 1 }
+    const goneSynth = { ...gone("Synth", "Gtr", "Synth port"), place: 2 }
+    expect(spell(laneOrder(audio("Gtr", "Bass"), [savedPads], [goneSynth]))).toEqual([
+      "audio:Gtr",
+      "notes:Pads",
+      "missing:Synth",
+      "audio:Bass",
+    ])
+    // And the same at the top, before every audio lane.
+    const top = laneOrder(
+      audio("Gtr"),
+      [{ ...notes("Synth", null), place: 1 }],
+      [{ ...gone("Pads", null), place: 0 }]
+    )
+    expect(spell(top)).toEqual(["missing:Pads", "notes:Synth", "audio:Gtr"])
+  })
+
+  it("keeps a Both track's own lane first by its place too", () => {
+    expect(
+      spell(
+        laneOrder(
+          audio("Gtr", "Drums"),
+          [{ ...notes("Keys", "Drums", "Launchkey"), place: 2 }],
+          [{ ...gone("Drums", "Drums", "TD-17"), place: 1 }]
+        )
+      )
+    ).toEqual(["audio:Gtr", "audio:Drums", "missing:Drums", "notes:Keys"])
+  })
+
+  it("keeps the order it was given where a lane has no place", () => {
+    // A track the band does not have has no place: as before, the saved first.
+    expect(
+      spell(
+        laneOrder(
+          audio("Gtr"),
+          [notes("Synth", "Gtr")],
+          [{ ...gone("Pads", "Gtr"), place: 1 }]
+        )
+      )
+    ).toEqual(["audio:Gtr", "notes:Synth", "missing:Pads"])
+  })
+
   it("lays out whatever the audio lanes are, and hands each back as it was given", () => {
     // The player lays its lanes out from what take_media answered, which has
     // a track's name and its waveform, and no file.

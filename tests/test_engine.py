@@ -8103,9 +8103,12 @@ def main():
         ok("Stop names the audio tracks alone",
            stop["ok"] and [t["name"] for t in stop["tracks"]] == ["Gtr", "Drums"])
         ok("and the notes, each with its port and the audio lane it follows",
-           stop["notes"] == [{"name": "Drums", "file": str(temp / "Drums.mid"), "port": "TD-17", "after": "Drums"}])
+           stop["notes"] == [{"name": "Drums", "file": str(temp / "Drums.mid"), "port": "TD-17",
+                              "after": "Drums", "place": 1}])
         ok("and the track whose port was not there, which has no file (F5)",
-           stop["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Drums"}])
+           stop["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Drums", "place": 2}])
+        ok("each lane carries its track's place in the band, for the player to keep them in band order",
+           [n.get("place") for n in stop["notes"]] == [1] and [n.get("place") for n in stop["notes_missing"]] == [2])
         ok("the draft holds the WAVs and the .mid and nothing else: take.json and take.clock are gone with the .midraw",
            names67(temp) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
         meta, data = heard67(temp / "Drums.mid")
@@ -8123,9 +8126,12 @@ def main():
            kept["ok"] and names67(there) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
         ok("the drafts folder is gone", not temp.exists() and not (folder / "_drafts").exists())
         ok("the kept take lists the notes lane after its audio, and the track that has none",
-           take["notes"] == [{"name": "Drums", "file": str(there / "Drums.mid"), "port": "TD-17", "after": "Drums"}]
-           and take["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Drums"}]
+           take["notes"] == [{"name": "Drums", "file": str(there / "Drums.mid"), "port": "TD-17",
+                              "after": "Drums", "place": 1}]
+           and take["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Drums", "place": 2}]
            and [t["name"] for t in take["tracks"]] == ["Gtr", "Drums"])
+        ok("the kept take's lanes carry their tracks' places in the band too",
+           [n.get("place") for n in take["notes"]] == [1] and [n.get("place") for n in take["notes_missing"]] == [2])
         ok("and the library gives it back the same", a.get_rehearsal(str(folder))["takes"][0]["notes"] == take["notes"])
 
         # An older interface asks for the take without its notes: the audio is saved, and Keep finds
@@ -8141,7 +8147,8 @@ def main():
            and all(Path(t["file"]).exists() for t in take["tracks"]))
         ok("and keeps the .mid Stop made beside the WAVs, listed with its port and lane, Keys alone missing",
            names67(there2) == ["Drums.mid", "Drums.wav", "Gtr.wav"]
-           and take["notes"] == [{"name": "Drums", "file": str(there2 / "Drums.mid"), "port": "TD-17", "after": "Drums"}]
+           and take["notes"] == [{"name": "Drums", "file": str(there2 / "Drums.mid"), "port": "TD-17",
+                                  "after": "Drums", "place": 1}]
            and [n["name"] for n in take["notes_missing"]] == ["Keys"])
 
         # Discard throws the whole draft away, the notes with it.
@@ -8177,6 +8184,22 @@ def main():
         stop = a.stop_take()
         ok("a take whose Drums audio produced no file does not anchor Drums' notes lane to it",
            [n["after"] for n in stop["notes"]] == ["Gtr"] and [n["after"] for n in stop["notes_missing"]] == ["Gtr"])
+
+        # Two tracks of notes alone after one audio lane, the first one's port
+        # not there: each carries its place, which is all that says Pads
+        # stood before Synth. A .mid of a track the band does not have has none.
+        lanes, gone = type(a)._note_lanes(
+            [{"name": "Gtr", "channel": 1},
+             {"name": "Pads", "channel": None, "mode": "midi", "midi_port": {"name": "Pad box"}},
+             {"name": "Synth", "channel": None, "mode": "midi", "midi_port": {"name": "Synth port"}},
+             {"name": "Bass", "channel": 2}],
+            [{"name": "Gtr", "file": "Gtr.wav"}, {"name": "Bass", "file": "Bass.wav"}],
+            [{"name": "Synth", "file": "Synth.mid", "port": "Synth port"},
+             {"name": "Stray", "file": "Stray.mid", "port": "Elsewhere"}])
+        ok("a saved and a missing lane after the same audio lane each carry their place in the band",
+           [(n["name"], n["after"], n.get("place")) for n in lanes] == [("Synth", "Gtr", 2), ("Stray", None, None)]
+           and gone == [{"name": "Pads", "port": "Pad box", "after": "Gtr", "place": 1}])
+        ok("and a .mid whose track is not in the band has no place at all", "place" not in lanes[1])
 
         # A laptop that slept ends the take where it slept: the notes are as long as the audio.
         a.start_take()
@@ -8502,8 +8525,9 @@ def main():
            res["ok"] and [t["name"] for t in take["tracks"]] == ["Drums", "Gtr"]
            and names67(there) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
         ok("the notes are listed with their port and lane, and the track with no notes is missing",
-           take["notes"] == [{"name": "Drums", "file": str(there / "Drums.mid"), "port": "TD-17", "after": "Drums"}]
-           and take["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Drums"}])
+           take["notes"] == [{"name": "Drums", "file": str(there / "Drums.mid"), "port": "TD-17",
+                              "after": "Drums", "place": 1}]
+           and take["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Drums", "place": 2}])
         ok("the note played is in the .mid", on67 in heard67(there / "Drums.mid")[1])
         ok("nothing of the draft is left to be lost or to be found again",
            not temp.exists() and not (folder / "_drafts").exists() and b.list_drafts() == []

@@ -112,11 +112,14 @@ export type Lane<T extends { name: string } = TrackFile> =
  * A Both track's own lane, saved or missing, comes first under its sound:
  * every other track that follows that lane follows it because the Both track
  * was the last before it with sound, so it stood after the Both track in the
- * band. Other lanes that follow the same audio lane (or all go first) stay in
- * the order they were given, the saved ones before the missing ones: nothing
- * here says how a saved track and a missing one stood in the band. One that
- * follows an audio lane this take does not have goes first, as `null` does,
- * which is where lane_after ends when nothing before it has sound.
+ * band. Other lanes that follow the same audio lane (or all go first) go in
+ * band order by their `place`, so a missing lane and a saved one come out as
+ * the band has them, and the same in every take whichever port was there.
+ * Where a lane of them has no place (its track is not in the band), they
+ * stay in the order they were given, the saved ones before the missing ones.
+ * One that follows an audio lane this take does not have goes first, as
+ * `null` does, which is where lane_after ends when nothing before it has
+ * sound.
  */
 export function laneOrder<T extends { name: string } = TrackFile>(
   tracks: T[],
@@ -135,6 +138,19 @@ export function laneOrder<T extends { name: string } = TrackFile>(
   }
   for (const n of notes) put(n.after, { kind: "notes", name: n.name, notes: n })
   for (const m of missing) put(m.after, { kind: "missing", name: m.name, missing: m })
+
+  // The own lane before any place, as above; the others by theirs, NaN for
+  // a lane that has none.
+  const placeOf = (lane: Lane<T>, key: string | null) => {
+    if (lane.name === key) return -1
+    const place =
+      lane.kind === "notes" ? lane.notes.place : lane.kind === "missing" ? lane.missing.place : undefined
+    return typeof place === "number" ? place : NaN
+  }
+  for (const [key, group] of following) {
+    if (group.every((lane) => !Number.isNaN(placeOf(lane, key))))
+      group.sort((a, b) => placeOf(a, key) - placeOf(b, key))
+  }
 
   const lanes: Lane<T>[] = [...(following.get(null) ?? [])]
   for (const track of tracks) {

@@ -83,6 +83,7 @@ from rehearsal_recorder.midi.rig import MidiRig
 from rehearsal_recorder.midi.rules import (
     lane_after,
     notes_problem,
+    place_in,
     port_of,
     records_audio,
     records_notes,
@@ -2168,13 +2169,18 @@ class Api:
         take (a port that was not there, or a .mid the disk refused). The lane
         is worked out over the audio files the take really has: a track whose
         audio produced none is not followed.
+
+        Each also carries "place", its track's index in the band: two lanes
+        that follow the same audio lane, one saved and one missing, are put
+        in band order by it, and nothing else says which stood first.
         """
         heard = {t["name"] for t in audio}
         written = {n["name"] for n in notes}
-        lanes = [{**n, "after": lane_after(band, heard, n["name"])} for n in notes]
+        lanes = [{**n, "after": lane_after(band, heard, n["name"]),
+                  **place_in(band, n["name"])} for n in notes]
         missing = [
             {"name": t["name"], "port": (port_of(t) or {}).get("name"),
-             "after": lane_after(band, heard, t["name"])}
+             "after": lane_after(band, heard, t["name"]), **place_in(band, t["name"])}
             for t in band if records_notes(t) and t["name"] not in written
         ]
         return lanes, missing

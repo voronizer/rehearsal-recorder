@@ -192,7 +192,9 @@ class Library:
         it follows in the player (rules.lane_after, over the rehearsal's
         tracks in band order and the lanes this take has). "notes_missing" is
         the tracks that record notes and have no .mid in this take: a port
-        that was not there when it was recorded."""
+        that was not there when it was recorded. Both carry "place", the
+        track's index in the rehearsal's band (rules.place_in), which puts
+        two lanes after the same audio lane in band order."""
         title = take.song.title if take.song is not None else None
         band = [{"name": t.name, "mode": t.mode, "midi_port": t.midi_port}
                 for t in take.rehearsal.tracks]
@@ -213,12 +215,12 @@ class Library:
             "notes": [
                 {"name": f.name, "file": str(folder / Path(f.file)),
                  "port": ports.get(f.name),
-                 "after": rules.lane_after(band, heard, f.name)}
+                 "after": rules.lane_after(band, heard, f.name), **rules.place_in(band, f.name)}
                 for f in notes
             ],
             "notes_missing": [
                 {"name": t["name"], "port": t["midi_port"],
-                 "after": rules.lane_after(band, heard, t["name"])}
+                 "after": rules.lane_after(band, heard, t["name"]), **rules.place_in(band, t["name"])}
                 for t in band
                 if rules.records_notes(t) and t["name"] not in written
             ],

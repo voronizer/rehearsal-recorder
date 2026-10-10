@@ -1285,10 +1285,13 @@ def main():
        and all(t["file"].endswith(".wav") for t in take16["tracks"]))
     ok("its notes files are a list of their own, each with its port and the lane it follows",
        take16["notes"] == [{"name": "Drums", "file": str(here16 / "Drums.mid"),
-                            "port": "TD-17", "after": "Drums"}])
+                            "port": "TD-17", "after": "Drums", "place": 0}])
     ok("a notes track with no .mid in the take is missing, and follows the lane before it",
        take16["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3",
-                                    "after": "Bass"}])
+                                    "after": "Bass", "place": 2}])
+    ok("each notes file and each missing track carries its track's place in the band",
+       [n.get("place") for n in take16["notes"]] == [0]
+       and [m.get("place") for m in take16["notes_missing"]] == [2])
     ok("the rows are kept in one sequence, audio then notes",
        files16(1) == [("audio", "Drums", 0), ("audio", "Bass", 1), ("midi", "Drums", 2)])
     ok("reading the take again, or the whole rehearsal, says the same",
@@ -1301,15 +1304,19 @@ def main():
         {"name": "Bass", "file": str(night16 / "02" / "Bass.wav")}]})
     ok("a take with no notes lists none, and every notes track as missing",
        quiet16["notes"] == [] and quiet16["notes_missing"] == [
-           {"name": "Drums", "port": "TD-17", "after": None},
-           {"name": "Keys", "port": "Launchkey Mini MK3", "after": "Bass"}])
+           {"name": "Drums", "port": "TD-17", "after": None, "place": 0},
+           {"name": "Keys", "port": "Launchkey Mini MK3", "after": "Bass", "place": 2}])
     lonely16 = lib.add_take(night16, {"take_number": 3, "name": "Doroga", "tracks": [],
                                       "notes": [{"name": "Keys", "file": str(night16 / "03" / "Keys.mid")}]})
     ok("a take with notes and no audio puts the lane first when no audio lane is before it",
        lonely16["tracks"] == [] and lonely16["notes"] == [
            {"name": "Keys", "file": str(night16 / "03" / "Keys.mid"),
-            "port": "Launchkey Mini MK3", "after": None}]
+            "port": "Launchkey Mini MK3", "after": None, "place": 2}]
        and [m["name"] for m in lonely16["notes_missing"]] == ["Drums"])
+    ok("a missing track keeps its place whatever came before it, and a lane that goes first too",
+       [m.get("place") for m in quiet16["notes_missing"]] == [0, 2]
+       and [n.get("place") for n in lonely16["notes"]] == [2]
+       and [m.get("place") for m in lonely16["notes_missing"]] == [0])
     plain16 = lib.add_take(night16, {"take_number": 4, "name": "Sonca", "tracks": [
         {"name": "Bass", "file": str(night16 / "04" / "Bass.wav")}]})
     ok("a take added the old way, with no notes key, is audio and nothing else",
@@ -1332,7 +1339,7 @@ def main():
         {"name": "Drums", "file": str(moved16 / "Drums.mid")}])
     ok("new paths for the notes move only the notes",
        after_notes16["notes"] == [{"name": "Drums", "file": str(moved16 / "Drums.mid"),
-                                   "port": "TD-17", "after": "Drums"}]
+                                   "port": "TD-17", "after": "Drums", "place": 0}]
        and after_notes16["tracks"] == after_audio16["tracks"])
     ok("and the rows are still one sequence",
        files16(1) == [("audio", "Drums", 0), ("audio", "Bass", 1), ("midi", "Drums", 2)])
@@ -1347,7 +1354,7 @@ def main():
     ok("an empty list of audio takes the audio away and leaves the notes, now with no lane before",
        no_audio16["tracks"] == []
        and no_audio16["notes"] == [{"name": "Drums", "file": str(moved16 / "Drums.mid"),
-                                    "port": "TD-17", "after": None}]
+                                    "port": "TD-17", "after": None, "place": 0}]
        and files16(1) == [("midi", "Drums", 0)])
     lib.update_take(night16, 1, tracks=to_wav16)
     ok("and the audio put back goes before the notes again",
@@ -1373,11 +1380,14 @@ def main():
            {"name": "Keys", "channel": None, "mode": "midi", "midi_port": "Launchkey Mini MK3"}])
     ok("its takes are audio, with the notes track missing from one that has none",
        imported16["takes"][0]["notes"] == [] and imported16["takes"][0]["notes_missing"]
-       == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Gtr"}])
+       == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Gtr", "place": 1}])
+    ok("an imported rehearsal's lanes carry their place in its band",
+       [m.get("place") for m in imported16["takes"][0]["notes_missing"]] == [1]
+       and [n.get("place") for n in imported16["takes"][1]["notes"]] == [1])
     ok("and the notes of one that has them kept apart",
        [t["name"] for t in imported16["takes"][1]["tracks"]] == ["Gtr"]
        and imported16["takes"][1]["notes"] == [{"name": "Keys", "file": str(imp16 / "02" / "Keys.mid"),
-                                                "port": "Launchkey Mini MK3", "after": "Gtr"}]
+                                                "port": "Launchkey Mini MK3", "after": "Gtr", "place": 1}]
        and imported16["takes"][1]["notes_missing"] == [])
 
     print("  what goes with a take or a rehearsal")
