@@ -18,6 +18,12 @@ where they are, so an edit under `src/` takes effect on the next run with no
 reinstall. It reads its dependency list from `requirements.txt` through
 `pyproject.toml`, so there is still only one list.
 
+The activation lasts as long as the terminal does. In every new one, run
+`source venv/bin/activate` again before any `python3` below. Without it
+`python3` is the system's, which has none of this installed: it says `No
+module named rehearsal_recorder`, or, run from inside `src/`, `No module
+named 'webview'`.
+
 The browser the interface's tests run in, once:
 
 ```bash
@@ -57,6 +63,7 @@ Two terminals.
 cd ui && npm run dev
 
 # terminal 2 — Python, in development mode
+source venv/bin/activate          # Windows: venv\Scripts\activate
 python3 -m rehearsal_recorder --dev
 ```
 
