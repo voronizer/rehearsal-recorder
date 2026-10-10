@@ -26,7 +26,7 @@ import { FooterRow } from "@/components/FooterRow"
 import { IconPicker } from "@/components/IconPicker"
 import { LastTime } from "@/components/LastTime"
 import { NameField } from "@/components/NameField"
-import { ModeSwitch } from "@/components/midi/ModeSwitch"
+import { END_COLUMN, ModeSwitch } from "@/components/midi/ModeSwitch"
 import { NotesCheck } from "@/components/midi/NotesCheck"
 import { PortPicker } from "@/components/midi/PortPicker"
 import { NewDot } from "@/components/NewDot"
@@ -60,8 +60,8 @@ import {
 const MONITOR_POLL_MS = 80
 // Whether the card is still sending — every couple of seconds, not a hot path.
 const MONITOR_HEALTH_MS = 2000
-/** How often the MIDI ports are read while the screen is up: a port plugged
- *  in or pulled out shows on the cards by itself (spec P4). */
+/** How often the MIDI ports are read while a track takes notes: a port
+ *  plugged in or pulled out shows on the cards by itself (spec P4). */
 const MIDI_PORTS_POLL_MS = 1000
 
 /** What a track's band entry keeps across interfaces: what is on screen when
@@ -70,6 +70,25 @@ type BandMember = Pick<Track, "name" | "stereo" | "icon" | "mode" | "midi_port">
 
 /** The name of the port a track keeps, or null while none is picked. */
 const portName = (t: Track) => (t.midi_port?.name?.trim() ? t.midi_port.name : null)
+
+/** The longest of these tracks' names, or null when there are none. */
+const longestName = (ts: Track[]) =>
+  ts.reduce<string | null>((a, t) => (a === null || t.name.length > a.length ? t.name : a), null)
+
+/** One instrument plugged in twice, said beside a track's port (P8). */
+function EchoNote({ name, echo, className }: { name: string; echo: string; className?: string }) {
+  return (
+    <p
+      className={cn(
+        "col-start-1 row-start-1 flex items-start gap-1.5 text-[11px] leading-3.5",
+        className
+      )}
+    >
+      <TriangleAlert className="size-3.5 shrink-0 text-warn" />
+      {name} gets the same notes as {echo}. Is it one instrument plugged in twice?
+    </p>
+  )
+}
 
 export function Setup({
   onStarted,
@@ -113,11 +132,14 @@ export function Setup({
   const [seen, setSeen] = useState<Record<string, boolean>>({})
   const checkingRef = useRef(false)
   // What the check hears from each track's port (P5, P8), where its bar
-  // stands, and the port each track had when the check began: what the check
-  // says of a track is about that port, not one picked since.
+  // stands, and what each track recorded and from which port when the check
+  // began: the ports the check opened. What the check says of a track is
+  // about that port, never one picked since.
   const [heard, setHeard] = useState<MidiActivity>({})
   const [notesShown, setNotesShown] = useState<Record<string, number>>({})
-  const [checkedPorts, setCheckedPorts] = useState<Record<string, string | null>>({})
+  const [checkedPorts, setCheckedPorts] = useState<
+    Record<string, { mode: RecordMode; port: string | null }>
+  >({})
 
   // The MIDI ports the system lists; null until they have first been read.
   const [midiPorts, setMidiPorts] = useState<MidiPorts | null>(null)
@@ -192,9 +214,13 @@ export function Setup({
       .catch((e) => console.error("Could not read last time:", e))
   }, [])
 
-  // The ports, read in a chain rather than on an interval, so a slow answer
-  // does not pile requests on top of each other.
+  // The ports, read while any track takes notes: at once when the first is
+  // set to Both or MIDI, so its picker is ready, then every second. A band
+  // with no MIDI never asks. In a chain rather than on an interval, so a slow
+  // answer does not pile requests on top of each other.
+  const anyNotes = tracks.some(recordsNotes)
   useEffect(() => {
+    if (!anyNotes) return
     let on = true
     let timer = 0
     const read = async () => {
@@ -211,7 +237,7 @@ export function Setup({
       on = false
       window.clearTimeout(timer)
     }
-  }, [])
+  }, [anyNotes])
 
   useEffect(() => {
     ;(async () => {
@@ -278,12 +304,20 @@ export function Setup({
     deviceIndex !== null &&
     !starting
 
-  /** What the check last heard from a track's port: only the port it began
-   *  with, so a port picked since is not said to be heard. */
-  const heardFrom = (t: Track) =>
-    checking && t.name in checkedPorts && checkedPorts[t.name] === portName(t)
-      ? heard[t.name]
-      : undefined
+  /**
+   * Whether the check opened this track's port: the track records as it did
+   * when the check began, from the same port. Only then does the check say
+   * anything of it; a port picked since, which nothing listens to, says
+   * nothing until the next check (it would say "no notes" while notes come).
+   */
+  const checkOpened = (t: Track) => {
+    const began = checking ? checkedPorts[t.name] : undefined
+    return (
+      !!began && began.port !== null && began.mode === modeOf(t) && began.port === portName(t)
+    )
+  }
+  /** What the check last heard from a track's port, when it opened it. */
+  const heardFrom = (t: Track) => (checkOpened(t) ? heard[t.name] : undefined)
 
   /**
    * How a track's port stands: null for a track that takes no notes, "none"
@@ -360,10 +394,13 @@ export function Setup({
           }))
         )
       )
-      // Looking again reads the MIDI ports again too (P4).
-      void pollPython("list_midi_ports")
-        .then(setMidiPorts)
-        .catch(() => {})
+      // Looking again reads the MIDI ports again too (P4), when a track
+      // takes notes.
+      if (anyNotes) {
+        void pollPython("list_midi_ports")
+          .then(setMidiPorts)
+          .catch(() => {})
+      }
     } finally {
       setRescanning(false)
     }
@@ -406,7 +443,9 @@ export function Setup({
     setHeard({})
     setNotesShown({})
     const noted = tracks.filter(recordsNotes)
-    setCheckedPorts(Object.fromEntries(noted.map((t) => [t.name, portName(t)])))
+    setCheckedPorts(
+      Object.fromEntries(noted.map((t) => [t.name, { mode: modeOf(t), port: portName(t) }]))
+    )
     setChecking(true)
     checkingRef.current = true
 
@@ -510,6 +549,9 @@ export function Setup({
     )
     setStarting(false)
     if (!res.ok) {
+      // No rehearsal took the ports the check left open: they go, or one
+      // another app could use stays held with nothing listening to it.
+      await stopMonitorQuietly()
       setError(res.error ?? "Could not start the rehearsal")
       return
     }
@@ -764,32 +806,48 @@ export function Setup({
               </p>
             )}
 
-            {notesSay && (
-              <p
-                role="status"
-                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
-              >
-                {notesSay}
-              </p>
-            )}
+            {/* The notes' own notes, in a place one note tall kept while any
+                track takes notes, so one that comes by itself (a port pulled
+                out, another app taking it) moves no card. It grows only
+                while two are up at once. A band with no MIDI has no place. */}
+            {anyNotes && (
+              <div data-notes-strip className="grid">
+                <p
+                  aria-hidden
+                  className="invisible col-start-1 row-start-1 border px-3 py-2 text-xs"
+                >
+                  &nbsp;
+                </p>
+                <div className="col-start-1 row-start-1 flex flex-col gap-3">
+                  {notesSay && (
+                    <p
+                      role="status"
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
+                    >
+                      {notesSay}
+                    </p>
+                  )}
 
-            {/* A port picked and not to be had stops nothing: the track takes
-                its notes from the moment it is (D7, P5). */}
-            {portsAway.length > 0 && (
-              <p
-                role="status"
-                className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
-              >
-                {portsAway.map(({ track, standing }, k) => (
-                  <span key={k} className="block">
-                    {standing === "in_use"
-                      ? `“${portName(track)}” is in use by another app.`
-                      : `“${portName(track)}” is not connected. ${
-                          track.name.trim() || "An unnamed track"
-                        } records its notes from the moment it is plugged in.`}
-                  </span>
-                ))}
-              </p>
+                  {/* A port picked and not to be had stops nothing: the track
+                      takes its notes from the moment it is (D7, P5). */}
+                  {portsAway.length > 0 && (
+                    <p
+                      role="status"
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
+                    >
+                      {portsAway.map(({ track, standing }, k) => (
+                        <span key={k} className="block">
+                          {standing === "in_use"
+                            ? `“${portName(track)}” is in use by another app.`
+                            : `“${portName(track)}” is not connected. ${
+                                track.name.trim() || "An unnamed track"
+                              } records its notes from the moment it is plugged in.`}
+                        </span>
+                      ))}
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
 
             <div className="flex flex-col gap-2">
@@ -797,6 +855,13 @@ export function Setup({
                 const standing = portStanding(track)
                 const away = standing === "missing" || standing === "in_use"
                 const ear = heardFrom(track)
+                // What P8 says of this track; and the longest it could say,
+                // while another track takes notes too, to keep its place.
+                const echo = ear?.echo ?? null
+                const echoRoom = recordsNotes(track)
+                  ? longestName(tracks.filter((o, k) => k !== i && recordsNotes(o)))
+                  : null
+                const echoWith = echo ?? echoRoom
                 const listed = track.midi_port && midiPorts
                   ? findPort(track.midi_port, midiPorts.ports).port
                   : null
@@ -908,10 +973,13 @@ export function Setup({
                           Stereo
                         </Button>
 
-                        <div data-check-slot="signal" className="ml-auto flex w-40 shrink-0">
+                        <div
+                          data-check-slot="signal"
+                          className={cn("ml-auto flex shrink-0", END_COLUMN)}
+                        >
                           <div
                             className={cn(
-                              "flex w-40 items-center gap-2",
+                              "flex flex-1 items-center gap-2",
                               !checking && "invisible"
                             )}
                           >
@@ -965,32 +1033,41 @@ export function Setup({
                           onChange={(port) => setTrack(i, { midi_port: port })}
                         />
                         {/* One instrument plugged in twice: said, and nothing
-                            stopped (P8). Beside the port, so the card keeps
-                            its height. */}
-                        <p
-                          className={cn(
-                            "flex min-w-0 flex-1 items-start gap-1.5 text-[11px] leading-3.5",
-                            ear?.echo && "min-w-40"
-                          )}
+                            stopped (P8). Beside the port, in a place kept
+                            while another track takes notes too: the longest
+                            it could say lies there unseen, so the card is as
+                            tall, and the port as wide, before it is said as
+                            after. */}
+                        <div
+                          className={cn("grid min-w-0 flex-1", echoWith !== null && "min-w-40")}
                         >
-                          {ear?.echo && (
-                            <>
-                              <TriangleAlert className="size-3.5 shrink-0 text-warn" />
-                              {track.name} gets the same notes as {ear.echo}. Is it one
-                              instrument plugged in twice?
-                            </>
+                          {echoWith !== null && (
+                            <EchoNote
+                              name={track.name}
+                              echo={echoWith}
+                              className={cn(!echo && "invisible")}
+                            />
                           )}
-                        </p>
+                          {echo && echoRoom !== null && echoRoom !== echo && (
+                            <EchoNote
+                              name={track.name}
+                              echo={echoRoom}
+                              className="invisible"
+                            />
+                          )}
+                        </div>
                         <div
                           data-check-slot="notes"
-                          className="ml-auto grid w-40 shrink-0 items-center"
+                          className={cn("ml-auto grid shrink-0 items-center", END_COLUMN)}
                         >
+                          {/* Only for a port the check opened: one picked
+                              since says nothing until the next check. */}
                           <NotesCheck
                             seen={(ear?.notes ?? 0) > 0 || (listed?.notes ?? 0) > 0}
                             vel={ear ? (notesShown[track.name] ?? 0) : 0}
                             className={cn(
                               "col-start-1 row-start-1",
-                              (!checking || away) && "invisible"
+                              (!checkOpened(track) || away) && "invisible"
                             )}
                           />
                           <span

@@ -3,8 +3,9 @@ import { cn } from "@/lib/utils"
 /**
  * A name that goes onto a second line when it is longer than its place is
  * wide, rather than losing its end (spec D5): a track's on its setup card.
- * One line all the same: Enter finishes it, and a line break pasted into it
- * becomes a space.
+ * One line all the same: Enter does what it did in the one-line field this
+ * replaced, nothing (focus stays, so a Space after it is typed, and does not
+ * start the rehearsal), and a line break pasted into it becomes a space.
  *
  * The field takes its height from a copy of its text laid out the same way
  * beside it, unseen, so the browser grows it as it wraps: nothing is measured
@@ -40,10 +41,7 @@ export function NameField({
         spellCheck={false}
         onChange={(e) => onChange(e.target.value.replace(/\s*[\r\n]+\s*/g, " "))}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault()
-            e.currentTarget.blur()
-          }
+          if (e.key === "Enter") e.preventDefault()
         }}
         className={cn(
           "col-start-1 row-start-1 block size-full min-w-0 resize-none overflow-hidden border-0 bg-transparent outline-none",

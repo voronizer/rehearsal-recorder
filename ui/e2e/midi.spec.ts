@@ -303,9 +303,55 @@ test.describe("setup", () => {
       await page.getByRole("button", { name: "Check signal" }).click()
       const said = "Keys gets the same notes as Synth. Is it one instrument plugged in twice?"
       await expect(card(page, 2).getByText(said)).toBeVisible({ timeout: 3000 })
-      await expect(card(page, 1).getByText("gets the same notes")).toHaveCount(0)
+      // Kept unseen in its place on the other card, which it is not said of.
+      await expect(card(page, 1).getByText("gets the same notes")).toBeHidden()
       // It warns and stops nothing.
       await expect(startButton(page)).toBeEnabled()
+    })
+
+    test("the question leaves the card as it was, long ports at 960 px too (P8)", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 960, height: 900 })
+      const ports = [
+        "Launchkey Mini MK3 MIDI Port (DAW In) on the second USB hub",
+        "TD-17 with the long name of the second port here",
+      ]
+      await openApp(page, {
+        before: `window.__MIDI_ECHO__ = ['Synth', 'Keys']; window.__MIDI_PORTS__ = ${JSON.stringify(ports)};`,
+      })
+      await nameField(page, 1).fill("Synth")
+      await nameField(page, 2).fill("Keys")
+      await setMode(page, 1, "Both")
+      await pickPort(page, 1, ports[0])
+      await setMode(page, 2, "Both")
+      await pickPort(page, 2, ports[1])
+      await page.mouse.move(0, 0)
+      const before = await places(page)
+
+      await page.getByRole("button", { name: "Check signal" }).click()
+      const said = "Keys gets the same notes as Synth. Is it one instrument plugged in twice?"
+      await expect(card(page, 2).getByText(said)).toBeVisible({ timeout: 3000 })
+      expect(await places(page)).toEqual(before)
+    })
+
+    test("says nothing of a port picked after it began", async ({ page }) => {
+      await openApp(page)
+      await nameField(page, 1).fill("Drums")
+      await page.getByRole("button", { name: "Check signal" }).click()
+      await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+      // The kit plays from now on, to a check that never opened its port.
+      await setMode(page, 1, "Both")
+      await pickPort(page, 1, "TD-17")
+      const slot = card(page, 1).locator("[data-check-slot='notes']")
+      await page.waitForTimeout(1500)
+      await expect(slot.getByText("no notes")).toBeHidden()
+      await expect(slot.getByText("✓ notes")).toBeHidden()
+
+      // The next check opens it, and says so.
+      await page.getByRole("button", { name: "Stop checking" }).click()
+      await page.getByRole("button", { name: "Check signal" }).click()
+      await expect(slot.getByText("✓ notes")).toBeVisible({ timeout: 3000 })
     })
 
     test("lists a keyboard's playing port first, and marks the one played (P7)", async ({
@@ -352,19 +398,104 @@ test.describe("setup", () => {
     await expect(card(page, 1).getByText("✓ notes")).toBeHidden()
     expect(await places(page)).toEqual(before)
 
-    // The note above the cards says it is gone; the cards themselves keep
-    // their size and everything on them its place.
-    const inCard = await places(page, true)
+    // The note above the cards says it is gone, in a place kept for one note
+    // while any track takes notes: no card moves for it.
     await setFake(page, "__MIDI_GONE__", ["TD-17"])
     await expect(card(page, 1).getByText("not connected", { exact: true })).toBeVisible({
       timeout: 2000,
     })
-    expect(await places(page, true)).toEqual(inCard)
+    await expect(note(page, "“TD-17” is not connected.")).toHaveCount(1)
+    expect(await places(page)).toEqual(before)
     await setFake(page, "__MIDI_GONE__", [])
     await expect(card(page, 1).getByText("not connected", { exact: true })).toBeHidden({
       timeout: 2000,
     })
+    await expect(note(page, "is not connected.")).toHaveCount(0)
     expect(await places(page)).toEqual(before)
+  })
+
+  test("two tracks on one port move no card either (P2)", async ({ page }) => {
+    // Two kits whose names take the same room, so that only the note can
+    // move anything: a picker is as wide as the port it shows.
+    await openApp(page, { before: "window.__MIDI_PORTS__ = ['TD-17', 'TD-71'];" })
+    await setMode(page, 1, "Both")
+    await pickPort(page, 1, "TD-17")
+    await setMode(page, 2, "Both")
+    await pickPort(page, 2, "TD-71")
+    await page.mouse.move(0, 0)
+    const cards = async () => (await places(page)).map((c) => c.card)
+    const before = await cards()
+
+    await pickPort(page, 2, "TD-17")
+    await expect(note(page, "Guitar and Vocals both take notes from TD-17.")).toHaveCount(1)
+    expect(await cards()).toEqual(before)
+    await pickPort(page, 2, "TD-71")
+    await expect(page.getByText("both take notes from")).toHaveCount(0)
+    expect(await cards()).toEqual(before)
+  })
+
+  test("a band without MIDI reads no ports, and the first Both reads them at once", async ({
+    page,
+  }) => {
+    await openApp(page)
+    await expect(input(page, 2)).toHaveText("Input 2")
+    await page.waitForTimeout(1500)
+    expect(await callCount(page, "list_midi_ports")).toBe(0)
+    // Nor keeps a place for notes it will never have.
+    await expect(page.locator("[data-notes-strip]")).toHaveCount(0)
+
+    await setMode(page, 1, "Both")
+    await expect.poll(() => callCount(page, "list_midi_ports"), { timeout: 500 }).toBeGreaterThan(0)
+    await picker(page, 1).click()
+    await expect(page.getByRole("option", { name: "TD-17" })).toBeVisible()
+    await page.keyboard.press("Escape")
+
+    // Back to sound alone, it stops reading them.
+    await setMode(page, 1, "Audio")
+    await page.waitForTimeout(300)
+    const read = await callCount(page, "list_midi_ports")
+    await page.waitForTimeout(1500)
+    expect(await callCount(page, "list_midi_ports")).toBe(read)
+  })
+
+  test("Enter in a name stays in it, and Space types a space", async ({ page }) => {
+    await openApp(page)
+    const field = nameField(page, 2)
+    await field.fill("Vocals two")
+    await field.press("Enter")
+    await expect(field).toBeFocused()
+    await page.keyboard.press("Space")
+    await expect(field).toHaveValue("Vocals two ")
+    expect(await callCount(page, "start_rehearsal")).toBe(0)
+  })
+
+  test("a Start that fails lets the check's ports go", async ({ page }) => {
+    // Python answers that it could not start, as it does when the card has
+    // gone since.
+    await openApp(page, {
+      after:
+        "window.pywebview.api.start_rehearsal = async (...args) => {" +
+        " window.__CALLS__.push({name: 'start_rehearsal', args});" +
+        " return {ok: false, error: 'No room left'} };",
+    })
+    await setMode(page, 1, "Both")
+    await pickPort(page, 1, "TD-17")
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+    await startButton(page).click()
+    await expect(page.getByText("No room left")).toBeVisible()
+
+    // Kept open for the rehearsal, then let go when there was none.
+    const log = await page.evaluate(() =>
+      (window as unknown as { __CALLS__: { name: string; args: unknown[] }[] }).__CALLS__
+    )
+    const started = log.findIndex((c) => c.name === "start_rehearsal")
+    const kept = log.slice(0, started).filter((c) => c.name === "stop_monitor").at(-1)
+    expect(kept?.args[0]).toBe(true)
+    const after = log.slice(started).filter((c) => c.name === "stop_monitor")
+    expect(after).toHaveLength(1)
+    expect(after[0].args[0]).toBeUndefined()
+    await expect(page.getByRole("button", { name: "Check signal" })).toBeVisible()
   })
 
   test("long names wrap at 960 px, and nothing is cut (D5)", async ({ page }) => {

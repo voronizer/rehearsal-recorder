@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils"
  * The signal check's meter for a port, at the end of its line on a setup
  * card: a bar that jumps with each note's velocity and falls back, and
  * "✓ notes" once a note has arrived. In the accent, not the level's green:
- * notes are not a sound and have no level to set. As wide as the input's
- * meter above it, the bars one under the other.
+ * notes are not a sound and have no level to set. As wide as the place it is
+ * given, the card's end column, so the bar is under the input's.
  */
 export function NotesCheck({
   seen,
@@ -19,7 +19,7 @@ export function NotesCheck({
   className?: string
 }) {
   return (
-    <div className={cn("flex w-40 shrink-0 items-center gap-2", className)}>
+    <div className={cn("flex min-w-0 items-center gap-2", className)}>
       <div className="relative h-2 flex-1 overflow-hidden rounded-full border bg-background">
         <div
           className="absolute inset-y-0 left-0 bg-primary transition-[width] duration-75"

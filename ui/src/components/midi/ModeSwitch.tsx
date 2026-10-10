@@ -1,6 +1,13 @@
 import type { RecordMode } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
+/**
+ * The width of a setup card's end column: this switch on the top line, and
+ * under it, one under the other, the check's meters (an input's level, a
+ * port's notes), so they line up with it.
+ */
+export const END_COLUMN = "w-40"
+
 const MODES: { mode: RecordMode; label: string }[] = [
   { mode: "audio", label: "Audio" },
   { mode: "both", label: "Both" },
@@ -26,7 +33,10 @@ export function ModeSwitch({
     <div
       role="group"
       aria-label={label}
-      className="grid h-8 w-40 shrink-0 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5"
+      className={cn(
+        "grid h-8 shrink-0 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5",
+        END_COLUMN
+      )}
     >
       {MODES.map((m) => (
         <button

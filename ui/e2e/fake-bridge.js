@@ -906,7 +906,7 @@ window.__MAKE_API__ = () => ({
   monitor_health: async () => ({checking:true, problem: window.__CHECK_QUIET__ || null}),
   // The ports the system lists; a port a track holds open says how many notes
   // it has sent (midi.rig ports()).
-  list_midi_ports: async () => {
+  list_midi_ports: track('list_midi_ports', async () => {
     const counts = Object.fromEntries(Object.entries(midiActivity(false)).map(([n, a]) => [n, a.notes]));
     const held = (name) => midiTracks().filter(t => portNameOf(t) === name && midiPortState(t) === 'ok')
       .reduce((sum, t) => sum + (counts[t.name] || 0), 0);
@@ -921,7 +921,7 @@ window.__MAKE_API__ = () => ({
     return {system:'Fake MIDI', error:null,
             ports: midiInOrder(midiPortNames().map((name, i, all) => ({
               ...midiPortInfo(name, all.filter(n => n === name).length > 1 ? i + 1 : 0), notes: notes(name)})))};
-  },
+  }),
   midi_activity: async () => midiActivity(true),
   // The notes of a take's tracks, a kit pattern for the drums and a keyboard
   // line for the rest, as long as the take (api.take_notes). Each answer, an
