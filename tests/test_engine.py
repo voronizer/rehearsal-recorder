@@ -7139,6 +7139,10 @@ def main():
     ok("an audio lane that was not recorded is not followed",
        rules.lane_after(lanes, {"Gtr", "Bass"}, "Drums") == "Gtr")
     ok("a name that is not in the band follows nobody", rules.lane_after(lanes, heard, "Nobody") is None)
+    ok("a lane's place is its track's index in the band, the first at 0",
+       rules.place_in(lanes, "Gtr") == {"place": 0})
+    ok("and one in the middle at its own", rules.place_in(lanes, "Drums") == {"place": 2})
+    ok("a name that is not in the band has no place", rules.place_in(lanes, "Nobody") == {})
     imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
                for n in ast.walk(ast.parse(Path(rules.__file__).read_text(encoding="utf-8")))
                if isinstance(n, (ast.Import, ast.ImportFrom))}
@@ -9593,59 +9597,61 @@ def main():
     catcher70 = logging70.Handler(level=logging70.INFO)
     catcher70.emit = said70.append
     logging70.getLogger(apimod70.__name__).addHandler(catcher70)
-    mixed = a70.take_notes([{"name": "Bass", "file": gone70}, {"name": "Drums", "file": drums70},
-                            {"name": "Keys", "file": str(folder70 / "Torn.mid")},
-                            {"name": "Pad", "file": str(folder70 / "Empty.mid")},
-                            {"name": "Folder", "file": str(folder70)},
-                            {"name": "Keys", "file": keys70}])
-    ok("a missing file is reported as not found, and the others still answer",
-       mixed[0] == {"name": "Bass", "error": "Notes file not found"}
-       and mixed[1]["drums"] is True and len(mixed[1]["notes"]) == 4
-       and mixed[5]["drums"] is False and len(mixed[5]["notes"]) == 2)
-    ok("a file that is no .mid, or is cut short, or empty, or a folder, is reported as not readable, and the rest answer",
-       [m.get("error") for m in mixed[2:5]] == ["Notes file not readable"] * 3
-       and [m["name"] for m in mixed[2:5]] == ["Keys", "Pad", "Folder"] and len(mixed) == 6)
-    ok("a file that is not readable carries its track's icon as well",
-       mixed[2] == {"name": "Keys", "icon": "keys", "error": "Notes file not readable"})
-    ok("and it says in the log, as a warning, which files, once each, and not the one that was only missing",
-       [r.getMessage().split(":")[0] for r in said70]
-       == ["notes of Torn.mid", "notes of Empty.mid", f"notes of {folder70.name}"]
-       and {r.levelno for r in said70} == {logging70.WARNING})
-    ok("no files, no answers", a70.take_notes([]) == [])
-
-    # One file that makes the system itself refuse cannot fail the others: a name too long for the file system
-    # raises OSError (ENAMETOOLONG) from the existence check on Linux and macOS, and is simply not there on Windows.
-    long70 = str(folder70 / ("x" * 300 + ".mid"))
-    refused = a70.take_notes([{"name": "Keys", "file": keys70}, {"name": "Long", "file": long70},
-                              {"name": "Drums", "file": drums70}])
-    ok("a name too long for the file system is answered with an error, and the other files still answer",
-       [r["name"] for r in refused] == ["Keys", "Long", "Drums"]
-       and refused[1].get("error") in ("Notes file not found", "Notes file not readable")
-       and "error" not in refused[0] and "error" not in refused[2] and refused[2]["drums"] is True)
-
-    # A console in a Windows code page cannot show every name, and a file whose name it cannot show is the very one
-    # that was not readable: saying so must not be what fails the call.
-    odd70 = folder70 / "Pa\u0142yn.mid"
-    odd70.write_bytes(b"not a midi file")
-    console70 = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
-    with contextlib.redirect_stdout(console70), contextlib.redirect_stderr(console70):
-        odd = a70.take_notes([{"name": "Pa\u0142yn", "file": str(odd70)}, {"name": "Keys", "file": keys70}])
-    ok("an unreadable file whose name the console cannot show is answered, and the call goes on",
-       odd[0] == {"name": "Pa\u0142yn", "error": "Notes file not readable"} and odd[1]["drums"] is False)
-
-    # A malformed item is that item's answer, and no more: no path, a path of None, no name, not even a dict.
-    said70.clear()
-    malformed = a70.take_notes([{"name": "Bass"}, {"name": "Gone", "file": None}, {"file": keys70}, None,
+    try:
+        mixed = a70.take_notes([{"name": "Bass", "file": gone70}, {"name": "Drums", "file": drums70},
+                                {"name": "Keys", "file": str(folder70 / "Torn.mid")},
+                                {"name": "Pad", "file": str(folder70 / "Empty.mid")},
+                                {"name": "Folder", "file": str(folder70)},
                                 {"name": "Keys", "file": keys70}])
-    ok("an item with no file, or none for a file, is not found, with its name when it has one, and the rest answer",
-       malformed[0] == {"name": "Bass", "error": "Notes file not found"}
-       and malformed[1] == {"name": "Gone", "error": "Notes file not found"}
-       and malformed[4]["name"] == "Keys" and malformed[4]["drums"] is False and len(malformed) == 5)
-    ok("an item with no name is answered without one, judged by its file alone, and one that is no item is not found",
-       malformed[2]["drums"] is False and "name" not in malformed[2] and len(malformed[2]["notes"]) == 2
-       and malformed[3] == {"error": "Notes file not found"})
-    ok("none of that is a file that could not be read, so none of it is in the log", said70 == [])
-    logging70.getLogger(apimod70.__name__).removeHandler(catcher70)
+        ok("a missing file is reported as not found, and the others still answer",
+           mixed[0] == {"name": "Bass", "error": "Notes file not found"}
+           and mixed[1]["drums"] is True and len(mixed[1]["notes"]) == 4
+           and mixed[5]["drums"] is False and len(mixed[5]["notes"]) == 2)
+        ok("a file that is no .mid, or is cut short, or empty, or a folder, is reported as not readable, and the rest answer",
+           [m.get("error") for m in mixed[2:5]] == ["Notes file not readable"] * 3
+           and [m["name"] for m in mixed[2:5]] == ["Keys", "Pad", "Folder"] and len(mixed) == 6)
+        ok("a file that is not readable carries its track's icon as well",
+           mixed[2] == {"name": "Keys", "icon": "keys", "error": "Notes file not readable"})
+        ok("and it says in the log, as a warning, which files, once each, and not the one that was only missing",
+           [r.getMessage().split(":")[0] for r in said70]
+           == ["notes of Torn.mid", "notes of Empty.mid", f"notes of {folder70.name}"]
+           and {r.levelno for r in said70} == {logging70.WARNING})
+        ok("no files, no answers", a70.take_notes([]) == [])
+
+        # One file that makes the system itself refuse cannot fail the others: a name too long for the file system
+        # raises OSError (ENAMETOOLONG) from the existence check on Linux and macOS, and is simply not there on Windows.
+        long70 = str(folder70 / ("x" * 300 + ".mid"))
+        refused = a70.take_notes([{"name": "Keys", "file": keys70}, {"name": "Long", "file": long70},
+                                  {"name": "Drums", "file": drums70}])
+        ok("a name too long for the file system is answered with an error, and the other files still answer",
+           [r["name"] for r in refused] == ["Keys", "Long", "Drums"]
+           and refused[1].get("error") in ("Notes file not found", "Notes file not readable")
+           and "error" not in refused[0] and "error" not in refused[2] and refused[2]["drums"] is True)
+
+        # A console in a Windows code page cannot show every name, and a file whose name it cannot show is the very one
+        # that was not readable: saying so must not be what fails the call.
+        odd70 = folder70 / "Pa\u0142yn.mid"
+        odd70.write_bytes(b"not a midi file")
+        console70 = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+        with contextlib.redirect_stdout(console70), contextlib.redirect_stderr(console70):
+            odd = a70.take_notes([{"name": "Pa\u0142yn", "file": str(odd70)}, {"name": "Keys", "file": keys70}])
+        ok("an unreadable file whose name the console cannot show is answered, and the call goes on",
+           odd[0] == {"name": "Pa\u0142yn", "error": "Notes file not readable"} and odd[1]["drums"] is False)
+
+        # A malformed item is that item's answer, and no more: no path, a path of None, no name, not even a dict.
+        said70.clear()
+        malformed = a70.take_notes([{"name": "Bass"}, {"name": "Gone", "file": None}, {"file": keys70}, None,
+                                    {"name": "Keys", "file": keys70}])
+        ok("an item with no file, or none for a file, is not found, with its name when it has one, and the rest answer",
+           malformed[0] == {"name": "Bass", "error": "Notes file not found"}
+           and malformed[1] == {"name": "Gone", "error": "Notes file not found"}
+           and malformed[4]["name"] == "Keys" and malformed[4]["drums"] is False and len(malformed) == 5)
+        ok("an item with no name is answered without one, judged by its file alone, and one that is no item is not found",
+           malformed[2]["drums"] is False and "name" not in malformed[2] and len(malformed[2]["notes"]) == 2
+           and malformed[3] == {"error": "Notes file not found"})
+        ok("none of that is a file that could not be read, so none of it is in the log", said70 == [])
+    finally:
+        logging70.getLogger(apimod70.__name__).removeHandler(catcher70)
 
     (folder70 / "Pad.mid").unlink()
     ok("a file that goes between two calls is not found the second time",

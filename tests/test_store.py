@@ -1251,7 +1251,9 @@ def main():
            {"name": "Keys", "channel": None, "mode": "midi", "midi_port": "Launchkey Mini MK3"}])
 
     def made16(tracks, how="create"):
-        """Whether a rehearsal with these tracks was made."""
+        """Whether a rehearsal with these tracks was made. Only what the store
+        raises for a track with no input (int() of a channel that is None or
+        not there) counts as refused; one that is made is forgotten again."""
         folder = rec16 / "Refused"
         try:
             if how == "create":
@@ -1260,9 +1262,15 @@ def main():
                 lib.import_rehearsal(folder, name="Refused", created_at="2026-09-03T19:00:00",
                                      samplerate=48000, bit_depth=24, tracks=tracks, takes=[],
                                      cloud={}, cloud_errors={}, cloud_dir=None)
-        except Exception:
+        except (KeyError, TypeError):
             return False
+        lib.forget_rehearsal(folder)
         return True
+
+    ok("the same helper makes a band whose one track records only MIDI, with no input",
+       made16([{"name": "Keys", "channel": None, "mode": "midi",
+                "midi_port": {"name": "Launchkey Mini MK3"}}]) is True
+       and made16([{"name": "Keys", "mode": "midi"}], "import") is True)
 
     ok("a track that records audio needs an input, as it always did",
        made16([{"name": "Gtr", "channel": None}]) is False
