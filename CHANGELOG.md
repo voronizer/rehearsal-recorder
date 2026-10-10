@@ -17,7 +17,8 @@ opening.
   it appears, even in the middle of a take. A *Both* track's notes lane sits
   under its waveform, a *MIDI* track's has a lane of its own, and in the
   cloud *The original tracks* and the cloud's *Both* copy each `.mid` as it
-  is. Every track so far is *Audio*.
+  is. Under the hood shows which MIDI system the app is on. Every track so
+  far is *Audio*.
 - **The laptop stays awake during a take.** While a take records, the
   laptop does not go to sleep and its screen does not go dark or lock, so
   Stop and Space still work after a long jam; after Stop the system's own

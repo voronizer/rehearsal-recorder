@@ -30,8 +30,9 @@ sys.modules["sounddevice"] = _sd
 # library raises ImportError, which midi/ports.open_system() answers as "MIDI is
 # not available" — whatever is plugged into the machine running them.
 sys.modules["pylibremidi"] = None
-# The app's log says why it has no MIDI on every Api made, and unhandled
-# that would print here each time; nothing here reads it.
+# The library is blocked here, so the one line the MIDI system logs is why it
+# has none, and the Api made in [6] logs it. Unhandled, Python prints it on
+# stderr; [9] reads it from crash.log instead.
 logging.getLogger("rehearsal_recorder.midi.ports").addHandler(logging.NullHandler())
 
 import rehearsal_recorder.platform_support as ps  # noqa: E402
@@ -198,7 +199,9 @@ def main():
 
     original_log = appmod.CRASH_LOG
     appmod.CRASH_LOG = tmp / "crash.log"
-    handlers_before = list(logging.getLogger("pywebview").handlers)
+    # The handler goes on both of the loggers it is put on, and comes off both.
+    armed_on = ("pywebview", "rehearsal_recorder")
+    handlers_before = {name: list(logging.getLogger(name).handlers) for name in armed_on}
     try:
         kept_open = appmod._arm_crash_log()
         logging.getLogger("pywebview").error(
@@ -219,14 +222,17 @@ def main():
            system is None and why in appmod.CRASH_LOG.read_text(encoding="utf-8"))
     finally:
         faulthandler.disable()
-        logger = logging.getLogger("pywebview")
-        for h in list(logger.handlers):
-            if h not in handlers_before:
-                logger.removeHandler(h)
-                h.close()
+        for name in armed_on:
+            logger = logging.getLogger(name)
+            for h in list(logger.handlers):
+                if h not in handlers_before[name]:
+                    logger.removeHandler(h)
+                    h.close()
         if kept_open:
             kept_open.close()
         appmod.CRASH_LOG = original_log
+    ok("and taking it down leaves neither logger with its handler",
+       all(logging.getLogger(name).handlers == handlers_before[name] for name in armed_on))
 
     print("\n[10] The thread that opens cards joins a COM apartment on Windows")
     # An ASIO driver is a COM object: a thread that has not joined an
@@ -540,6 +546,10 @@ def main():
     ok("and it ran through to its verdict",
        said is not None and ("Incomplete build" in said
                              or "This build has everything it needs." in said))
+    # Its own line says the MIDI system, so the log is not asked to say it too.
+    ok("and the MIDI system is not said a second time, on stderr",
+       not [ln for ln in run.stderr.decode("utf-8", "replace").splitlines()
+            if ln.startswith("MIDI")])
     if len(problems) > problems_before:
         # What a failed run left, in ASCII because the CI console may not
         # print anything else.

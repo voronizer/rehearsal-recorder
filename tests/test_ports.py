@@ -263,8 +263,9 @@ def main():
     systems.append(system)
     ok("and the classic one where its observer will not start",
        system is not None and system.name == "Windows MIDI")
-    ok("the log names that one, and says nothing of the one that would not start",
-       said() == [("MIDI: Windows MIDI", logging.ERROR)])
+    ok("the log names that one, and in the same line why MIDI Services was not used",
+       said() == [("MIDI: Windows MIDI (Windows MIDI Services was not used: "
+                   "WINDOWS_MIDI_SERVICES: the class is not registered)", logging.ERROR)])
     finish()
     world = fake_libremidi.install()
     world.present_apis.discard("WINDOWS_MIDI_SERVICES")
@@ -274,7 +275,9 @@ def main():
     systems.append(system)
     ok("and the classic one where the library quietly gives a dummy for it",
        system is not None and system.name == "Windows MIDI")
-    ok("and the log names it, once", said() == [("MIDI: Windows MIDI", logging.ERROR)])
+    ok("and the log names it, once, with why MIDI Services was not used",
+       said() == [("MIDI: Windows MIDI (Windows MIDI Services was not used: "
+                   "Windows MIDI Services is not available to the library)", logging.ERROR)])
     finish()
     world = fake_libremidi.install()
     world.present_apis.clear()
@@ -290,6 +293,13 @@ def main():
     ok("another system gets what the library picks",
        system is not None and system.name != "")
     ok("and the log names it", said() == [(f"MIDI: {system.name}", logging.ERROR)])
+    finish()
+    # --selftest says the system on a line of its own, and asks for no second.
+    world = fake_libremidi.install()
+    system, why = ports.open_system(quiet=True)
+    systems.append(system)
+    ok("asked to be quiet, open_system still answers and the log says nothing",
+       system is not None and why is None and said() == [])
     finish()
     world = fake_libremidi.install()
     world.present_apis.clear()

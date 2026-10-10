@@ -159,7 +159,7 @@ def selftest():
         # build that lost the library fails here, in CI, not at a rehearsal.
         from rehearsal_recorder.midi.ports import open_system
 
-        system, why = open_system()
+        system, why = open_system(quiet=True)
         if system is None:
             # The app is built for these two, so there MIDI must work. On any
             # other system (a developer's Linux) it is allowed not to.

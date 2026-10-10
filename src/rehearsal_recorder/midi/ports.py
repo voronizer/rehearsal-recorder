@@ -694,7 +694,7 @@ class PortSystem:
                 log.exception("a MIDI port watcher")
 
 
-def open_system() -> tuple[PortSystem | None, str | None]:
+def open_system(quiet=False) -> tuple[PortSystem | None, str | None]:
     """
     The MIDI system of this machine, or None and why not. Never raises: an
     app without MIDI still records audio. Safe to call from any thread: the
@@ -702,20 +702,28 @@ def open_system() -> tuple[PortSystem | None, str | None]:
 
     On Windows, Windows MIDI Services first (the newer, which lets apps share
     a port) if its observer starts, else the classic one. The app's log says
-    which, or why none.
+    which, and why the first was not used if it was not, or why none; `quiet`
+    leaves that out, for --selftest, which says the system itself.
     """
-    system, why = _choose_system()
+    system, why, passed_over = _choose_system()
+    if quiet:
+        return system, why
     # At ERROR, though it is news and not a fault: the crash log is the only
     # log a windowed build has, and it keeps nothing below ERROR (app.py).
     if system is not None:
-        log.error("MIDI: %s", system.name)
+        line = f"MIDI: {system.name}"
+        if passed_over:
+            line += " (" + "; ".join(f"{_NAMES.get(api, api)} was not used: {reason}"
+                                     for api, reason in passed_over) + ")"
+        log.error("%s", line)
     else:
         log.error("%s", why)
     return system, why
 
 
-def _choose_system() -> tuple[PortSystem | None, str | None]:
-    """open_system() without the log."""
+def _choose_system() -> tuple[PortSystem | None, str | None, list[tuple[str, str]]]:
+    """open_system() without the log: the system or why none, and the systems
+    tried first that would not start, each with its reason."""
     if sys.platform == "win32":
         asked = ["WINDOWS_MIDI_SERVICES", "WINDOWS_MM"]
     elif sys.platform == "darwin":
@@ -723,12 +731,12 @@ def _choose_system() -> tuple[PortSystem | None, str | None]:
     else:
         asked = [None]
 
-    reasons = []
+    passed_over = []
     for api in asked:
         try:
-            return PortSystem(api), None
+            return PortSystem(api), None, passed_over
         except _NoLibrary as e:
-            return None, f"MIDI is not available: {e}"
+            return None, f"MIDI is not available: {e}", passed_over
         except Exception as e:
-            reasons.append(_reason(e))
-    return None, "MIDI is not available: " + "; ".join(reasons)
+            passed_over.append((api, _reason(e)))
+    return None, "MIDI is not available: " + "; ".join(r for _, r in passed_over), passed_over

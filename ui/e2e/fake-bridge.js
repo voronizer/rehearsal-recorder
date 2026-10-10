@@ -596,6 +596,8 @@ const portNameOf = (t) => {
   const name = typeof p === 'string' ? p : p && p.name;
   return typeof name === 'string' && name.trim() ? name : null;
 };
+// The MIDI system the fake is on, for the picker and Under the hood alike.
+const MIDI_SYSTEM = 'Windows MIDI Services';
 const midiPortNames = () => (window.__MIDI_PORTS__ || ['TD-17', 'Launchkey Mini MK3'])
   .filter(n => !(window.__MIDI_GONE__ || []).includes(n));
 // What the system says of a port besides its name: the maker where it is
@@ -918,7 +920,7 @@ window.__MAKE_API__ = () => ({
     const elapsed = run ? (run.ended ?? clock() - run.since) : 0;
     const notes = (name) => open.includes(name) ? held(name)
       : isPlayed(name) && beside.has(midiDeviceOf(name)) ? kitCount(elapsed) : 0;
-    return {system:'Fake MIDI', error:null,
+    return {system:MIDI_SYSTEM, error:null,
             ports: midiInOrder(midiPortNames().map((name, i, all) => ({
               ...midiPortInfo(name, all.filter(n => n === name).length > 1 ? i + 1 : 0), notes: notes(name)})))};
   }),
@@ -1605,7 +1607,7 @@ window.__MAKE_API__ = () => ({
   // Settings › Under the hood: the machine, the report, and the check of
   // the interface, which a page scripts through __CHECK_RESULT__ ('works',
   // 'no_sound') and __CHECK_MS__, how long it listens. The MIDI system is
-  // Windows MIDI Services, or with __MIDI_ERROR__ none, and why.
+  // MIDI_SYSTEM, or with __MIDI_ERROR__ none, and why.
   under_the_hood: track('under_the_hood', async () => ({
     version:'0.2.0', running_as: window.__BUILT__ ? 'built' : 'source', executable:'python.exe',
     system:'Windows 11 Pro 10.0.26200, x64',
@@ -1616,7 +1618,7 @@ window.__MAKE_API__ = () => ({
                       samplerate:48000, bit_depth:24},
            playback:'System output'},
     midi: window.__MIDI_ERROR__ ? {system:null, ports:[], error:window.__MIDI_ERROR__}
-                                : {system:'Windows MIDI Services', ports:[], error:null},
+                                : {system:MIDI_SYSTEM, ports:[], error:null},
     files:[{key:'settings', path:'C:\\Users\\alex\\.rehearsal-recorder\\config.json',
             exists:true, size:2100, modified:'2026-09-29T10:00:00'},
            {key:'history', path:'C:\\Users\\alex\\RehearsalRecordings\\library.sqlite',

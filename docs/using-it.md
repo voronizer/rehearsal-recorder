@@ -839,10 +839,10 @@ ASIO driver that comes with some laptops is known to behave like this.
 
 To ask for help, press **Copy details for a bug report** on the same page and
 paste what it copies into your message. It says which version you have, what
-the computer is, which interface and settings you record with, what the last
-check found, and where the app keeps its files. The **Show** buttons there
-open the folder with the settings, the history or the crash log, if someone
-asks you to send one.
+the computer is, which interface and settings you record with, which MIDI
+the app is on, what the last check found, and where the app keeps its files.
+The **Show** buttons there open the folder with the settings, the history or
+the crash log, if someone asks you to send one.
 
 The same test also runs from a terminal, in the folder where you unpacked the
 app, which can test another interface too — add its number from the list it
