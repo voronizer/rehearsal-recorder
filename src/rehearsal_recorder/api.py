@@ -2237,14 +2237,7 @@ class Api:
         # The review screen is still playing these very files.
         self._release_player_in(temp_dir)
 
-        # Every .mid in the draft is the take's, the ones `notes` leaves out
-        # too: found by their files, they are named as the tracks they belong to.
-        notes = list(notes or [])
-        listed = {Path(n["file"]).name for n in notes}
-        notes += self._named_as_tracks(s["tracks"], [
-            {"name": p.stem, "file": str(p)}
-            for p in sorted(Path(temp_dir).glob(f"*{MID_SUFFIX}")) if p.name not in listed
-        ])
+        notes = self._draft_notes(temp_dir, s["tracks"], notes)
         moved, moved_notes, undo = self._move_take_files(temp_dir, take_dir, tracks, notes)
 
         take_info = {
@@ -2331,6 +2324,22 @@ class Api:
                     dst = Path(take_dir) / src.name
                     shutil.move(str(src), str(dst))
                     undo.append((dst, src))
+
+    @classmethod
+    def _draft_notes(cls, temp_dir, band, notes):
+        """
+        A draft's notes, as Keep keeps them and Crop cuts them: the .mid files
+        `notes` lists, then every other .mid in the draft, found by its file
+        and named as the track it belongs to. An older screen passes none, and
+        a .mid left in the draft would be deleted with the drafts folder, or
+        kept uncut beside audio that was cut.
+        """
+        notes = list(notes or [])
+        listed = {Path(n["file"]).name for n in notes}
+        return notes + cls._named_as_tracks(band, [
+            {"name": p.stem, "file": str(p)}
+            for p in sorted(Path(temp_dir).glob(f"*{MID_SUFFIX}")) if p.name not in listed
+        ])
 
     @staticmethod
     def _named_as_tracks(band, notes):
@@ -3296,14 +3305,17 @@ class Api:
         record in the database yet, so there is nothing here to fix up. The
         files keep their paths, so the caller saves the take as it would have.
         `notes` are its .mid files, [{"name", "file"}] like the tracks, cut
-        with them and answered the same way.
+        with them and answered the same way. Every other .mid in the draft is
+        cut too, as Keep keeps it (_draft_notes), and is not in the answer.
         """
         temp_dir = Path(temp_dir)
         if not self._inside_recordings(temp_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
         live = [t for t in (tracks or []) if Path(t.get("file", "")).exists()]
-        live_notes = [n for n in (notes or []) if Path(n.get("file", "")).exists()]
+        given = [n for n in (notes or []) if Path(n.get("file", "")).exists()]
+        band = self._session["tracks"] if self._session is not None else []
+        live_notes = self._draft_notes(temp_dir, band, given)
         if not live and not live_notes:
             return {"ok": False, "error": "The take has no files left on disk"}
 
@@ -3327,7 +3339,7 @@ class Api:
         return {
             "ok": True,
             "tracks": live,
-            "notes": live_notes,
+            "notes": given,
             "duration_sec": done["duration_sec"],
             "trashed": done["trashed"],
             "location": done["location"],

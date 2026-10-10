@@ -9252,8 +9252,10 @@ def main():
     ok("a draft of nothing but notes is cropped, a note file that is not there is left out, and the length is the region's",
        res["ok"] and res["tracks"] == [] and res["notes"] == [note_only68]
        and abs(res["duration_sec"] - 2.0) < 0.01 and kit_ticks68(draft_notes68 / "Drums.mid")[1][0] == 960)
+    gone_draft68 = folder68 / "_drafts" / "take 18"
+    gone_draft68.mkdir(parents=True)
     ok("a draft with no files left at all is refused as it was",
-       a68.crop_draft(str(draft_notes68), [], 1.0, 3.0, notes=[ghost68])
+       a68.crop_draft(str(gone_draft68), [], 1.0, 3.0, notes=[{"name": "Keys", "file": str(gone_draft68 / "Keys.mid")}])
        == {"ok": False, "error": "The take has no files left on disk"})
     left_draft68 = folder68 / "_drafts" / "take 16"
     write_wav(left_draft68 / "Gtr.wav", 1000, seconds=4.0)
@@ -9268,6 +9270,23 @@ def main():
     ok("a draft's unconverted leftovers go aside with its originals, and the cropped draft keeps none",
        res["ok"] and files68(left_draft68) == ["Drums.mid", "Gtr.wav"]
        and files68(Path(res["location"])) == ["Drums.mid", "Gtr.wav", *left68])
+
+    # A .mid in the draft that the screen did not list (an older screen) is the draft's all the same: Keep keeps
+    # it, so Crop cuts it, and the take does not keep notes that start before its audio does.
+    unlisted_draft68 = folder68 / "_drafts" / "take 17"
+    write_wav(unlisted_draft68 / "Gtr.wav", 1000, seconds=4.0)
+    listed68 = kit68(unlisted_draft68 / "Drums.mid")
+    kit68(unlisted_draft68 / "Keys.mid")
+    unlisted_gtr68 = [{"name": "Gtr", "file": str(unlisted_draft68 / "Gtr.wav")}]
+    res = a68.crop_draft(str(unlisted_draft68), unlisted_gtr68, 1.0, 3.0, notes=[listed68])
+    ok("a .mid crop_draft was not given is cut with the audio all the same, and only the given ones are answered",
+       res["ok"] and res["notes"] == [listed68] and len(kit_ticks68(unlisted_draft68 / "Drums.mid")) == 5
+       and kit_ticks68(unlisted_draft68 / "Keys.mid") == kit_ticks68(unlisted_draft68 / "Drums.mid"))
+    kept68 = a68.keep_take(17, str(unlisted_draft68), "Unlisted", res["duration_sec"], unlisted_gtr68,
+                           notes=[listed68])
+    ok("and Keep, which keeps it too, keeps it cut",
+       kept68["ok"] and [n["name"] for n in kept68["take"]["notes"]] == ["Drums", "Keys"]
+       and all(len(kit_ticks68(n["file"])) == 5 for n in kept68["take"]["notes"]))
 
     print("\n[69] Notes go to the cloud with the tracks")
     # A take's notes are .mid files beside its WAVs. The original tracks and Both copy each one as it is, under its
