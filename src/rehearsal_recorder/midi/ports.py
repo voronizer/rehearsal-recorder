@@ -12,10 +12,10 @@ that opens real ports.
 The library is only ever used on threads this module starts, not on the
 caller's: the observer's thread imports it and makes the observer, and each
 open port's thread makes its input, polls it and closes it. Where the caller
-is the GUI's thread that matters (see COM below). The one exception is
-OpenPort.resync(), which the owner may call from its own thread and which reads
-a clock of the library's input (`absolute_timestamp()`), nothing that makes or
-frees anything.
+is the GUI's thread that matters (see COM below). Even OpenPort.resync(),
+which the owner calls from its own thread, only asks the port's thread to read
+the input's clock again: a caller that held the input could be the last to let
+go of it, if the port closed meanwhile, and free it off its own thread.
 
 What pylibremidi 5.4.3 really does, which is not always what libremidi's own
 documentation says. Read this before changing anything below.
@@ -278,7 +278,10 @@ class OpenPort:
         self._stop = threading.Event()
         self._started = threading.Event()
         self._failure = None
-        self._in = None
+        # Set by resync(): the port's thread measures the clock again at its
+        # next look. What the last measurement failed with, as text.
+        self._resync_wanted = threading.Event()
+        self._clock_failure = None
         self._library_says_open = True
 
         self._thread = threading.Thread(
@@ -311,8 +314,7 @@ class OpenPort:
         midi_in = None
         try:
             midi_in = self._make()
-            self._in = midi_in
-            self.resync()
+            self._measure(midi_in)
             interval = INPUT_POLL_SEC if self._library_time else STAMPED_POLL_SEC
             self._started.set()
             while True:
@@ -323,6 +325,9 @@ class OpenPort:
                 time.sleep(interval)
                 if self._stop.is_set():
                     break
+                if self._resync_wanted.is_set():
+                    self._resync_wanted.clear()
+                    self._measure_again(midi_in)
                 self._poll(midi_in)
         except Exception as e:  # anything, so that open() hears of it
             if self._started.is_set():
@@ -338,10 +343,6 @@ class OpenPort:
                     self._poll(midi_in)
                 except Exception:
                     log.exception("closing MIDI port %s", self.info.name)
-            # The library's object holds this one, through `conf.on_message`,
-            # in a loop Python's collector cannot see. So it is let go of by
-            # hand.
-            self._in = None
 
     def _make(self):
         """The library's input, open on the port. Raises if it will not be."""
@@ -374,6 +375,35 @@ class OpenPort:
         except Exception:  # see the notes at the top
             log.exception("MIDI event from %s", self.info.name)
 
+    def _measure(self, midi_in):
+        """
+        The offset between the library's clock and Python's, on this thread.
+        Both are read around one another, a few times, and the tightest pair
+        is kept: a pause between two reads shows as a wide pair and is thrown
+        away.
+        """
+        if not self._library_time:
+            return
+        best = None
+        for _ in range(OFFSET_READS):
+            before = time.perf_counter_ns()
+            theirs = midi_in.absolute_timestamp()
+            after = time.perf_counter_ns()
+            if best is None or after - before < best[0]:
+                best = (after - before, (before + after) // 2 - theirs)
+        self._offset = best[1]
+
+    def _measure_again(self, midi_in):
+        """What resync() asked for. A clock that cannot be read leaves the
+        offset as it was and the port listening, and is kept as text for
+        resync() to say."""
+        try:
+            self._measure(midi_in)
+        except Exception as e:
+            self._clock_failure = _reason(e)
+        else:
+            self._clock_failure = None
+
     def _poll(self, midi_in):
         try:
             midi_in.poll()
@@ -398,22 +428,16 @@ class OpenPort:
 
     def resync(self) -> None:
         """
-        Measure the offset between the library's clock and Python's again, so
-        a clock that drifts from it is followed. Both are read around one
-        another, a few times, and the tightest pair is kept: a pause between
-        two reads shows as a wide pair and is thrown away.
+        Has the offset between the library's clock and Python's measured
+        again, so a clock that drifts from it is followed: by the port's own
+        thread, at its next look (see the notes at the top). Raises
+        RuntimeError, with the library's words, while the last measurement
+        failed: a clock that cannot be read is heard of a look late.
         """
-        midi_in = self._in
-        if not self._library_time or midi_in is None:
-            return
-        best = None
-        for _ in range(OFFSET_READS):
-            before = time.perf_counter_ns()
-            theirs = midi_in.absolute_timestamp()
-            after = time.perf_counter_ns()
-            if best is None or after - before < best[0]:
-                best = (after - before, (before + after) // 2 - theirs)
-        self._offset = best[1]
+        self._resync_wanted.set()
+        failure = self._clock_failure
+        if failure is not None:
+            raise RuntimeError(failure)
 
     def close(self) -> None:
         """Stop listening. A listener may close its own port."""

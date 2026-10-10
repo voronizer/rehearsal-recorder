@@ -372,12 +372,42 @@ def main():
     wait_for(lambda: len(got) == 4)
     ok("a clock that has moved away from Python's puts events off", abs(got[3][0] - before)
        > 30_000_000)
+    # The input is the port thread's own: it made it and is the one to let go
+    # of it. So the clock is read there, at its next look, and not by the
+    # caller, whose reference could be the last one if the port closed then.
+    midi_in = world.inputs[-1]
+    read_on = []
+
+    def read_clock(read=midi_in.absolute_timestamp):
+        read_on.append(threading.current_thread())
+        return read()
+
+    midi_in.absolute_timestamp = read_clock
     rx.resync()
+    ok("resync() has the clock read again on the port's own thread",
+       wait_for(lambda: len(read_on) >= ports.OFFSET_READS)
+       and all(t.name.startswith("midi-in") for t in read_on))
+    del midi_in.absolute_timestamp
+    del midi_in, read_clock
     before = time.perf_counter_ns()
     world.send("TD-17", [0xB0, 4, 91])
     after = time.perf_counter_ns()
     wait_for(lambda: len(got) == 5)
     ok("and resync() puts them right again", before - 1_000_000 <= got[4][0] <= after + 1_000_000)
+    world.clock_raises = True
+
+    def resync_says():
+        try:
+            rx.resync()
+        except RuntimeError as e:
+            return "could not be read" in str(e)
+        return False
+
+    said = wait_for(resync_says)
+    world.clock_raises = False
+    world.send("TD-17", [0xB0, 4, 92])
+    ok("a clock that can no longer be read is said by resync(), and the port goes on listening",
+       said and wait_for(lambda: len(got) == 6) and rx.connected())
     finish()
 
     print("\n[7] A callback that raises does not end the port")
