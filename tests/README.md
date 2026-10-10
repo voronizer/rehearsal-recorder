@@ -147,10 +147,13 @@ a folder of generated WAVs and `.mid` files and its printed numbers read back
 through its `main()` in the suite's own process): clicks every half second with
 notes 3 ms late or 3 ms early, a take of 130 s answered in two windows (the
 notes 2 ms behind at the start and 9 ms at the end) and one of 90 s in one, 16
-and 24-bit, 8 channels and 32-bit float, drum hits that rise over 3 ms hard and
-soft, soft hits (8% of the loudest) that rise over 10 ms and a ringing, irregular
-pattern, each with its notes at the exact start of the hit and the worst within
-3 ms, a note beyond the window left unmatched and said so, `--max-ms` widening
+and 24-bit, 8 channels (read in blocks of whole frames, which a stand-in WAV that
+records what it is asked for checks) and 32-bit float, drum hits that rise over
+3 ms hard and soft, soft hits (8% of the loudest) that rise over 10 ms, a ringing,
+irregular pattern, a ringing tone with a hit five times louder 52 to 55 ms after
+it and a 60 Hz rumble about as loud as the softest hits, each with its notes at
+the exact start of the hit and the worst within 3 ms (early as well as late), a
+note beyond the window left unmatched and said so, `--max-ms` widening
 it, two notes at one click (one matched), a `.mid` with no WAV of its name and
 `--wav`, a folder with no `.mid`, no `.wav` or no folder at all exiting
 non-zero, an unreadable `.mid`, a soundfile that will not import, and the output

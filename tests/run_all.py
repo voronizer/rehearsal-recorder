@@ -62,9 +62,9 @@ things to be true:
                        drift), and tools/midi_alignment.py, the hand check
                        of how far the notes are from their audio, run on
                        a folder of WAVs and .mid files made here (clicks
-                       and drum hits, hard, soft, slow and ringing, 3 ms
-                       late or early, a take of two windows, 16, 24 and
-                       32-bit float).
+                       and drum hits, hard, soft, slow, ringing and over
+                       a rumble, 3 ms late or early, a take of two windows,
+                       16, 24 and 32-bit float).
                        Later tasks add to it. No port is opened: the library
                        is blocked and the rules are plain functions.
 

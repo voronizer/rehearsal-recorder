@@ -3027,17 +3027,28 @@ def main():
                 code = stopped.code if isinstance(stopped.code, int) else 1
         return code, out.getvalue(), err.getvalue(), all(ord(c) < 128 for c in out.getvalue() + err.getvalue())
 
-    def kit10(starts, amps, rise, decay, hiss=0.0005, seed=4):
-        """A noise burst at each of `starts` (seconds), `amps` loud, that takes
-        `rise` s to rise and rings with a time constant of `decay` s, over a
-        little hiss: a drum as the audio hears it, one column of samples."""
+    def kit10(starts, amps, rise, decay, hiss=0.0005, seed=4, tone=None, rumble=None):
+        """A burst at each of `starts` (seconds), `amps` loud, that takes `rise` s
+        to rise and rings with a time constant of `decay` s, over a little hiss: a
+        drum as the audio hears it, one column of samples. The burst is noise, or
+        a struck tone of `tone` Hz. `rumble` is (Hz, loudness): noise low-passed
+        at that frequency, as a stage floor or a passing lorry gives, under it all."""
         rng = np.random.default_rng(seed)
         ring = round(1.0 * 48000)
         shape = np.minimum(np.arange(ring) / 48000 / rise, 1.0) * np.exp(-np.arange(ring) / 48000 / decay)
         kit = rng.normal(0.0, hiss, round((starts[-1] + 1.0) * 48000))
+        if rumble:
+            cut, loud = rumble
+            slow = np.fft.irfft(np.fft.rfft(rng.normal(0.0, 1.0, len(kit)))
+                                / np.sqrt(1.0 + (np.fft.rfftfreq(len(kit), 1 / 48000) / cut) ** 4), len(kit))
+            kit += loud * slow / slow.std()
         for sec, loud in zip(starts, amps):
             at = round(sec * 48000)
-            kit[at:at + ring] += (loud * shape * rng.normal(0.0, 1.0, ring) / 3.0)[:len(kit) - at]
+            if tone:
+                burst = 0.7 * np.sin(2 * np.pi * tone * np.arange(ring) / 48000 + rng.uniform(0.0, 2 * np.pi))
+            else:
+                burst = rng.normal(0.0, 1.0, ring) / 3.0
+            kit[at:at + ring] += (loud * shape * burst)[:len(kit) - at]
         return np.clip(kit, -1.0, 1.0)[:, None]
 
     seen10 = re.compile(r"matched (\d+) of (\d+) notes, median ([+-]\d+\.\d) ms, worst ([+-]\d+\.\d) ms")
@@ -3124,12 +3135,34 @@ def main():
             ok(f"{label}: the clicks are found, the median is 3 ms and all 20 notes are matched",
                len(got) == 1 and got[0][:2] == (20, 20) and abs(got[0][2] - 3.0) < 0.5)
 
-        # A wide file is read a block of whole frames at a time.
+        # A wide file is read as it is, and in blocks that hold the same number of
+        # samples however many channels there are.
         samples, clicks = clicks10(10.0, channels=8)
         wide = take10({"Drums.wav": (samples, 48000, "pcm24"), "Drums.mid": [t + 0.003 for t in clicks]})
         got = windows10(run10(wide)[1])
         ok("an 8-channel WAV is read all the same: all 20 notes matched at 3 ms",
            len(got) == 1 and got[0][:2] == (20, 20) and abs(got[0][2] - 3.0) < 0.5)
+
+        class Wide10:
+            """A WAV of 8 channels that only says how much it was asked for."""
+            channels = 8
+            samplerate = 48000
+
+            def __init__(self):
+                self.asked = []
+
+            def seek(self, frame):
+                pass
+
+            def read(self, frames, dtype, always_2d):
+                self.asked.append(frames)
+                return np.zeros((frames, self.channels), dtype=np.float32)
+
+        wide_wav = Wide10()
+        loud_enough = alignment.loudness(wide_wav, 0, 3 * alignment.BLOCK_FRAMES // 8 + 5)
+        ok("and 8 channels are asked for in blocks of BLOCK_FRAMES samples at most, the whole stretch read",
+           len(loud_enough) == 3 * alignment.BLOCK_FRAMES // 8 + 5 and len(wide_wav.asked) == 4
+           and max(wide_wav.asked) * 8 <= alignment.BLOCK_FRAMES)
 
         # Drum hits are not clicks: a noise burst that takes 3 ms to rise and rings
         # for 150 ms, hard and soft, on irregular beats, over a little hiss. The
@@ -3167,6 +3200,34 @@ def main():
         got = windows10(run10(ring_take)[1])
         ok("a ringing, irregular pattern: more than half its hits are found, and the worst is within 3 ms",
            len(got) == 1 and got[0][0] > got[0][1] / 2 and abs(got[0][3]) < 3.0)
+        # The other way: a hit must not be placed before it starts. A soft tone that
+        # rings for 400 ms (0.18 loud), and 52 to 55 ms after it a hit five times as
+        # loud: the ring is still over the level before the second hit, and it must
+        # not be taken for its start, which would put the onset up to 46 ms early.
+        pair_gaps = (0.052, 0.053, 0.054, 0.055, 0.052, 0.054)
+        pair_at = np.array([(1.0 + 2.5 * k, 1.0 + 2.5 * k + gap) for k, gap in enumerate(pair_gaps)]).ravel()
+        pair_at = np.round(pair_at * 48000) / 48000
+        pair_take = take10({"Drums.wav": (kit10(pair_at, [0.18, 0.9] * len(pair_gaps), 0.003, 0.4, seed=5, tone=200),
+                                         48000, "pcm24"),
+                            "Drums.mid": list(pair_at)})
+        got = windows10(run10(pair_take)[1])
+        ok("a ringing tone and a hit five times louder 52 to 55 ms after it: both found, and neither early, the worst within 3 ms",
+           len(got) == 1 and got[0][:2] == (12, 12) and abs(got[0][3]) < 3.0)
+
+        # A low rumble under soft hits: 60 Hz noise at -40 dBFS (0.01), about as loud
+        # as the softest hits, and varying as slowly as their rise does, so that the
+        # rise was followed back into it. 60 hits, 0.05 to 0.9 loud. (Over twenty such
+        # takes the median worst is 3 ms, the same as before the rise was followed
+        # back; without the high-pass it was 5 ms, and 13 at the worst.)
+        rumble_amps = np.exp(np.random.default_rng(23).uniform(np.log(0.05), np.log(0.9), 60))
+        rumble_amps[0] = 0.9
+        rumble_at = np.round((0.5 + 0.7 * np.arange(60)) * 48000) / 48000
+        rumble_take = take10({"Drums.wav": (kit10(rumble_at, rumble_amps, 0.003, 0.08, hiss=0.0003, seed=523,
+                                                   rumble=(60, 0.01)), 48000, "pcm24"),
+                              "Drums.mid": list(rumble_at)})
+        got = windows10(run10(rumble_take)[1])
+        ok("a 60 Hz rumble about as loud as the soft hits: nearly all are found, and the worst is within 3 ms, not 6 ms early",
+           len(got) == 1 and got[0][0] >= 0.9 * got[0][1] and abs(got[0][3]) < 3.0)
 
         # How far a note may be from an onset and still be its own.
         samples, clicks = clicks10(10.0)
