@@ -301,17 +301,15 @@ test.describe("setup", () => {
       await setMode(page, 2, "Both")
       await pickPort(page, 2, "Launchkey Mini MK3")
       await page.getByRole("button", { name: "Check signal" }).click()
+      // Above the cards, with the other notes: its words name both tracks.
       const said = "Keys gets the same notes as Synth. Is it one instrument plugged in twice?"
-      await expect(card(page, 2).getByText(said)).toBeVisible({ timeout: 3000 })
-      // Kept unseen in its place on the other card, which it is not said of.
-      await expect(card(page, 1).getByText("gets the same notes")).toBeHidden()
+      await expect(note(page, said)).toBeVisible({ timeout: 3000 })
+      await expect(page.locator("[data-track-card]").getByText("gets the same notes")).toHaveCount(0)
       // It warns and stops nothing.
       await expect(startButton(page)).toBeEnabled()
     })
 
-    test("the question leaves the card as it was, long ports at 960 px too (P8)", async ({
-      page,
-    }) => {
+    test("the question moves no card while it is the only note (P8)", async ({ page }) => {
       await page.setViewportSize({ width: 960, height: 900 })
       const ports = [
         "Launchkey Mini MK3 MIDI Port (DAW In) on the second USB hub",
@@ -330,8 +328,7 @@ test.describe("setup", () => {
       const before = await places(page)
 
       await page.getByRole("button", { name: "Check signal" }).click()
-      const said = "Keys gets the same notes as Synth. Is it one instrument plugged in twice?"
-      await expect(card(page, 2).getByText(said)).toBeVisible({ timeout: 3000 })
+      await expect(note(page, "Keys gets the same notes as Synth.")).toBeVisible({ timeout: 3000 })
       expect(await places(page)).toEqual(before)
     })
 
@@ -432,6 +429,26 @@ test.describe("setup", () => {
     await pickPort(page, 2, "TD-71")
     await expect(page.getByText("both take notes from")).toHaveCount(0)
     expect(await cards()).toEqual(before)
+  })
+
+  test("a second notes track leaves a card's port as wide as it was", async ({ page }) => {
+    // At 1180 px, where Last time takes the side and the cards are narrower.
+    await page.setViewportSize({ width: 1180, height: 900 })
+    const port = "Launchkey Mini MK3 MIDI Port"
+    await openApp(page, { before: `window.__MIDI_PORTS__ = ['TD-17', ${JSON.stringify(port)}];` })
+    await nameField(page, 2).fill("Keys")
+    await setMode(page, 2, "MIDI")
+    await pickPort(page, 2, port)
+    expect(await lines(picker(page, 2).getByText(port))).toBe(1)
+    const alone = await card(page, 2).boundingBox()
+    const pickerAlone = await picker(page, 2).boundingBox()
+
+    await nameField(page, 1).fill("Drums")
+    await setMode(page, 1, "Both")
+    await pickPort(page, 1, "TD-17")
+    expect(await lines(picker(page, 2).getByText(port))).toBe(1)
+    expect((await card(page, 2).boundingBox())!.height).toBe(alone!.height)
+    expect((await picker(page, 2).boundingBox())!.width).toBe(pickerAlone!.width)
   })
 
   test("a band without MIDI reads no ports, and the first Both reads them at once", async ({

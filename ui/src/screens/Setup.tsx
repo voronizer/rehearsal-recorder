@@ -10,7 +10,6 @@ import {
   Mic,
   Settings as SettingsIcon,
   Trash2,
-  TriangleAlert,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -70,25 +69,6 @@ type BandMember = Pick<Track, "name" | "stereo" | "icon" | "mode" | "midi_port">
 
 /** The name of the port a track keeps, or null while none is picked. */
 const portName = (t: Track) => (t.midi_port?.name?.trim() ? t.midi_port.name : null)
-
-/** The longest of these tracks' names, or null when there are none. */
-const longestName = (ts: Track[]) =>
-  ts.reduce<string | null>((a, t) => (a === null || t.name.length > a.length ? t.name : a), null)
-
-/** One instrument plugged in twice, said beside a track's port (P8). */
-function EchoNote({ name, echo, className }: { name: string; echo: string; className?: string }) {
-  return (
-    <p
-      className={cn(
-        "col-start-1 row-start-1 flex items-start gap-1.5 text-[11px] leading-3.5",
-        className
-      )}
-    >
-      <TriangleAlert className="size-3.5 shrink-0 text-warn" />
-      {name} gets the same notes as {echo}. Is it one instrument plugged in twice?
-    </p>
-  )
-}
 
 export function Setup({
   onStarted,
@@ -335,6 +315,12 @@ export function Setup({
     if (state === "ok" || !midiPorts) return "ok"
     return findPort(t.midi_port, midiPorts.ports).port ? "ok" : "missing"
   }
+  // The tracks the check hears the same notes from as from another: one
+  // instrument plugged in twice, perhaps (P8). Said, and nothing stopped.
+  const echoes = tracks.flatMap((t) => {
+    const echo = heardFrom(t)?.echo
+    return echo ? [{ track: t, echo }] : []
+  })
   // The tracks whose port is picked and not to be had: they wait, and Start
   // goes ahead (D7, P5).
   const portsAway = tracks.flatMap((t) => {
@@ -808,8 +794,9 @@ export function Setup({
 
             {/* The notes' own notes, in a place one note tall kept while any
                 track takes notes, so one that comes by itself (a port pulled
-                out, another app taking it) moves no card. It grows only
-                while two are up at once. A band with no MIDI has no place. */}
+                out, another app taking it, the same notes twice) moves no
+                card. It grows only while two are up at once. A band with no
+                MIDI has no place. */}
             {anyNotes && (
               <div data-notes-strip className="grid">
                 <p
@@ -846,6 +833,24 @@ export function Setup({
                       ))}
                     </p>
                   )}
+
+                  {/* Above the cards rather than on one: its words name both
+                      tracks, and it comes during the check, while everyone
+                      is looking. */}
+                  {echoes.length > 0 && (
+                    <p
+                      role="status"
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
+                    >
+                      {echoes.map(({ track, echo }, k) => (
+                        <span key={k} className="block">
+                          {`${track.name.trim() || "An unnamed track"} gets the same notes as ${
+                            echo
+                          }. Is it one instrument plugged in twice?`}
+                        </span>
+                      ))}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -855,13 +860,6 @@ export function Setup({
                 const standing = portStanding(track)
                 const away = standing === "missing" || standing === "in_use"
                 const ear = heardFrom(track)
-                // What P8 says of this track; and the longest it could say,
-                // while another track takes notes too, to keep its place.
-                const echo = ear?.echo ?? null
-                const echoRoom = recordsNotes(track)
-                  ? longestName(tracks.filter((o, k) => k !== i && recordsNotes(o)))
-                  : null
-                const echoWith = echo ?? echoRoom
                 const listed = track.midi_port && midiPorts
                   ? findPort(track.midi_port, midiPorts.ports).port
                   : null
@@ -1032,30 +1030,6 @@ export function Setup({
                           warn={standing === "none" || away}
                           onChange={(port) => setTrack(i, { midi_port: port })}
                         />
-                        {/* One instrument plugged in twice: said, and nothing
-                            stopped (P8). Beside the port, in a place kept
-                            while another track takes notes too: the longest
-                            it could say lies there unseen, so the card is as
-                            tall, and the port as wide, before it is said as
-                            after. */}
-                        <div
-                          className={cn("grid min-w-0 flex-1", echoWith !== null && "min-w-40")}
-                        >
-                          {echoWith !== null && (
-                            <EchoNote
-                              name={track.name}
-                              echo={echoWith}
-                              className={cn(!echo && "invisible")}
-                            />
-                          )}
-                          {echo && echoRoom !== null && echoRoom !== echo && (
-                            <EchoNote
-                              name={track.name}
-                              echo={echoRoom}
-                              className="invisible"
-                            />
-                          )}
-                        </div>
                         <div
                           data-check-slot="notes"
                           className={cn("ml-auto grid shrink-0 items-center", END_COLUMN)}
