@@ -70,8 +70,8 @@ export function MidiTile({
   /** Notes played this take. */
   notes: number
   connected: boolean
-  /** What the tooltip says instead of the port's name, when there is more
-   *  to say of it: that it is not there, or another app holds it. */
+  /** What the tooltip says under the port's name, when there is more to say
+   *  of it: that it is not there, or another app holds it. */
   tip?: string
 }) {
   // A count too long for the tile is hidden, never shown cut: "12,345" with
@@ -94,16 +94,19 @@ export function MidiTile({
     if (tile.current) watch.observe(tile.current)
     return () => watch.disconnect()
   }, [measure])
-  // The tooltip: the port's own sentence when it has one, else the count that
-  // was hidden, else the port's name.
-  const hidden = `${notes.toLocaleString("en-US")} ${notes === 1 ? "note" : "notes"}`
+  // The tooltip: the port's name, and under it what there is no room to say
+  // on the tile: its own sentence when it has one (not there, or held), else
+  // the count that was hidden.
+  const more =
+    tip ?? (fits ? undefined : `${notes.toLocaleString("en-US")} ${notes === 1 ? "note" : "notes"}`)
+  const title = [port, more].filter(Boolean).join("\n") || undefined
 
   return (
     <div
       ref={tile}
       role="group"
       aria-label={name}
-      title={tip ?? (fits ? port || undefined : hidden)}
+      title={title}
       data-midi-tile
       data-level={Math.round(vel * 100)}
       data-not-connected={!connected || undefined}

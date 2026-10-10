@@ -161,6 +161,11 @@ function bandOf(count: number) {
 const notThere = (port: string, track: string) =>
   `\u201c${port}\u201d is not connected. ${track} records its notes from the moment it is plugged in.`
 
+/** A MIDI tile's tooltip: its port's name, and under it what else there is to
+ *  say (that it is not there, held, or how many notes there is no room for). */
+const KEYS_PORT = "Launchkey Mini MK3"
+const keysTip = (more: string) => `${KEYS_PORT}\n${more}`
+
 test.describe("recording", () => {
   test("a MIDI track gets a tile in band order, as wide as the others", async ({ page }) => {
     await recording(page)
@@ -555,7 +560,7 @@ test.describe("recording", () => {
 
     await setFake(page, "__MIDI_GONE__", ["TD-17", "Launchkey Mini MK3"])
     await expect(drums).toHaveAttribute("title", notThere("TD-17", "Drums"))
-    await expect(keys).toHaveAttribute("title", notThere("Launchkey Mini MK3", "Keys"))
+    await expect(keys).toHaveAttribute("title", keysTip(notThere(KEYS_PORT, "Keys")))
     await expect(drums.locator("[data-notes]").getByText("not connected")).toBeHidden()
 
     // Plugged in again: the Both tile has none, the MIDI tile its port's name.
@@ -604,7 +609,7 @@ test.describe("recording", () => {
           expect(seen.title).toBe("Launchkey Mini MK3")
         } else {
           hidden++
-          expect(seen.title, `${shown} at ${width} px`).toBe(`${shown} notes`)
+          expect(seen.title, `${shown} at ${width} px`).toBe(keysTip(`${shown} notes`))
         }
       }
       expect(whole, `some counts fit at ${width} px`).toBeGreaterThan(0)
@@ -613,15 +618,15 @@ test.describe("recording", () => {
       // A port that is gone or held has its own sentence, hidden count or not.
       await setFake(page, "__NOTES__", 123456)
       await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
-      await expect(keys).toHaveAttribute("title", notThere("Launchkey Mini MK3", "Keys"))
+      await expect(keys).toHaveAttribute("title", keysTip(notThere(KEYS_PORT, "Keys")))
       await setFake(page, "__MIDI_GONE__", [])
       await setFake(page, "__MIDI_BUSY__", ["Launchkey Mini MK3"])
       await expect(keys).toHaveAttribute(
         "title",
-        "\u201cLaunchkey Mini MK3\u201d is in use by another app."
+        keysTip("\u201cLaunchkey Mini MK3\u201d is in use by another app.")
       )
       await setFake(page, "__MIDI_BUSY__", [])
-      await expect(keys).toHaveAttribute("title", "123,456 notes")
+      await expect(keys).toHaveAttribute("title", keysTip("123,456 notes"))
       await setFake(page, "__NOTES__", 99)
     }
   })
@@ -632,7 +637,10 @@ test.describe("recording", () => {
     const drums = tile(page, "Drums")
     await expect(keys).toContainText("not connected")
     await expect(keys).toHaveAttribute("data-not-connected")
-    await expect(keys).toHaveAttribute("title", "\u201cLaunchkey Mini MK3\u201d is in use by another app.")
+    await expect(keys).toHaveAttribute(
+      "title",
+      keysTip("\u201cLaunchkey Mini MK3\u201d is in use by another app.")
+    )
     await expect(drums).toHaveAttribute("title", "\u201cTD-17\u201d is in use by another app.")
     // Let go of: the port's own name again, and none on a Both tile.
     await setFake(page, "__MIDI_BUSY__", [])
@@ -642,7 +650,7 @@ test.describe("recording", () => {
     // One that is not plugged in says nothing of another app.
     await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
     await expect(keys).toHaveAttribute("data-not-connected")
-    await expect(keys).toHaveAttribute("title", notThere("Launchkey Mini MK3", "Keys"))
+    await expect(keys).toHaveAttribute("title", keysTip(notThere(KEYS_PORT, "Keys")))
   })
 
   test("the tiles are polled with the levels, and no longer when the screen has gone", async ({
