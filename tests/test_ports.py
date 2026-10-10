@@ -356,10 +356,14 @@ def main():
        [d for _, d in got] == [bytes([0x90, 38, 100]), bytes([0x80, 38, 0])])
     ok("each time is Python's, within 5 ms of the send",
        all(abs(ns - before) < 5_000_000 for ns, _ in got))
+    # Measured against the send, not against when the check runs: a loaded
+    # machine can be slow to hand the event over, and that is not its time.
+    before = time.perf_counter_ns()
     world.send("TD-17", [0x90, 39, 100], ago_ns=20_000_000)
+    after = time.perf_counter_ns()
     ok("an event the OS stamped 20 ms ago is 20 ms ago",
        wait_for(lambda: len(got) == 3)
-       and 15_000_000 < time.perf_counter_ns() - got[2][0] < 60_000_000)
+       and before - 25_000_000 < got[2][0] < after - 15_000_000)
     world.inputs[-1].origin -= 40_000_000
     before = time.perf_counter_ns()
     world.send("TD-17", [0xB0, 4, 90])
