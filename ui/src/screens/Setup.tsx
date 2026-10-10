@@ -338,11 +338,14 @@ export function Setup({
   // The tracks the check hears the same notes from as from another: one
   // instrument plugged in twice, perhaps (P8). Said, and nothing stopped.
   // Python names the other by the name it had when the check began; the
-  // sentence names it as it is now.
+  // sentence names it as it is now. An other that no longer takes notes from
+  // the port the check opened is not asked about.
   const echoes = tracks.flatMap((t, i) => {
     const echo = heardFrom(t, i)?.echo
     const other = checkedPorts.findIndex((b, j) => j !== i && b !== null && b.name === echo)
-    return typeof echo === "string" && tracks[other] ? [{ track: t, echo: tracks[other] }] : []
+    return typeof echo === "string" && tracks[other] && checkOpened(tracks[other], other)
+      ? [{ track: t, echo: tracks[other] }]
+      : []
   })
   // The tracks whose port is picked and not to be had: they wait, and Start
   // goes ahead (D7, P5).

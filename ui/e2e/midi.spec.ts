@@ -309,6 +309,23 @@ test.describe("setup", () => {
       await expect(startButton(page)).toBeEnabled()
     })
 
+    test("the question goes when the other track stops taking notes during it (P8)", async ({
+      page,
+    }) => {
+      await openApp(page, { before: "window.__MIDI_ECHO__ = ['Synth', 'Keys'];" })
+      await nameField(page, 1).fill("Synth")
+      await nameField(page, 2).fill("Keys")
+      await setMode(page, 1, "Both")
+      await pickPort(page, 1, "TD-17")
+      await setMode(page, 2, "Both")
+      await pickPort(page, 2, "Launchkey Mini MK3")
+      await page.getByRole("button", { name: "Check signal" }).click()
+      await expect(note(page, "Keys gets the same notes as Synth.")).toBeVisible({ timeout: 3000 })
+      // Synth records sound alone now: there is nothing left to ask about it.
+      await setMode(page, 1, "Audio")
+      await expect(note(page, "gets the same notes as")).toHaveCount(0)
+    })
+
     test("the question moves no card while it is the only note (P8)", async ({ page }) => {
       await page.setViewportSize({ width: 960, height: 900 })
       const ports = [
