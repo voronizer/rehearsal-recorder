@@ -165,7 +165,7 @@ test.describe("setup", () => {
       timeout: 2000,
     })
     await expect(picker(page, 1)).not.toHaveClass(/border-amber/)
-    await expect(page.getByText("is not connected.")).toHaveCount(0)
+    await expect(note(page, "is not connected.")).toHaveCount(0)
   })
 
   test("a port another app holds is said so (P5)", async ({ page }) => {
@@ -408,6 +408,43 @@ test.describe("setup", () => {
       timeout: 2000,
     })
     await expect(note(page, "is not connected.")).toHaveCount(0)
+    expect(await places(page)).toEqual(before)
+  })
+
+  test("a long note alone moves no card either, with D5's names at 960 px (D7, P8)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 960, height: 900 })
+    const port = "Launchkey Mini MK3 MIDI Port (DAW In) on the second USB hub"
+    const overheads = "Overheads left and right microphones"
+    const kit = "Drums and pads (Kastuś), the kit by the window"
+    await openApp(page, {
+      before:
+        `window.__MIDI_PORTS__ = ['TD-17', ${JSON.stringify(port)}];` +
+        `window.__MIDI_ECHO__ = ${JSON.stringify([kit, overheads])};`,
+    })
+    await nameField(page, 1).fill(overheads)
+    await setMode(page, 1, "Both")
+    await pickPort(page, 1, port)
+    await nameField(page, 2).fill(kit)
+    await setMode(page, 2, "Both")
+    await pickPort(page, 2, "TD-17")
+    await page.mouse.move(0, 0)
+    const before = await places(page)
+
+    // Each of these takes two lines at this width, and comes by itself.
+    const gone = note(page, `\u201c${port}\u201d is not connected. ${overheads} records its notes`)
+    await setFake(page, "__MIDI_GONE__", [port])
+    await expect(gone).toBeVisible({ timeout: 2000 })
+    expect(await places(page)).toEqual(before)
+    await setFake(page, "__MIDI_GONE__", [])
+    await expect(gone).toHaveCount(0, { timeout: 2000 })
+    expect(await places(page)).toEqual(before)
+
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await expect(note(page, `${overheads} gets the same notes as ${kit}.`)).toBeVisible({
+      timeout: 3000,
+    })
     expect(await places(page)).toEqual(before)
   })
 

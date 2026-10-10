@@ -70,6 +70,18 @@ type BandMember = Pick<Track, "name" | "stereo" | "icon" | "mode" | "midi_port">
 /** The name of the port a track keeps, or null while none is picked. */
 const portName = (t: Track) => (t.midi_port?.name?.trim() ? t.midi_port.name : null)
 
+/** A track's name in a sentence, or what stands for it while it has none. */
+const named = (name: string) => name.trim() || "An unnamed track"
+
+// The notes about a track's port that come by themselves, in the spec's
+// words: its port pulled out (D7), another app holding it (P5), and the same
+// notes from it as from another track's (P8).
+const sayGone = (t: Track) =>
+  `“${portName(t)}” is not connected. ${named(t.name)} records its notes from the moment it is plugged in.`
+const sayBusy = (t: Track) => `“${portName(t)}” is in use by another app.`
+const sayEcho = (name: string, echo: string) =>
+  `${named(name)} gets the same notes as ${echo}. Is it one instrument plugged in twice?`
+
 export function Setup({
   onStarted,
   onOpenHistory,
@@ -327,6 +339,16 @@ export function Setup({
     const standing = portStanding(t)
     return standing === "missing" || standing === "in_use" ? [{ track: t, standing }] : []
   })
+  // Every note that could come by itself for this band, with its own names
+  // and ports: the place above the cards is kept as tall as the longest of
+  // them, so none moves a card when it comes alone.
+  const takingNotes = tracks.filter(recordsNotes)
+  const couldSay = [
+    ...takingNotes.filter((t) => portName(t) !== null).flatMap((t) => [sayGone(t), sayBusy(t)]),
+    ...takingNotes.flatMap((t) =>
+      takingNotes.filter((o) => o !== t).map((o) => sayEcho(t.name, named(o.name)))
+    ),
+  ]
 
   const setTrack = (i: number, patch: Partial<Track>) =>
     setTracks((prev) => prev.map((t, j) => (j === i ? { ...t, ...patch } : t)))
@@ -792,19 +814,24 @@ export function Setup({
               </p>
             )}
 
-            {/* The notes' own notes, in a place one note tall kept while any
-                track takes notes, so one that comes by itself (a port pulled
-                out, another app taking it, the same notes twice) moves no
-                card. It grows only while two are up at once. A band with no
-                MIDI has no place. */}
+            {/* The notes' own notes, in a place kept while any track takes
+                notes, as tall as the longest that could come by itself (a
+                port pulled out, another app taking it, the same notes twice):
+                one line for ordinary names, two for long ones, laid there
+                unseen. None of them moves a card when it comes alone; the
+                place grows only while two are up at once. A band with no MIDI
+                has no place. */}
             {anyNotes && (
               <div data-notes-strip className="grid">
-                <p
-                  aria-hidden
-                  className="invisible col-start-1 row-start-1 border px-3 py-2 text-xs"
-                >
-                  &nbsp;
-                </p>
+                {["\u00a0", ...couldSay].map((say, k) => (
+                  <p
+                    key={k}
+                    aria-hidden
+                    className="invisible col-start-1 row-start-1 border px-3 py-2 text-xs"
+                  >
+                    {say}
+                  </p>
+                ))}
                 <div className="col-start-1 row-start-1 flex flex-col gap-3">
                   {notesSay && (
                     <p
@@ -824,11 +851,7 @@ export function Setup({
                     >
                       {portsAway.map(({ track, standing }, k) => (
                         <span key={k} className="block">
-                          {standing === "in_use"
-                            ? `“${portName(track)}” is in use by another app.`
-                            : `“${portName(track)}” is not connected. ${
-                                track.name.trim() || "An unnamed track"
-                              } records its notes from the moment it is plugged in.`}
+                          {standing === "in_use" ? sayBusy(track) : sayGone(track)}
                         </span>
                       ))}
                     </p>
@@ -844,9 +867,7 @@ export function Setup({
                     >
                       {echoes.map(({ track, echo }, k) => (
                         <span key={k} className="block">
-                          {`${track.name.trim() || "An unnamed track"} gets the same notes as ${
-                            echo
-                          }. Is it one instrument plugged in twice?`}
+                          {sayEcho(track.name, echo)}
                         </span>
                       ))}
                     </p>
