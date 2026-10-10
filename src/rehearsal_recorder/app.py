@@ -246,9 +246,13 @@ def selftest():
         return shown
 
     def window_toolkit():
-        import webview
+        from importlib.metadata import version
 
-        return f"pywebview {getattr(webview, '__version__', '?')}"
+        import webview  # noqa: F401 - that it imports is the check
+
+        # pywebview 6 has no __version__, so it is read from the package's
+        # metadata, which the spec bundles for this line.
+        return f"pywebview {version('pywebview')}"
 
     check("audio engine", audio)
     check("looking for interfaces again", rescan_works)

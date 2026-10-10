@@ -91,7 +91,10 @@ for package in ("soundfile", "_soundfile_data", "sounddevice", "_sounddevice_dat
 # PyInstaller leaves behind unless asked: without it the built app's self-test
 # says "mido 0.0.0.dev0". Unlike the libraries above, mido is required, so a
 # build where it is not installed fails here rather than skipping it.
+# pywebview's is there for the self-test, which reads the version from it:
+# pywebview 6 has no __version__.
 datas += copy_metadata("mido")
+datas += copy_metadata("pywebview")
 
 a = Analysis(
     # Not app.py: a module run as a script is __main__, and the package
