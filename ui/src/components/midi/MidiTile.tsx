@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { MidiGlyph } from "@/components/midi/MidiGlyph"
 import { cn } from "@/lib/utils"
@@ -70,14 +71,39 @@ export function MidiTile({
   notes: number
   connected: boolean
   /** What the tooltip says instead of the port's name, when there is more
-   *  to say of it: that another app holds it. */
+   *  to say of it: that it is not there, or another app holds it. */
   tip?: string
 }) {
+  // A count too long for the tile is hidden, never shown cut: "12,345" with
+  // its end clipped reads as "12". It keeps its place, and the tooltip says it.
+  const tile = useRef<HTMLDivElement>(null)
+  const figure = useRef<HTMLSpanElement>(null)
+  const [fits, setFits] = useState(true)
+  const measure = useCallback(() => {
+    const box = tile.current
+    const chip = figure.current
+    if (box && chip)
+      setFits(
+        chip.getBoundingClientRect().right <=
+          box.getBoundingClientRect().left + box.clientLeft + box.clientWidth
+      )
+  }, [])
+  useLayoutEffect(measure, [measure, notes])
+  useEffect(() => {
+    const watch = new ResizeObserver(measure)
+    if (tile.current) watch.observe(tile.current)
+    return () => watch.disconnect()
+  }, [measure])
+  // The tooltip: the port's own sentence when it has one, else the count that
+  // was hidden, else the port's name.
+  const hidden = `${notes.toLocaleString("en-US")} ${notes === 1 ? "note" : "notes"}`
+
   return (
     <div
+      ref={tile}
       role="group"
       aria-label={name}
-      title={tip ?? (port || undefined)}
+      title={tip ?? (fits ? port || undefined : hidden)}
       data-midi-tile
       data-level={Math.round(vel * 100)}
       data-not-connected={!connected || undefined}
@@ -95,8 +121,12 @@ export function MidiTile({
           </span>
           <div className="flex min-w-0 flex-col items-end gap-1 text-right [&>span]:rounded [&>span]:bg-card/85 [&>span]:px-1">
             <span
+              ref={figure}
               data-notes
-              className="flex items-center gap-1 whitespace-nowrap text-muted-foreground"
+              className={cn(
+                "flex items-center gap-1 whitespace-nowrap text-muted-foreground",
+                !fits && "invisible"
+              )}
               style={{ fontSize: "clamp(0.6875rem, 8cqi, 1.125rem)" }}
             >
               <MidiGlyph className="size-[0.9em] shrink-0 text-primary @max-[7rem]:hidden" />

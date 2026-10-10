@@ -129,6 +129,38 @@ const stand = (tileEl: Locator) =>
     }
   })
 
+/** A band of `count` tracks: Drums on Both, Keys on MIDI alone, and audio
+ *  tracks for the rest, as many as it takes to make the tiles this narrow.
+ *  Drums clips, so that a line stands under its count. */
+type Member = {
+  name: string
+  channel: number | null
+  icon?: string
+  mode?: string
+  midi_port?: { name: string }
+}
+function bandOf(count: number) {
+  const band: Member[] = [
+    { name: "Drums", channel: 1, icon: "drums", mode: "both", midi_port: { name: "TD-17" } },
+    {
+      name: "Keys",
+      channel: null,
+      icon: "keys",
+      mode: "midi",
+      midi_port: { name: "Launchkey Mini MK3" },
+    },
+    ...Array.from({ length: count - 2 }, (_, i) => ({ name: `Tr ${i + 1}`, channel: i + 2 })),
+  ]
+  const levels = Object.fromEntries(
+    band.filter((t) => t.mode !== "midi").map((t) => [t.name, [t.name === "Drums" ? 0.99 : 0.5]])
+  )
+  return { band, levels }
+}
+
+/** What the tooltip of a tile says of a port that is not plugged in (D7). */
+const notThere = (port: string, track: string) =>
+  `\u201c${port}\u201d is not connected. ${track} records its notes from the moment it is plugged in.`
+
 test.describe("recording", () => {
   test("a MIDI track gets a tile in band order, as wide as the others", async ({ page }) => {
     await recording(page)
@@ -449,34 +481,17 @@ test.describe("recording", () => {
 
   // Tiles between 112 and 160 px wide are the 7 to 12 tracks of a band: the
   // header's column is under 90 px there, and what it says must fit on one
-  // line or give way, so that nothing under it moves.
-  for (const [count, width] of [
-    [8, 1180],
-    [7, 960],
+  // line or give way, so that nothing under it moves. From 152 px up the
+  // Both tile's count gives its place to "not connected" in words.
+  for (const [count, width, from, to, words] of [
+    [8, 1180, 112, 160, false],
+    [7, 960, 112, 160, false],
+    [6, 1180, 152, 276, true],
   ] as const) {
     test(`the header keeps still at ${count} tracks and ${width} px, as notes arrive and a port comes and goes`, async ({
       page,
     }) => {
-      const band: {
-        name: string
-        channel: number | null
-        icon?: string
-        mode?: string
-        midi_port?: { name: string }
-      }[] = [
-        { name: "Drums", channel: 1, icon: "drums", mode: "both", midi_port: { name: "TD-17" } },
-        {
-          name: "Keys",
-          channel: null,
-          icon: "keys",
-          mode: "midi",
-          midi_port: { name: "Launchkey Mini MK3" },
-        },
-        ...Array.from({ length: count - 2 }, (_, i) => ({ name: `Tr ${i + 1}`, channel: i + 2 })),
-      ]
-      const levels = Object.fromEntries(
-        band.filter((t) => t.mode !== "midi").map((t) => [t.name, [t.name === "Drums" ? 0.99 : 0.5]])
-      )
+      const { band, levels } = bandOf(count)
       await recording(page, { band, levels, after: COUNTS })
       await page.setViewportSize({ width, height: 820 })
       const drums = tile(page, "Drums")
@@ -484,8 +499,8 @@ test.describe("recording", () => {
       // A clip stands under the Both tile's count: what would be pushed.
       await expect(drums).toHaveAttribute("data-clipped")
       const at = (await drums.boundingBox())!
-      expect(at.width, "a tile of the width this is about").toBeGreaterThan(112)
-      expect(at.width).toBeLessThan(160)
+      expect(at.width, "a tile of the width this is about").toBeGreaterThan(from)
+      expect(at.width).toBeLessThan(to)
       await expect(drums).toContainText("99")
       await expect(keys).toContainText("99")
       const first = [await stand(drums), await stand(keys)]
@@ -507,15 +522,109 @@ test.describe("recording", () => {
       await setFake(page, "__MIDI_GONE__", ["TD-17", "Launchkey Mini MK3"])
       await expect(drums).toHaveAttribute("data-not-connected")
       await expect(keys).toHaveAttribute("data-not-connected")
+      // Where it fits the Both tile says so in words in the count's place;
+      // where it does not, the count stays and the edge and tooltip say it.
+      const said = drums.locator("[data-notes]").getByText("not connected")
+      if (words) await expect(said).toBeVisible()
+      else await expect(said).toBeHidden()
       expect(await stand(drums), "Drums, port gone").toEqual(first[0])
       expect(await stand(keys), "Keys, port gone").toEqual(first[1])
       await setFake(page, "__MIDI_GONE__", [])
       await expect(drums).not.toHaveAttribute("data-not-connected")
       await expect(keys).not.toHaveAttribute("data-not-connected")
+      await expect(said).toHaveCount(0)
       expect(await stand(drums), "Drums, port back").toEqual(first[0])
       expect(await stand(keys), "Keys, port back").toEqual(first[1])
     })
   }
+
+  test("a port that is not plugged in says why in its tooltip, on a tile too narrow for words", async ({
+    page,
+  }) => {
+    // Eight tracks at 1180 px: a tile of 133 px has no room for "not
+    // connected", and Drums has clipped, so its edge is red and not amber.
+    const { band, levels } = bandOf(8)
+    await recording(page, { band, levels })
+    await page.setViewportSize({ width: 1180, height: 820 })
+    const drums = tile(page, "Drums")
+    const keys = tile(page, "Keys")
+    await expect(drums).toHaveAttribute("data-clipped")
+    expect((await drums.boundingBox())!.width).toBeLessThan(152)
+    await expect(drums).not.toHaveAttribute("title")
+    await expect(keys).toHaveAttribute("title", "Launchkey Mini MK3")
+
+    await setFake(page, "__MIDI_GONE__", ["TD-17", "Launchkey Mini MK3"])
+    await expect(drums).toHaveAttribute("title", notThere("TD-17", "Drums"))
+    await expect(keys).toHaveAttribute("title", notThere("Launchkey Mini MK3", "Keys"))
+    await expect(drums.locator("[data-notes]").getByText("not connected")).toBeHidden()
+
+    // Plugged in again: the Both tile has none, the MIDI tile its port's name.
+    await setFake(page, "__MIDI_GONE__", [])
+    await expect(drums).not.toHaveAttribute("title")
+    await expect(keys).toHaveAttribute("title", "Launchkey Mini MK3")
+  })
+
+  test("a count that does not fit a narrow tile is hidden, never shown cut, and the tooltip has it", async ({
+    page,
+  }) => {
+    // Sixteen tracks: a MIDI tile of 50 to 62 px, where "12,345" shows as "12".
+    const { band, levels } = bandOf(16)
+    await recording(page, { band, levels, after: COUNTS })
+    for (const width of [1180, 960]) {
+      await page.setViewportSize({ width, height: 820 })
+      const keys = tile(page, "Keys")
+      const count = keys.locator("[data-notes]")
+      expect((await keys.boundingBox())!.width).toBeLessThan(77)
+      let hidden = 0
+      let whole = 0
+      for (const [notes, shown] of [
+        [9, "9"],
+        [99, "99"],
+        [999, "999"],
+        [1000, "1,000"],
+        [12345, "12,345"],
+        [99999, "99,999"],
+        [123456, "123,456"],
+      ] as const) {
+        await setFake(page, "__NOTES__", notes)
+        // Until the count is this one and not the one before ("9" is in "99").
+        await expect(count).toHaveText(new RegExp(`^${shown} notes?$`))
+        const seen = await keys.evaluate((el) => {
+          const chip = el.querySelector("[data-notes]")!
+          return {
+            visible: getComputedStyle(chip).visibility === "visible",
+            inside: chip.getBoundingClientRect().right <= el.getBoundingClientRect().right,
+            title: el.getAttribute("title"),
+          }
+        })
+        if (seen.visible) {
+          whole++
+          // Seen, it is seen whole, inside the tile.
+          expect(seen.inside, `${shown} at ${width} px`).toBe(true)
+          expect(seen.title).toBe("Launchkey Mini MK3")
+        } else {
+          hidden++
+          expect(seen.title, `${shown} at ${width} px`).toBe(`${shown} notes`)
+        }
+      }
+      expect(whole, `some counts fit at ${width} px`).toBeGreaterThan(0)
+      expect(hidden, `some counts do not at ${width} px`).toBeGreaterThan(0)
+
+      // A port that is gone or held has its own sentence, hidden count or not.
+      await setFake(page, "__NOTES__", 123456)
+      await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
+      await expect(keys).toHaveAttribute("title", notThere("Launchkey Mini MK3", "Keys"))
+      await setFake(page, "__MIDI_GONE__", [])
+      await setFake(page, "__MIDI_BUSY__", ["Launchkey Mini MK3"])
+      await expect(keys).toHaveAttribute(
+        "title",
+        "\u201cLaunchkey Mini MK3\u201d is in use by another app."
+      )
+      await setFake(page, "__MIDI_BUSY__", [])
+      await expect(keys).toHaveAttribute("title", "123,456 notes")
+      await setFake(page, "__NOTES__", 99)
+    }
+  })
 
   test("a port another app holds reads not connected, and its tooltip says why", async ({ page }) => {
     await recording(page, { before: "window.__MIDI_BUSY__ = ['Launchkey Mini MK3', 'TD-17'];" })
@@ -533,7 +642,7 @@ test.describe("recording", () => {
     // One that is not plugged in says nothing of another app.
     await setFake(page, "__MIDI_GONE__", ["Launchkey Mini MK3"])
     await expect(keys).toHaveAttribute("data-not-connected")
-    await expect(keys).toHaveAttribute("title", "Launchkey Mini MK3")
+    await expect(keys).toHaveAttribute("title", notThere("Launchkey Mini MK3", "Keys"))
   })
 
   test("the tiles are polled with the levels, and no longer when the screen has gone", async ({

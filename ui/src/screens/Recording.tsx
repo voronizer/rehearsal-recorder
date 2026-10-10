@@ -324,9 +324,15 @@ export function Recording({
                   vel: watched?.vel ?? 0,
                   notes: watched?.notes ?? 0,
                   connected: watched?.connected ?? !noted,
-                  // Held by another app it reads "not connected" as well; the
-                  // tooltip says why, since plugging it in again will not help.
-                  tip: watched?.inUse ? `“${port}” is in use by another app.` : undefined,
+                  // What the tooltip says of a port that is not there, for a
+                  // tile with no room for words (D7, P5). Held by another app
+                  // it reads "not connected" as well, but plugging it in again
+                  // will not help.
+                  tip: !watched || watched.connected || !port
+                    ? undefined
+                    : watched.inUse
+                      ? `“${port}” is in use by another app.`
+                      : `“${port}” is not connected. ${t.name} records its notes from the moment it is plugged in.`,
                 }
               : undefined
             if (heard && !recordsAudio(t))
