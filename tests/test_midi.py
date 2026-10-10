@@ -252,8 +252,8 @@ def main():
     here = [P("TD-17", "TD-17", "Roland", "1001"), P("Launchkey Mini MK3 MIDI Port", "Launchkey Mini MK3", "Novation")]
     ok("found by its id first", find_port({"name": "renamed", "id": "1001"}, here)[0] is here[0])
     ok("then by its name", find_port({"name": "TD-17"}, here)[0] is here[0])
-    ok("then by its name as Windows renumbers it", find_port({"name": "TD-17 1"}, [P("TD-17 2")])[0].name == "TD-17 2")
-    ok("and with a second device's 2- in front", find_port({"name": "2- TD-17"}, [P("TD-17")])[0].name == "TD-17")
+    ok("then by its name as Windows renumbers it", find_port({"name": "TD-17 1"}, [P("TD-17 2")])[0] == P("TD-17 2"))
+    ok("and with a second device's 2- in front", find_port({"name": "2- TD-17"}, [P("TD-17")])[0] == P("TD-17"))
     ok("two alike are not guessed between", find_port({"name": "TD-17"}, [P("TD-17"), P("TD-17")]) == (None, True))
     ok("nor two alike once the numbers are taken off",
        find_port({"name": "TD-17"}, [P("TD-17 1"), P("2- TD-17 2")]) == (None, True))
@@ -279,6 +279,8 @@ def main():
        [p.name for p in in_order([P("Keystation Controller DAW Port", "Keystation Controller"),
                                   P("Keystation Controller MIDI Port", "Keystation Controller")])] ==
        ["Keystation Controller MIDI Port", "Keystation Controller DAW Port"])
+    ok("the device's name is taken out only where it is a word of its own: a device called MIDI keeps MIDIIN2",
+       [p.name for p in in_order([P("MIDIIN2 (MIDI)", "MIDI"), P("MIDI", "MIDI")])] == ["MIDI", "MIDIIN2 (MIDI)"])
     ok("nor Launch Control XL's, whose playing port is named for the device",
        [p.name for p in in_order([P("Launch Control XL DAW Port", "Launch Control XL"),
                                   P("Launch Control XL", "Launch Control XL")])] ==
@@ -290,13 +292,13 @@ def main():
     ok("a saved port with no usable name and no id finds nothing",
        find_port({"device": "TD-17"}, here) == (None, False) and find_port({"name": "  "}, here) == (None, False))
     ok("the exact name comes before the bare one: TD-17 1 among TD-17 1 and TD-17 2",
-       find_port({"name": "TD-17 1"}, [P("TD-17 1"), P("TD-17 2")])[0].name == "TD-17 1")
+       find_port({"name": "TD-17 1"}, [P("TD-17 1"), P("TD-17 2")])[0] == P("TD-17 1"))
     ok("bare_name ignores the space around a name", bare_name("  2- TD-17 1 ") == "TD-17")
     ok("a saved 2- with nothing after it matches no port", find_port({"name": "2- "}, [P("3-")]) == (None, False))
     ok("a saved KeyLab 49 is not bound to a KeyLab 61 by its bare name",
        find_port({"name": "KeyLab 49", "device": "KeyLab 49"}, [P("KeyLab 61", "KeyLab 61")]) == (None, False))
     ok("Windows' renumbered name is still found on its own device",
-       find_port({"name": "TD-17 1", "device": "TD-17"}, [P("TD-17 2", "TD-17")])[0].name == "TD-17 2")
+       find_port({"name": "TD-17 1", "device": "TD-17"}, [P("TD-17 2", "TD-17")])[0] == P("TD-17 2", "TD-17"))
 
     # What a Standard MIDI File can hold (F2) and how it is written (F4): format
     # 0, 960 ticks to the beat, 120 bpm, every name in UTF-8, every event on the

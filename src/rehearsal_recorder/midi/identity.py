@@ -122,11 +122,13 @@ def _is_control(port: PortInfo) -> bool:
     Whether a port is a device's control or DAW port (see in_order). The
     device's own name is taken out of the port's name first: "Launch Control XL"
     and "Keystation Controller" are names with a control word in them, and their
-    playing ports say nothing of the kind.
+    playing ports say nothing of the kind. Only where it stands as a word of its
+    own: a device called "MIDI" leaves the "midiin2" in "MIDIIN2 (MIDI)".
     """
     name = port.name.lower()
     if port.device:
-        name = name.replace(port.device.lower(), " ")
+        device = re.escape(port.device.lower())
+        name = re.sub(rf"(?<![a-z0-9]){device}(?![a-z0-9])", " ", name)
     return any(word in name for word in _CONTROL_WORDS)
 
 
