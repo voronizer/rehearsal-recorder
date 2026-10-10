@@ -143,3 +143,24 @@ export function pageLine(goes: SongGo[], unnamed: boolean, now: Date = new Date(
     return `${takesLabel(goes.length)} in ${rehearsalsLabel(rungs.length)} · last ${formatDayIn(newest, now)}`
   return `${goesLabel(goes.length)} in ${rehearsalsLabel(rungs.length)} · first ${formatDate(oldest, now)} · last ${formatDate(newest, now)}`
 }
+
+/** What a merge will do, as its dry run counted it (api.merge_songs). */
+export type MergeCounts = { goes: number; rehearsals: number; first: number | null; last: number | null }
+
+/**
+ * The question asked before merging `from` into `into` (rename-and-merge
+ * songs spec, R6): how many goes from how many rehearsals, the goes they
+ * become, and that it is undone only take by take.
+ */
+export function mergeQuestion(
+  from: string,
+  into: string,
+  { goes, rehearsals, first, last }: MergeCounts
+): { title: string; says: string } {
+  const become = first === last ? `${into} ${first}` : `${into} ${first}–${last}`
+  const says =
+    goes === 1
+      ? `1 go in ${rehearsalsLabel(rehearsals)} becomes ${become}, and its folder and cloud copies are renamed. To split it off again, rename the take.`
+      : `${goesLabel(goes)} in ${rehearsalsLabel(rehearsals)} become ${become}, and their folders and cloud copies are renamed. To split them again, rename the takes one by one.`
+  return { title: `Merge ${from} into ${into}?`, says }
+}

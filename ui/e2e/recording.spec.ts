@@ -1,4 +1,4 @@
-import { expect, keyOn, openApp, setFake, startRehearsal, test } from "./app.ts"
+import { expect, keyOn, nameTake, openApp, setFake, startRehearsal, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // The recording screen is read from across the room. Nobody stands at the
@@ -15,7 +15,7 @@ async function secondGo(page: Page, song = "Viasna") {
   await startRehearsal(page)
   await page.getByRole("button", { name: /Record take 1/ }).click()
   await page.getByRole("button", { name: /^Stop/ }).click()
-  await page.fill("#take-name", song)
+  await nameTake(page, song)
   await page.getByRole("button", { name: /Save take/ }).click()
   await page.getByRole("button", { name: /Record take 2/ }).click()
   await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
@@ -281,6 +281,26 @@ test("running out of disk is said on the disk line, and past an hour the clock s
   // Two tracks give wide tiles, and the name is written the same way there:
   // one way to read a tile, whatever the band.
   expect(await badNames(page)).toEqual([])
+})
+
+test("a battery running low is said on the status line, and nothing moves", async ({ page }) => {
+  await secondGo(page)
+  // The row the status line shares with RECORDING: it must not grow a line.
+  const row = topLine(page).locator("..")
+  const before = (await row.boundingBox())!.height
+  await setFake(page, "__BATTERY__", 14)
+  // Said where the free space always is, as long as it holds: not a notice.
+  await expect(page.getByText("Battery 14%: plug the laptop in", { exact: true })).toHaveCount(1)
+  await expect(page.locator("[data-notice]")).toHaveCount(0)
+  expect((await row.boundingBox())!.height).toBe(before)
+  // Charged enough, or plugged in: the usual line.
+  await setFake(page, "__BATTERY__", 64)
+  await expect(page.getByText(/^Interface connected · room for/)).toHaveCount(1)
+  await expect(page.getByText(/^Battery/)).toHaveCount(0)
+  await setFake(page, "__BATTERY__", 14)
+  await expect(page.getByText(/^Battery 14%/)).toHaveCount(1)
+  await setFake(page, "__BATTERY__", null)
+  await expect(page.getByText(/^Interface connected · room for/)).toHaveCount(1)
 })
 
 test("sixteen tracks still fit in one row, a stereo one split down the middle", async ({

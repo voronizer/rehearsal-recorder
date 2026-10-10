@@ -4,6 +4,7 @@ import {
   FolderOpen,
   Mic,
   Info,
+  ListMusic,
   Palette,
   RefreshCw,
   RotateCcw,
@@ -15,6 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DevicePicker } from "@/components/DevicePicker"
 import { MarksSettings } from "@/components/MarksSettings"
+import { SetsSettings } from "@/components/SetsSettings"
 import { OutputChannels } from "@/components/OutputChannels"
 import { NewDot } from "@/components/NewDot"
 import { UnderTheHood } from "@/components/UnderTheHood"
@@ -41,7 +43,7 @@ const SAID = "settings"
 // after "Found …" has gone, and after leaving Settings.
 const PLAYBACK = "playback"
 
-type TabId = "audio" | "folders" | "marks" | "appearance" | "about"
+type TabId = "audio" | "folders" | "marks" | "sets" | "appearance" | "about"
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[] = [
   {
@@ -61,6 +63,12 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode; blurb: string }[]
     label: "Marks",
     icon: <Tags className="size-4" />,
     blurb: "What a moment in a take can be marked with",
+  },
+  {
+    id: "sets",
+    label: "Sets",
+    icon: <ListMusic className="size-4" />,
+    blurb: "Songs in the order a rehearsal goes through them",
   },
   {
     id: "appearance",
@@ -87,7 +95,7 @@ const AUTO_PUBLISH_OPTIONS: { id: ShareWhat; label: string; hint: string }[] = [
   {
     id: "tracks",
     label: "The original tracks",
-    hint: "Every track as recorded, untouched — for opening in a DAW later.",
+    hint: "Every track as recorded, untouched, and the notes as .mid — for opening in a DAW later.",
   },
   {
     id: "both",
@@ -321,7 +329,7 @@ export function Settings({
   return (
     <Shell title="Settings" onBack={onBack} backKey>
       <div className="mx-auto flex w-full max-w-4xl gap-8">
-        {/* The section list. Five groups is few enough to show at once, so
+        {/* The section list. Six groups is few enough to show at once, so
             nothing is hidden behind a menu. */}
         <nav className="hidden w-52 shrink-0 flex-col gap-1 sm:flex">
           {TABS.map((t) => (
@@ -420,6 +428,8 @@ export function Settings({
         )}
 
         {tab === "marks" && <MarksSettings />}
+
+        {tab === "sets" && <SetsSettings />}
 
         {tab === "audio" && (<>
 

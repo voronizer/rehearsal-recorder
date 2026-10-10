@@ -5,7 +5,7 @@ import { FooterRow } from "@/components/FooterRow"
 import { Kbd, Shell } from "@/components/Shell"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
-import { TakeNameField } from "@/components/TakeNameField"
+import { TakeSummary } from "@/components/TakeSummary"
 import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import { MarkerDialog } from "@/components/MarkerDialog"
@@ -17,6 +17,7 @@ import {
   type Marker,
   type PendingTake,
   type ShareWhat,
+  type Take,
 } from "@/lib/api"
 import { croppedButNotSwept, formatMMSS } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
@@ -37,12 +38,15 @@ const WHAT_GOES: Record<ShareWhat, string> = {
 export function Review({
   take,
   rehearsalName,
+  takes,
   onKept,
   onDiscarded,
   onCropped,
 }: {
   take: PendingTake
   rehearsalName: string
+  /** Tonight's takes kept so far: the song's goes before this one. */
+  takes: Take[]
   onKept: () => void
   onDiscarded: () => void
   onCropped: (take: PendingTake) => void
@@ -51,7 +55,8 @@ export function Review({
   // over from the previous one with the counter bumped.
   const firstName = take.suggested_name ?? `Take ${take.take_number}`
   const [name, setName] = useState(firstName)
-  // And when the band has moved on, the song they moved to is a click.
+  // And when the band has moved on, the song they moved to is a click, in
+  // Rename take.
   const songChoices = useSongChoices(true, null, take.take_number)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -145,7 +150,9 @@ export function Review({
       markers,
       // Only an answer that differs from the setting is sent: one that
       // agrees leaves the take following the setting, even if it changes.
-      cloud?.dir && send !== cloud.auto ? send : null
+      cloud?.dir && send !== cloud.auto ? send : null,
+      // The .mid files stop_take made, kept beside the audio.
+      take.notes
     )
     setBusy(false)
     if (!res.ok) {
@@ -175,7 +182,9 @@ export function Review({
     setError(null)
     dismiss("review")
     player.pause()
-    const res = await watching(api().crop_draft(take.temp_dir, take.tracks, from, to))
+    const res = await watching(
+      api().crop_draft(take.temp_dir, take.tracks, from, to, take.notes)
+    )
     setBusy(false)
     if (!res.ok) {
       setError(res.error ?? "Could not crop the take")
@@ -186,9 +195,12 @@ export function Review({
         .filter((m) => m.at >= from && m.at <= to)
         .map((m) => ({ ...m, at: Math.round((m.at - from) * 100) / 100 }))
     )
+    // The notes are cut with the audio. A new list is a take opened again:
+    // the player reads them afresh.
     onCropped({
       ...take,
       tracks: res.tracks ?? take.tracks,
+      notes: res.notes ?? take.notes,
       duration_sec: res.duration_sec ?? take.duration_sec,
     })
     // The crop itself went through — only the sweep of the original is what
@@ -212,13 +224,14 @@ export function Review({
           error={error}
           rule
           left={
-            <TakeNameField
-              id="take-name"
-              label="Take name"
-              value={name}
-              fallback={take.default_name ?? `Take ${take.take_number}`}
+            <TakeSummary
+              name={name}
+              takeNumber={take.take_number}
+              durationSec={take.duration_sec}
+              takes={takes}
               choices={songChoices}
-              onCommit={setName}
+              fallback={take.default_name ?? `Take ${take.take_number}`}
+              onRename={setName}
             />
           }
         >
@@ -282,6 +295,8 @@ export function Review({
       <div className="flex w-full flex-col gap-6">
         <TakePlayer
           player={player}
+          notes={take.notes}
+          notesMissing={take.notes_missing}
           markers={markers}
           onAddMarker={addMarker}
           onEditMarker={setEditing}

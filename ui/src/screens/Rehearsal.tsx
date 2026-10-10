@@ -14,11 +14,12 @@ import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEveningSettings } from "@/hooks/useEveningSettings"
-import { TakeNameField } from "@/components/TakeNameField"
-import { BeforeTonightCard } from "@/components/BeforeTonightCard"
-import { byPlace, type PlacedTake } from "@/lib/songs"
+import { TakeNameField, type TakeNameFieldHandle } from "@/components/TakeNameField"
+import { SetCard, SongRows } from "@/components/NextTakeSongs"
+import { SHORT, otherSongs, rowsFor, shortList, songOf, useListOpen } from "@/lib/setSongs"
+import { SongKeys } from "@/components/SongKeys"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
-import { useEscape, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
+import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
   type Marker,
@@ -58,13 +59,8 @@ export function Rehearsal({
     openAt,
     move,
     playInOverview,
-    cueAt,
     player,
-  } = useTakeStripPlayer(byPlace)
-  // An earlier go from the panel is a take placed in its own rehearsal:
-  // take numbers repeat from one rehearsal to the next, and tonight's
-  // takes have no folder of their own here.
-  const cuedEarlier = cued !== null && (cued as PlacedTake).folder !== undefined
+  } = useTakeStripPlayer()
   // A take open in the player, or playing in the overview: either way Space
   // is its, and Escape puts it away before it finishes anything.
   const inHand = selected !== null || cued !== null
@@ -117,29 +113,46 @@ export function Rehearsal({
   // The go Python has for the name the field shows, while that is the name
   // it answered for; undefined for a pick it has not answered yet.
   const knownGo = nextName === session.next_take_name ? session.next_take_go : undefined
-  // The song the next take is named for, as Python has it: the card under
-  // the field is about it. A name with a go is a song's; "Take N" has none.
-  const nextSong = session.next_take_go != null ? session.next_take_name : null
-  // Both are the song's title as the library keeps it: Python has matched a
-  // name typed in other capitals to its song already.
-  const nextPlayedTonight =
-    nextSong !== null && (session.songs ?? []).some((s) => s.name === nextSong)
   const knownGoRef = useRef(knownGo)
   useEffect(() => {
     knownGoRef.current = knownGo
   }, [knownGo])
+
+  // The songs beside the field (NextTakeSongs): the set, then the others.
+  // What is typed in the field, and what it held as typing began, narrows
+  // them; a row names the take through the field, as a pill would.
+  const fieldRef = useRef<TakeNameFieldHandle>(null)
+  const [typing, setTyping] = useState<{ from: string; text: string } | null>(null)
+  const [listOpen, setListOpen] = useListOpen(session.folder)
+  const setTitles = session.set?.songs.map((s) => s.title) ?? []
+  const others = otherSongs(nextChoices, setTitles)
+  const goesTonight = new Map((session.songs ?? []).map((s) => [s.name, s.takes]))
+  const lastTakes = new Map((nextChoices?.here ?? []).map((c) => [c.song, c.last_take ?? 0]))
+  const shownName = typing?.text ?? nextName
+  const current = songOf(shownName, nextChoices, setTitles)
+  const narrowBy =
+    typing && typing.text.trim() !== "" && typing.text.trim() !== typing.from.trim()
+      ? typing.text
+      : null
 
   const nameNextTake = (name: string) => {
     // The name it would have anyway goes as "", so it goes on following
     // the takes when one is renamed or deleted — and what the field keeps
     // is the fallback's own spelling, not a case-only variant typed over it.
     const sent = name.toLocaleLowerCase() === fallback.toLocaleLowerCase() ? "" : name
-    setPicked({ against: session.next_take_name, name: sent === "" ? fallback : name })
+    const shown = sent === "" ? fallback : name
+    setPicked({ against: session.next_take_name, name: shown })
     naming.current = naming.current.then(async () => {
       try {
         const res = await api().set_next_take_name(sent)
         if (res.ok) {
           setError(null)
+          // What the take will be called is Python's answer: "Palyn", an old
+          // name, is Pałyn, and "Pałyn 5" is Pałyn. When that is the name the
+          // session had already, nothing else would bring the field round
+          // to it.
+          const settled = res.next_take_name
+          if (settled) setPicked((p) => (p && p.name === shown ? { ...p, name: settled } : p))
         } else {
           setError(res.error ?? "Could not name the next take")
           // Python never took it: the field goes back to the name it has.
@@ -152,6 +165,58 @@ export function Rehearsal({
       onChanged()
     })
   }
+
+  const pickSong = (title: string) => {
+    if (fieldRef.current) fieldRef.current.put(title)
+    else nameNextTake(title)
+  }
+
+  // ↑ and ↓ go through the rows as they stand: the set's, then the others
+  // (K1), folded as the list shows them — its five, the song the field
+  // names after them when it is not one, then the rest. One past the five
+  // opens the rest; a row picked by a key is scrolled into view (R7). While
+  // typing they move a highlight through the rows the typing left, which
+  // Enter takes (K3).
+  const short = shortList(others, lastTakes)
+  const extra = current !== null && others.includes(current) && !short.includes(current)
+  const asShown =
+    !listOpen && others.length > SHORT + 1
+      ? [
+          ...short,
+          ...(extra ? [current] : []),
+          ...others.filter((t) => !short.includes(t) && t !== current),
+        ]
+      : others
+  const order = [...setTitles, ...asShown]
+  const [highlight, setHighlight] = useState<string | null>(null)
+  const reveal = (title: string) => {
+    if (others.includes(title) && !short.includes(title)) setListOpen(true)
+    requestAnimationFrame(() => {
+      const panel = document.querySelector("[data-next-take-panel]")
+      const key = CSS.escape(title)
+      panel
+        ?.querySelector(`[data-set-song="${key}"], [data-song-row="${key}"]`)
+        ?.scrollIntoView({ block: "nearest" })
+    })
+  }
+  const stepSong = (dir: 1 | -1) => {
+    const at = current === null ? -1 : order.indexOf(current)
+    const to = at < 0 ? (dir > 0 ? order[0] : undefined) : order[at + dir]
+    if (to === undefined) return
+    reveal(to)
+    pickSong(to)
+  }
+  const arrowWhileTyping = (dir: 1 | -1) => {
+    const found = rowsFor(order, narrowBy, current)
+    const from = highlight ?? current
+    const at = from === null ? -1 : found.indexOf(from)
+    const to = at < 0 ? (dir > 0 ? found[0] : found.at(-1)) : found[at + dir]
+    if (to === undefined) return
+    if (narrowBy === null) reveal(to)
+    setHighlight(to)
+  }
+  useKey("ArrowUp", () => stepSong(-1), selected === null && !busy)
+  useKey("ArrowDown", () => stepSong(1), selected === null && !busy)
 
   const startTake = async () => {
     if (busy) return
@@ -174,6 +239,16 @@ export function Rehearsal({
   // Escape below is what points Space at recording again.
   useSpacebar(inHand ? player.toggle : startTake, !busy)
   usePlayerKeys(player.skip, inHand)
+  const finish = async () => {
+    player.pause()
+    const res = await api().finish_rehearsal()
+    if (!res.ok) {
+      setError(res.error ?? "Could not finish the rehearsal")
+      return
+    }
+    onFinished()
+  }
+
   // Escape climbs the same ladder here as everywhere: the strip's columns,
   // the open take, then a take playing in the overview, and then the
   // rehearsal itself, because finishing is the only way up from this screen.
@@ -196,24 +271,6 @@ export function Rehearsal({
     const id = setInterval(() => onChanged(), 1500)
     return () => clearInterval(id)
   }, [inFlight, onChanged])
-
-  // An earlier go is the card's song's: another song picked under the field
-  // puts it away. A refresh that leaves the song as it was does not.
-  const beforeSong = session.before_tonight?.song ?? null
-  useEffect(() => {
-    if (cuedEarlier) uncue()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beforeSong])
-
-  const finish = async () => {
-    player.pause()
-    const res = await api().finish_rehearsal()
-    if (!res.ok) {
-      setError(res.error ?? "Could not finish the rehearsal")
-      return
-    }
-    onFinished()
-  }
 
   const deleteTake = async (take: Take) => {
     player.pause()
@@ -338,9 +395,9 @@ export function Rehearsal({
           folder={session.folder}
         />
       }
-      // The next take's name and its songs sit with what the song went
-      // like before tonight, in a panel of their own on the setup screen's
-      // panel colour (issue #12 step 6).
+      // The next take's name, the set and the band's other songs, in a
+      // panel of their own on the setup screen's panel colour (issue #12
+      // steps 6 and 8).
       aside={
         <aside
           aria-label="Next take"
@@ -348,6 +405,7 @@ export function Rehearsal({
           className="flex w-[22.5rem] shrink-0 flex-col gap-5 overflow-y-auto border-l bg-panel px-5 py-6 min-[1100px]:w-[26rem]"
         >
           <TakeNameField
+            ref={fieldRef}
             id="next-take-name"
             label="Next take"
             value={nextName}
@@ -356,28 +414,40 @@ export function Rehearsal({
             knownGo={knownGo}
             onCommit={nameNextTake}
             onPanel
+            songs="none"
+            onDraft={(text) => {
+              // What is typed changed, or the field was left: no row is
+              // highlighted any more.
+              if (text !== (typing?.text ?? null)) setHighlight(null)
+              setTyping((t) => (text === null ? null : { from: t?.from ?? text, text }))
+            }}
+            onArrow={arrowWhileTyping}
+            highlighted={() => highlight}
+            selectOnClick
+            labelAside={<SongKeys hidden={selected !== null} />}
           />
-          {/* Hidden while a take is open: the one player is its. */}
-          <BeforeTonightCard
-            key={session.before_tonight?.song ?? nextSong ?? ""}
-            hidden={selected !== null}
-            before={session.before_tonight ?? null}
-            song={nextSong}
-            playedTonight={nextPlayedTonight}
-            playback={
-              cuedEarlier
-                ? {
-                    take: cued as PlacedTake,
-                    playing: player.playing,
-                    loading: player.loading,
-                    position: player.position,
-                    duration: player.duration,
-                  }
-                : null
-            }
-            problem={cuedEarlier ? player.loadError : null}
-            onPlay={playInOverview}
-            onPlayAt={(take, at) => cueAt(take, Math.max(0, at - 3))}
+          {session.set && (
+            <SetCard
+              set={session.set}
+              goes={goesTonight}
+              current={current}
+              onPick={pickSong}
+              highlighted={highlight}
+            />
+          )}
+          <SongRows
+            titles={others}
+            lastTake={lastTakes}
+            goes={goesTonight}
+            current={current}
+            typed={narrowBy}
+            typing={typing !== null}
+            inSet={setTitles}
+            title={session.set ? "Other songs" : "Songs"}
+            onPick={pickSong}
+            highlighted={highlight}
+            open={listOpen}
+            onOpen={setListOpen}
           />
         </aside>
       }
@@ -436,6 +506,7 @@ export function Rehearsal({
           <TakePlayer
             player={player}
             markers={liveTake(session.takes, selected)?.markers ?? []}
+            notes={selected.notes} notesMissing={selected.notes_missing}
             onAddMarker={(sec) => addMarker(selected, sec)}
             onEditMarker={(marker) => setMarkerEdit({ take: selected, marker })}
             onRemoveMarker={(sec) => removeMarker(selected, sec)}
@@ -451,15 +522,13 @@ export function Rehearsal({
               takes={session.takes}
               songs={session.songs ?? []}
               playback={
-                cued && !cuedEarlier
-                  ? {
-                      take: cued.take_number,
-                      playing: player.playing,
-                      loading: player.loading,
-                      position: player.position,
-                      duration: player.duration,
-                    }
-                  : null
+                cued && {
+                  take: cued.take_number,
+                  playing: player.playing,
+                  loading: player.loading,
+                  position: player.position,
+                  duration: player.duration,
+                }
               }
               onPlay={playInOverview}
               onOpen={select}

@@ -32,26 +32,75 @@ export type Track = {
   icon?: string
   /** The interface input this track comes from, counted from 1. null when
    *  the layout came from a card with more inputs than this one has and
-   *  nobody has yet said who plays and who sits out. */
+   *  nobody has yet said who plays and who sits out, and for a track that
+   *  records MIDI only, which has no input. */
   channel: number | null
+  /** What it records: its sound, its notes or both. Left out, it records
+   *  sound, as every band saved before MIDI does (lib/midi.ts modeOf). */
+  mode?: RecordMode
+  /** The port its notes come from, for a track on Both or MIDI. Python
+   *  keeps only what the system said of it; null while none is picked. */
+  midi_port?: MidiPortRef | null
+}
+
+/** What a track records: its audio, its MIDI notes, or both. The words are
+ *  the ones the band's config and the database keep. */
+export type RecordMode = "audio" | "both" | "midi"
+
+/** A MIDI port as a band keeps it: the name first, and whatever else the
+ *  system said of it, which finds the port again when its name changes. */
+export type MidiPortRef = {
+  name: string
+  device?: string
+  maker?: string
+  id?: string
 }
 
 /**
  * A track of a rehearsal that is running. Its input is settled: a rehearsal
- * cannot start while any track is still waiting for one, so nothing past the
- * setup screen has to ask.
+ * cannot start while any track that records sound is still waiting for one,
+ * so nothing past the setup screen has to ask.
  */
 export type PlacedTrack = {
   name: string
-  channel: number
+  /** null for a track that records MIDI only: it has no input. Every other
+   *  track has one by now. */
+  channel: number | null
   /** Two adjacent inputs, written as one two-channel file. */
   stereo?: boolean
   icon?: string
+  mode?: RecordMode
+  midi_port?: MidiPortRef | null
 }
 
 export type TrackFile = {
   name: string
   file: string
+}
+
+/** A take's notes of one track: the .mid saved beside the audio. `port` is
+ *  the name of the port they came from. `after` is the audio track whose lane
+ *  this one follows in the player (a Both track's own name), or null to go
+ *  first; Python works it out from the band's order (rules.lane_after) and
+ *  lib/midi.ts laneOrder lays the lanes out by it. `place` is the track's
+ *  index in the rehearsal's band (rules.place_in), which orders two lanes
+ *  that follow the same one; none for a track the band does not have. */
+export type NotesFile = {
+  name: string
+  file: string
+  port: string
+  after: string | null
+  place?: number
+}
+
+/** A track that takes notes and has no .mid in this take: its port was not
+ *  plugged in the whole take. Placed by `after` and `place` as a NotesFile
+ *  is. */
+export type MissingNotes = {
+  name: string
+  port: string
+  after: string | null
+  place?: number
 }
 
 /** A take already saved to disk. */
@@ -68,7 +117,13 @@ export type Take = {
    *  have several, and a take with no song can have one. */
   starred?: boolean
   duration_sec: number
+  /** The audio files only, as always. */
   tracks: TrackFile[]
+  /** The .mid files beside them, for the tracks that took notes. Read a
+   *  list that is not there as none: takes from before MIDI have no notes. */
+  notes?: NotesFile[]
+  /** Tracks that take notes and got none in this take. */
+  notes_missing?: MissingNotes[]
   /** Spots marked while listening back, in order. */
   markers?: Marker[]
   /** What of this take was copied into the cloud folder, if anything. */
@@ -108,6 +163,9 @@ export type Label = {
 /** What a change to the labels answers: all of them, as they are now. */
 export type LabelsAnswer = Ok<{ labels?: Label[] }>
 
+/** What a change to the sets answers: every set as it now is. */
+export type SetsAnswer = Ok<{ sets?: SongSet[] }>
+
 export type Marker = {
   /** Position in the take, in seconds. */
   at: number
@@ -138,6 +196,10 @@ export type PendingTake = {
   temp_dir: string
   duration_sec: number
   tracks: TrackFile[]
+  /** The .mid files stop_take made, and the tracks that have none: keep_take
+   *  and crop_draft are handed the first again. */
+  notes?: NotesFile[]
+  notes_missing?: MissingNotes[]
   suggested_name?: string
   /** The name it would have had with none picked before recording: what ✕
    *  in the review screen's name field puts back. */
@@ -149,6 +211,9 @@ export type Draft = {
   dir: string
   name: string
   tracks: string[]
+  /** The tracks that took notes, by name like `tracks`: the take's .mid
+   *  files, made or still to be made when it is recovered. */
+  notes?: string[]
   duration_sec: number
   rehearsal_folder: string
   rehearsal_name: string
@@ -171,11 +236,11 @@ export type SessionState =
       next_take_go?: number | null
       /** What the next take would be called without a name picked for it. */
       next_take_default?: string
-      /** The song the next take is named for, as it went before tonight:
-       *  the card beside the Next take field. Null with no song, or none. */
-      before_tonight?: BeforeTonight | null
       /** The latest go at the song the next take is named for, if any. */
       last_attempt?: LastAttempt | null
+      /** The set this rehearsal plays by, as it kept it at Start; null when
+       *  it plays freely. */
+      set?: RehearsalSet | null
       recording: boolean
       /** Takes the app is copying to the cloud folder right now. */
       cloud_queue?: Record<number, "queued" | "working">
@@ -195,18 +260,17 @@ export type LastAttempt = {
   created_at?: string | null
 }
 
-/**
- * A song as it went before tonight (api._before_tonight): the go shown
- * beside the Next take field — its newest ★ go, else the last go of its
- * latest rehearsal — and what "N more" adds under it, the last go of each of
- * its three latest rehearsals less that one. Tonight's rehearsal and the
- * ones not on disk are left out.
- */
-export type BeforeTonight = {
-  song: string
-  first: SongPlays
-  more: SongPlays[]
-}
+/** A song in a set: its title now, or as typed when no song has it yet
+ *  (`new`: a song not played yet, which Settings › Sets says). */
+export type SetSong = { title: string; new: boolean }
+
+/** A set of songs in the order the band means to play them (Settings ›
+ *  Sets), as list_sets gives them. */
+export type SongSet = { id: number; name: string; songs: SetSong[] }
+
+/** The copy of a set a rehearsal keeps from its start: editing or deleting
+ *  the set later leaves it as it was. */
+export type RehearsalSet = { name: string; songs: SetSong[] }
 
 /**
  * A song a rehearsal was spent on, and how many goes it got. Worked out from
@@ -248,6 +312,8 @@ export type RehearsalSummary = {
   /** The folder is not on disk — deleted, renamed outside the app, or on a
    *  drive that is not plugged in. */
   missing?: boolean
+  /** The name of the set it was played by, if any. */
+  set_name?: string | null
 }
 
 export type RehearsalDetail = {
@@ -261,6 +327,9 @@ export type RehearsalDetail = {
   /** The folder is not on disk — deleted, renamed outside the app, or on a
    *  drive that is not plugged in. */
   missing?: boolean
+  /** The set it was played by, as it kept it; null when it was played
+   *  freely. */
+  set?: RehearsalSet | null
 }
 
 /** A song a take can be named after, and the go naming it so would make. */
@@ -271,6 +340,9 @@ export type SongChoice = {
   go: number
   /** On a song this rehearsal played: the number of its latest take. */
   last_take?: number
+  /** Titles the song had, or songs merged into it: typed, they are this
+   *  song too (Library._resolve). */
+  also?: string[]
 }
 
 /** The songs a take can be named after (api.song_choices): what its own
@@ -325,6 +397,8 @@ export type SongSummary = {
   first_played: string
   last_played: string
   starred: number
+  /** Its old names: titles it had, and songs merged into it. */
+  also: string[]
 }
 
 /** The takes nobody named, as the last row of the Songs view. */
@@ -351,9 +425,30 @@ export type SongDetail = {
   error?: string
   id?: number | null
   title?: string | null
+  /** Its old names, which typed are this song too. */
+  also?: string[]
   plays?: SongPlays | null
   goes?: SongGo[]
 }
+
+/** A song renamed (api.rename_song). Refused because the title is another
+ *  song's, title or old name, `into` is that song: merging into it is what
+ *  to offer. */
+export type RenameSongAnswer = Ok<{
+  title?: string
+  goes?: number
+  into?: { id: number; title: string } | null
+}>
+
+/** A song merged into another, or asked about first (api.merge_songs): how
+ *  many goes from how many rehearsals, and the goes they become. */
+export type MergeAnswer = Ok<{
+  into?: string
+  goes?: number
+  rehearsals?: number
+  first?: number | null
+  last?: number | null
+}>
 
 /**
  * What the setup screen says about the rehearsals before this one
@@ -417,6 +512,76 @@ export type TrackMedia = {
   /** One row per channel: a stereo track has two. */
   peaks: number[][]
 }
+
+/**
+ * The MIDI ports the system lists (api.list_midi_ports): a port as the band
+ * keeps it, and how many notes it has sent since the counts last started
+ * again, which only a port that is open says anything about (a track's, or one
+ * the check opened).
+ */
+export type MidiPort = MidiPortRef & { notes: number }
+
+export type MidiPorts = {
+  /** The MIDI system in use, or null when there is none. */
+  system: string | null
+  /** A device's playing port first. */
+  ports: MidiPort[]
+  /** Why there is no MIDI system, in words; null when there is one. */
+  error: string | null
+}
+
+/** How a track's port stands: "ok" is open and heard as there; "missing" not
+ *  plugged in, or gone quiet; "in_use" held by another app; "ambiguous" two
+ *  ports it could be; "none" no port picked. */
+export type MidiState = "ok" | "missing" | "in_use" | "ambiguous" | "none"
+
+/** What one track that takes notes is doing (api.midi_activity). */
+export type MidiTrackActivity = {
+  /** The loudest note-on since the last call, 0..1. */
+  vel: number
+  /** Note-ons since the counts last started again: this check, this take. */
+  notes: number
+  /** Whether `state` is "ok". */
+  connected: boolean
+  state: MidiState
+  /** The track whose notes this port gets too: probably one instrument
+   *  plugged in twice. */
+  echo?: string
+}
+
+/** Every track that takes notes, by name. */
+export type MidiActivity = Record<string, MidiTrackActivity>
+
+/**
+ * One track's notes, read back from its .mid for the player (api.take_notes).
+ * Times are seconds from the take's start. Drums come as the six rows (plus
+ * "Other" when a note falls outside them) and a note's third figure is its
+ * row, counted from 0 at the top; anything else comes by pitch, from `low` to
+ * `high` (whole octaves, C to B). The fourth is the note-on's velocity, 1 to
+ * 127 as the .mid has it, unlike `MidiTrackActivity.vel` (0 to 1).
+ *
+ * `icon` is the band's for the name, found as take_media finds a track's, on
+ * an error too: a track that records notes only has no audio lane to take it
+ * from.
+ */
+export type TakeNotes = { icon?: string } & (
+  | { name: string; error: string }
+  | {
+      name: string
+      drums: true
+      rows: string[]
+      /** [start, length, row, velocity] */
+      notes: [number, number, number, number][]
+    }
+  | {
+      name: string
+      drums: false
+      low: number
+      high: number
+      /** [start, length, pitch, velocity] */
+      notes: [number, number, number, number][]
+    }
+)
 
 /** Player state on the Python side. */
 export type PlayerState = {
@@ -504,6 +669,8 @@ export type RecordingHealth = {
   free_bytes?: number
   minutes_left?: number
   low_space?: boolean
+  /** On battery: its charge, 0 to 100. Null on mains or with no battery. */
+  battery_percent?: number | null
 }
 
 /** One of the app's own files, for Under the hood's Show buttons. */
@@ -536,6 +703,8 @@ export type UnderTheHood = {
     } | null
     playback: string
   }
+  /** The MIDI system and its ports, as api.list_midi_ports has them. */
+  midi: MidiPorts
   files: OwnFile[]
   deleting: "system" | "folder"
   fallback_trash: string
@@ -591,6 +760,9 @@ export type Settings = {
   history_view?: HistoryView
   /** How its Marks view groups a label's marks. */
   marks_grouping?: MarksGrouping
+  /** The set picked beside Start rehearsal, kept across restarts; null to
+   *  play freely, and when that set is gone. */
+  next_set: number | null
   ui_scale: number
   output_device_index: number | null
   /** Outputs of that card the mix comes out of, from 1: [3, 4] or [5]. */
@@ -626,10 +798,10 @@ type PyApi = {
   list_input_devices(): Promise<Device[]>
   list_output_devices(): Promise<OutputDevice[]>
   /** The band placed on the interface in force. Without `band`, the saved
-   *  one; with it, those names, stereo switches and icons — what is on
-   *  screen. */
+   *  one; with it, those names, stereo switches, icons, modes and MIDI ports
+   *  — what is on screen. */
   load_default_tracks(
-    band?: Pick<Track, "name" | "stereo" | "icon">[]
+    band?: Pick<Track, "name" | "stereo" | "icon" | "mode" | "midi_port">[]
   ): Promise<TrackTemplate | null>
   /** Looks for interfaces again — one plugged in after the app started is
    *  not listed until it does. Refused while recording. `found` and `gone`
@@ -653,7 +825,9 @@ type PyApi = {
     deviceIndex: number,
     samplerate: number,
     tracks: Track[],
-    bitDepth?: number
+    bitDepth?: number,
+    /** The set it plays by; left out or null, it plays freely. */
+    setId?: number | null
   ): Promise<Ok<{ folder?: string }>>
   /** Which rate/depth combinations this input actually accepts. */
   recording_formats(
@@ -671,6 +845,10 @@ type PyApi = {
   /** Names the take recorded next; blank goes back to the name it would
    *  have had. Holds until a take is kept. */
   set_next_take_name(name: string): Promise<Ok<{ next_take_name?: string; next_take_go?: number | null }>>
+  /** The latest go at the song `name` resolves to, by session_state's rule
+   *  for last_attempt: what the screen after a take measures it against.
+   *  null with no rehearsal on, no song, or a song never played. */
+  last_attempt(name: string): Promise<LastAttempt | null>
   get_levels(): Promise<Record<string, number>>
   stop_take(): Promise<PendingTake | { ok: false; error: string }>
   keep_take(
@@ -682,7 +860,9 @@ type PyApi = {
     markers?: Marker[],
     /** This take's own answer: null follows the setting, false keeps it
      *  out of the cloud folder, true sends it with sending off. */
-    sendToCloud?: boolean | null
+    sendToCloud?: boolean | null,
+    /** The .mid files stop_take made, to be kept beside the audio. */
+    notes?: NotesFile[]
   ): Promise<Ok<{ take?: Take }>>
   discard_take(tempDir: string): Promise<Ok>
   /**
@@ -704,9 +884,17 @@ type PyApi = {
     tempDir: string,
     tracks: TrackFile[],
     startSec: number,
-    endSec: number
+    endSec: number,
+    /** The draft's .mid files, cropped with the audio. */
+    notes?: NotesFile[]
   ): Promise<
-    Ok<{ tracks?: TrackFile[]; duration_sec?: number; location?: string | null }>
+    Ok<{
+      tracks?: TrackFile[]
+      /** The notes again, cut to the same part. */
+      notes?: NotesFile[]
+      duration_sec?: number
+      location?: string | null
+    }>
   >
 
   list_rehearsals(): Promise<RehearsalSummary[]>
@@ -723,6 +911,14 @@ type PyApi = {
    *  the take named, which does not count as a go. With no folder, the
    *  rehearsal in progress. */
   song_choices(folder?: string | null, takeNumber?: number | null): Promise<SongChoices>
+  /** A song's new title; its takes' folders and cloud copies follow in the
+   *  background. */
+  rename_song(songId: number, title: string): Promise<RenameSongAnswer>
+  /** One song's goes become another's, numbered after its own; `dryRun`
+   *  only counts them, for the question. */
+  merge_songs(fromId: number, intoId: number, dryRun?: boolean): Promise<MergeAnswer>
+  /** An old name forgotten: typed again, it is a new song. */
+  forget_song_name(name: string): Promise<Ok>
   /** Takes a rehearsal whose folder is gone out of history. Nothing on disk
    *  is touched — there is nothing left to touch. */
   forget_rehearsal(folder: string): Promise<Ok>
@@ -832,6 +1028,18 @@ type PyApi = {
   /** A label in use needs `marksTo`: the label its marks get. */
   delete_label(labelId: number, marksTo?: number | null): Promise<LabelsAnswer>
 
+  /** Every set, in order. */
+  list_sets(): Promise<SongSet[]>
+  /** Each answers with every set as it now is, or with the reason it was
+   *  refused: no name, or a name another set has. */
+  add_set(name: string, songs: string[]): Promise<SetsAnswer>
+  /** null leaves the name, or the songs, as they are. */
+  update_set(setId: number, name: string | null, songs: string[] | null): Promise<SetsAnswer>
+  /** Rehearsals played by it keep their copy of it. */
+  delete_set(setId: number): Promise<SetsAnswer>
+  /** The set Start rehearsal plays by, or null to play freely. */
+  save_next_set(setId: number | null): Promise<Ok>
+
   list_drafts(): Promise<Draft[]>
   recover_draft(draftDir: string, name?: string): Promise<Ok<{ take?: Take }>>
   discard_draft(draftDir: string): Promise<DeleteResult>
@@ -877,11 +1085,25 @@ type PyApi = {
   ): Promise<Ok>
   monitor_levels(): Promise<Record<string, number>>
   monitor_health(): Promise<MonitorHealth>
+  /** The MIDI ports the system lists now, for the picker on the setup
+   *  screen. Polled while it is up. */
+  list_midi_ports(): Promise<MidiPorts>
+  /** What each track that takes notes is doing: the loudest note since the
+   *  last call, the count, and whether its port is there. Polled with the
+   *  levels. */
+  midi_activity(): Promise<MidiActivity>
+  /** The notes of a take's tracks, read back from their .mid files, one answer
+   *  per file in the order asked. A track with no file (its port never
+   *  appeared) is asked with a file of null, for its icon: it is answered
+   *  "Notes file not found". */
+  take_notes(files: (TrackFile | { name: string; file: null })[]): Promise<TakeNotes[]>
   activity(): Promise<Activity>
   activity_seen(): Promise<Ok>
   clear_activity(): Promise<Ok>
   retry_cloud(entryId: number): Promise<Ok<{ queued?: boolean }>>
-  stop_monitor(): Promise<Ok>
+  /** `keepPorts`: the rehearsal about to start takes the check's MIDI ports
+   *  as they are, open, rather than closing them to open them again. */
+  stop_monitor(keepPorts?: boolean): Promise<Ok>
 
   player_open(tracks: TrackFile[]): Promise<PlayerState>
   player_close(): Promise<Ok>
@@ -989,12 +1211,17 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "get_levels",
   "monitor_levels",
   "monitor_health",
+  "list_midi_ports",
+  "midi_activity",
+  "take_notes",
   "activity",
   "recording_health",
   "list_rehearsals",
   "list_songs",
   "list_drafts",
   "list_labels",
+  "list_sets",
+  "last_attempt",
   "get_settings",
   "startup_problems",
 ])
@@ -1070,6 +1297,8 @@ type Pollable = {
   get_levels: Record<string, number[]>
   monitor_levels: Record<string, number[]>
   monitor_health: MonitorHealth
+  list_midi_ports: MidiPorts
+  midi_activity: MidiActivity
   activity: Activity
   recording_health: RecordingHealth
   session_state: SessionState

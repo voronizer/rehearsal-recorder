@@ -14,9 +14,17 @@ to the cloud folder, so moving any of the three moves what points into it.
 from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from rehearsal_recorder.midi.rules import AUDIO
+
 
 class Base(DeclarativeBase):
     pass
+
+
+# The kinds of a take's file (TakeFile.kind), as stored: the words never
+# change.
+AUDIO_FILE = "audio"
+NOTES_FILE = "midi"
 
 
 class Rehearsal(Base):
@@ -30,6 +38,12 @@ class Rehearsal(Base):
     created_at: Mapped[str] = mapped_column(String)
     samplerate: Mapped[int] = mapped_column(Integer)
     bit_depth: Mapped[int] = mapped_column(Integer)
+    # The set it was played by, copied when it started (migration 0006):
+    # the set's name and its song titles in order, None when played freely.
+    # A copy, not a link, so changing or deleting the set later leaves what
+    # this evening was meant to be.
+    set_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    set_songs: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     tracks: Mapped[list["Track"]] = relationship(
         back_populates="rehearsal", cascade="all, delete-orphan",
@@ -60,8 +74,27 @@ class Song(Base):
     last_go: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class SongName(Base):
+    """
+    A title a song had before it was renamed, or the title of a song merged
+    into it (docs/superpowers/specs/2026-10-02-rename-and-merge-songs-design.md,
+    D6-D8): typed again, it names a go at the song. Spelled as it was. Unique
+    case-blind across every song, and never a song's title too, which
+    library.py enforces as it does titles.
+    """
+
+    __tablename__ = "song_name"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    song_id: Mapped[int] = mapped_column(
+        ForeignKey("song.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String)
+
+
 class Track(Base):
-    """One input as the rehearsal was set up: its name and which channel."""
+    """One member of the band as the rehearsal was set up: its name, what it
+    records, and which channel and port it was plugged into."""
 
     __tablename__ = "track"
 
@@ -71,7 +104,14 @@ class Track(Base):
     )
     position: Mapped[int] = mapped_column(Integer)
     name: Mapped[str] = mapped_column(String)
-    channel: Mapped[int] = mapped_column(Integer)
+    # None for a track that records only MIDI: it is plugged into no input
+    # (migration 0007).
+    channel: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # "audio", "both" or "midi" — midi/rules.py says what each means.
+    mode: Mapped[str] = mapped_column(String, default=AUDIO, server_default=AUDIO)
+    # The name of the MIDI port it played into, for a track that records
+    # notes.
+    midi_port: Mapped[str | None] = mapped_column(String, nullable=True)
 
     rehearsal: Mapped[Rehearsal] = relationship(back_populates="tracks")
 
@@ -128,7 +168,8 @@ class Take(Base):
 
 
 class TakeFile(Base):
-    """One track of a take on disk."""
+    """One file of a take on disk: a track's WAV, or the notes a MIDI port
+    sent while it played."""
 
     __tablename__ = "take_file"
 
@@ -140,6 +181,10 @@ class TakeFile(Base):
     name: Mapped[str] = mapped_column(String)
     # Relative to the rehearsal folder: "01 - Verse riff/Guitar 1.wav".
     file: Mapped[str] = mapped_column(String)
+    # "audio" for a WAV, "midi" for a .mid (migration 0007). Kept apart so
+    # that nothing which opens a take's tracks as audio is handed a .mid.
+    # Added in place, like song_id on `take`.
+    kind: Mapped[str] = mapped_column(String, default=AUDIO_FILE, server_default=AUDIO_FILE)
 
     take: Mapped[Take] = relationship(back_populates="files")
 
@@ -165,6 +210,26 @@ class Label(Base):
     colour: Mapped[str] = mapped_column(String)
     # From 0, with no gaps: the order of the marker dialog's buttons, and
     # the first is what a new mark gets.
+    position: Mapped[int] = mapped_column(Integer)
+
+
+class SongSet(Base):
+    """
+    Songs a rehearsal goes through, in order, made by the band in Settings or
+    on the start screen (docs/superpowers/specs/2026-10-08-song-sets-design.md).
+    The songs are titles, resolved as a typed name is when read, so a song
+    renamed or merged away is still found; a title no song has is a song not
+    played yet. Names are unique case-blind, which library.py enforces. An id
+    is never given twice (AUTOINCREMENT, see migration 0006).
+    """
+
+    __tablename__ = "song_set"
+    __table_args__ = {"sqlite_autoincrement": True}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    songs: Mapped[list] = mapped_column(JSON)
+    # From 0, with no gaps: the order the sets are listed in.
     position: Mapped[int] = mapped_column(Integer)
 
 

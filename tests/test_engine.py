@@ -7,10 +7,12 @@ the renderer is called directly and the samples themselves are inspected.
 """
 
 import json
+import logging
 import re
 import struct
 import sys
 import tempfile
+import time
 import types
 import wave
 from pathlib import Path
@@ -92,14 +94,25 @@ _sd.check_input_settings = _check_input_settings
 _sd.OutputStream = _FakeStream
 _sd.InputStream = _FakeStream
 sys.modules["sounddevice"] = _sd
+# No suite opens a real MIDI port. With None in sys.modules, importing the
+# library raises ImportError, which midi/ports.open_system() answers as "MIDI is
+# not available" — whatever is plugged into the machine running them.
+sys.modules["pylibremidi"] = None
+# The app's log says why it has no MIDI on every Api made, and unhandled
+# that would print here each time; nothing here reads it.
+logging.getLogger("rehearsal_recorder.midi.ports").addHandler(logging.NullHandler())
 
 import numpy as np  # noqa: E402
 
+import rehearsal_recorder.api as _api_at_start  # noqa: E402
 from rehearsal_recorder.api import _is_inside  # noqa: E402
 from rehearsal_recorder.audio.player import TakePlayer  # noqa: E402
 
 SR = 48000
 problems = []
+# The rig's two threads stay off in every Api this suite builds, however it builds
+# it: most sections never touch MIDI, and a section that does asks for them.
+_api_at_start.MIDI_THREADS = False
 
 
 def ok(label, cond):
@@ -133,11 +146,14 @@ def settle(player, blocks=40, frames=512):
     return out
 
 
-def fresh_api(tmp):
+def fresh_api(tmp, midi_threads=False):
     import rehearsal_recorder.api as apimod
 
     apimod.RECORDINGS_ROOT = tmp / "Rec"
     apimod.CONFIG_PATH = tmp / "config.json"
+    # The rig's two threads stay off unless a section asks for them: most
+    # sections never touch MIDI, and a section that does drives the rig itself.
+    apimod.MIDI_THREADS = midi_threads
     a = apimod.Api.__new__(apimod.Api)
     apimod.Api.__init__(a)
     return apimod, a
@@ -698,12 +714,14 @@ def main():
     rec = AudioRecorder.__new__(AudioRecorder)
     rec.error = None
     rec._stopping = False
+    rec._seen_wall = None  # not started: no sleep to tell (see [63])
     rec._finished()  # as if the stream stopped by itself
     ok("an unrequested stop is flagged as an error", rec.error is not None)
 
     rec2 = AudioRecorder.__new__(AudioRecorder)
     rec2.error = None
     rec2._stopping = True
+    rec2._seen_wall = None
     rec2._finished()  # this one we asked for
     ok("our own stop is not an error", rec2.error is None)
 
@@ -3507,25 +3525,25 @@ def main():
        L.inputs_for(saved, xr18) == {"Guitar": 3, "Vocals": 7})
     ok("and gives those numbers back",
        L.for_device(band, saved, xr18, 18)
-       == [{"name": "Guitar", "channel": 3, "stereo": False},
-           {"name": "Vocals", "channel": 7, "stereo": False}])
+       == [{"name": "Guitar", "channel": 3, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 7, "stereo": False, "mode": "audio"}])
 
     # The whole point: a card nobody has used yet keeps the band entire.
     ok("an unused card keeps everyone, counted from the first free input",
        L.for_device(band, saved, little, 2)
-       == [{"name": "Guitar", "channel": 1, "stereo": False},
-           {"name": "Vocals", "channel": 2, "stereo": False}])
+       == [{"name": "Guitar", "channel": 1, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 2, "stereo": False, "mode": "audio"}])
 
     both = L.remember(saved, little, [{"name": "Guitar", "channel": 1},
                                       {"name": "Vocals", "channel": 2}])
     ok("going back to the first card brings its own numbers back",
        L.for_device(band, both, xr18, 18)
-       == [{"name": "Guitar", "channel": 3, "stereo": False},
-           {"name": "Vocals", "channel": 7, "stereo": False}])
+       == [{"name": "Guitar", "channel": 3, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 7, "stereo": False, "mode": "audio"}])
     ok("and the other card keeps its own",
        L.for_device(band, both, little, 2)
-       == [{"name": "Guitar", "channel": 1, "stereo": False},
-           {"name": "Vocals", "channel": 2, "stereo": False}])
+       == [{"name": "Guitar", "channel": 1, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 2, "stereo": False, "mode": "audio"}])
 
     print("  the band changes")
     # Somebody joins on one card. Every other card must show them too — that
@@ -3533,12 +3551,12 @@ def main():
     grew = [{"name": "Guitar"}, {"name": "Vocals"}, {"name": "Drums"}]
     ok("a new member appears on a card that never saw them",
        L.for_device(grew, both, xr18, 18)
-       == [{"name": "Guitar", "channel": 3, "stereo": False},
-           {"name": "Vocals", "channel": 7, "stereo": False},
-           {"name": "Drums", "channel": 1, "stereo": False}])
+       == [{"name": "Guitar", "channel": 3, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 7, "stereo": False, "mode": "audio"},
+           {"name": "Drums", "channel": 1, "stereo": False, "mode": "audio"}])
     ok("on the lowest input nobody else is on",
        L.for_device(grew, both, little, 2)[2] == {"name": "Drums", "channel": None,
-                                                  "stereo": False})
+                                                  "stereo": False, "mode": "audio"})
 
     ok("and when the inputs run out, the rest simply have none",
        [t["channel"] for t in L.for_device(
@@ -3568,8 +3586,8 @@ def main():
        L.inputs_for(a32._config["layouts"], big) == {"Guitar": 5, "Vocals": 6})
     ok("the card gets its own numbers back",
        a32.load_default_tracks()["tracks"]
-       == [{"name": "Guitar", "channel": 5, "stereo": False},
-           {"name": "Vocals", "channel": 6, "stereo": False}])
+       == [{"name": "Guitar", "channel": 5, "stereo": False, "mode": "audio"},
+           {"name": "Vocals", "channel": 6, "stereo": False, "mode": "audio"}])
 
     # Device 1 is the one-input "Podcast mic": the band survives the move.
     a32._remember_device("device", 1)
@@ -3701,8 +3719,8 @@ def main():
     band2 = [{"name": "Gtr"}, {"name": "Keys", "stereo": True}]
     ok("a stereo member takes a pair, counted from the first free input",
        L.for_device(band2, [], xr18, 8)
-       == [{"name": "Gtr", "channel": 1, "stereo": False},
-           {"name": "Keys", "channel": 2, "stereo": True}])
+       == [{"name": "Gtr", "channel": 1, "stereo": False, "mode": "audio"},
+           {"name": "Keys", "channel": 2, "stereo": True, "mode": "audio"}])
     ok("and the pair it takes is not offered to anybody else",
        L.for_device(band2 + [{"name": "Voc"}], [], xr18, 8)[2]["channel"] == 4)
     ok("a stereo member with no room for its second input has none",
@@ -3711,7 +3729,7 @@ def main():
     ok("a remembered pair comes back as a pair",
        L.for_device(band2, L.remember([], xr18, [
            {"name": "Keys", "channel": 5, "stereo": True}]), xr18, 8)[1]
-       == {"name": "Keys", "channel": 5, "stereo": True})
+       == {"name": "Keys", "channel": 5, "stereo": True, "mode": "audio"})
 
     print("  what the card and the disk make of it")
     # Device 0 is the eight-input "Interface".
@@ -3785,7 +3803,7 @@ def main():
     # bass player's icon is theirs whichever card they plug into.
     ok("a member's icon comes back with it",
        L.for_device([{"name": "Bass", "icon": "bass"}], [], xr18, 8)
-       == [{"name": "Bass", "channel": 1, "stereo": False, "icon": "bass"}])
+       == [{"name": "Bass", "channel": 1, "stereo": False, "icon": "bass", "mode": "audio"}])
     ok("and one with no icon has none, rather than a guess",
        "icon" not in L.for_device([{"name": "Gtr"}], [], xr18, 8)[0])
 
@@ -5798,7 +5816,7 @@ def main():
 
     def refuse_take_4(folder, number, take, name):
         if number == 4:
-            return None, None, "the folder is open in another program"
+            return None, None, None, "the folder is open in another program"
         return real_move53(folder, number, take, name)
 
     p53._move_take_dir = refuse_take_4
@@ -6166,8 +6184,8 @@ def main():
     sa_event.listen(s56._lib._engine, "before_cursor_execute", count56)
     s56.list_songs()
     sa_event.remove(s56._lib._engine, "before_cursor_execute", count56)
-    ok("the list of songs is one query",
-       len(statements56) == 1)
+    ok("the list of songs is two queries, its songs and their old names, however many",
+       len(statements56) == 2)
 
     ok("History opens on its Rehearsals view until another is chosen",
        s56.get_settings()["history_view"] == "rehearsals")
@@ -6234,10 +6252,11 @@ def main():
     finally:
         api57mod.open_in_file_manager = real_open57
 
-    print("\n[58] The next song's goes from before tonight")
-    # The rehearsal screen shows the song the next take is named for as it
-    # went before tonight: one go, and a few more on request. The recording
-    # screen measures its first go of the evening against that same go.
+    print("\n[58] The first go tonight against the go before tonight")
+    # The recording screen measures the first go of a song tonight against a
+    # go from before tonight, with its day: the newest starred one, else the
+    # last go of the latest rehearsal that played it. (Before tonight, the
+    # card that showed those goes on the rehearsal screen, is gone.)
     import shutil as shutil58
     tmp58 = Path(tempfile.mkdtemp())
     _, s58 = fresh_api(tmp58)
@@ -6257,16 +6276,10 @@ def main():
 
     A58 = rehearsal58("First", "2026-08-25T19:00:00",
                       [("Polyn", 180), ("Polyn 2", 190), ("Doroga", 200)])
-    B58 = rehearsal58("Middle", "2026-09-10T19:00:00", [("Polyn", 210), ("Vesna", 220)])
+    rehearsal58("Middle", "2026-09-10T19:00:00", [("Polyn", 210), ("Vesna", 220)])
     C58 = rehearsal58("Tuesday", "2026-09-15T19:00:00",
                       [("Polyn", 230), ("Polyn 2", 240), ("Vesna", 250)])
     D58 = rehearsal58("Last", "2026-09-22T19:00:00", [("Vesna", 260), ("Polyn", 270)])
-
-    def pick58(go):
-        return (go["folder"], go["take"]["take_number"])
-
-    def before58():
-        return s58.session_state()["before_tonight"]
 
     s58.start_rehearsal("Live", 0, SR, [{"name": "Gtr", "channel": 1}])
     live58 = Path(s58._session["folder"])
@@ -6278,95 +6291,53 @@ def main():
         return s58.keep_take(number, str(d), name, 1.0,
                              [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
 
-    s58.set_next_take_name("Polyn")
-    b58 = before58()
-    ok("with no star, the last go of the latest rehearsal is shown",
-       b58 is not None and pick58(b58["first"]) == (D58, 2))
-    ok("more is the last go of each of three rehearsals, less the one shown",
-       b58 is not None and [pick58(g) for g in b58["more"]] == [(C58, 2), (B58, 1)])
-    ok("the song is the library's title", b58 is not None and b58["song"] == "Polyn")
-    ok("a go is in _go_at's shape",
-       b58 is not None and set(b58["first"]) == {"folder", "rehearsal", "created_at", "take"}
-       and all(set(g) == {"folder", "rehearsal", "created_at", "take"} for g in b58["more"]))
-    s58.set_take_star(C58, 1, True)
-    b58 = before58()
-    ok("the newest starred go is shown", b58 is not None and pick58(b58["first"]) == (C58, 1))
-    ok("then all three rehearsals' last goes",
-       b58 is not None and [pick58(g) for g in b58["more"]] == [(D58, 2), (C58, 2), (B58, 1)])
-    s58.set_take_star(C58, 1, False)
+    def last58():
+        return s58.session_state()["last_attempt"]
 
-    s58.set_next_take_name("polyn")
-    b58 = before58()
-    ok("a title in another case finds its song", b58 is not None and b58["song"] == "Polyn")
-    ok("and the field names it as the library does",
-       s58.session_state()["next_take_name"] == "Polyn")
-    la58 = s58.session_state()["last_attempt"]
-    ok("the first go tonight is measured against the go shown",
+    s58.set_next_take_name("Polyn")
+    ok("the rehearsal screen has no Before tonight any more",
+       "before_tonight" not in s58.session_state())
+    la58 = last58()
+    ok("with no star, the last go of the latest rehearsal, with its day",
        la58 is not None and la58["duration_sec"] == 270
        and str(la58.get("created_at", "")).startswith("2026-09-22"))
-
-    keep58(1, "Polyn")
-    st58 = s58.session_state()
-    b58 = st58["before_tonight"]
-    ok("tonight's go is never before tonight",
-       b58 is not None and all(Path(g["folder"]) != live58 for g in [b58["first"], *b58["more"]])
-       and pick58(b58["first"]) == (D58, 2))
-    ok("nor counted among the three rehearsals",
-       b58 is not None and [pick58(g) for g in b58["more"]] == [(C58, 2), (B58, 1)])
-    ok("with a go tonight, last time is tonight's",
-       st58["last_attempt"] is not None and "created_at" not in st58["last_attempt"]
-       and st58["last_attempt"]["duration_sec"] == 1.0)
-
-    # The screen asks for its state after everything done on it: the card
-    # reads the few goes it can show, not every go at the song with its
-    # files and marks.
-    read58 = []
-    take_data58 = s58._lib._take_data
-
-    def counting58(folder, take):
-        read58.append(take.id)
-        return take_data58(folder, take)
-
-    s58._lib._take_data = counting58
-    try:
-        s58.set_next_take_name("Take 2")
-        s58.session_state()
-        without58 = len(read58)
-        s58.set_next_take_name("Polyn")
-        read58.clear()
-        s58.session_state()
-        n58 = len(read58) - without58
-        ok(f"the card reads only the goes it can show ({n58} read)", n58 <= 3)
-    finally:
-        s58._lib._take_data = take_data58
-
+    s58.set_take_star(C58, 1, True)
+    ok("the newest starred go once there is one",
+       last58() is not None and last58()["duration_sec"] == 230)
+    s58.set_take_star(C58, 1, False)
     s58.set_take_star(A58, 1, True)
-    b58 = before58()
-    ok("a star older than the three rehearsals is still the go shown",
-       b58 is not None and pick58(b58["first"]) == (A58, 1)
-       and [pick58(g) for g in b58["more"]] == [(D58, 2), (C58, 2), (B58, 1)])
+    ok("a star older than the latest rehearsals is still the one",
+       last58() is not None and last58()["duration_sec"] == 180)
     s58.set_take_star(A58, 1, False)
+
+    s58.set_next_take_name("polyn")
+    ok("a title in another case finds its song",
+       last58() is not None and last58()["song"] == "Polyn")
 
     shutil58.move(D58, str(tmp58 / "moved"))
     try:
-        b58 = before58()
-        ok("a rehearsal not on disk is skipped and not counted",
-           b58 is not None and pick58(b58["first"]) == (C58, 2)
-           and [pick58(g) for g in b58["more"]] == [(B58, 1), (A58, 2)])
+        ok("a rehearsal not on disk is skipped",
+           last58() is not None and last58()["duration_sec"] == 240)
     finally:
         shutil58.move(str(tmp58 / "moved"), D58)
 
-    keep58(2, "Sonca")
-    ok("a song played only tonight has none", before58() is None)
-    s58.set_next_take_name("Take 3")
+    keep58(1, "Polyn")
     st58 = s58.session_state()
-    ok("Take N has none", st58["before_tonight"] is None and st58["last_attempt"] is None)
+    ok("with a go tonight, last time is tonight's",
+       st58["last_attempt"] is not None and "created_at" not in st58["last_attempt"]
+       and st58["last_attempt"]["duration_sec"] == 1.0)
+    keep58(2, "Sonca")
+    ok("a song played only tonight is measured against tonight",
+       last58() is not None and last58()["song"] == "Sonca"
+       and "created_at" not in last58())
+    s58.set_next_take_name("Take 3")
+    ok("Take N has none", last58() is None)
     s58.set_next_take_name("Nothing yet")
-    ok("a new song has none", before58() is None)
+    ok("a new song has none", last58() is None)
 
-    # The library failing to answer for the card must not take the
-    # rehearsal screen down with it: the session is what it shows.
-    s58.set_next_take_name("Polyn")
+    # The library failing to answer must not take the rehearsal screen down
+    # with it: the session is what it shows.
+    s58.set_next_take_name("Vesna")
     goes_before58 = s58._lib.goes_before
 
     def broken58(*_a, **_k):
@@ -6376,8 +6347,8 @@ def main():
     try:
         st58 = s58.session_state()
         ok("a library that cannot answer leaves the session as it is",
-           st58.get("active") is True and st58["before_tonight"] is None
-           and st58["next_take_name"] == "Polyn")
+           st58.get("active") is True and st58["last_attempt"] is None
+           and st58["next_take_name"] == "Vesna")
     except Exception as e:
         ok(f"a library that cannot answer leaves the session as it is ({e!r})", False)
     finally:
@@ -6588,6 +6559,3110 @@ def main():
                               "Take 6", "Vesna", "Polyn")])
     ok("the number of queries does not grow with the marks",
        len(s60.list_marks(1)["marks"]) == 22 and queries60(1) == few60)
+
+    print("\n[61] Renaming and merging songs")
+    from rehearsal_recorder.activity import Journal as Journal61
+    from rehearsal_recorder.names_pass import NamesPass as NamesPass61
+
+    # The loop: a pass over the takes given, under its own title.
+    journal61 = Journal61()
+    fixed61 = []
+
+    def fix61(folder, number):
+        fixed61.append(number)
+        return {"renamed": True, "error": None}
+
+    queued61 = NamesPass61(find=lambda: [("/r", 9, "Other 1")], fix=fix61,
+                           busy=lambda: False, journal=journal61)
+    queued61.request_takes([("/r", 1, "Polin 1"), ("/r", 2, "Polin 2")],
+                           "Renaming Polyn to Polin")
+    entry61 = None
+    ok("a pass over the takes given renames only those, under its own title",
+       queued61.run_queued() == 2 and fixed61 == [1, 2])
+    entry61 = journal61.snapshot()[0]
+    ok("and says so in its own entry",
+       entry61["kind"] == "names" and entry61["title"] == "Renaming Polyn to Polin"
+       and entry61["state"] == "done" and entry61["detail"] == "2 takes renamed")
+    ok("once", queued61.run_queued() == 0 and fixed61 == [1, 2])
+    # One pass going wrong outside a take leaves the next queued pass to run.
+    queued61.request_takes([("/r", 3)], "Broken")
+    queued61.request_takes([("/r", 4, "Polin 4")], "Renaming Polin to Polyn")
+    ok("a queued pass that breaks does not hold up the next",
+       queued61.run_queued() == 1 and fixed61 == [1, 2, 4])
+
+    # The real thing: folders and a cloud copy following a rename and a merge.
+    tmp61 = Path(tempfile.mkdtemp())
+    rec61, cloud61 = tmp61 / "Rec", tmp61 / "Drive"
+    cloud61.mkdir(parents=True)
+    (tmp61 / "config.json").write_text(json.dumps(
+        {"recordings_dir": str(rec61), "cloud_dir": str(cloud61)}), encoding="utf-8")
+    _, p61 = fresh_api(tmp61)
+
+    def rehearsal61(name, created_at, names):
+        folder = rec61 / f"{name} - {created_at[:10]} 19-00"
+        takes = []
+        for i, n in enumerate(names, start=1):
+            take_dir = folder / f"{i:02d} - {n}"
+            write_wav(take_dir / "Gtr.wav", 100, seconds=0.2)
+            takes.append({"take_number": i, "name": n, "duration_sec": 0.2, "markers": [],
+                          "tracks": [{"name": "Gtr", "file": str(take_dir / "Gtr.wav")}]})
+        (folder / "session.json").write_text(json.dumps({
+            "name": name, "created_at": created_at, "samplerate": SR,
+            "tracks": [{"name": "Gtr", "channel": 1}], "takes": takes}), encoding="utf-8")
+        import_all(p61._lib, p61._cloud_dir)
+        return folder
+
+    def dirs61(folder):
+        return sorted(d.name for d in folder.iterdir() if d.is_dir())
+
+    def entry_of61(title):
+        return next((e for e in p61.activity()["entries"] if e["title"] == title), None)
+
+    def song61(title):
+        return next((s for s in p61.list_songs()["songs"] if s["title"] == title), None)
+
+    # Polyn 1-3; Pałyn 1-3, then Palyn 1-2 a week later.
+    one61 = rehearsal61("One", "2026-09-01T19:00:00", ["Polyn", "Polyn", "Pałyn", "Pałyn"])
+    two61 = rehearsal61("Two", "2026-09-08T19:00:00", ["Polyn", "Pałyn", "Viasna"])
+    three61 = rehearsal61("Three", "2026-09-15T19:00:00", ["Palyn", "Palyn"])
+    p61._names_pass.run()
+    mix61 = cloud61 / two61.name / "01 - Polyn 3.wav"
+    mix61.parent.mkdir(parents=True)
+    mix61.write_bytes(b"RIFF")
+    p61._lib.set_cloud_copy(two61, 1, {"mix": str(mix61), "mix_format": "wav", "source": {}},
+                            cloud61)
+
+    polyn61 = song61("Polyn")["id"]
+    renamed61 = p61.rename_song(polyn61, "Polin")
+    ok("a song renamed answers its title and how many goes it has",
+       renamed61 == {"ok": True, "title": "Polin", "goes": 3})
+    p61.player_open([{"name": "Gtr", "file": str(one61 / "02 - Polyn 2" / "Gtr.wav")}])
+    p61._names_pass.run_queued()
+    ok("its folders follow in the background, but not one open in the player",
+       dirs61(one61) == ["01 - Polin 1", "02 - Polyn 2", "03 - Pałyn 1", "04 - Pałyn 2"]
+       and dirs61(two61)[0] == "01 - Polin 3" and p61._open_tracks is not None)
+    ok("and so does its copy in the cloud folder",
+       sorted(p.name for p in (cloud61 / two61.name).iterdir()) == ["01 - Polin 3.wav"])
+    rename_entry61 = entry_of61("Renaming Polyn to Polin \u00b7 3 takes")
+    ok("the background work says what it is doing",
+       rename_entry61 is not None and rename_entry61["kind"] == "names"
+       and rename_entry61["state"] == "done")
+    p61.player_close()
+    ok("the take left is renamed by the next pass once the player lets go",
+       p61._names_pass.run() == 1 and "02 - Polin 2" in dirs61(one61))
+
+    pałyn61 = song61("Pałyn")["id"]
+    ok("a title that is another song's is refused, naming that song",
+       p61.rename_song(polyn61, "pałyn") == {
+           "ok": False, "error": "There is already a song called Pałyn",
+           "into": {"id": pałyn61, "title": "Pałyn"}})
+    ok("other refusals name no song",
+       p61.rename_song(polyn61, "Take 2") == {
+           "ok": False, "error": "Take 2 is what a take with no song is called", "into": None})
+
+    palyn61 = song61("Palyn")["id"]
+    p61._lib.set_starred(three61, 2, True)
+    p61._lib.set_starred(one61, 3, True)
+    asked61 = p61.merge_songs(palyn61, pałyn61, True)
+    ok("a merge asked about answers the counts and moves nothing",
+       asked61 == {"ok": True, "into": "Pałyn", "goes": 2, "rehearsals": 1,
+                   "first": 4, "last": 5}
+       and dirs61(three61) == ["01 - Palyn 1", "02 - Palyn 2"])
+    merged61 = p61.merge_songs(palyn61, pałyn61)
+    p61._names_pass.run_queued()
+    ok("merged, its goes are the other's next, folders and all",
+       merged61 == asked61 and dirs61(three61) == ["01 - Pałyn 4", "02 - Pałyn 5"])
+    merge_entry61 = entry_of61("Merging Palyn into Pa\u0142yn \u00b7 2 takes")
+    ok("the background work says that too",
+       merge_entry61 is not None and merge_entry61["state"] == "done")
+    ok("and a whole pass after it finds nothing left to rename",
+       p61._names_pass.run() == 0)
+    plays61 = p61.get_song(pałyn61)["plays"]
+    ok("the merged song plays its newest starred go, whichever song it was",
+       plays61["folder"] == str(three61) and plays61["take"]["take_number"] == 2)
+    ok("a song merged into itself is refused",
+       p61.merge_songs(pałyn61, pałyn61) == {
+           "ok": False, "error": "A song cannot be merged into itself"})
+
+    ok("the songs carry their old names, for the name fields",
+       next(c for c in p61.song_choices(str(two61))["here"] if c["song"] == "Pałyn")["also"]
+       == ["Palyn"])
+    ok("and for History", song61("Pałyn")["also"] == ["Palyn"]
+       and p61.get_song(pałyn61)["also"] == ["Palyn"])
+    p61.start_rehearsal("Four", 0, SR, [{"name": "Gtr", "channel": 1}])
+    picked61 = p61.set_next_take_name("Palyn")
+    ok("the old name typed for the next take is the song it went to",
+       picked61["next_take_name"] == "Pałyn" and picked61["next_take_go"] == 6)
+    ok("forgetting it", p61.forget_song_name("palyn") == {"ok": True})
+    again61 = p61.set_next_take_name("Palyn")
+    ok("typed again, it is a new song",
+       again61["next_take_name"] == "Palyn" and again61["next_take_go"] == 1)
+    ok("a name no song was called is not forgotten",
+       p61.forget_song_name("Palyn") == {"ok": False, "error": "No song was called Palyn"})
+    p61.finish_rehearsal()
+
+    print("\n[62] Song sets")
+    # A set is picked beside Start rehearsal: its first song is the first
+    # take, the rehearsal keeps a copy of it, and History says it.
+    tmp62 = Path(tempfile.mkdtemp())
+    _, p62 = fresh_api(tmp62)
+    tracks62 = [{"name": "Gtr", "channel": 1}]
+    ok("there are no sets to begin with", p62.list_sets() == [])
+    r62 = p62.add_set("Gig", ["Polyn", "Vesna", "Novaja"])
+    ok("a set is made and every set comes back",
+       r62.get("ok") is True and [st["name"] for st in r62["sets"]] == ["Gig"]
+       and [x["title"] for x in r62["sets"][0]["songs"]] == ["Polyn", "Vesna", "Novaja"])
+    gig62 = r62["sets"][0]["id"]
+    ok("a taken name is refused with the reason",
+       p62.add_set("GIG", []) == {"ok": False, "error": "There is already a set called Gig"})
+    ok("an empty name is refused", p62.add_set(" ", [])["ok"] is False)
+    ok("a set is renamed",
+       p62.update_set(gig62, name="Gig on the 25th")["sets"][0]["name"] == "Gig on the 25th")
+    other62 = p62.add_set("Spare", [])["sets"][1]["id"]
+    ok("a set that is not there is refused",
+       p62.update_set(999, name="x") == {"ok": False, "error": "Set not found"})
+
+    ok("no set is picked to begin with", p62.get_settings()["next_set"] is None)
+    ok("picking one is kept", p62.save_next_set(gig62) == {"ok": True}
+       and p62.get_settings()["next_set"] == gig62 and p62._config.get("next_set") == gig62)
+    p62.save_next_set(other62)
+    p62.delete_set(other62)
+    ok("a picked set deleted reads as none", p62.get_settings()["next_set"] is None)
+    p62.save_next_set(None)
+    ok("no set is kept too", p62.get_settings()["next_set"] is None)
+    # Settings is where another folder is chosen when this one is gone: it
+    # must open whatever the library says.
+    p62.save_next_set(gig62)
+
+    def unreadable62(*_args, **_kwargs):
+        raise RuntimeError("the drive went away")
+
+    p62._lib.set_of = p62._lib.sets = unreadable62
+    try:
+        answered62 = p62.get_settings()
+    except Exception:
+        answered62 = None
+    del p62._lib.set_of, p62._lib.sets
+    ok("settings still answer when the sets cannot be read, with no set picked",
+       answered62 is not None and answered62["next_set"] is None)
+    p62.save_next_set(None)
+
+    p62.start_rehearsal("Played by the set", 0, SR, tracks62, set_id=gig62)
+    st62 = p62.session_state()
+    ok("the rehearsal says its set",
+       st62["set"] == {"name": "Gig on the 25th", "songs": [
+           {"title": "Polyn", "new": True}, {"title": "Vesna", "new": True},
+           {"title": "Novaja", "new": True}]})
+    ok("the first take is the set's first song",
+       st62["next_take_name"] == "Polyn" and st62["next_take_go"] == 1)
+    live62 = Path(p62._session["folder"])
+
+    def keep62(number, name):
+        p62._session["take_counter"] = number
+        d = live62 / "_drafts" / f"take {number}"
+        write_wav(d / "Gtr.wav", 100, seconds=1.0)
+        return p62.keep_take(number, str(d), name, 1.0,
+                             [{"name": "Gtr", "file": str(d / "Gtr.wav")}])
+
+    keep62(1, "Vesna")
+    ok("after a take the next take follows it, set or no set",
+       p62.session_state()["next_take_name"] == "Vesna")
+    ok("a song of the set played is no longer new",
+       p62.session_state()["set"]["songs"][1] == {"title": "Vesna", "new": False})
+    p62.update_set(gig62, name="Changed", songs=["Doroga"])
+    ok("changing the set later leaves the rehearsal's copy",
+       p62.session_state()["set"]["name"] == "Gig on the 25th")
+    ok("the last go at a song, asked by name",
+       p62.last_attempt("vesna") == {"song": "Vesna", "duration_sec": 1.0})
+    ok("none for a take with no song", p62.last_attempt("Take 3") is None)
+    ok("none for a song never played", p62.last_attempt("Novaja") is None)
+    folder62 = p62._session["folder"]
+    p62.finish_rehearsal()
+
+    listed62 = {r["name"]: r.get("set_name") for r in p62.list_rehearsals()}
+    ok("History's list says the set", listed62.get("Played by the set") == "Gig on the 25th")
+    ok("and the rehearsal itself",
+       p62.get_rehearsal(str(folder62))["set"]["name"] == "Gig on the 25th")
+
+    p62.start_rehearsal("Free", 0, SR, tracks62)
+    ok("played freely, there is no set", p62.session_state()["set"] is None)
+    ok("and the first take is Take 1", p62.session_state()["next_take_name"] == "Take 1")
+    p62.finish_rehearsal()
+    p62.start_rehearsal("Gone", 0, SR, tracks62, set_id=999)
+    ok("a set that is not there starts with none", p62.session_state()["set"] is None)
+    p62.finish_rehearsal()
+
+    print("\n[63] Awake during a take")
+    # A laptop that sleeps anyway (a closed lid, the battery) ends the take
+    # where it slept: everything before kept, nothing after added, and the
+    # screen told why once it wakes.
+    import time as _t63
+
+    import rehearsal_recorder.audio.capture as capmod
+    from rehearsal_recorder.audio import heartbeat as hb63
+
+    tmp63 = Path(tempfile.mkdtemp())
+    one63 = [{"name": "Gtr", "channel": 1}]
+    # The checks move _seen_wall back by hand; a real tick landing in between
+    # would move it on again, so the tick waits out the section unless a
+    # check asks for it.
+    tick_was = capmod.TICK_SEC
+    capmod.TICK_SEC = 3600
+    block63 = np.full((256, 1), 900, dtype=np.int16)
+
+    def recorder63(name):
+        rec = capmod.AudioRecorder(0, SR, one63, tmp63 / name)
+        rec.start()
+        return rec
+
+    def raw63(rec):
+        rec.flush()  # written through Python's buffer until then
+        return (rec.out_dir / "Gtr.raw").stat().st_size
+
+    at63 = _t63.time() - 120
+    ok("the notice says when the laptop went to sleep",
+       capmod.slept_notice(at63)
+       == f"The laptop went to sleep at {_t63.strftime('%H:%M', _t63.localtime(at63))}, "
+          "so the take ends there. Everything up to that moment is saved.")
+
+    told = recorder63("told")
+    told._callback(block63, 256, None, None)
+    told._callback(block63, 256, None, None)
+    told.fell_asleep(at63)
+    ok("a take told the laptop is going to sleep says so",
+       told.problem() == capmod.slept_notice(at63))
+    told._callback(block63, 256, None, None)
+    ok("and writes nothing after it", raw63(told) == 2 * 256 * 2)
+    first63 = told.stop()
+    ok("so the take ends where the laptop slept",
+       first63["duration_sec"] == 512 / SR)
+    second63 = told.stop()
+    with wave.open(first63["tracks"][0]["file"], "rb") as w63:
+        frames63 = w63.getnframes()
+    ok("stopping twice as the laptop wakes writes the take once",
+       second63 == first63 and frames63 == 512)
+
+    gap = recorder63("gap")
+    gap._callback(block63, 256, None, None)
+    gap._seen_wall -= 12
+    before63 = gap._seen_wall
+    gap._callback(block63, 256, None, None)
+    ok("two blocks more than ten seconds apart mean the laptop slept between them",
+       gap.problem() == capmod.slept_notice(before63) and raw63(gap) == 256 * 2)
+    gap.stop()
+
+    soon = recorder63("soon")
+    soon._callback(block63, 256, None, None)
+    soon._seen_wall -= 9
+    soon._callback(block63, 256, None, None)
+    ok("a block soon after the last is just a block",
+       soon.problem() is None and raw63(soon) == 2 * 256 * 2)
+    soon.stop()
+
+    tick = recorder63("tick")
+    tick._seen_wall -= 12
+    before63 = tick._seen_wall
+    tick._seen(_t63.time())
+    ok("a tick after a long gap means the same",
+       tick.problem() == capmod.slept_notice(before63))
+    tick.stop()
+
+    woke = recorder63("woke")
+    woke._callback(block63, 256, None, None)
+    woke._seen_wall -= 12
+    woke._heartbeat._last -= 12
+    before63 = woke._seen_wall
+    ok("nothing at all since the laptop woke says it slept, not that the card went",
+       woke.problem() == capmod.slept_notice(before63))
+    woke.stop()
+
+    gone = recorder63("gone")
+    gone._callback(block63, 256, None, None)
+    gone._heartbeat._last -= 15
+    said63 = gone.problem() or ""
+    ok("a card unplugged while nobody asked says the interface, not sleep",
+       "interface" in said63 and "sleep" not in said63)
+    gone.fell_asleep(_t63.time())
+    gone._callback(block63, 256, None, None)
+    ok("a card already gone stays gone",
+       gone.problem() == said63 and raw63(gone) == 256 * 2)
+    gone.stop()
+
+    # A driver that ends its stream on waking (WASAPI can) says so through
+    # PortAudio's finished callback, which may come before the tick or the
+    # poll: a sleep must still be told as the sleep it was.
+    ended = recorder63("ended")
+    ended._callback(block63, 256, None, None)
+    ended._seen_wall -= 60
+    before63 = ended._seen_wall
+    ended._finished()
+    ok("a stream that ends as the laptop wakes is the sleep, not the interface",
+       ended.problem() == capmod.slept_notice(before63))
+    ended.stop()
+    awake63 = recorder63("awake")
+    awake63._callback(block63, 256, None, None)
+    awake63._finished()
+    ok("and one that ends while it is awake is still the interface",
+       "interface stopped responding" in (awake63.problem() or ""))
+    awake63.stop()
+
+    short = recorder63("short")
+    short._callback(block63, 256, None, None)
+    short._seen_wall -= 4
+    short._heartbeat._last -= 4
+    ok("a short silence is the silent card, as today",
+       short.problem() == capmod.STALLED)
+    short.stop()
+
+    capmod.TICK_SEC = 0.05
+    try:
+        ticking = recorder63("ticking")
+        started63 = ticking._seen_wall
+        _t63.sleep(0.5)
+        moved63 = ticking._seen_wall > started63
+        ticking.stop()
+        ok("the take ticks while it records, and stops ticking with it",
+           moved63 and not ticking._tick_thread.is_alive())
+    finally:
+        capmod.TICK_SEC = 3600
+    ok("the silent-card rule is the one it was",
+       hb63.SILENCE_SEC == 3.0 and capmod.SLEPT_GAP_SEC == 10.0)
+
+    # The app holds the laptop awake from a take's start to the end of Stop.
+    class Lock63:
+        def __init__(self, fail=False):
+            self.calls, self.fail = [], fail
+
+        def hold(self):
+            self.calls.append("hold")
+            if self.fail:
+                raise RuntimeError("refused")
+
+        def release(self):
+            self.calls.append("release")
+
+    api63, a63 = fresh_api(tmp63)
+    lock63 = Lock63()
+    a63._awake = lock63
+    a63.start_rehearsal("Late night", 0, SR, one63)
+    a63.start_take()
+    ok("a take that starts holds the laptop awake", lock63.calls == ["hold"])
+    a63.stop_take()
+    ok("and lets go once it is written", lock63.calls == ["hold", "release"])
+
+    lock63.calls.clear()
+    a63.start_take()
+    broken63 = a63._recorder
+
+    def no_disk(progress=None):
+        raise OSError("the disk is full")
+
+    broken63.stop = no_disk
+    try:
+        a63.stop_take()
+        raised63 = False
+    except OSError:
+        raised63 = True
+    ok("even when writing it fails",
+       raised63 and lock63.calls == ["hold", "release"])
+    broken63.abandon()
+
+    class NoCard(capmod.AudioRecorder):
+        def start(self):
+            raise RuntimeError("no card")
+
+    lock63.calls.clear()
+    real_recorder63 = api63.AudioRecorder
+    api63.AudioRecorder = NoCard
+    try:
+        refused63 = a63.start_take()
+    finally:
+        api63.AudioRecorder = real_recorder63
+    ok("a take that cannot start holds nothing",
+       refused63["ok"] is False and lock63.calls == [])
+
+    a63._awake = Lock63(fail=True)
+    started63 = a63.start_take()
+    ok("a lock the system refuses does not stop the take",
+       started63["ok"] is True and a63._recorder is not None)
+    a63._awake = lock63
+
+    a63._laptop_sleeping()
+    ok("the laptop going to sleep reaches the take being recorded",
+       (a63.recording_health()["error"] or "").startswith("The laptop went to sleep at "))
+    a63.stop_take()
+    try:
+        a63._laptop_sleeping()
+        quiet63 = True
+    except Exception:  # noqa: BLE001
+        quiet63 = False
+    a63.start_take()
+    ok("between takes it changes nothing",
+       quiet63 and a63.recording_health()["error"] is None)
+
+    battery_was63 = api63.battery_percent
+    try:
+        api63.battery_percent = lambda: 14
+        ok("the health check says the charge on battery",
+           a63.recording_health()["battery_percent"] == 14)
+        api63.battery_percent = lambda: None
+        health63 = a63.recording_health()
+        ok("and none on mains",
+           "battery_percent" in health63 and health63["battery_percent"] is None)
+
+        def unreadable():
+            raise OSError("no IOKit")
+
+        api63.battery_percent = unreadable
+        health63 = a63.recording_health()
+        ok("a battery that cannot be read leaves the health check working",
+           health63["battery_percent"] is None and "error" in health63)
+    finally:
+        api63.battery_percent = battery_was63
+
+    lock63.calls.clear()
+    a63.shutdown()
+    ok("closing the window lets go", lock63.calls[-1:] == ["release"])
+    capmod.TICK_SEC = tick_was
+
+    print("\n[63b] A track records audio, both or MIDI")
+    # The mode and the port belong to the band, as stereo and the icon do:
+    # the e-kit goes with the drummer whatever interface is on the desk. A
+    # MIDI track has no input, and takes none from anybody else.
+    import ast
+
+    from rehearsal_recorder import layouts
+    from rehearsal_recorder.midi import rules
+
+    print("  the band")
+    port = {"name": "TD-17", "device": "TD-17", "maker": "Roland"}
+    card = {"name": "Interface", "host_api": "CoreAudio"}
+    ok("a member keeps its mode and port",
+       layouts.band_member({"name": "Drums", "channel": 1, "icon": "drums", "mode": "both",
+                            "midi_port": port})
+       == {"name": "Drums", "icon": "drums", "mode": "both", "midi_port": port})
+    ok("an audio member saves neither",
+       layouts.band_member({"name": "Bass", "channel": 2, "mode": "audio", "midi_port": port})
+       == {"name": "Bass"})
+    ok("a port saved as a bare name is a port",
+       layouts.band_member({"name": "K", "mode": "midi", "midi_port": "TD-17"})["midi_port"]
+       == {"name": "TD-17"})
+    ok("a mode nobody knows is saved as audio",
+       layouts.band_member({"name": "X", "mode": "loud", "midi_port": port}) == {"name": "X"})
+    ok("a Both member with no port yet saves a mode and no port",
+       layouts.band_member({"name": "Drums", "mode": "both"}) == {"name": "Drums", "mode": "both"})
+    ok("a port with no name is no port",
+       "midi_port" not in layouts.band_member(
+           {"name": "K", "mode": "midi", "midi_port": {"device": "TD-17"}}))
+    placed = layouts.for_device(
+        [{"name": "Keys", "mode": "midi", "midi_port": {"name": "Launchkey Mini MK3"}},
+         {"name": "Bass"}], [], card, 2)
+    ok("a MIDI member gets no input", placed[0]["channel"] is None and placed[0]["mode"] == "midi")
+    ok("and takes none from the others", placed[1]["channel"] == 1)
+    ok("an old member reads as audio", placed[1]["mode"] == "audio" and "midi_port" not in placed[1])
+    ok("remember keeps no input for a MIDI member",
+       "Keys" not in layouts.remember([], card, [{"name": "Keys", "channel": 3, "mode": "midi"}])[0]["inputs"])
+
+    print("  placed on a card")
+    ok("a MIDI member's port comes back with it, as a port",
+       placed[0]["midi_port"] == {"name": "Launchkey Mini MK3"})
+    ok("a MIDI member is not stereo, whatever the band says",
+       layouts.for_device([{"name": "Keys", "stereo": True, "mode": "midi"}], [], card, 2)[0]["stereo"]
+       is False)
+    ok("a Both member is placed on an input like an audio one",
+       layouts.for_device([{"name": "Drums", "mode": "both", "midi_port": "TD-17"}], [], card, 2)
+       == [{"name": "Drums", "channel": 1, "stereo": False, "mode": "both",
+            "midi_port": {"name": "TD-17"}}])
+    was_audio = layouts.remember([], card, [{"name": "Keys", "channel": 1}])
+    ok("a member who was on an input and is MIDI now leaves it free",
+       [t["channel"] for t in layouts.for_device(
+           [{"name": "Keys", "mode": "midi"}, {"name": "Bass"}], was_audio, card, 2)] == [None, 1])
+    ok("and gets the input back when it records audio again",
+       [t["channel"] for t in layouts.for_device(
+           [{"name": "Keys", "mode": "both"}, {"name": "Bass"}], was_audio, card, 2)] == [1, 2])
+    ok("an audio member's stray port is not carried",
+       "midi_port" not in layouts.for_device(
+           [{"name": "Bass", "mode": "audio", "midi_port": port}], [], card, 2)[0])
+    ok("a band saved with a bare port name is read as a port",
+       layouts.for_device([{"name": "K", "mode": "midi", "midi_port": "TD-17"}], [], card, 2)[0]["midi_port"]
+       == {"name": "TD-17"})
+
+    print("  the rules")
+    ok("a track with no mode records audio", rules.mode_of({"name": "Bass"}) == "audio")
+    ok("and so does one with a mode nobody knows",
+       rules.mode_of({"mode": "loud"}) == "audio" and rules.mode_of({"mode": None}) == "audio"
+       and rules.mode_of({"mode": ""}) == "audio")
+    ok("the three modes are read as they are",
+       [rules.mode_of({"mode": m}) for m in ("audio", "both", "midi")] == ["audio", "both", "midi"])
+    ok("audio and Both record sound, MIDI does not",
+       [rules.records_audio({"mode": m}) for m in ("audio", "both", "midi")] == [True, True, False]
+       and rules.records_audio({}) is True)
+    ok("Both and MIDI record notes, audio does not",
+       [rules.records_notes({"mode": m}) for m in ("audio", "both", "midi")] == [False, True, True]
+       and rules.records_notes({}) is False)
+    ok("a port saved as a bare name is that name", rules.port_ref("TD-17") == {"name": "TD-17"})
+    ok("a saved port keeps what is filled in and nothing else",
+       rules.port_ref({"name": "TD-17", "device": "", "maker": "Roland", "id": None,
+                       "colour": "red"}) == {"name": "TD-17", "maker": "Roland"}
+       and rules.port_ref({**port, "id": "3"}) == {**port, "id": "3"})
+    ok("a port with no name, or no port, is None",
+       rules.port_ref({"device": "TD-17"}) is None and rules.port_ref({"name": ""}) is None
+       and rules.port_ref("") is None and rules.port_ref("  ") is None
+       and rules.port_ref(None) is None and rules.port_ref(5) is None
+       and rules.port_ref(["TD-17"]) is None and rules.port_ref({"name": 5}) is None)
+    ok("a saved port is a copy, not the dictionary it was read from",
+       rules.port_ref(port) == port and rules.port_ref(port) is not port)
+    ok("a track that records notes keeps the port it was given",
+       rules.port_of({"mode": "both", "midi_port": "TD-17"}) == {"name": "TD-17"}
+       and rules.port_of({"mode": "midi", "midi_port": port}) == port)
+    ok("a track that records audio keeps none, whatever it is handed",
+       rules.port_of({"mode": "audio", "midi_port": port}) is None
+       and rules.port_of({"name": "Bass", "midi_port": port}) is None)
+    ok("and one that records notes with no port to speak of keeps none",
+       rules.port_of({"mode": "both"}) is None
+       and rules.port_of({"mode": "midi", "midi_port": {"device": "TD-17"}}) is None)
+    ok("the modes are stored under these words, which never change",
+       (rules.AUDIO, rules.BOTH, rules.MIDI) == ("audio", "both", "midi")
+       and rules.MODES == (rules.AUDIO, rules.BOTH, rules.MIDI))
+
+    lanes = [{"name": "Gtr"}, {"name": "Keys", "mode": "midi"}, {"name": "Drums", "mode": "both"},
+             {"name": "Bass"}, {"name": "Pad", "mode": "midi"}]
+    heard = {"Gtr", "Drums", "Bass"}
+    ok("a notes lane follows its own audio lane when it has one",
+       rules.lane_after(lanes, heard, "Drums") == "Drums")
+    ok("a MIDI track's lane follows the audio lane before it in the band",
+       rules.lane_after(lanes, heard, "Keys") == "Gtr"
+       and rules.lane_after(lanes, heard, "Pad") == "Bass")
+    ok("and goes first when no audio lane is before it",
+       rules.lane_after([{"name": "Keys", "mode": "midi"}, {"name": "Gtr"}], {"Gtr"}, "Keys") is None
+       and rules.lane_after(lanes, set(), "Pad") is None)
+    ok("an audio lane that was not recorded is not followed",
+       rules.lane_after(lanes, {"Gtr", "Bass"}, "Drums") == "Gtr")
+    ok("a name that is not in the band follows nobody", rules.lane_after(lanes, heard, "Nobody") is None)
+    ok("a lane's place is its track's index in the band, the first at 0",
+       rules.place_in(lanes, "Gtr") == {"place": 0})
+    ok("and one in the middle at its own", rules.place_in(lanes, "Drums") == {"place": 2})
+    ok("a name that is not in the band has no place", rules.place_in(lanes, "Nobody") == {})
+    imports = {n.names[0].name if isinstance(n, ast.Import) else n.module
+               for n in ast.walk(ast.parse(Path(rules.__file__).read_text(encoding="utf-8")))
+               if isinstance(n, (ast.Import, ast.ImportFrom))}
+    ok("the rules import neither the MIDI library nor mido",
+       not imports & {"mido", "pylibremidi", "rehearsal_recorder.midi.ports"})
+
+    print("\n[64] The recorder marks the clock")
+    # A take's notes are placed on the audio's own clock (spec F1): the recorder
+    # knows how many frames it has written when each block arrives, so it tells
+    # the clock, and the clock does the rest.
+    from rehearsal_recorder.audio.devices import input_latency
+    from rehearsal_recorder.midi.clock import AudioClock
+
+    marked_dir = tmp / "marked"
+    marked_tracks = [{"name": "Gtr", "channel": 1}, {"name": "Voc", "channel": 2}]
+    clock = AudioClock(SR)
+    clock.latency_sec = 0.010
+    keys_note = [{"file": "Keys", "port": "Launchkey Mini MK3"}]
+    rec_m = AudioRecorder(0, SR, marked_tracks, marked_dir, clock=clock, notes=keys_note)
+    rec_m._raw_files = {
+        t["name"]: open(marked_dir / f"{t['name']}.raw", "wb") for t in marked_tracks
+    }
+    block = np.zeros((256, 2), dtype=np.int16)
+    # The first frame of a block is as old as the block is long and the
+    # interface's latency, when the driver says nothing of it.
+    lag = 10_000_000 + 256 / SR * 1e9
+
+    before = time.perf_counter_ns()
+    rec_m._callback(block, 256, None, None)
+    after = time.perf_counter_ns()
+    one = clock.marks()
+    ok("a block leaves one mark", len(one) == 1)
+    ok("of its first frame", one[0][1] == 0)
+    ok("at the time that frame was captured, on the clock of this process",
+       before - lag <= one[0][0] <= after - lag)
+    rec_m._callback(block, 256, None, None)
+    ok("the next block, a moment later, is the latest and not another kept",
+       [m[1] for m in clock.marks()] == [0, 256])
+
+    # What the driver says of a block: its first frame was captured a certain time ago.
+    driver = types.SimpleNamespace(currentTime=12.500, inputBufferAdcTime=12.480, outputBufferDacTime=0.0)
+    before = time.perf_counter_ns()
+    rec_m._callback(block, 256, driver, None)
+    after = time.perf_counter_ns()
+    ns, frame = clock.marks()[-1]
+    ok("its word is taken: the frame was 20 ms old when the callback ran",
+       frame == 512 and before - 20_000_000 - 1000 <= ns <= after - 20_000_000 + 1000)
+    odd = [types.SimpleNamespace(currentTime=0.0, inputBufferAdcTime=0.0),
+           types.SimpleNamespace(currentTime=5.0, inputBufferAdcTime=0.0),
+           types.SimpleNamespace(currentTime=0.0, inputBufferAdcTime=5.0),
+           types.SimpleNamespace(currentTime=1.0, inputBufferAdcTime=2.0),
+           types.SimpleNamespace(currentTime=5.0, inputBufferAdcTime=3.0),
+           types.SimpleNamespace(currentTime=float("nan"), inputBufferAdcTime=1.0),
+           types.SimpleNamespace(), object()]
+    stray = []
+    for info in odd:
+        before = time.perf_counter_ns()
+        rec_m._callback(block, 256, info, None)
+        after = time.perf_counter_ns()
+        if not before - lag <= clock.marks()[-1][0] <= after - lag:
+            stray.append(info)
+    ok("a zero, a time that is not now, a missing field or no time_info are not believed", stray == [])
+
+    # A block that is not written is not marked.
+    count, last = len(clock.marks()), clock.marks()[-1]
+    rec_m._callback(block, 0, None, None)
+    rec_m._stopping = True
+    rec_m._callback(block, 256, None, None)
+    rec_m._stopping = False
+    ok("a block of no frames, or one that came after Stop, is not", len(clock.marks()) == count and clock.marks()[-1] == last)
+    ok("the frame of a mark is the frames written before its block",
+       clock.marks()[-1][1] == rec_m._frames_written - 256)
+
+    for _ in range(240):
+        rec_m._callback(np.zeros((1024, 2), dtype=np.int16), 1024, None, None)
+    ok("five seconds on, a mark a second and the latest", 5 <= len(clock.marks()) <= 8)
+    ok("the latest is the last block written", clock.marks()[-1][1] == rec_m._frames_written - 1024)
+    for f in rec_m._raw_files.values():
+        f.close()
+
+    # What a crashed take's folder says of its notes.
+    rec_m._write_record()
+    record = json.loads((marked_dir / "take.json").read_text(encoding="utf-8"))
+    ok("take.json lists the notes tracks beside the audio ones",
+       record["notes"] == [{"file": "Keys", "port": "Launchkey Mini MK3"}]
+       and [t["file"] for t in record["tracks"]] == ["Gtr", "Voc"] and record["samplerate"] == SR)
+    keys_note[0]["port"] = "Another"
+    keys_note.append({"file": "Pad", "port": "Pad"})
+    rec_m._write_record()
+    ok("and keeps what it was given, not the list it was given",
+       json.loads((marked_dir / "take.json").read_text(encoding="utf-8"))["notes"]
+       == [{"file": "Keys", "port": "Launchkey Mini MK3"}])
+    plain = AudioRecorder(0, SR, marked_tracks, tmp / "unmarked")
+    plain._write_record()
+    ok("a take with no notes lists none", json.loads((tmp / "unmarked" / "take.json").read_text(encoding="utf-8"))["notes"] == [])
+
+    # No clock, nothing changes: the block is written as it was.
+    plain._raw_files = {
+        t["name"]: open(tmp / "unmarked" / f"{t['name']}.raw", "wb") for t in marked_tracks
+    }
+    plain._callback(block, 256, driver, None)
+    for f in plain._raw_files.values():
+        f.close()
+    ok("with no clock a block is written all the same",
+       plain._frames_written == 256 and (tmp / "unmarked" / "Gtr.raw").stat().st_size == 512)
+
+    ok("a clock that works leaves no fault", rec_m.clock_fault is None and plain.clock_fault is None)
+
+    # A clock that raises must not cost the audio, and must not go unsaid: the
+    # first fault is kept, for the app to read at Stop.
+    class _Broken:
+        calls = 0
+
+        def mark(self, *args):
+            _Broken.calls += 1
+            raise RuntimeError(f"clock broke {_Broken.calls}")
+
+    rec_b = AudioRecorder(0, SR, marked_tracks, tmp / "broken", clock=_Broken())
+    rec_b._raw_files = {
+        t["name"]: open(tmp / "broken" / f"{t['name']}.raw", "wb") for t in marked_tracks
+    }
+    loud = np.full((256, 2), 1234, dtype=np.int16)
+    rec_b._callback(loud, 256, None, None)
+    first_fault = rec_b.clock_fault
+    rec_b._callback(loud, 256, None, None)
+    for f in rec_b._raw_files.values():
+        f.close()
+    ok("a clock that raises costs the audio nothing: both blocks are written",
+       _Broken.calls == 2 and rec_b._frames_written == 512
+       and (tmp / "broken" / "Gtr.raw").read_bytes() == struct.pack("<h", 1234) * 512)
+    ok("and the fault is named", first_fault == "RuntimeError('clock broke 1')")
+    ok("a second one leaves the first in place", rec_b.clock_fault == first_fault)
+
+    # Starting: the clock is told when, before the stream opens, and how late the
+    # stream is: what was asked for until the stream says, and then what it says.
+    asked = input_latency(_sd, 0)
+
+    class _Latent(_sd.InputStream):
+        latency = 0.012
+
+        def __init__(self, **kw):
+            opened.append((started.started_ns, started.latency_sec, kw["latency"]))
+            super().__init__(**kw)
+
+    class _Vague(_sd.InputStream):
+        latency = (0.01, 0.02)
+
+    started, opened = AudioClock(SR), []
+    stock = _sd.InputStream
+    try:
+        for kind, folder in ((_Latent, "latent"), (_Vague, "vague"), (stock, "stock")):
+            _sd.InputStream = kind
+            started.latency_sec = 0.5
+            rec_s = AudioRecorder(0, SR, marked_tracks, tmp / folder, clock=started)
+            began = time.perf_counter_ns()
+            rec_s.start()
+            ended = time.perf_counter_ns()
+            rec_s.abandon()
+            if kind is _Latent:
+                ok("start() says when it began before it opens the stream",
+                   len(opened) == 1 and began <= opened[0][0] <= ended)
+                ok("and has the latency it asks for on the clock before the stream exists",
+                   asked > 0 and opened[0][1] == asked and opened[0][2] == asked)
+                ok("then takes the latency from the stream once open", started.latency_sec == 0.012)
+            else:
+                ok(f"a stream that gives no latency as a number leaves the one asked for ({folder})",
+                   started.latency_sec == asked)
+    finally:
+        _sd.InputStream = stock
+    ok("start() set started_ns whatever the stream", started.started_ns is not None)
+
+    print("\n[65] A crashed take with notes")
+    # A take whose app died leaves its notes as a .midraw beside the raw audio
+    # (spec F3). The drafts count it as a take's recording, list it, and turn it
+    # into a .mid when the take is recovered.
+    from rehearsal_recorder.audio.drafts import describe as describe65
+    from rehearsal_recorder.audio.drafts import draft_dirs as draft_dirs65
+    from rehearsal_recorder.audio.drafts import finalize as finalize65
+    from rehearsal_recorder.audio.drafts import has_audio as has_audio65
+    from rehearsal_recorder.midi.clock import save_line as save_line65
+    from rehearsal_recorder.midi.smf import read_events as read_events65
+
+    ms65, t65 = 1_000_000, 9_000_000_000
+    folder65 = tmp / "notes crash"
+    draft = folder65 / "_drafts" / "take 1"
+    draft.mkdir(parents=True)
+    (draft / "take.json").write_text(json.dumps({
+        "samplerate": SR, "bit_depth": 16,
+        "tracks": [{"file": "Drums", "channels": 1}],
+        "notes": [{"file": "Keys", "port": "Launchkey Mini MK3"}]}), encoding="utf-8")
+    ok("a draft with nothing but its record is not a take",
+       not has_audio65(draft) and draft_dirs65(folder65) == [])
+    (draft / "Keys.midraw").write_bytes("".join([
+        f"t {t65}\n",
+        "s c00a\n",                                # the program the keyboard was on
+        f"n {t65 + 250 * ms65} 903c40\n",          # 60 on at a quarter second
+        f"n {t65 + 500 * ms65} 803c00\n",          # and off at half
+        f"n {t65 + 900 * ms65} 904040\n",          # 64 on, held when the app died
+        f"n {t65 + 1500 * ms65} 904140\n",         # after the audio ended
+    ]).encode("ascii"))
+    ok("a draft whose only recording is notes is a take, not an empty folder",
+       has_audio65(draft) and draft_dirs65(folder65) == [draft])
+    info = describe65(draft, SR)
+    ok("describe lists the notes beside the tracks, which are the audio alone",
+       info["notes"] == ["Keys"] and info["tracks"] == [] and info["duration_sec"] == 0)
+    (draft / "Drums.raw").write_bytes(struct.pack("<h", 100) * SR)
+    info = describe65(draft, SR)
+    ok("with audio beside it, both are listed and the length is the audio's",
+       info["notes"] == ["Keys"] and info["tracks"] == ["Drums"] and abs(info["duration_sec"] - 1.0) < 1e-6)
+
+    done = finalize65(draft, SR, 16)
+    ok("finalize makes the .wav and the .mid, and lists the audio and the notes apart",
+       [t["name"] for t in done["tracks"]] == ["Drums"]
+       and [(n["name"], n["file"]) for n in done["notes"]] == [("Keys", str(draft / "Keys.mid"))]
+       and (draft / "Keys.mid").exists() and (draft / "Drums.wav").exists())
+    ok("the notes carry the port take.json named, and take.json is left, for a Recover tried again",
+       done["notes"][0]["port"] == "Launchkey Mini MK3" and (draft / "take.json").exists())
+    ok("nothing but the .wav, the .mid and take.json is left, and the take is as long as its audio",
+       sorted(p.name for p in draft.iterdir()) == ["Drums.wav", "Keys.mid", "take.json"]
+       and abs(done["duration_sec"] - 1.0) < 1e-6)
+    names65, events65 = read_events65(draft / "Keys.mid")
+    ok("the .mid has the names, the program at the start, the keys, and the key held at the crash let go at the end",
+       names65 == {"track_name": "Keys", "device_name": "Launchkey Mini MK3"}
+       and [(round(sec * 1920), data) for sec, data in events65]
+       == [(0, b"\xc0\x0a"), (480, b"\x90\x3c\x40"), (960, b"\x80\x3c\x00"),
+           (1728, b"\x90\x40\x40"), (1920, b"\x80\x40\x00")])
+
+    # No audio at all, notes placed by the marks that reached the disk, and a
+    # record that lists no notes: the port is called by its file.
+    marks_only = folder65 / "_drafts" / "take 2"
+    marks_only.mkdir(parents=True)
+    (marks_only / "take.json").write_text(json.dumps({"samplerate": SR, "tracks": [], "notes": []}), encoding="utf-8")
+    (marks_only / "Keys.midraw").write_bytes("".join([
+        f"t {t65}\n", f"n {t65 + 600 * ms65} 903c40\n", f"n {t65 + 1100 * ms65} 803c00\n"]).encode("ascii"))
+    (marks_only / "take.clock").write_bytes("".join(
+        save_line65(m) for m in [(t65 + 100 * ms65, 0), (t65 + 1100 * ms65, SR)]).encode("ascii"))
+    done = finalize65(marks_only, SR, 16)
+    names65, events65 = read_events65(marks_only / "Keys.mid")
+    ok("a draft of notes alone is recovered, with no audio and no tracks",
+       done["tracks"] == [] and [n["name"] for n in done["notes"]] == ["Keys"] and done["duration_sec"] == 0)
+    ok("its notes are placed by take.clock: the first frame was heard 100 ms after the take began",
+       [(round(sec * 1920), data) for sec, data in events65] == [(960, b"\x90\x3c\x40"), (1920, b"\x80\x3c\x00")])
+    ok("and the port is called what its file is, and take.clock is gone",
+       names65["device_name"] == "Keys" and done["notes"][0]["port"] == "Keys"
+       and sorted(p.name for p in marks_only.iterdir()) == ["Keys.mid", "take.json"])
+
+    # A take with no notes is recovered as it always was.
+    plain65 = folder65 / "_drafts" / "take 3"
+    plain65.mkdir(parents=True)
+    (plain65 / "Gtr.raw").write_bytes(struct.pack("<h", 100) * SR)
+    info = describe65(plain65, SR)
+    done = finalize65(plain65, SR, 16)
+    ok("a draft with no notes lists none and recovers none",
+       info["notes"] == [] and done["notes"] == [] and [t["name"] for t in done["tracks"]] == ["Gtr"])
+
+    # A draft stop had already converted: .mid files and no .midraw, as when the take was
+    # stopped and not kept, or the app died between two tracks. They are notes of the take as
+    # they are, and recovering the draft must not leave them to be deleted with its folder.
+    from rehearsal_recorder.midi.smf import write_mid as write_mid65
+
+    stopped65 = folder65 / "_drafts" / "take 4"
+    write_wav(stopped65 / "Drums.wav", 100, seconds=1.0)
+    for stem, device in (("Keys", "Launchkey Mini MK3"), ("Pad", "Pad Controller")):
+        write_mid65(stopped65 / f"{stem}.mid", track_name=stem, port_name=device, start=[],
+                    events=[(0.5, b"\x90\x3c\x40"), (0.75, b"\x80\x3c\x00")])
+    (stopped65 / "Odd.mid").write_bytes(b"not a midi file")
+    (stopped65 / "take.json").write_text(json.dumps({
+        "samplerate": SR, "tracks": [{"file": "Drums", "channels": 1}],
+        "notes": [{"file": "Keys", "port": "Keys as take.json has it"}]}), encoding="utf-8")
+    kept65 = {p.name: p.read_bytes() for p in stopped65.glob("*.mid")}
+    info = describe65(stopped65, SR)
+    ok("describe lists a .mid that has no .midraw among the notes", info["notes"] == ["Keys", "Odd", "Pad"]
+       and info["tracks"] == ["Drums"])
+    done = finalize65(stopped65, SR, 16)
+    ok("finalize lists them with the audio's .wav, with the port take.json names, else the file's own, else its name",
+       [(n["name"], n["port"]) for n in done["notes"]]
+       == [("Keys", "Keys as take.json has it"), ("Odd", "Odd"), ("Pad", "Pad Controller")]
+       and [t["name"] for t in done["tracks"]] == ["Drums"])
+    ok("and does not touch them",
+       {p.name: p.read_bytes() for p in stopped65.glob("*.mid")} == kept65
+       and [n["file"] for n in done["notes"]] == [str(stopped65 / f"{s}.mid") for s in ("Keys", "Odd", "Pad")])
+
+    # A conversion the app died in the middle of: the .midraw is still whole, and the .part is
+    # not a take's notes, not a recording, and not kept.
+    halfway65 = folder65 / "_drafts" / "take 5"
+    halfway65.mkdir(parents=True)
+    (halfway65 / "Keys.mid.part").write_bytes(b"MThd half a file")
+    ok("a half-made .mid alone is not a recording", not has_audio65(halfway65))
+    (halfway65 / "Old.mid.part").write_bytes(b"MThd")
+    (halfway65 / "Keys.midraw").write_bytes(f"t {t65}\nn {t65 + 250 * ms65} 903c40\n".encode("ascii"))
+    ok("with a .midraw beside it the take is the .midraw, and the .part is not one of its notes",
+       has_audio65(halfway65) and describe65(halfway65, SR)["notes"] == ["Keys"])
+    done = finalize65(halfway65, SR, 16)
+    ok("recovering it gives one Keys.mid, made from the .midraw, and leaves no .part",
+       sorted(p.name for p in halfway65.iterdir()) == ["Keys.mid"] and [n["name"] for n in done["notes"]] == ["Keys"]
+       and [(round(sec * 1920), d) for sec, d in read_events65(halfway65 / "Keys.mid")[1]]
+       == [(480, b"\x90\x3c\x40"), (480, b"\x80\x3c\x00")])
+
+    # A notes file that cannot be made into a .mid is left, with the take.json that names its port, so that a
+    # second go can make it; the audio is recovered all the same.
+    import logging as logging65
+    from rehearsal_recorder.midi import capture as capture65
+
+    stuck65 = folder65 / "_drafts" / "take 6"
+    write_wav(stuck65 / "Drums.wav", 100, seconds=1.0)
+    (stuck65 / "take.json").write_text(json.dumps({
+        "samplerate": SR, "tracks": [{"file": "Drums", "channels": 1}],
+        "notes": [{"file": "Keys", "port": "Launchkey Mini MK3"}]}), encoding="utf-8")
+    (stuck65 / "Keys.midraw").write_bytes(f"t {t65}\nn {t65 + 250 * ms65} 903c40\n".encode("ascii"))
+    said65 = []
+    catcher65 = logging65.Handler(level=logging65.INFO)
+    catcher65.emit = said65.append
+    logging65.getLogger(capture65.__name__).addHandler(catcher65)
+
+    def refused_mid(path, **kw):
+        raise OSError(28, "No space left on device")
+
+    real_write_mid65 = capture65.write_mid
+    capture65.write_mid = refused_mid
+    try:
+        first = finalize65(stuck65, SR, 16)
+    finally:
+        capture65.write_mid = real_write_mid65
+    ok("a notes file that cannot be made into a .mid is left where it was, with take.json, and the audio is recovered",
+       first["notes"] == [] and [t["name"] for t in first["tracks"]] == ["Drums"]
+       and sorted(p.name for p in stuck65.iterdir()) == ["Drums.wav", "Keys.midraw", "take.json"] and len(said65) == 1)
+    again = finalize65(stuck65, SR, 16)
+    logging65.getLogger(capture65.__name__).removeHandler(catcher65)
+    ok("a second go makes it, with the port take.json named",
+       [(n["name"], n["port"]) for n in again["notes"]] == [("Keys", "Launchkey Mini MK3")]
+       and sorted(p.name for p in stuck65.iterdir()) == ["Drums.wav", "Keys.mid", "take.json"])
+
+    # A take whose only recording is notes that are a .mid already, as a recovery that found no
+    # audio leaves it (spec Part 3: has_audio counts a .midraw or a .mid).
+    made65 = folder65 / "_drafts" / "take 7"
+    made65.mkdir(parents=True)
+    write_mid65(made65 / "Keys.mid", track_name="Keys", port_name="Launchkey Mini MK3", start=[],
+                events=[(0.5, b"\x90\x3c\x40"), (0.75, b"\x80\x3c\x00")])
+    ok("a draft whose only recording is a .mid is a take, not an empty folder",
+       has_audio65(made65) and made65 in draft_dirs65(folder65))
+    ok("and is described by its notes", describe65(made65, SR)["notes"] == ["Keys"])
+
+    # take.json records which track each file is: a file's name is not always its track's.
+    named65 = folder65 / "_drafts" / "take 8"
+    named65.mkdir(parents=True)
+    (named65 / "Synth_Pad.raw").write_bytes(struct.pack("<h", 100) * SR)
+    (named65 / "Synth_Pad.midraw").write_bytes(f"t {t65}\nn {t65 + 250 * ms65} 903c40\n".encode("ascii"))
+    (named65 / "take.json").write_text(json.dumps({
+        "samplerate": SR, "bit_depth": 16,
+        "tracks": [{"file": "Synth_Pad", "name": "Synth/Pad", "channels": 1}],
+        "notes": [{"file": "Synth_Pad", "name": "Synth/Pad", "port": "Launchkey Mini MK3"}]}), encoding="utf-8")
+    done = finalize65(named65, SR, 16)
+    ok("finalize names the audio and the notes by the track take.json records for their file",
+       [(t["name"], Path(t["file"]).name) for t in done["tracks"]] == [("Synth/Pad", "Synth_Pad.wav")]
+       and [(n["name"], Path(n["file"]).name, n["port"]) for n in done["notes"]]
+       == [("Synth/Pad", "Synth_Pad.mid", "Launchkey Mini MK3")])
+    ok("and the .mid it makes says the track's name inside, as one Stop makes does",
+       read_events65(named65 / "Synth_Pad.mid")[0]["track_name"] == "Synth/Pad")
+
+    print("\n[66] MIDI before a take")
+    # The setup screen's check opens the ports of the tracks that take notes, Start
+    # opens exactly what the final tracks say and keeps what the check had open,
+    # and Finish and closing the app let them go. A fake port system stands in for
+    # the OS; with the rig's threads off the section drains the queue itself.
+    sys.path.insert(0, str(PROJECT / "tests"))
+    from fake_midi import FakePortSystem as Fake66
+
+    from rehearsal_recorder.mediaserver import POLLABLE as POLLABLE66
+    from rehearsal_recorder.midi.ports import PortInfo as Port66
+
+    import rehearsal_recorder.api as apimod66
+
+    real_open66 = apimod66.open_midi_system
+    td17 = Port66("TD-17", "TD-17", "Roland")
+    lkm = Port66("Launchkey Mini MK3 MIDI Port", "Launchkey Mini MK3", "Novation")
+    gtr66 = {"name": "Gtr", "channel": 1}
+    drums66 = {"name": "Drums", "channel": 2, "mode": "both", "midi_port": td17.saved()}
+    keys66 = {"name": "Keys", "channel": None, "mode": "midi", "midi_port": lkm.saved()}
+    a1_66 = "At least one track has to record sound, so the takes can be heard."
+
+    def api66(system, error=None, threads=False):
+        apimod66.open_midi_system = lambda: (system, error)
+        return fresh_api(Path(tempfile.mkdtemp()), midi_threads=threads)[1]
+
+    def folders66(api):
+        return sorted(p.name for p in api._recordings_dir.iterdir() if p.is_dir())
+
+    def open66(fake):
+        return sorted(p.info.name for p in fake.open_ports)
+
+    def get66(api, name):
+        with urllib.request.urlopen(api.ui_url + "api/" + name, timeout=5) as r:
+            return json.loads(r.read().decode())
+
+    def rescan66(api):
+        # Look again, with PortAudio's private calls stood in for as the section above does.
+        saved = {n: getattr(_sd, n, None) for n in ("_initialized", "_terminate", "_initialize")}
+        _sd._initialized = 1
+        _sd._terminate = _sd._initialize = lambda: None
+        try:
+            return api.rescan_devices()
+        finally:
+            for n, value in saved.items():
+                if value is None:
+                    if hasattr(_sd, n):
+                        delattr(_sd, n)
+                else:
+                    setattr(_sd, n, value)
+
+    def scenario66(what):
+        # A scenario that breaks says so as a failed check, and the rest still run.
+        def run(fn):
+            try:
+                fn()
+            except Exception as e:  # noqa: BLE001
+                ok(f"{what}: stopped by {type(e).__name__}: {e}", False)
+            return fn
+        return run
+
+    import contextlib as contextlib66
+    import io as io66
+    import urllib.request
+
+    @scenario66("the ports")
+    def _():
+        print("  the ports")
+        fake = Fake66([td17, lkm])
+        a = api66(fake)
+        listed = a.list_midi_ports()
+        ok("list_midi_ports lists the system's ports, a device's own port first",
+           listed["system"] == "Fake MIDI" and listed["error"] is None
+           and [p["name"] for p in listed["ports"]] == ["TD-17", "Launchkey Mini MK3 MIDI Port"])
+        ok("each as it is saved, with the notes counted on it so far",
+           listed["ports"][0] == {**td17.saved(), "notes": 0})
+        ok("both calls the window polls are served over http",
+           "list_midi_ports" in POLLABLE66 and "midi_activity" in POLLABLE66
+           and get66(a, "list_midi_ports") == listed and get66(a, "midi_activity") == {})
+        ok("nothing is open until a check or a rehearsal wants it", not fake.open_ports)
+        hood = a.under_the_hood()["midi"]
+        ok("Under the hood says the system and the ports, as the picker has them",
+           hood == listed and set(hood) == {"system", "ports", "error"})
+        lines = [ln for ln in a.bug_report()["text"].splitlines() if ln.startswith("MIDI:")]
+        ok("and Copy details has a MIDI line for each port",
+           len(lines) == 2 and "TD-17" in lines[0] and "Launchkey Mini MK3 MIDI Port" in lines[1]
+           and "Roland" in lines[0] and "Fake MIDI" in lines[0])
+
+    @scenario66("the check")
+    def _():
+        print("  the check")
+        fake = Fake66([td17, lkm])
+        a = api66(fake)
+        ok("the check starts", a.start_monitor(0, SR, [gtr66, drums66]) == {"ok": True})
+        ok("and opens the port of the track that takes notes, and only that",
+           fake.opens == {"TD-17": 1} and open66(fake) == ["TD-17"])
+        ok("the card is listened to for the tracks that record sound only",
+           a._monitor is not None and [t["name"] for t in a._monitor.tracks] == ["Gtr", "Drums"])
+        a._midi.drain()
+        seen = a.midi_activity()
+        ok("Drums is heard on its port, and Gtr, which takes no notes, is not listed",
+           list(seen) == ["Drums"] and seen["Drums"]["state"] == "ok" and seen["Drums"]["connected"] is True)
+        fake.send("TD-17", time.perf_counter_ns(), bytes([0x99, 38, 100]))
+        a._midi.drain()
+        seen = a.midi_activity()
+        ok("a note played counts for the track, with its loudness",
+           seen["Drums"]["notes"] == 1 and abs(seen["Drums"]["vel"] - 100 / 127) < 1e-9)
+        ok("and for the port in the picker", a.list_midi_ports()["ports"][0]["notes"] == 1)
+        a.stop_monitor()
+
+        # The notes' rules stop Start, never the check: it listens to every picked port.
+        fake = Fake66([td17, lkm])
+        k = api66(fake)
+        res = k.start_monitor(0, SR, [keys66])
+        ok("a band that is all MIDI is checked: A1 stops Start, not the check",
+           res == {"ok": True} and fake.opens == {lkm.name: 1})
+        ok("there is no card to listen to, and the card's calls say so",
+           k._monitor is None and k.monitor_levels() == {}
+           and k.monitor_health() == {"checking": False, "problem": None})
+        k._midi.drain()
+        ok("Keys is heard on its port", k.midi_activity()["Keys"]["state"] == "ok")
+        res = k.start_monitor(0, SR, [gtr66, {"name": "Drums", "channel": 2, "mode": "both"}])
+        ok("a Both track with no port yet does not stop the check (P3 is Start's)",
+           res == {"ok": True} and k._monitor is not None)
+        res = k.start_monitor(0, SR, [gtr66, drums66, {**keys66, "midi_port": td17.saved()}])
+        ok("nor do two tracks on one port (P2 is Start's)", res == {"ok": True})
+        res = k.start_monitor(0, SR, [gtr66, keys66])
+        ok("a MIDI track is not handed to the card: it has no input to be on",
+           res == {"ok": True} and [t["name"] for t in k._monitor.tracks] == ["Gtr"])
+        k.stop_monitor()
+        res = k.start_monitor(0, SR, [gtr66, {"name": "Bass", "channel": 9}, drums66])
+        ok("the card still refuses what does not fit it, in the card's own words",
+           res["ok"] is False and "8 inputs" in res["error"] and "9" in res["error"])
+        ok("and a check the card refuses opens no port", not fake.open_ports and k._monitor is None)
+
+    @scenario66("Start")
+    def _():
+        print("  Start")
+        fake = Fake66([td17, lkm])
+        a = api66(fake)
+        a.start_monitor(0, SR, [gtr66, drums66])
+        held = next(iter(fake.open_ports))
+        ok("stop_monitor(keep_ports=True) lets go of the card and keeps the port",
+           a.stop_monitor(keep_ports=True) == {"ok": True} and a._monitor is None
+           and held in fake.open_ports and not held.closed)
+        res = a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        ok("Start keeps the port the check opened: it was opened once and not closed in between",
+           res["ok"] and fake.opens == {"TD-17": 1} and held in fake.open_ports and not held.closed)
+        a._midi.drain()
+        ok("and Drums is heard", a.midi_activity()["Drums"]["state"] == "ok")
+
+        fake = Fake66([td17, lkm])
+        b = api66(fake)
+        b.start_monitor(0, SR, [gtr66, drums66])
+        res = b.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        ok("Start without a stop_monitor first lets go of the card and keeps the port as well",
+           res["ok"] and b._monitor is None and fake.opens == {"TD-17": 1} and open66(fake) == ["TD-17"])
+
+        fake = Fake66([td17, lkm])
+        c = api66(fake)
+        c.start_monitor(0, SR, [gtr66, drums66])
+        c.stop_monitor()
+        ok("stop_monitor() alone closes the check's ports and forgets the tracks",
+           not fake.open_ports and c.midi_activity() == {} and c._monitor is None)
+
+        # The band edited between the check and Start (Review Focus 3).
+        fake = Fake66([td17, lkm])
+        d = api66(fake)
+        d.start_monitor(0, SR, [gtr66, drums66])
+        d.stop_monitor(keep_ports=True)
+        kit = {**drums66, "name": "Kit", "midi_port": lkm.saved()}
+        res = d.start_rehearsal("Jam", 0, SR, [gtr66, kit])
+        d._midi.drain()
+        seen = d.midi_activity()
+        ok("Drums renamed Kit and moved to the Launchkey: TD-17 is closed and the Launchkey is open",
+           res["ok"] and open66(fake) == [lkm.name] and fake.opens == {"TD-17": 1, lkm.name: 1})
+        ok("and the activity is keyed by the name the track has now",
+           list(seen) == ["Kit"] and seen["Kit"]["state"] == "ok")
+
+        # Drums set back to Audio between the check and Start: no track takes notes, so every port closes.
+        fake = Fake66([td17, lkm])
+        d2 = api66(fake)
+        d2.start_monitor(0, SR, [gtr66, drums66])
+        d2.stop_monitor(keep_ports=True)
+        res = d2.start_rehearsal("Jam", 0, SR, [gtr66, {**drums66, "mode": "audio"}])
+        ok("Drums set back to Audio between the check and Start: every port is closed and nothing is listened to",
+           res["ok"] and not fake.open_ports and d2.midi_activity() == {})
+
+        # The check opens a keyboard's other port to count it (P7); Start lets it go.
+        daw = Port66("Launchkey Mini MK3 DAW Port", "Launchkey Mini MK3", "Novation")
+        fake = Fake66([lkm, daw])
+        d3 = api66(fake)
+        d3.start_monitor(0, SR, [gtr66, keys66])
+        counted = open66(fake)
+        d3.stop_monitor(keep_ports=True)
+        res = d3.start_rehearsal("Jam", 0, SR, [gtr66, keys66])
+        ok("the check counts a keyboard's other port too, and Start closes it but keeps the picked one",
+           counted == sorted([lkm.name, daw.name]) and res["ok"] and open66(fake) == [lkm.name]
+           and fake.opens == {lkm.name: 1, daw.name: 1})
+
+        # The notes played during the check are not the rehearsal's: Start counts from nothing.
+        fake = Fake66([td17, lkm])
+        d4 = api66(fake)
+        d4.start_monitor(0, SR, [gtr66, drums66])
+        fake.send("TD-17", time.perf_counter_ns(), bytes([0x99, 38, 100]))
+        d4._midi.drain()
+        heard = d4.list_midi_ports()["ports"][0]["notes"]
+        d4.stop_monitor(keep_ports=True)
+        d4.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        d4._midi.drain()
+        seen = d4.midi_activity()
+        ok("notes played during the check do not show once the rehearsal has started",
+           heard == 1 and seen["Drums"]["notes"] == 0 and seen["Drums"]["vel"] == 0
+           and d4.list_midi_ports()["ports"][0]["notes"] == 0)
+
+        # A Start that fails lets the check's ports go; the audio check is stopped, so the MIDI one is over too.
+        real_unique = apimod66._unique_path
+
+        def failing_unique(path):
+            raise OSError("no room for a folder")
+
+        fake = Fake66([td17, lkm])
+        d5 = api66(fake)
+        d5.start_monitor(0, SR, [gtr66, drums66])
+        apimod66._unique_path = failing_unique
+        try:
+            d5.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+            raised = False
+        except OSError:
+            raised = True
+        finally:
+            apimod66._unique_path = real_unique
+        d5._midi.drain()
+        ok("a Start that cannot make its folder raises, and the check's port is closed with its tracks forgotten",
+           raised and d5._session is None and d5._monitor is None
+           and not fake.open_ports and d5.midi_activity() == {})
+
+        fake = Fake66([td17, lkm])
+        d6 = api66(fake)
+        d6.start_monitor(0, SR, [gtr66, drums66])
+        real_create = d6._lib.create_rehearsal
+
+        def failing_create(*args, **kwargs):
+            raise OSError("the database refused")
+
+        d6._lib.create_rehearsal = failing_create
+        try:
+            d6.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+            raised = False
+        except OSError:
+            raised = True
+        finally:
+            d6._lib.create_rehearsal = real_create
+        ok("and so does one the database refuses",
+           raised and d6._session is None and not fake.open_ports and d6.midi_activity() == {})
+
+        # And when letting go of the check's ports fails as well, the error that stopped Start is the one raised.
+        fake = Fake66([td17, lkm])
+        d8 = api66(fake)
+        d8.start_monitor(0, SR, [gtr66, drums66])
+
+        def stuck_release():
+            raise RuntimeError("a port would not close")
+
+        d8._midi.release = stuck_release
+        apimod66._unique_path = failing_unique
+        said = io66.StringIO()
+        try:
+            with contextlib66.redirect_stdout(said):
+                d8.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+            raised = None
+        except Exception as e:  # noqa: BLE001
+            raised = e
+        finally:
+            apimod66._unique_path = real_unique
+        ok("a Start that cannot make its folder and cannot let go of the ports raises the folder's error",
+           isinstance(raised, OSError) and "no room for a folder" in str(raised)
+           and "a port would not close" in said.getvalue())
+
+        # A rehearsal under way is not undone by a second Start that fails before it begins.
+        fake = Fake66([td17, lkm])
+        d7 = api66(fake)
+        d7.start_rehearsal("First", 0, SR, [gtr66, drums66])
+        held = next(iter(fake.open_ports))
+        first = d7._session
+        apimod66._unique_path = failing_unique
+        try:
+            d7.start_rehearsal("Second", 0, SR, [gtr66, drums66])
+        except OSError:
+            pass
+        finally:
+            apimod66._unique_path = real_unique
+        ok("a second Start that fails before it begins leaves the first rehearsal and its ports as they were",
+           d7._session is first and held in fake.open_ports and not held.closed
+           and d7.midi_activity()["Drums"]["state"] == "ok")
+
+        # What Start refuses, in the spec's words, before any folder is made.
+        fake = Fake66([td17, lkm])
+        e = api66(fake)
+        before = folders66(e)
+        port_less = {"name": "Keys", "channel": None, "mode": "midi"}
+        refused = [
+            ("A1", [keys66], a1_66),
+            ("P3", [gtr66, port_less], "Keys has no MIDI port yet. Pick one, or set it to Audio."),
+            ("P3, plural", [gtr66, port_less, {"name": "Synth", "channel": None, "mode": "midi"}],
+             "Keys, Synth have no MIDI port yet. Pick one, or set them to Audio."),
+            ("P2", [gtr66, drums66, {**keys66, "midi_port": td17.saved()}],
+             "Drums and Keys both take notes from TD-17."),
+        ]
+        for what, band, words in refused:
+            res = e.start_rehearsal("Nope", 0, SR, band)
+            ok(f"Start refuses {what} in the spec's words, as the other refusals are shaped",
+               res == {"ok": False, "error": words})
+        ok("and none of them makes a folder, a rehearsal or a port",
+           folders66(e) == before and e._session is None and not fake.open_ports
+           and fake.opens == {})
+
+        # The band as the window sends it: the tracks as they are, mode and port included.
+        fake = Fake66([td17, lkm])
+        f = api66(fake)
+        band = [{**gtr66, "mode": "audio"}, drums66, keys66]
+        res = f.start_rehearsal("Jam", 0, SR, band)
+        ok("a band of audio, Both and MIDI starts, and opens a port for each that takes notes",
+           res["ok"] and open66(fake) == sorted([td17.name, lkm.name]))
+        tracks = f.session_state()["tracks"]
+        ok("the session's tracks carry the mode and the port as given",
+           [t["mode"] for t in tracks] == ["audio", "both", "midi"]
+           and tracks[1]["midi_port"] == td17.saved() and tracks[2]["midi_port"] == lkm.saved()
+           and "midi_port" not in tracks[0])
+
+    @scenario66("Finish and closing")
+    def _():
+        print("  Finish")
+        fake = Fake66([td17, lkm])
+        a = api66(fake)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66, keys66])
+        a._midi.drain()
+        ok("two ports are open and heard", len(fake.open_ports) == 2 and list(a.midi_activity()) == ["Drums", "Keys"])
+        res = a.finish_rehearsal()
+        ok("finish_rehearsal closes every port and forgets the tracks",
+           res["ok"] and not fake.open_ports and a.midi_activity() == {})
+        ok("the ports are still listed", len(a.list_midi_ports()["ports"]) == 2)
+
+        # Closing the app, with the rig's own threads running.
+        fake = Fake66([td17, lkm])
+        t = api66(fake, threads=True)
+        t.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        threads = [t._midi._writer, t._midi._watcher]
+        ok("with its threads, the rig has a writer and a watcher running",
+           all(th is not None and th.is_alive() for th in threads) and len(fake.open_ports) == 1)
+        steps = []
+        for name in ("abandon_take", "shutdown"):
+            real = getattr(t._midi, name)
+            setattr(t._midi, name, lambda real=real, name=name: (steps.append(name), real())[1])
+        t.shutdown()
+        ok("shutdown lets go of a take's notes, then stops the rig", steps[:2] == ["abandon_take", "shutdown"])
+        ok("the rig's threads have stopped, its ports are closed and its system is shut",
+           not any(th.is_alive() for th in threads) and not fake.open_ports and fake.inputs() == [])
+        ok("and nothing is listed afterwards", t.list_midi_ports()["ports"] == [])
+
+        # A rig that fails to let go of a take must not stop the rest of closing.
+        fake = Fake66([td17, lkm])
+        w = api66(fake)
+        w.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        order = []
+        real_shutdown, real_abandon = w._midi.shutdown, w._midi.abandon_take
+
+        def failing_abandon():
+            # The Api's call fails; the rig's own, inside its shutdown, is the real one.
+            order.append("abandon_take")
+            if order.count("abandon_take") == 1:
+                raise RuntimeError("the take would not let go")
+            real_abandon()
+
+        w._midi.abandon_take = failing_abandon
+        w._midi.shutdown = lambda: (order.append("shutdown"), real_shutdown())[1]
+        said = io66.StringIO()
+        with contextlib66.redirect_stdout(said):
+            w.shutdown()
+        ok("a take that will not be let go of does not keep the rig from closing its ports and system",
+           order[:2] == ["abandon_take", "shutdown"] and not fake.open_ports and fake.inputs() == []
+           and "the take would not let go" in said.getvalue())
+
+        # And a rig that fails to release does not keep Finish from clearing up the empty folder.
+        fake = Fake66([td17, lkm])
+        v = api66(fake)
+        v.start_rehearsal("Empty", 0, SR, [gtr66, drums66])
+        folder = Path(v._session["folder"])
+
+        def failing_release():
+            raise RuntimeError("a port would not close")
+
+        v._midi.release = failing_release
+        said = io66.StringIO()
+        with contextlib66.redirect_stdout(said):
+            res = v.finish_rehearsal()
+        ok("a port that will not close does not keep Finish from finishing: the empty folder still goes",
+           res["ok"] is True and v._session is None and res["folder_removed"] is True and not folder.exists()
+           and "a port would not close" in said.getvalue())
+
+        # Nor keeps the app from closing during the check: the rig, its ports and its system are still let go.
+        fake = Fake66([td17, lkm])
+        u = api66(fake)
+        u.start_monitor(0, SR, [gtr66, drums66])
+        u._midi.release = failing_release
+        said = io66.StringIO()
+        try:
+            with contextlib66.redirect_stdout(said):
+                u.shutdown()
+            closed = True
+        except RuntimeError:
+            closed = False
+        ok("a port that will not close during the check does not keep the app from closing: the rig shuts",
+           closed and not fake.open_ports and fake.inputs() == [] and "a port would not close" in said.getvalue())
+
+    @scenario66("a rehearsal under way")
+    def _():
+        print("  a rehearsal under way")
+        fake = Fake66([td17, lkm])
+        a = api66(fake)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        held = next(iter(fake.open_ports))
+        a.stop_monitor()
+        ok("stop_monitor() between takes (a screen being left) does not close the rehearsal's ports",
+           held in fake.open_ports and not held.closed and list(a.midi_activity()) == ["Drums"])
+        res = rescan66(a)
+        ok("Look again between takes reads the ports and leaves the rehearsal's open",
+           res.get("ok") is True and held in fake.open_ports and not held.closed
+           and a.midi_activity()["Drums"]["state"] == "ok")
+        a._recorder = types.SimpleNamespace(abandon=lambda: None)
+        try:
+            res = a.start_rehearsal("Other", 0, SR, [gtr66, {**drums66, "name": "Kit"}])
+            ok("a take recording refuses another rehearsal, and the ports stay as they were",
+               res == {"ok": False, "error": "Recording in progress"} and list(a.midi_activity()) == ["Drums"])
+            res = a.start_monitor(0, SR, [gtr66, {**drums66, "name": "Kit"}])
+            ok("and a check, which would have changed the tracks under the take",
+               res == {"ok": False, "error": "Recording in progress"} and list(a.midi_activity()) == ["Drums"]
+               and held in fake.open_ports and not held.closed)
+        finally:
+            a._recorder = None
+
+    @scenario66("what counts as audio")
+    def _():
+        print("  audio only")
+        ok("_channels_of counts the channels audio tracks write, a stereo one as two, MIDI ones as none",
+           apimod66._channels_of([gtr66, {**drums66, "stereo": True}, keys66, {**keys66, "stereo": True}]) == 3)
+        a = api66(None, "MIDI is not available: test")
+        real_usage = apimod66.shutil.disk_usage
+        apimod66.shutil.disk_usage = lambda path: types.SimpleNamespace(
+            free=2 * SR * 2 * 60 * 100)  # a hundred minutes of two channels
+        a._recorder = types.SimpleNamespace(error=None, problem=lambda: None, is_active=lambda: True)
+        a._session = {"samplerate": SR, "bit_depth": 16, "tracks": [gtr66, drums66, keys66]}
+        try:
+            health = a.recording_health()
+        finally:
+            a._recorder = None
+            apimod66.shutil.disk_usage = real_usage
+        ok("while recording, the disk estimate counts the audio channels only (Keys writes none)",
+           abs(health["minutes_left"] - 100) < 0.01)
+
+    @scenario66("Copy details names the ports")
+    def _():
+        print("  Copy details")
+        a = api66(Fake66([td17, lkm]))
+        a._remember_device("device", 0)
+        a._config["tracks"] = [
+            {"name": "Gtr"},
+            {"name": "Drums", "mode": "both", "midi_port": td17.saved()},
+            {"name": "Keys", "mode": "midi", "midi_port": lkm.saved()},
+            {"name": "Pad", "mode": "midi"}]
+        text = a.bug_report()["text"]
+        ok("a MIDI track is said by its port, a Both track by its input and its port, and no port as none",
+           "Tracks: Gtr on input 1, Drums on input 2 and MIDI port TD-17, "
+           "Keys on MIDI port Launchkey Mini MK3 MIDI Port, Pad on no MIDI port" in text)
+        ok("and a MIDI track is not said to be on no input", "Keys on no input" not in text)
+        real_tracks_for = apimod66.tracks_for
+
+        def cannot_place(*args, **kwargs):
+            raise RuntimeError("the card cannot be asked")
+
+        apimod66.tracks_for = cannot_place
+        try:
+            text = a.bug_report()["text"]
+        finally:
+            apimod66.tracks_for = real_tracks_for
+        ok("when the card cannot be asked, the inputs are unknown, not none, and the ports are still said",
+           "Tracks: Gtr on an unknown input, Drums on an unknown input and MIDI port TD-17, "
+           "Keys on MIDI port Launchkey Mini MK3 MIDI Port, Pad on no MIDI port" in text)
+
+    @scenario66("no MIDI system")
+    def _():
+        print("  no MIDI system")
+        a = api66(None, "MIDI is not available: test")
+        ok("list_midi_ports says why there are none",
+           a.list_midi_ports() == {"system": None, "ports": [], "error": "MIDI is not available: test"})
+        ok("Under the hood says the same", a.under_the_hood()["midi"] == a.list_midi_ports())
+        lines = [ln for ln in a.bug_report()["text"].splitlines() if ln.startswith("MIDI:")]
+        ok("and Copy details has one MIDI line, with the reason",
+           lines == ["MIDI: MIDI is not available: test"])
+        ok("the check still listens to the card", a.start_monitor(0, SR, [gtr66, drums66]) == {"ok": True}
+           and a._monitor is not None)
+        res = a.start_monitor(0, SR, [keys66])
+        ok("a check of a band that is all MIDI runs too, and Keys is not connected",
+           res == {"ok": True} and a._monitor is None and a.midi_activity()["Keys"]["connected"] is False)
+        a.stop_monitor()
+        res = a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        a._midi.drain()
+        seen = a.midi_activity()
+        ok("a rehearsal with Drums on Both starts, and Drums is not connected",
+           res["ok"] and seen["Drums"]["connected"] is False)
+        ok("it can be finished and the app closed", a.finish_rehearsal()["ok"] and a.shutdown() is None)
+
+        fake = Fake66([])
+        e = api66(fake)
+        lines = [ln for ln in e.bug_report()["text"].splitlines() if ln.startswith("MIDI:")]
+        ok("a system with no ports says so in one line, and which system it is", lines == ["MIDI: no ports, Fake MIDI"])
+        from rehearsal_recorder import diagnostics as diag66
+
+        port66 = {"name": "TD-17", "device": "TD-17", "maker": "Roland", "id": "7", "notes": 0}
+        ok("a port is said as it was, with its system after it",
+           diag66.midi_lines({"system": "CoreMIDI", "ports": [port66], "error": None})
+           == ["MIDI: TD-17 (Roland, id 7), CoreMIDI"])
+        ok("no ports on Windows MIDI Services says so, and the system",
+           diag66.midi_lines({"system": "Windows MIDI Services", "ports": [], "error": None})
+           == ["MIDI: no ports, Windows MIDI Services"])
+        ok("no system says why, as it did",
+           diag66.midi_lines({"system": None, "ports": [], "error": "MIDI is not available: test"})
+           == ["MIDI: MIDI is not available: test"])
+        ok("and with neither a system nor a reason, only that there are no ports",
+           diag66.midi_lines({"system": None, "ports": [], "error": None}) == ["MIDI: no ports"]
+           and diag66.midi_lines(None) == ["MIDI: no ports"])
+
+    @scenario66("Look again")
+    def _():
+        print("  Look again")
+        fake = Fake66([td17])
+        fake.notify = False
+        a = api66(fake)
+        fake.plug(lkm)
+        ok("a port the system did not tell us of is not listed yet", len(a.list_midi_ports()["ports"]) == 1)
+        res = rescan66(a)
+        ok("Look again reads the MIDI ports too", res.get("ok") is True
+           and [p["name"] for p in a.list_midi_ports()["ports"]] == ["TD-17", lkm.name])
+
+    apimod66.open_midi_system = real_open66
+    apimod66.MIDI_THREADS = False
+
+    print("\n[67] A take with notes")
+    # Start gives the card the tracks that record sound and the rig the clock, Stop
+    # stops the audio and then makes the .mid files, Keep and Recover move them
+    # beside the WAVs. The audio side is driven by the recorder's own callback, the
+    # MIDI side by a fake port system.
+    import logging as logging67
+
+    from rehearsal_recorder.audio.capture import AudioRecorder as Recorder67
+    from rehearsal_recorder.midi import capture as capture67
+    from rehearsal_recorder.midi.smf import read_events as read_events67
+
+    lkm67 = Port66("Launchkey Mini MK3", "Launchkey Mini MK3", "Novation")
+    keys67 = {"name": "Keys", "channel": None, "mode": "midi", "midi_port": lkm67.saved()}
+    on67, off67 = bytes([0x99, 38, 100]), bytes([0x89, 38, 0])
+
+    said67 = []
+    catcher67 = logging67.Handler(level=logging67.INFO)
+    catcher67.emit = said67.append
+    logging67.getLogger("rehearsal_recorder").addHandler(catcher67)
+
+    def errors67(since=0):
+        return [r for r in said67[since:] if r.levelno >= logging67.ERROR]
+
+    def api67(system, root=None):
+        apimod66.open_midi_system = lambda: (system, None)
+        return fresh_api(root or Path(tempfile.mkdtemp()))[1]
+
+    def play67(a, fake, notes=True, blocks=5, silent=False, port="TD-17", data=(on67, off67)):
+        # Five blocks of 0.1 s: a note struck after the first and let go after the
+        # third. Under half a second, so the clock's marks make no steep line.
+        rec = a._recorder
+        block = np.full((4800, rec._max_channel), 0 if silent else 900, dtype=np.int16)
+        for i in range(blocks):
+            rec._callback(block, 4800, None, None)
+            if notes and i == 0:
+                fake.send(port, time.perf_counter_ns(), data[0])
+            if notes and i == 2:
+                fake.send(port, time.perf_counter_ns(), data[1])
+
+    def heard67(path):
+        names, events = read_events67(path)
+        return names, [data for _, data in events]
+
+    def names67(folder):
+        return sorted(p.name for p in Path(folder).iterdir())
+
+    def refused_mid67(path, **kw):
+        raise OSError(28, "No space left on device")
+
+    import contextlib as contextlib67
+
+    @contextlib67.contextmanager
+    def refused_move67(name):
+        # A move of the file called `name` fails, as Windows fails it while another
+        # program holds the file open (a sharing violation); every other move goes.
+        real = apimod66.shutil.move
+
+        def move(src, dst, *args, **kw):
+            if Path(src).name == name:
+                raise PermissionError(13, "The process cannot access the file because it is "
+                                          "being used by another process")
+            return real(src, dst, *args, **kw)
+
+        apimod66.shutil.move = move
+        try:
+            yield
+        finally:
+            apimod66.shutil.move = real
+
+    def dirs67(folder):
+        return sorted(p.name for p in Path(folder).iterdir() if p.is_dir())
+
+    def scenario67(what):
+        def run(fn):
+            try:
+                fn()
+            except Exception as e:  # noqa: BLE001
+                ok(f"{what}: stopped by {type(e).__name__}: {e}", False)
+            return fn
+        return run
+
+    @scenario67("stop and keep")
+    def _():
+        print("  stop and keep")
+        fake = Fake66([td17])  # the Launchkey is not plugged in
+        a = api67(fake)
+        res = a.start_rehearsal("Jam", 0, SR, [gtr66, drums66, keys67])
+        folder = Path(a._session["folder"])
+        spy = []
+        real_begin = a._midi.begin_take
+        a._midi.begin_take = lambda out_dir, anchor: (spy.append((out_dir, anchor)), real_begin(out_dir, anchor))[1]
+        errors_before = len(said67)
+        res = a.start_take()
+        rec = a._recorder
+        temp = Path(a._recorder_temp_dir)
+        ok("a rehearsal of audio, Both and MIDI starts a take", res == {"ok": True, "take_number": 1})
+        ok("the card is given the tracks that record sound only, and no channel arithmetic touches Keys",
+           [t["name"] for t in rec.tracks] == ["Gtr", "Drums"] and rec._max_channel == 2)
+        ok("the rig is begun once, on the take's folder and on the recorder's own clock, started",
+           len(spy) == 1 and spy[0][0] == temp and spy[0][1] is rec._clock
+           and rec._clock is not None and rec._clock.started_ns is not None)
+        record = json.loads((temp / "take.json").read_text(encoding="utf-8"))
+        ok("take.json names each notes track's file, track and port, the one that is not plugged in too",
+           record["notes"] == [{"file": "Drums", "name": "Drums", "port": "TD-17"},
+                               {"file": "Keys", "name": "Keys", "port": "Launchkey Mini MK3"}]
+           and [(t["file"], t.get("name")) for t in record["tracks"]] == [("Gtr", "Gtr"), ("Drums", "Drums")])
+        play67(a, fake)
+        a._midi.drain()
+        ok("the notes of a port that is there are on disk as they are played, and a port that is not has no file",
+           (temp / "Drums.midraw").exists() and not (temp / "Keys.midraw").exists()
+           and (temp / "take.json").exists())
+        health = a.recording_health()
+        ok("the health check has nothing to say about the notes", health["recording"] and health["error"] is None)
+
+        stop = a.stop_take()
+        ok("Stop names the audio tracks alone",
+           stop["ok"] and [t["name"] for t in stop["tracks"]] == ["Gtr", "Drums"])
+        ok("and the notes, each with its port and the audio lane it follows",
+           stop["notes"] == [{"name": "Drums", "file": str(temp / "Drums.mid"), "port": "TD-17",
+                              "after": "Drums", "place": 1}])
+        ok("and the track whose port was not there, which has no file (F5)",
+           stop["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Drums", "place": 2}])
+        ok("each lane carries its track's place in the band, for the player to keep them in band order",
+           [n.get("place") for n in stop["notes"]] == [1] and [n.get("place") for n in stop["notes_missing"]] == [2])
+        ok("the draft holds the WAVs and the .mid and nothing else: take.json and take.clock are gone with the .midraw",
+           names67(temp) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
+        meta, data = heard67(temp / "Drums.mid")
+        ok("the .mid has the track and the port and the note, held and let go",
+           meta == {"track_name": "Drums", "device_name": "TD-17"} and data == [on67, off67])
+        ok("and nothing was said at ERROR on the way", errors67(errors_before) == [])
+        ok("a second Stop has nothing to stop", a.stop_take() == {"ok": False, "error": "Not recording"})
+        ok("and leaves the draft as it was", names67(temp) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
+
+        kept = a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"],
+                           notes=stop["notes"])
+        take = kept["take"]
+        there = Path(take["tracks"][0]["file"]).parent
+        ok("keep_take moves the .mid into the take's folder beside the WAVs",
+           kept["ok"] and names67(there) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
+        ok("the drafts folder is gone", not temp.exists() and not (folder / "_drafts").exists())
+        ok("the kept take lists the notes lane after its audio, and the track that has none",
+           take["notes"] == [{"name": "Drums", "file": str(there / "Drums.mid"), "port": "TD-17",
+                              "after": "Drums", "place": 1}]
+           and take["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Drums", "place": 2}]
+           and [t["name"] for t in take["tracks"]] == ["Gtr", "Drums"])
+        ok("the kept take's lanes carry their tracks' places in the band too",
+           [n.get("place") for n in take["notes"]] == [1] and [n.get("place") for n in take["notes_missing"]] == [2])
+        ok("and the library gives it back the same", a.get_rehearsal(str(folder))["takes"][0]["notes"] == take["notes"])
+
+        # An older interface asks for the take without its notes: the audio is saved, and Keep finds
+        # the .mid Stop made in the draft itself rather than delete it with the drafts folder.
+        a.start_take()
+        play67(a, fake)
+        stop = a.stop_take()
+        kept = a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"])
+        take = kept["take"]
+        there2 = Path(take["tracks"][0]["file"]).parent
+        ok("keep_take without notes still saves the audio",
+           kept["ok"] and [t["name"] for t in take["tracks"]] == ["Gtr", "Drums"]
+           and all(Path(t["file"]).exists() for t in take["tracks"]))
+        ok("and keeps the .mid Stop made beside the WAVs, listed with its port and lane, Keys alone missing",
+           names67(there2) == ["Drums.mid", "Drums.wav", "Gtr.wav"]
+           and take["notes"] == [{"name": "Drums", "file": str(there2 / "Drums.mid"), "port": "TD-17",
+                                  "after": "Drums", "place": 1}]
+           and [n["name"] for n in take["notes_missing"]] == ["Keys"])
+
+        # Discard throws the whole draft away, the notes with it.
+        a.start_take()
+        play67(a, fake)
+        stop = a.stop_take()
+        gone = a.discard_take(stop["temp_dir"])
+        ok("discarding a take with notes takes its .mid with it: only the kept takes' are left in the rehearsal",
+           gone["ok"] and not Path(stop["temp_dir"]).exists() and not (folder / "_drafts").exists()
+           and sorted(p.parent.name for p in folder.rglob("*.mid*")) == sorted([there.name, there2.name]))
+        ok("a take that was discarded used its number: the next is the one after",
+           stop["take_number"] == 3 and a.start_take()["take_number"] == 4)
+        a.stop_take()
+
+    @scenario67("the stop")
+    def _():
+        print("  the stop")
+        fake = Fake66([td17])
+        a = api67(fake)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66, keys67])
+
+        # The notes' lanes follow the audio that the take really has.
+        a.start_take()
+        play67(a, fake)
+        real_stop = a._recorder.stop
+        recorder = a._recorder
+
+        def without_drums(progress=None):
+            done = real_stop(progress=progress)
+            return {**done, "tracks": [t for t in done["tracks"] if t["name"] != "Drums"]}
+
+        recorder.stop = without_drums
+        stop = a.stop_take()
+        ok("a take whose Drums audio produced no file does not anchor Drums' notes lane to it",
+           [n["after"] for n in stop["notes"]] == ["Gtr"] and [n["after"] for n in stop["notes_missing"]] == ["Gtr"])
+
+        # Two tracks of notes alone after one audio lane, the first one's port
+        # not there: each carries its place, which is all that says Pads
+        # stood before Synth. A .mid of a track the band does not have has none.
+        lanes, gone = type(a)._note_lanes(
+            [{"name": "Gtr", "channel": 1},
+             {"name": "Pads", "channel": None, "mode": "midi", "midi_port": {"name": "Pad box"}},
+             {"name": "Synth", "channel": None, "mode": "midi", "midi_port": {"name": "Synth port"}},
+             {"name": "Bass", "channel": 2}],
+            [{"name": "Gtr", "file": "Gtr.wav"}, {"name": "Bass", "file": "Bass.wav"}],
+            [{"name": "Synth", "file": "Synth.mid", "port": "Synth port"},
+             {"name": "Stray", "file": "Stray.mid", "port": "Elsewhere"}])
+        ok("a saved and a missing lane after the same audio lane each carry their place in the band",
+           [(n["name"], n["after"], n.get("place")) for n in lanes] == [("Synth", "Gtr", 2), ("Stray", None, None)]
+           and gone == [{"name": "Pads", "port": "Pad box", "after": "Gtr", "place": 1}])
+        ok("and a .mid whose track is not in the band has no place at all", "place" not in lanes[1])
+
+        # A laptop that slept ends the take where it slept: the notes are as long as the audio.
+        a.start_take()
+        rec = a._recorder
+        block = np.full((4800, 2), 900, dtype=np.int16)
+        for i in range(5):
+            rec._callback(block, 4800, None, None)
+            if i == 0:
+                fake.send("TD-17", time.perf_counter_ns(), on67)
+        a._laptop_sleeping()
+        rec._callback(block, 4800, None, None)
+        fake.send("TD-17", time.perf_counter_ns() + 5_000_000_000, bytes([0x99, 40, 90]))
+        stop = a.stop_take()
+        _, data = heard67(stop["notes"][0]["file"])
+        ok("the audio ends where the laptop slept, and the notes with it: the key held then is let go, the note after is not",
+           abs(stop["duration_sec"] - 0.5) < 1e-6 and data == [on67, off67])
+
+        # The audio fails to finish: the notes stay as raw files, as a crash would leave them, and the rig is not left in a take.
+        a.start_take()
+        play67(a, fake)
+        temp = Path(a._recorder_temp_dir)
+
+        def no_disk(progress=None):
+            raise OSError("the disk is full")
+
+        a._recorder.stop = no_disk
+        try:
+            a.stop_take()
+            raised = False
+        except OSError:
+            raised = True
+        ok("a take whose audio cannot be finished raises as before, and its notes stay for the drafts",
+           raised and (temp / "Drums.midraw").exists() and (temp / "take.json").exists())
+        ok("and the rig is no longer in that take", a._midi.end_take(1.0) == [] and a._recorder is None)
+
+        # The notes' clock fails in the audio callback: the audio is kept, and Stop says so once, at ERROR.
+        before = len(said67)
+        a.start_take()
+        clock = a._recorder._clock
+
+        def broken(*args):
+            raise RuntimeError("the clock broke")
+
+        clock.mark = broken
+        play67(a, fake)
+        stop = a.stop_take()
+        said = errors67(before)
+        ok("a clock that fails costs the audio nothing and the notes still become a .mid",
+           stop["ok"] and len(stop["tracks"]) == 2 and [n["name"] for n in stop["notes"]] == ["Drums"])
+        ok("and Stop says so in the app's log, once, at ERROR",
+           len(said) == 1 and "the clock broke" in said[0].getMessage())
+
+        # The MIDI side fails when the take is stopped: the audio is saved all the same.
+        before = len(said67)
+        a.start_take()
+        play67(a, fake)
+        a._midi.drain()
+        temp = Path(a._recorder_temp_dir)
+
+        def boom(*args):
+            raise RuntimeError("the writer broke")
+
+        real_end = a._midi.end_take
+        a._midi.end_take = boom
+        stop = a.stop_take()
+        a._midi.end_take = real_end
+        ok("a rig that fails at Stop does not cost the take its audio",
+           stop["ok"] and [t["name"] for t in stop["tracks"]] == ["Gtr", "Drums"]
+           and all(Path(t["file"]).exists() for t in stop["tracks"]) and stop["notes"] == [])
+        ok("both tracks that take notes are missing, and it is said at ERROR",
+           [n["name"] for n in stop["notes_missing"]] == ["Drums", "Keys"] and len(errors67(before)) == 1)
+        ok("the notes stay as they are for the drafts, with the record that names their ports",
+           (temp / "Drums.midraw").exists() and (temp / "take.json").exists())
+        a._midi.abandon_take()
+
+        # And at Start: a rig that cannot begin leaves a take with audio and no notes.
+        before = len(said67)
+        real_begin = a._midi.begin_take
+        a._midi.begin_take = boom
+        res = a.start_take()
+        a._midi.begin_take = real_begin
+        play67(a, fake)
+        stop = a.stop_take()
+        ok("a rig that cannot begin does not stop the take: audio, no notes, said at ERROR",
+           res["ok"] and stop["ok"] and len(stop["tracks"]) == 2 and stop["notes"] == []
+           and [n["name"] for n in stop["notes_missing"]] == ["Drums", "Keys"] and len(errors67(before)) == 1)
+
+    @scenario67("a port pulled")
+    def _():
+        print("  a port pulled")
+        fake = Fake66([td17])
+        a = api67(fake)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        a.start_take()
+        play67(a, fake, blocks=2, data=(on67, off67))
+        fake.pull("TD-17")
+        a._midi.tick()
+        a._recorder._callback(np.full((4800, 2), 900, dtype=np.int16), 4800, None, None)
+        health = a.recording_health()
+        ok("the kit pulled mid-take: the health check has no error and the take is still recording",
+           health["recording"] is True and health["error"] is None and health["active"] is True)
+        play67(a, fake, notes=False, blocks=2)
+        stop = a.stop_take()
+        _, data = heard67(stop["notes"][0]["file"])
+        ok("the take goes on, with the notes it had and the key held when it went let go",
+           stop["ok"] and len(stop["tracks"]) == 2 and data == [on67, off67])
+
+    @scenario67("notes only")
+    def _():
+        print("  notes on a Both track")
+        fake = Fake66([td17])
+        a = api67(fake)
+        a.start_rehearsal("Pads", 0, SR, [drums66])
+        a.start_take()
+        play67(a, fake, silent=True)
+        stop = a.stop_take()
+        with wave.open(stop["tracks"][0]["file"], "rb") as w:
+            silent = not any(w.readframes(w.getnframes()))
+        kept = a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"],
+                           notes=stop["notes"])["take"]
+        _, data = heard67(kept["notes"][0]["file"])
+        ok("a take where only notes arrived on a Both track keeps its silent audio and its .mid",
+           silent and [t["name"] for t in kept["tracks"]] == ["Drums"] and data == [on67, off67]
+           and [(n["name"], n["after"]) for n in kept["notes"]] == [("Drums", "Drums")] and kept["notes_missing"] == [])
+
+    @scenario67("a track that is MIDI only")
+    def _():
+        print("  a track that is MIDI only")
+        fake = Fake66([td17, lkm67])
+        a = api67(fake)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, keys67])
+        res = a.start_take()
+        rec = a._recorder
+        ok("a rehearsal of Gtr and a MIDI track starts a take: the card is given Gtr alone",
+           res == {"ok": True, "take_number": 1} and [t["name"] for t in rec.tracks] == ["Gtr"]
+           and rec._max_channel == 1)
+        play67(a, fake, port="Launchkey Mini MK3", data=(bytes([0x90, 60, 90]), bytes([0x80, 60, 0])))
+        stop = a.stop_take()
+        ok("and its notes are a .mid after the audio lane before it",
+           [t["name"] for t in stop["tracks"]] == ["Gtr"] and [(n["name"], n["after"]) for n in stop["notes"]]
+           == [("Keys", "Gtr")] and stop["notes_missing"] == [])
+
+        # Refused or failed before the recorder starts: no take number is used up.
+        folder = Path(a._session["folder"])
+        counter = a._session["take_counter"]
+        band = a._session["tracks"]
+        spy = []
+        real_begin = a._midi.begin_take
+        a._midi.begin_take = lambda *args: (spy.append(args), real_begin(*args))[1]
+        a._session["tracks"] = [keys67]
+        res = a.start_take()
+        ok("a session with no track that records sound is refused in the rule's words, and no take number is used",
+           res == {"ok": False, "error": a1_66} and a._session["take_counter"] == counter and a._recorder is None)
+        a._session["tracks"] = band
+
+        class NoCard67(Recorder67):
+            def start(self):
+                raise RuntimeError("no card")
+
+        real_recorder = apimod66.AudioRecorder
+        apimod66.AudioRecorder = NoCard67
+        try:
+            res = a.start_take()
+        finally:
+            apimod66.AudioRecorder = real_recorder
+        ok("a card that will not open uses no take number either, and the notes were not begun",
+           res["ok"] is False and a._session["take_counter"] == counter and spy == [] and a._recorder is None)
+        res = a.start_take()
+        ok("the next take has the number after the last one that was recorded",
+           res["take_number"] == counter + 1)
+        a.stop_take()
+        a._midi.begin_take = real_begin
+        ok("and the refusal left no folder for a take that never started",
+           sorted(p.name for p in (folder / "_drafts").iterdir()) == [f"take {n}" for n in range(1, counter + 2)])
+
+    @scenario67("a check between takes")
+    def _():
+        print("  a check between takes")
+        fake = Fake66([td17, lkm67])
+        a = api67(fake)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        ok("the check of another band, between takes, leaves the rig on that band's ports",
+           a.start_monitor(0, SR, [gtr66, keys67]) == {"ok": True} and a.stop_monitor() == {"ok": True}
+           and open66(fake) == ["Launchkey Mini MK3"])
+        a.start_take()
+        ok("the next take puts the session's tracks back before it begins: its port is open, the check's closed",
+           open66(fake) == ["TD-17"] and fake.opens == {"Launchkey Mini MK3": 1, "TD-17": 2})
+        play67(a, fake)
+        stop = a.stop_take()
+        ok("and records the session's notes track, not the check's",
+           [n["name"] for n in stop["notes"]] == ["Drums"] and stop["notes_missing"] == [])
+
+    @scenario67("no notes")
+    def _():
+        print("  a take with no notes tracks")
+        fake = Fake66([td17])
+        a = api67(fake)
+        bass67 = {"name": "Bass", "channel": 2}
+        a.start_rehearsal("Jam", 0, SR, [gtr66, bass67])
+        spy = []
+        for name in ("use", "begin_take", "end_take"):
+            real = getattr(a._midi, name)
+            setattr(a._midi, name, lambda *args, real=real, name=name: (spy.append(name), real(*args))[1])
+        a.start_take()
+        temp = Path(a._recorder_temp_dir)
+        rec = a._recorder
+        record = json.loads((temp / "take.json").read_text(encoding="utf-8"))
+        ok("the recorder has no clock and lists no notes, as before",
+           rec._clock is None and record["notes"] == [])
+        play67(a, fake, notes=False)
+        stop = a.stop_take()
+        ok("the rig is not asked for anything", spy == [])
+        ok("the take is stopped as it always was: the WAVs alone, take.json gone",
+           [t["name"] for t in stop["tracks"]] == ["Gtr", "Bass"] and names67(temp) == ["Bass.wav", "Gtr.wav"])
+        ok("with no notes and none missing", stop["notes"] == [] and stop["notes_missing"] == [])
+
+        # The recorder itself: a take with notes keeps take.json for the notes to find their ports in.
+        for label, notes in (("with notes", [{"file": "Keys", "port": "Launchkey Mini MK3"}]), ("with none", [])):
+            folder = tmp / ("direct67 " + label)
+            direct = Recorder67(0, SR, [{"name": "Gtr", "channel": 1}], folder, notes=notes)
+            direct._write_record()
+            direct._raw_files = {"Gtr": open(folder / "Gtr.raw", "wb")}
+            direct._callback(np.zeros((256, 1), dtype=np.int16), 256, None, None)
+            direct.stop()
+            ok(f"AudioRecorder.stop {label} {'leaves' if notes else 'removes'} take.json",
+               (folder / "take.json").exists() == bool(notes) and (folder / "Gtr.wav").exists())
+
+    @scenario67("R40")
+    def _():
+        print("  a .mid the disk refused")
+        fake = Fake66([td17])
+        a = api67(fake)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66, keys67])
+        folder = Path(a._session["folder"])
+        before = len(said67)
+        a.start_take()
+        play67(a, fake)
+        temp = Path(a._recorder_temp_dir)
+        real_write = capture67.write_mid
+        capture67.write_mid = refused_mid67
+        try:
+            stop = a.stop_take()
+        finally:
+            capture67.write_mid = real_write
+        said = errors67(before)
+        ok("a .mid the disk refused at Stop is said at ERROR in the app's log, by its track",
+           len(said) == 1 and said[0].getMessage().startswith("Drums:"))
+        ok("Stop still answers: the audio is saved, Drums is among the notes with no file",
+           stop["ok"] and len(stop["tracks"]) == 2 and stop["notes"] == []
+           and [n["name"] for n in stop["notes_missing"]] == ["Drums", "Keys"])
+        ok("its .midraw stays in the draft with take.json and take.clock, which a later try needs",
+           names67(temp) == ["Drums.midraw", "Drums.wav", "Gtr.wav", "take.clock", "take.json"])
+
+        # The library cannot write the take: what Keep moved goes back, the leftovers too.
+        def locked(*args, **kw):
+            raise RuntimeError("database is locked")
+
+        a._lib.add_take = locked
+        try:
+            a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"],
+                        notes=stop["notes"])
+            raised = None
+        except RuntimeError as e:
+            raised = e
+        finally:
+            del a._lib.add_take
+        ok("a take the library cannot write puts the .midraw, take.clock and take.json back in the draft with the WAVs",
+           raised is not None and names67(temp) == ["Drums.midraw", "Drums.wav", "Gtr.wav", "take.clock", "take.json"])
+        ok("and leaves no take folder and no take",
+           dirs67(folder) == ["_drafts"] and a.get_rehearsal(str(folder))["takes"] == [])
+
+        # The leftovers' own move fails: everything Keep moved before it goes back.
+        with refused_move67("take.json"):
+            try:
+                a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"],
+                            notes=stop["notes"])
+                raised = None
+            except PermissionError as e:
+                raised = e
+        ok("a take.json that will not move puts the WAVs, the .midraw and take.clock back, and leaves no take",
+           raised is not None and names67(temp) == ["Drums.midraw", "Drums.wav", "Gtr.wav", "take.clock", "take.json"]
+           and dirs67(folder) == ["_drafts"] and a.get_rehearsal(str(folder))["takes"] == [])
+
+        kept = a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"],
+                           notes=stop["notes"])
+        take = kept["take"]
+        there = Path(take["tracks"][0]["file"]).parent
+        ok("Keep moves the .midraw, unconverted, into the take's folder with the files that make it a .mid",
+           kept["ok"] and names67(there) == ["Drums.midraw", "Drums.wav", "Gtr.wav", "take.clock", "take.json"])
+        ok("the take lists Drums among the notes it lacks, and the drafts folder is removed as usual",
+           take["notes"] == [] and [n["name"] for n in take["notes_missing"]] == ["Drums", "Keys"]
+           and not temp.exists() and not (folder / "_drafts").exists())
+        made = capture67.finish_draft(there, take["duration_sec"], SR)
+        ok("nothing was lost: it still becomes a .mid, with its port",
+           [(n["name"], n["port"]) for n in made] == [("Drums", "TD-17")] and heard67(there / "Drums.mid")[1] == [on67, off67])
+        a.shutdown()
+
+    @scenario67("recover")
+    def _():
+        print("  a crash")
+        fake = Fake66([td17])
+        root = Path(tempfile.mkdtemp())
+        a = api67(fake, root)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66, keys67])
+        folder = Path(a._session["folder"])
+        a.start_take()
+        play67(a, fake, blocks=5)
+        temp = Path(a._recorder_temp_dir)
+        a.shutdown()
+        ok("closing the window mid-take leaves the notes beside the audio, with the clock's marks",
+           names67(temp) == ["Drums.midraw", "Drums.raw", "Gtr.raw", "take.clock", "take.json"])
+
+        b = api67(Fake66([td17]), root)
+        found = b.list_drafts()
+        ok("list_drafts shows the draft with its audio and its notes",
+           len(found) == 1 and found[0]["dir"] == str(temp) and found[0]["notes"] == ["Drums"]
+           and found[0]["tracks"] == ["Drums", "Gtr"] and abs(found[0]["duration_sec"] - 0.5) < 1e-6)
+        before = len(said67)
+        res = b.recover_draft(found[0]["dir"])
+        take = res["take"]
+        there = Path(take["tracks"][0]["file"]).parent
+        ok("recover_draft gives a take with the audio and Drums.mid, in its folder",
+           res["ok"] and [t["name"] for t in take["tracks"]] == ["Drums", "Gtr"]
+           and names67(there) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
+        ok("the notes are listed with their port and lane, and the track with no notes is missing",
+           take["notes"] == [{"name": "Drums", "file": str(there / "Drums.mid"), "port": "TD-17",
+                              "after": "Drums", "place": 1}]
+           and take["notes_missing"] == [{"name": "Keys", "port": "Launchkey Mini MK3", "after": "Drums", "place": 2}])
+        ok("the note played is in the .mid", on67 in heard67(there / "Drums.mid")[1])
+        ok("nothing of the draft is left to be lost or to be found again",
+           not temp.exists() and not (folder / "_drafts").exists() and b.list_drafts() == []
+           and not [p for p in folder.rglob("*") if p.suffix in (".midraw", ".json", ".clock", ".raw")])
+        ok("and nothing was said at ERROR", errors67(before) == [])
+
+        # A .mid the disk refuses at recovery: moved, unconverted, with the take.
+        root = Path(tempfile.mkdtemp())
+        fake = Fake66([td17])
+        a = api67(fake, root)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        folder = Path(a._session["folder"])
+        a.start_take()
+        play67(a, fake)
+        temp = Path(a._recorder_temp_dir)
+        a.shutdown()
+        b = api67(Fake66([td17]), root)
+        before = len(said67)
+        real_write = capture67.write_mid
+        capture67.write_mid = refused_mid67
+        try:
+            res = b.recover_draft(str(temp))
+        finally:
+            capture67.write_mid = real_write
+        take = res["take"]
+        there = Path(take["tracks"][0]["file"]).parent
+        ok("a .mid the disk refuses at recovery is said at ERROR, and the audio is recovered",
+           res["ok"] and len(errors67(before)) == 1 and [t["name"] for t in take["tracks"]] == ["Drums", "Gtr"])
+        ok("its .midraw is moved into the take's folder, unconverted, and the take lists the track as missing",
+           names67(there) == ["Drums.midraw", "Drums.wav", "Gtr.wav", "take.clock", "take.json"]
+           and take["notes"] == [] and [n["name"] for n in take["notes_missing"]] == ["Drums"])
+        ok("the drafts folder is removed as usual", not temp.exists() and not (folder / "_drafts").exists())
+
+        # A take that was stopped and never kept: its .mid files are made, and recovery moves them.
+        root = Path(tempfile.mkdtemp())
+        fake = Fake66([td17])
+        a = api67(fake, root)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66, keys67])
+        folder = Path(a._session["folder"])
+        a.start_take()
+        play67(a, fake)
+        stop = a.stop_take()
+        temp = Path(stop["temp_dir"])
+        a.shutdown()
+        b = api67(Fake66([td17]), root)
+        found = b.list_drafts()
+        ok("a take that was stopped and not kept is a draft with its .mid listed among the notes",
+           len(found) == 1 and found[0]["notes"] == ["Drums"] and found[0]["tracks"] == ["Drums", "Gtr"])
+        res = b.recover_draft(found[0]["dir"])
+        take = res["take"]
+        there = Path(take["tracks"][0]["file"]).parent
+        ok("recovering it moves the .mid Stop had made, which finalize lists with the notes",
+           res["ok"] and names67(there) == ["Drums.mid", "Drums.wav", "Gtr.wav"]
+           and [(n["name"], n["port"]) for n in take["notes"]] == [("Drums", "TD-17")]
+           and heard67(there / "Drums.mid")[1] == [on67, off67] and not temp.exists())
+
+        # A track whose name is not a file name: the notes are the track's, not the file's.
+        fake = Fake66([lkm67, td17])
+        root = Path(tempfile.mkdtemp())
+        a = api67(fake, root)
+        pad = {"name": "Synth/Pad", "channel": None, "mode": "midi", "midi_port": lkm67.saved()}
+        a.start_rehearsal("Jam", 0, SR, [gtr66, pad])
+        a.start_take()
+        play67(a, fake, port="Launchkey Mini MK3", data=(bytes([0x90, 60, 90]), bytes([0x80, 60, 0])))
+        temp = Path(a._recorder_temp_dir)
+        a.shutdown()
+        b = api67(Fake66([lkm67]), root)
+        found = b.list_drafts()
+        take = b.recover_draft(found[0]["dir"])["take"]
+        ok("a draft's notes file Synth_Pad comes back as the track Synth/Pad, not as a track that is missing",
+           found[0]["notes"] == ["Synth_Pad"] and [(n["name"], n["after"]) for n in take["notes"]] == [("Synth/Pad", "Gtr")]
+           and take["notes_missing"] == [])
+
+        # A Both track of that name: its audio and its notes come back under the one name, so the
+        # notes lane follows the track's own audio, as it does for a take that was kept.
+        def both_crash():
+            root, fake = Path(tempfile.mkdtemp()), Fake66([lkm67])
+            a = api67(fake, root)
+            both = {"name": "Synth/Pad", "channel": 2, "mode": "both", "midi_port": lkm67.saved()}
+            a.start_rehearsal("Jam", 0, SR, [gtr66, both])
+            a.start_take()
+            play67(a, fake, port="Launchkey Mini MK3", data=(bytes([0x90, 60, 90]), bytes([0x80, 60, 0])))
+            temp = Path(a._recorder_temp_dir)
+            a.shutdown()
+            return root, temp
+
+        root, temp = both_crash()
+        record = json.loads((temp / "take.json").read_text(encoding="utf-8"))
+        ok("take.json records the name of each track beside its file, audio and notes",
+           [(t["file"], t.get("name")) for t in record["tracks"]] == [("Gtr", "Gtr"), ("Synth_Pad", "Synth/Pad")]
+           and [(n["file"], n.get("name")) for n in record["notes"]] == [("Synth_Pad", "Synth/Pad")])
+        b = api67(Fake66([lkm67]), root)
+        take = b.recover_draft(str(temp))["take"]
+        ok("a recovered Both track Synth/Pad has its audio and its notes under that name, the notes after its own audio",
+           [t["name"] for t in take["tracks"]] == ["Gtr", "Synth/Pad"]
+           and [(n["name"], n["after"]) for n in take["notes"]] == [("Synth/Pad", "Synth/Pad")]
+           and take["notes_missing"] == [])
+        b.shutdown()
+
+        # A draft whose take.json names no track, as one written before it did: as it was.
+        root, temp = both_crash()
+        record = json.loads((temp / "take.json").read_text(encoding="utf-8"))
+        for entry in record["tracks"] + record["notes"]:
+            entry.pop("name", None)
+        (temp / "take.json").write_text(json.dumps(record), encoding="utf-8")
+        b = api67(Fake66([lkm67]), root)
+        take = b.recover_draft(str(temp))["take"]
+        ok("a take.json with no names: the audio and the notes are named as the band's track, Synth_Pad as Synth/Pad",
+           [t["name"] for t in take["tracks"]] == ["Gtr", "Synth/Pad"]
+           and [n["name"] for n in take["notes"]] == ["Synth/Pad"])
+        b.shutdown()
+
+        # Stopped and never kept: the app was closed on the review screen. Stop made the .mid files and
+        # took take.json away, so the draft knows its files by their stems alone ("Keys_Pad"). The
+        # audio and the notes of the Both track Keys/Pad still come back under its one name.
+        root, fake = Path(tempfile.mkdtemp()), Fake66([lkm67])
+        a = api67(fake, root)
+        keys_pad = {"name": "Keys/Pad", "channel": 2, "mode": "both", "midi_port": lkm67.saved()}
+        a.start_rehearsal("Jam", 0, SR, [gtr66, keys_pad])
+        a.start_take()
+        play67(a, fake, port="Launchkey Mini MK3", data=(bytes([0x90, 60, 90]), bytes([0x80, 60, 0])))
+        temp = Path(a.stop_take()["temp_dir"])
+        a.shutdown()
+        (temp / "take.json").unlink(missing_ok=True)
+        b = api67(Fake66([lkm67]), root)
+        take = b.recover_draft(str(temp))["take"]
+        ok("Keys/Pad stopped, not kept and recovered with no take.json: one name for its audio and its notes, "
+           "the notes after its own audio",
+           [t["name"] for t in take["tracks"]] == ["Gtr", "Keys/Pad"]
+           and [(n["name"], n["after"]) for n in take["notes"]] == [("Keys/Pad", "Keys/Pad")]
+           and take["notes_missing"] == [])
+        b.shutdown()
+
+        # "A_B" is the file of the track "A/B", and the track "A_B" has "A_B (2)": a name take.json
+        # gave is not taken for a file's and named again.
+        root, fake = Path(tempfile.mkdtemp()), Fake66([lkm67, td17])
+        a = api67(fake, root)
+        slash = {"name": "A/B", "channel": None, "mode": "midi", "midi_port": lkm67.saved()}
+        under = {"name": "A_B", "channel": None, "mode": "midi", "midi_port": td17.saved()}
+        a.start_rehearsal("Jam", 0, SR, [gtr66, slash, under])
+        a.start_take()
+        play67(a, fake)
+        temp = Path(a._recorder_temp_dir)
+        a.shutdown()
+        b = api67(Fake66([lkm67, td17]), root)
+        take = b.recover_draft(str(temp))["take"]
+        ok("tracks A/B and A_B come back as themselves, from the files A_B and A_B (2)",
+           sorted((n["name"], Path(n["file"]).name) for n in take["notes"])
+           == [("A/B", "A_B.mid"), ("A_B", "A_B (2).mid")] and take["notes_missing"] == [])
+        b.shutdown()
+
+    @scenario67("a move that fails")
+    def _():
+        print("  a move that fails")
+        fake = Fake66([td17])
+        root = Path(tempfile.mkdtemp())
+        a = api67(fake, root)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        folder = Path(a._session["folder"])
+        a.start_take()
+        play67(a, fake)
+        stop = a.stop_take()
+        temp = Path(stop["temp_dir"])
+
+        def keep():
+            try:
+                a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"],
+                            notes=stop["notes"])
+                return None
+            except PermissionError as e:
+                return e
+
+        with refused_move67("Drums.mid"):
+            raised = keep()
+        ok("Keep whose .mid will not move says so", raised is not None)
+        ok("and puts the WAVs it had moved back in the draft beside the .mid",
+           names67(temp) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
+        ok("leaving no take folder and no take",
+           dirs67(folder) == ["_drafts"] and a.get_rehearsal(str(folder))["takes"] == [])
+        found = a.list_drafts()
+        ok("the draft is still listed, with its audio and its notes",
+           [(d["dir"], d["tracks"], d["notes"]) for d in found] == [(str(temp), ["Drums", "Gtr"], ["Drums"])])
+
+        with refused_move67("Drums.wav"):
+            raised = keep()
+        ok("a WAV that will not move puts back the one moved before it",
+           raised is not None and names67(temp) == ["Drums.mid", "Drums.wav", "Gtr.wav"] and dirs67(folder) == ["_drafts"])
+
+        kept = a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"],
+                           notes=stop["notes"])
+        there = Path(kept["take"]["tracks"][0]["file"]).parent
+        ok("Keep asked again keeps it all",
+           kept["ok"] and names67(there) == ["Drums.mid", "Drums.wav", "Gtr.wav"]
+           and [n["name"] for n in kept["take"]["notes"]] == ["Drums"] and not temp.exists())
+
+        # The same in Recover, after a crash.
+        a.start_take()
+        play67(a, fake)
+        temp = Path(a._recorder_temp_dir)
+        a.shutdown()
+        b = api67(Fake66([td17]), root)
+        with refused_move67("Drums.mid"):
+            try:
+                b.recover_draft(str(temp))
+                raised = None
+            except PermissionError as e:
+                raised = e
+        ok("Recover whose .mid will not move says so, and puts the audio back in the draft, take.json still there",
+           raised is not None and names67(temp) == ["Drums.mid", "Drums.wav", "Gtr.wav", "take.json"])
+        ok("leaving no new take folder and no new take",
+           dirs67(folder) == sorted(["_drafts", there.name]) and len(b.get_rehearsal(str(folder))["takes"]) == 1)
+        ok("and the draft is still listed",
+           [(d["dir"], d["tracks"], d["notes"]) for d in b.list_drafts()] == [(str(temp), ["Drums", "Gtr"], ["Drums"])])
+        res = b.recover_draft(str(temp))
+        again = Path(res["take"]["tracks"][0]["file"]).parent
+        ok("Recover asked again recovers it all",
+           res["ok"] and names67(again) == ["Drums.mid", "Drums.wav", "Gtr.wav"]
+           and [n["name"] for n in res["take"]["notes"]] == ["Drums"] and not temp.exists())
+        b.shutdown()
+
+    @scenario67("Keep finds the notes")
+    def _():
+        print("  Keep finds the notes")
+        fake = Fake66([td17, lkm67])
+        a = api67(fake)
+        pad = {"name": "Synth/Pad", "channel": None, "mode": "midi", "midi_port": lkm67.saved()}
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66, pad])
+
+        # Every .mid in the draft is kept, named as the tracks are.
+        a.start_take()
+        play67(a, fake)
+        stop = a.stop_take()
+        kept = a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"])
+        take = kept["take"]
+        there = Path(take["tracks"][0]["file"]).parent
+        ok("Keep without notes keeps every .mid of the draft, the one of Synth/Pad under the track's name",
+           kept["ok"] and names67(there) == ["Drums.mid", "Drums.wav", "Gtr.wav", "Synth_Pad.mid"]
+           and [(n["name"], Path(n["file"]).name) for n in take["notes"]]
+           == [("Drums", "Drums.mid"), ("Synth/Pad", "Synth_Pad.mid")]
+           and take["notes_missing"] == [])
+
+        # A .mid the list passed in leaves out goes along too.
+        a.start_take()
+        play67(a, fake)
+        stop = a.stop_take()
+        kept = a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"],
+                           notes=[n for n in stop["notes"] if n["name"] == "Drums"])
+        take = kept["take"]
+        there = Path(take["tracks"][0]["file"]).parent
+        ok("a .mid the notes passed in leave out is kept and listed beside them",
+           kept["ok"] and names67(there) == ["Drums.mid", "Drums.wav", "Gtr.wav", "Synth_Pad.mid"]
+           and [n["name"] for n in take["notes"]] == ["Drums", "Synth/Pad"] and take["notes_missing"] == []
+           and not Path(stop["temp_dir"]).exists())
+        a.shutdown()
+
+    @scenario67("a Start while Stop finishes")
+    def _():
+        print("  a Start while Stop finishes")
+        fake = Fake66([td17])
+        a = api67(fake)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        a.start_take()
+        play67(a, fake)
+        first = Path(a._recorder_temp_dir)
+        asked = {}
+
+        def ask():
+            return a.start_take(), a.start_monitor(0, SR, [gtr66, drums66])
+
+        real_stop = a._recorder.stop
+
+        def slow_stop(progress=None):
+            done = real_stop(progress=progress)
+            asked["audio"] = ask()
+            return done
+
+        a._recorder.stop = slow_stop
+        real_end = a._midi.end_take
+
+        def slow_end(duration_sec):
+            asked["notes"] = ask()
+            return real_end(duration_sec)
+
+        a._midi.end_take = slow_end
+        try:
+            stop = a.stop_take()
+        finally:
+            a._midi.end_take = real_end
+        refused = {"ok": False, "error": "Still saving the last take"}
+        ok("Start and the check are refused while Stop finishes the audio", asked.get("audio") == (refused, refused))
+        ok("and while it finishes the notes", asked.get("notes") == (refused, refused))
+        ok("so the take keeps its own notes",
+           [Path(n["file"]).parent for n in stop["notes"]] == [first] and names67(first) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
+        res = a.start_take()
+        ok("once Stop is done, the next take starts with the next number", res == {"ok": True, "take_number": 2})
+        play67(a, fake)
+        stop = a.stop_take()
+        ok("and has notes of its own", [n["name"] for n in stop["notes"]] == ["Drums"])
+
+        # A Stop that fails does not leave Start refused.
+        a.start_take()
+        play67(a, fake)
+        real_stop = a._recorder.stop
+
+        def failing_stop(progress=None):
+            real_stop(progress=progress)
+            raise OSError("the disk is full")
+
+        a._recorder.stop = failing_stop
+        try:
+            a.stop_take()
+        except OSError:
+            pass
+        res = a.start_take()
+        ok("a Stop that failed leaves the next Start free", res["ok"] is True)
+        a.stop_take()
+        a.shutdown()
+
+    @scenario67("take.json held")
+    def _():
+        print("  take.json held")
+        fake = Fake66([td17])
+        a = api67(fake)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        a.start_take()
+        play67(a, fake)
+        temp = Path(a._recorder_temp_dir)
+        before = len(said67)
+        real_unlink = Path.unlink
+
+        def held(self, *args, **kw):
+            if self.name == "take.json":
+                raise PermissionError(13, "The process cannot access the file because it is "
+                                          "being used by another process")
+            return real_unlink(self, *args, **kw)
+
+        Path.unlink = held
+        try:
+            stop = a.stop_take()
+        finally:
+            Path.unlink = real_unlink
+        ok("a take.json that cannot be removed does not fail Stop: the audio and the .mid are there",
+           stop["ok"] and [t["name"] for t in stop["tracks"]] == ["Gtr", "Drums"]
+           and [n["name"] for n in stop["notes"]] == ["Drums"]
+           and names67(temp) == ["Drums.mid", "Drums.wav", "Gtr.wav", "take.json"])
+        ok("and it is said at ERROR, once", len(errors67(before)) == 1)
+        kept = a.keep_take(stop["take_number"], stop["temp_dir"], "", stop["duration_sec"], stop["tracks"],
+                           notes=stop["notes"])
+        there = Path(kept["take"]["tracks"][0]["file"]).parent
+        ok("the take is kept as usual, and take.json goes with the drafts folder",
+           kept["ok"] and names67(there) == ["Drums.mid", "Drums.wav", "Gtr.wav"] and not temp.exists())
+        a.shutdown()
+
+    @scenario67("notes alone")
+    def _():
+        print("  a draft of notes alone")
+        fake = Fake66([td17])
+        root = Path(tempfile.mkdtemp())
+        a = api67(fake, root)
+        a.start_rehearsal("Jam", 0, SR, [gtr66, drums66])
+        a.start_take()
+        play67(a, fake)
+        temp = Path(a._recorder_temp_dir)
+        a.shutdown()
+        for raw in temp.glob("*.raw"):
+            raw.unlink()  # the audio lost, the notes kept
+        b = api67(Fake66([td17]), root)
+        listed = [(d["tracks"], d["notes"]) for d in b.list_drafts()]
+        res = b.recover_draft(str(temp))
+        ok("a draft whose audio is lost is listed by its notes, and Recover refuses it as having no audio",
+           listed == [([], ["Drums"])] and res == {"ok": False, "error": "Draft has no audio"})
+        ok("it is still listed afterwards, its notes now a .mid",
+           [(d["tracks"], d["notes"]) for d in b.list_drafts()] == [([], ["Drums"])] and "Drums.mid" in names67(temp))
+        b.shutdown()
+
+    logging67.getLogger("rehearsal_recorder").removeHandler(catcher67)
+    apimod66.open_midi_system = real_open66
+
+    print("\n[68] A take's notes follow it")
+    # A take's .mid files sit beside its .wav files and go wherever the take goes: its
+    # folder renamed (by hand, by merging its song, or by the pass that puts names right),
+    # deleted, or cropped. A take of nothing but notes has no .wav to find its folder by.
+    from rehearsal_recorder.api import _carries as carries68
+    from rehearsal_recorder.api import _take_dir_name as dir_name68
+    from rehearsal_recorder.midi.smf import read_events as read_events68
+    from rehearsal_recorder.midi.smf import write_mid as write_mid68
+
+    tmp68 = Path(tempfile.mkdtemp())
+    apimod68, a68 = fresh_api(tmp68)
+    a68.start_rehearsal("Notes", None, SR, [{"name": "Gtr", "channel": 1}], 16)
+    folder68 = Path(a68._session["folder"])
+
+    def kit68(path):
+        """A kit's .mid: the hi-hat's controller, then a hit and its release each second, from 0.5 s."""
+        events = [e for second in range(4)
+                  for e in ((second + 0.5, b"\x99\x24\x64"), (second + 0.6, b"\x89\x24\x00"))]
+        write_mid68(path, track_name=path.stem, port_name="TD-17", start=[b"\xB9\x04\x5A"], events=events)
+        return {"name": path.stem, "file": str(path)}
+
+    def make68(number, name, audio=("Gtr",), notes=("Drums",), where=None, seconds=4.0):
+        """A kept take in the folder keep_take would make for it (or `where`): a .wav for each of
+        `audio` and a .mid for each of `notes`, added to the library."""
+        named = a68._lib.resolve_name(folder68, name, number)
+        take_dir = folder68 / (where or dir_name68(number, named["name"]))
+        take_dir.mkdir(parents=True, exist_ok=True)
+        tracks = []
+        for stem in audio:
+            write_wav(take_dir / f"{stem}.wav", 1000, seconds=seconds)
+            tracks.append({"name": stem, "file": str(take_dir / f"{stem}.wav")})
+        mids = [kit68(take_dir / f"{stem}.mid") for stem in notes]
+        return a68._lib.add_take(folder68, {
+            "take_number": number, "name": name, "duration_sec": seconds, "markers": [],
+            "tracks": tracks, "notes": mids})
+
+    def kit_ticks68(path):
+        return [(round(sec * 1920), data) for sec, data in read_events68(path)[1]]
+
+    def files68(take_dir):
+        return sorted(p.name for p in take_dir.iterdir())
+
+    whole68 = kit_ticks68(make68(90, "Spare")["notes"][0]["file"])
+    ok("a take as the library lists it has its .mid under notes, apart from the tracks",
+       len(whole68) == 9 and a68._lib.take(folder68, 90)["notes"][0]["name"] == "Drums"
+       and [t["name"] for t in a68._lib.take(folder68, 90)["tracks"]] == ["Gtr"])
+    a68.delete_take(str(folder68), 90)
+
+    # Renaming a take: the folder moves, and the .mid is listed at its new path; a .midraw
+    # the disk would not turn into a .mid goes along with the folder.
+    first68 = make68(1, "Polyn")
+    first_dir68 = Path(first68["notes"][0]["file"]).parent
+    (first_dir68 / "Keys.midraw").write_bytes(b"t 1\n")
+    res = a68.rename_take(str(folder68), 1, "Vesna")
+    moved_dir68 = folder68 / "01 - Vesna 1"
+    ok("renaming a take moves its folder, and the take still lists Drums.mid, at the new path",
+       res["ok"] and moved_dir68.is_dir() and not first_dir68.exists()
+       and [(n["name"], n["file"]) for n in res["take"]["notes"]] == [("Drums", str(moved_dir68 / "Drums.mid"))]
+       and [t["file"] for t in res["take"]["tracks"]] == [str(moved_dir68 / "Gtr.wav")])
+    ok("the files are there, and as the library has them", all(
+        Path(f["file"]).exists() for f in res["take"]["notes"] + res["take"]["tracks"])
+       and a68._lib.take(folder68, 1)["notes"] == res["take"]["notes"])
+    ok("an unconverted .midraw goes along with the folder",
+       files68(moved_dir68) == ["Drums.mid", "Gtr.wav", "Keys.midraw"])
+    ok("and the notes are as they were", kit_ticks68(moved_dir68 / "Drums.mid") == whole68)
+
+    # A take of nothing but notes has no .wav to find its folder by.
+    solo68 = make68(2, "Solo", audio=())
+    solo_dir68 = Path(solo68["notes"][0]["file"]).parent
+    ok("a take of nothing but notes lists no tracks", solo68["tracks"] == [] and len(solo68["notes"]) == 1)
+    res = a68.rename_take(str(folder68), 2, "Pesnya")
+    pesnya_dir68 = folder68 / "02 - Pesnya 1"
+    ok("a take of nothing but notes is renamed too: its folder moves and its .mid is listed at the new path",
+       res["ok"] and pesnya_dir68.is_dir() and not solo_dir68.exists() and res["take"]["tracks"] == []
+       and [n["file"] for n in res["take"]["notes"]] == [str(pesnya_dir68 / "Drums.mid")]
+       and (pesnya_dir68 / "Drums.mid").exists())
+    res = a68.rename_take(str(folder68), 2, "Pesnya")
+    ok("renamed to the name it has, nothing moves and the notes stay", res["ok"] and pesnya_dir68.is_dir()
+       and res["take"]["notes"][0]["file"] == str(pesnya_dir68 / "Drums.mid"))
+
+    # A record that cannot follow: the folder goes back, and the notes with it.
+    real_update68 = a68._lib.update_take
+
+    def refuse_update68(*args, **kwargs):
+        raise RuntimeError("the database is locked")
+
+    a68._lib.update_take = refuse_update68
+    try:
+        try:
+            a68.rename_take(str(folder68), 2, "Niche")
+            raised68 = False
+        except RuntimeError:
+            raised68 = True
+    finally:
+        a68._lib.update_take = real_update68
+    ok("a record that cannot follow puts the folder back, and the take still opens its notes",
+       raised68 and pesnya_dir68.is_dir() and not (folder68 / "02 - Niche 1").exists()
+       and Path(a68._lib.take(folder68, 2)["notes"][0]["file"]).exists())
+
+    # Merging songs: the pass that renames the folders carries the notes.
+    make68(3, "Polyn")
+    make68(4, "Polyn", audio=())
+    make68(5, "Pałyn")
+
+    def song68(title):
+        return next(s for s in a68.list_songs()["songs"] if s["title"] == title)
+
+    merged68 = a68.merge_songs(song68("Polyn")["id"], song68("Pałyn")["id"])
+    a68._names_pass.run_queued()
+    taken68 = {n: a68._lib.take(folder68, n) for n in (3, 4, 5)}
+    ok("merging a song into another renames its takes' folders and each take still lists its notes there",
+       merged68["ok"] and all(
+           carries68(Path(t["notes"][0]["file"]).parent.name, dir_name68(n, t["name"]))
+           and Path(t["notes"][0]["file"]).exists() and t["name"].startswith("Pałyn")
+           for n, t in taken68.items()))
+    ok("the one with audio has both, in one folder; the one of notes alone has its .mid and no audio",
+       Path(taken68[3]["tracks"][0]["file"]).parent == Path(taken68[3]["notes"][0]["file"]).parent
+       and taken68[4]["tracks"] == [] and Path(taken68[4]["notes"][0]["file"]).parent.name.startswith("04 - Pałyn"))
+    ok("and a pass after it finds nothing left to rename", a68._names_pass.run() == 0)
+
+    # The pass that puts names right: a folder that does not carry its take's name.
+    make68(6, "Tango", where="06 - old name")
+    make68(7, "Tango", audio=(), where="07 - another old name")
+    ok("a take whose folder does not carry its name is out of line, notes alone or with audio",
+       {n for _, n, _ in a68._names_out_of_line()} == {6, 7})
+    put68 = a68._put_name_right(str(folder68), 6)
+    ok("the pass puts it right and the take still lists its .mid beside its .wav",
+       put68 == {"renamed": True, "error": None}
+       and (folder68 / "06 - Tango 1" / "Drums.mid").exists()
+       and a68._lib.take(folder68, 6)["notes"][0]["file"] == str(folder68 / "06 - Tango 1" / "Drums.mid")
+       and a68._lib.take(folder68, 6)["tracks"][0]["file"] == str(folder68 / "06 - Tango 1" / "Gtr.wav"))
+    put68 = a68._put_name_right(str(folder68), 7)
+    ok("so does a take of nothing but notes",
+       put68 == {"renamed": True, "error": None} and not (folder68 / "07 - another old name").exists()
+       and a68._lib.take(folder68, 7)["notes"][0]["file"] == str(folder68 / "07 - Tango 2" / "Drums.mid")
+       and (folder68 / "07 - Tango 2" / "Drums.mid").exists())
+    ok("and none is left out of line", a68._names_out_of_line() == [])
+
+    # Deleting: the folder is found through the files the take has, whichever kind.
+    make68(8, "Gone wav")
+    gone_dir68 = folder68 / "08 - Gone wav 1"
+    (gone_dir68 / "Gtr.wav").unlink()
+    (gone_dir68 / "Keys.midraw").write_bytes(b"t 1\n")
+    res = a68.delete_take(str(folder68), 8)
+    ok("(a guard, as it passed before: the take still names its .wav files) a take whose .wav files "
+       "were deleted by hand is trashed with its folder",
+       res["ok"] and not gone_dir68.exists() and a68._lib.take(folder68, 8) is None
+       and res["trashed"] is True)
+    make68(9, "Only notes", audio=())
+    only_dir68 = folder68 / "09 - Only notes 1"
+    res = a68.delete_take(str(folder68), 9)
+    ok("a take of nothing but notes has its folder found through its notes, and trashed",
+       res["ok"] and not only_dir68.exists() and a68._lib.take(folder68, 9) is None)
+    make68(10, "Plain", notes=())
+    plain_dir68 = folder68 / "10 - Plain 1"
+    res = a68.delete_take(str(folder68), 10)
+    ok("a take with no notes is deleted as it always was",
+       res["ok"] and not plain_dir68.exists() and a68._lib.take(folder68, 10) is None)
+
+    # Cropping: the .mid is cropped with the .wav, and the original goes aside with it. Drums
+    # is a Both track here: a .wav and a .mid of one name.
+    made68 = make68(11, "Cut", audio=("Gtr", "Drums"))
+    cut_dir68 = Path(made68["notes"][0]["file"]).parent
+
+    def leave68(take_dir):
+        """What a notes file the disk would not turn into a .mid leaves in a take's folder (R40): the .midraw,
+        and the clock and the record that a later try needs to make it."""
+        for name in ("Keys.midraw", "take.clock", "take.json"):
+            (take_dir / name).write_bytes(b"t 1\n")
+
+    left68 = ["Keys.midraw", "take.clock", "take.json"]
+    leave68(cut_dir68)
+    real_trash68 = apimod68.move_to_trash
+    apimod68.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
+    try:
+        res = a68.crop_take(str(folder68), 11, 1.0, 3.0)
+    finally:
+        apimod68.move_to_trash = real_trash68
+    ok("cropping a take crops its notes with its audio: the take is two seconds, notes and all",
+       res["ok"] and abs(res["take"]["duration_sec"] - 2.0) < 0.01
+       and wav_frames(cut_dir68 / "Gtr.wav") == 2 * SR and wav_frames(cut_dir68 / "Drums.wav") == 2 * SR
+       and res["take"]["notes"] == made68["notes"])
+    ok("the .mid has what was set before the start at tick 0, and the hits of 1.5 s and 2.5 s moved to 0.5 s and 1.5 s",
+       kit_ticks68(cut_dir68 / "Drums.mid") == [
+           (0, b"\xB9\x04\x5A"), (960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00"),
+           (2880, b"\x99\x24\x64"), (3072, b"\x89\x24\x00")])
+    aside68 = Path(res["location"])
+    ok("the originals, .mid and .wav, are in the (before crop) folder together, as they were",
+       aside68.name.endswith("(before crop)")
+       and [n for n in files68(aside68) if n not in left68] == ["Drums.mid", "Drums.wav", "Gtr.wav"]
+       and kit_ticks68(aside68 / "Drums.mid") == whole68 and wav_frames(aside68 / "Gtr.wav") == 4 * SR
+       and wav_frames(aside68 / "Drums.wav") == 4 * SR)
+    ok("the unconverted .midraw, with its clock and its record, is aside with the originals it was timed from",
+       files68(aside68) == ["Drums.mid", "Drums.wav", "Gtr.wav", *left68]
+       and all((aside68 / name).read_bytes() == b"t 1\n" for name in left68))
+    ok("and the cropped take keeps none of them, nor a .writing- file",
+       files68(cut_dir68) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
+
+    # A crop that stops half way leaves the take exactly as it was, every kind of file.
+    leave68(cut_dir68)
+    before68 = {p.name: p.read_bytes() for p in cut_dir68.iterdir()}
+    beside68 = sorted(p.name for p in cut_dir68.parent.iterdir())
+    real_move68, moves68 = apimod68.shutil.move, {"n": 0}
+
+    def flaky_move68(src, dst):
+        moves68["n"] += 1
+        if moves68["n"] == 5:        # the clock, with the .wav files, the .mid and the .midraw aside
+            raise PermissionError("the file is open in another process")
+        return real_move68(src, dst)
+
+    apimod68.shutil.move = flaky_move68
+    try:
+        half68 = a68.crop_take(str(folder68), 11, 0.5, 1.5)
+    finally:
+        apimod68.shutil.move = real_move68
+    ok("a move that fails with the .wav files, the .mid and the .midraw aside puts every one of them back",
+       not half68["ok"] and {p.name: p.read_bytes() for p in cut_dir68.iterdir()} == before68
+       and sorted(p.name for p in cut_dir68.parent.iterdir()) == beside68)
+
+    real_replace68 = apimod68.os.replace
+
+    def flaky_replace68(src, dst):
+        if Path(src).name == ".writing-Drums.mid":      # the last file to take its name
+            raise PermissionError("the file is open in another process")
+        return real_replace68(src, dst)
+
+    apimod68.os.replace = flaky_replace68
+    try:
+        late68 = a68.crop_take(str(folder68), 11, 0.5, 1.5)
+    finally:
+        apimod68.os.replace = real_replace68
+    ok("and one that fails when the new .mid takes its name puts every original and leftover back, and leaves "
+       "no .writing- file",
+       not late68["ok"] and {p.name: p.read_bytes() for p in cut_dir68.iterdir()} == before68
+       and sorted(p.name for p in cut_dir68.parent.iterdir()) == beside68)
+
+    (cut_dir68 / "Drums.mid").write_bytes(b"not a midi file")
+    torn68 = a68.crop_take(str(folder68), 11, 0.5, 1.5)
+    ok("a .mid that cannot be read costs the crop and nothing else: the .wav is as long as it was",
+       not torn68["ok"] and wav_frames(cut_dir68 / "Gtr.wav") == 2 * SR
+       and (cut_dir68 / "Drums.mid").read_bytes() == b"not a midi file"
+       and files68(cut_dir68) == ["Drums.mid", "Drums.wav", "Gtr.wav", *left68]
+       and sorted(p.name for p in cut_dir68.parent.iterdir()) == beside68)
+
+    # A take of notes alone is cropped by its length, and the .mid is a file like any. A record with no
+    # .midraw beside it is not a leftover of the kind that goes aside: it stays.
+    make68(12, "Notes cut", audio=())
+    notes_dir68 = folder68 / "12 - Notes cut 1"
+    (notes_dir68 / "take.json").write_bytes(b"{}")
+    res = a68.crop_take(str(folder68), 12, 1.0, 3.0)
+    ok("a take of nothing but notes is cropped: two seconds long, its .mid cut",
+       res["ok"] and abs(res["take"]["duration_sec"] - 2.0) < 0.01
+       and kit_ticks68(notes_dir68 / "Drums.mid")[1:3] == [(960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00")]
+       and files68(notes_dir68) == ["Drums.mid", "take.json"])
+    ok("a region shorter than a second is refused for notes too", not a68.crop_take(str(folder68), 12, 0.1, 0.4)["ok"])
+    make68(13, "Wav gone")
+    wav_gone_dir68 = folder68 / "13 - Wav gone 1"
+    (wav_gone_dir68 / "Gtr.wav").unlink()
+    res = a68.crop_take(str(folder68), 13, 1.0, 3.0)
+    ok("a take whose .wav went is cropped by what is left of it: the notes",
+       res["ok"] and files68(wav_gone_dir68) == ["Drums.mid"]
+       and kit_ticks68(wav_gone_dir68 / "Drums.mid")[1:3] == [(960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00")])
+
+    # A draft on the review screen has its notes beside its audio, not yet in the library.
+    draft68 = folder68 / "_drafts" / "take 14"
+    write_wav(draft68 / "Gtr.wav", 1000, seconds=4.0)
+    note68 = kit68(draft68 / "Drums.mid")
+    pending68 = [{"name": "Gtr", "file": str(draft68 / "Gtr.wav")}]
+    res = a68.crop_draft(str(draft68), pending68, 1.0, 3.0, notes=[note68])
+    ok("a draft is cropped with its notes: they are answered like the tracks, at the same paths",
+       res["ok"] and res["tracks"] == pending68 and res["notes"] == [note68]
+       and abs(res["duration_sec"] - 2.0) < 0.01 and wav_frames(draft68 / "Gtr.wav") == 2 * SR)
+    ok("the .mid is cut, with what was set before the start at tick 0",
+       kit_ticks68(draft68 / "Drums.mid")[:3] == [(0, b"\xB9\x04\x5A"), (960, b"\x99\x24\x64"), (1152, b"\x89\x24\x00")]
+       and files68(draft68) == ["Drums.mid", "Gtr.wav"])
+    write_wav(draft68 / "Gtr.wav", 1000, seconds=4.0)
+    res = a68.crop_draft(str(draft68), pending68, 1.0, 3.0)
+    ok("a draft cropped with no notes given answers none, as before", res["ok"] and res["notes"] == []
+       and res["tracks"] == pending68)
+    draft_notes68 = folder68 / "_drafts" / "take 15"
+    draft_notes68.mkdir(parents=True)
+    note_only68 = kit68(draft_notes68 / "Drums.mid")
+    ghost68 = {"name": "Keys", "file": str(draft_notes68 / "Keys.mid")}
+    res = a68.crop_draft(str(draft_notes68), [], 1.0, 3.0, notes=[note_only68, ghost68])
+    ok("a draft of nothing but notes is cropped, a note file that is not there is left out, and the length is the region's",
+       res["ok"] and res["tracks"] == [] and res["notes"] == [note_only68]
+       and abs(res["duration_sec"] - 2.0) < 0.01 and kit_ticks68(draft_notes68 / "Drums.mid")[1][0] == 960)
+    gone_draft68 = folder68 / "_drafts" / "take 18"
+    gone_draft68.mkdir(parents=True)
+    ok("a draft with no files left at all is refused as it was",
+       a68.crop_draft(str(gone_draft68), [], 1.0, 3.0, notes=[{"name": "Keys", "file": str(gone_draft68 / "Keys.mid")}])
+       == {"ok": False, "error": "The take has no files left on disk"})
+    left_draft68 = folder68 / "_drafts" / "take 16"
+    write_wav(left_draft68 / "Gtr.wav", 1000, seconds=4.0)
+    left_note68 = kit68(left_draft68 / "Drums.mid")
+    leave68(left_draft68)
+    apimod68.move_to_trash = lambda *a, **k: {"ok": False, "error": "no room"}
+    try:
+        res = a68.crop_draft(str(left_draft68), [{"name": "Gtr", "file": str(left_draft68 / "Gtr.wav")}],
+                             1.0, 3.0, notes=[left_note68])
+    finally:
+        apimod68.move_to_trash = real_trash68
+    ok("a draft's unconverted leftovers go aside with its originals, and the cropped draft keeps none",
+       res["ok"] and files68(left_draft68) == ["Drums.mid", "Gtr.wav"]
+       and files68(Path(res["location"])) == ["Drums.mid", "Gtr.wav", *left68])
+
+    # A .mid in the draft that the screen did not list (an older screen) is the draft's all the same: Keep keeps
+    # it, so Crop cuts it, and the take does not keep notes that start before its audio does.
+    unlisted_draft68 = folder68 / "_drafts" / "take 17"
+    write_wav(unlisted_draft68 / "Gtr.wav", 1000, seconds=4.0)
+    listed68 = kit68(unlisted_draft68 / "Drums.mid")
+    kit68(unlisted_draft68 / "Keys.mid")
+    unlisted_gtr68 = [{"name": "Gtr", "file": str(unlisted_draft68 / "Gtr.wav")}]
+    res = a68.crop_draft(str(unlisted_draft68), unlisted_gtr68, 1.0, 3.0, notes=[listed68])
+    ok("a .mid crop_draft was not given is cut with the audio all the same, and only the given ones are answered",
+       res["ok"] and res["notes"] == [listed68] and len(kit_ticks68(unlisted_draft68 / "Drums.mid")) == 5
+       and kit_ticks68(unlisted_draft68 / "Keys.mid") == kit_ticks68(unlisted_draft68 / "Drums.mid"))
+    kept68 = a68.keep_take(17, str(unlisted_draft68), "Unlisted", res["duration_sec"], unlisted_gtr68,
+                           notes=[listed68])
+    ok("and Keep, which keeps it too, keeps it cut",
+       kept68["ok"] and [n["name"] for n in kept68["take"]["notes"]] == ["Drums", "Keys"]
+       and all(len(kit_ticks68(n["file"])) == 5 for n in kept68["take"]["notes"]))
+
+    print("\n[69] Notes go to the cloud with the tracks")
+    # A take's notes are .mid files beside its WAVs. The original tracks and Both copy each one as it is, under its
+    # own name, never through encode (which would name it <stem>.wav); the mix has no notes in it, and mixdown is only
+    # ever given the WAVs. A copy's record names the notes, so a take that has some reads as changed when its copy
+    # was made without them, and a take that has none reads exactly as it always did.
+    from rehearsal_recorder import cloud as cloudmod69
+    from rehearsal_recorder.midi.smf import write_mid as write_mid69
+
+    def hits69(path, notes):
+        """A .mid of these notes struck 0.25 s apart on channel 10, each let go 0.1 s later."""
+        events = [e for k, note in enumerate(notes)
+                  for e in ((k * 0.25, bytes((0x99, note, 100))), (k * 0.25 + 0.1, bytes((0x89, note, 0))))]
+        write_mid69(path, track_name=path.stem, port_name="Port", start=[], events=events)
+        return str(path)
+
+    root69 = Path(tempfile.mkdtemp())
+    apimod69, a69 = fresh_api(root69)
+    a69.set_cloud_dir(str(root69 / "Cloud"))
+    folder69 = a69.recordings_dir / "Jam - 2026-10-09 20-00"
+    a69._lib.create_rehearsal(folder69, "Jam", "2026-10-09T20:00:00", SR, 16, [
+        {"name": "Drums", "channel": 1, "mode": "both", "midi_port": {"name": "TD-17"}},
+        {"name": "Keys", "mode": "midi", "midi_port": {"name": "Launchkey"}},
+        {"name": "Bass", "channel": 2}])
+    target69 = apimod69._cloud_subfolder(a69._cloud_dir, folder69)
+
+    def keep69(number, audio, notes):
+        """A take the library keeps: these audio tracks (name: level) and these notes (name: pitches)."""
+        where = folder69 / f"take {number}"
+        for name, level in audio.items():
+            write_wav(where / f"{name}.wav", level, seconds=2.0)
+        a69._lib.add_take(folder69, {
+            "take_number": number, "name": f"Take {number}", "duration_sec": 2.0, "markers": [],
+            "tracks": [{"name": n, "file": str(where / f"{n}.wav")} for n in audio],
+            "notes": [{"name": n, "file": hits69(where / f"{n}.mid", pitches)} for n, pitches in notes.items()]})
+
+    asked69 = {"encode": [], "mixdown": [], "copy": []}
+
+    def copy69(number, what, **kw):
+        """_copy_to_cloud, noting what encode, mixdown and copy2 were given."""
+        real = apimod69.encode, apimod69.mixdown, apimod69.shutil.copy2
+        for key in asked69:
+            asked69[key].clear()
+
+        def encode69(src, *args, **kwargs):
+            asked69["encode"].append(Path(src).name)
+            return real[0](src, *args, **kwargs)
+
+        def mixdown69(tracks, *args, **kwargs):
+            asked69["mixdown"] += [Path(t["file"]).name for t in tracks]
+            return real[1](tracks, *args, **kwargs)
+
+        def copy2_69(src, dst, *args, **kwargs):
+            asked69["copy"].append((Path(src).name, Path(dst).name))
+            return real[2](src, dst, *args, **kwargs)
+
+        apimod69.encode, apimod69.mixdown, apimod69.shutil.copy2 = encode69, mixdown69, copy2_69
+        try:
+            return a69._copy_to_cloud(str(folder69), number, what, **kw)
+        finally:
+            apimod69.encode, apimod69.mixdown, apimod69.shutil.copy2 = real
+
+    def mids69(number):
+        return {n["name"]: Path(n["file"]) for n in a69._lib.take(folder69, number)["notes"]}
+
+    def same69(copy, source):
+        """Whether `copy` is there and is byte for byte `source`."""
+        return copy.is_file() and copy.read_bytes() == source.read_bytes()
+
+    keep69(1, {"Drums": 1000, "Bass": 2000}, {"Drums": [36, 38, 42], "Keys": [60, 64]})
+    keep69(2, {"Bass": 800}, {})
+    a69.set_cloud_format("flac")
+
+    print("  The original tracks")
+    res = copy69(1, "tracks")
+    dest69 = Path(res["cloud"]["tracks"])
+    ext69 = ".flac" if res["cloud"]["tracks_format"] == "flac" else ".wav"
+    ok("the take has two .mid files of its own, which differ", sorted(mids69(1)) == ["Drums", "Keys"]
+       and mids69(1)["Drums"].read_bytes() != mids69(1)["Keys"].read_bytes())
+    ok("each .mid is in the copy's folder under its own name, byte for byte the take's",
+       res["ok"] and all(same69(dest69 / f"{n}.mid", p) for n, p in mids69(1).items()))
+    ok("and nothing was made of them as audio: Keys has no sound, Drums has its one",
+       sorted(f.name for f in dest69.iterdir()) == sorted([f"Bass{ext69}", f"Drums{ext69}", "Drums.mid", "Keys.mid"]))
+    ok("encode was given the two audio tracks and never a .mid",
+       len(asked69["encode"]) == 2 and not any(n.endswith(".mid") for n in asked69["encode"]))
+    ok("each .mid was copied under a writing name and moved onto its own",
+       [c for c in asked69["copy"] if c[0].endswith(".mid")]
+       == [("Drums.mid", apimod69.WRITING_PREFIX + "Drums.mid"), ("Keys.mid", apimod69.WRITING_PREFIX + "Keys.mid")])
+    ok("with nothing half-written left", not list(target69.rglob(apimod69.WRITING_PREFIX + "*")))
+    ok("the copy's record names the notes", res["cloud"]["source"].get("notes") == ["Drums", "Keys"])
+
+    seen69 = []
+    res = copy69(1, "tracks", progress=lambda fraction, step: seen69.append((fraction, step)))
+    ok("the progress stages are the audio's alone: a track each, none for the notes",
+       res["ok"] and sorted({s for _, s in seen69}) == ["Track 1 of 2", "Track 2 of 2"]
+       and seen69[-1][0] == 1.0 and [f for f, _ in seen69] == sorted(f for f, _ in seen69))
+
+    print("  Both")
+    res = copy69(1, "both")
+    ok("the .mid files are in the tracks' folder, once each in the whole copy, byte for byte the take's",
+       res["ok"] and sorted(p.name for p in target69.rglob("*.mid")) == ["Drums.mid", "Keys.mid"]
+       and all(same69(Path(res["cloud"]["tracks"]) / f"{n}.mid", p) for n, p in mids69(1).items()))
+    ok("the mix is one audio file with no .mid beside it",
+       Path(res["cloud"]["mix"]).suffix in (".flac", ".wav")
+       and [p.name for p in target69.iterdir() if p.is_file()] == [Path(res["cloud"]["mix"]).name])
+    ok("mixdown was given the two WAVs and nothing else",
+       sorted(asked69["mixdown"]) == ["Bass.wav", "Drums.wav"])
+    ok("encode was never given a .mid",
+       len(asked69["encode"]) == 3 and not any(n.endswith(".mid") for n in asked69["encode"]))
+    ok("and its record names the notes", res["cloud"]["source"].get("notes") == ["Drums", "Keys"])
+
+    print("  The mix")
+    res = copy69(1, "mix")
+    ok("the mix has no .mid in it or beside it, and the old copy's notes went with its folder",
+       res["ok"] and "tracks" not in res["cloud"] and not list(target69.rglob("*.mid"))
+       and not [c for c in asked69["copy"] if c[0].endswith(".mid")])
+    ok("mixdown was given the two WAVs and nothing else",
+       sorted(asked69["mixdown"]) == ["Bass.wav", "Drums.wav"])
+    ok("and the mix's record leaves the notes out, as the mix does", "notes" not in res["cloud"]["source"])
+
+    print("  What the record says")
+    where69 = a69._cloud_target(folder69)
+    volumes69 = a69.get_settings()["volumes"]
+    res = copy69(2, "tracks")
+    take2 = a69._lib.take(folder69, 2)
+    old69 = {"what": "tracks", "name": take2["name"], "format": "flac", "dir": str(where69),
+             "volumes": {"Bass": 1.0}, "duration_sec": 2.0}
+    ok("a take with no notes: source_of is exactly what it was, with no notes in it",
+       cloudmod69.source_of(take2, "tracks", volumes69, "flac", where69) == old69 and res["cloud"]["source"] == old69)
+    ok("and its copy counts as current", cloudmod69.is_current(take2, "tracks", volumes69, "flac", where69))
+    sent69 = []
+    real_copy69 = a69._copy_to_cloud
+    a69._copy_to_cloud = lambda *args, **kwargs: (sent69.append(args), real_copy69(*args, **kwargs))[1]
+    try:
+        a69.set_auto_publish(True, "tracks")
+        a69._enqueue_publish(folder69, 2)
+        while a69._cloud_queue.run_next():
+            pass
+        a69.set_auto_publish(False, "mix")
+    finally:
+        a69._copy_to_cloud = real_copy69
+    ok("so a copy made before notes existed is not sent again", sent69 == [])
+
+    res = copy69(1, "tracks")
+    take1 = a69._lib.take(folder69, 1)
+    ok("a take that has notes is current with a copy made from them",
+       cloudmod69.is_current(take1, "tracks", volumes69, "flac", where69))
+    older = {**take1, "cloud": {**take1["cloud"], "source": {
+        k: v for k, v in take1["cloud"]["source"].items() if k != "notes"}}}
+    ok("and not with a copy made without them", not cloudmod69.is_current(older, "tracks", volumes69, "flac", where69))
+    ok("both records name the notes: Both carries the .mid files like the tracks do",
+       cloudmod69.source_of(take1, "both", volumes69, "flac", where69).get("notes") == ["Drums", "Keys"])
+    # A mix holds no notes, so what a take has of them cannot make a mix copy stale: one made before the take had
+    # notes, or by a build that did not record them, is not mixed and sent again for nothing.
+    mix_record69 = {"what": "mix", "name": take1["name"], "format": "flac", "dir": str(where69),
+                    "volumes": {"Drums": 1.0, "Bass": 1.0}, "duration_sec": take1["duration_sec"]}
+    ok("source_of for a mix of a take that has notes has no notes key",
+       cloudmod69.source_of(take1, "mix", volumes69, "flac", where69) == mix_record69)
+    mixed69 = {**take1, "cloud": {"mix": take1["cloud"]["tracks"], "source": mix_record69}}
+    ok("so a mix copy whose record has none is current for a take with notes",
+       cloudmod69.is_current(mixed69, "mix", volumes69, "flac", where69))
+
+    print("  A crop")
+    cropped69 = a69.crop_take(str(folder69), 1, 0.5, 1.5)
+    while a69._cloud_queue.run_next():
+        pass
+    take1 = a69._lib.take(folder69, 1)
+    dest69 = Path(take1["cloud"].get("tracks") or "")
+    ok("a crop sends the take again, in the shape it had, with its notes in the copy as they are in the take now",
+       cropped69["ok"] and dest69.is_dir() and not take1["cloud"].get("mix")
+       and all(same69(dest69 / f"{n}.mid", p) for n, p in mids69(1).items())
+       and sorted(mids69(1)) == ["Drums", "Keys"])
+    ok("and that copy is current for the cropped take",
+       cloudmod69.is_current(take1, "tracks", volumes69, "flac", where69) and take1["duration_sec"] < 2.0
+       and take1["cloud"]["source"].get("notes") == ["Drums", "Keys"])
+
+    print("  A .mid that is not there")
+    keep69(3, {"Drums": 900}, {"Drums": [36, 38], "Keys": [62]})
+    mids69(3)["Keys"].unlink()
+    res = copy69(3, "tracks")
+    ok("a .mid missing on disk is skipped, and the copy still goes with the rest",
+       res["ok"] and sorted(f.name for f in Path(res["cloud"]["tracks"]).iterdir()) == [f"Drums{ext69}", "Drums.mid"]
+       and same69(Path(res["cloud"]["tracks"]) / "Drums.mid", mids69(3)["Drums"]))
+    ok("with nothing half-written left", not list(target69.rglob(apimod69.WRITING_PREFIX + "*")))
+
+    print("  A .mid the disk refuses")
+    keep69(4, {"Drums": 700}, {"Drums": [36, 38]})
+    for which69 in ("copy2", "os.replace"):
+        real69 = apimod69.shutil.copy2, apimod69.os.replace
+
+        def refuse69(real, which=which69):
+            def refusing(src, dst, *args, **kwargs):
+                if str(src).endswith(".mid"):
+                    raise OSError(28, f"No space left on device ({which})")
+                return real(src, dst, *args, **kwargs)
+            return refusing
+
+        if which69 == "copy2":
+            apimod69.shutil.copy2 = refuse69(real69[0])
+        else:
+            apimod69.os.replace = refuse69(real69[1])
+        try:
+            try:
+                res = a69._copy_to_cloud(str(folder69), 4, "tracks")
+            except OSError as e:
+                res = {"ok": "raised", "error": str(e)}
+        finally:
+            apimod69.shutil.copy2, apimod69.os.replace = real69
+        ok(f"{which69} refusing a .mid: the copy fails with the error text, and does not raise",
+           res["ok"] is False and res["error"].startswith("Could not copy the tracks: ")
+           and f"No space left on device ({which69})" in res["error"])
+        ok(f"{which69} refusing a .mid: no half-written file is left, and no .mid under its real name",
+           not list(target69.rglob(apimod69.WRITING_PREFIX + "*"))
+           and not [p for p in target69.rglob("*.mid") if p.parent.name.startswith("04 - ")])
+        ok(f"{which69} refusing a .mid: nothing is recorded for the take",
+           not (a69._lib.take(folder69, 4).get("cloud") or {}).get("tracks"))
+    res = a69._copy_to_cloud(str(folder69), 4, "tracks")
+    ok("and the next try, with the disk back, copies the take whole",
+       res["ok"] and (Path(res["cloud"]["tracks"]) / "Drums.mid").is_file())
+    a69.unshare_take(str(folder69), 4)
+
+    print("  A rename")
+    renamed69 = a69.rename_take(str(folder69), 3, "Chorus")
+    take3 = a69._lib.take(folder69, 3)
+    dest3 = Path(take3["cloud"].get("tracks") or "")
+    ok("a renamed take's copy is renamed where it is, the .mid inside it, and it is still current",
+       renamed69["ok"] and take3["name"] != "Take 3" and dest3.name == "03 - " + take3["name"]
+       and (dest3 / "Drums.mid").is_file()
+       and cloudmod69.is_current(take3, "tracks", volumes69, "flac", where69))
+
+    print("  Taking a copy back")
+    removed69 = a69.unshare_take(str(folder69), 1)
+    ok("removing a take's copy takes its notes with it, and the other takes' copies stay",
+       removed69["ok"] and not dest69.exists()
+       and sorted(p.parent.name for p in target69.rglob("*.mid")) == [Path(a69._lib.take(folder69, 3)["cloud"]["tracks"]).name])
+
+    print("\n[70] take_notes")
+    # The player draws a take's notes from its .mid files. A take knows them only
+    # by name and file, and whether a lane is a drum grid is the band's icon, found
+    # by that name as take_media finds a track's.
+    from rehearsal_recorder.midi.notes import DRUM_ROWS as DRUM_ROWS70
+    from rehearsal_recorder.midi.smf import write_mid as write_mid70
+
+    def hits70(path, channel, notes):
+        """A .mid of these notes struck 0.25 s apart on `channel` (0-based), each let go 0.1 s later."""
+        events = [e for k, note in enumerate(notes)
+                  for e in ((k * 0.25, bytes((0x90 | channel, note, 100))),
+                            (k * 0.25 + 0.1, bytes((0x80 | channel, note, 0))))]
+        write_mid70(path, track_name=path.stem, port_name="Port", start=[], events=events)
+        return str(path)
+
+    folder70 = Path(tempfile.mkdtemp())
+    apimod70, a70 = fresh_api(folder70)
+    a70._config["tracks"] = [
+        {"name": "Drums", "mode": "both", "icon": "drums", "midi_port": {"name": "TD-17"}},
+        {"name": "Keys", "mode": "midi", "icon": "keys", "midi_port": {"name": "Launchkey"}},
+        {"name": "Bass"}]
+    drums70 = hits70(folder70 / "Drums.mid", 0, [36, 38, 42, 99])   # on channel 1: only the icon says a kit
+    keys70 = hits70(folder70 / "Keys.mid", 0, [61, 74])
+    pad70 = hits70(folder70 / "Pad.mid", 9, [36, 38])               # not in the band, but on channel 10
+    answered = a70.take_notes([{"name": "Drums", "file": drums70}, {"name": "Keys", "file": keys70},
+                               {"name": "Pad", "file": pad70}])
+    ok("a Both track named Drums with the drums icon in the band reads as drums, the rows in the order they are drawn",
+       answered[0]["name"] == "Drums" and answered[0]["drums"] is True
+       and answered[0]["rows"] == DRUM_ROWS70 + ["Other"]
+       and [n[2] for n in answered[0]["notes"]] == [5, 4, 2, 6])
+    ok("every note comes with its start, length and velocity in seconds and 1 to 127",
+       [n[:2] for n in answered[0]["notes"]] == [[0.0, 0.1], [0.25, 0.1], [0.5, 0.1], [0.75, 0.1]]
+       and {n[3] for n in answered[0]["notes"]} == {100})
+    ok("a track whose icon is not the drums' is a piano roll: whole octaves around its notes",
+       answered[1]["name"] == "Keys" and answered[1]["drums"] is False
+       and (answered[1]["low"], answered[1]["high"]) == (60, 83)
+       and [n[2] for n in answered[1]["notes"]] == [61, 74])
+    ok("a name the band does not have is judged by its file alone: notes on channel 10 are drums",
+       answered[2]["name"] == "Pad" and answered[2]["drums"] is True and answered[2]["rows"] == DRUM_ROWS70)
+    ok("each file is answered, in the order it was asked", [a["name"] for a in answered] == ["Drums", "Keys", "Pad"])
+    ok("what the player is sent can go over the bridge as JSON", json.loads(json.dumps(answered)) == answered)
+
+    # A track that records notes only has no audio lane, and so no take_media answer to take its icon from: the
+    # plate of its notes lane takes it from here, found as take_media finds a track's.
+    ok("each answer carries the band's icon for its name, as take_media's does",
+       answered[0].get("icon") == "drums" and answered[1].get("icon") == "keys")
+    ok("a name the band does not have gets no icon",
+       "icon" not in answered[2])
+    iconned70 = a70.take_notes([{"name": "Keys", "file": str(folder70 / "Gone.mid")},
+                                {"name": "Drums", "file": None}, {"name": "Keys"}, {"name": "Bass", "file": None}])
+    ok("an answer that is an error carries the icon too: a file not found, a file of None, no file at all",
+       iconned70[:3] == [{"name": "Keys", "icon": "keys", "error": "Notes file not found"},
+                         {"name": "Drums", "icon": "drums", "error": "Notes file not found"},
+                         {"name": "Keys", "icon": "keys", "error": "Notes file not found"}])
+    ok("and a band member with no icon gets none, as take_media gives none",
+       iconned70[3] == {"name": "Bass", "error": "Notes file not found"})
+    ok("a name that is not text gets no icon, and does not fail the call",
+       a70.take_notes([{"name": ["Keys"], "file": None}, {"name": "Keys", "file": keys70}])[1].get("icon") == "keys")
+
+    gone70 = str(folder70 / "Gone.mid")
+    (folder70 / "Torn.mid").write_bytes(b"MThd\x00\x00\x00\x06\x00")
+    (folder70 / "Empty.mid").write_bytes(b"")
+    import contextlib
+    import io
+    import logging as logging70
+
+    said70 = []  # what take_notes says in the log for a file it cannot read
+    catcher70 = logging70.Handler(level=logging70.INFO)
+    catcher70.emit = said70.append
+    logging70.getLogger(apimod70.__name__).addHandler(catcher70)
+    try:
+        mixed = a70.take_notes([{"name": "Bass", "file": gone70}, {"name": "Drums", "file": drums70},
+                                {"name": "Keys", "file": str(folder70 / "Torn.mid")},
+                                {"name": "Pad", "file": str(folder70 / "Empty.mid")},
+                                {"name": "Folder", "file": str(folder70)},
+                                {"name": "Keys", "file": keys70}])
+        ok("a missing file is reported as not found, and the others still answer",
+           mixed[0] == {"name": "Bass", "error": "Notes file not found"}
+           and mixed[1]["drums"] is True and len(mixed[1]["notes"]) == 4
+           and mixed[5]["drums"] is False and len(mixed[5]["notes"]) == 2)
+        ok("a file that is no .mid, or is cut short, or empty, or a folder, is reported as not readable, and the rest answer",
+           [m.get("error") for m in mixed[2:5]] == ["Notes file not readable"] * 3
+           and [m["name"] for m in mixed[2:5]] == ["Keys", "Pad", "Folder"] and len(mixed) == 6)
+        ok("a file that is not readable carries its track's icon as well",
+           mixed[2] == {"name": "Keys", "icon": "keys", "error": "Notes file not readable"})
+        ok("and it says in the log, as a warning, which files, once each, and not the one that was only missing",
+           [r.getMessage().split(":")[0] for r in said70]
+           == ["notes of Torn.mid", "notes of Empty.mid", f"notes of {folder70.name}"]
+           and {r.levelno for r in said70} == {logging70.WARNING})
+        ok("no files, no answers", a70.take_notes([]) == [])
+
+        # One file that makes the system itself refuse cannot fail the others: a name too long for the file system
+        # raises OSError (ENAMETOOLONG) from the existence check on Linux and macOS, and is simply not there on Windows.
+        long70 = str(folder70 / ("x" * 300 + ".mid"))
+        refused = a70.take_notes([{"name": "Keys", "file": keys70}, {"name": "Long", "file": long70},
+                                  {"name": "Drums", "file": drums70}])
+        ok("a name too long for the file system is answered with an error, and the other files still answer",
+           [r["name"] for r in refused] == ["Keys", "Long", "Drums"]
+           and refused[1].get("error") in ("Notes file not found", "Notes file not readable")
+           and "error" not in refused[0] and "error" not in refused[2] and refused[2]["drums"] is True)
+
+        # A console in a Windows code page cannot show every name, and a file whose name it cannot show is the very one
+        # that was not readable: saying so must not be what fails the call.
+        odd70 = folder70 / "Pa\u0142yn.mid"
+        odd70.write_bytes(b"not a midi file")
+        console70 = io.TextIOWrapper(io.BytesIO(), encoding="cp1252", errors="strict")
+        with contextlib.redirect_stdout(console70), contextlib.redirect_stderr(console70):
+            odd = a70.take_notes([{"name": "Pa\u0142yn", "file": str(odd70)}, {"name": "Keys", "file": keys70}])
+        ok("an unreadable file whose name the console cannot show is answered, and the call goes on",
+           odd[0] == {"name": "Pa\u0142yn", "error": "Notes file not readable"} and odd[1]["drums"] is False)
+
+        # A malformed item is that item's answer, and no more: no path, a path of None, no name, not even a dict.
+        said70.clear()
+        malformed = a70.take_notes([{"name": "Bass"}, {"name": "Gone", "file": None}, {"file": keys70}, None,
+                                    {"name": "Keys", "file": keys70}])
+        ok("an item with no file, or none for a file, is not found, with its name when it has one, and the rest answer",
+           malformed[0] == {"name": "Bass", "error": "Notes file not found"}
+           and malformed[1] == {"name": "Gone", "error": "Notes file not found"}
+           and malformed[4]["name"] == "Keys" and malformed[4]["drums"] is False and len(malformed) == 5)
+        ok("an item with no name is answered without one, judged by its file alone, and one that is no item is not found",
+           malformed[2]["drums"] is False and "name" not in malformed[2] and len(malformed[2]["notes"]) == 2
+           and malformed[3] == {"error": "Notes file not found"})
+        ok("none of that is a file that could not be read, so none of it is in the log", said70 == [])
+    finally:
+        logging70.getLogger(apimod70.__name__).removeHandler(catcher70)
+
+    (folder70 / "Pad.mid").unlink()
+    ok("a file that goes between two calls is not found the second time",
+       a70.take_notes([{"name": "Pad", "file": pad70}]) == [{"name": "Pad", "error": "Notes file not found"}])
+    a70._config["tracks"] = [{"name": "Pad", "icon": "drums"}]
+    ok("the icon is read from the band as it is now",
+       a70.take_notes([{"name": "Keys", "file": keys70}])[0]["drums"] is False
+       and a70.take_notes([{"name": "Pad", "file": drums70}])[0]["drums"] is True)
+    a70._config["tracks"] = None
+    ok("a band that is not set yet leaves every file to its channel",
+       a70.take_notes([{"name": "Drums", "file": drums70}])[0]["drums"] is False)
 
     print("\n" + "=" * 60)
     if problems:

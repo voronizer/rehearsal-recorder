@@ -5,6 +5,7 @@ import {
   dragRegion,
   expect,
   keyOn,
+  nameTake,
   openApp,
   openHistory,
   recordTake,
@@ -26,7 +27,7 @@ async function review(page: Page) {
 /** Take 1 saved as "Pałyn", and take 2 recorded and up for review. */
 async function secondTake(page: Page) {
   await review(page)
-  await page.fill("#take-name", "Pałyn")
+  await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
   await recordTake(page, 2)
 }
@@ -37,7 +38,7 @@ const keysList = (page: Page) => page.getByRole("dialog").filter({ hasText: "Key
 test.describe("the review screen", () => {
   test("names a first take, and puts its keys on its buttons", async ({ page }) => {
     await review(page)
-    await expect(page.locator("#take-name")).toHaveValue("Take 1")
+    await expect(page.locator("[data-take-summary] h2")).toHaveText("Take 1")
     // The keys are on the buttons they press, not in a line underneath.
     await expect.poll(() => keyOn(page.getByRole("button", { name: /Save take/ }))).toBe("Space")
     await expect.poll(() => keyOn(page.getByRole("button", { name: /Discard/ }))).toBe("Esc")
@@ -128,14 +129,6 @@ test.describe("the review screen", () => {
     await expect(repeat).toHaveAttribute("aria-pressed", "false")
   })
 
-  test("a space typed in the take's name is a space, and saves nothing", async ({ page }) => {
-    await review(page)
-    await page.fill("#take-name", "Pałyn")
-    await page.keyboard.press("Space")
-    await expect(page.locator("#take-name")).toHaveValue("Pałyn ")
-    expect(await callCount(page, "keep_take")).toBe(0)
-  })
-
   test("can crop a take before it is ever saved", async ({ page }) => {
     // The dead air at the start of a take is visible the moment recording
     // stops, which makes this the screen where trimming is most wanted.
@@ -153,18 +146,15 @@ test.describe("the review screen", () => {
     await expect(page.locator("span", { hasText: "/ 0:03" }).first()).toBeVisible()
   })
 
-  test("Escape leaves the name field without asking to discard, and Space then saves", async ({
+  test("named in Rename take, Space then saves it, and it waits for the cloud", async ({
     page,
   }) => {
     // Everywhere else space runs the screen's main action, and here that is
-    // saving the take. Escape takes the name field's keys back first — only
-    // that: a name just typed is no reason to be asked to throw the take away.
+    // saving the take. Rename take gives the keyboard back when it closes.
     await review(page)
-    await page.fill("#take-name", "Pałyn")
-    await page.keyboard.press("Escape")
-    await expect.poll(() => page.evaluate(() => document.activeElement?.id)).not.toBe("take-name")
+    await nameTake(page, "Pałyn")
     await expect(page.getByText("Discard this take?")).toHaveCount(0)
-    await expect(page.locator("#take-name")).toHaveValue("Pałyn")
+    await expect(page.locator("[data-take-summary] h2")).toHaveText("Pałyn 1")
     await page.keyboard.press("Space")
     await expect.poll(() => callCount(page, "keep_take")).toBe(1)
     // A saved take says it is on its way to the cloud, and stops saying so
@@ -175,10 +165,8 @@ test.describe("the review screen", () => {
 
   test("the next take takes the last one's name, numbered", async ({ page }) => {
     await secondTake(page)
-    await expect(page.locator("#take-name")).toHaveValue("Pałyn")
-    await expect(
-      page.getByRole("group", { name: "Take name" }).locator("[data-take-go]")
-    ).toHaveText("2")
+    await expect(page.locator("[data-take-summary] h2")).toHaveText("Pałyn 2")
+    await expect(page.locator("[data-take-summary] [data-go]")).toHaveText("2")
   })
 
   test("Escape asks before dropping a take, and a second Escape answers nothing", async ({
@@ -193,7 +181,7 @@ test.describe("the review screen", () => {
     await page.keyboard.press("Escape")
     await expect(page.getByText("Discard this take?")).toHaveCount(0)
     expect(await callCount(page, "discard_take")).toBe(0)
-    await expect(page.locator("#take-name")).toHaveValue("Pałyn")
+    await expect(page.locator("[data-take-summary] h2")).toHaveText("Pałyn 2")
   })
 
   test("a mark made before saving goes with the take when it is saved", async ({ page }) => {
@@ -218,7 +206,7 @@ test.describe("the review screen", () => {
  *  start — and "Pałyn 2" open in the player. */
 async function savedTake(page: Page) {
   await review(page)
-  await page.fill("#take-name", "Pałyn")
+  await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
   await recordTake(page, 2)
   await page.getByRole("button", { name: "Add marker" }).click()

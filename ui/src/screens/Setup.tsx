@@ -24,19 +24,31 @@ import {
 import { FooterRow } from "@/components/FooterRow"
 import { IconPicker } from "@/components/IconPicker"
 import { LastTime } from "@/components/LastTime"
+import { NameField } from "@/components/NameField"
+import { END_COLUMN, ModeSwitch } from "@/components/midi/ModeSwitch"
+import { NotesCheck } from "@/components/midi/NotesCheck"
+import { PortPicker } from "@/components/midi/PortPicker"
 import { NewDot } from "@/components/NewDot"
+import { NewSetDialog, SetPicker } from "@/components/SetPicker"
 import { Kbd, Shell } from "@/components/Shell"
+import { chosenSet, useSets } from "@/hooks/useSets"
+import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
 import { byFiles, useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { cn } from "@/lib/utils"
 import { useUpdate } from "@/lib/update"
 import { aboutDuration, notConnected } from "@/lib/format"
 import { QUIET_THRESHOLD, fallBack, meterReach } from "@/lib/levels"
+import { modeOf, notesProblem, recordsAudio, recordsNotes } from "@/lib/midi"
+import { findPort } from "@/lib/midiPorts"
 import {
   api,
   type Device,
   type DiskEstimate,
   type LastTime as LastTimeData,
+  type MidiActivity,
+  type MidiPorts,
+  type RecordMode,
   type Settings as SettingsData,
   type Take,
   type Track,
@@ -47,6 +59,28 @@ import {
 const MONITOR_POLL_MS = 80
 // Whether the card is still sending — every couple of seconds, not a hot path.
 const MONITOR_HEALTH_MS = 2000
+/** How often the MIDI ports are read while a track takes notes: a port
+ *  plugged in or pulled out shows on the cards by itself (spec P4). */
+const MIDI_PORTS_POLL_MS = 1000
+
+/** What a track's band entry keeps across interfaces: what is on screen when
+ *  a card found by looking again is laid out. */
+type BandMember = Pick<Track, "name" | "stereo" | "icon" | "mode" | "midi_port">
+
+/** The name of the port a track keeps, or null while none is picked. */
+const portName = (t: Track) => (t.midi_port?.name?.trim() ? t.midi_port.name : null)
+
+/** A track's name in a sentence, or what stands for it while it has none. */
+const named = (name: string) => name.trim() || "An unnamed track"
+
+// The notes about a track's port that come by themselves, in the spec's
+// words: its port pulled out (D7), another app holding it (P5), and the same
+// notes from it as from another track's (P8).
+const sayGone = (t: Track) =>
+  `“${portName(t)}” is not connected. ${named(t.name)} records its notes from the moment it is plugged in.`
+const sayBusy = (t: Track) => `“${portName(t)}” is in use by another app.`
+const sayEcho = (name: string, echo: string) =>
+  `${named(name)} gets the same notes as ${named(echo)}. Is it one instrument plugged in twice?`
 
 export function Setup({
   onStarted,
@@ -89,6 +123,20 @@ export function Setup({
   const levelsAt = useRef(0)
   const [seen, setSeen] = useState<Record<string, boolean>>({})
   const checkingRef = useRef(false)
+  // What the check hears from each track's port (P5, P8) and where its bar
+  // stands, by the names the tracks had when it began, as Python has them;
+  // and, by each track's place in the band, that name and what the track
+  // recorded and from which port then: the ports the check opened. What the
+  // check says of a track is about that port, never one picked since, and
+  // holds while the track is named again.
+  const [heard, setHeard] = useState<MidiActivity>({})
+  const [notesShown, setNotesShown] = useState<Record<string, number>>({})
+  const [checkedPorts, setCheckedPorts] = useState<
+    ({ name: string; mode: RecordMode; port: string | null } | null)[]
+  >([])
+
+  // The MIDI ports the system lists; null until they have first been read.
+  const [midiPorts, setMidiPorts] = useState<MidiPorts | null>(null)
 
   const [disk, setDisk] = useState<DiskEstimate | null>(null)
 
@@ -101,6 +149,11 @@ export function Setup({
   // The interface that was chosen and is not plugged in. Not the same as
   // none chosen: the desk is often switched on after the laptop.
   const [missing, setMissing] = useState<SettingsData["missing_device"]>(null)
+  // The set Start plays by (S1–S2), kept across restarts, and New set…
+  // over this screen (S3), with the band's songs to add.
+  const sets = useSets()
+  const [makingSet, setMakingSet] = useState(false)
+  const songChoices = useSongChoices(makingSet, null, null)
   const [rescanning, setRescanning] = useState(false)
   const [stillMissing, setStillMissing] = useState(false)
 
@@ -111,7 +164,7 @@ export function Setup({
    *
    * Returns whether the chosen interface is still missing.
    */
-  const loadInterface = async (band?: Pick<Track, "name" | "stereo" | "icon">[]) => {
+  const loadInterface = async (band?: BandMember[]) => {
     const devs = await api().list_input_devices()
     setDevices(devs)
 
@@ -155,6 +208,31 @@ export function Setup({
       .catch((e) => console.error("Could not read last time:", e))
   }, [])
 
+  // The ports, read while any track takes notes: at once when the first is
+  // set to Both or MIDI, so its picker is ready, then every second. A band
+  // with no MIDI never asks. In a chain rather than on an interval, so a slow
+  // answer does not pile requests on top of each other.
+  const anyNotes = tracks.some(recordsNotes)
+  useEffect(() => {
+    if (!anyNotes) return
+    let on = true
+    let timer = 0
+    const read = async () => {
+      try {
+        const next = await pollPython("list_midi_ports")
+        if (on) setMidiPorts(next)
+      } catch {
+        /* the bridge blinked — read them again next time */
+      }
+      if (on) timer = window.setTimeout(read, MIDI_PORTS_POLL_MS)
+    }
+    void read()
+    return () => {
+      on = false
+      window.clearTimeout(timer)
+    }
+  }, [anyNotes])
+
   useEffect(() => {
     ;(async () => {
       await loadInterface()
@@ -171,8 +249,8 @@ export function Setup({
 
   // How much more fits on disk with these settings — worked out up front so
   // the space does not run out mid-rehearsal. Counted in channels: a stereo
-  // track writes two.
-  const channelCount = tracks.reduce((n, t) => n + (t.stereo ? 2 : 1), 0)
+  // track writes two, and a track of notes alone none (its .mid is tiny).
+  const channelCount = tracks.filter(recordsAudio).reduce((n, t) => n + (t.stereo ? 2 : 1), 0)
   useEffect(() => {
     if (!channelCount) return
     let cancelled = false
@@ -198,19 +276,121 @@ export function Setup({
   // A track waiting for an input: either the layout had more names than this
   // card has inputs, or a saved number is past what the driver now reports.
   // Both are the same thing to the person — nowhere to plug this musician in.
+  // A track of notes alone has no input to wait for.
   const waiting = (t: Track) =>
-    !!device && (t.channel === null || t.channel > maxChannels)
+    recordsAudio(t) && !!device && (t.channel === null || t.channel > maxChannels)
   const needInput = tracks.filter(waiting)
+  const soundTracks = tracks.filter(recordsAudio).length
   // Two ways to not fit, and only one is fixable by renumbering. Five tracks
   // on a two-input card fit in no arrangement, so "pick one below" would be
   // asking for the impossible.
-  const tooManyTracks = needInput.length > 0 && tracks.length > maxChannels
+  const tooManyTracks = needInput.length > 0 && soundTracks > maxChannels
+  // What stops Start for the notes (A1, P3, P2), in Python's own words, so
+  // pressing Start would not say something else.
+  const notesSay = notesProblem(
+    tracks.map((t) => ({ ...t, name: t.name.trim() || "An unnamed track" }))
+  )
   const canStart =
     tracks.length > 0 &&
     tracks.every((t) => t.name.trim()) &&
     needInput.length === 0 &&
+    notesSay === null &&
     deviceIndex !== null &&
     !starting
+
+  /**
+   * Whether the check opened this track's port: the track records as it did
+   * when the check began, from the same port. Only then does the check say
+   * anything of it; a port picked since, which nothing listens to, says
+   * nothing until the next check (it would say "no notes" while notes come).
+   */
+  const checkOpened = (t: Track, i: number) => {
+    const began = checking ? checkedPorts[i] : null
+    return (
+      !!began && began.port !== null && began.mode === modeOf(t) && began.port === portName(t)
+    )
+  }
+  /** The name the check knows the track at place `i` by, when it opened its port. */
+  const checkedName = (t: Track, i: number) =>
+    checkOpened(t, i) ? checkedPorts[i]!.name : null
+  /** What the check last heard from a track's port, when it opened it. */
+  const heardFrom = (t: Track, i: number) => {
+    const name = checkedName(t, i)
+    return name === null ? undefined : heard[name]
+  }
+
+  /**
+   * How a track's port stands: null for a track that takes no notes, "none"
+   * while none is picked (P3). The check says best how an open port is; the
+   * list says whether the port is there at all (P1), and two alike that
+   * nothing tells apart count as not there. Before the list is first read,
+   * nothing is said against a port.
+   */
+  const portStanding = (t: Track, i: number): "none" | "ok" | "missing" | "in_use" | null => {
+    if (!recordsNotes(t)) return null
+    if (!t.midi_port || portName(t) === null) return "none"
+    const state = heardFrom(t, i)?.state
+    if (state === "in_use") return "in_use"
+    if (state === "missing" || state === "ambiguous") return "missing"
+    if (state === "ok" || !midiPorts) return "ok"
+    return findPort(t.midi_port, midiPorts.ports).port ? "ok" : "missing"
+  }
+  // The tracks the check hears the same notes from as from another: one
+  // instrument plugged in twice, perhaps (P8). Said, and nothing stopped.
+  // Python names the other by the name it had when the check began; the
+  // sentence names it as it is now. An other that no longer takes notes from
+  // the port the check opened is not asked about.
+  const echoes = tracks.flatMap((t, i) => {
+    const echo = heardFrom(t, i)?.echo
+    const other = checkedPorts.findIndex((b, j) => j !== i && b !== null && b.name === echo)
+    return typeof echo === "string" && tracks[other] && checkOpened(tracks[other], other)
+      ? [{ track: t, echo: tracks[other] }]
+      : []
+  })
+  // The tracks whose port is picked and not to be had: they wait, and Start
+  // goes ahead (D7, P5).
+  const portsAway = tracks.flatMap((t, i) => {
+    const standing = portStanding(t, i)
+    return standing === "missing" || standing === "in_use" ? [{ track: t, standing }] : []
+  })
+  // Every note that could come by itself for this band, with its own names
+  // and ports: the place above the cards is kept as tall as the longest of
+  // them, so none moves a card when it comes alone.
+  const takingNotes = tracks.filter(recordsNotes)
+  const couldSay = [
+    ...takingNotes.filter((t) => portName(t) !== null).flatMap((t) => [sayGone(t), sayBusy(t)]),
+    ...takingNotes.flatMap((t) =>
+      takingNotes.filter((o) => o !== t).map((o) => sayEcho(t.name, o.name))
+    ),
+  ]
+
+  const setTrack = (i: number, patch: Partial<Track>) =>
+    setTracks((prev) => prev.map((t, j) => (j === i ? { ...t, ...patch } : t)))
+
+  /**
+   * What a track records. Notes start with no port picked, so nobody's notes
+   * land on a port they did not choose (P3); a track that records sound
+   * again from notes alone takes the first input nobody has.
+   */
+  const setMode = (i: number, mode: RecordMode) =>
+    setTracks((prev) =>
+      prev.map((t, j) => {
+        if (j !== i) return t
+        const port = mode !== "audio" && recordsNotes(t) ? (t.midi_port ?? null) : null
+        if (mode === "midi") return { ...t, mode, midi_port: port, channel: null, stereo: false }
+        const taken = (c: number) =>
+          prev.some(
+            (o, k) =>
+              k !== i &&
+              recordsAudio(o) &&
+              o.channel !== null &&
+              (o.channel === c || (!!o.stereo && o.channel + 1 === c))
+          )
+        const free = Array.from({ length: maxChannels }, (_, c) => c + 1).find((c) => !taken(c))
+        const channel = recordsAudio(t) ? t.channel : (free ?? null)
+        return { ...t, mode, midi_port: port, channel }
+      })
+    )
 
   // PortAudio lists the interfaces once, when the app starts, so a desk
   // switched on afterwards is found only by looking again.
@@ -226,18 +406,34 @@ export function Setup({
         return
       }
       setStillMissing(
-        await loadInterface(tracks.map((t) => ({ name: t.name, stereo: t.stereo, icon: t.icon })))
+        await loadInterface(
+          tracks.map((t) => ({
+            name: t.name,
+            stereo: t.stereo,
+            icon: t.icon,
+            mode: t.mode,
+            midi_port: t.midi_port,
+          }))
+        )
       )
+      // Looking again reads the MIDI ports again too (P4), when a track
+      // takes notes.
+      if (anyNotes) {
+        void pollPython("list_midi_ports")
+          .then(setMidiPorts)
+          .catch(() => {})
+      }
     } finally {
       setRescanning(false)
     }
   }
 
   // Stopping the check is incidental: if it fails, that is no reason to block
-  // someone from starting the rehearsal.
-  const stopMonitorQuietly = async () => {
+  // someone from starting the rehearsal. `keepPorts`: the rehearsal about to
+  // start takes the check's MIDI ports as they are, open.
+  const stopMonitorQuietly = async (keepPorts?: boolean) => {
     try {
-      await api().stop_monitor()
+      await (keepPorts ? api().stop_monitor(true) : api().stop_monitor())
     } catch (e) {
       console.error("stop_monitor:", e)
     }
@@ -247,6 +443,8 @@ export function Setup({
     checkingRef.current = false
     setChecking(false)
     setLevels({})
+    setHeard({})
+    setNotesShown({})
     levelsAt.current = 0
     await stopMonitorQuietly()
   }
@@ -264,19 +462,43 @@ export function Setup({
       return
     }
     setSeen({})
+    setHeard({})
+    setNotesShown({})
+    const noted = tracks.filter(recordsNotes)
+    setCheckedPorts(
+      tracks.map((t) =>
+        recordsNotes(t) ? { name: t.name, mode: modeOf(t), port: portName(t) } : null
+      )
+    )
     setChecking(true)
     checkingRef.current = true
 
     // Poll in a chain rather than on an interval, so slow answers do not pile
-    // requests on top of each other.
+    // requests on top of each other. The notes are asked for with the levels,
+    // and only when a track takes any.
     const poll = async () => {
       if (!checkingRef.current) return
       try {
-        const next = await pollPython("monitor_levels")
+        const [next, notes] = await Promise.all([
+          pollPython("monitor_levels"),
+          noted.length ? pollPython("midi_activity").catch(() => null) : null,
+        ])
         if (!checkingRef.current) return
         const now = Date.now()
         const since = levelsAt.current ? now - levelsAt.current : 0
         levelsAt.current = now
+        if (notes) {
+          setHeard(notes)
+          // Each note's velocity, falling back between notes as a level does.
+          setNotesShown((prev) =>
+            Object.fromEntries(
+              Object.entries(notes).map(([trackName, a]) => [
+                trackName,
+                fallBack(prev[trackName] ?? 0, a.vel, since),
+              ])
+            )
+          )
+        }
         setLevels((prev) =>
           Object.fromEntries(
             Object.entries(next).map(([trackName, sides]) => [
@@ -336,7 +558,9 @@ export function Setup({
     uncue()
     checkingRef.current = false
     setChecking(false)
-    await stopMonitorQuietly()
+    // The ports the check opened go to the rehearsal still open: a pedal held
+    // down is still held, and nothing is missed while they would reopen.
+    await stopMonitorQuietly(true)
     setStarting(true)
     setError(null)
     const res = await api().start_rehearsal(
@@ -344,10 +568,14 @@ export function Setup({
       deviceIndex,
       samplerate,
       tracks,
-      bitDepth
+      bitDepth,
+      await chosenSet()
     )
     setStarting(false)
     if (!res.ok) {
+      // No rehearsal took the ports the check left open: they go, or one
+      // another app could use stays held with nothing listening to it.
+      await stopMonitorQuietly()
       setError(res.error ?? "Could not start the rehearsal")
       return
     }
@@ -357,7 +585,7 @@ export function Setup({
   // Something from last time playing has Space and Escape, as a take
   // playing in history's overview does; Start gets them back once it stops.
   const inHand = cued !== null
-  useSpacebar(inHand ? player.toggle : start, inHand || canStart)
+  useSpacebar(inHand ? player.toggle : start, (inHand || canStart) && !makingSet)
   useEscape(uncue, inHand)
 
   const playLastTime = (take: Take) => {
@@ -412,16 +640,33 @@ export function Setup({
       }
       footer={
         <FooterRow error={error}>
-          <Button
-            size="xl"
-            onClick={start}
-            disabled={!canStart}
-            aria-keyshortcuts={inHand ? undefined : "Space"}
-          >
-            <Radio />
-            Start rehearsal
-            {!inHand && <Kbd>Space</Kbd>}
-          </Button>
+          <div className="flex items-center gap-3">
+            <SetPicker
+              sets={sets.sets}
+              chosen={sets.chosen}
+              onChoose={sets.choose}
+              onNew={() => setMakingSet(true)}
+            />
+            <Button
+              size="xl"
+              onClick={start}
+              disabled={!canStart}
+              aria-keyshortcuts={inHand ? undefined : "Space"}
+            >
+              <Radio />
+              Start rehearsal
+              {!inHand && <Kbd>Space</Kbd>}
+            </Button>
+          </div>
+          <NewSetDialog
+            open={makingSet}
+            onOpenChange={setMakingSet}
+            choices={songChoices}
+            onCreated={(all, id) => {
+              sets.replace(all)
+              sets.choose(id)
+            }}
+          />
         </FooterRow>
       }
     >
@@ -514,9 +759,18 @@ export function Setup({
             <div className="flex items-end justify-between">
               <div>
                 <Label>Tracks</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  One per musician: a track name and the interface input it comes
-                  from.
+                {/* The check's own words take this line's place while it
+                    runs, in a place as tall as the longer of the two, so the
+                    cards under it never move. */}
+                <p className="mt-1 grid text-xs text-muted-foreground">
+                  <span className={cn("col-start-1 row-start-1", checking && "invisible")}>
+                    One per musician: a track name and the interface input it comes
+                    from.
+                  </span>
+                  <span className={cn("col-start-1 row-start-1", !checking && "invisible")}>
+                    Have everyone play in turn — the bar should move next to their own
+                    track. If the wrong one moves, change the input number.
+                  </span>
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -527,7 +781,15 @@ export function Setup({
                   disabled={!tracks.length || deviceIndex === null}
                 >
                   <Activity />
-                  {checking ? "Stop checking" : "Check signal"}
+                  {/* As wide whichever it says, so nothing beside it moves. */}
+                  <span className="grid">
+                    <span className={cn("col-start-1 row-start-1", checking && "invisible")}>
+                      Check signal
+                    </span>
+                    <span className={cn("col-start-1 row-start-1", !checking && "invisible")}>
+                      Stop checking
+                    </span>
+                  </span>
                 </Button>
                 <Button variant="outline" size="sm" onClick={saveTemplate}>
                   {saved ? <Check /> : null}
@@ -535,13 +797,6 @@ export function Setup({
                 </Button>
               </div>
             </div>
-
-            {checking && (
-              <p className="text-xs text-muted-foreground">
-                Have everyone play in turn — the bar should move next to their own
-                track. If the wrong one moves, change the input number.
-              </p>
-            )}
 
             {checkProblem && (
               <p
@@ -561,7 +816,7 @@ export function Setup({
                   <>
                     “{device?.name}” has {maxChannels}{" "}
                     {maxChannels === 1 ? "input" : "inputs"} — not enough for{" "}
-                    {tracks.length} tracks. Record fewer at once, or use an
+                    {soundTracks} tracks. Record fewer at once, or use an
                     interface with more inputs.
                   </>
                 ) : (
@@ -575,166 +830,287 @@ export function Setup({
               </p>
             )}
 
-            <div className="flex flex-col gap-2">
-              {tracks.map((track, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3"
-                >
-                  <IconPicker
-                    label={`Track ${i + 1} icon`}
-                    name={track.name || `track ${i + 1}`}
-                    value={track.icon}
-                    onChange={(icon) =>
-                      setTracks((prev) =>
-                        prev.map((t, j) => (j === i ? { ...t, icon } : t))
-                      )
-                    }
-                  />
-                  <Input
-                    value={track.name}
-                    aria-label={`Track ${i + 1} name`}
-                    placeholder="Track name"
-                    onChange={(e) =>
-                      setTracks((prev) =>
-                        prev.map((t, j) =>
-                          j === i ? { ...t, name: e.target.value } : t
-                        )
-                      )
-                    }
-                    className="flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
-                  />
-                  <Select
-                    value={waiting(track) ? "" : String(track.channel ?? "")}
-                    onValueChange={(v) =>
-                      setTracks((prev) =>
-                        prev.map((t, j) =>
-                          j === i ? { ...t, channel: Number(v) } : t
-                        )
-                      )
-                    }
+            {/* The notes' own notes, in a place kept while any track takes
+                notes, as tall as the longest that could come by itself (a
+                port pulled out, another app taking it, the same notes twice):
+                one line for ordinary names, two for long ones, laid there
+                unseen. None of them moves a card when it comes alone; the
+                place grows only while two are up at once. A band with no MIDI
+                has no place. */}
+            {anyNotes && (
+              <div data-notes-strip className="grid">
+                {["\u00a0", ...couldSay].map((say, k) => (
+                  <p
+                    key={k}
+                    aria-hidden
+                    className="invisible col-start-1 row-start-1 border px-3 py-2 text-xs"
                   >
-                    <SelectTrigger
-                      size="sm"
-                      aria-label={`Track ${i + 1} input`}
-                      className={
-                        "w-32" +
-                        (waiting(track)
-                          ? " border-amber-500/60 text-muted-foreground"
-                          : "")
-                      }
+                    {say}
+                  </p>
+                ))}
+                <div className="col-start-1 row-start-1 flex flex-col gap-3">
+                  {notesSay && (
+                    <p
+                      role="status"
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
                     >
-                      <SelectValue placeholder="No input" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: maxChannels }, (_, c) => c + 1)
-                        // A stereo track takes the input after its own, so the
-                        // last input is not somewhere it can start.
-                        .filter((c) => !track.stereo || c < maxChannels)
-                        .map((c) => (
-                          <SelectItem key={c} value={c.toString()}>
-                            {track.stereo ? `Inputs ${c}–${c + 1}` : `Input ${c}`}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={track.stereo ? "default" : "outline"}
-                    aria-pressed={!!track.stereo}
-                    aria-label={`Track ${i + 1} in stereo`}
-                    title="Two adjacent inputs, written as one stereo file"
-                    onClick={() =>
-                      setTracks((prev) =>
-                        prev.map((t, j) => {
-                          if (j !== i) return t
-                          const stereo = !t.stereo
-                          // Turning stereo on claims the input after this one.
-                          // Where that input is somebody else's, or past the
-                          // end of the card, the track is left waiting for one
-                          // rather than quietly recording the same signal twice.
-                          const clash =
-                            stereo &&
-                            t.channel !== null &&
-                            (t.channel + 1 > maxChannels ||
-                              prev.some(
-                                (o, k) =>
-                                  k !== i &&
-                                  o.channel !== null &&
-                                  (o.channel === t.channel! + 1 ||
-                                    (!!o.stereo && o.channel + 1 === t.channel! + 1))
-                              ))
-                          return { ...t, stereo, channel: clash ? null : t.channel }
-                        })
-                      )
-                    }
-                  >
-                    Stereo
-                  </Button>
-
-                  {checking && (
-                    <div className="flex w-40 shrink-0 items-center gap-2">
-                      {/* One bar of the usual height, split along its length for
-                          a stereo track: left above, right below. A dead half
-                          of a pair has to be visible here or the check has not
-                          done its job. In dB, as on the recording screen and
-                          the desk. */}
-                      <div
-                        data-meter={track.name}
-                        className="relative h-2 flex-1 overflow-hidden rounded-full border bg-background"
-                      >
-                        {(levels[track.name] ?? [0]).map((side, i, all) => (
-                          <div
-                            key={i}
-                            className="absolute left-0 bg-signal transition-[width] duration-75"
-                            style={{
-                              width: `${meterReach(side) * 100}%`,
-                              top: all.length > 1 && i === 1 ? "50%" : 0,
-                              bottom: all.length > 1 && i === 0 ? "50%" : 0,
-                            }}
-                          />
-                        ))}
-                      </div>
-                      {seen[track.name] ? (
-                        <span
-                          className="flex items-center gap-1 text-[11px] text-signal"
-                          title="Signal has arrived on this input"
-                        >
-                          <Check className="size-3" />
-                          signal
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground">
-                          silent
-                        </span>
-                      )}
-                    </div>
+                      {notesSay}
+                    </p>
                   )}
 
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Remove track ${track.name}`}
-                    onClick={() =>
-                      setTracks((prev) => prev.filter((_, j) => j !== i))
-                    }
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 />
-                  </Button>
+                  {/* A port picked and not to be had stops nothing: the track
+                      takes its notes from the moment it is (D7, P5). */}
+                  {portsAway.length > 0 && (
+                    <p
+                      role="status"
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
+                    >
+                      {portsAway.map(({ track, standing }, k) => (
+                        <span key={k} className="block">
+                          {standing === "in_use" ? sayBusy(track) : sayGone(track)}
+                        </span>
+                      ))}
+                    </p>
+                  )}
+
+                  {/* Above the cards rather than on one: its words name both
+                      tracks, and it comes during the check, while everyone
+                      is looking. */}
+                  {echoes.length > 0 && (
+                    <p
+                      role="status"
+                      className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs"
+                    >
+                      {echoes.map(({ track, echo }, k) => (
+                        <span key={k} className="block">
+                          {sayEcho(track.name, echo.name)}
+                        </span>
+                      ))}
+                    </p>
+                  )}
                 </div>
-              ))}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2">
+              {tracks.map((track, i) => {
+                const standing = portStanding(track, i)
+                const away = standing === "missing" || standing === "in_use"
+                const ear = heardFrom(track, i)
+                const listed = track.midi_port && midiPorts
+                  ? findPort(track.midi_port, midiPorts.ports).port
+                  : null
+                return (
+                  <div
+                    key={i}
+                    data-track-card
+                    className="flex flex-col gap-2 rounded-xl border bg-card px-4 py-3"
+                  >
+                    {/* Who it is and what it records. A long name goes onto a
+                        second line rather than losing its end (D5). */}
+                    <div className="flex items-start gap-3">
+                      <IconPicker
+                        label={`Track ${i + 1} icon`}
+                        name={track.name || `track ${i + 1}`}
+                        value={track.icon}
+                        onChange={(icon) => setTrack(i, { icon })}
+                      />
+                      <NameField
+                        label={`Track ${i + 1} name`}
+                        placeholder="Track name"
+                        value={track.name}
+                        onChange={(name) => setTrack(i, { name })}
+                      />
+                      <ModeSwitch
+                        label={`Track ${i + 1} records`}
+                        value={modeOf(track)}
+                        onChange={(mode) => setMode(i, mode)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Remove track ${track.name}`}
+                        onClick={() => {
+                          setTracks((prev) => prev.filter((_, j) => j !== i))
+                          // What the check opened goes by place: those after
+                          // this one move up with their tracks.
+                          setCheckedPorts((prev) => prev.filter((_, j) => j !== i))
+                        }}
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+
+                    {/* Under the name, a line for each thing it records, the
+                        check's meter at the end. The meter's place is kept
+                        while nothing is checked, so a check moves nothing. */}
+                    {recordsAudio(track) && (
+                      <div className="flex items-center gap-3 px-11">
+                        <Select
+                          value={waiting(track) ? "" : String(track.channel ?? "")}
+                          onValueChange={(v) => setTrack(i, { channel: Number(v) })}
+                        >
+                          <SelectTrigger
+                            size="sm"
+                            aria-label={`Track ${i + 1} input`}
+                            className={
+                              "w-32" +
+                              (waiting(track)
+                                ? " border-amber-500/60 text-muted-foreground"
+                                : "")
+                            }
+                          >
+                            <SelectValue placeholder="No input" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: maxChannels }, (_, c) => c + 1)
+                              // A stereo track takes the input after its own, so the
+                              // last input is not somewhere it can start.
+                              .filter((c) => !track.stereo || c < maxChannels)
+                              .map((c) => (
+                                <SelectItem key={c} value={c.toString()}>
+                                  {track.stereo ? `Inputs ${c}–${c + 1}` : `Input ${c}`}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={track.stereo ? "default" : "outline"}
+                          aria-pressed={!!track.stereo}
+                          aria-label={`Track ${i + 1} in stereo`}
+                          title="Two adjacent inputs, written as one stereo file"
+                          onClick={() =>
+                            setTracks((prev) =>
+                              prev.map((t, j) => {
+                                if (j !== i) return t
+                                const stereo = !t.stereo
+                                // Turning stereo on claims the input after this one.
+                                // Where that input is somebody else's, or past the
+                                // end of the card, the track is left waiting for one
+                                // rather than quietly recording the same signal twice.
+                                const clash =
+                                  stereo &&
+                                  t.channel !== null &&
+                                  (t.channel + 1 > maxChannels ||
+                                    prev.some(
+                                      (o, k) =>
+                                        k !== i &&
+                                        o.channel !== null &&
+                                        (o.channel === t.channel! + 1 ||
+                                          (!!o.stereo && o.channel + 1 === t.channel! + 1))
+                                    ))
+                                return { ...t, stereo, channel: clash ? null : t.channel }
+                              })
+                            )
+                          }
+                        >
+                          Stereo
+                        </Button>
+
+                        <div
+                          data-check-slot="signal"
+                          className={cn("ml-auto flex shrink-0", END_COLUMN)}
+                        >
+                          <div
+                            className={cn(
+                              "flex flex-1 items-center gap-2",
+                              !checking && "invisible"
+                            )}
+                          >
+                            {/* One bar of the usual height, split along its length for
+                                a stereo track: left above, right below. A dead half
+                                of a pair has to be visible here or the check has not
+                                done its job. In dB, as on the recording screen and
+                                the desk. */}
+                            <div
+                              data-meter={track.name}
+                              className="relative h-2 flex-1 overflow-hidden rounded-full border bg-background"
+                            >
+                              {(levels[track.name] ?? [0]).map((side, k, all) => (
+                                <div
+                                  key={k}
+                                  className="absolute left-0 bg-signal transition-[width] duration-75"
+                                  style={{
+                                    width: `${meterReach(side) * 100}%`,
+                                    top: all.length > 1 && k === 1 ? "50%" : 0,
+                                    bottom: all.length > 1 && k === 0 ? "50%" : 0,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                            {seen[track.name] ? (
+                              <span
+                                className="flex w-12 items-center gap-1 text-[11px] text-signal"
+                                title="Signal has arrived on this input"
+                              >
+                                <Check className="size-3" />
+                                signal
+                              </span>
+                            ) : (
+                              <span className="w-12 text-[11px] text-muted-foreground">
+                                silent
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {recordsNotes(track) && (
+                      <div className="flex items-center gap-3 px-11">
+                        <PortPicker
+                          label={`Track ${i + 1} MIDI port`}
+                          value={track.midi_port}
+                          ports={midiPorts}
+                          counting={checking}
+                          warn={standing === "none" || away}
+                          onChange={(port) => setTrack(i, { midi_port: port })}
+                        />
+                        <div
+                          data-check-slot="notes"
+                          className={cn("ml-auto grid shrink-0 items-center", END_COLUMN)}
+                        >
+                          {/* Only for a port the check opened: one picked
+                              since says nothing until the next check. */}
+                          <NotesCheck
+                            seen={(ear?.notes ?? 0) > 0 || (listed?.notes ?? 0) > 0}
+                            vel={ear ? (notesShown[checkedName(track, i)!] ?? 0) : 0}
+                            className={cn(
+                              "col-start-1 row-start-1",
+                              (!checkOpened(track, i) || away) && "invisible"
+                            )}
+                          />
+                          <span
+                            className={cn(
+                              "col-start-1 row-start-1 text-[11px] text-muted-foreground",
+                              !away && "invisible"
+                            )}
+                          >
+                            not connected
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
             <div className="flex items-center justify-between gap-4">
               <Button
                 variant="outline"
+                // A new track records Audio, on the input after the others'.
                 onClick={() =>
                   setTracks((prev) => [
                     ...prev,
-                    { name: "", channel: Math.min(prev.length + 1, maxChannels) },
+                    {
+                      name: "",
+                      channel: Math.min(prev.filter(recordsAudio).length + 1, maxChannels),
+                    },
                   ])
                 }
               >
@@ -742,8 +1118,9 @@ export function Setup({
                 Add track
               </Button>
 
-              {/* Always on screen, not just when space runs low. */}
-              {disk?.ok && disk.minutes !== undefined && (
+              {/* Always on screen, not just when space runs low — while
+                  any track records sound, which is what fills a disk. */}
+              {disk?.ok && disk.minutes !== undefined && channelCount > 0 && (
                 <span
                   className={cn(
                     "flex items-center gap-1.5 text-xs",

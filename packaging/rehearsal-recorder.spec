@@ -2,9 +2,13 @@
 """
 Packaging: one file you double-click, nothing to install.
 
-    pip install pyinstaller
+    pip install -e . pyinstaller
     pyinstaller packaging/rehearsal-recorder.spec
-    dist/Reha/Reha --selftest      # or the .app / .exe
+    dist/Reha.app/Contents/MacOS/Reha --selftest   # Windows: dist/Reha/Reha.exe
+
+`-e .` is not optional: PyInstaller bundles only what is installed in the
+Python it runs in, so without the app's own libraries there is nothing to
+put in. docs/building.md has the whole sequence.
 
 Run it from the repository root, not from this folder: dist/ and build/ are
 written next to where pyinstaller is invoked, and the paths below are
@@ -30,7 +34,7 @@ Two things that are easy to get wrong and expensive to discover later:
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 # This file lives in packaging/, so the repository is one level up.
 ROOT = Path(SPECPATH).parent
@@ -83,6 +87,15 @@ for package in ("soundfile", "_soundfile_data", "sounddevice", "_sounddevice_dat
         # the system — nothing to collect and nothing wrong.
         pass
 
+# mido reads its own version from the installed package's metadata, which
+# PyInstaller leaves behind unless asked: without it the built app's self-test
+# says "mido 0.0.0.dev0". Unlike the libraries above, mido is required, so a
+# build where it is not installed fails here rather than skipping it.
+# pywebview's is there for the self-test, which reads the version from it:
+# pywebview 6 has no __version__.
+datas += copy_metadata("mido")
+datas += copy_metadata("pywebview")
+
 a = Analysis(
     # Not app.py: a module run as a script is __main__, and the package
     # imports inside app.py would have nothing to resolve against. __main__.py
@@ -94,8 +107,11 @@ a = Analysis(
     # Each migration module imports alembic.op and sqlalchemy only once
     # Alembic runs it, by path, at start — not at import time, so the
     # analysis above cannot see them used and misses them without help.
+    # pylibremidi is a compiled module imported inside a function (so that
+    # an app without MIDI still starts), which is the other thing the
+    # analysis does not follow.
     hiddenimports=["send2trash", "sqlalchemy.dialects.sqlite", "mako",
-                   *collect_submodules("alembic")],
+                   "pylibremidi", *collect_submodules("alembic")],
     hookspath=[],
     excludes=[
         # Nothing here draws with these, and they are large.

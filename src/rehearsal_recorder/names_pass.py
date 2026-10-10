@@ -16,10 +16,16 @@ recovered — but waits for that to finish.
 Api finds the takes and renames them. This is the loop around that: the
 waiting, the one entry in the background-work list, and the thread. See
 docs/superpowers/specs/2026-10-02-songs-in-the-store-design.md, F1–F5.
+
+A song renamed or merged hands over the takes whose names it changed, and
+they are put right in a pass of their own, under a title saying what it is
+("Renaming Polyn to Polin · 12 takes"), without walking the whole library
+(docs/superpowers/specs/2026-10-02-rename-and-merge-songs-design.md, A3).
 """
 
 import sys
 import threading
+from collections import deque
 
 TITLE = "Putting names right"
 
@@ -46,14 +52,21 @@ class NamesPass:
         self._asked = threading.Event()
         self._stop = threading.Event()
         self._thread = None
+        # Passes over given takes, waiting their turn: (todo, title).
+        self._queued = deque()
+        self._queue_lock = threading.Lock()
+        # Whether a pass over the whole library has been asked for.
+        self._whole = False
 
-    def run(self):
-        """One pass over the library; how many takes it renamed. Shows
-        nothing at all when every name already matches."""
-        todo = self._find()
+    def run(self, todo=None, title=TITLE):
+        """One pass, over the library or over the takes `todo`, as find()
+        gives them; how many takes it renamed. Shows nothing at all when
+        every name already matches."""
+        if todo is None:
+            todo = self._find()
         if not todo:
             return 0
-        entry = self._journal.begin("names", TITLE)
+        entry = self._journal.begin("names", title)
         renamed, failed = 0, []
         try:
             for i, (folder, take_number, name) in enumerate(todo):
@@ -84,19 +97,45 @@ class NamesPass:
             entry = None
         finally:
             if entry is not None:  # something outside a take went wrong
-                entry.fail("Putting names right stopped unexpectedly")
+                entry.fail(f"{title} stopped unexpectedly")
         return renamed
 
     def request(self):
         """Another pass, once the one running (if any) is over: a recordings
         folder has just been opened."""
+        self._whole = True
         self._asked.set()
+
+    def request_takes(self, todo, title):
+        """A pass over the takes `todo` only, [(folder, take_number, name)],
+        under `title`, once the one running (if any) is over."""
+        with self._queue_lock:
+            self._queued.append((list(todo), title))
+        self._asked.set()
+
+    def run_queued(self):
+        """Every pass over given takes asked for so far, in turn; how many
+        takes they renamed. One that goes wrong outside a take (its entry
+        says it stopped) does not hold up the ones after it. The thread runs
+        them; the suites call this."""
+        renamed = 0
+        while not self._stop.is_set():
+            with self._queue_lock:
+                if not self._queued:
+                    break
+                todo, title = self._queued.popleft()
+            try:
+                renamed += self.run(todo, title)
+            except Exception as e:
+                print(f"{title} failed: {e}", file=sys.stderr)
+        return renamed
 
     def start(self):
         """The thread, and a first pass. Only the real app starts it; the
         suites call run() themselves."""
         if self._thread is not None:
             return
+        self._whole = True
         self._asked.set()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -115,6 +154,9 @@ class NamesPass:
             if self._stop.is_set():
                 return
             try:
-                self.run()
+                self.run_queued()
+                if self._whole:
+                    self._whole = False
+                    self.run()
             except Exception as e:  # the next open tries again
                 print(f"{TITLE} failed: {e}", file=sys.stderr)

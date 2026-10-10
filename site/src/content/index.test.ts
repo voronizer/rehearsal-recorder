@@ -7,16 +7,37 @@ import { displayVersion, latestVersion, newsLead } from "./changelog"
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
 describe("the site's content", () => {
-  it("has the seven tiles, in order", () => {
+  it("has the ten tiles, in order, the MIDI one right after the one on tracks", () => {
     expect(content.features.tiles.map((t) => t.id)).toEqual([
       "health",
       "track",
+      "midi",
       "rehearsals",
       "marks",
+      "names",
       "cloud",
+      "sets",
       "formats",
       "trash",
     ])
+  })
+
+  it("has the MIDI tile's words", () => {
+    const midi = content.features.tiles.find((t) => t.id === "midi")!
+    expect(midi.title).toBe("Notes too, from an e-kit or a keyboard.")
+    expect(midi.body.replace(/\s+/g, " ").trim()).toBe(
+      "A track records its audio, its MIDI or both. The notes are saved as .mid beside " +
+        "the audio, ready for your DAW."
+    )
+  })
+
+  it("has the sets tile's words", () => {
+    const sets = content.features.tiles.find((t) => t.id === "sets")!
+    expect(sets.title).toBe("Rehearse the set, in order.")
+    expect(sets.body.replace(/\s+/g, " ").trim()).toBe(
+      "Make the gig's songs a set once. Every take is the song you are on until you move " +
+        "on, and History says which ones you never got to."
+    )
   })
 
   it("has the five steps, in order", () => {
@@ -26,6 +47,16 @@ describe("the site's content", () => {
       "keep",
       "history",
       "compare",
+    ])
+  })
+
+  it("tells the second step as the app goes through it", () => {
+    const record = content.story.steps.find((s) => s.id === "record")!
+    expect(record.title).toBe("Hear last week, then record.")
+    expect(leadAndBeats(record.body).beats).toEqual([
+      "▶ beside Pałyn on the start screen plays its best go from last week.",
+      "Start, and ↑ picks Pałyn under Next take.",
+      "Record: the take's name over a big clock, and a tile per track that turns red when it clips.",
     ])
   })
 
@@ -52,9 +83,14 @@ describe("the site's content", () => {
     )
   })
 
-  it("has seven questions, each with an answer, the name's first", () => {
-    expect(content.faq.questions).toHaveLength(7)
+  it("has eight questions, each with an answer, the name's first", () => {
+    expect(content.faq.questions).toHaveLength(8)
     expect(content.faq.questions[0].body).toContain("Belarusian for “echo”")
+    // Sleep follows the laptop dying, the question it answers next.
+    expect(content.faq.questions[5].title).toBe("What if the laptop dies in the middle of a take?")
+    expect(content.faq.questions[6].title).toBe(
+      "Will the laptop fall asleep in the middle of a take?"
+    )
     for (const q of content.faq.questions) expect(q.body).not.toBe("")
   })
 

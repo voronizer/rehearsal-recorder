@@ -355,6 +355,11 @@ export function UnderTheHood() {
           <Row label="Audio engine">
             <span className="tnum text-xs">{hood.audio.engine ?? "unknown"}</span>
           </Row>
+          <Row label="MIDI">
+            {hood.midi.system ?? (
+              <span className="text-muted-foreground">{hood.midi.error}</span>
+            )}
+          </Row>
         </dl>
 
         <CheckTheInterface disabled={!rec || !!rec.missing} name={rec?.name} />

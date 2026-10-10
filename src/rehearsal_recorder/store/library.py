@@ -15,11 +15,13 @@ see models.py for why.
 from pathlib import Path
 
 from sqlalchemy import Integer, cast, func, select, update
-from sqlalchemy.orm import selectinload, sessionmaker
+from sqlalchemy.orm import object_session, selectinload, sessionmaker
 
+from rehearsal_recorder.midi import rules
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
-    CloudCopy, Label, Marker, Rehearsal, Song, Take, TakeFile, Track,
+    AUDIO_FILE, NOTES_FILE, CloudCopy, Label, Marker, Rehearsal, Song, SongName, SongSet,
+    Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
 
@@ -33,6 +35,22 @@ LABEL_NAME_MAX = 40
 class LabelRefused(ValueError):
     """A change to the labels that cannot be made. The message says why, to
     the person, as it is."""
+
+
+class SetRefused(ValueError):
+    """A change to the sets that cannot be made. The message says why, to the
+    person, as it is."""
+
+
+class SongRefused(ValueError):
+    """A rename or a merge of songs that cannot be made. The message says
+    why, to the person, as it is. `into` is {"id", "title"} of the song the
+    title already belongs to, when that is why: merging into it is what the
+    person can do instead."""
+
+    def __init__(self, message, into=None):
+        super().__init__(message)
+        self.into = into
 
 
 def as_marker(value):
@@ -72,7 +90,7 @@ _WITH_TAKES = (
 # A take read as a go at its song (goes_of, goes_before), and their order:
 # the newest rehearsal first, the order played within one.
 _AS_GO = (
-    selectinload(Take.rehearsal), selectinload(Take.song),
+    selectinload(Take.rehearsal).selectinload(Rehearsal.tracks), selectinload(Take.song),
     selectinload(Take.files), selectinload(Take.markers),
     selectinload(Take.cloud_copy),
 )
@@ -167,8 +185,24 @@ class Library:
 
     def _take_data(self, folder, take):
         """The take as the interface gets it, but with "cloud" still the raw
-        row; _take_out finishes it."""
+        row; _take_out finishes it.
+
+        "tracks" is its audio files only, in the order they were kept, and
+        "notes" its .mid files, each with its track's port and the audio lane
+        it follows in the player (rules.lane_after, over the rehearsal's
+        tracks in band order and the lanes this take has). "notes_missing" is
+        the tracks that record notes and have no .mid in this take: a port
+        that was not there when it was recorded. Both carry "place", the
+        track's index in the rehearsal's band (rules.place_in), which puts
+        two lanes after the same audio lane in band order."""
         title = take.song.title if take.song is not None else None
+        band = [{"name": t.name, "mode": t.mode, "midi_port": t.midi_port}
+                for t in take.rehearsal.tracks]
+        ports = {t["name"]: t["midi_port"] for t in band}
+        audio = [f for f in take.files if f.kind != NOTES_FILE]
+        notes = [f for f in take.files if f.kind == NOTES_FILE]
+        heard = {f.name for f in audio}
+        written = {f.name for f in notes}
         out = {
             "take_number": take.take_number,
             # Not stored: it follows from the song and the go (D3).
@@ -177,8 +211,18 @@ class Library:
             "go": take.go if title is not None else None,
             "starred": take.starred,
             "duration_sec": take.duration_sec,
-            "tracks": [
-                {"name": f.name, "file": str(folder / Path(f.file))} for f in take.files
+            "tracks": [{"name": f.name, "file": str(folder / Path(f.file))} for f in audio],
+            "notes": [
+                {"name": f.name, "file": str(folder / Path(f.file)),
+                 "port": ports.get(f.name),
+                 "after": rules.lane_after(band, heard, f.name), **rules.place_in(band, f.name)}
+                for f in notes
+            ],
+            "notes_missing": [
+                {"name": t["name"], "port": t["midi_port"],
+                 "after": rules.lane_after(band, heard, t["name"]), **rules.place_in(band, t["name"])}
+                for t in band
+                if rules.records_notes(t) and t["name"] not in written
             ],
             "markers": [
                 {"at": m.at, "label_id": m.label_id, "note": m.note} for m in take.markers
@@ -197,15 +241,28 @@ class Library:
         data["cloud"] = self._cloud_dict(data["cloud"], cloud)
         return data
 
-    def _rehearsal_data(self, rehearsal):
+    def _rehearsal_data(self, rehearsal, titles=None):
+        """`titles` is _titles_of(db), for the set's songs; made here when
+        not given, which one rehearsal can afford and a list of them not."""
         folder = self._folder(rehearsal.folder)
+        if rehearsal.set_name is None:
+            played_by = None
+        else:
+            if titles is None:
+                titles = self._titles_of(object_session(rehearsal))
+            played_by = {"name": rehearsal.set_name,
+                         "songs": self._songs_of_set(titles, rehearsal.set_songs)}
         return {
+            "set": played_by,
             "folder": str(folder),
             "name": rehearsal.name,
             "created_at": rehearsal.created_at,
             "samplerate": rehearsal.samplerate,
             "bit_depth": rehearsal.bit_depth,
-            "tracks": [{"name": t.name, "channel": t.channel} for t in rehearsal.tracks],
+            "tracks": [
+                {"name": t.name, "channel": t.channel, "mode": t.mode, "midi_port": t.midi_port}
+                for t in rehearsal.tracks
+            ],
             "takes": [self._take_data(folder, t) for t in rehearsal.takes],
         }
 
@@ -216,12 +273,39 @@ class Library:
         return data
 
     @staticmethod
-    def _files(folder, tracks):
-        """[{"name", "file": absolute}] → rows relative to the rehearsal."""
+    def _files(folder, files, kind, start=0):
+        """[{"name", "file": absolute}] → rows of that kind (AUDIO_FILE or
+        NOTES_FILE) relative to the rehearsal, numbered from `start`."""
         return [
-            TakeFile(position=i, name=t["name"], file=_relative(t["file"], folder))
-            for i, t in enumerate(tracks)
+            TakeFile(position=start + i, name=f["name"], kind=kind,
+                     file=_relative(f["file"], folder))
+            for i, f in enumerate(files)
         ]
+
+    @classmethod
+    def _take_files(cls, folder, take):
+        """A new take's rows: its "tracks" as audio, then its "notes" as MIDI,
+        one sequence of positions."""
+        audio = cls._files(folder, take.get("tracks") or [], AUDIO_FILE)
+        return audio + cls._files(folder, take.get("notes") or [], NOTES_FILE, start=len(audio))
+
+    @staticmethod
+    def _track_rows(tracks):
+        """The band as rows: each with its mode and the name of its port (a
+        track that records only audio has none), and the input it was on. A
+        track that records audio has to have one, and raises without; one that
+        records only MIDI is on none."""
+        rows = []
+        for i, t in enumerate(tracks):
+            port = rules.port_of(t)
+            rows.append(Track(
+                position=i,
+                name=t["name"],
+                channel=int(t["channel"]) if rules.records_audio(t) else None,
+                mode=rules.mode_of(t),
+                midi_port=port["name"] if port else None,
+            ))
+        return rows
 
     @staticmethod
     def _labelled(db, markers):
@@ -246,10 +330,30 @@ class Library:
     # casefolded before a song is made. A song is never deleted with its
     # takes: one with none keeps its title and its count of goes given
     # (Song.last_go), so a number is never given twice.
+    #
+    # A title a song leaves, renamed or merged into another, stays a way to
+    # name it: an old name (models.SongName). Old names are unique
+    # case-blind too, and never a song's title as well, so a name leads to
+    # one song at most.
 
     @staticmethod
     def _songs_by_key(db):
         return {s.title.casefold(): s for s in db.scalars(select(Song))}
+
+    @staticmethod
+    def _names_by_key(db):
+        """Every old name, by its casefold: {key: SongName}."""
+        return {n.name.casefold(): n for n in db.scalars(select(SongName))}
+
+    @staticmethod
+    def _also(db):
+        """{song_id: its old names}, each list in case-blind order."""
+        out = {}
+        for song_id, name in db.execute(select(SongName.song_id, SongName.name)):
+            out.setdefault(song_id, []).append(name)
+        for names in out.values():
+            names.sort(key=str.casefold)
+        return out
 
     @staticmethod
     def _has_other_takes(db, song_id, take_id):
@@ -266,9 +370,9 @@ class Library:
 
         1. Nothing, or "Take N", is no song.
         2. A song whose title is the whole text, compared casefolded, is that
-           song.
-        3. A song whose title is the text less a trailing number is that
-           song: a number typed out of habit ("Polyn 3") is dropped.
+           song; failing that, a song with the whole text as an old name.
+        3. The same for the text less a trailing number: a number typed out
+           of habit ("Polyn 3") is dropped.
         4. Anything else is a new song with exactly that title — "Opus 5" is
            a title of its own unless a song called "Opus" exists.
 
@@ -287,11 +391,19 @@ class Library:
                 Take.rehearsal_id == rehearsal_id, Take.take_number == take_number
             )).one_or_none()
         songs = self._songs_by_key(db)
-        song = songs.get(name.casefold())
+        olds = self._names_by_key(db)
+
+        def known(text):
+            key = text.casefold()
+            if key in songs:
+                return songs[key]
+            return db.get(Song, olds[key].song_id) if key in olds else None
+
+        song = known(name)
         if song is None:
             base, number = split_go(name)
             if number is not None:
-                song = songs.get(base.casefold())
+                song = known(base)
         if song is None:
             return None, name, 1
         title = song.title
@@ -348,16 +460,151 @@ class Library:
             rows = db.execute(select(Song.title, Song.last_go)).all()
         return {title: (last or 0) + 1 for title, last in rows}
 
+    def song_names(self):
+        """{title: its old names} for every song that has any, each list in
+        case-blind order: for the songs offered under a take's name."""
+        with self._session() as db:
+            also = self._also(db)
+            titles = dict(db.execute(select(Song.id, Song.title)).all())
+        return {titles[song_id]: names for song_id, names in also.items()}
+
+    def _played(self, db, song_id):
+        """A song's takes with their rehearsal's folder, as stored: the
+        oldest rehearsal first, the order played within one."""
+        return db.execute(
+            select(Take, Rehearsal.folder)
+            .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+            .where(Take.song_id == song_id)
+            .order_by(Rehearsal.created_at, Rehearsal.id, Take.take_number)
+        ).all()
+
+    def _named(self, rows, title, goes):
+        """(folder, take_number, name) of each of `rows` (_played), named as
+        `title` at the go `goes` gives it: what the files are to follow."""
+        return [(str(self._folder(key)), take.take_number,
+                 take_name(title, goes(i, take), take.take_number))
+                for i, (take, key) in enumerate(rows)]
+
+    @staticmethod
+    def _taken(db, title, song_id):
+        """Refused when `title` is another song's, by its title or by an old
+        name, naming that song (SongRefused.into)."""
+        key = title.casefold()
+        other = Library._songs_by_key(db).get(key)
+        if other is not None and other.id != song_id:
+            raise SongRefused(f"There is already a song called {other.title}",
+                              {"id": other.id, "title": other.title})
+        old = Library._names_by_key(db).get(key)
+        if old is not None and old.song_id != song_id:
+            owner = db.get(Song, old.song_id)
+            raise SongRefused(f"{title} is {owner.title} now",
+                              {"id": owner.id, "title": owner.title})
+
+    def rename_song(self, song_id, title):
+        """
+        Gives a song another title (rename-and-merge-songs spec D1, R2-R5):
+        one row changes, and the names of its takes follow from it. The title
+        it leaves is remembered as an old name (D6), unless only its case
+        changed (R4); an old name of its own taken back as its title is no
+        longer one (D7). Refused (SongRefused) for an empty title, for "Take
+        N", and for another song's title or old name, which is a merge
+        (merge_songs) into the song it names.
+
+        Returns {"from", "title", "takes"}: the takes whose names changed,
+        as (folder, take_number, name), the oldest first, for their files to
+        follow. None changed when the title is the one it has.
+        """
+        title = str(title or "").strip()
+        with self._session.begin() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                raise SongRefused("Song not found")
+            if not title:
+                raise SongRefused("A song needs a title")
+            if UNNAMED_TAKE.match(title):
+                raise SongRefused(f"{title} is what a take with no song is called")
+            self._taken(db, title, song.id)
+            old = song.title
+            if title == old:
+                return {"from": old, "title": title, "takes": []}
+            if title.casefold() != old.casefold():
+                for name in db.scalars(select(SongName).where(SongName.song_id == song.id)):
+                    if name.name.casefold() == title.casefold():
+                        db.delete(name)
+                db.add(SongName(song_id=song.id, name=old))
+            song.title = title
+            takes = self._named(self._played(db, song.id), title, lambda _, t: t.go)
+        return {"from": old, "title": title, "takes": takes}
+
+    def merge_songs(self, from_id, into_id, dry_run=False):
+        """
+        Points every take of song `from_id` at song `into_id` (D1, D3),
+        numbered on from the goes `into` has given (Song.last_go), the oldest
+        rehearsal first and in the order played within one: no name is given
+        twice, and the target's own goes keep theirs. Stars stay on their
+        takes (D4). The merged song's title and its old names become the
+        target's old names (D7), and its row goes. One transaction.
+
+        Returns {"from", "into", "goes", "rehearsals", "first", "last",
+        "takes"}: how many goes from how many rehearsals, the first and last
+        go they get (None with none), and the takes as rename_song gives
+        them. dry_run: the same answer with nothing changed, for the question
+        asked first (R3, R6).
+        """
+        with self._session.begin() as db:
+            source, target = db.get(Song, from_id), db.get(Song, into_id)
+            if source is None or target is None:
+                raise SongRefused("Song not found")
+            if source.id == target.id:
+                raise SongRefused("A song cannot be merged into itself")
+            rows = self._played(db, source.id)
+            first = (target.last_go or 0) + 1
+            count = len(rows)
+            answer = {
+                "from": source.title, "into": target.title, "goes": count,
+                "rehearsals": len({key for _, key in rows}),
+                "first": first if count else None,
+                "last": first + count - 1 if count else None,
+                "takes": self._named(rows, target.title, lambda i, _: first + i),
+            }
+            if dry_run:
+                return answer
+            for i, (take, _) in enumerate(rows):
+                take.song = target
+                take.go = first + i
+            if count:
+                target.last_go = first + count - 1
+            for name in db.scalars(select(SongName).where(SongName.song_id == source.id)):
+                name.song_id = target.id
+            db.add(SongName(song_id=target.id, name=source.title))
+            # Everything off the song before it goes, so nothing of it is
+            # left for the database's ON DELETE to touch.
+            db.flush()
+            db.delete(source)
+        return answer
+
+    def forget_song_name(self, name):
+        """Forgets an old name (D8): typed again, it is a new song. False when
+        no song had it."""
+        key = str(name or "").strip().casefold()
+        with self._session.begin() as db:
+            found = self._names_by_key(db).get(key)
+            if found is None:
+                return False
+            db.delete(found)
+            return True
+
     def songs(self):
         """
         Every song with a go, for History's Songs view, and the takes with no
         song as one more row: {"songs": [{"id", "title", "goes",
-        "rehearsals", "first_played", "last_played", "starred"}],
+        "rehearsals", "first_played", "last_played", "starred", "also"}],
         "not_named": {"takes", "rehearsals", "last_played"} or None}.
 
-        One query, grouped by song, and no folder looked at: a rehearsal on a
-        drive that is not plugged in is counted like any other. A song whose
-        every go was deleted has no takes to group, so it is not listed.
+        Two queries, the goes grouped by song and the songs' old names, and no
+        folder looked at: a rehearsal on a drive that is not plugged in is
+        counted like any other. A song whose every go was deleted has no
+        takes to group, so it is not listed.
         """
         with self._session() as db:
             rows = db.execute(
@@ -374,6 +621,7 @@ class Library:
                 .outerjoin(Song, Take.song_id == Song.id)
                 .group_by(Take.song_id)
             ).all()
+            also = self._also(db)
         songs, not_named = [], None
         for song_id, title, goes, rehearsals, first, last, starred in rows:
             if song_id is None:
@@ -381,14 +629,16 @@ class Library:
                 continue
             songs.append({"id": song_id, "title": title, "goes": goes,
                           "rehearsals": rehearsals, "first_played": first,
-                          "last_played": last, "starred": starred or 0})
+                          "last_played": last, "starred": starred or 0,
+                          "also": also.get(song_id, [])})
         songs.sort(key=lambda s: (s["title"].casefold(), s["id"]))
         return {"songs": songs, "not_named": not_named}
 
     def goes_of(self, song_id):
         """
         A song's goes, from every rehearsal, for its page: {"id", "title",
-        "goes": [{"folder", "rehearsal", "created_at", "missing", "take"}]},
+        "also", "goes": [{"folder", "rehearsal", "created_at", "missing",
+        "take"}]}, "also" being its old names,
         the newest rehearsal first and the order played within one. None for
         an id no song has. `song_id` None is the takes with no song.
 
@@ -400,6 +650,7 @@ class Library:
             if song_id is not None and song is None:
                 return None
             title = None if song is None else song.title
+            also = [] if song is None else self._also(db).get(song.id, [])
             goes = self._goes(db, Take.song_id.is_(None) if song_id is None
                               else Take.song_id == song_id)
         cloud = self._cloud_dir()
@@ -409,7 +660,7 @@ class Library:
             if go["folder"] not in there:
                 there[go["folder"]] = Path(go["folder"]).is_dir()
             go["missing"] = not there[go["folder"]]
-        return {"id": song_id, "title": title, "goes": goes}
+        return {"id": song_id, "title": title, "also": also, "goes": goes}
 
     def marks_of(self, label_id):
         """
@@ -451,12 +702,13 @@ class Library:
 
     def goes_before(self, song_id, folder):
         """
-        goes_of for the rehearsal screen's card, which asks on every refresh
-        while the rehearsal in `folder` is on: only goes from rehearsals on
-        disk other than that one, and of those only the ones the card picks
-        from, so none "missing". They are the last go of each of the three
-        newest such rehearsals, and the later ★ go of the newest such
-        rehearsal with one. None for an id no song has.
+        goes_of for what the first go tonight is measured against, asked on
+        every refresh of the rehearsal screen while the rehearsal in
+        `folder` is on: only goes from rehearsals on disk other than that
+        one, and of those only the ones it can be picked from (api._plays_of),
+        so none "missing": the last go of the newest such rehearsal, and the
+        later ★ go of the newest such rehearsal with one. None for an id no
+        song has.
         """
         live = Path(folder)
         with self._session() as db:
@@ -473,13 +725,13 @@ class Library:
             last, starred, there = {}, None, {}
             for take_id, star, key in rows:
                 if key not in there:
-                    if len(last) == 3 and starred is not None:
+                    if last and starred is not None:
                         break
                     path = self._folder(key)
                     there[key] = path != live and path.is_dir()
                 if not there[key]:
                     continue
-                if key in last or len(last) < 3:
+                if key in last or not last:
                     last[key] = take_id
                 if star and (starred is None or starred[0] == key):
                     starred = (key, take_id)
@@ -516,7 +768,8 @@ class Library:
             rows = db.scalars(
                 select(Rehearsal).options(*_WITH_TAKES).order_by(Rehearsal.created_at.desc())
             ).all()
-            data = [self._rehearsal_data(r) for r in rows]
+            titles = self._titles_of(db)
+            data = [self._rehearsal_data(r, titles) for r in rows]
         cloud = self._cloud_dir()
         return [self._rehearsal_out(d, cloud) for d in data]
 
@@ -530,7 +783,10 @@ class Library:
         with self._session() as db:
             return self._find(db, folder) is not None
 
-    def create_rehearsal(self, folder, name, created_at, samplerate, bit_depth, tracks):
+    def create_rehearsal(self, folder, name, created_at, samplerate, bit_depth, tracks,
+                         set_copy=None):
+        """`set_copy` is the set it is played by, as set_of gives it, kept on
+        the rehearsal as it is now (D7 of the song-sets spec)."""
         with self._session.begin() as db:
             db.add(Rehearsal(
                 folder=self.key(folder),
@@ -538,10 +794,9 @@ class Library:
                 created_at=created_at,
                 samplerate=int(samplerate),
                 bit_depth=int(bit_depth),
-                tracks=[
-                    Track(position=i, name=t["name"], channel=int(t["channel"]))
-                    for i, t in enumerate(tracks)
-                ],
+                set_name=None if set_copy is None else set_copy["name"],
+                set_songs=None if set_copy is None else list(set_copy["songs"]),
+                tracks=self._track_rows(tracks),
             ))
 
     def import_rehearsal(self, folder, *, name, created_at, samplerate, bit_depth,
@@ -556,6 +811,9 @@ class Library:
         folder = Path(folder)
         with self._session.begin() as db:
             songs = self._songs_by_key(db)
+            # An old name is the song it leads to, as when typed.
+            for key, old in self._names_by_key(db).items():
+                songs.setdefault(key, db.get(Song, old.song_id))
             counted = {}
 
             def go_at(name):
@@ -570,11 +828,14 @@ class Library:
                 key = title.casefold()
                 if key not in songs:
                     songs[key] = Song(title=title, last_go=0)
-                if key not in counted:
-                    counted[key] = songs[key].last_go or 0
-                counted[key] += 1
-                songs[key].last_go = counted[key]
-                return songs[key], counted[key]
+                # By song, not by spelling: its title and an old name are
+                # the same song's goes.
+                song = songs[key]
+                if song not in counted:
+                    counted[song] = song.last_go or 0
+                counted[song] += 1
+                song.last_go = counted[song]
+                return song, counted[song]
 
             placed = {int(t["take_number"]): go_at(t.get("name"))
                       for t in sorted(takes, key=lambda t: int(t["take_number"]))}
@@ -584,10 +845,7 @@ class Library:
                 created_at=created_at,
                 samplerate=int(samplerate),
                 bit_depth=int(bit_depth),
-                tracks=[
-                    Track(position=i, name=t["name"], channel=int(t["channel"]))
-                    for i, t in enumerate(tracks)
-                ],
+                tracks=self._track_rows(tracks),
                 takes=[
                     Take(
                         take_number=int(t["take_number"]),
@@ -597,7 +855,7 @@ class Library:
                         cloud_skip=bool(t.get("cloud_skip")),
                         cloud_send=bool(t.get("cloud_send")),
                         cloud_error=cloud_errors.get(int(t["take_number"])),
-                        files=self._files(folder, t.get("tracks", [])),
+                        files=self._take_files(folder, t),
                         markers=[Marker(**m) for m in self._labelled(db, t.get("markers", []))],
                         cloud_copy=self._cloud_row(cloud.get(int(t["take_number"])), cloud_dir),
                     )
@@ -642,7 +900,9 @@ class Library:
     def add_take(self, folder, take):
         """
         take: {"take_number", "name" (what the name field held — see _resolve), "duration_sec", "tracks": [{"name",
-        "file": absolute}], "markers"?, "cloud_skip"?, "cloud_send"?}.
+        "file": absolute}], "notes"?: [{"name", "file": absolute}], "markers"?, "cloud_skip"?,
+        "cloud_send"?}. "tracks" are the audio files and "notes" the .mid files, kept
+        as rows of their own kinds.
         Returns the take as it is now kept, or None without the rehearsal.
         """
         folder = Path(folder)
@@ -660,7 +920,7 @@ class Library:
                 duration_sec=float(take.get("duration_sec") or 0.0),
                 cloud_skip=bool(take.get("cloud_skip")),
                 cloud_send=bool(take.get("cloud_send")),
-                files=self._files(folder, take.get("tracks", [])),
+                files=self._take_files(folder, take),
                 markers=[Marker(**m) for m in self._labelled(db, take.get("markers", []))],
             )
             db.add(row)
@@ -670,11 +930,13 @@ class Library:
         return self._take_out(data, self._cloud_dir())
 
     def update_take(self, folder, take_number, *, name=None, duration_sec=None,
-                    tracks=None, markers=None):
+                    tracks=None, notes=None, markers=None):
         """Changes what is given and leaves the rest. name: what the name field
         held, made a song and a go as add_take makes it (_resolve), so the name
-        the take ends up with can differ. tracks: the take's files at their new
-        absolute paths. Returns the take, or None."""
+        the take ends up with can differ. tracks: the take's audio files at
+        their new absolute paths; notes: its .mid files likewise. Each replaces
+        only its own kind, so moving the audio leaves the notes where they were.
+        Returns the take, or None."""
         folder = Path(folder)
         with self._session.begin() as db:
             row = self._find_take(db, folder, take_number)
@@ -686,8 +948,14 @@ class Library:
                 row.go = go
             if duration_sec is not None:
                 row.duration_sec = float(duration_sec)
-            if tracks is not None:
-                row.files = self._files(folder, tracks)
+            if tracks is not None or notes is not None:
+                audio = ([f for f in row.files if f.kind != NOTES_FILE] if tracks is None
+                         else self._files(folder, tracks, AUDIO_FILE))
+                midi = ([f for f in row.files if f.kind == NOTES_FILE] if notes is None
+                        else self._files(folder, notes, NOTES_FILE))
+                for position, f in enumerate(audio + midi):
+                    f.position = position
+                row.files = audio + midi
             if markers is not None:
                 row.markers = [Marker(**m) for m in self._labelled(db, markers)]
             db.flush()
@@ -776,6 +1044,135 @@ class Library:
                 return False
             row.cloud_error = message
             return True
+
+    # ---------- sets ----------
+    #
+    # Songs a rehearsal goes through, in order: a name and titles each, in an
+    # order of their own. A title is resolved when read, through the songs'
+    # titles and old names, so a set follows renames and merges; a title no
+    # song has is a song not played yet. Each change is one transaction and
+    # returns every set as sets() gives them.
+
+    def _titles_of(self, db):
+        """A function from a title in a set to {"title", "new"}, as a typed
+        name resolves (_resolve): the song's title now, found by its title or
+        an old name, compared casefolded, then the same less a trailing
+        number ("Opus 5" is Opus when there is a song Opus); the title as it
+        is, new, when no song has it."""
+        songs = self._songs_by_key(db)
+        olds = self._names_by_key(db)
+        titles = dict(db.execute(select(Song.id, Song.title)).all())
+
+        def known(text):
+            key = text.casefold()
+            if key in songs:
+                return songs[key].title
+            return titles[olds[key].song_id] if key in olds else None
+
+        def resolve(text):
+            title = known(text)
+            if title is None:
+                base, number = split_go(text)
+                if number is not None:
+                    title = known(base)
+            return {"title": text, "new": True} if title is None else {"title": title, "new": False}
+
+        return resolve
+
+    @staticmethod
+    def _songs_of_set(titles, stored):
+        """A set's stored titles as its songs (`titles` is _titles_of): each
+        song once, where it first comes, since two titles can come to name
+        one song when the songs are merged (D9)."""
+        out, seen = [], set()
+        for text in stored or []:
+            song = titles(text)
+            key = song["title"].casefold()
+            if key not in seen:
+                seen.add(key)
+                out.append(song)
+        return out
+
+    def sets(self):
+        """[{"id", "name", "songs": [{"title", "new"}]}] in their order."""
+        with self._session() as db:
+            titles = self._titles_of(db)
+            return [{"id": st.id, "name": st.name,
+                     "songs": self._songs_of_set(titles, st.songs)}
+                    for st in self._ordered_sets(db)]
+
+    def set_of(self, set_id):
+        """{"name", "songs"} of the set, the titles as stored, for a
+        rehearsal to keep; None when there is no such set."""
+        with self._session() as db:
+            st = db.get(SongSet, set_id) if set_id is not None else None
+            return None if st is None else {"name": st.name, "songs": list(st.songs)}
+
+    @staticmethod
+    def _ordered_sets(db):
+        return list(db.scalars(select(SongSet).order_by(SongSet.position, SongSet.id)))
+
+    @staticmethod
+    def _set_in(sets, set_id):
+        found = next((st for st in sets if st.id == set_id), None)
+        if found is None:
+            raise SetRefused("Set not found")
+        return found
+
+    @staticmethod
+    def _set_name(sets, name, set_id=None):
+        """`name` as a set is called: trimmed and cut as a label's name is.
+        Refused empty, or when another set has it, compared by casefold."""
+        name = str(name or "").strip()[:LABEL_NAME_MAX].strip()
+        if not name:
+            raise SetRefused("A set needs a name")
+        for other in sets:
+            if other.id != set_id and other.name.casefold() == name.casefold():
+                raise SetRefused(f"There is already a set called {other.name}")
+        return name
+
+    @staticmethod
+    def _set_songs(songs):
+        """Titles trimmed, empty ones dropped, and each once, at its first
+        place, compared casefolded: a song is in a set once (D9)."""
+        out, seen = [], set()
+        for title in songs or []:
+            title = str(title or "").strip()
+            if title and title.casefold() not in seen:
+                seen.add(title.casefold())
+                out.append(title)
+        return out
+
+    def add_set(self, name, songs):
+        """A new set at the end of the list."""
+        with self._session.begin() as db:
+            sets = self._ordered_sets(db)
+            db.add(SongSet(name=self._set_name(sets, name),
+                           songs=self._set_songs(songs), position=len(sets)))
+        return self.sets()
+
+    def update_set(self, set_id, name=None, songs=None):
+        """Renames the set, or replaces its songs, or both; None leaves that
+        part as it is."""
+        with self._session.begin() as db:
+            sets = self._ordered_sets(db)
+            st = self._set_in(sets, set_id)
+            if name is not None:
+                st.name = self._set_name(sets, name, st.id)
+            if songs is not None:
+                st.songs = self._set_songs(songs)
+        return self.sets()
+
+    def delete_set(self, set_id):
+        """Deletes the set. Rehearsals played by it keep their copy."""
+        with self._session.begin() as db:
+            sets = self._ordered_sets(db)
+            st = self._set_in(sets, set_id)
+            sets.remove(st)
+            db.delete(st)
+            for position, other in enumerate(sets):
+                other.position = position
+        return self.sets()
 
     # ---------- labels ----------
     #

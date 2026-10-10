@@ -1,22 +1,53 @@
 // The pieces of the app in the tiles: the app's own components, given what
 // the screens would give them, from the band on the fake Python side. They
 // are pictures here: still, and not for clicking.
-import type { ReactNode } from "react"
+import { Fragment, type ReactNode } from "react"
 import { HealthLine } from "@/components/HealthLine"
+import { NotesLane } from "@/components/midi/NotesLane"
+import { NotesPlate } from "@/components/midi/NotesPlate"
+import { SetCard, SongRows } from "@/components/NextTakeSongs"
 import { RehearsalList } from "@/components/RehearsalList"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
+import { SongKeys } from "@/components/SongKeys"
 import { StopTake } from "@/components/StopTake"
+import { TakeNameField } from "@/components/TakeNameField"
 import { TrackTile } from "@/components/TrackTile"
-import { api, type RehearsalDetail, type RehearsalSummary } from "@/lib/api"
+import {
+  api,
+  type RehearsalDetail,
+  type RehearsalSet,
+  type RehearsalSummary,
+  type SongChoices,
+} from "@/lib/api"
+import { otherSongs } from "@/lib/setSongs"
 import type { TILES } from "../content"
+import { siteNotes, type SiteNotes } from "../stage/demo"
 
-export type PieceData = { rehearsals: RehearsalSummary[]; last: RehearsalDetail }
+export type PieceData = {
+  rehearsals: RehearsalSummary[]
+  last: RehearsalDetail
+  /** The songs under the Next take field, with Pałyn also typed as Palyn. */
+  choices: SongChoices
+  /** The band's set, Gig on the 25th, for the sets tile. */
+  set: RehearsalSet | null
+  /** The drums' and the keys' notes for the MIDI tile (stage/notes.js). */
+  notes: SiteNotes
+}
 
-/** What the tiles show, asked of the bridge as the history screen would. */
+/** What the tiles show, asked of the bridge as the history screen and the
+ *  rehearsal screen would. */
 export async function loadPieces(): Promise<PieceData> {
   const rehearsals = await api().list_rehearsals()
   const last = await api().get_rehearsal(rehearsals[0].folder)
-  return { rehearsals, last }
+  // As at the band's next rehearsal: each song at one past its last go in
+  // the newest one, as Python counts goes across the library (the fake
+  // counts them from 1 each evening).
+  const offered = await api().song_choices()
+  const next = (song: string) =>
+    Math.max(0, ...last.takes.filter((t) => t.song === song).map((t) => t.go ?? 0)) + 1
+  const choices = { here: [], other: offered.other.map((c) => ({ ...c, go: next(c.song) })) }
+  const [set] = await api().list_sets()
+  return { rehearsals, last, choices, set: set ?? null, notes: siteNotes() }
 }
 
 const nothing = () => {}
@@ -64,10 +95,55 @@ function Goes({ last, song, only }: { last: RehearsalDetail; song: string; only?
   )
 }
 
+/** Gig on the 25th mid-set: Pałyn played four times, Viasna up now. */
+const MID_SET = new Map([["Pałyn", 4]])
+
+/**
+ * The rehearsal screen's Next take panel, the field over the songs under
+ * it, as the screen lays them out.
+ */
+function Panel({ children }: { children: ReactNode }) {
+  return <div className="flex w-[23rem] max-w-full flex-col gap-5">{children}</div>
+}
+
+/**
+ * Two tracks' notes over eight bars, as the player lays them out: a plate on
+ * the left, what it is and where it came from, and the notes beside it, the
+ * part already heard in the accent. Where there is no room for the plate
+ * beside the notes, as on a phone, it goes over them.
+ */
+function Notes({ notes }: { notes: SiteNotes }) {
+  return (
+    <div className="@container w-[44rem] max-w-full">
+      <div className="grid grid-cols-1 grid-rows-[auto_7.5rem_auto_7.5rem] gap-2 @md:grid-cols-[11rem_minmax(0,1fr)] @md:grid-rows-[7.5rem_7.5rem]">
+        {notes.lanes.map(({ port, notes: read }) => (
+          <Fragment key={read.name}>
+            <NotesPlate name={read.name} icon={read.icon} port={port} />
+            <NotesLane
+              name={read.name}
+              data={read}
+              duration={notes.to}
+              view={{ from: notes.from, to: notes.to }}
+              playhead={notes.playhead}
+              className="h-full rounded-lg border"
+            />
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export type Shot = { pieces: ReactNode; left?: boolean }
 
 /** Which piece goes beside which tile's words, by the tile's id. */
-export function shots({ rehearsals, last }: PieceData): Record<(typeof TILES)[number], Shot | null> {
+export function shots({
+  rehearsals,
+  last,
+  choices,
+  set,
+  notes,
+}: PieceData): Record<(typeof TILES)[number], Shot | null> {
   const kept = last.takes.find((t) => t.cloud && t.starred)
   return {
     health: {
@@ -91,6 +167,15 @@ export function shots({ rehearsals, last }: PieceData): Record<(typeof TILES)[nu
         </Piece>
       ),
     },
+    midi: {
+      pieces: (
+        <Piece
+          label={`The notes of ${notes.lanes.map((l) => `${l.notes.name} from ${l.port}`).join(" and ")} over eight bars, each saved as .mid`}
+        >
+          <Notes notes={notes} />
+        </Piece>
+      ),
+    },
     rehearsals: {
       pieces: (
         <Piece label="Four rehearsals in the history list, each with its length and number of takes">
@@ -108,11 +193,70 @@ export function shots({ rehearsals, last }: PieceData): Record<(typeof TILES)[nu
         </Piece>
       ),
     },
+    names: {
+      left: true,
+      pieces: (
+        <Piece label="The Next take field with Palyn typed: Palyn is Pałyn now, at its next go, the one song left under it">
+          <Panel>
+            {/* "Make Palyn a new song" floats over the songs on the screen,
+                and here would hide the one this tile is about. */}
+            <TakeNameField
+              id="site-next-take"
+              label="Next take"
+              value="Palyn"
+              fallback="Pałyn"
+              choices={choices}
+              onCommit={nothing}
+              onPanel
+              songs="none"
+              offerNewSong={false}
+              labelAside={<SongKeys />}
+            />
+            <SongRows
+              titles={otherSongs(choices, [])}
+              lastTake={new Map()}
+              goes={new Map()}
+              current="Pałyn"
+              typed="Palyn"
+              typing={false}
+              inSet={[]}
+              title="Songs"
+              onPick={nothing}
+              highlighted={null}
+              open={false}
+              onOpen={nothing}
+            />
+          </Panel>
+        </Piece>
+      ),
+    },
     cloud: {
       left: true,
       pieces: kept ? (
         <Piece label={`${kept.name}, marked as the one to keep, in the cloud`}>
           <Goes last={last} song={kept.song ?? ""} only={(n) => n === kept.take_number} />
+        </Piece>
+      ) : null,
+    },
+    sets: {
+      pieces: set ? (
+        <Piece
+          label={`The Next take field with Viasna, and under it the set ${set.name}: Pałyn played 4 times, Viasna now, Ahoń next`}
+        >
+          <Panel>
+            <TakeNameField
+              id="site-set-take"
+              label="Next take"
+              value="Viasna"
+              fallback="Viasna"
+              choices={choices}
+              onCommit={nothing}
+              onPanel
+              songs="none"
+              labelAside={<SongKeys />}
+            />
+            <SetCard set={set} goes={MID_SET} current="Viasna" onPick={nothing} highlighted={null} />
+          </Panel>
         </Piece>
       ) : null,
     },

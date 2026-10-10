@@ -34,6 +34,7 @@ from functools import partial
 import sounddevice as sd
 
 from rehearsal_recorder.audio.format import SUPPORTED_DEPTHS, capture_dtype
+from rehearsal_recorder.midi.rules import notes_problem, records_audio
 from rehearsal_recorder.platform_support import enter_com_apartment
 
 STREAM_LOCK = threading.RLock()
@@ -514,7 +515,20 @@ def channels_available(device_index, tracks):
     device at all — query_devices(None) answers with the whole list rather
     than with a device, and "no interface chosen" is a different complaint,
     made elsewhere.
+
+    What stops a rehearsal for the notes — no track that records sound, a
+    track that takes notes with no port, two on one port — is asked first,
+    before the card is looked at at all, and in its own words: those are not
+    about the card and no card can fix them. After that only the tracks that
+    record audio are held to the card. A MIDI track has no input, so it is
+    never one with "no input yet", never claims one, and does not count among
+    the tracks the inputs have to be enough for.
     """
+    problem = notes_problem(tracks)
+    if problem:
+        return problem
+    tracks = [t for t in tracks if records_audio(t)]
+
     if device_index is None or not tracks:
         return None
 

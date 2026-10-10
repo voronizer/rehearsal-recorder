@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   aboutDuration,
+  against,
   croppedButNotSwept,
   daysAgo,
   describeRescan,
@@ -136,5 +137,22 @@ describe("formatDate", () => {
   })
   it("is nothing for what it cannot read", () => {
     expect(formatDate("", now)).toBe("")
+  })
+})
+
+describe("against", () => {
+  it("says by how much a go ran shorter or longer, in seconds under a minute", () => {
+    expect(against(139, 151, "go 2")).toBe("12 s shorter than go 2")
+    expect(against(159, 151, "on 22 Sep")).toBe("8 s longer than on 22 Sep")
+  })
+
+  it("calls under two seconds either way as long", () => {
+    expect(against(151.4, 150, "go 2")).toBe("as long as go 2")
+    expect(against(149, 150.6, "go 2")).toBe("as long as go 2")
+  })
+
+  it("writes a minute or more as minutes and seconds", () => {
+    expect(against(216, 151, "go 2")).toBe("1:05 longer than go 2")
+    expect(against(91, 151, "go 2")).toBe("1:00 shorter than go 2")
   })
 })

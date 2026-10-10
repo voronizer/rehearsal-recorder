@@ -629,6 +629,7 @@ test.describe("Songs in History", () => {
     await openApp(page)
     await startRehearsal(page)
     await recordTake(page)
+    await page.locator("[data-take-summary]").getByRole("button", { name: "Rename take" }).click()
     const pills = page.getByRole("group", { name: "Take name" }).locator("[data-song-choice]")
     await pills.filter({ hasText: /^Ahoń 1$/ }).click()
     await expect(page.locator("#take-name")).toHaveValue("Ahoń")

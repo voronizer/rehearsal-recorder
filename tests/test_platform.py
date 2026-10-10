@@ -8,6 +8,7 @@ Windows — nothing short of Windows proves that — but it does prove the code
 takes the right branch instead of reaching for something that is not there.
 """
 
+import logging
 import shutil
 import sys
 import tempfile
@@ -25,6 +26,14 @@ _sd.query_devices = lambda *a, **k: []
 _sd.query_hostapis = lambda: []
 _sd.OutputStream = _sd.InputStream = None
 sys.modules["sounddevice"] = _sd
+# No suite opens a real MIDI port. With None in sys.modules, importing the
+# library raises ImportError, which midi/ports.open_system() answers as "MIDI is
+# not available" — whatever is plugged into the machine running them.
+sys.modules["pylibremidi"] = None
+# The library is blocked here, so the one line the MIDI system logs is why it
+# has none, and the Api made in [6] logs it. Unhandled, Python prints it on
+# stderr; [9] reads it from crash.log instead.
+logging.getLogger("rehearsal_recorder.midi.ports").addHandler(logging.NullHandler())
 
 import rehearsal_recorder.platform_support as ps  # noqa: E402
 
@@ -131,6 +140,8 @@ def main():
 
     apimod.RECORDINGS_ROOT = tmp / "Rec2"
     apimod.CONFIG_PATH = tmp / "config.json"
+    # The MIDI rig's two threads stay off: nothing here touches a port.
+    apimod.MIDI_THREADS = False
     a = apimod.Api.__new__(apimod.Api)
     apimod.Api.__init__(a)
     settings = a.get_settings()
@@ -183,13 +194,14 @@ def main():
     # to stderr — which a windowed build does not have. Save take and rename
     # both failed that way on Windows with nothing kept anywhere.
     import faulthandler
-    import logging
 
     import rehearsal_recorder.app as appmod
 
     original_log = appmod.CRASH_LOG
     appmod.CRASH_LOG = tmp / "crash.log"
-    handlers_before = list(logging.getLogger("pywebview").handlers)
+    # The handler goes on both of the loggers it is put on, and comes off both.
+    armed_on = ("pywebview", "rehearsal_recorder")
+    handlers_before = {name: list(logging.getLogger(name).handlers) for name in armed_on}
     try:
         kept_open = appmod._arm_crash_log()
         logging.getLogger("pywebview").error(
@@ -200,16 +212,27 @@ def main():
         logging.getLogger("pywebview").error("once")
         ok("arming twice does not write everything twice",
            appmod.CRASH_LOG.read_text(encoding="utf-8").count("once") == 1)
+        # The line that says which MIDI system the app is on, or why it has
+        # none, is the one thing P5 asks the app's log for. The library is
+        # blocked here, so it is the reason that is said.
+        from rehearsal_recorder.midi import ports as midi_ports
+
+        system, why = midi_ports.open_system()
+        ok("the MIDI system, or why there is none, is written to crash.log",
+           system is None and why in appmod.CRASH_LOG.read_text(encoding="utf-8"))
     finally:
         faulthandler.disable()
-        logger = logging.getLogger("pywebview")
-        for h in list(logger.handlers):
-            if h not in handlers_before:
-                logger.removeHandler(h)
-                h.close()
+        for name in armed_on:
+            logger = logging.getLogger(name)
+            for h in list(logger.handlers):
+                if h not in handlers_before[name]:
+                    logger.removeHandler(h)
+                    h.close()
         if kept_open:
             kept_open.close()
         appmod.CRASH_LOG = original_log
+    ok("and taking it down leaves neither logger with its handler",
+       all(logging.getLogger(name).handlers == handlers_before[name] for name in armed_on))
 
     print("\n[10] The thread that opens cards joins a COM apartment on Windows")
     # An ASIO driver is a COM object: a thread that has not joined an
@@ -512,10 +535,31 @@ def main():
         said = run.stdout.decode("utf-8")
     except UnicodeDecodeError:
         said = None
+    problems_before = len(problems)
     ok("what it says reads as UTF-8, whatever the code page",
        said is not None and " — " in said)
     ok("the app's name included, which is Cyrillic",
        said is not None and said.startswith("РЭХА "))
+    # A process that dies in the middle (the MIDI library, on a thread in the
+    # wrong COM apartment, once ended it on Windows with nothing written) says
+    # nothing of the kind, so it is asked for its verdict.
+    ok("and it ran through to its verdict",
+       said is not None and ("Incomplete build" in said
+                             or "This build has everything it needs." in said))
+    # pywebview 6 has no __version__, and the line said "pywebview ?".
+    ok("the window toolkit's line says which pywebview, as a number",
+       said is not None and "window toolkit — pywebview " in said
+       and said.split("window toolkit — pywebview ", 1)[1][:1].isdigit())
+    # Its own line says the MIDI system, so the log is not asked to say it too.
+    ok("and the MIDI system is not said a second time, on stderr",
+       not [ln for ln in run.stderr.decode("utf-8", "replace").splitlines()
+            if ln.startswith("MIDI")])
+    if len(problems) > problems_before:
+        # What a failed run left, in ASCII because the CI console may not
+        # print anything else.
+        print(f"    exit code {run.returncode}")
+        print(f"    stdout, the last of it: {ascii(run.stdout[-800:])}")
+        print(f"    stderr, the last of it: {ascii(run.stderr[-800:])}")
 
     print("\n[downloads] A new version goes where a browser would put it")
     # Windows lets the Downloads folder be moved anywhere, so it is asked of
@@ -526,6 +570,234 @@ def main():
         ok("on Windows it is the one the system names, and it is there", found.is_dir())
     ok("on a Mac it is Downloads in the home folder",
        ps.downloads_folder(system="darwin") == Path.home() / "Downloads")
+
+    print("\n[awake] A take keeps the laptop and its screen awake")
+    # Nobody touches the laptop while the band plays. Each system has its own
+    # documented call for it; the fakes stand in for the system so that both
+    # branches run here, and the real calls run on CI's Mac and Windows.
+
+    class FakeMac:
+        def __init__(self):
+            self.calls = []
+
+        def beginActivityWithOptions_reason_(self, options, reason):
+            self.calls.append(("begin", options, reason))
+            return "token"
+
+        def endActivity_(self, token):
+            self.calls.append(("end", token))
+
+    class FakeKernel:
+        def __init__(self, fail=False):
+            self.calls, self.fail = [], fail
+
+        def PowerCreateRequest(self, ref):
+            self.calls.append(("create", ref._obj.Reason.SimpleReasonString))
+            return 7
+
+        def PowerSetRequest(self, h, kind):
+            if self.fail:
+                raise OSError("refused")
+            self.calls.append(("set", h, kind))
+            return 1
+
+        def PowerClearRequest(self, h, kind):
+            self.calls.append(("clear", h, kind))
+            return 1
+
+        def CloseHandle(self, h):
+            self.calls.append(("close", h))
+            return 1
+
+    mac = FakeMac()
+    awake = ps.KeepAwake("darwin", process_info=mac)
+    awake.hold()
+    ok("on a Mac a take holds one activity that keeps the system and the screen awake",
+       mac.calls == [("begin", ps.MAC_AWAKE_OPTIONS, "Recording a take")]
+       and awake.held)
+    awake.hold()
+    ok("holding twice holds once", len(mac.calls) == 1)
+    awake.release()
+    ok("letting go ends that activity",
+       mac.calls[-1] == ("end", "token") and not awake.held)
+    idle = FakeMac()
+    ps.KeepAwake("darwin", process_info=idle).release()
+    ok("letting go with nothing held does nothing", idle.calls == [])
+
+    kernel = FakeKernel()
+    awake = ps.KeepAwake("win32", kernel32=kernel)
+    awake.hold()
+    ok("on Windows a take asks for the display, the system and the process",
+       kernel.calls == [("create", "РЭХА is recording a take"),
+                        ("set", 7, 0), ("set", 7, 1), ("set", 7, 3)])
+    awake.release()
+    ok("and lets go of all three and the handle",
+       kernel.calls[-4:] == [("clear", 7, 0), ("clear", 7, 1),
+                             ("clear", 7, 3), ("close", 7)]
+       and not awake.held)
+
+    refusing = FakeKernel(fail=True)
+    awake = ps.KeepAwake("win32", kernel32=refusing)
+    try:
+        awake.hold()
+        awake.release()
+        raised = False
+    except Exception:  # noqa: BLE001
+        raised = True
+    ok("a refusing system does not raise",
+       not raised and refusing.calls[-1] == ("close", 7))
+
+    awake = ps.KeepAwake("linux")
+    try:
+        awake.hold()
+        held_on_linux = awake.held
+        awake.release()
+        raised = False
+    except Exception:  # noqa: BLE001
+        raised = True
+    ok("on Linux it does nothing", not raised and not held_on_linux)
+
+    if sys.platform == "darwin":
+        from Foundation import (
+            NSActivityIdleDisplaySleepDisabled,
+            NSActivityUserInitiated,
+        )
+        ok("the Mac's own names add up to the options used",
+           NSActivityUserInitiated | NSActivityIdleDisplaySleepDisabled
+           == ps.MAC_AWAKE_OPTIONS)
+    if sys.platform in ("darwin", "win32"):
+        real = ps.KeepAwake()
+        real.hold()
+        held = real.held
+        real.release()
+        ok(f"a real hold and release on this {'Mac' if sys.platform == 'darwin' else 'Windows'}",
+           held and not real.held)
+
+    print("\n[sleep] The take hears the system say it is going to sleep")
+    # A closed lid cannot be stopped; the take can only end there honestly.
+
+    class FakeCenter:
+        def __init__(self):
+            self.added, self.removed = [], []
+
+        def addObserverForName_object_queue_usingBlock_(self, name, obj, queue, block):
+            self.added.append((name, block))
+            return "obs"
+
+        def removeObserver_(self, observer):
+            self.removed.append(observer)
+
+    class FakePowrprof:
+        def __init__(self):
+            self.flags = self.callback = None
+            self.unregistered = []
+
+        def PowerRegisterSuspendResumeNotification(self, flags, params_ref, handle_ref):
+            self.flags = flags
+            self.callback = params_ref._obj.Callback
+            return 0
+
+        def PowerUnregisterSuspendResumeNotification(self, handle):
+            self.unregistered.append(handle)
+            return 0
+
+    heard = []
+    center = FakeCenter()
+    watch = ps.SleepWatch(lambda: heard.append(1), "darwin", center=center)
+    started = watch.start()
+    ok("on a Mac it listens for the system going to sleep",
+       started and center.added[0][0] == "NSWorkspaceWillSleepNotification")
+    center.added[0][1](None)
+    ok("and the take hears it", heard == [1])
+    watch.stop()
+    ok("and stops listening when asked", center.removed == ["obs"])
+
+    heard.clear()
+    powrprof = FakePowrprof()
+    watch = ps.SleepWatch(lambda: heard.append(1), "win32", powrprof=powrprof)
+    started = watch.start()
+    ok("on Windows it registers a callback for suspend and resume",
+       started and powrprof.flags == 2)
+    ok("going to sleep reaches the take",
+       powrprof.callback(None, 4, None) == 0 and heard == [1])
+    powrprof.callback(None, 18, None)
+    powrprof.callback(None, 7, None)
+    ok("waking does not", heard == [1])
+    watch.stop()
+    ok("and it unregisters when asked", len(powrprof.unregistered) == 1)
+    # Microsoft does not say that unregistering waits for a callback already
+    # under way, so the callback stays alive with the watch, not freed then.
+    ok("a callback already under way as it stops is not freed under it",
+       watch._callback is not None)
+
+    def broken():
+        raise RuntimeError("the take is gone")
+
+    powrprof = FakePowrprof()
+    ps.SleepWatch(broken, "win32", powrprof=powrprof).start()
+    try:
+        answered = powrprof.callback(None, 4, None)
+    except Exception:  # noqa: BLE001
+        answered = None
+    ok("a failing handler never reaches the system", answered == 0)
+
+    ok("on Linux there is nothing to listen to",
+       ps.SleepWatch(lambda: None, "linux").start() is False)
+
+    if sys.platform == "darwin":
+        import AppKit
+        ok("the Mac's notification is the one listened for",
+           AppKit.NSWorkspaceWillSleepNotification == ps.MAC_WILL_SLEEP)
+    if sys.platform in ("darwin", "win32"):
+        real = ps.SleepWatch(lambda: None)
+        started = real.start()
+        try:
+            real.stop()
+            stopped = True
+        except Exception:  # noqa: BLE001
+            stopped = False
+        ok(f"a real start and stop on this {'Mac' if sys.platform == 'darwin' else 'Windows'}",
+           started and stopped)
+
+    print("\n[battery] The battery's charge, only while the laptop runs on it")
+
+    def internal(state, current, most):
+        return {"Type": "InternalBattery", "Power Source State": state,
+                "Current Capacity": current, "Max Capacity": most}
+
+    ok("a Mac on its battery says its charge",
+       ps.mac_battery([internal("Battery Power", 14, 100)]) == 14)
+    ok("worked out from the capacity when it is not out of 100",
+       ps.mac_battery([internal("Battery Power", 2800, 4000)]) == 70)
+    ok("a Mac on mains says nothing",
+       ps.mac_battery([internal("AC Power", 14, 100)]) is None)
+    ups = dict(internal("Battery Power", 14, 100), Type="UPS")
+    ok("nor a Mac with no battery",
+       ps.mac_battery([]) is None and ps.mac_battery([ups]) is None)
+    ok("nor one that cannot say how full it can be",
+       ps.mac_battery([internal("Battery Power", 14, 0)]) is None
+       and ps.mac_battery([{"Type": "InternalBattery",
+                            "Power Source State": "Battery Power"}]) is None)
+    ok("Windows on its battery says its charge",
+       ps.windows_battery(0, 0, 14) == 14 and ps.windows_battery(0, 2, 64) == 64)
+    ok("Windows on mains says nothing", ps.windows_battery(1, 8, 64) is None)
+    ok("nor without a battery, or when it cannot tell",
+       ps.windows_battery(0, 128, 255) is None
+       and ps.windows_battery(0, 255, 50) is None
+       and ps.windows_battery(0, 1, 255) is None)
+    ok("on Linux there is no answer", ps.battery_percent("linux") is None)
+    # battery_percent() swallows a failure, so the system's call is asked
+    # directly too: a call that is wrong for the system must fail here.
+    if sys.platform == "darwin":
+        ok("IOKit's power sources can be read on this Mac",
+           isinstance(ps._mac_power_sources(), list))
+    if sys.platform == "win32":
+        ok("Windows says what it runs on",
+           ps._windows_power_status().ACLineStatus in (0, 1, 255))
+    if sys.platform in ("darwin", "win32"):
+        charge = ps.battery_percent()
+        ok("this machine's answer is a charge or none",
+           charge is None or (isinstance(charge, int) and 0 <= charge <= 100))
 
     print("\n" + "=" * 60)
 

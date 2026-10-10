@@ -270,7 +270,9 @@ function pastRehearsal(folder) {
      markers:[{at:40, note:'guitar drifts here', label_id:3}],
      tracks:[{name:'Guitar', file:'/rec/old/v1.wav'}]},
   ] : [{take_number:1, name:'Pałyn', duration_sec:oldLength, markers:[],
-        tracks:[{name:'Guitar', file:'/rec/old/g.wav'}]}];
+        tracks:[{name:'Guitar', file:'/rec/old/g.wav'}],
+        // A page can give it notes: {notes, notes_missing}, as a take has them.
+        ...(window.__OLD_TAKE_NOTES__ || {})}];
   return withCloud(withStars(withEdits({folder, name:'Tuesday jam', created_at:'2026-09-10T19:00:00', takes: asSent(takes)})));
 }
 
@@ -312,18 +314,48 @@ let library = async () => [
 ];
 // Rehearsals deleted, by folder: gone from the library too.
 const deletedRehearsals = new Set();
+// Takes whose song a rename or a merge changed (api.rename_song,
+// api.merge_songs), as "folder#take_number" → {song, go}: the rehearsals
+// before this one are built afresh on every call, so this is laid over them.
+const retitled = new Map();
+function retitle(r, t) {
+  const o = retitled.get(`${r.folder}#${t.take_number}`);
+  return o ? {...t, song:o.song, go:o.go, name:`${o.song} ${o.go}`} : t;
+}
 async function libraryNow() {
   const all = (await library()).filter(r => !deletedRehearsals.has(r.folder)).map(r => ({...r, missing: Boolean(r.missing),
-    takes: r.takes.filter(t => !deleted.has(`${r.folder}#${t.take_number}`))}));
+    takes: r.takes.filter(t => !deleted.has(`${r.folder}#${t.take_number}`)).map(t => retitle(r, t))}));
   return all.sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 // Python numbers songs as they are made; here, in the order they were first
-// played, oldest first.
+// played, oldest first, once: a song renamed keeps its id, as in Python. A
+// page can add songs with no goes left (window.__TAKELESS_SONGS__ = ['Old']),
+// which Python keeps and the Songs view does not list.
+const knownIds = new Map();
 function songIds(all) {
-  const ids = new Map();
   for (const r of [...all].reverse())
-    for (const t of r.takes) if (t.song && !ids.has(t.song)) ids.set(t.song, ids.size + 1);
-  return ids;
+    for (const t of r.takes) if (t.song && !knownIds.has(t.song)) knownIds.set(t.song, knownIds.size + 1);
+  for (const title of window.__TAKELESS_SONGS__ || [])
+    if (!knownIds.has(title)) knownIds.set(title, knownIds.size + 1);
+  return knownIds;
+}
+const titleOfId = (id) => [...knownIds].find(([, i]) => i === id)?.[0];
+
+// Songs' old names (Library song_name): titles renamed or merged away, which
+// typed are the song they went to. Keyed lower case: {name, song}. A page
+// can give some (window.__OLD_NAMES__ = [['Palyn', 'Pałyn'], …]).
+const oldNames = new Map((window.__OLD_NAMES__ || []).map(([name, song]) =>
+  [name.toLowerCase(), {name, song}]));
+const alsoOf = (song) => [...oldNames.values()].filter(v => v.song === song).map(v => v.name)
+  .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+// What a rename or a merge leaves in the background-work list, done.
+// Its title says how many takes, as api.rename_song and merge_songs title it.
+function namesDone(title, n) {
+  window.__ACTIVITY__ = [...(window.__ACTIVITY__ || []), {
+    id: 950 + (window.__ACTIVITY__ || []).length, kind:'names',
+    title: `${title} · ${n === 1 ? '1 take' : `${n} takes`}`, folder:null,
+    take_number:null, state:'done', fraction:1, step:null, error:null,
+    detail: n === 1 ? '1 take renamed' : `${n} takes renamed`, retry:null, seen:false}];
 }
 // api._plays_of: the newest ★ go on disk, else the last go at the newest
 // rehearsal on disk.
@@ -339,6 +371,9 @@ function songPlays(goes) {
 // The rest of the band's repertoire, as other rehearsals in the library
 // played it, the latest first.
 const REPERTOIRE = ['Pałyn', 'Viasna', 'Ahoń', 'Sonca', 'Dym', 'Ptuška', 'Daroha'];
+// The repertoire as renames and merges have left it. A page can add songs
+// to it (window.__MORE_SONGS__ = ['Opus', …]), played at other rehearsals.
+let repertoire = [...REPERTOIRE, ...(window.__MORE_SONGS__ || [])];
 
 // Python groups takes by the song each is a go at (api._songs_of) and hands
 // the result over; the mock does the same.
@@ -376,21 +411,20 @@ function playsOf(song, r, goes, rehearsals) {
   return {folder:r.folder, rehearsal:r.name, created_at:r.created_at, take:goes[goes.length - 1]};
 }
 
-// And api._last_attempt: how long the latest go at the next take's song ran,
-// tonight, or with none the go shown before tonight, with its day.
+// And api._last_attempt: how long the latest go at a song ran, tonight, or
+// with none the go before tonight (`before`, goBeforeTonight's), with its day.
 function lastAttempt(takes, song, before = null) {
   if (!song) return null;
   const goes = takes.filter(t => t.song === song);
   if (goes.length) return {song, duration_sec: goes[goes.length - 1].duration_sec};
-  return before ? {song, duration_sec: before.first.take.duration_sec,
-                   created_at: before.first.created_at} : null;
+  return before ? {song, duration_sec: before.take.duration_sec,
+                   created_at: before.created_at} : null;
 }
 
-// api._before_tonight: the next take's song as it went before tonight — the
-// go shown (songPlays' pick) and the last go of each of the three latest
-// rehearsals less that one — over the library, less the rehearsal in
+// api._go_before_tonight: the go at a song played before tonight that it is
+// measured against — songPlays' pick over the library, less the rehearsal in
 // progress and the rehearsals not on disk.
-async function beforeTonight(song) {
+async function goBeforeTonight(song) {
   if (!song) return null;
   const goes = [];
   for (const r of await libraryNow()) {
@@ -401,34 +435,97 @@ async function beforeTonight(song) {
         goes.push({folder:r.folder, rehearsal:r.name, created_at:r.created_at, missing:false, take:t});
       }
   }
-  const first = songPlays(goes);
-  if (!first) return null;
-  const last = new Map();
-  for (const g of goes) {
-    if (!last.has(g.folder) && last.size === 3) break;
-    last.set(g.folder, g);
+  return songPlays(goes);
+}
+
+// The library's sets, in their order (Library.sets): kept, as the database
+// keeps them, across a reload — in localStorage, beside the config. A page
+// can give its own (window.__SETS__ = [{id, name, songs: ['Pałyn', …]}, …]).
+const SETS = 'mock-sets';
+let sets = (() => {
+  try {
+    const kept = JSON.parse(localStorage.getItem(SETS));
+    if (Array.isArray(kept)) return kept;
+  } catch { /* none kept */ }
+  return (window.__SETS__ || []).map(st => ({...st, songs:[...st.songs]}));
+})();
+const keepSets = () => localStorage.setItem(SETS, JSON.stringify(sets));
+// Ids are never given twice, as in Python (AUTOINCREMENT).
+let nextSetId = Math.max(0, ...sets.map(st => st.id)) + 1;
+
+// Library._titles_of: a title in a set as the song it is now — by its title
+// or an old name, compared case-blind, else by what it is a go at ("Viasna
+// 2") — or as typed and new when no song has it.
+async function setTitles() {
+  const known = new Map();
+  for (const r of await libraryNow())
+    for (const t of r.takes) if (t.song) known.set(t.song.toLowerCase(), t.song);
+  for (const t of session ? session.takes : []) if (t.song) known.set(t.song.toLowerCase(), t.song);
+  for (const title of [...repertoire, ...(window.__TAKELESS_SONGS__ || [])])
+    if (!known.has(title.toLowerCase())) known.set(title.toLowerCase(), title);
+  const find = (text) => known.get(text.toLowerCase()) ?? oldNames.get(text.toLowerCase())?.song;
+  return (text) => {
+    const m = /^(.*?)\s+(\d+)$/.exec(text.trim());
+    const title = find(text) ?? (m && m[1].trim() ? find(m[1].trim()) : undefined);
+    return title ? {title, new:false} : {title:text, new:true};
+  };
+}
+// Library._songs_of_set: a set's songs as they are now, each song once, in
+// the place it first comes.
+function songsOfSet(titles, stored) {
+  const seen = new Set();
+  return stored.map(titles).filter(x => {
+    const key = x.title.toLowerCase();
+    return seen.has(key) ? false : (seen.add(key), true);
+  });
+}
+async function setsAsSent() {
+  const titles = await setTitles();
+  return JSON.parse(JSON.stringify(sets.map(st => ({id:st.id, name:st.name,
+    songs:songsOfSet(titles, st.songs)}))));
+}
+// A rehearsal's own copy of its set, as sent (Library._rehearsal_data).
+async function setAsSent(copy) {
+  if (!copy) return null;
+  const titles = await setTitles();
+  return {name:copy.name, songs:songsOfSet(titles, copy.songs)};
+}
+// The set a rehearsal before this one was played by, as it kept it: a page
+// gives them by folder (window.__PLAYED_BY__ = {'/rec/old': {name, songs:
+// ['Pałyn', …]}}); the others were played freely.
+const playedBy = (folder) => (window.__PLAYED_BY__ || {})[folder] || null;
+// The same rules and the same words as Python's (Library._set_name, _set_songs).
+function setNameRefusal(name, id) {
+  const trimmed = String(name || '').trim().slice(0, 40).trim();
+  if (!trimmed) return 'A set needs a name';
+  const other = sets.find(st => st.id !== id && st.name.toLowerCase() === trimmed.toLowerCase());
+  return other ? `There is already a set called ${other.name}` : null;
+}
+function setSongs(songs) {
+  const out = [], seen = new Set();
+  for (const raw of songs || []) {
+    const title = String(raw || '').trim();
+    if (title && !seen.has(title.toLowerCase())) { seen.add(title.toLowerCase()); out.push(title); }
   }
-  const more = [...last.values()]
-    .filter(g => !(g.folder === first.folder && g.take.take_number === first.take.take_number))
-    .map(({folder, rehearsal, created_at, take}) => ({folder, rehearsal, created_at, take}));
-  return {song: goes[0].take.song, first, more};
+  return out;
 }
 
 // What a take is a go at, as Python's library resolves a name
-// (Library._resolve), over the songs the mock knows: the takes it is given
-// and REPERTOIRE. Python numbers goes across the whole library; the mock
-// counts them within the takes it is given, which is all the interface's
-// tests need — the interface shows what it is sent.
+// (Library._resolve), over the songs the mock knows: the takes it is given,
+// the repertoire and the old names. Python numbers goes across the whole
+// library; the mock counts them within the takes it is given, which is all
+// the interface's tests need — the interface shows what it is sent.
 function songOf(text, takes) {
   const name = (text || '').trim();
   if (!name || /^Take \d+$/.test(name)) return null;
   const known = new Map();
   for (const t of takes) if (t.song) known.set(t.song.toLowerCase(), t.song);
-  for (const s of REPERTOIRE) if (!known.has(s.toLowerCase())) known.set(s.toLowerCase(), s);
-  if (known.has(name.toLowerCase())) return known.get(name.toLowerCase());
+  for (const s of repertoire) if (!known.has(s.toLowerCase())) known.set(s.toLowerCase(), s);
+  const find = (x) => known.get(x.toLowerCase()) ?? oldNames.get(x.toLowerCase())?.song;
+  const whole = find(name);
+  if (whole) return whole;
   const m = /^(.*?)\s+(\d+)$/.exec(name);
-  if (m && known.has(m[1].trim().toLowerCase())) return known.get(m[1].trim().toLowerCase());
-  return name;
+  return (m && find(m[1].trim())) || name;
 }
 function goAt(song, takes, n) {
   const own = takes.find(t => t.take_number === n);
@@ -459,7 +556,9 @@ function nextTake(n, chosen = true) {
   const takes = session ? session.takes : [];
   if (chosen && session && nextName) return resolved(nextName, takes, number);
   const last = takes[takes.length - 1];
-  return resolved(last && last.song ? last.song : '', takes, number);
+  // The evening's first take is the set's first song (R3).
+  const first = !takes.length && session && session.set ? session.set.songs[0] : null;
+  return resolved(last && last.song ? last.song : first || '', takes, number);
 }
 // And the name field's text for it: the title, or "Take N".
 const fieldText = (r) => r.song || r.name;
@@ -467,6 +566,221 @@ const fieldText = (r) => r.song || r.name;
 // Mirrors api.suggest_take_name: n is the take being named, left out it means
 // the one that comes next.
 function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); }
+
+// ---- MIDI ---------------------------------------------------------------
+// The ports the fake system lists, and what the tracks on them are doing. A
+// page can set up, before it loads:
+//   window.__MIDI_PORTS__ = ['TD-17', …]  the ports the system lists (default:
+//                                         an e-kit and a keyboard). Two alike
+//                                         are ambiguous, as in Python.
+//   window.__MIDI_GONE__  = ['TD-17']     names not plugged in: left out of the
+//                                         list, and a track on one is missing.
+//   window.__MIDI_BUSY__  = ['TD-17']     names another app holds: listed, and
+//                                         a track on one is in_use.
+//   window.__MIDI_ECHO__  = ['Keys', 'Synth']  two tracks, the second getting
+//                                         the first's notes: Synth says
+//                                         echo: 'Keys', as Python's does.
+//   window.__MIDI_PLAYED__ = ['Launchkey Mini MK3 MIDI Port']  ports somebody
+//                                         plays, as the kit does, whichever
+//                                         track has them. A check opens the
+//                                         other ports of a picked port's
+//                                         device too, and counts a played one
+//                                         among them (P7).
+// and a test can change them while it runs, as it can the others.
+// A track that takes notes is one on Both or MIDI (rules.records_notes);
+// one with no mode records audio.
+const takesNotes = (t) => Boolean(t) && (t.mode === 'both' || t.mode === 'midi');
+const takesSound = (t) => !t || t.mode !== 'midi';
+const portNameOf = (t) => {
+  const p = t && t.midi_port;
+  const name = typeof p === 'string' ? p : p && p.name;
+  return typeof name === 'string' && name.trim() ? name : null;
+};
+// The MIDI system the fake is on, for the picker and Under the hood alike.
+const MIDI_SYSTEM = 'Windows MIDI Services';
+const midiPortNames = () => (window.__MIDI_PORTS__ || ['TD-17', 'Launchkey Mini MK3'])
+  .filter(n => !(window.__MIDI_GONE__ || []).includes(n));
+// What the system says of a port besides its name: the maker where it is
+// known, and an id that is the same every time.
+const MIDI_MAKERS = {'TD-17': 'Roland', 'Launchkey Mini MK3': 'Novation'};
+// A keyboard lists its ports under its own name: "Launchkey Mini MK3 MIDI
+// Port" and "Launchkey Mini MK3 DAW Port" are one device's.
+const midiDeviceOf = (name) => name.replace(/\s+(MIDI|DAW)\s+Port\b.*$/, '') || name;
+// A name the system lists twice gets a different id each time (`copy`, from 1).
+function midiPortInfo(name, copy = 0) {
+  let id = 1000 + copy * 7919;
+  for (const c of name) id = (id * 31 + c.codePointAt(0)) % 1000003;
+  const device = midiDeviceOf(name);
+  return {name, device, ...(MIDI_MAKERS[device] ? {maker: MIDI_MAKERS[device]} : {}), id: String(id)};
+}
+// identity.in_order: a device's ports together, in the order the devices
+// first come, and within one its control or DAW port after the others.
+function midiInOrder(ports) {
+  const groups = [], byDevice = new Map();
+  for (const p of ports) {
+    if (byDevice.has(p.device)) byDevice.get(p.device).push(p);
+    else { const group = [p]; byDevice.set(p.device, group); groups.push(group); }
+  }
+  const control = (p) => /daw|midiin2|control|ctrl/
+    .test(p.name.toLowerCase().split(p.device.toLowerCase()).join(' '));
+  return groups.flatMap(g => [...g.filter(p => !control(p)), ...g.filter(control)]);
+}
+const isPlayed = (name) => Boolean(name) && (window.__MIDI_PLAYED__ || []).includes(name);
+// How a track's port stands (midi.rig's activity states).
+function midiPortState(t) {
+  const name = portNameOf(t);
+  if (!name) return 'none';
+  const here = midiPortNames().filter(n => n === name);
+  if (!here.length) return 'missing';
+  if (here.length > 1) return 'ambiguous';
+  return (window.__MIDI_BUSY__ || []).includes(name) ? 'in_use' : 'ok';
+}
+// rules.lane_after: the audio lane a track's notes follow in the player.
+function laneAfter(band, audioNames, name) {
+  if (audioNames.includes(name)) return name;
+  const names = band.map(m => m.name);
+  if (!names.includes(name)) return null;
+  for (const earlier of names.slice(0, names.indexOf(name)).reverse())
+    if (audioNames.includes(earlier)) return earlier;
+  return null;
+}
+// The kit's tracks: the drums icon, whether the band says so or the track
+// does, or a track called Drums.
+const iconOfName = (name) => {
+  const placed = (session ? session.tracks : []).find(t => t.name === name);
+  return (placed && placed.icon) || withIcon({name}).icon || '';
+};
+const isKit = (t) => Boolean(t) && (t.icon === 'drums' || iconOfName(t.name) === 'drums' || /^drums?$/i.test(t.name));
+
+// The fake kit plays 4/4 at 120 bpm from a quarter second in: kick on 1 and 3,
+// snare on 2 and 4, hi-hat on the eighths, a crash on the first bar of four
+// and a tom fill in the last. It is a pattern of bars of four, so how many
+// hits there have been by any time is worked out, not stored.
+const KIT_ROWS = ['Crash', 'Ride', 'Hi-hat', 'Toms', 'Snare', 'Kick'];
+const KIT_FROM = 0.25, KIT_BLOCK_SEC = 8;
+const KIT_BLOCK = [0, 1, 2, 3].flatMap((b) => {
+  const hits = [];
+  const hit = (beat, row, vel) => hits.push([b * 2 + beat * 0.5, 0.1, row, vel]);
+  const fill = b === 3;
+  for (let k = 0; k < 8; k++) if (!(fill && k >= 6)) hit(k / 2, 2, k % 2 ? 62 : 84);
+  hit(0, 5, 112);
+  hit(2, 5, 104);
+  if (b % 2) hit(2.5, 5, 96);
+  hit(1, 4, 108);
+  if (fill) [90, 96, 102, 110].forEach((vel, i) => hit(3 + i / 4, 3, vel));
+  else hit(3, 4, 100);
+  if (b === 0) hit(0, 0, 118);
+  return hits;
+}).sort((a, b) => a[0] - b[0]);
+// The kit's hits with a start in [from, to), seconds from the run's start,
+// as [start, length, row, velocity]: windows that follow one another count
+// every hit once. Looks back no more than two blocks, for a run that was not
+// looked at for a long while.
+function kitHits(from, to) {
+  const out = [];
+  const lo = Math.max(from, to - 2 * KIT_BLOCK_SEC) - KIT_FROM;
+  for (let k = Math.max(0, Math.floor(lo / KIT_BLOCK_SEC)); k * KIT_BLOCK_SEC <= to - KIT_FROM; k++)
+    for (const [t, d, row, vel] of KIT_BLOCK) {
+      const at = KIT_FROM + k * KIT_BLOCK_SEC + t;
+      if (at >= from && at < to) out.push([at, d, row, vel]);
+    }
+  return out;
+}
+// How many hits started before `to`: what kitHits(0, to) and kitPattern(to)
+// hold.
+function kitCount(to) {
+  const x = to - KIT_FROM;
+  if (x < 0) return 0;
+  const k = Math.floor(x / KIT_BLOCK_SEC), r = x - k * KIT_BLOCK_SEC;
+  return k * KIT_BLOCK.length + KIT_BLOCK.filter(h => h[0] < r).length;
+}
+// A take's worth of the kit, and a keyboard line (C minor, up and down, a
+// bass note under each bar of eight), both as take_notes sends notes:
+// [start, length, pitch or row, velocity], none running past `seconds`.
+function kitPattern(seconds) {
+  const out = [];
+  for (let k = 0; KIT_FROM + k * KIT_BLOCK_SEC < seconds; k++)
+    for (const [t, d, row, vel] of KIT_BLOCK) {
+      const at = KIT_FROM + k * KIT_BLOCK_SEC + t;
+      if (at < seconds) out.push([at, Math.min(d, seconds - at), row, vel]);
+    }
+  return out;
+}
+function keysPattern(seconds) {
+  const line = [60, 63, 67, 70, 72, 70, 67, 63], held = [0.4, 0.4, 0.9, 0.4];
+  const out = [];
+  for (let i = 0; 0.5 + i * 0.5 < seconds; i++) {
+    const t = 0.5 + i * 0.5, up = Math.floor(i / 8) % 2 ? 5 : 0;
+    if (i % 8 === 0) out.push([t, Math.min(3.6, seconds - t), 48 + up, 80]);
+    out.push([t, Math.min(held[i % 4], seconds - t), line[i % 8] + up, 70 + (i * 7) % 40]);
+  }
+  return out;
+}
+// A take's notes read back, as api.take_notes answers: whole octaves, C to B,
+// for what is not drums.
+function notesOfFile(name, seconds) {
+  if (isKit({name})) return {name, drums: true, rows: [...KIT_ROWS], notes: kitPattern(seconds)};
+  const notes = keysPattern(seconds);
+  const pitches = notes.map(n => n[2]);
+  return {name, drums: false,
+    low: pitches.length ? Math.floor(Math.min(...pitches) / 12) * 12 : 60,
+    high: pitches.length ? Math.floor(Math.max(...pitches) / 12) * 12 + 11 : 71, notes};
+}
+
+// What is being counted: a check of the tracks on the setup screen, or, once
+// a rehearsal is on, its take. Each is {since, ended, read}: when it began (the
+// clock's seconds), how long it ran if it has stopped, and how far each
+// track's loudest note has been read. A take also has `heard`: the tracks
+// whose port was there at any look since it began, which are the ones that
+// keep a .mid (a port pulled mid-take keeps the notes it was writing).
+let midiCheck = null;
+let midiTake = null;
+// The tracks whose ports are open now, and the run that counts their notes.
+function midiTracks() {
+  return (session ? session.tracks : midiCheck ? midiCheck.tracks : []).filter(takesNotes);
+}
+function midiRun() { return session ? midiTake : midiCheck; }
+// api.midi_activity: `read` is whether this call takes the loudest note, as
+// Python's does (the next call starts from nothing). Only a kit plays; a
+// keyboard is quiet.
+function midiActivity(read) {
+  const tracks = midiTracks(), run = midiRun();
+  const elapsed = run ? (run.ended ?? clock() - run.since) : 0;
+  const echo = window.__MIDI_ECHO__ || [];
+  const out = {};
+  for (const t of tracks) {
+    const state = midiPortState(t);
+    if (state === 'ok' && run && run.heard && run.ended === null) run.heard.add(t.name);
+    // An echo plays what the track before it plays, when both are heard.
+    const first = echo[1] === t.name && state === 'ok'
+      ? tracks.find(o => o.name === echo[0] && midiPortState(o) === 'ok') : null;
+    const source = first || t;
+    const plays = state === 'ok' && run && (isKit(source) || isPlayed(portNameOf(source)));
+    let vel = 0;
+    if (plays && run.ended === null) {
+      const since = run.read[t.name] ?? 0;
+      vel = Math.max(0, ...kitHits(since, elapsed).map(h => h[3])) / 127;
+      if (read) run.read[t.name] = elapsed;
+    }
+    out[t.name] = {vel, notes: plays ? kitCount(elapsed) : 0, connected: state === 'ok', state,
+      ...(source !== t ? {echo: source.name} : {})};
+  }
+  return out;
+}
+
+// What a take of these tracks leaves besides its audio: a .mid for each track
+// that takes notes and whose port was there, and the rest as missing, placed
+// by rules.lane_after over the band, each with its place in it (rules.place_in).
+function notesOfTake(band, audio, saved) {
+  const audioNames = audio.map(t => t.name);
+  const noted = band.filter(takesNotes);
+  const where = (t) => ({name: t.name, port: portNameOf(t) || '', after: laneAfter(band, audioNames, t.name),
+                         place: band.indexOf(t)});
+  return {
+    notes: noted.filter(t => saved.includes(t.name)).map(t => ({...where(t), file: `/rec/${t.name}.mid`})),
+    notes_missing: noted.filter(t => !saved.includes(t.name)).map(where),
+  };
+}
 
 // What a copy to the cloud folder leaves on a take, as share_take makes it.
 function cloudShare(what) {
@@ -532,9 +846,16 @@ window.__MAKE_API__ = () => ({
   load_default_tracks: track('load_default_tracks', async (band) => window.__PLUGGED_IN_LATE__ ? ({
     // Like layouts.for_device: with no card there is one input to go round;
     // with the desk, every name gets its own.
-    tracks: (band || [{name:'Guitar'}, {name:'Vocals'}]).map((t, i) => ({
-      name: t.name, stereo: !!t.stereo, ...(t.icon ? {icon: t.icon} : {}),
-      channel: pluggedIn ? i + 1 : (i === 0 ? 1 : null)}))}) : ({
+    // A track on MIDI only takes no input from anybody (layouts.for_device),
+    // and keeps its mode and port, as layouts.band_member does.
+    tracks: (band || [{name:'Guitar'}, {name:'Vocals'}]).map((t, i, all) => {
+      const midiOnly = t.mode === 'midi';
+      const nth = all.slice(0, i).filter(o => o.mode !== 'midi').length;
+      return {
+        name: t.name, stereo: !midiOnly && !!t.stereo, ...(t.icon ? {icon: t.icon} : {}),
+        ...(t.mode ? {mode: t.mode} : {}), ...(t.midi_port ? {midi_port: t.midi_port} : {}),
+        channel: midiOnly ? null : pluggedIn ? nth + 1 : (nth === 0 ? 1 : null)};
+    })}) : ({
     tracks: (window.__TRACKS_FROM_A_BIGGER_CARD__
       ? [{name:'Guitar', channel:1}, {name:'Vocals', channel:12}]
       : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]).map(withIcon)})),
@@ -573,12 +894,43 @@ window.__MAKE_API__ = () => ({
   }),
   recording_health: async () => ({recording:true, error: window.__IFACE_GONE__ || null,
     active: !window.__IFACE_GONE__, free_bytes:1e11,
-    minutes_left: window.__LOW_SPACE__ ? 5 : 640, low_space: !!window.__LOW_SPACE__}),
+    minutes_left: window.__LOW_SPACE__ ? 5 : 640, low_space: !!window.__LOW_SPACE__,
+    battery_percent: window.__BATTERY__ ?? null}),
 
-  start_monitor: track('start_monitor', async () => ({ok:true})),
+  // A check opens the ports of the tracks that take notes, and counts again
+  // from nothing (api.start_monitor).
+  start_monitor: track('start_monitor', async (_dev, _rate, tracks) => {
+    midiCheck = {tracks: (tracks || []).filter(takesNotes), since: clock(), ended: null, read: {}};
+    return {ok:true};
+  }),
   monitor_levels: track('monitor_levels', async () =>
     window.__MONITOR_LEVELS__ || ({'Guitar':[0.62], 'Vocals':[0.0004]})),
   monitor_health: async () => ({checking:true, problem: window.__CHECK_QUIET__ || null}),
+  // The ports the system lists; a port a track holds open says how many notes
+  // it has sent (midi.rig ports()).
+  list_midi_ports: track('list_midi_ports', async () => {
+    const counts = Object.fromEntries(Object.entries(midiActivity(false)).map(([n, a]) => [n, a.notes]));
+    const held = (name) => midiTracks().filter(t => portNameOf(t) === name && midiPortState(t) === 'ok')
+      .reduce((sum, t) => sum + (counts[t.name] || 0), 0);
+    // A check also opens the other ports of each picked port's device, only
+    // to count them (P7): a played one among them counts what is played.
+    const open = midiTracks().filter(t => midiPortState(t) === 'ok').map(portNameOf);
+    const beside = new Set(!session && midiCheck ? open.map(midiDeviceOf) : []);
+    const run = midiRun();
+    const elapsed = run ? (run.ended ?? clock() - run.since) : 0;
+    const notes = (name) => open.includes(name) ? held(name)
+      : isPlayed(name) && beside.has(midiDeviceOf(name)) ? kitCount(elapsed) : 0;
+    return {system:MIDI_SYSTEM, error:null,
+            ports: midiInOrder(midiPortNames().map((name, i, all) => ({
+              ...midiPortInfo(name, all.filter(n => n === name).length > 1 ? i + 1 : 0), notes: notes(name)})))};
+  }),
+  midi_activity: async () => midiActivity(true),
+  // The notes of a take's tracks, a kit pattern for the drums and a keyboard
+  // line for the rest, as long as the take (api.take_notes). Each answer, an
+  // error too, carries the band's icon for its name, as take_media's does.
+  take_notes: track('take_notes', async (files) => (files || []).map(({name, file}) => withIcon(file
+    ? notesOfFile(name, fileDurations[file] ?? (P ? P.duration : TAKE))
+    : {name, error:'Notes file not found'}))),
 
   // Long work, scripted by the test through window.__ACTIVITY__. Counted, so
   // a test can wait for the screen to have looked again.
@@ -598,25 +950,45 @@ window.__MAKE_API__ = () => ({
   }),
   retry_cloud: track('retry_cloud', async (_id) => (window.__RETRY_REFUSED__
     ? {ok:false, error: window.__RETRY_REFUSED__} : {ok:true, queued:true})),
-  stop_monitor: track('stop_monitor', async () => ({ok:true})),
+  // The ports go with the check, or stay open for the rehearsal about to
+  // start (keepPorts).
+  stop_monitor: track('stop_monitor', async (keepPorts) => {
+    if (keepPorts && midiCheck) midiCheck.ended = clock() - midiCheck.since;
+    else midiCheck = null;
+    return {ok:true};
+  }),
 
   // A page can start the rehearsal with takes in it already:
   // window.__TONIGHT__ = [{name, duration_sec, starred?, markers?, cloud?}, …],
   // numbered from 1 in that order.
-  start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, _tr, _depth) => {
+  start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, tracksIn, _depth, setId) => {
     const folder = '/rec/' + name;
     const tonight = (window.__TONIGHT__ || []).map((t, i) => ({take_number:i + 1, markers:[],
       tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));
     for (const t of tonight) fileDurations[t.tracks[0].file] = t.duration_sec;
+    for (const t of tonight) for (const n of t.notes || []) fileDurations[n.file] = t.duration_sec;
+    // The set as it is now: the rehearsal keeps its own copy (Library.set_of).
+    const byIt = sets.find(st => st.id === setId);
+    // A band with MIDI in it is the band that was started with, as Python
+    // places it; any other is the pair the tests have always had.
+    const placed = (tracksIn || []).some(takesNotes) ? tracksIn.map(t => ({
+      name:t.name, channel: t.mode === 'midi' ? null : t.channel, stereo: t.mode === 'midi' ? false : !!t.stereo,
+      ...(t.icon ? {icon:t.icon} : {}), mode: t.mode || 'audio', midi_port: takesNotes(t) ? t.midi_port || null : null,
+    })) : null;
     session = {name, folder, takes:asSent(tonight),
-               tracks: window.__SESSION_TRACKS__ || [{name:'Guitar',channel:1},{name:'Vocals',channel:2}]};
+               tracks: window.__SESSION_TRACKS__ || placed || [{name:'Guitar',channel:1},{name:'Vocals',channel:2}],
+               set: byIt ? {name:byIt.name, songs:[...byIt.songs]} : null};
+    midiCheck = null;
+    midiTake = null;
     takeCounter = tonight.length;
     nextName = null;
     return {ok:true, folder:session.folder};
   }),
   session_state: async () => {
     if (!session) return {active:false};
-    const before = await beforeTonight(nextTake().song);
+    const song = nextTake().song;
+    const before = await goBeforeTonight(song);
+    const set = await setAsSent(session.set);
     // Drain on read, the way the real queue empties once a take is copied —
     // otherwise the interface would see the same take "queued" forever.
     const cq = cloudQueue;
@@ -631,21 +1003,33 @@ window.__MAKE_API__ = () => ({
        next_take_number:takeCounter + 1,
        next_take_name:suggestName(), next_take_go:nextTake().go,
        next_take_default:suggestName(undefined, false),
-       before_tonight:before,
-       last_attempt:lastAttempt(session.takes, nextTake().song, before),
+       last_attempt:lastAttempt(session.takes, song, before), set,
        recording:false, cloud_queue:cq, disk_bytes:48000000 * session.takes.length}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
     session = null;
+    midiTake = null;
     return r;
   }),
 
-  start_take: track('start_take', async () => { takeCounter += 1; return {ok:true, take_number:takeCounter}; }),
+  start_take: track('start_take', async () => {
+    takeCounter += 1;
+    midiTake = {since: clock(), ended: null, read: {},
+      heard: new Set((session ? session.tracks : []).filter(t => takesNotes(t) && midiPortState(t) === 'ok')
+        .map(t => t.name))};
+    return {ok:true, take_number:takeCounter};
+  }),
   set_next_take_name: track('set_next_take_name', async (name) => {
     if (!session) return {ok:false, error:'No rehearsal in progress'};
     nextName = (name || '').trim() || null;
     return {ok:true, next_take_name:suggestName(), next_take_go:nextTake().go};
+  }),
+  last_attempt: track('last_attempt', async (name) => {
+    await held('last_attempt');
+    if (!session) return null;
+    const song = songOf(name, session.takes);
+    return lastAttempt(session.takes, song, await goBeforeTonight(song));
   }),
   // api.song_choices: the songs of the rehearsal (the live one with no
   // folder), each as the next go at it, and the rest of the repertoire.
@@ -654,10 +1038,10 @@ window.__MAKE_API__ = () => ({
     const takes = !folder || (session && folder === session.folder)
       ? (session ? session.takes : []) : pastRehearsal(folder).takes;
     const here = songsOf(takes).map(s => ({song:s.name, go:goAt(s.name, takes, n),
-                                           last_take:Math.max(...s.take_numbers)}));
+                                           also:alsoOf(s.name), last_take:Math.max(...s.take_numbers)}));
     const seen = new Set(here.map(c => c.song.toLowerCase()));
-    const other = REPERTOIRE.filter(song => !seen.has(song.toLowerCase()))
-      .map(song => ({song, go:1}));
+    const other = repertoire.filter(song => !seen.has(song.toLowerCase()))
+      .map(song => ({song, go:1, also:alsoOf(song)}));
     return {here, other};
   }),
   // One input pinned at the top and one silent, unless a test plays its own.
@@ -666,12 +1050,32 @@ window.__MAKE_API__ = () => ({
     window.__LEVEL_POLLS__ = (window.__LEVEL_POLLS__ || 0) + 1;
     return window.__LEVELS__ || ({'Guitar':[0.99], 'Vocals':[0.0005]});
   },
-  stop_take: track('stop_take', async () => (await held('stop_take'), {ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
-    duration_sec:TAKE, suggested_name:suggestName(takeCounter), default_name:suggestName(takeCounter, false),
-    tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]})),
-  keep_take: track('keep_take', async (n, _t, name, dur, tracks, markers) => {
+  // A band with no MIDI in it leaves the two files it always has; one with
+  // MIDI leaves its audio tracks' files, and a .mid for each track that took
+  // notes from a port that was there (the others are missing).
+  stop_take: track('stop_take', async () => {
+    await held('stop_take');
+    if (midiTake && midiTake.ended === null) midiTake.ended = clock() - midiTake.since;
+    const band = session ? session.tracks : [];
+    const take = {ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
+      duration_sec:TAKE, suggested_name:suggestName(takeCounter), default_name:suggestName(takeCounter, false),
+      tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]};
+    if (!band.some(takesNotes)) return take;
+    take.tracks = band.filter(takesSound).map(t => ({name:t.name, file:`/rec/${t.name}.wav`}));
+    // A port that was there at any point of the take has its notes; one gone
+    // the whole take has none.
+    const heard = band.filter(t => takesNotes(t)
+      && (midiPortState(t) === 'ok' || (midiTake && midiTake.heard.has(t.name)))).map(t => t.name);
+    return {...take, ...notesOfTake(band, take.tracks, heard)};
+  }),
+  keep_take: track('keep_take', async (n, _t, name, dur, tracks, markers, _cloud, notes) => {
     const take = {take_number:n, ...resolved(name, session.takes, n), duration_sec:dur, tracks,
                   markers: (markers || []).map(m => ({...m, label_id: labelIdOf(m.label_id)}))};
+    // The notes handed back are kept as they are; a track that took notes and
+    // has none among them is missing.
+    if (notes || session.tracks.some(takesNotes))
+      Object.assign(take, {notes: notes || [],
+        notes_missing: notesOfTake(session.tracks, tracks, (notes || []).map(x => x.name)).notes_missing});
     session.takes.push(take);
     if (n === takeCounter) nextName = null;
     cloudQueue = {...cloudQueue, [n]: 'queued'};
@@ -691,19 +1095,27 @@ window.__MAKE_API__ = () => ({
     // concerned, and the mock looks lengths up by path, so give it one.
     take.tracks = take.tracks.map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
     for (const t of take.tracks) fileDurations[t.file] = take.duration_sec;
+    // The notes are cut with the audio.
+    if (take.notes) {
+      take.notes = take.notes.map(n => ({...n, file: n.file + '#' + Math.round(a * 100)}));
+      for (const n of take.notes) fileDurations[n.file] = take.duration_sec;
+    }
     P = null;   // Python lets go of the files before rewriting them
     // Deep copy, same as rename_take — a live handle would let the interface
     // alias the mock's own state, which the real bridge never allows.
     return JSON.parse(JSON.stringify(
       {ok:true, take, trashed:true, location:null, markers_dropped:dropped}));
   }),
-  crop_draft: track('crop_draft', async (dir, tracks, a, b) => {
+  crop_draft: track('crop_draft', async (dir, tracks, a, b, notes) => {
     await held('crop_draft');
     const cut = (tracks || []).map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
     for (const t of cut) fileDurations[t.file] = b - a;
+    // The notes are cut with the audio, and come back when they were sent.
+    const cutNotes = (notes || []).map(n => ({...n, file: n.file + '#' + Math.round(a * 100)}));
+    for (const n of cutNotes) fileDurations[n.file] = b - a;
     P = null;
     return JSON.parse(JSON.stringify(
-      {ok:true, tracks:cut, duration_sec: b - a, trashed:true, location:null}));
+      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, trashed:true, location:null}));
   }),
 
   take_media: track('take_media', async (tracks, _buckets, _from, _to) => tracks.map(t => {
@@ -796,6 +1208,36 @@ window.__MAKE_API__ = () => ({
     keepMarks(folder, n, take);
     return JSON.parse(JSON.stringify({ok:true, markers: take ? take.markers : []}));
   }),
+  list_sets: track('list_sets', async () => setsAsSent()),
+  add_set: track('add_set', async (name, songs) => {
+    const refusal = setNameRefusal(name);
+    if (refusal) return {ok:false, error:refusal};
+    sets.push({id: nextSetId++, name: name.trim().slice(0, 40).trim(), songs: setSongs(songs)});
+    keepSets();
+    return {ok:true, sets: await setsAsSent()};
+  }),
+  update_set: track('update_set', async (id, name, songs) => {
+    const st = sets.find(x => x.id === id);
+    if (!st) return {ok:false, error:'Set not found'};
+    if (name !== null && name !== undefined) {
+      const refusal = setNameRefusal(name, id);
+      if (refusal) return {ok:false, error:refusal};
+      st.name = name.trim().slice(0, 40).trim();
+    }
+    if (songs !== null && songs !== undefined) st.songs = setSongs(songs);
+    keepSets();
+    return {ok:true, sets: await setsAsSent()};
+  }),
+  delete_set: track('delete_set', async (id) => {
+    if (!sets.some(x => x.id === id)) return {ok:false, error:'Set not found'};
+    sets = sets.filter(x => x.id !== id);
+    keepSets();
+    return {ok:true, sets: await setsAsSent()};
+  }),
+  save_next_set: track('save_next_set', async (id) => {
+    writeCfg({...readCfg(), next_set: id ?? null});
+    return {ok:true};
+  }),
   list_labels: track('list_labels', async () => JSON.parse(JSON.stringify(await labelsAsSent()))),
   // The same rules and the same words as Python's (store/library.py).
   add_label: track('add_label', async (name, colour) => {
@@ -885,7 +1327,7 @@ window.__MAKE_API__ = () => ({
   }),
 
   list_rehearsals: track('list_rehearsals', async () => ([
-    {folder:'/rec/old', name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
+    {folder:'/rec/old', set_name: playedBy('/rec/old')?.name ?? null, name:'Tuesday jam', created_at:'2026-09-10T19:00:00',
      take_count:9, total_duration_sec:2520, disk_bytes:1200000000, in_cloud:3,
      songs:[{name:'Pałyn', takes:3}, {name:'Viasna', takes:2}, {name:'Ahoń', takes:1},
             {name:'Sonca', takes:1}, {name:'Dym', takes:1}, {name:'Ptuška', takes:1}],
@@ -920,7 +1362,8 @@ window.__MAKE_API__ = () => ({
     const r = folder === '/rec/older' ? withExtraSongs(pastRehearsal(folder)) : pastRehearsal(folder);
     r.takes = r.takes.filter(t => !deleted.has(`${folder}#${t.take_number}`));
     for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
-    return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes)}));
+    return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes),
+                                      set: await setAsSent(playedBy(folder))}));
   }),
   // The setup screen's last time (api.last_time): Tuesday jam song by song,
   // Daroha from the rehearsal before it, and the others in history's order.
@@ -980,7 +1423,8 @@ window.__MAKE_API__ = () => ({
         continue;
       }
       const s = bySong.get(t.song) || {id:ids.get(t.song), title:t.song, goes:0,
-        rehearsals:new Set(), first_played:r.created_at, last_played:r.created_at, starred:0};
+        rehearsals:new Set(), first_played:r.created_at, last_played:r.created_at, starred:0,
+        also:alsoOf(t.song)};
       s.goes++; s.rehearsals.add(r.folder); s.starred += t.starred ? 1 : 0;
       if (r.created_at < s.first_played) s.first_played = r.created_at;
       if (r.created_at > s.last_played) s.last_played = r.created_at;
@@ -1004,7 +1448,78 @@ window.__MAKE_API__ = () => ({
         goes.push({folder:r.folder, rehearsal:r.name, created_at:r.created_at,
                    missing:r.missing, take:t});
       }
-    return JSON.parse(JSON.stringify({ok:true, id, title, plays:songPlays(goes), goes}));
+    return JSON.parse(JSON.stringify({ok:true, id, title, also:title ? alsoOf(title) : [],
+                                      plays:songPlays(goes), goes}));
+  }),
+  // A song renamed, or merged into another (api.rename_song,
+  // api.merge_songs), and an old name forgotten (api.forget_song_name), as
+  // Python answers them. The files following are a done entry at once.
+  rename_song: track('rename_song', async (id, title) => {
+    await held('rename_song');
+    const all = await libraryNow();
+    songIds(all);
+    const from = titleOfId(id);
+    const t = String(title || '').trim();
+    const refuse = (error, into = null) => ({ok:false, error, into});
+    if (from === undefined) return refuse('Song not found');
+    if (!t) return refuse('A song needs a title');
+    if (/^Take \d+$/.test(t)) return refuse(`${t} is what a take with no song is called`);
+    const other = [...knownIds.keys()].find(s => s !== from && s.toLowerCase() === t.toLowerCase());
+    if (other) return refuse(`There is already a song called ${other}`, {id:knownIds.get(other), title:other});
+    const old = oldNames.get(t.toLowerCase());
+    if (old && old.song !== from) return refuse(`${t} is ${old.song} now`, {id:knownIds.get(old.song), title:old.song});
+    if (t === from) return {ok:true, title:t, goes:0};
+    let goes = 0;
+    for (const r of all) for (const take of r.takes) if (take.song === from) {
+      retitled.set(`${r.folder}#${take.take_number}`, {song:t, go:take.go});
+      goes++;
+    }
+    for (const take of session ? session.takes : []) if (take.song === from)
+      Object.assign(take, {song:t, name:`${t} ${take.go}`});
+    if (t.toLowerCase() !== from.toLowerCase()) {
+      oldNames.delete(t.toLowerCase());
+      oldNames.set(from.toLowerCase(), {name:from, song:t});
+    }
+    for (const v of oldNames.values()) if (v.song === from) v.song = t;
+    knownIds.set(t, knownIds.get(from));
+    knownIds.delete(from);
+    repertoire = repertoire.map(s => (s === from ? t : s));
+    namesDone(`Renaming ${from} to ${t}`, goes);
+    return {ok:true, title:t, goes};
+  }),
+  merge_songs: track('merge_songs', async (fromId, intoId, dryRun) => {
+    await held('merge_songs');
+    const all = await libraryNow();
+    songIds(all);
+    const from = titleOfId(fromId), into = titleOfId(intoId);
+    if (from === undefined || into === undefined) return {ok:false, error:'Song not found'};
+    if (from === into) return {ok:false, error:'A song cannot be merged into itself'};
+    // Numbered after the target's highest go, the oldest rehearsal first.
+    let last = 0;
+    const moving = [];
+    for (const r of [...all].reverse())
+      for (const t of [...r.takes].sort((a, b) => a.take_number - b.take_number)) {
+        if (t.song === into) last = Math.max(last, t.go);
+        if (t.song === from) moving.push({r, t});
+      }
+    const n = moving.length;
+    const counts = {ok:true, into, goes:n, rehearsals:new Set(moving.map(x => x.r.folder)).size,
+                    first:n ? last + 1 : null, last:n ? last + n : null};
+    if (dryRun) return counts;
+    moving.forEach(({r, t}, i) =>
+      retitled.set(`${r.folder}#${t.take_number}`, {song:into, go:last + 1 + i}));
+    for (const v of oldNames.values()) if (v.song === from) v.song = into;
+    oldNames.set(from.toLowerCase(), {name:from, song:into});
+    knownIds.delete(from);
+    repertoire = repertoire.filter(s => s !== from);
+    namesDone(`Merging ${from} into ${into}`, n);
+    return counts;
+  }),
+  forget_song_name: track('forget_song_name', async (name) => {
+    const key = String(name || '').trim().toLowerCase();
+    if (!oldNames.has(key)) return {ok:false, error:`No song was called ${String(name || '').trim()}`};
+    oldNames.delete(key);
+    return {ok:true};
   }),
   save_history_view: track('save_history_view', async (view) => {
     if (!['rehearsals', 'songs', 'marks'].includes(view)) return {ok:false, error:'Unknown view'};
@@ -1091,7 +1606,8 @@ window.__MAKE_API__ = () => ({
 
   // Settings › Under the hood: the machine, the report, and the check of
   // the interface, which a page scripts through __CHECK_RESULT__ ('works',
-  // 'no_sound') and __CHECK_MS__, how long it listens.
+  // 'no_sound') and __CHECK_MS__, how long it listens. The MIDI system is
+  // MIDI_SYSTEM, or with __MIDI_ERROR__ none, and why.
   under_the_hood: track('under_the_hood', async () => ({
     version:'0.2.0', running_as: window.__BUILT__ ? 'built' : 'source', executable:'python.exe',
     system:'Windows 11 Pro 10.0.26200, x64',
@@ -1101,6 +1617,8 @@ window.__MAKE_API__ = () => ({
            recording:{name:'X32 USB', host_api:'ASIO', inputs:16,
                       samplerate:48000, bit_depth:24},
            playback:'System output'},
+    midi: window.__MIDI_ERROR__ ? {system:null, ports:[], error:window.__MIDI_ERROR__}
+                                : {system:MIDI_SYSTEM, ports:[], error:null},
     files:[{key:'settings', path:'C:\\Users\\alex\\.rehearsal-recorder\\config.json',
             exists:true, size:2100, modified:'2026-09-29T10:00:00'},
            {key:'history', path:'C:\\Users\\alex\\RehearsalRecordings\\library.sqlite',
@@ -1182,6 +1700,8 @@ window.__MAKE_API__ = () => ({
     tracks:[], volumes:{}, master_volume: readCfg().master_volume ?? 1,
     history_view: readCfg().history_view ?? 'rehearsals',
     marks_grouping: readCfg().marks_grouping ?? 'rehearsal',
+    // api._next_set: none when the set picked is gone.
+    next_set: sets.some(st => st.id === readCfg().next_set) ? readCfg().next_set : null,
     output_device_index: outputDevice.index,
     output_channels: outputDevice.channels || [1, 2],
     cloud_format: cloudFormat,

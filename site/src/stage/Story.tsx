@@ -18,8 +18,9 @@ import {
   type PendingTake,
   type PlacedTrack,
   type SessionState,
+  type Take,
 } from "@/lib/api"
-import { CLIPS, demoApi } from "./demo"
+import { CLIPS } from "./demo"
 import { Hero } from "./Hero"
 import { bringIntoView, button, dragTimeline, fill, hasText, key, press, sleep, waitFor } from "./drive"
 
@@ -36,7 +37,7 @@ type Scene =
       tracks: PlacedTrack[]
       lastAttempt: LastAttempt | null
     }
-  | { step: "review"; take: PendingTake; rehearsalName: string }
+  | { step: "review"; take: PendingTake; rehearsalName: string; takes: Take[] }
   | { step: "history" }
 
 // The screen on show, outside React so the steps below can change it.
@@ -55,8 +56,10 @@ const NAME = "Tuesday jam"
 /** The least a take runs before it is stopped: past the guitar's last clip,
  *  so whoever moves on quickly has still seen it clip all three times. */
 const LEAST_TAKE_MS = (Math.max(...CLIPS) + 0.3) * 1000
-/** How long last week's go plays before Record is pressed. */
+/** How long last week's go plays before Start is pressed. */
 const LAST_WEEK_MS = 3000
+/** How long each song ↑ goes past stays picked, for the eye to follow. */
+const ARROW_MS = 450
 /** How long every Went wrong is on show before a song in it is opened. */
 const MARKS_MS = 1800
 /** The least a line of a step stays lit on the page, when nothing else
@@ -69,6 +72,14 @@ let rehearsalName = NAME
 
 const nothing = () => {}
 
+/** What App does once Start has started the rehearsal: its screen. */
+async function showRehearsal() {
+  const session = await api().session_state()
+  if (!session.active) throw new Error("demo: the rehearsal did not start")
+  rehearsalName = session.name
+  show({ step: "rehearsal", session })
+}
+
 export function Story() {
   const now = useSyncExternalStore(subscribe, () => scene)
   if (!now) return null
@@ -76,7 +87,7 @@ export function Story() {
     case "setup":
       return (
         <Setup
-          onStarted={nothing}
+          onStarted={() => void showRehearsal().catch((e) => console.warn(e))}
           onOpenHistory={nothing}
           onOpenRehearsal={nothing}
           onOpenSettings={nothing}
@@ -93,7 +104,11 @@ export function Story() {
           takeGo={now.takeGo}
           tracks={now.tracks}
           lastAttempt={now.lastAttempt}
-          onStopped={(take) => show({ step: "review", take, rehearsalName })}
+          onStopped={async (take) => {
+            // The screen after a take shows the song's goes before it.
+            const session = await api().session_state()
+            show({ step: "review", take, rehearsalName, takes: session.active ? session.takes : [] })
+          }}
         />
       )
     case "review":
@@ -101,13 +116,14 @@ export function Story() {
         <Review
           take={now.take}
           rehearsalName={now.rehearsalName}
+          takes={now.takes}
           onKept={async () => {
             // Back on the rehearsal screen, with the take just kept on it.
             const session = await api().session_state()
             if (session.active) show({ step: "rehearsal", session })
           }}
           onDiscarded={nothing}
-          onCropped={(take) => show({ step: "review", take, rehearsalName: now.rehearsalName })}
+          onCropped={(take) => show({ ...now, take })}
         />
       )
     case "history":
@@ -135,27 +151,39 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     beat(2)
     await waitFor(() => button("Stop checking"))
   },
-  // The rehearsal started, Pałyn picked under Next take, and its ★ go from
-  // last week playing in the card beside it; a moment later, Record on the
-  // song picked: the next take is Pałyn 3.
+  // Pałyn's ★ go from last week, from Last time on the start screen; then
+  // Start, and ↑ up the songs under Next take to Pałyn; a moment later,
+  // Record on it: the next take is Pałyn 3.
   async record({ beat, linger }) {
     button("Stop checking")?.click()
-    const bridge = demoApi()
-    const t = (await bridge.load_default_tracks()) ?? {}
-    await bridge.start_rehearsal(NAME, t.device_index ?? 0, t.samplerate ?? 44100, t.tracks ?? [], t.bit_depth ?? 24)
-    const before = await api().session_state()
-    if (!before.active) throw new Error("demo: the rehearsal did not start")
-    rehearsalName = before.name
-    show({ step: "rehearsal", session: before })
-    ;(await waitFor(() => document.querySelector<HTMLButtonElement>("[aria-label='Next take'] [data-song-choice='Pałyn']"))).click()
+    ;(
+      await waitFor(() =>
+        document.querySelector<HTMLButtonElement>("[aria-label='Last time'] button[aria-label^='Play Pałyn 7']")
+      )
+    ).click()
+    await waitFor(() => document.querySelector("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']"))
     beat(0)
-    await linger(BEAT_MS)
-    ;(await waitFor(() => document.querySelector<HTMLButtonElement>("button[aria-label='Play Pałyn 7']"))).click()
-    beat(1)
-    await waitFor(() => document.querySelector("button[aria-label='Pause Pałyn 7']"))
     await sleep(LAST_WEEK_MS)
 
-    const session = await api().session_state()
+    await press("Start rehearsal")
+    const field = await waitFor(() => document.querySelector<HTMLInputElement>("#next-take-name"))
+    // Pałyn is above the song the field names, first of tonight's songs.
+    for (let i = 0; i < 10 && !field.value.startsWith("Pałyn"); i++) {
+      const was = field.value
+      key("ArrowUp")
+      await waitFor(() => field.value !== was)
+      await sleep(ARROW_MS)
+    }
+    if (!field.value.startsWith("Pałyn")) throw new Error("demo: ↑ did not get to Pałyn")
+    beat(1)
+    await linger(BEAT_MS)
+
+    // Record once Python has the name the field shows.
+    let session = await api().session_state()
+    for (let i = 0; i < 40 && session.active && !session.next_take_name.startsWith("Pałyn"); i++) {
+      await sleep(50)
+      session = await api().session_state()
+    }
     if (!session.active) throw new Error("demo: the rehearsal is not going")
     const started = await api().start_take()
     if (!started.ok || started.take_number == null) throw new Error("demo: the take did not start")
@@ -177,7 +205,7 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
   async keep({ beat, linger }) {
     await waitFor(() => performance.now() - takeStarted >= LEAST_TAKE_MS)
     await press("Stop", { exact: true })
-    await waitFor(() => document.querySelector("#take-name"))
+    await waitFor(() => document.querySelector("[data-take-summary]"))
     beat(0)
     await linger(BEAT_MS)
     await press("Save take")
