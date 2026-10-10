@@ -17,9 +17,11 @@ from pathlib import Path
 from sqlalchemy import Integer, cast, func, select, update
 from sqlalchemy.orm import object_session, selectinload, sessionmaker
 
+from rehearsal_recorder.midi import rules
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
-    CloudCopy, Label, Marker, Rehearsal, Song, SongName, SongSet, Take, TakeFile, Track,
+    AUDIO_FILE, NOTES_FILE, CloudCopy, Label, Marker, Rehearsal, Song, SongName, SongSet,
+    Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
 
@@ -88,7 +90,7 @@ _WITH_TAKES = (
 # A take read as a go at its song (goes_of, goes_before), and their order:
 # the newest rehearsal first, the order played within one.
 _AS_GO = (
-    selectinload(Take.rehearsal), selectinload(Take.song),
+    selectinload(Take.rehearsal).selectinload(Rehearsal.tracks), selectinload(Take.song),
     selectinload(Take.files), selectinload(Take.markers),
     selectinload(Take.cloud_copy),
 )
@@ -183,8 +185,24 @@ class Library:
 
     def _take_data(self, folder, take):
         """The take as the interface gets it, but with "cloud" still the raw
-        row; _take_out finishes it."""
+        row; _take_out finishes it.
+
+        "tracks" is its audio files only, in the order they were kept, and
+        "notes" its .mid files, each with its track's port and the audio lane
+        it follows in the player (rules.lane_after, over the rehearsal's
+        tracks in band order and the lanes this take has). "notes_missing" is
+        the tracks that record notes and have no .mid in this take: a port
+        that was not there when it was recorded. Both carry "place", the
+        track's index in the rehearsal's band (rules.place_in), which puts
+        two lanes after the same audio lane in band order."""
         title = take.song.title if take.song is not None else None
+        band = [{"name": t.name, "mode": t.mode, "midi_port": t.midi_port}
+                for t in take.rehearsal.tracks]
+        ports = {t["name"]: t["midi_port"] for t in band}
+        audio = [f for f in take.files if f.kind != NOTES_FILE]
+        notes = [f for f in take.files if f.kind == NOTES_FILE]
+        heard = {f.name for f in audio}
+        written = {f.name for f in notes}
         out = {
             "take_number": take.take_number,
             # Not stored: it follows from the song and the go (D3).
@@ -193,8 +211,18 @@ class Library:
             "go": take.go if title is not None else None,
             "starred": take.starred,
             "duration_sec": take.duration_sec,
-            "tracks": [
-                {"name": f.name, "file": str(folder / Path(f.file))} for f in take.files
+            "tracks": [{"name": f.name, "file": str(folder / Path(f.file))} for f in audio],
+            "notes": [
+                {"name": f.name, "file": str(folder / Path(f.file)),
+                 "port": ports.get(f.name),
+                 "after": rules.lane_after(band, heard, f.name), **rules.place_in(band, f.name)}
+                for f in notes
+            ],
+            "notes_missing": [
+                {"name": t["name"], "port": t["midi_port"],
+                 "after": rules.lane_after(band, heard, t["name"]), **rules.place_in(band, t["name"])}
+                for t in band
+                if rules.records_notes(t) and t["name"] not in written
             ],
             "markers": [
                 {"at": m.at, "label_id": m.label_id, "note": m.note} for m in take.markers
@@ -231,7 +259,10 @@ class Library:
             "created_at": rehearsal.created_at,
             "samplerate": rehearsal.samplerate,
             "bit_depth": rehearsal.bit_depth,
-            "tracks": [{"name": t.name, "channel": t.channel} for t in rehearsal.tracks],
+            "tracks": [
+                {"name": t.name, "channel": t.channel, "mode": t.mode, "midi_port": t.midi_port}
+                for t in rehearsal.tracks
+            ],
             "takes": [self._take_data(folder, t) for t in rehearsal.takes],
         }
 
@@ -242,12 +273,39 @@ class Library:
         return data
 
     @staticmethod
-    def _files(folder, tracks):
-        """[{"name", "file": absolute}] → rows relative to the rehearsal."""
+    def _files(folder, files, kind, start=0):
+        """[{"name", "file": absolute}] → rows of that kind (AUDIO_FILE or
+        NOTES_FILE) relative to the rehearsal, numbered from `start`."""
         return [
-            TakeFile(position=i, name=t["name"], file=_relative(t["file"], folder))
-            for i, t in enumerate(tracks)
+            TakeFile(position=start + i, name=f["name"], kind=kind,
+                     file=_relative(f["file"], folder))
+            for i, f in enumerate(files)
         ]
+
+    @classmethod
+    def _take_files(cls, folder, take):
+        """A new take's rows: its "tracks" as audio, then its "notes" as MIDI,
+        one sequence of positions."""
+        audio = cls._files(folder, take.get("tracks") or [], AUDIO_FILE)
+        return audio + cls._files(folder, take.get("notes") or [], NOTES_FILE, start=len(audio))
+
+    @staticmethod
+    def _track_rows(tracks):
+        """The band as rows: each with its mode and the name of its port (a
+        track that records only audio has none), and the input it was on. A
+        track that records audio has to have one, and raises without; one that
+        records only MIDI is on none."""
+        rows = []
+        for i, t in enumerate(tracks):
+            port = rules.port_of(t)
+            rows.append(Track(
+                position=i,
+                name=t["name"],
+                channel=int(t["channel"]) if rules.records_audio(t) else None,
+                mode=rules.mode_of(t),
+                midi_port=port["name"] if port else None,
+            ))
+        return rows
 
     @staticmethod
     def _labelled(db, markers):
@@ -738,10 +796,7 @@ class Library:
                 bit_depth=int(bit_depth),
                 set_name=None if set_copy is None else set_copy["name"],
                 set_songs=None if set_copy is None else list(set_copy["songs"]),
-                tracks=[
-                    Track(position=i, name=t["name"], channel=int(t["channel"]))
-                    for i, t in enumerate(tracks)
-                ],
+                tracks=self._track_rows(tracks),
             ))
 
     def import_rehearsal(self, folder, *, name, created_at, samplerate, bit_depth,
@@ -790,10 +845,7 @@ class Library:
                 created_at=created_at,
                 samplerate=int(samplerate),
                 bit_depth=int(bit_depth),
-                tracks=[
-                    Track(position=i, name=t["name"], channel=int(t["channel"]))
-                    for i, t in enumerate(tracks)
-                ],
+                tracks=self._track_rows(tracks),
                 takes=[
                     Take(
                         take_number=int(t["take_number"]),
@@ -803,7 +855,7 @@ class Library:
                         cloud_skip=bool(t.get("cloud_skip")),
                         cloud_send=bool(t.get("cloud_send")),
                         cloud_error=cloud_errors.get(int(t["take_number"])),
-                        files=self._files(folder, t.get("tracks", [])),
+                        files=self._take_files(folder, t),
                         markers=[Marker(**m) for m in self._labelled(db, t.get("markers", []))],
                         cloud_copy=self._cloud_row(cloud.get(int(t["take_number"])), cloud_dir),
                     )
@@ -848,7 +900,9 @@ class Library:
     def add_take(self, folder, take):
         """
         take: {"take_number", "name" (what the name field held — see _resolve), "duration_sec", "tracks": [{"name",
-        "file": absolute}], "markers"?, "cloud_skip"?, "cloud_send"?}.
+        "file": absolute}], "notes"?: [{"name", "file": absolute}], "markers"?, "cloud_skip"?,
+        "cloud_send"?}. "tracks" are the audio files and "notes" the .mid files, kept
+        as rows of their own kinds.
         Returns the take as it is now kept, or None without the rehearsal.
         """
         folder = Path(folder)
@@ -866,7 +920,7 @@ class Library:
                 duration_sec=float(take.get("duration_sec") or 0.0),
                 cloud_skip=bool(take.get("cloud_skip")),
                 cloud_send=bool(take.get("cloud_send")),
-                files=self._files(folder, take.get("tracks", [])),
+                files=self._take_files(folder, take),
                 markers=[Marker(**m) for m in self._labelled(db, take.get("markers", []))],
             )
             db.add(row)
@@ -876,11 +930,13 @@ class Library:
         return self._take_out(data, self._cloud_dir())
 
     def update_take(self, folder, take_number, *, name=None, duration_sec=None,
-                    tracks=None, markers=None):
+                    tracks=None, notes=None, markers=None):
         """Changes what is given and leaves the rest. name: what the name field
         held, made a song and a go as add_take makes it (_resolve), so the name
-        the take ends up with can differ. tracks: the take's files at their new
-        absolute paths. Returns the take, or None."""
+        the take ends up with can differ. tracks: the take's audio files at
+        their new absolute paths; notes: its .mid files likewise. Each replaces
+        only its own kind, so moving the audio leaves the notes where they were.
+        Returns the take, or None."""
         folder = Path(folder)
         with self._session.begin() as db:
             row = self._find_take(db, folder, take_number)
@@ -892,8 +948,14 @@ class Library:
                 row.go = go
             if duration_sec is not None:
                 row.duration_sec = float(duration_sec)
-            if tracks is not None:
-                row.files = self._files(folder, tracks)
+            if tracks is not None or notes is not None:
+                audio = ([f for f in row.files if f.kind != NOTES_FILE] if tracks is None
+                         else self._files(folder, tracks, AUDIO_FILE))
+                midi = ([f for f in row.files if f.kind == NOTES_FILE] if notes is None
+                        else self._files(folder, notes, NOTES_FILE))
+                for position, f in enumerate(audio + midi):
+                    f.position = position
+                row.files = audio + midi
             if markers is not None:
                 row.markers = [Marker(**m) for m in self._labelled(db, markers)]
             db.flush()

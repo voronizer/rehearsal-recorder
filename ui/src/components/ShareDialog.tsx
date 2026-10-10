@@ -134,7 +134,7 @@ export function ShareDialog({
             <ShareOption
               icon={<Layers />}
               title="The original tracks"
-              hint="Every track as recorded, untouched — for opening in a DAW later."
+              hint="Every track as recorded, untouched, and the notes as .mid — for opening in a DAW later."
               done={Boolean(shared.tracks)}
               busy={busy === "tracks"}
               disabled={!cloudDir || busy !== null}

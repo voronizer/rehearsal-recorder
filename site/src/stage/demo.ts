@@ -3,6 +3,8 @@
 // that a desktop window does not.
 import fake from "../../../ui/e2e/fake-bridge.js?raw"
 import band from "../../../ui/e2e/band.js?raw"
+import notes from "./notes.js?raw"
+import type { TakeNotes } from "@/lib/api"
 
 // The bridge's calls, as the fake answers them. Typed loosely: the
 // interface's own `api()` is the typed way in.
@@ -11,6 +13,20 @@ export type DemoApi = Record<string, Call>
 
 export const demoApi = () =>
   (window as unknown as { pywebview: { api: DemoApi } }).pywebview.api
+
+/**
+ * The notes of the MIDI tile, as take_notes reads them back for two lanes: the
+ * stretch of the take they are shown for, and how far the playhead has got in
+ * it. See notes.js.
+ */
+export type SiteNotes = {
+  from: number
+  to: number
+  playhead: number
+  lanes: { port: string; notes: TakeNotes }[]
+}
+
+export const siteNotes = () => (window as unknown as { __SITE_NOTES__: SiteNotes }).__SITE_NOTES__
 
 /** When the guitarist leans in during a take, in seconds from its start. */
 export const CLIPS = [1.2, 2.2, 3.4]
@@ -34,8 +50,9 @@ export function clipSchedule(times: number[]): (t: number) => boolean {
 export function installDemo(): void {
   // One classic script, as tests/docs_screenshots.py does it: the band sets
   // the fake's top-level `let`s, which only a script of the same page sees.
+  // The MIDI tile's notes come after the band, made from its song form.
   const script = document.createElement("script")
-  script.textContent = `${fake}\n${band}`
+  script.textContent = `${fake}\n${band}\n${notes}`
   document.head.append(script)
   script.remove()
 

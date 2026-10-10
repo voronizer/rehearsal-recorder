@@ -86,6 +86,13 @@ jobs:
       - name: Run every suite
         run: python tests/run_all.py
 
+      # The suites keep the MIDI library out so they never touch a port; this
+      # is the one place it runs for real. On macOS it makes a virtual port,
+      # plays 100 notes into it and pulls it; on Windows it lists what the
+      # system has. See the top of the script.
+      - name: The MIDI library on this machine
+        run: python tests/midi_live.py
+
       # The entry point the docs tell people to use. Cheap, and it catches a
       # package that imports from a clone but not once installed.
       - name: Does it start

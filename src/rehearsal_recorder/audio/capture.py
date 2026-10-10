@@ -20,6 +20,7 @@ sees it for itself when it does not: see `_seen`.
 """
 
 import json
+import math
 import os
 import threading
 import time
@@ -88,12 +89,42 @@ RAW_SUFFIX = ".raw"
 # Written beside the raw files as recording starts. A .raw file carries no
 # header, so without this nothing in a crashed take's folder says how wide
 # each track was, and a rescued stereo keyboard would come back as one
-# channel of twice the length.
+# channel of twice the length. It also says which tracks are recording notes
+# and from which port, since a .midraw holds nothing but their events.
 TAKE_RECORD = "take.json"
 
 
+def _block_age(time_info):
+    """
+    How old a block's first frame is as the callback runs, in seconds, as the
+    driver says it — or None when it does not say. A field it left at zero is
+    not a time, and neither is one that is not there at all: the callback is
+    handed None when it is called by hand, and PortAudio's struct has only the
+    fields the host API fills in.
+    """
+    try:
+        now = time_info.currentTime
+        captured = time_info.inputBufferAdcTime
+        if not now or not captured:
+            return None
+        return now - captured
+    except Exception:
+        return None
+
+
+def _stream_latency(stream, asked):
+    """The input latency an open stream says it has, in seconds; `asked`, the
+    latency it was opened with, for a stream that gives none or something that
+    is not a number (a duplex stream's is a pair)."""
+    latency = getattr(stream, "latency", None)
+    if isinstance(latency, (int, float)) and math.isfinite(latency) and latency > 0:
+        return float(latency)
+    return asked
+
+
 class AudioRecorder:
-    def __init__(self, device_index, samplerate, tracks, out_dir, bit_depth=16):
+    def __init__(self, device_index, samplerate, tracks, out_dir, bit_depth=16,
+                 clock=None, notes=()):
         """
         tracks: list of {"name": str, "channel": int, "stereo": bool};
                 channel is 1-based, the way it is shown in the interface
@@ -101,6 +132,12 @@ class AudioRecorder:
                 and the next one, and is written as one two-channel file.
         out_dir: where this take's files are written.
         bit_depth: 16 or 24 — see audio/format.py for what that costs and buys.
+        clock: an AudioClock (midi/clock.py) when the take has notes to place
+               on this audio. Every block marks it, and start() tells it when
+               the take began and how late the stream says it is.
+        notes: [{"file": str, "port": str}], the tracks recording notes beside
+               this audio; written into the take's record, so that after a
+               crash the notes can be told from the sound.
         """
         if not tracks:
             raise ValueError("No tracks configured")
@@ -112,8 +149,18 @@ class AudioRecorder:
         self._sample_bytes = bytes_per_sample(self.bit_depth)
         self._full_scale = full_scale(self.bit_depth)
         self.tracks = tracks
+        self._clock = clock
+        self._notes = [dict(n) for n in notes]
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Why the notes' clock failed, if it did: repr() of the first error
+        # `clock.mark` raised in the audio callback, which carries on without
+        # it (the notes lose the drift correction, the audio loses nothing).
+        # A single assignment, because nothing more is allowed on the audio
+        # thread: no print, no log. The app reads it when the take stops and
+        # writes it to the log there.
+        self.clock_fault = None
 
         self._stream = None
         self._raw_files = {}
@@ -261,6 +308,19 @@ class AudioRecorder:
             # take has ended where the laptop slept.
             if frames == 0 or self._stopping or self._asleep:
                 return
+            clock = self._clock
+            if clock is not None:
+                # The block's first frame is the next one to go to disk. A
+                # fault in the notes' clock must not cost the audio: the
+                # notes would be placed from when the take started, and the
+                # take goes on.
+                try:
+                    clock.mark(time.perf_counter_ns(),
+                               self._frames_written + frames, frames,
+                               _block_age(time_info))
+                except Exception as e:
+                    if self.clock_fault is None:
+                        self.clock_fault = repr(e)
             self._take_block(indata, frames)
         finally:
             self._heartbeat.leave()
@@ -340,7 +400,14 @@ class AudioRecorder:
                 path = self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}"
                 self._raw_files[track["name"]] = open(path, "wb")
 
+            latency = input_latency(sd, self.device_index)
             with STREAM_LOCK:
+                if self._clock is not None:
+                    # open_stream starts the stream, and its first block can
+                    # be marked before it returns: the clock has the latency
+                    # that was asked for until the stream says what it is.
+                    self._clock.started_ns = time.perf_counter_ns()
+                    self._clock.latency_sec = latency
                 self._stream = open_stream(
                     sd.InputStream,
                     device=self.device_index,
@@ -348,10 +415,12 @@ class AudioRecorder:
                     samplerate=self.samplerate,
                     dtype=self._dtype,
                     blocksize=BLOCK_FRAMES,
-                    latency=input_latency(sd, self.device_index),
+                    latency=latency,
                     callback=self._callback,
                     finished_callback=self._finished,
                 )
+            if self._clock is not None:
+                self._clock.latency_sec = _stream_latency(self._stream, latency)
         except BaseException:
             self._discard_files()
             raise
@@ -397,8 +466,10 @@ class AudioRecorder:
 
     def _write_record(self):
         """What the folder needs to describe itself if the app dies: the
-        format, and how wide each track is. Best effort — a take that cannot
-        write this is still worth recording."""
+        format, how wide each track is, which track each file is (a file's
+        name is not always its track's: "Synth/Pad" is Synth_Pad.raw), and
+        which tracks are notes. Best effort — a take that cannot write this is
+        still worth recording."""
         try:
             (self.out_dir / TAKE_RECORD).write_text(
                 json.dumps({
@@ -406,9 +477,11 @@ class AudioRecorder:
                     "bit_depth": self.bit_depth,
                     "tracks": [
                         {"file": self.safe_name(t["name"]),
+                         "name": t["name"],
                          "channels": self._width[t["name"]]}
                         for t in self.tracks
                     ],
+                    "notes": self._notes,
                 }),
                 encoding="utf-8",
             )
@@ -460,8 +533,12 @@ class AudioRecorder:
             })
 
         # The record has done its job: every wav now carries its own header.
-        # Left behind it would ride along into the saved take.
-        (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
+        # Left behind it would ride along into the saved take. A take with
+        # notes keeps it a little longer: the .mid files are made after this,
+        # and it says which port each came from (midi/capture.finish_draft).
+        # The app removes it once no notes file is left that needs it.
+        if not self._notes:
+            (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
 
         self._result = {"duration_sec": duration, "tracks": finalized}
         return self._result

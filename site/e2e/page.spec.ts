@@ -109,21 +109,176 @@ test("the sets tile shows a rehearsal mid-set", async ({ page }) => {
   await expect(card.locator("[data-set-song='Viasna']")).toHaveAttribute("aria-current", "true")
 })
 
-test("every row of tiles is full", async ({ page }) => {
-  await page.goto("/")
-  const rows = await page.locator("#features .bento").evaluate((bento) => {
-    const right = bento.getBoundingClientRect().right
-    const ends = new Map<number, number>()
-    for (const tile of bento.children) {
-      const box = tile.getBoundingClientRect()
-      const top = Math.round(box.top)
-      ends.set(top, Math.max(ends.get(top) ?? 0, box.right))
-    }
-    return [...ends.values()].map((end) => Math.round(right - end))
+/** The MIDI tile, found by its heading. */
+const midiTile = (page: Page) =>
+  page.locator("#features article").filter({
+    has: page.getByRole("heading", { name: "Notes too, from an e-kit or a keyboard." }),
   })
-  expect(rows.length).toBe(5)
-  for (const gap of rows) expect(gap).toBeLessThanOrEqual(1)
+
+test("the MIDI tile shows two lanes of notes, each with its plate", async ({ page }) => {
+  await page.goto("/")
+  const tile = midiTile(page)
+  await expect(tile.getByText("A track records its audio, its MIDI or both.")).toBeVisible()
+  const piece = tile.getByRole("img", { name: /TD-17.*Launchkey Mini MK3/ })
+  const drums = piece.locator("[data-notes-plate='Drums']")
+  await expect(drums).toContainText("TD-17")
+  await expect(drums).toContainText("Saved as .mid, not played here")
+  const keys = piece.locator("[data-notes-plate='Keys']")
+  await expect(keys).toContainText("Launchkey Mini MK3")
+  await expect(keys).toContainText("Saved as .mid, not played here")
+  await expect(piece.locator("[data-notes-lane]")).toHaveCount(2)
+  // The drums' rows are named, and the keys' octaves.
+  await expect(piece.locator("[data-notes-lane='Drums']")).toContainText("Crash")
+  await expect(piece.locator("[data-notes-lane='Drums']")).toContainText("Kick")
+  await expect(piece.locator("[data-notes-lane='Keys']")).toContainText("C4")
 })
+
+test("in the MIDI tile the part already heard is in the accent and the rest grey", async ({ page }) => {
+  await page.goto("/")
+  const piece = midiTile(page).getByRole("img", { name: /TD-17/ })
+  for (const name of ["Drums", "Keys"]) {
+    const canvas = piece.locator(`[data-notes-lane='${name}'] canvas`)
+    // Where the accent ends and the grey begins, as a share of the lane.
+    const edge = () =>
+      canvas.evaluate((el: HTMLCanvasElement) => {
+        const { data, width, height } = el.getContext("2d")!.getImageData(0, 0, el.width, el.height)
+        let lastAccent = -1
+        let firstGrey = width
+        for (let x = 0; x < width; x++)
+          for (let y = 0; y < height; y++) {
+            const i = (y * width + x) * 4
+            if (data[i + 3] < 40) continue
+            // The accent is blue, the unheard notes a dark grey; the lines
+            // between the rows are a light one.
+            if (data[i + 2] - data[i] > 60) lastAccent = Math.max(lastAccent, x)
+            else if (data[i] < 150) firstGrey = Math.min(firstGrey, x)
+          }
+        return { accent: lastAccent / width, grey: firstGrey / width }
+      })
+    await expect.poll(async () => (await edge()).accent, { message: name }).toBeGreaterThan(0.5)
+    const { accent, grey } = await edge()
+    // A bar into the bridge of eight bars, five eighths of the way.
+    expect(accent).toBeLessThan(0.7)
+    expect(grey).toBeGreaterThanOrEqual(accent - 0.01)
+    expect(grey).toBeLessThan(1)
+  }
+})
+
+test("the MIDI tile is a picture: nothing moves, nothing plays, nothing to click", async ({ page }) => {
+  await page.goto("/")
+  const tile = midiTile(page)
+  const piece = tile.getByRole("img", { name: /TD-17/ })
+  await expect(piece.locator("[inert]")).toHaveCount(1)
+  await expect(tile.locator("audio, video, button, a, input")).toHaveCount(0)
+  const drawn = () =>
+    piece.locator("canvas").evaluateAll((all) => all.map((c) => (c as HTMLCanvasElement).toDataURL()).join())
+  await expect.poll(async () => (await drawn()).length).toBeGreaterThan(1000)
+  const before = await drawn()
+  await page.waitForTimeout(800)
+  expect(await drawn()).toBe(before)
+})
+
+test("the MIDI tile is the whole width, right after the one on tracks, its words beside its notes", async ({
+  page,
+}) => {
+  await page.goto("/")
+  const found = await page.locator("#features .bento").evaluate((bento) => {
+    const box = (el: Element) => el.getBoundingClientRect()
+    const tiles = [...bento.children]
+    const at = tiles.findIndex((t) => t.querySelector("h3")?.textContent === "Notes too, from an e-kit or a keyboard.")
+    const midi = tiles[at]
+    return {
+      before: tiles[at - 1]?.querySelector("h3")?.textContent,
+      bento: box(bento),
+      midi: box(midi),
+      track: box(tiles[at - 1]),
+      copy: box(midi.querySelector(".copy")!),
+      piece: box(midi.querySelector(".piece")!),
+    }
+  })
+  expect(found.before).toBe("Every musician on their own track.")
+  expect(Math.abs(found.midi.left - found.bento.left)).toBeLessThanOrEqual(1)
+  expect(Math.abs(found.midi.right - found.bento.right)).toBeLessThanOrEqual(1)
+  expect(found.midi.top).toBeGreaterThanOrEqual(found.track.bottom)
+  expect(found.copy.right).toBeLessThanOrEqual(found.piece.left)
+  expect(found.copy.top).toBeLessThan(found.piece.bottom)
+  expect(found.piece.top).toBeLessThan(found.copy.bottom)
+})
+
+// The name on a plate is whole from the narrowest phone to a wide screen,
+// and at 1000 px, where the plate and the notes are tightest side by side:
+// none of its words is broken across lines or sticks out of it, and the notes
+// still have room beside it, or under it.
+for (const width of [320, 390, 960, 1000, 1440]) {
+  test(`at ${width} px the Launchkey Mini MK3 is whole on its plate, with room for its notes`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/")
+    const piece = midiTile(page).getByRole("img", { name: /TD-17/ })
+    await expect(piece).toBeVisible()
+    await piece.scrollIntoViewIfNeeded()
+    const plate = piece.locator("[data-notes-plate='Keys']")
+    await expect(plate).toContainText("Launchkey Mini MK3")
+    const found = await plate.evaluate((el) => {
+      const box = el.getBoundingClientRect()
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      const broken: string[] = []
+      const outside: string[] = []
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const word of node.textContent!.matchAll(/\S+/g)) {
+          const range = document.createRange()
+          range.setStart(node, word.index!)
+          range.setEnd(node, word.index! + word[0].length)
+          if (range.getClientRects().length > 1) broken.push(word[0])
+          const r = range.getBoundingClientRect()
+          if (r.left < box.left - 0.5 || r.right > box.right + 0.5) outside.push(word[0])
+        }
+      }
+      return { broken, outside, overflow: el.scrollWidth - el.clientWidth }
+    })
+    expect(found).toEqual({ broken: [], outside: [], overflow: 0 })
+    // The heading keeps e-kit whole too, rather than end a line on "e-".
+    const heading = midiTile(page).getByRole("heading")
+    const lines = await heading.evaluate((el) => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const at = node.textContent!.indexOf("e-kit")
+        if (at < 0) continue
+        const range = document.createRange()
+        range.setStart(node, at)
+        range.setEnd(node, at + "e-kit".length)
+        return range.getClientRects().length
+      }
+      return 0
+    })
+    expect(lines).toBe(1)
+    const lane = await piece.locator("[data-notes-lane='Keys']").boundingBox()
+    expect(lane!.width).toBeGreaterThanOrEqual(200)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+  })
+}
+
+// Six columns from 1000 px: the section's six rows are full on a laptop and
+// on a wide screen alike.
+for (const width of [1000, 1280, 1440]) {
+  test(`every row of tiles is full at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/")
+    const rows = await page.locator("#features .bento").evaluate((bento) => {
+      const right = bento.getBoundingClientRect().right
+      const ends = new Map<number, number>()
+      for (const tile of bento.children) {
+        const box = tile.getBoundingClientRect()
+        const top = Math.round(box.top)
+        ends.set(top, Math.max(ends.get(top) ?? 0, box.right))
+      }
+      return [...ends.values()].map((end) => Math.round(right - end))
+    })
+    expect(rows.length).toBe(6)
+    for (const gap of rows) expect(gap).toBeLessThanOrEqual(1)
+  })
+}
 
 test("on a middle-sized window too, no row of tiles has a hole", async ({ page }) => {
   await page.setViewportSize({ width: 860, height: 900 })

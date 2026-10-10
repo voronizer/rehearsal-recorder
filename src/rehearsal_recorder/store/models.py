@@ -14,9 +14,17 @@ to the cloud folder, so moving any of the three moves what points into it.
 from sqlalchemy import JSON, Boolean, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from rehearsal_recorder.midi.rules import AUDIO
+
 
 class Base(DeclarativeBase):
     pass
+
+
+# The kinds of a take's file (TakeFile.kind), as stored: the words never
+# change.
+AUDIO_FILE = "audio"
+NOTES_FILE = "midi"
 
 
 class Rehearsal(Base):
@@ -85,7 +93,8 @@ class SongName(Base):
 
 
 class Track(Base):
-    """One input as the rehearsal was set up: its name and which channel."""
+    """One member of the band as the rehearsal was set up: its name, what it
+    records, and which channel and port it was plugged into."""
 
     __tablename__ = "track"
 
@@ -95,7 +104,14 @@ class Track(Base):
     )
     position: Mapped[int] = mapped_column(Integer)
     name: Mapped[str] = mapped_column(String)
-    channel: Mapped[int] = mapped_column(Integer)
+    # None for a track that records only MIDI: it is plugged into no input
+    # (migration 0007).
+    channel: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # "audio", "both" or "midi" — midi/rules.py says what each means.
+    mode: Mapped[str] = mapped_column(String, default=AUDIO, server_default=AUDIO)
+    # The name of the MIDI port it played into, for a track that records
+    # notes.
+    midi_port: Mapped[str | None] = mapped_column(String, nullable=True)
 
     rehearsal: Mapped[Rehearsal] = relationship(back_populates="tracks")
 
@@ -152,7 +168,8 @@ class Take(Base):
 
 
 class TakeFile(Base):
-    """One track of a take on disk."""
+    """One file of a take on disk: a track's WAV, or the notes a MIDI port
+    sent while it played."""
 
     __tablename__ = "take_file"
 
@@ -164,6 +181,10 @@ class TakeFile(Base):
     name: Mapped[str] = mapped_column(String)
     # Relative to the rehearsal folder: "01 - Verse riff/Guitar 1.wav".
     file: Mapped[str] = mapped_column(String)
+    # "audio" for a WAV, "midi" for a .mid (migration 0007). Kept apart so
+    # that nothing which opens a take's tracks as audio is handed a .mid.
+    # Added in place, like song_id on `take`.
+    kind: Mapped[str] = mapped_column(String, default=AUDIO_FILE, server_default=AUDIO_FILE)
 
     take: Mapped[Take] = relationship(back_populates="files")
 

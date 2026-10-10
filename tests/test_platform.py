@@ -8,6 +8,7 @@ Windows — nothing short of Windows proves that — but it does prove the code
 takes the right branch instead of reaching for something that is not there.
 """
 
+import logging
 import shutil
 import sys
 import tempfile
@@ -25,6 +26,14 @@ _sd.query_devices = lambda *a, **k: []
 _sd.query_hostapis = lambda: []
 _sd.OutputStream = _sd.InputStream = None
 sys.modules["sounddevice"] = _sd
+# No suite opens a real MIDI port. With None in sys.modules, importing the
+# library raises ImportError, which midi/ports.open_system() answers as "MIDI is
+# not available" — whatever is plugged into the machine running them.
+sys.modules["pylibremidi"] = None
+# The library is blocked here, so the one line the MIDI system logs is why it
+# has none, and the Api made in [6] logs it. Unhandled, Python prints it on
+# stderr; [9] reads it from crash.log instead.
+logging.getLogger("rehearsal_recorder.midi.ports").addHandler(logging.NullHandler())
 
 import rehearsal_recorder.platform_support as ps  # noqa: E402
 
@@ -131,6 +140,8 @@ def main():
 
     apimod.RECORDINGS_ROOT = tmp / "Rec2"
     apimod.CONFIG_PATH = tmp / "config.json"
+    # The MIDI rig's two threads stay off: nothing here touches a port.
+    apimod.MIDI_THREADS = False
     a = apimod.Api.__new__(apimod.Api)
     apimod.Api.__init__(a)
     settings = a.get_settings()
@@ -183,13 +194,14 @@ def main():
     # to stderr — which a windowed build does not have. Save take and rename
     # both failed that way on Windows with nothing kept anywhere.
     import faulthandler
-    import logging
 
     import rehearsal_recorder.app as appmod
 
     original_log = appmod.CRASH_LOG
     appmod.CRASH_LOG = tmp / "crash.log"
-    handlers_before = list(logging.getLogger("pywebview").handlers)
+    # The handler goes on both of the loggers it is put on, and comes off both.
+    armed_on = ("pywebview", "rehearsal_recorder")
+    handlers_before = {name: list(logging.getLogger(name).handlers) for name in armed_on}
     try:
         kept_open = appmod._arm_crash_log()
         logging.getLogger("pywebview").error(
@@ -200,16 +212,27 @@ def main():
         logging.getLogger("pywebview").error("once")
         ok("arming twice does not write everything twice",
            appmod.CRASH_LOG.read_text(encoding="utf-8").count("once") == 1)
+        # The line that says which MIDI system the app is on, or why it has
+        # none, is the one thing P5 asks the app's log for. The library is
+        # blocked here, so it is the reason that is said.
+        from rehearsal_recorder.midi import ports as midi_ports
+
+        system, why = midi_ports.open_system()
+        ok("the MIDI system, or why there is none, is written to crash.log",
+           system is None and why in appmod.CRASH_LOG.read_text(encoding="utf-8"))
     finally:
         faulthandler.disable()
-        logger = logging.getLogger("pywebview")
-        for h in list(logger.handlers):
-            if h not in handlers_before:
-                logger.removeHandler(h)
-                h.close()
+        for name in armed_on:
+            logger = logging.getLogger(name)
+            for h in list(logger.handlers):
+                if h not in handlers_before[name]:
+                    logger.removeHandler(h)
+                    h.close()
         if kept_open:
             kept_open.close()
         appmod.CRASH_LOG = original_log
+    ok("and taking it down leaves neither logger with its handler",
+       all(logging.getLogger(name).handlers == handlers_before[name] for name in armed_on))
 
     print("\n[10] The thread that opens cards joins a COM apartment on Windows")
     # An ASIO driver is a COM object: a thread that has not joined an
@@ -512,10 +535,27 @@ def main():
         said = run.stdout.decode("utf-8")
     except UnicodeDecodeError:
         said = None
+    problems_before = len(problems)
     ok("what it says reads as UTF-8, whatever the code page",
        said is not None and " — " in said)
     ok("the app's name included, which is Cyrillic",
        said is not None and said.startswith("РЭХА "))
+    # A process that dies in the middle (the MIDI library, on a thread in the
+    # wrong COM apartment, once ended it on Windows with nothing written) says
+    # nothing of the kind, so it is asked for its verdict.
+    ok("and it ran through to its verdict",
+       said is not None and ("Incomplete build" in said
+                             or "This build has everything it needs." in said))
+    # Its own line says the MIDI system, so the log is not asked to say it too.
+    ok("and the MIDI system is not said a second time, on stderr",
+       not [ln for ln in run.stderr.decode("utf-8", "replace").splitlines()
+            if ln.startswith("MIDI")])
+    if len(problems) > problems_before:
+        # What a failed run left, in ASCII because the CI console may not
+        # print anything else.
+        print(f"    exit code {run.returncode}")
+        print(f"    stdout, the last of it: {ascii(run.stdout[-800:])}")
+        print(f"    stderr, the last of it: {ascii(run.stderr[-800:])}")
 
     print("\n[downloads] A new version goes where a browser would put it")
     # Windows lets the Downloads folder be moved anywhere, so it is asked of

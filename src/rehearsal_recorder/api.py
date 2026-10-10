@@ -32,7 +32,7 @@ from pathlib import Path
 import sounddevice as sd
 
 from rehearsal_recorder import __version__
-from rehearsal_recorder.audio.capture import AudioRecorder
+from rehearsal_recorder.audio.capture import TAKE_RECORD, AudioRecorder
 from rehearsal_recorder.audio.drafts import (
     DRAFTS_DIR,
     describe,
@@ -69,12 +69,26 @@ from rehearsal_recorder.audio.devices import (
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
+from rehearsal_recorder.midi.notes import read_notes
 from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder import cloud as cloudmod
 from rehearsal_recorder.names_pass import NamesPass
 from rehearsal_recorder import layouts
 from rehearsal_recorder import updates
 from rehearsal_recorder.mediaserver import AppServer
+from rehearsal_recorder.midi import ports as midiports
+from rehearsal_recorder.midi.capture import CLOCK_FILE, MID_SUFFIX, MIDRAW_SUFFIX, note_stems
+from rehearsal_recorder.midi.clock import AudioClock
+from rehearsal_recorder.midi.rig import MidiRig
+from rehearsal_recorder.midi.rules import (
+    lane_after,
+    notes_problem,
+    place_in,
+    port_of,
+    records_audio,
+    records_notes,
+)
+from rehearsal_recorder.midi.smf import crop_mid
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
 from rehearsal_recorder.store.library import (
@@ -112,6 +126,14 @@ MIN_CROP_SEC = 1.0
 
 # What a fresh install records at until Settings says otherwise.
 DEFAULT_SAMPLERATE = 44100
+
+# The MIDI system of this machine, asked once when the app starts, and whether
+# the rig that holds the rehearsal's ports runs its own threads. The suites
+# replace both: they have no port to open, and drive the rig themselves.
+open_midi_system = midiports.open_system
+MIDI_THREADS = True
+
+log = logging.getLogger(__name__)
 
 
 # What a cloud copy is called while it is still being written. The worker is
@@ -192,6 +214,13 @@ def _unique_path(path):
 def _take_dir_name(take_number, name):
     """What a take's folder is called: "03 - Polyn 3"."""
     return f"{int(take_number):02d} - {_safe_name(name)}"
+
+
+def _dirs_of(take):
+    """The folders a take's files are in, its audio's and its notes'. A take of
+    nothing but notes has no audio to find its folder by."""
+    files = [*take["tracks"], *(take.get("notes") or [])]
+    return {Path(f["file"]).parent for f in files if f.get("file")}
 
 
 def _carries(dir_name, expected):
@@ -420,8 +449,9 @@ def _copy_detail(what, res):
 
 
 def _channels_of(tracks):
-    """How many channels these tracks write: a stereo track is two."""
-    return sum(2 if t.get("stereo") else 1 for t in tracks)
+    """How many channels these tracks write: a stereo track is two, and a
+    track that only records MIDI writes none."""
+    return sum(2 if t.get("stereo") else 1 for t in tracks if records_audio(t))
 
 
 def _is_output_choice(channels):
@@ -451,8 +481,19 @@ class Api:
         )
         self._recorder_take_number = None
         self._recorder_temp_dir = None
+        # The band the take began with, so that Stop reads the tracks it
+        # recorded and not the session's as they are by then.
+        self._recorder_band = None
+        # True while a Stop writes its take's files, the recorder already let
+        # go of: no take or check may begin until it is done (stop_take).
+        self._stopping = False
         self._session = None
         self._monitor = None
+        # The MIDI ports of the signal check and of the rehearsal, kept open
+        # between takes so that what an instrument has set is in the next one.
+        # No port is opened until a check or a rehearsal asks.
+        system, midi_error = open_midi_system()
+        self._midi = MidiRig(system, midi_error, threads=MIDI_THREADS)
         # Settings › Under the hood's check of the interface; see probe.py.
         self._check = InterfaceCheck()
         self._player = None
@@ -543,6 +584,14 @@ class Api:
         self._awake.release()
         self._sleep_watch.stop()
         self.stop_monitor()
+        # A take's notes stay for the drafts, as its audio does; then the
+        # ports close, the rig's threads stop and the MIDI system is let go.
+        # Each on its own: one that fails does not keep the other from running.
+        for let_go in (self._midi.abandon_take, self._midi.shutdown):
+            try:
+                let_go()
+            except Exception as e:
+                print(f"[shutdown] letting go of the MIDI ports: {e}")
         self.player_close()
         self._cloud_queue.stop()
         self._names_pass.stop()
@@ -775,6 +824,7 @@ class Api:
                 "recording": recording,
                 "playback": playback,
             },
+            "midi": self._midi.ports(),
             "files": files,
             "deleting": trash_kind(),
             "fallback_trash": FALLBACK_TRASH,
@@ -793,7 +843,9 @@ class Api:
             max_inputs = sd.query_devices(index)["max_input_channels"] if index is not None else 0
             tracks = tracks_for(self._config, device_identity(index), max_inputs)
         except Exception:  # noqa: BLE001
-            tracks = [{"name": t.get("name", "?"), "channel": None}
+            # No card to place them on: the inputs are unknown (no "channel"
+            # at all), but the mode and the port are the band's own.
+            tracks = [{"name": t.get("name", "?"), **{k: t[k] for k in ("mode", "midi_port") if k in t}}
                       for t in self._config.get("tracks", [])]
         if not self._config.get("cloud_dir"):
             cloud = "no cloud folder"
@@ -1091,6 +1143,57 @@ class Api:
             })
         return result
 
+    def take_notes(self, files):
+        """The notes of a take for the player: one answer per file, in order,
+        each with its "name", from the .mid read back (midi/notes.py). The
+        notes of a whole take are sent at once, so zooming asks for nothing
+        again.
+
+        A take knows its notes only by name and file, as it knows its tracks.
+        Whether the lane is a drum grid is the band's icon, found by that name
+        as take_media finds a track's; a name the band does not have is judged
+        by the file alone.
+
+        Every file is answered on its own and one can never fail the call: one
+        that is not there, or has no path, is "Notes file not found"; any other
+        trouble (not a .mid, cut short, a folder, a name too long, a drive that
+        will not answer) is "Notes file not readable", said in the log. The
+        answer carries the file's "name" when it was given one.
+
+        Each answer, an error too, carries the band's icon for its name, as
+        take_media's does: a track that records notes only has no audio lane
+        to take it from, and the plate of its notes lane shows it. A track
+        whose port never appeared has no file at all, and is asked with a
+        file of None for the same reason."""
+        icon_of = layouts.icons(self._config.get("tracks"))
+        result = []
+        for f in files:
+            if not isinstance(f, dict):
+                f = {}
+            named = {"name": f["name"]} if "name" in f else {}
+            # A name that is not text is no member of the band, and cannot be
+            # looked up in it without failing the call.
+            if isinstance(f.get("name"), str) and f["name"] in icon_of:
+                named["icon"] = icon_of[f["name"]]
+            if f.get("file") is None:
+                result.append({**named, "error": "Notes file not found"})
+                continue
+            try:
+                path = Path(f["file"])
+                if not path.exists():
+                    result.append({**named, "error": "Notes file not found"})
+                    continue
+                notes = read_notes(path, icon_of.get(f.get("name")) == "drums")
+            except Exception as e:
+                # The log, not print: a console that cannot show a name such as
+                # "Pałyn" would raise here and fail the call for this very file.
+                logging.getLogger(__name__).warning(
+                    "notes of %s: %s: %s", Path(str(f["file"])).name, type(e).__name__, e)
+                result.append({**named, "error": "Notes file not readable"})
+                continue
+            result.append({**named, **notes})
+        return result
+
     @staticmethod
     def _host_api_names():
         """
@@ -1225,6 +1328,9 @@ class Api:
                              "look again.",
                 }
             self.stop_monitor()
+            # Look again reads the MIDI ports too, in case the system missed
+            # one coming or going.
+            self._midi.refresh()
 
             before = self._device_names()
             if self._player is not None:
@@ -1312,22 +1418,35 @@ class Api:
 
     def start_monitor(self, device_index, samplerate, tracks):
         """Opens the inputs without recording, so everyone can confirm they
-        land on their own track."""
+        land on their own track, and the MIDI ports of the tracks that take
+        notes, so everyone can confirm those too."""
         self.stop_monitor()
         if self._recorder is not None:
             return {"ok": False, "error": "Recording in progress"}
+        # A check would put the rig on its own ports while a Stop is still
+        # ending the take's notes on them.
+        if self._stopping:
+            return {"ok": False, "error": "Still saving the last take"}
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
-        stray = channels_available(device_index, tracks)
-        if stray:
-            return {"ok": False, "error": stray}
+        # Only the tracks that record sound reach the card, and as plain
+        # audio ones: what stops Start for the notes (no track that records
+        # sound, a port not picked, two tracks on one) is Start's to say and
+        # never stops the check, which listens to every port that is picked.
+        audio = [t for t in tracks if records_audio(t)]
+        if audio:
+            stray = channels_available(device_index, [{**t, "mode": "audio"} for t in audio])
+            if stray:
+                return {"ok": False, "error": stray}
 
-        monitor = LevelMonitor(device_index, samplerate, tracks)
-        try:
-            monitor.start()
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-        self._monitor = monitor
+            monitor = LevelMonitor(device_index, samplerate, audio)
+            try:
+                monitor.start()
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+            self._monitor = monitor
+        self._midi.use(tracks, check=True)
+        self._midi.reset_counts()
         return {"ok": True}
 
     def monitor_levels(self):
@@ -1347,14 +1466,42 @@ class Api:
             return {"checking": False, "problem": None}
         return {"checking": True, "problem": monitor.problem()}
 
-    def stop_monitor(self):
+    def stop_monitor(self, keep_ports=False):
+        """Lets go of the card, and of the MIDI ports the check opened unless
+        `keep_ports`: Start keeps them, and hands them to the rehearsal. With
+        a rehearsal under way they are its ports, not the check's, and they
+        stay: leaving the setup screen, or Look again, must not close them
+        under a take. Finishing the rehearsal closes them. Never raises: it is
+        the first step of closing the app, and of a Start that failed."""
         if self._monitor is not None:
             try:
                 self._monitor.stop()
             except Exception as e:
                 print(f"[monitor] stop: {e}")
             self._monitor = None
+        if not keep_ports and self._session is None:
+            try:
+                self._midi.release()
+            except Exception as e:
+                # The check is over whether or not a port would close.
+                print(f"[monitor] letting go of the MIDI ports: {e}")
         return {"ok": True}
+
+    # ---------- MIDI ports ----------
+
+    def list_midi_ports(self):
+        """The MIDI ports there are, for the port pickers: the system, each
+        port as it is saved with the notes counted on it since the check
+        began, and why there is no system when there is none. Asked over http
+        every second or so."""
+        return self._midi.ports()
+
+    def midi_activity(self):
+        """What each track that takes notes is hearing: its loudest note
+        since the last ask, its note count, and whether its port is there.
+        Asked over http, by one screen at a time (the loudest note is
+        forgotten when it is read)."""
+        return self._midi.activity()
 
     # ---------- disk space and recording health ----------
 
@@ -1436,7 +1583,11 @@ class Api:
         take. One that is not there any more starts it with none."""
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
+        # The take recording keeps the tracks it began with, notes and all.
+        if self._recorder is not None:
+            return {"ok": False, "error": "Recording in progress"}
         # Caught before a folder is made for a rehearsal that cannot record.
+        # The notes' rules are asked first, in their own words (A1, P3, P2).
         stray = channels_available(device_index, tracks)
         if stray:
             return {"ok": False, "error": stray}
@@ -1449,38 +1600,51 @@ class Api:
         library = self._lib
 
         # The signal check and the recording cannot hold the input at once.
-        self.stop_monitor()
+        # Its MIDI ports are kept: the rehearsal takes them over below.
+        self.stop_monitor(keep_ports=True)
 
-        played_by = library.set_of(set_id) if set_id is not None else None
-
-        created_at = time.strftime("%Y-%m-%dT%H:%M:%S")
-        folder = _unique_path(
-            self._recordings_dir
-            / f"{_safe_name(name)} - {_timestamp_suffix(created_at)}"
-        )
-        folder.mkdir(parents=True, exist_ok=True)
-
-        self._session = {
-            "name": name,
-            "folder": folder,
-            "created_at": created_at,
-            "device_index": device_index,
-            "samplerate": samplerate,
-            "bit_depth": bit_depth,
-            "tracks": tracks,
-            "take_counter": 0,
-            "set": played_by,
-        }
-        # In the database from the start, so History can read the take list
-        # even after a restart.
         try:
-            library.create_rehearsal(
-                folder, name, created_at, samplerate, bit_depth, tracks,
-                set_copy=played_by,
+            played_by = library.set_of(set_id) if set_id is not None else None
+
+            created_at = time.strftime("%Y-%m-%dT%H:%M:%S")
+            folder = _unique_path(
+                self._recordings_dir
+                / f"{_safe_name(name)} - {_timestamp_suffix(created_at)}"
             )
+            folder.mkdir(parents=True, exist_ok=True)
+
+            self._session = {
+                "name": name,
+                "folder": folder,
+                "created_at": created_at,
+                "device_index": device_index,
+                "samplerate": samplerate,
+                "bit_depth": bit_depth,
+                "tracks": tracks,
+                "take_counter": 0,
+                "set": played_by,
+            }
+            # In the database from the start, so History can read the take list
+            # even after a restart.
+            try:
+                library.create_rehearsal(
+                    folder, name, created_at, samplerate, bit_depth, tracks,
+                    set_copy=played_by,
+                )
+            except Exception:
+                self._session = None
+                raise
         except Exception:
-            self._session = None
+            # The audio check is over and no rehearsal has begun, so the MIDI
+            # check is too: its ports were only kept for this Start. A
+            # rehearsal already under way keeps its own (stop_monitor).
+            self.stop_monitor()
             raise
+        # Exactly the ports the final tracks name: one the check had open that
+        # they still name stays open as it is; the rest of the check's close.
+        # What was played during the check is not the rehearsal's.
+        self._midi.use(tracks)
+        self._midi.reset_counts()
         return {"ok": True, "folder": str(folder)}
 
     def _session_rehearsal(self):
@@ -1717,6 +1881,11 @@ class Api:
         rehearsal = self._lib.rehearsal(folder)
         take_count = len(rehearsal["takes"]) if rehearsal else 0
         self._session = None
+        try:
+            self._midi.release()
+        except Exception as e:
+            # The rehearsal is over whether or not a port would close.
+            print(f"[finish] letting go of the MIDI ports: {e}")
 
         # A rehearsal where nothing was saved should not leave a folder behind.
         removed = False
@@ -1810,28 +1979,70 @@ class Api:
             return {"ok": False, "error": "No rehearsal in progress"}
         if self._recorder is not None:
             return {"ok": False, "error": "Already recording"}
+        # Asked after the recorder, which a Stop lets go of only once this is
+        # set. The rig keeps one take at a time: a take begun now would be
+        # the one the old Stop then ends, with the old take's notes unmade.
+        if self._stopping:
+            return {"ok": False, "error": "Still saving the last take"}
 
         s = self._session
-        s["take_counter"] += 1
-        take_number = s["take_counter"]
+        # Only the tracks that record sound reach the card: a MIDI track has no
+        # input, and the recorder counts channels. A band with none cannot
+        # record a take; start_rehearsal refuses it first, in the same words.
+        audio = [t for t in s["tracks"] if records_audio(t)]
+        if not audio:
+            return {"ok": False,
+                    "error": notes_problem(s["tracks"]) or "No tracks configured"}
+        notes_tracks = [t for t in s["tracks"] if records_notes(t)]
+        # The number is used up only once the take is recording: one that is
+        # refused or cannot start leaves the count where it was.
+        take_number = s["take_counter"] + 1
         temp_dir = s["folder"] / DRAFTS_DIR / f"take {take_number}"
+
+        clock, notes = None, []
+        if notes_tracks:
+            # A signal check run since the last take may have left the rig on
+            # other tracks, and stopping it does not put these back. It
+            # changes nothing when nothing changed, and this is between takes:
+            # never while one records.
+            self._notes_step("The MIDI ports could not be put right for the take",
+                             self._midi.use, s["tracks"])
+            # The notes' files are named by capture.note_stems, here for
+            # take.json and in the rig's recorder for the files themselves.
+            stems = note_stems([t["name"] for t in notes_tracks])
+            clock = AudioClock(s["samplerate"])
+            # The track's name too: a draft recovered after a crash is named
+            # by it, as its audio is, and not by its file.
+            notes = [{"file": stems[t["name"]], "name": t["name"],
+                      "port": (port_of(t) or {}).get("name", "")}
+                     for t in notes_tracks]
 
         recorder = AudioRecorder(
             s["device_index"],
             s["samplerate"],
-            s["tracks"],
+            audio,
             temp_dir,
             s.get("bit_depth", LEGACY_DEPTH),
+            clock=clock,
+            notes=notes,
         )
         try:
             recorder.start()
         except Exception as e:
-            s["take_counter"] -= 1
             return {"ok": False, "error": str(e)}
+        s["take_counter"] = take_number
+
+        # Right after the audio has started, with the clock's start set: what
+        # arrives before is the state the notes begin from, what arrives
+        # after is in the take.
+        if notes_tracks:
+            self._notes_step("The take's notes could not begin",
+                             self._midi.begin_take, temp_dir, clock)
 
         self._recorder = recorder
         self._recorder_take_number = take_number
         self._recorder_temp_dir = temp_dir
+        self._recorder_band = s["tracks"]
         # Held only once the take is really recording; a lock the system
         # refuses is no reason to stop it (KeepAwake never raises, but this
         # must not be the line that ends a take).
@@ -1840,6 +2051,17 @@ class Api:
         except Exception as e:  # noqa: BLE001
             print(f"[awake] {e}")
         return {"ok": True, "take_number": take_number}
+
+    @staticmethod
+    def _notes_step(what, call, *args):
+        """A step of a take's notes. The notes never cost a take its audio: a
+        step that fails is said in the log, at ERROR, which the crash log keeps,
+        and the take goes on without them. Returns what the step did, or None."""
+        try:
+            return call(*args)
+        except Exception:
+            log.exception("%s", what)
+            return None
 
     def get_levels(self):
         if self._recorder is None:
@@ -1853,9 +2075,14 @@ class Api:
         recorder = self._recorder
         take_number = self._recorder_take_number
         temp_dir = self._recorder_temp_dir
+        band = self._recorder_band or []
+        # Set before the recorder is let go of, and cleared once the take's
+        # files are written: start_take and start_monitor wait for it.
+        self._stopping = True
         self._recorder = None
         self._recorder_take_number = None
         self._recorder_temp_dir = None
+        self._recorder_band = None
 
         try:
             field = self.suggest_take_name(take_number)
@@ -1870,24 +2097,97 @@ class Api:
             default = self.suggest_take_name(take_number, chosen=False)
         except Exception:
             default = f"Take {take_number}"
+
+        def finish(progress):
+            try:
+                done = recorder.stop(progress=progress)
+            except BaseException:
+                # The sound did not finish, so the notes do not either: they
+                # stay as raw files, as a crash would leave them, for the
+                # drafts to finish.
+                if any(records_notes(t) for t in band):
+                    self._notes_step("The take's notes could not be let go of",
+                                     self._midi.abandon_take)
+                raise
+            return {**done, "notes": self._end_notes(
+                recorder, band, temp_dir, done["duration_sec"])}
+
         # Awake until the take's files are written, whether or not that
         # works: a laptop asleep half-way through would leave them unwritten.
         try:
             result = self._journaled(
-                "stop", f"Saving “{plain_name}”", temp_dir, take_number,
-                lambda progress: recorder.stop(progress=progress),
+                "stop", f"Saving “{plain_name}”", temp_dir, take_number, finish,
             )
         finally:
+            self._stopping = False
             self._awake.release()
+        notes, missing = self._note_lanes(band, result["tracks"], result["notes"])
         return {
             "ok": True,
             "take_number": take_number,
             "temp_dir": str(temp_dir),
             "duration_sec": result["duration_sec"],
             "tracks": result["tracks"],
+            "notes": notes,
+            "notes_missing": missing,
             "suggested_name": field,
             "default_name": default,
         }
+
+    def _end_notes(self, recorder, band, temp_dir, duration_sec):
+        """
+        A take's notes, once its audio has stopped: the .mid files the rig made
+        of them, [{"name", "file", "port"}], as long as the audio and no
+        longer (a take a sleeping laptop ended stops where it slept). Never
+        raises, for the audio is saved by now; a track whose .mid could not be
+        made is left out, its .midraw staying in the draft.
+        """
+        if not any(records_notes(t) for t in band):
+            return []
+        # The audio callback keeps the first fault of the notes' clock and says
+        # nothing, being the audio thread; the spec has it in the app's log.
+        fault = getattr(recorder, "clock_fault", None)
+        if fault is not None:
+            log.error("The clock that places the take's notes failed during the "
+                      "take, so they are placed without the audio card's own "
+                      "time: %s", fault)
+        notes = self._notes_step("The take's notes could not be finished",
+                                 self._midi.end_take, duration_sec) or []
+
+        # AudioRecorder.stop left take.json for the notes to find their ports
+        # in: it goes once no notes file is left that a later try would need it
+        # for. One that cannot go (Windows, while another program has it open)
+        # costs Stop nothing: it is said in the log and goes with the drafts folder.
+        def forget_record():
+            if not any(Path(temp_dir).glob(f"*{MIDRAW_SUFFIX}")):
+                (Path(temp_dir) / TAKE_RECORD).unlink(missing_ok=True)
+
+        self._notes_step("The take's record could not be removed", forget_record)
+        return notes
+
+    @staticmethod
+    def _note_lanes(band, audio, notes):
+        """
+        A take's notes as the screens get them: each .mid with the audio lane
+        it follows, and the tracks that record notes and have no .mid in the
+        take (a port that was not there, or a .mid the disk refused). The lane
+        is worked out over the audio files the take really has: a track whose
+        audio produced none is not followed.
+
+        Each also carries "place", its track's index in the band: two lanes
+        that follow the same audio lane, one saved and one missing, are put
+        in band order by it, and nothing else says which stood first.
+        """
+        heard = {t["name"] for t in audio}
+        written = {n["name"] for n in notes}
+        lanes = [{**n, "after": lane_after(band, heard, n["name"]),
+                  **place_in(band, n["name"])} for n in notes]
+        missing = [
+            {"name": t["name"], "port": (port_of(t) or {}).get("name"),
+             "after": lane_after(band, heard, t["name"]), **place_in(band, t["name"])}
+            for t in band if records_notes(t) and t["name"] not in written
+        ]
+        return lanes, missing
 
     def keep_take(
         self,
@@ -1898,11 +2198,20 @@ class Api:
         tracks,
         markers=None,
         send_to_cloud=None,
+        notes=None,
     ):
         """
         tracks: [{"name":.., "file": <path in the drafts folder>}, ...] as
         returned by stop_take(). Moves them into the rehearsal folder and adds
         the take to the saved list.
+
+        notes: the .mid files, as stop_take() returns them in "notes", moved
+        beside the WAVs. Any other .mid in the draft goes with them, named as
+        its track: an older screen passes none, and a .mid left in the draft
+        would be deleted with the drafts folder. A notes file that could not
+        become a .mid is never thrown away either: it goes into the take's
+        folder as it is (see _move_unmade_notes). Everything moves or nothing
+        does (_move_take_files).
 
         markers: anything marked while listening on the review screen. They
         are passed in rather than saved as they are placed, because until the
@@ -1928,13 +2237,15 @@ class Api:
         # The review screen is still playing these very files.
         self._release_player_in(temp_dir)
 
-        moved, undo = self._move_tracks(tracks, take_dir)
+        notes = self._draft_notes(temp_dir, s["tracks"], notes)
+        moved, moved_notes, undo = self._move_take_files(temp_dir, take_dir, tracks, notes)
 
         take_info = {
             "take_number": take_number,
             "name": (custom_name or "").strip(),
             "duration_sec": duration_sec,
             "tracks": moved,
+            "notes": moved_notes,
             "markers": [self._as_marker(m) for m in (markers or [])],
         }
         if send_to_cloud is False:
@@ -1955,13 +2266,37 @@ class Api:
         self._retry_failed_publishes()
         return {"ok": True, "take": kept}
 
+    @classmethod
+    def _move_take_files(cls, draft_dir, take_dir, tracks, notes):
+        """
+        Everything a take keeps from its draft into its folder: the audio, the
+        notes, and any notes file not yet a .mid (_move_unmade_notes). It all
+        moves or none of it does. A file that will not move (Windows refuses
+        one another program holds open) puts back every file moved before it
+        and the error goes on: the draft stays whole and listed, to be saved
+        again, and no audio is left in a folder the library never hears of.
+        Returns the audio and the notes at their new paths, and the (new, old)
+        pairs that put them back should the take not be recorded.
+        """
+        undo = []
+        try:
+            moved = cls._move_tracks(tracks, take_dir, undo)
+            moved_notes = cls._move_tracks(notes, take_dir, undo)
+            cls._move_unmade_notes(draft_dir, take_dir, undo)
+        except BaseException:
+            cls._unmove(undo, take_dir)
+            raise
+        return moved, moved_notes, undo
+
     @staticmethod
-    def _move_tracks(tracks, take_dir):
+    def _move_tracks(tracks, take_dir, undo):
         """
-        A take's files into its folder. Returns them at their new paths, and
-        the (new, old) pairs that put them back.
+        A take's files into its folder: its audio, or its .mid files, being
+        anything shaped [{"name", "file"}]. Returns them at their new paths.
+        Each move's (new, old) pair goes into `undo` as soon as it is made, so
+        one that fails part-way still leaves those before it to be put back.
         """
-        moved, undo = [], []
+        moved = []
         for t in tracks:
             src = Path(t["file"])
             dst = take_dir / src.name
@@ -1969,7 +2304,73 @@ class Api:
                 shutil.move(str(src), str(dst))
                 undo.append((dst, src))
             moved.append({"name": t["name"], "file": str(dst)})
-        return moved, undo
+        return moved
+
+    @staticmethod
+    def _move_unmade_notes(draft_dir, take_dir, undo):
+        """
+        A notes file the disk would not let become a .mid (it is still a
+        .midraw) goes into the take's folder as it is, with the clock and the
+        record that a later try needs to make it, and the drafts folder is
+        removed as usual: nothing is deleted unconverted. The take does not
+        list it, so its track shows as one with no notes in this take. Each
+        move's (new, old) pair goes into `undo` as it is made.
+        """
+        draft_dir = Path(draft_dir)
+        left = sorted(draft_dir.glob(f"*{MIDRAW_SUFFIX}"))
+        if left:
+            for src in [*left, draft_dir / CLOCK_FILE, draft_dir / TAKE_RECORD]:
+                if src.exists():
+                    dst = Path(take_dir) / src.name
+                    shutil.move(str(src), str(dst))
+                    undo.append((dst, src))
+
+    @classmethod
+    def _draft_notes(cls, temp_dir, band, notes):
+        """
+        A draft's notes, as Keep keeps them and Crop cuts them: the .mid files
+        `notes` lists, then every other .mid in the draft, found by its file
+        and named as the track it belongs to. An older screen passes none, and
+        a .mid left in the draft would be deleted with the drafts folder, or
+        kept uncut beside audio that was cut.
+        """
+        notes = list(notes or [])
+        listed = {Path(n["file"]).name for n in notes}
+        return notes + cls._named_as_tracks(band, [
+            {"name": p.stem, "file": str(p)}
+            for p in sorted(Path(temp_dir).glob(f"*{MID_SUFFIX}")) if p.name not in listed
+        ])
+
+    @staticmethod
+    def _named_as_tracks(band, notes):
+        """
+        Notes found in a draft by their files, whose stems are all a draft
+        knows them by, under the names of the tracks they belong to
+        ("Synth_Pad" is the track "Synth/Pad"), the way stop_take() names
+        them. The stems are capture.note_stems' over the rehearsal's tracks
+        that take notes. A note already named otherwise (finalize names it
+        from take.json where the record has the name) is left as it is.
+        """
+        stems = note_stems([t["name"] for t in band if records_notes(t)])
+        names = {stem: name for name, stem in stems.items()}
+        return [{**n, "name": names.get(n["name"], n["name"])}
+                if n["name"] == Path(n["file"]).stem else n
+                for n in notes]
+
+    @staticmethod
+    def _audio_named_as_tracks(band, tracks):
+        """
+        The audio found in a draft by its files, under the names of the tracks
+        it belongs to ("Keys_Pad" is the track "Keys/Pad"), as
+        _named_as_tracks names the notes: a draft with no take.json (Stop
+        removes it, and the app was closed on the review screen) knows its
+        files by their stems alone, and a Both track's audio and notes come
+        back under one name. Audio already named otherwise is left as it is.
+        """
+        names = {AudioRecorder.safe_name(t["name"]): t["name"] for t in band if records_audio(t)}
+        return [{**t, "name": names.get(t["name"], t["name"])}
+                if t["name"] == Path(t["file"]).stem else t
+                for t in tracks]
 
     def _add_moved_take(self, folder, take_info, undo, take_dir):
         """
@@ -2043,7 +2444,9 @@ class Api:
     def list_drafts(self):
         """
         Takes that were recorded but never saved — the app was closed or died
-        mid-take. Their audio is on disk as raw PCM; here we just report it.
+        mid-take. Their audio is on disk as raw PCM, and their notes, if they
+        had any, as .midraw files (or a .mid, if Stop got that far); here we
+        just report them: "tracks" and "notes", by file name.
         """
         found = []
         # By folder name, as they sit on disk.
@@ -2091,12 +2494,15 @@ class Api:
         take_dir = _unique_path(folder / _take_dir_name(take_number, named["name"]))
         take_dir.mkdir(parents=True, exist_ok=True)
 
-        moved, undo = self._move_tracks(result["tracks"], take_dir)
+        moved, moved_notes, undo = self._move_take_files(
+            draft_dir, take_dir, self._audio_named_as_tracks(r["tracks"], result["tracks"]),
+            self._named_as_tracks(r["tracks"], result["notes"]))
         take_info = {
             "take_number": take_number,
             "name": display_name,
             "duration_sec": result["duration_sec"],
             "tracks": moved,
+            "notes": moved_notes,
             # A rescued take was never listened to, so it has no marks yet.
             "markers": [],
         }
@@ -2307,13 +2713,15 @@ class Api:
     def _move_take_dir(self, folder, take_number, take, name):
         """
         A take's folder renamed to carry `name`, so the names still make
-        sense browsing the disk. Returns (moved, tracks, error): the (old,
-        new) folders when it moved, the take's files at their new paths
-        (None when nothing moved), and why it could not be moved.
+        sense browsing the disk. Returns (moved, tracks, notes, error): the
+        (old, new) folders when it moved, the take's audio files and its notes
+        at their new paths (None when nothing moved), and why it could not be
+        moved. Whatever else is in the folder, an unconverted .midraw among it,
+        goes with it.
         """
-        old_dirs = {Path(t["file"]).parent for t in take["tracks"] if t.get("file")}
+        old_dirs = _dirs_of(take)
         if len(old_dirs) != 1:
-            return None, None, None
+            return None, None, None, None
         old_dir = old_dirs.pop()
         target = folder / _take_dir_name(take_number, name)
         # Path itself compares case-insensitively on Windows, so whether
@@ -2332,7 +2740,7 @@ class Api:
         else:
             new_dir = _unique_path(target)
         if not old_dir.exists() or str(old_dir) == str(new_dir):
-            return None, None, None
+            return None, None, None, None
         # Windows will not rename a folder holding a file the player has
         # mapped, and the rehearsal screen is usually playing the very take
         # it offers to rename. The interface reopens the take from its new
@@ -2341,10 +2749,12 @@ class Api:
         try:
             old_dir.rename(new_dir)
         except OSError as e:
-            return None, None, str(e)
-        return ((old_dir, new_dir),
-                [{**t, "file": str(new_dir / Path(t["file"]).name)} for t in take["tracks"]],
-                None)
+            return None, None, None, str(e)
+
+        def at_new(files):
+            return [{**f, "file": str(new_dir / Path(f["file"]).name)} for f in files]
+
+        return (old_dir, new_dir), at_new(take["tracks"]), at_new(take.get("notes") or []), None
 
     def rename_take(self, folder, take_number, new_name):
         """Renames a take and its folder on disk, keeping paths in sync."""
@@ -2367,14 +2777,15 @@ class Api:
             # differ from what was typed: renamed to its own song, a take
             # keeps its go.
             named = self._lib.resolve_name(folder, display_name, take_number)
-            moved, new_tracks, error = self._move_take_dir(
+            moved, new_tracks, new_notes, error = self._move_take_dir(
                 folder, take_number, take, named["name"])
             if error is not None:
                 print(f"[rename] take folder: {error}")
 
             try:
                 updated = self._lib.update_take(
-                    folder, take_number, name=display_name, tracks=new_tracks
+                    folder, take_number, name=display_name, tracks=new_tracks,
+                    notes=new_notes
                 )
             except Exception:
                 # The folder must not stay renamed under a record that still
@@ -2668,31 +3079,39 @@ class Api:
                     f"A take has to keep at least {MIN_CROP_SEC:g} second"}
         return {"start": start, "end": end}
 
-    def _crop_tracks(self, tracks, start_sec, end_sec, progress=None):
+    def _crop_tracks(self, tracks, start_sec, end_sec, progress=None, notes=()):
         """
-        Rewrites every track shorter and puts the originals in the Trash as
-        one folder named after the take — what turns up there is then a
-        recognisable thing rather than eight loose files called Gtr.wav.
+        Rewrites every track shorter, and every notes file (a .mid) with them,
+        and puts the originals in the Trash as one folder named after the take
+        — what turns up there is then a recognisable thing rather than eight
+        loose files called Gtr.wav. An unconverted .midraw (R40), with the
+        clock and the record that a later try would make it from, is timed
+        from the uncropped take's start and belongs to the take as it was: it
+        goes aside with the originals and the cropped take keeps none. Anything
+        else in the take's folder is not the crop's to touch.
 
         The order matters, because the app can be killed in the middle of it.
         Every new file is written under WRITING_PREFIX first, so nothing is
         replaced until all of them exist; then the originals move aside
-        together; then the new files take their names; then the folder of
-        originals goes. Die between those last two and the take folder holds
-        obviously-unfinished files with the originals in a folder beside it —
-        repairable by hand, which is the most a step that moves files can
-        promise. A move that fails while the app is alive is undone instead:
-        the take goes back to exactly what it was, because a half-cropped take
-        behind the words "could not crop" is a take nobody goes looking at.
+        together, the .mid files with the .wav files; then the new files take
+        their names; then the folder of originals goes. Die between those last
+        two and the take folder holds obviously-unfinished files with the
+        originals in a folder beside it — repairable by hand, which is the most
+        a step that moves files can promise. A move that fails while the app is
+        alive is undone instead: the take goes back to exactly what it was,
+        because a half-cropped take behind the words "could not crop" is a take
+        nobody goes looking at.
         """
-        take_dir = Path(tracks[0]["file"]).parent
+        files = [*tracks, *notes]
+        take_dir = Path(files[0]["file"]).parent
         written = []
         # What the new files really came out as. Tracks of a take may differ in
         # length, so the take is as long as its longest one — and the region
         # that was asked for is not that length: it is not clamped to the file
         # for a draft, and a legacy take with no stored duration is not clamped
-        # at all.
-        kept_sec = 0.0
+        # at all. A take of nothing but notes has no audio to measure: it is
+        # the region.
+        kept_sec = 0.0 if tracks else max(0.0, end_sec - start_sec)
         # How far along it is, the tracks weighed by their length.
         stages = activitymod.Stages(
             [(f"Track {i + 1} of {len(tracks)}", wav_frames(t["file"]))
@@ -2711,6 +3130,22 @@ class Api:
                 return {"ok": False, "error": res["error"]}
             written.append(target)
             kept_sec = max(kept_sec, res["frames"] / res["samplerate"])
+        for n in notes:
+            source = Path(n["file"])
+            target = _writing_path(source)
+            res = crop_mid(source, target, start_sec, end_sec)
+            if not res["ok"]:
+                target.unlink(missing_ok=True)
+                for w in written:
+                    w.unlink(missing_ok=True)
+                return {"ok": False, "error": f"{source.name}: {res['error']}"}
+            written.append(target)
+
+        # The clock and the record go with a .midraw only when there is one, as
+        # _move_unmade_notes has it.
+        left = sorted(take_dir.glob(f"*{MIDRAW_SUFFIX}"))
+        if left:
+            left += [p for p in (take_dir / CLOCK_FILE, take_dir / TAKE_RECORD) if p.exists()]
 
         aside = _unique_path(take_dir.with_name(f"{take_dir.name} (before crop)"))
         # Every original that reached the aside folder, oldest first. On
@@ -2721,12 +3156,11 @@ class Api:
         moved = []
         try:
             aside.mkdir(parents=True)
-            for t in tracks:
-                source = Path(t["file"])
+            for source in [*(Path(f["file"]) for f in files), *left]:
                 shutil.move(str(source), str(aside / source.name))
                 moved.append((aside / source.name, source))
-            for t, target in zip(tracks, written):
-                os.replace(target, Path(t["file"]))
+            for f, target in zip(files, written):
+                os.replace(target, Path(f["file"]))
         except OSError as e:
             # Backwards, so that an original lands on top of a replacement
             # already made rather than under it. os.replace rather than
@@ -2783,7 +3217,8 @@ class Api:
             return {"ok": False, "error": "Take not found"}
 
         tracks = [t for t in take["tracks"] if Path(t.get("file", "")).exists()]
-        if not tracks:
+        notes = [n for n in take.get("notes") or [] if Path(n.get("file", "")).exists()]
+        if not tracks and not notes:
             return {"ok": False, "error": "The take has no files left on disk"}
 
         span = self._crop_span(take["duration_sec"], start_sec, end_sec)
@@ -2800,7 +3235,7 @@ class Api:
             "crop", f"Cropping “{take.get('name') or f'Take {take_number}'}”",
             folder, take_number,
             lambda progress: self._crop_tracks(
-                tracks, span["start"], span["end"], progress=progress),
+                tracks, span["start"], span["end"], progress=progress, notes=notes),
         )
         if not done["ok"]:
             # Nothing else will put the player back: the take's tracks are
@@ -2863,19 +3298,25 @@ class Api:
             **({"error": done["error"]} if "error" in done else {}),
         }
 
-    def crop_draft(self, temp_dir, tracks, start_sec, end_sec):
+    def crop_draft(self, temp_dir, tracks, start_sec, end_sec, notes=None):
         """
         The same cut, one folder over. A take that has been stopped is proper
         .wav already — capture wraps the raw PCM on stop — it just has no
         record in the database yet, so there is nothing here to fix up. The
         files keep their paths, so the caller saves the take as it would have.
+        `notes` are its .mid files, [{"name", "file"}] like the tracks, cut
+        with them and answered the same way. Every other .mid in the draft is
+        cut too, as Keep keeps it (_draft_notes), and is not in the answer.
         """
         temp_dir = Path(temp_dir)
         if not self._inside_recordings(temp_dir):
             return {"ok": False, "error": "Folder is outside the recordings directory"}
 
         live = [t for t in (tracks or []) if Path(t.get("file", "")).exists()]
-        if not live:
+        given = [n for n in (notes or []) if Path(n.get("file", "")).exists()]
+        band = self._session["tracks"] if self._session is not None else []
+        live_notes = self._draft_notes(temp_dir, band, given)
+        if not live and not live_notes:
             return {"ok": False, "error": "The take has no files left on disk"}
 
         span = self._crop_span(0, start_sec, end_sec)
@@ -2887,7 +3328,7 @@ class Api:
         done = self._journaled(
             "crop", "Cropping the take", temp_dir, None,
             lambda progress: self._crop_tracks(
-                live, span["start"], span["end"], progress=progress),
+                live, span["start"], span["end"], progress=progress, notes=live_notes),
         )
         if not done["ok"]:
             # See crop_take: the files the interface would reopen on have not
@@ -2898,6 +3339,7 @@ class Api:
         return {
             "ok": True,
             "tracks": live,
+            "notes": given,
             "duration_sec": done["duration_sec"],
             "trashed": done["trashed"],
             "location": done["location"],
@@ -3089,12 +3531,9 @@ class Api:
                 return {"ok": False, "error": "Take not found"}
 
             # Find the take folder from its files rather than its name: the name
-            # could have been changed by hand.
-            take_dirs = {
-                str(Path(t["file"]).parent)
-                for t in target["tracks"]
-                if t.get("file")
-            }
+            # could have been changed by hand. Its notes are files too: a take
+            # of nothing but notes has no audio to find it by.
+            take_dirs = {str(d) for d in _dirs_of(target)}
             result = {"ok": True, "trashed": False, "location": None}
             for d in take_dirs:
                 if Path(d).exists() and self._inside_recordings(d):
@@ -3564,8 +4003,9 @@ class Api:
     def _copy_to_cloud(self, folder, take_number, what="mix", progress=None):
         """
         Copies one take into the cloud folder. what: "mix" (one stereo file),
-        "tracks" (the originals) or "both". `progress(fraction, step)`, when
-        given, hears how far along it is, weighed in frames of audio.
+        "tracks" (the originals, with the take's notes as .mid) or "both".
+        `progress(fraction, step)`, when given, hears how far along it is,
+        weighed in frames of audio.
 
         Anything shared earlier for this take is replaced, so re-sharing after
         a rename or a new balance leaves one copy, not three.
@@ -3609,7 +4049,9 @@ class Api:
         # with, and the take would then report itself current for a mix that
         # is wrong — for good, since the fingerprint suppresses its own repair.
         volumes = dict(self._config.get("volumes", {}))
-        notes = []
+        # What the encoder had to say, for the person (an encode that fell back
+        # to WAV); not the take's notes, which are the .mid files below.
+        encoder_notes = []
 
         # How far along it is, in frames of audio: the mixdown reads the
         # longest track twice, its encode once more; each track's copy is its
@@ -3636,7 +4078,7 @@ class Api:
                 return res
             packed = encode(res["file"], fmt, progress=stages.part(1))
             if packed.get("note"):
-                notes.append(packed["note"])
+                encoder_notes.append(packed["note"])
             mix = target / f"{base}{extension(packed['format'])}"
             os.replace(packed["file"], mix)
             shared["mix"] = str(mix)
@@ -3664,8 +4106,21 @@ class Api:
                         dest / f"{source.stem}{extension(packed['format'])}",
                     )
                     writing = None
-                    if packed.get("note") and packed["note"] not in notes:
-                        notes.append(packed["note"])
+                    if packed.get("note") and packed["note"] not in encoder_notes:
+                        encoder_notes.append(packed["note"])
+                # The take's notes go beside the tracks as they are: a .mid is
+                # not audio, so it is never encoded (which would rename it
+                # <stem>.wav) and is not part of the mix. One that is not on
+                # disk any more is left out, as a missing track is. They weigh
+                # nothing in the stages: a few kilobytes beside the audio.
+                for row in take.get("notes") or []:
+                    mid = Path(row.get("file") or "")
+                    if not mid.is_file():
+                        continue
+                    writing = _writing_path(dest / mid.name)
+                    shutil.copy2(mid, writing)
+                    os.replace(writing, dest / mid.name)
+                    writing = None
             except OSError as e:
                 if writing is not None:
                     writing.unlink(missing_ok=True)
@@ -3694,7 +4149,7 @@ class Api:
             "ok": True,
             "take": take,
             "cloud": shared,
-            **({"note": " ".join(notes)} if notes else {}),
+            **({"note": " ".join(encoder_notes)} if encoder_notes else {}),
         }
 
     def unshare_take(self, folder, take_number):
@@ -3915,7 +4370,7 @@ class Api:
         more than one folder, or are not on disk, has no folder to rename.
         """
         wrong = set()
-        dirs = {Path(t["file"]).parent for t in take["tracks"] if t.get("file")}
+        dirs = _dirs_of(take)
         if len(dirs) == 1:
             d = next(iter(dirs))
             if d.is_dir() and not _carries(d.name, _take_dir_name(take["take_number"], take["name"])):
@@ -3981,13 +4436,14 @@ class Api:
                 with self._player_lock:
                     if self._playing_from(take):
                         return {"renamed": False, "error": None}
-                    moved, tracks, error = self._move_take_dir(
+                    moved, tracks, notes, error = self._move_take_dir(
                         folder, take_number, take, take["name"])
                 if error is not None:
                     return {"renamed": False, "error": error}
                 if moved:
                     try:
-                        updated = self._lib.update_take(folder, take_number, tracks=tracks)
+                        updated = self._lib.update_take(
+                            folder, take_number, tracks=tracks, notes=notes)
                     except Exception as e:
                         return self._undo_move(moved, str(e))
                     if updated is None:

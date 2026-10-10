@@ -7,10 +7,11 @@ import { displayVersion, latestVersion, newsLead } from "./changelog"
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
 describe("the site's content", () => {
-  it("has the nine tiles, in order", () => {
+  it("has the ten tiles, in order, the MIDI one right after the one on tracks", () => {
     expect(content.features.tiles.map((t) => t.id)).toEqual([
       "health",
       "track",
+      "midi",
       "rehearsals",
       "marks",
       "names",
@@ -19,6 +20,15 @@ describe("the site's content", () => {
       "formats",
       "trash",
     ])
+  })
+
+  it("has the MIDI tile's words", () => {
+    const midi = content.features.tiles.find((t) => t.id === "midi")!
+    expect(midi.title).toBe("Notes too, from an e-kit or a keyboard.")
+    expect(midi.body.replace(/\s+/g, " ").trim()).toBe(
+      "A track records its audio, its MIDI or both. The notes are saved as .mid beside " +
+        "the audio, ready for your DAW."
+    )
   })
 
   it("has the sets tile's words", () => {

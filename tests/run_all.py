@@ -3,13 +3,21 @@ Every Python suite, one command:
 
     python tests/run_all.py
 
-Three of them, because they answer different questions and need different
+Five of them, because they answer different questions and need different
 things to be true:
 
     test_engine.py     the audio itself — mixing, seeking, disk safety,
-                       crash recovery, both bit depths, compression. No
-                       browser, no sound card: PortAudio is stubbed and the
-                       samples are inspected directly.
+                       crash recovery (a crashed take's notes included), both
+                       bit depths, compression, the notes going to the
+                       cloud with the original tracks, the notes the player
+                       is sent for a take (take_notes), the MIDI ports
+                       before a take (the check, Start, Finish, Under the
+                       hood), a take with notes (Start, Stop, Keep and
+                       Recover, through the Api on a fake port system), and
+                       a take's notes following its files (renamed, merged,
+                       deleted and cropped with the audio, a take of nothing
+                       but notes too). No browser, no sound card: PortAudio
+                       is stubbed and the samples are inspected directly.
 
     test_platform.py   the places macOS, Windows and Linux differ. Only one
                        of them is here, so the code is driven into each shape
@@ -18,6 +26,47 @@ things to be true:
 
     test_store.py      the history database — schema, migrations, and the move of
                        old session.json files into it.
+
+    test_ports.py      midi/ports.py, the one module that talks to the MIDI
+                       library, against a stand-in for the library that has
+                       the real one's quirks. The other suites block the
+                       library; this one puts the stand-in in its place.
+
+    test_midi.py       recording notes beside the audio. So far: what stops
+                       Start (no track that records sound, a track with no
+                       port, two on one port), that the card check then
+                       holds only the tracks that record audio, which saved
+                       port is found again after a replug, the order a
+                       device's ports are listed in, the .mid file (what
+                       one can hold, written with mido and read back, names
+                       in UTF-8, a DAW's own ticks and tempo read right), and
+                       what a port has set and holds (the state a take starts
+                       with, the keys and pedals let go at its end), and the
+                       audio's own clock (a note placed on its sample, drift
+                       included), and one take's notes on disk (a .midraw
+                       written as they are played, the .mid made at Stop or
+                       after a crash, a disk that refuses a write or takes it
+                       in part, a recorder two threads drive), and the
+                       rehearsal's ports on a fake port system (a port that
+                       waits, comes, goes, is held by another app or goes
+                       quiet, the same notes on two ports, a port kept open
+                       with what it set through a rename or a re-pick and on
+                       a system that opens a port once, a track starting from
+                       its port's state while the port is away, a pedal let
+                       up when its port goes, a take fed through the rig's
+                       own threads), and a take's .mid read back as the notes
+                       the player draws (a drum grid or a piano roll, a roll on
+                       one note paired oldest first), and a .mid cropped (the
+                       state before the start at tick 0, a key held across
+                       either end left out or let go, ticks that do not
+                       drift), and tools/midi_alignment.py, the hand check
+                       of how far the notes are from their audio, run on
+                       a folder of WAVs and .mid files made here (clicks
+                       and drum hits, hard, soft, slow, ringing and over
+                       a rumble, 3 ms late or early, a take of two windows,
+                       16, 24 and 32-bit float).
+                       Later tasks add to it. No port is opened: the library
+                       is blocked and the rules are plain functions.
 
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.
@@ -33,7 +82,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SUITES = ("test_engine.py", "test_platform.py", "test_store.py")
+SUITES = ("test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
+          "test_midi.py")
 
 
 def main():

@@ -7,6 +7,18 @@ opening.
 
 ## Unreleased
 
+- **Record what the e-kit plays, or the keyboard.** Every track card has an
+  **Audio / Both / MIDI** switch, and a track on *Both* or *MIDI* has a MIDI
+  port to pick under it: an e-kit, a keyboard, several at once. The notes are
+  saved as a `.mid` beside the take's WAVs, for a DAW; the app draws them in
+  the player and never plays them. **Check signal** says *✓ notes* beside a
+  port once a note has arrived. A port that is not plugged in does not stop
+  the rehearsal: its card says so in amber, and its notes start the moment
+  it appears, even in the middle of a take. A *Both* track's notes lane sits
+  under its waveform, a *MIDI* track's has a lane of its own, and in the
+  cloud *The original tracks* and the cloud's *Both* copy each `.mid` as it
+  is. Under the hood shows which MIDI system the app is on. Every track so
+  far is *Audio*.
 - **The laptop stays awake during a take.** While a take records, the
   laptop does not go to sleep and its screen does not go dark or lock, so
   Stop and Space still work after a long jam; after Stop the system's own

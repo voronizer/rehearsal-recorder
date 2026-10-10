@@ -123,10 +123,15 @@ function MeteredFader({
  * follow the music is not a meter.
  *
  * It reads zero when nothing is playing, which is what a meter at rest does.
+ *
+ * A track that records its notes too is one card of two halves: these
+ * controls above, and its notes' plate (midi/NotesPlate) below, under a
+ * dashed line.
  */
 export function LaneControls({
   name,
   icon,
+  paired = false,
   channels,
   muted,
   soloed,
@@ -141,6 +146,8 @@ export function LaneControls({
   name: string
   /** The band's icon for this name; none draws the neutral one. */
   icon?: string
+  /** The upper half of the track's card: its notes' plate is under it. */
+  paired?: boolean
   /** In the file: 1, 2, or 0 when it could not be read. */
   channels: number
   muted: boolean
@@ -158,7 +165,10 @@ export function LaneControls({
   return (
     <div
       data-plate={name}
-      className="flex h-full flex-col justify-center gap-2.5 rounded-lg border bg-card px-3.5 py-2"
+      className={cn(
+        "flex h-full flex-col justify-center gap-2.5 rounded-lg border bg-card px-3.5 py-2",
+        paired && "rounded-b-none border-b-0"
+      )}
     >
       <div className="flex items-center gap-2.5">
         <InstrumentIcon icon={icon} className="size-4 shrink-0 text-muted-foreground" />

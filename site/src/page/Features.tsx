@@ -1,6 +1,7 @@
 import { content, TILES } from "../content"
 import { Paragraphs } from "./Md"
 import { shots, type PieceData } from "./pieces"
+import { titleParts } from "./title"
 
 type Id = (typeof TILES)[number]
 
@@ -8,6 +9,8 @@ type Id = (typeof TILES)[number]
 const LAYOUT: Record<Id, string> = {
   health: "tile s4",
   track: "tile s2",
+  // A row of its own, its words beside the notes as the sets tile's are.
+  midi: "tile s6",
   rehearsals: "tile s2",
   marks: "tile s4",
   names: "tile s4",
@@ -20,7 +23,20 @@ const LAYOUT: Record<Id, string> = {
 }
 
 /** The tiles with their words beside the piece, not over it. */
-const SPLIT = new Set<Id>(["health", "sets"])
+const SPLIT = new Set<Id>(["health", "midi", "sets"])
+
+/** A tile's title, its short hyphenated words kept whole (see titleParts). */
+function Title({ text }: { text: string }) {
+  return titleParts(text).map((part, i) =>
+    part.whole ? (
+      <span key={i} className="whole">
+        {part.text}
+      </span>
+    ) : (
+      part.text
+    )
+  )
+}
 
 export function Features({ data }: { data: PieceData }) {
   const { features } = content
@@ -37,7 +53,9 @@ export function Features({ data }: { data: PieceData }) {
           const s = shot[id]
           const copy = (
             <div className="copy">
-              <h3>{tile.title}</h3>
+              <h3>
+                <Title text={tile.title} />
+              </h3>
               <Paragraphs text={tile.body} />
             </div>
           )

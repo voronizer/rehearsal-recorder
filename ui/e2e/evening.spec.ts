@@ -180,12 +180,14 @@ test("Send starred says which take it could not send, and why", async ({ page })
 })
 
 test("Clear false starts is off while it clears", async ({ page }) => {
-  const overview = await openEvening(page, "window.__DELETE_MS__ = 1500;")
+  // The fake takes 3 s to clear, so a busy machine still sees the button
+  // disabled well inside that time; the check below gives it 2 s of it.
+  const overview = await openEvening(page, "window.__DELETE_MS__ = 3000;")
   const clear = overview.getByRole("button", { name: /Clear false starts/ })
   await clear.click()
   await page.getByRole("dialog").getByRole("button", { name: "Move to the Trash" }).click()
   // Still clearing: pressed again, it asks nothing.
-  await expect(clear).toBeDisabled({ timeout: 300 })
+  await expect(clear).toBeDisabled({ timeout: 2000 })
   await clear.click({ force: true })
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(row(overview, 4)).toHaveCount(0)

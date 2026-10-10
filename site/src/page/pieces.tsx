@@ -1,8 +1,10 @@
 // The pieces of the app in the tiles: the app's own components, given what
 // the screens would give them, from the band on the fake Python side. They
 // are pictures here: still, and not for clicking.
-import type { ReactNode } from "react"
+import { Fragment, type ReactNode } from "react"
 import { HealthLine } from "@/components/HealthLine"
+import { NotesLane } from "@/components/midi/NotesLane"
+import { NotesPlate } from "@/components/midi/NotesPlate"
 import { SetCard, SongRows } from "@/components/NextTakeSongs"
 import { RehearsalList } from "@/components/RehearsalList"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
@@ -19,6 +21,7 @@ import {
 } from "@/lib/api"
 import { otherSongs } from "@/lib/setSongs"
 import type { TILES } from "../content"
+import { siteNotes, type SiteNotes } from "../stage/demo"
 
 export type PieceData = {
   rehearsals: RehearsalSummary[]
@@ -27,6 +30,8 @@ export type PieceData = {
   choices: SongChoices
   /** The band's set, Gig on the 25th, for the sets tile. */
   set: RehearsalSet | null
+  /** The drums' and the keys' notes for the MIDI tile (stage/notes.js). */
+  notes: SiteNotes
 }
 
 /** What the tiles show, asked of the bridge as the history screen and the
@@ -42,7 +47,7 @@ export async function loadPieces(): Promise<PieceData> {
     Math.max(0, ...last.takes.filter((t) => t.song === song).map((t) => t.go ?? 0)) + 1
   const choices = { here: [], other: offered.other.map((c) => ({ ...c, go: next(c.song) })) }
   const [set] = await api().list_sets()
-  return { rehearsals, last, choices, set: set ?? null }
+  return { rehearsals, last, choices, set: set ?? null, notes: siteNotes() }
 }
 
 const nothing = () => {}
@@ -101,6 +106,34 @@ function Panel({ children }: { children: ReactNode }) {
   return <div className="flex w-[23rem] max-w-full flex-col gap-5">{children}</div>
 }
 
+/**
+ * Two tracks' notes over eight bars, as the player lays them out: a plate on
+ * the left, what it is and where it came from, and the notes beside it, the
+ * part already heard in the accent. Where there is no room for the plate
+ * beside the notes, as on a phone, it goes over them.
+ */
+function Notes({ notes }: { notes: SiteNotes }) {
+  return (
+    <div className="@container w-[44rem] max-w-full">
+      <div className="grid grid-cols-1 grid-rows-[auto_7.5rem_auto_7.5rem] gap-2 @md:grid-cols-[11rem_minmax(0,1fr)] @md:grid-rows-[7.5rem_7.5rem]">
+        {notes.lanes.map(({ port, notes: read }) => (
+          <Fragment key={read.name}>
+            <NotesPlate name={read.name} icon={read.icon} port={port} />
+            <NotesLane
+              name={read.name}
+              data={read}
+              duration={notes.to}
+              view={{ from: notes.from, to: notes.to }}
+              playhead={notes.playhead}
+              className="h-full rounded-lg border"
+            />
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export type Shot = { pieces: ReactNode; left?: boolean }
 
 /** Which piece goes beside which tile's words, by the tile's id. */
@@ -109,6 +142,7 @@ export function shots({
   last,
   choices,
   set,
+  notes,
 }: PieceData): Record<(typeof TILES)[number], Shot | null> {
   const kept = last.takes.find((t) => t.cloud && t.starred)
   return {
@@ -130,6 +164,15 @@ export function shots({
           <div className="flex flex-col items-end gap-2">
             <StopTake onStop={nothing} stopping={false} saving={null} />
           </div>
+        </Piece>
+      ),
+    },
+    midi: {
+      pieces: (
+        <Piece
+          label={`The notes of ${notes.lanes.map((l) => `${l.notes.name} from ${l.port}`).join(" and ")} over eight bars, each saved as .mid`}
+        >
+          <Notes notes={notes} />
         </Piece>
       ),
     },

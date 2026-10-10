@@ -49,6 +49,9 @@ it has and the recording quality. Click it to open Settings.
 - **Stereo** records an input and the next one together as one stereo track,
   for a keyboard or a pair of overhead microphones. See
   [Stereo instruments](#stereo-instruments).
+- **Audio, Both and MIDI**, at the top right of each card, say what the
+  track records: its input, its input and a MIDI port, or a MIDI port alone,
+  for an electronic kit or a keyboard. See [Recording MIDI](#recording-midi).
 
 The tracks, their icons and their inputs are saved when you start the
 rehearsal, and they are filled in for you next time. **Save as template** saves them without
@@ -558,8 +561,8 @@ sending on.
 - **The mix:** one stereo file, mixed with the balance you set in the player.
   This is the one to send to the band. If the tracks together would clip, the
   level is lowered automatically.
-- **The original tracks:** every track as recorded, for editing later in a
-  DAW.
+- **The original tracks:** every track as recorded, and the notes of any
+  track that records MIDI as `.mid`, for editing later in a DAW.
 - **Both.**
 
 In Settings you also choose the format of the copies:
@@ -668,6 +671,107 @@ meter in the player show left above right, so you notice straight away if
 one microphone stops working. A
 stereo track takes twice the disk space of a mono one.
 
+## Recording MIDI
+
+![Drums on Both, with its input and the port TD-17 being checked, above Bass on Audio](screenshots/midi-card.png)
+
+An electronic drum kit, an e-kit, sends its sound to the mixer, and every
+hit down its USB cable as MIDI. A track can record its audio, its MIDI, or
+both. The notes are saved as a `.mid` beside the take's WAVs, for a DAW: the
+kit's sound as it was in the room, and its hits as notes to put other drum
+sounds on later. The app draws the notes in the player and never plays them.
+
+### The switch and the port
+
+At the top right of every track card is a switch.
+
+- **Audio** records the input, as always. Every track starts on it.
+- **Both** records the input and a MIDI port, on a second line under the
+  input. This is the setting for an e-kit.
+- **MIDI** records a port alone, for a keyboard. The track has no input.
+
+Pick the port in the list on its line; a MIDI cable into the interface
+shows up there too. On a keyboard with two ports, the list puts the one you
+play first, and during **Check signal** says "✓ notes" beside the one that
+is played. Two identical devices are both listed, and the track says "not
+connected" until you pick one. The mode and the port stay with the musician,
+as the icon and **Stereo** do.
+
+**Start rehearsal** stays off, and the screen says why, when a track on
+**Both** or **MIDI** has no port yet, when two tracks take notes from one
+port, and when every track is on **MIDI**: the takes are heard from their
+audio. **Check signal** checks the ports too: a port's line says "no notes"
+until a note has arrived, and then "✓ notes".
+
+### A port that is not plugged in
+
+A port that was picked and is not there does not stop the rehearsal. Its
+line gets an amber edge, and an amber note says "“TD-17” is not connected.
+Drums records its notes from the moment it is plugged in." The track waits,
+and its notes start when the port appears, even in the middle of a take; the
+list notices a port plugged in within a couple of seconds. A port pulled out
+during a take stops nothing, and if it comes back, its notes go on in the
+same file.
+
+### On the recording screen, and in the player
+
+![A take open in the player: Drums with its notes under its waveform, the part already played in blue and the rest grey](screenshots/midi-player.png)
+
+While you record, a track on **Both** has a narrow column for its notes on
+the right of its tile, and a track on **MIDI** has a tile of its own. A port
+that is not connected gives the tile an amber edge, and says so where the
+tile is wide enough.
+
+In the player, a track's notes are a lane of their own: under the audio on
+**Both**, its plate the lower half of the same card, and in its own place in
+the band on **MIDI**. The plate says "Saved as .mid, not played here", and
+has no **M**, **S** or fader, as there is nothing to hear. A kit is drawn in
+six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything else, by
+pitch. A track with the drums icon is drawn as a kit, and so is one whose
+notes are all on MIDI channel 10. A track with no notes in a take says "No
+notes in this take".
+
+### Where the .mid files are
+
+In the take's folder, beside the WAVs, with the same name as the track:
+`Drums.wav` and `Drums.mid`. A track on **MIDI** has only a `.mid`. **Show in
+Finder** (**Show in Explorer** on Windows), at the top of the window, opens
+the rehearsal's folder, and the take's folder is in it. In the cloud, **The
+original tracks** and the cloud's **Both** copy each `.mid` as it is; **The
+mix** has no notes in it.
+
+### In a DAW
+
+The `.mid` is written at 120 bpm, and the file says so. Set the project to
+120 bpm, or let the DAW take the file's tempo, and put the `.mid` at bar 1,
+where the WAVs start. Then they line up. At any other project tempo, the
+notes drift from the audio.
+
+- **Logic** may ask about the file's tempo, or have that question turned
+  off.
+- In **Cubase**, **Ignore Master Track Events on Merge** keeps the
+  project's own tempo.
+- **Ableton Live** puts every channel of a file in one clip.
+
+A Polish or Cyrillic track name is saved as it is. Some DAWs still show it
+garbled; the file's own name is right.
+
+### Bluetooth, and Windows
+
+**Bluetooth MIDI** adds a few milliseconds of uneven delay, so its notes sit
+a little late and loose against the sound. For a part that has to be tight,
+such as the kit, use a cable.
+
+**Settings → Under the hood** has a **MIDI** row, under Audio engine, that
+says which MIDI the app is using: on Windows, "Windows MIDI Services" or
+"Windows MIDI"; the bug report has it too. On "Windows MIDI" a Bluetooth
+MIDI device cannot be seen: if yours is not in the list, use a cable.
+"Windows MIDI" also lets only one program have a port at a time. If a DAW
+or a drum-sound program has it, the amber note during **Check signal** says
+"“TD-17” is in use by another app."; while you record, the tile reads "not
+connected" and its tooltip says why. Close the other program. The app holds
+a port too, during **Check signal** and in a rehearsal.
+
 ## Keyboard
 
 Space does the main thing on each screen: start the rehearsal, start a take,
@@ -735,10 +839,10 @@ ASIO driver that comes with some laptops is known to behave like this.
 
 To ask for help, press **Copy details for a bug report** on the same page and
 paste what it copies into your message. It says which version you have, what
-the computer is, which interface and settings you record with, what the last
-check found, and where the app keeps its files. The **Show** buttons there
-open the folder with the settings, the history or the crash log, if someone
-asks you to send one.
+the computer is, which interface and settings you record with, which MIDI
+the app is on, what the last check found, and where the app keeps its files.
+The **Show** buttons there open the folder with the settings, the history or
+the crash log, if someone asks you to send one.
 
 The same test also runs from a terminal, in the folder where you unpacked the
 app, which can test another interface too — add its number from the list it
@@ -754,7 +858,8 @@ If the interface is unplugged or switched off during a take, the take stops
 on its own after three seconds without sound. Everything recorded until then
 is kept, and the take opens as usual, with a note saying why it stopped. Plug
 the interface back in and record the next take. If it is not offered, press
-**Look again** in Settings.
+**Look again** in Settings. A MIDI port that goes away does not stop a take:
+see [A port that is not plugged in](#a-port-that-is-not-plugged-in).
 
 When a stream has just started, the interface gets five seconds to send its
 first sound, because some drivers take a moment to start.
@@ -784,7 +889,8 @@ Everything up to that moment is saved." Record the next take as usual.
 
 The app writes every track to disk while you play, and makes sure it is
 saved every 30 seconds. If the app closes or crashes during a take, you lose
-at most the last half minute.
+at most the last half minute. The notes of a MIDI track are written the same
+way, and come back with the take.
 
 Next time you open the app, it offers these takes first. **Recover** adds a
 take to its rehearsal, **Discard** moves it to the Trash, and **Decide
@@ -812,6 +918,9 @@ RehearsalRecordings/
 
 While a take records, it is written to `_drafts`. **Save take** moves it into
 its own folder, and **Discard** moves it to the Trash.
+
+A track that records MIDI leaves a `.mid` beside the WAVs, with the same
+name. See [Where the .mid files are](#where-the-mid-files-are).
 
 Deleted takes and rehearsals go to the Trash or the Recycle Bin. On a
 computer without one, they go to a `_deleted` folder inside the recordings

@@ -95,7 +95,7 @@ const AUTO_PUBLISH_OPTIONS: { id: ShareWhat; label: string; hint: string }[] = [
   {
     id: "tracks",
     label: "The original tracks",
-    hint: "Every track as recorded, untouched — for opening in a DAW later.",
+    hint: "Every track as recorded, untouched, and the notes as .mid — for opening in a DAW later.",
   },
   {
     id: "both",
