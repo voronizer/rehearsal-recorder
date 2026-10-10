@@ -127,6 +127,10 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     its notes come back under the one name, as Stop gives them; otherwise by
     its file.
 
+    take.json is left where it is: a recovery whose files then fail to move
+    is tried again with it, and the draft's folder goes, with it, once the
+    take is kept.
+
     `progress(fraction, step)`, when given, hears how far along it is, the
     tracks weighed by their size.
     """
@@ -135,7 +139,6 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     frames = 0
 
     widths = _widths(take_dir)
-    # Read now: take.json is deleted below, once the notes are made.
     track_names, note_names = _names(take_dir, "tracks"), _names(take_dir, "notes")
     raws = sorted(take_dir.glob(f"*{RAW_SUFFIX}"))
     stages = Stages(
@@ -159,13 +162,8 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
         tracks.append({"name": track_names.get(wav_path.stem, wav_path.stem), "file": str(wav_path)})
 
     duration = frames / samplerate if samplerate else 0
-    # Before the record goes: it says which port each notes file came from. And
-    # not while a notes file is left that could not be made into a .mid, which
-    # a second try needs it for.
     notes = [{**n, "name": note_names.get(n["name"], n["name"])}
              for n in finish_draft(take_dir, duration, samplerate)]
-    if not any(take_dir.glob(f"*{MIDRAW_SUFFIX}")):
-        (take_dir / TAKE_RECORD).unlink(missing_ok=True)
 
     return {
         "tracks": tracks,

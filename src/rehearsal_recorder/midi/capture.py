@@ -502,11 +502,11 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
     name in the file, else its name. A `.mid.part` is what a conversion that was
     cut short left, and is removed.
 
-    The samplerate and the ports' names come from take.json, which the audio
-    wrote when the take began (the caller deletes it after this); `samplerate`
-    stands in when it has none. With no samplerate at all the clock's marks are
-    not used and the notes are placed by when the take began. A port take.json
-    does not name is called what its file is.
+    The samplerate, the ports' names and the tracks' come from take.json,
+    which the audio wrote when the take began; `samplerate` stands in when it
+    has none. With no samplerate at all the clock's marks are not used and the
+    notes are placed by when the take began. A port take.json does not name is
+    called what its file is, and so is a track inside its .mid.
 
     `duration_sec` is the audio's length. A take with no audio frames, 0 or
     None, keeps every event and lets go at the last of them, which is better
@@ -521,11 +521,14 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
         record = {}
     rate = next((r for r in (record.get("samplerate"), samplerate)
                  if isinstance(r, (int, float)) and not isinstance(r, bool) and math.isfinite(r) and r > 0), None)
-    ports = {}
+    ports, names = {}, {}
     notes = record.get("notes")
     for entry in notes if isinstance(notes, list) else []:
-        if isinstance(entry, dict) and isinstance(entry.get("file"), str) and isinstance(entry.get("port"), str):
-            ports.setdefault(entry["file"], entry["port"])
+        if isinstance(entry, dict) and isinstance(entry.get("file"), str):
+            if isinstance(entry.get("port"), str):
+                ports.setdefault(entry["file"], entry["port"])
+            if isinstance(entry.get("name"), str) and entry["name"]:
+                names.setdefault(entry["file"], entry["name"])
     marks = load(take_dir / CLOCK_FILE) if rate else []
 
     for leftover in take_dir.glob(f"*{MID_SUFFIX}{PART_SUFFIX}"):
@@ -540,7 +543,7 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
         port = ports.get(raw.stem) or raw.stem
         mid = raw.with_suffix(MID_SUFFIX)
         try:
-            _make_mid(raw, mid, raw.stem, port, marks, rate, duration_sec)
+            _make_mid(raw, mid, names.get(raw.stem, raw.stem), port, marks, rate, duration_sec)
         except Exception as e:
             log.error("%s: its notes could not be made into a .mid, and are kept: %r", raw.name, e)
             unfinished = True

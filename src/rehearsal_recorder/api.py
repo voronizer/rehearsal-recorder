@@ -2344,6 +2344,21 @@ class Api:
                 if n["name"] == Path(n["file"]).stem else n
                 for n in notes]
 
+    @staticmethod
+    def _audio_named_as_tracks(band, tracks):
+        """
+        The audio found in a draft by its files, under the names of the tracks
+        it belongs to ("Keys_Pad" is the track "Keys/Pad"), as
+        _named_as_tracks names the notes: a draft with no take.json (Stop
+        removes it, and the app was closed on the review screen) knows its
+        files by their stems alone, and a Both track's audio and notes come
+        back under one name. Audio already named otherwise is left as it is.
+        """
+        names = {AudioRecorder.safe_name(t["name"]): t["name"] for t in band if records_audio(t)}
+        return [{**t, "name": names.get(t["name"], t["name"])}
+                if t["name"] == Path(t["file"]).stem else t
+                for t in tracks]
+
     def _add_moved_take(self, folder, take_info, undo, take_dir):
         """
         Records a take whose files were just moved into take_dir. If the
@@ -2467,7 +2482,7 @@ class Api:
         take_dir.mkdir(parents=True, exist_ok=True)
 
         moved, moved_notes, undo = self._move_take_files(
-            draft_dir, take_dir, result["tracks"],
+            draft_dir, take_dir, self._audio_named_as_tracks(r["tracks"], result["tracks"]),
             self._named_as_tracks(r["tracks"], result["notes"]))
         take_info = {
             "take_number": take_number,

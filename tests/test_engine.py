@@ -7354,10 +7354,10 @@ def main():
        [t["name"] for t in done["tracks"]] == ["Drums"]
        and [(n["name"], n["file"]) for n in done["notes"]] == [("Keys", str(draft / "Keys.mid"))]
        and (draft / "Keys.mid").exists() and (draft / "Drums.wav").exists())
-    ok("the notes carry the port take.json named, which finalize reads before it deletes take.json",
-       done["notes"][0]["port"] == "Launchkey Mini MK3" and not (draft / "take.json").exists())
-    ok("nothing but the .wav and the .mid is left, and the take is as long as its audio",
-       sorted(p.name for p in draft.iterdir()) == ["Drums.wav", "Keys.mid"]
+    ok("the notes carry the port take.json named, and take.json is left, for a Recover tried again",
+       done["notes"][0]["port"] == "Launchkey Mini MK3" and (draft / "take.json").exists())
+    ok("nothing but the .wav, the .mid and take.json is left, and the take is as long as its audio",
+       sorted(p.name for p in draft.iterdir()) == ["Drums.wav", "Keys.mid", "take.json"]
        and abs(done["duration_sec"] - 1.0) < 1e-6)
     names65, events65 = read_events65(draft / "Keys.mid")
     ok("the .mid has the names, the program at the start, the keys, and the key held at the crash let go at the end",
@@ -7383,7 +7383,7 @@ def main():
        [(round(sec * 1920), data) for sec, data in events65] == [(960, b"\x90\x3c\x40"), (1920, b"\x80\x3c\x00")])
     ok("and the port is called what its file is, and take.clock is gone",
        names65["device_name"] == "Keys" and done["notes"][0]["port"] == "Keys"
-       and sorted(p.name for p in marks_only.iterdir()) == ["Keys.mid"])
+       and sorted(p.name for p in marks_only.iterdir()) == ["Keys.mid", "take.json"])
 
     # A take with no notes is recovered as it always was.
     plain65 = folder65 / "_drafts" / "take 3"
@@ -7467,9 +7467,9 @@ def main():
        and sorted(p.name for p in stuck65.iterdir()) == ["Drums.wav", "Keys.midraw", "take.json"] and len(said65) == 1)
     again = finalize65(stuck65, SR, 16)
     logging65.getLogger(capture65.__name__).removeHandler(catcher65)
-    ok("a second go makes it, with the port take.json named, and only then deletes take.json",
+    ok("a second go makes it, with the port take.json named",
        [(n["name"], n["port"]) for n in again["notes"]] == [("Keys", "Launchkey Mini MK3")]
-       and sorted(p.name for p in stuck65.iterdir()) == ["Drums.wav", "Keys.mid"])
+       and sorted(p.name for p in stuck65.iterdir()) == ["Drums.wav", "Keys.mid", "take.json"])
 
     # A take whose only recording is notes that are a .mid already, as a recovery that found no
     # audio leaves it (spec Part 3: has_audio counts a .midraw or a .mid).
@@ -7495,6 +7495,8 @@ def main():
        [(t["name"], Path(t["file"]).name) for t in done["tracks"]] == [("Synth/Pad", "Synth_Pad.wav")]
        and [(n["name"], Path(n["file"]).name, n["port"]) for n in done["notes"]]
        == [("Synth/Pad", "Synth_Pad.mid", "Launchkey Mini MK3")])
+    ok("and the .mid it makes says the track's name inside, as one Stop makes does",
+       read_events65(named65 / "Synth_Pad.mid")[0]["track_name"] == "Synth/Pad")
 
     print("\n[66] MIDI before a take")
     # The setup screen's check opens the ports of the tracks that take notes, Start
@@ -8654,9 +8656,30 @@ def main():
         (temp / "take.json").write_text(json.dumps(record), encoding="utf-8")
         b = api67(Fake66([lkm67]), root)
         take = b.recover_draft(str(temp))["take"]
-        ok("a take.json with no names: the audio keeps its file's name and the notes the track's, as before",
-           [t["name"] for t in take["tracks"]] == ["Gtr", "Synth_Pad"]
+        ok("a take.json with no names: the audio and the notes are named as the band's track, Synth_Pad as Synth/Pad",
+           [t["name"] for t in take["tracks"]] == ["Gtr", "Synth/Pad"]
            and [n["name"] for n in take["notes"]] == ["Synth/Pad"])
+        b.shutdown()
+
+        # Stopped and never kept: the app was closed on the review screen. Stop made the .mid files and
+        # took take.json away, so the draft knows its files by their stems alone ("Keys_Pad"). The
+        # audio and the notes of the Both track Keys/Pad still come back under its one name.
+        root, fake = Path(tempfile.mkdtemp()), Fake66([lkm67])
+        a = api67(fake, root)
+        keys_pad = {"name": "Keys/Pad", "channel": 2, "mode": "both", "midi_port": lkm67.saved()}
+        a.start_rehearsal("Jam", 0, SR, [gtr66, keys_pad])
+        a.start_take()
+        play67(a, fake, port="Launchkey Mini MK3", data=(bytes([0x90, 60, 90]), bytes([0x80, 60, 0])))
+        temp = Path(a.stop_take()["temp_dir"])
+        a.shutdown()
+        (temp / "take.json").unlink(missing_ok=True)
+        b = api67(Fake66([lkm67]), root)
+        take = b.recover_draft(str(temp))["take"]
+        ok("Keys/Pad stopped, not kept and recovered with no take.json: one name for its audio and its notes, "
+           "the notes after its own audio",
+           [t["name"] for t in take["tracks"]] == ["Gtr", "Keys/Pad"]
+           and [(n["name"], n["after"]) for n in take["notes"]] == [("Keys/Pad", "Keys/Pad")]
+           and take["notes_missing"] == [])
         b.shutdown()
 
         # "A_B" is the file of the track "A/B", and the track "A_B" has "A_B (2)": a name take.json
@@ -8733,8 +8756,8 @@ def main():
                 raised = None
             except PermissionError as e:
                 raised = e
-        ok("Recover whose .mid will not move says so, and puts the audio back in the draft",
-           raised is not None and names67(temp) == ["Drums.mid", "Drums.wav", "Gtr.wav"])
+        ok("Recover whose .mid will not move says so, and puts the audio back in the draft, take.json still there",
+           raised is not None and names67(temp) == ["Drums.mid", "Drums.wav", "Gtr.wav", "take.json"])
         ok("leaving no new take folder and no new take",
            dirs67(folder) == sorted(["_drafts", there.name]) and len(b.get_rehearsal(str(folder))["takes"]) == 1)
         ok("and the draft is still listed",
