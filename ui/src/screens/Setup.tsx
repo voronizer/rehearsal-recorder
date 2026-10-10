@@ -80,7 +80,7 @@ const sayGone = (t: Track) =>
   `“${portName(t)}” is not connected. ${named(t.name)} records its notes from the moment it is plugged in.`
 const sayBusy = (t: Track) => `“${portName(t)}” is in use by another app.`
 const sayEcho = (name: string, echo: string) =>
-  `${named(name)} gets the same notes as ${echo}. Is it one instrument plugged in twice?`
+  `${named(name)} gets the same notes as ${named(echo)}. Is it one instrument plugged in twice?`
 
 export function Setup({
   onStarted,
@@ -123,15 +123,17 @@ export function Setup({
   const levelsAt = useRef(0)
   const [seen, setSeen] = useState<Record<string, boolean>>({})
   const checkingRef = useRef(false)
-  // What the check hears from each track's port (P5, P8), where its bar
-  // stands, and what each track recorded and from which port when the check
-  // began: the ports the check opened. What the check says of a track is
-  // about that port, never one picked since.
+  // What the check hears from each track's port (P5, P8) and where its bar
+  // stands, by the names the tracks had when it began, as Python has them;
+  // and, by each track's place in the band, that name and what the track
+  // recorded and from which port then: the ports the check opened. What the
+  // check says of a track is about that port, never one picked since, and
+  // holds while the track is named again.
   const [heard, setHeard] = useState<MidiActivity>({})
   const [notesShown, setNotesShown] = useState<Record<string, number>>({})
   const [checkedPorts, setCheckedPorts] = useState<
-    Record<string, { mode: RecordMode; port: string | null }>
-  >({})
+    ({ name: string; mode: RecordMode; port: string | null } | null)[]
+  >([])
 
   // The MIDI ports the system lists; null until they have first been read.
   const [midiPorts, setMidiPorts] = useState<MidiPorts | null>(null)
@@ -302,14 +304,20 @@ export function Setup({
    * anything of it; a port picked since, which nothing listens to, says
    * nothing until the next check (it would say "no notes" while notes come).
    */
-  const checkOpened = (t: Track) => {
-    const began = checking ? checkedPorts[t.name] : undefined
+  const checkOpened = (t: Track, i: number) => {
+    const began = checking ? checkedPorts[i] : null
     return (
       !!began && began.port !== null && began.mode === modeOf(t) && began.port === portName(t)
     )
   }
+  /** The name the check knows the track at place `i` by, when it opened its port. */
+  const checkedName = (t: Track, i: number) =>
+    checkOpened(t, i) ? checkedPorts[i]!.name : null
   /** What the check last heard from a track's port, when it opened it. */
-  const heardFrom = (t: Track) => (checkOpened(t) ? heard[t.name] : undefined)
+  const heardFrom = (t: Track, i: number) => {
+    const name = checkedName(t, i)
+    return name === null ? undefined : heard[name]
+  }
 
   /**
    * How a track's port stands: null for a track that takes no notes, "none"
@@ -318,10 +326,10 @@ export function Setup({
    * nothing tells apart count as not there. Before the list is first read,
    * nothing is said against a port.
    */
-  const portStanding = (t: Track): "none" | "ok" | "missing" | "in_use" | null => {
+  const portStanding = (t: Track, i: number): "none" | "ok" | "missing" | "in_use" | null => {
     if (!recordsNotes(t)) return null
     if (!t.midi_port || portName(t) === null) return "none"
-    const state = heardFrom(t)?.state
+    const state = heardFrom(t, i)?.state
     if (state === "in_use") return "in_use"
     if (state === "missing" || state === "ambiguous") return "missing"
     if (state === "ok" || !midiPorts) return "ok"
@@ -329,14 +337,17 @@ export function Setup({
   }
   // The tracks the check hears the same notes from as from another: one
   // instrument plugged in twice, perhaps (P8). Said, and nothing stopped.
-  const echoes = tracks.flatMap((t) => {
-    const echo = heardFrom(t)?.echo
-    return echo ? [{ track: t, echo }] : []
+  // Python names the other by the name it had when the check began; the
+  // sentence names it as it is now.
+  const echoes = tracks.flatMap((t, i) => {
+    const echo = heardFrom(t, i)?.echo
+    const other = checkedPorts.findIndex((b, j) => j !== i && b !== null && b.name === echo)
+    return typeof echo === "string" && tracks[other] ? [{ track: t, echo: tracks[other] }] : []
   })
   // The tracks whose port is picked and not to be had: they wait, and Start
   // goes ahead (D7, P5).
-  const portsAway = tracks.flatMap((t) => {
-    const standing = portStanding(t)
+  const portsAway = tracks.flatMap((t, i) => {
+    const standing = portStanding(t, i)
     return standing === "missing" || standing === "in_use" ? [{ track: t, standing }] : []
   })
   // Every note that could come by itself for this band, with its own names
@@ -346,7 +357,7 @@ export function Setup({
   const couldSay = [
     ...takingNotes.filter((t) => portName(t) !== null).flatMap((t) => [sayGone(t), sayBusy(t)]),
     ...takingNotes.flatMap((t) =>
-      takingNotes.filter((o) => o !== t).map((o) => sayEcho(t.name, named(o.name)))
+      takingNotes.filter((o) => o !== t).map((o) => sayEcho(t.name, o.name))
     ),
   ]
 
@@ -452,7 +463,9 @@ export function Setup({
     setNotesShown({})
     const noted = tracks.filter(recordsNotes)
     setCheckedPorts(
-      Object.fromEntries(noted.map((t) => [t.name, { mode: modeOf(t), port: portName(t) }]))
+      tracks.map((t) =>
+        recordsNotes(t) ? { name: t.name, mode: modeOf(t), port: portName(t) } : null
+      )
     )
     setChecking(true)
     checkingRef.current = true
@@ -867,7 +880,7 @@ export function Setup({
                     >
                       {echoes.map(({ track, echo }, k) => (
                         <span key={k} className="block">
-                          {sayEcho(track.name, echo)}
+                          {sayEcho(track.name, echo.name)}
                         </span>
                       ))}
                     </p>
@@ -878,9 +891,9 @@ export function Setup({
 
             <div className="flex flex-col gap-2">
               {tracks.map((track, i) => {
-                const standing = portStanding(track)
+                const standing = portStanding(track, i)
                 const away = standing === "missing" || standing === "in_use"
-                const ear = heardFrom(track)
+                const ear = heardFrom(track, i)
                 const listed = track.midi_port && midiPorts
                   ? findPort(track.midi_port, midiPorts.ports).port
                   : null
@@ -914,9 +927,12 @@ export function Setup({
                         variant="ghost"
                         size="icon-sm"
                         aria-label={`Remove track ${track.name}`}
-                        onClick={() =>
+                        onClick={() => {
                           setTracks((prev) => prev.filter((_, j) => j !== i))
-                        }
+                          // What the check opened goes by place: those after
+                          // this one move up with their tracks.
+                          setCheckedPorts((prev) => prev.filter((_, j) => j !== i))
+                        }}
                         className="shrink-0 text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 />
@@ -1059,10 +1075,10 @@ export function Setup({
                               since says nothing until the next check. */}
                           <NotesCheck
                             seen={(ear?.notes ?? 0) > 0 || (listed?.notes ?? 0) > 0}
-                            vel={ear ? (notesShown[track.name] ?? 0) : 0}
+                            vel={ear ? (notesShown[checkedName(track, i)!] ?? 0) : 0}
                             className={cn(
                               "col-start-1 row-start-1",
-                              (!checkOpened(track) || away) && "invisible"
+                              (!checkOpened(track, i) || away) && "invisible"
                             )}
                           />
                           <span

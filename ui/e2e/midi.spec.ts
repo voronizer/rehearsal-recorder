@@ -332,6 +332,62 @@ test.describe("setup", () => {
       expect(await places(page)).toEqual(before)
     })
 
+    test("a track named again during it keeps what it heard, said in the new names (P8)", async ({
+      page,
+    }) => {
+      // At 960 px, where the question in the kit's first name takes two lines,
+      // and every note that could come for the names typed since takes one.
+      await page.setViewportSize({ width: 960, height: 900 })
+      const kit =
+        "Drums and pads (Kastuś), the kit by the window, with its second snare and both cowbells"
+      await openApp(page, { before: "window.__MIDI_PLAYED__ = ['TD-17'];" })
+      await nameField(page, 1).fill(kit)
+      await setMode(page, 1, "Both")
+      await pickPort(page, 1, "TD-17")
+      await nameField(page, 2).fill("Keys")
+      await setMode(page, 2, "Both")
+      await pickPort(page, 2, "Launchkey Mini MK3")
+      await page.getByRole("button", { name: "Check signal" }).click()
+      const kitSlot = card(page, 1).locator("[data-check-slot='notes']")
+      const keysSlot = card(page, 2).locator("[data-check-slot='notes']")
+      await expect(kitSlot.getByText("✓ notes")).toBeVisible({ timeout: 3000 })
+      await expect(keysSlot.getByText("no notes")).toBeVisible()
+
+      // Each slot goes on saying what its port sent, under any name.
+      await nameField(page, 1).fill("Kit")
+      await nameField(page, 2).fill("Pad")
+      await expect(kitSlot.getByText("✓ notes")).toBeVisible()
+      await expect(keysSlot.getByText("no notes")).toBeVisible()
+      await page.mouse.move(0, 0)
+      const before = await places(page)
+      const strip = page.locator("[data-notes-strip]")
+      const tall = (await strip.boundingBox())!.height
+
+      // The question then comes by itself, no taller than the room kept for
+      // it, and in the names the tracks have now.
+      await setFake(page, "__MIDI_ECHO__", [kit, "Keys"])
+      await expect(note(page, "gets the same notes as")).toBeVisible({ timeout: 3000 })
+      expect((await strip.boundingBox())!.height).toBe(tall)
+      expect(await places(page)).toEqual(before)
+      await expect(note(page, "Pad gets the same notes as Kit.")).toBeVisible()
+      // A name taken away reads as it does in every other note.
+      await nameField(page, 1).fill("")
+      await expect(note(page, "Pad gets the same notes as An unnamed track.")).toBeVisible()
+    })
+
+    test("a track taken out during it leaves what it heard from the others", async ({ page }) => {
+      await openApp(page)
+      await nameField(page, 2).fill("Drums")
+      await setMode(page, 2, "Both")
+      await pickPort(page, 2, "TD-17")
+      await page.getByRole("button", { name: "Check signal" }).click()
+      await expect(card(page, 2).getByText("✓ notes")).toBeVisible({ timeout: 3000 })
+      // The kit's card is the first now, and still says what its port sent.
+      await page.getByRole("button", { name: "Remove track Guitar" }).click()
+      await expect(page.locator("[data-track-card]")).toHaveCount(1)
+      await expect(card(page, 1).getByText("✓ notes")).toBeVisible()
+    })
+
     test("says nothing of a port picked after it began", async ({ page }) => {
       await openApp(page)
       await nameField(page, 1).fill("Drums")
