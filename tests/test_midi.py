@@ -2607,6 +2607,55 @@ def main():
                back_again == 3 and len(said7) - said_before == 4)
             spare.shutdown()
 
+            # A failure that comes with one port's events, while another port's go through between them.
+            class Unkept(PortState):
+                def feed(self, data):
+                    raise RuntimeError("this port's state cannot be kept")
+
+            mixed_fake, mixed = a_rig(td17, launchkey)
+            mixed._states[td17] = Unkept()                       # the state the rig keeps for TD-17
+            mixed.use([gtr, drums, keys])
+            said_before = len(said7)
+            for i in range(50):
+                mixed_fake.send("TD-17", now[0] + i * MS, b"\x99\x26\x40")
+                mixed_fake.send("Launchkey Mini MK3", now[0] + i * MS, b"\x90\x3c\x40")
+            mixed.drain()
+            ok("a failure with every event of one port, the other's going through between them, is said once",
+               len(said7) - said_before == 1 and mixed.activity()["Keys"]["notes"] == 50)
+            mixed.shutdown()
+
+            # And on the watcher's thread: a tick that keeps failing, with a look the observer asked for
+            # working between two of them.
+            watch_clock = [3000 * S]
+            watched = MidiRig(FakePortSystem([td17]), now_ns=lambda: watch_clock[0])
+            runs = {"tick": 0, "refresh": 0}
+
+            def failing_tick():
+                runs["tick"] += 1
+                raise RuntimeError("the tick cannot be done")
+
+            def working_refresh():
+                runs["refresh"] += 1
+
+            def until(what, count, move_clock):
+                deadline = time.monotonic() + 10
+                while runs[what] < count and time.monotonic() < deadline:
+                    if move_clock:
+                        watch_clock[0] += TICK
+                    time.sleep(0.01)
+
+            try:
+                watched.tick, watched.refresh = failing_tick, working_refresh
+                said_before = len(said7)
+                until("tick", 1, True)
+                watched._on_change()
+                until("refresh", 1, False)
+                until("tick", runs["tick"] + 1, True)
+                ok("a tick that keeps failing, with a look that works between two of them, is said once",
+                   runs["refresh"] >= 1 and runs["tick"] >= 2 and len(said7) - said_before == 1)
+            finally:
+                watched.shutdown()
+
             # With its own threads, as the app runs it.
             live_fake = FakePortSystem([td17])
             live = MidiRig(live_fake)

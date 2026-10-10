@@ -463,15 +463,21 @@ class MidiRig:
             self._take_item(item)
 
     def _take_item(self, item):
+        # A failure is said for its kind of item and its port: one that comes
+        # with every event of one port is not said again for each event of
+        # another that goes through between them.
+        kind, port = ("event", item[0]) if item[0] is not None else (item[1], item[2])
+        what = (f"the MIDI writer ({kind}, {port.info.name})" if isinstance(port, _Port)
+                else f"the MIDI writer ({kind})")
         try:
             if item[0] is None:
                 self._marker(item)
             else:
                 self._event(*item)
         except Exception:
-            self._failed("the MIDI writer")
+            self._failed(what)
         else:
-            self._fine("the MIDI writer")
+            self._fine(what)
 
     def _event(self, port, ns, data):
         """One message from a port, in the order the ports sent them."""
@@ -720,17 +726,17 @@ class MidiRig:
                     try:
                         self.refresh()
                     except Exception:
-                        self._failed("the MIDI watcher")
+                        self._failed("the MIDI watcher's look")
                     else:
-                        self._fine("the MIDI watcher")
+                        self._fine("the MIDI watcher's look")
             now = self._now()
             if now >= due:
                 try:
                     self.tick()
                 except Exception:
-                    self._failed("the MIDI watcher")
+                    self._failed("the MIDI watcher's tick")
                 else:
-                    self._fine("the MIDI watcher")
+                    self._fine("the MIDI watcher's tick")
                 due += step
                 if due <= now:
                     due = now + step
