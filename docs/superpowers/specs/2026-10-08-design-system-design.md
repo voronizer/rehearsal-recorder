@@ -51,6 +51,7 @@ layered into the next mockup:
 | One small player | https://claude.ai/artifact/8Wh4rzYDcn5yoPWucJW9am |
 | Ask before the Trash or undo after | https://claude.ai/artifact/6MBUux1YHf2jKLrYk5bcgR |
 | Motion | https://claude.ai/artifact/W63fEPXy3yMC5vNQ32Lsgh |
+| Colour of notes coming in from MIDI | https://claude.ai/artifact/6z7XpRAL3fFXjNrx7LfqfC |
 
 The rulings, numbered R1 to R23 with their times, are in the project's
 files at `design-system/rulings.md`, with each mockup's sources beside it.
@@ -103,7 +104,13 @@ blue by hand (`page.css:15-24`), take their values from it.
   keep their own colours. In a set's list the song the Next take field
   names is a selected row, and *next* and a played ✓ are in the text's
   colours (cobalt in all three today, `NextTakeSongs.tsx:53,61,67`,
-  `SetPlayed.tsx:87`).
+  `SetPlayed.tsx:87`). Notes coming in from MIDI are neutral, in the
+  text's colour, a grey fill on a tile (Alex, 2026-10-10 22:23Z, "Серый"
+  on the mockup): the check's bar and "✓ notes", the tile's notes fill
+  and its MIDI sign (cobalt today, `NotesCheck.tsx:25,31`,
+  `PortPicker.tsx:113`, `MidiTile.tsx:24,135`, `TrackTile.tsx:128,167`).
+  Played notes in the player's notes lane stay in the accent, as what
+  plays (`NotesLane.tsx:149`).
 - **F3. Marks keep eight colours, and blue becomes orange** (R12):
   `oklch(0.68 0.17 48)` light, `oklch(0.7 0.17 45)` dark. Cobalt is then the
   only blue in the app, and the played part of the waveform (the accent,
