@@ -491,6 +491,8 @@ test.describe("setup", () => {
   test("a band without MIDI reads no ports, and the first Both reads them at once", async ({
     page,
   }) => {
+    // The page's own clock, running as usual until it is held still below.
+    await page.clock.install()
     await openApp(page)
     await expect(input(page, 2)).toHaveText("Input 2")
     await page.waitForTimeout(1500)
@@ -498,8 +500,12 @@ test.describe("setup", () => {
     // Nor keeps a place for notes it will never have.
     await expect(page.locator("[data-notes-strip]")).toHaveCount(0)
 
+    // Held still from here, a read every second cannot come: any read is the
+    // one the first Both makes at once, however long a busy machine takes.
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000)
     await setMode(page, 1, "Both")
-    await expect.poll(() => callCount(page, "list_midi_ports"), { timeout: 500 }).toBeGreaterThan(0)
+    await expect.poll(() => callCount(page, "list_midi_ports"), { timeout: 5000 }).toBeGreaterThan(0)
+    await page.clock.resume()
     await picker(page, 1).click()
     await expect(page.getByRole("option", { name: "TD-17" })).toBeVisible()
     await page.keyboard.press("Escape")
