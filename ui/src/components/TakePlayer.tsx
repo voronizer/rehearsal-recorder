@@ -248,20 +248,18 @@ export function TakePlayer({
       <ConfirmDialog
         open={cropping}
         onOpenChange={setCropping}
-        title={
-          band
-            ? `Keep only ${formatMMSS(band.a)} – ${formatMMSS(band.b)}?`
-            : "Keep only this part?"
+        title={band && `Keep only ${formatMMSS(band.a)} – ${formatMMSS(band.b)}?`}
+        description={
+          band &&
+          `The rest of the take — ${formatMMSS(lost)} — ${goesTo()}${
+            lostMarkers > 0
+              ? `, and ${lostMarkers} ${
+                  lostMarkers === 1 ? "marker" : "markers"
+                } outside it go with it`
+              : ""
+          }. ${canBePutBack()}`
         }
-        description={`The rest of the take — ${formatMMSS(lost)} — ${goesTo()}${
-          lostMarkers > 0
-            ? `, and ${lostMarkers} ${
-                lostMarkers === 1 ? "marker" : "markers"
-              } outside it go with it`
-            : ""
-        }. ${canBePutBack()}`}
-        confirmLabel="Crop"
-        cancelLabel="Keep it all"
+        actionLabel="Crop"
         onConfirm={() => band && onCrop?.(band.a, band.b)}
       />
     </div>

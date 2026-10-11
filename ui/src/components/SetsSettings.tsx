@@ -139,15 +139,14 @@ export function SetsSettings() {
         />
       )}
 
-      {deleting && (
-        <ConfirmDialog
-          open
-          onOpenChange={(o) => !o && setDeleting(null)}
-          title={`Delete ${deleting.name}?`}
-          description="Rehearsals played by it keep their takes and their names."
-          onConfirm={() => void remove(deleting)}
-        />
-      )}
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={deleting && `Delete “${deleting.name}”?`}
+        description="Rehearsals played by it keep their takes and their names."
+        actionLabel="Delete"
+        onConfirm={() => deleting && void remove(deleting)}
+      />
     </section>
   )
 }

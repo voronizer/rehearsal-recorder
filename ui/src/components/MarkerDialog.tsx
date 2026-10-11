@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react"
-import { Dialog as DialogPrimitive } from "radix-ui"
 import { Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogButtons,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
+import { useHeld } from "@/lib/held"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
 import type { Marker } from "@/lib/api"
-
-const overlayClass =
-  "fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-
-const contentClass =
-  "fixed top-1/2 left-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-6 shadow-lg data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
 
 /**
  * What a marker is about.
@@ -51,54 +53,55 @@ export function MarkerDialog({
     onOpenChange(false)
   }
 
+  // The marker the title names, until the dialog has faded out.
+  const shown = useHeld<Marker | null>(marker, null)
+
   return (
-    <DialogPrimitive.Root open={marker !== null} onOpenChange={onOpenChange}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className={overlayClass} />
-        <DialogPrimitive.Content className={contentClass}>
-          <DialogPrimitive.Title className="flex items-baseline gap-2 text-base font-semibold">
+    <Dialog open={marker !== null} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-baseline gap-2">
             Marker at
-            <span className="tnum">{formatMMSS(marker?.at ?? 0)}</span>
-          </DialogPrimitive.Title>
-          <DialogPrimitive.Description asChild>
-            <p className="mt-1 text-sm text-muted-foreground">
-              A word about this spot, so next week it still means something.
-            </p>
-          </DialogPrimitive.Description>
+            <span className="tnum">{formatMMSS(shown?.at ?? 0)}</span>
+          </DialogTitle>
+          <DialogDescription>
+            A word about this spot, so next week it still means something.
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            {labels.map((l) => (
-              <Button
-                key={l.id}
-                variant={chosen === l.id ? "default" : "outline"}
-                size="row"
-                aria-pressed={chosen === l.id}
-                aria-label={l.name}
-                onClick={() => setLabelId(l.id)}
-              >
-                <span className={cn("size-2 rounded-full", labelLook(l.colour).dot)} />
-                {l.name}
-              </Button>
-            ))}
-          </div>
+        <div className="flex flex-wrap gap-2">
+          {labels.map((l) => (
+            <Button
+              key={l.id}
+              variant={chosen === l.id ? "default" : "outline"}
+              size="row"
+              aria-pressed={chosen === l.id}
+              aria-label={l.name}
+              onClick={() => setLabelId(l.id)}
+            >
+              <span className={cn("size-2 rounded-full", labelLook(l.colour).dot)} />
+              {l.name}
+            </Button>
+          ))}
+        </div>
 
-          <Input
-            autoFocus
-            value={note}
-            placeholder="Guitar drifts, second chorus"
-            maxLength={200}
-            onChange={(e) => setNote(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault()
-                save()
-              }
-            }}
-            aria-label="Marker note"
-            className="mt-3"
-          />
+        <Input
+          autoFocus
+          value={note}
+          placeholder="Guitar drifts, second chorus"
+          maxLength={200}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              save()
+            }
+          }}
+          aria-label="Marker note"
+        />
 
-          <div className="mt-6 flex items-center justify-between gap-3">
+        <DialogButtons
+          aside={
             <Button
               variant="ghost"
               size="row"
@@ -111,15 +114,10 @@ export function MarkerDialog({
               <Trash2 />
               Delete marker
             </Button>
-            <div className="flex gap-2">
-              <DialogPrimitive.Close asChild>
-                <Button variant="ghost">Cancel</Button>
-              </DialogPrimitive.Close>
-              <Button onClick={save}>Save</Button>
-            </div>
-          </div>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+          }
+          action={<Button onClick={save}>Save</Button>}
+        />
+      </DialogContent>
+    </Dialog>
   )
 }

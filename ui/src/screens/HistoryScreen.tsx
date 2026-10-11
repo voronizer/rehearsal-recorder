@@ -82,8 +82,7 @@ import {
 type SongName = { id: number; title: string }
 
 /** "9 takes, 1.2 GB" — what deleting a rehearsal takes away and gives back. */
-function takesAndSize(r: RehearsalSummary | null): string {
-  if (!r) return takesLabel(0)
+function takesAndSize(r: RehearsalSummary): string {
   return `${takesLabel(r.take_count)}, ${formatBytes(r.disk_bytes)}`
 }
 
@@ -891,10 +890,12 @@ export function HistoryScreen({
       <ConfirmDialog
         open={takeToDelete !== null}
         onOpenChange={(open) => !open && setTakeToDelete(null)}
-        title={`Delete “${takeToDelete?.name ?? ""}”?`}
-        description={`The take and all its tracks ${goPlural()}.${takeCloudToo(
-          takeToDelete
-        )} ${canBePutBack()}`}
+        title={takeToDelete && `Delete “${takeToDelete.name}”?`}
+        description={
+          takeToDelete &&
+          `The take and all its tracks ${goPlural()}.${takeCloudToo(takeToDelete)} ${canBePutBack()}`
+        }
+        actionLabel="Delete"
         onConfirm={() => {
           if (takeToDelete) void deleteTake(takeToDelete)
           setTakeToDelete(null)
@@ -1303,9 +1304,9 @@ export function HistoryScreen({
       <ConfirmDialog
         open={mergeAsked !== null}
         onOpenChange={(open) => !open && setMergeAsked(null)}
-        title={mergeSays?.title ?? ""}
+        title={mergeSays?.title}
         description={mergeSays?.says}
-        confirmLabel="Merge"
+        actionLabel="Merge"
         destructive={false}
         onConfirm={() => {
           if (mergeAsked) void mergeSongs(mergeAsked.from, mergeAsked.into)
@@ -1316,13 +1317,17 @@ export function HistoryScreen({
       <ConfirmDialog
         open={rehearsalToDelete !== null}
         onOpenChange={(open) => !open && setRehearsalToDelete(null)}
-        title={`Delete “${rehearsalToDelete?.name ?? ""}”?`}
-        description={`The whole folder, with all its takes (${takesAndSize(
-          rehearsalToDelete
-        )}), ${goesTo()}.${rehearsalCloudToo(
-          rehearsalToDelete?.in_cloud,
-          rehearsalToDelete?.take_count
-        )} ${canBePutBack()}`}
+        title={rehearsalToDelete && `Delete “${rehearsalToDelete.name}”?`}
+        description={
+          rehearsalToDelete &&
+          `The whole folder, with all its takes (${takesAndSize(
+            rehearsalToDelete
+          )}), ${goesTo()}.${rehearsalCloudToo(
+            rehearsalToDelete.in_cloud,
+            rehearsalToDelete.take_count
+          )} ${canBePutBack()}`
+        }
+        actionLabel="Delete"
         onConfirm={() => {
           if (rehearsalToDelete) void deleteRehearsal(rehearsalToDelete)
           setRehearsalToDelete(null)
@@ -1332,9 +1337,9 @@ export function HistoryScreen({
       <ConfirmDialog
         open={rehearsalToForget !== null}
         onOpenChange={(open) => !open && setRehearsalToForget(null)}
-        title={`Remove “${rehearsalToForget?.name ?? ""}” from history?`}
+        title={rehearsalToForget && `Remove “${rehearsalToForget.name}” from history?`}
         description="Only the entry goes — there is nothing on disk to delete. If the folder turns up again, it will not come back by itself."
-        confirmLabel="Remove"
+        actionLabel="Remove"
         onConfirm={() => {
           if (rehearsalToForget) void forgetRehearsal(rehearsalToForget)
           setRehearsalToForget(null)

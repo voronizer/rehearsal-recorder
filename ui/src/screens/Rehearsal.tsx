@@ -27,7 +27,7 @@ import {
   type SessionState,
   type Take,
 } from "@/lib/api"
-import { croppedButNotSwept, takesLabel } from "@/lib/format"
+import { croppedButNotSwept, savedLine } from "@/lib/format"
 import { goFor } from "@/lib/goes"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
@@ -564,11 +564,10 @@ export function Rehearsal({
         open={finishing}
         onOpenChange={setFinishing}
         title="Finish this rehearsal?"
-        description={`${takesLabel(
+        description={`${savedLine(
           session.takes.length
-        )} are saved and stay where they are. You cannot add to this rehearsal afterwards — a later one starts its own folder.`}
-        confirmLabel="Finish"
-        cancelLabel="Keep going"
+        )} You cannot add to this rehearsal afterwards — a later one starts its own folder.`}
+        actionLabel="Finish"
         destructive={false}
         onConfirm={() => void finish()}
       />
@@ -576,10 +575,12 @@ export function Rehearsal({
       <ConfirmDialog
         open={toDelete !== null}
         onOpenChange={(open) => !open && setToDelete(null)}
-        title={`Delete “${toDelete?.name ?? ""}”?`}
-        description={`The take and all its tracks ${goPlural()}.${takeCloudToo(
-          toDelete
-        )} ${canBePutBack()}`}
+        title={toDelete && `Delete “${toDelete.name}”?`}
+        description={
+          toDelete &&
+          `The take and all its tracks ${goPlural()}.${takeCloudToo(toDelete)} ${canBePutBack()}`
+        }
+        actionLabel="Delete"
         onConfirm={() => {
           if (toDelete) void deleteTake(toDelete)
           setToDelete(null)

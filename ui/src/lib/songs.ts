@@ -162,5 +162,5 @@ export function mergeQuestion(
     goes === 1
       ? `1 go in ${rehearsalsLabel(rehearsals)} becomes ${become}, and its folder and cloud copies are renamed. To split it off again, rename the take.`
       : `${goesLabel(goes)} in ${rehearsalsLabel(rehearsals)} become ${become}, and their folders and cloud copies are renamed. To split them again, rename the takes one by one.`
-  return { title: `Merge ${from} into ${into}?`, says }
+  return { title: `Merge “${from}” into “${into}”?`, says }
 }

@@ -195,7 +195,7 @@ test.describe("Rename song, from a song's page", () => {
       dialog(page).getByText("Pałyn is another song: Palyn's goes join it.")
     ).toBeVisible()
     await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()
-    await expect(question(page)).toHaveAccessibleName("Merge Palyn into Pałyn?")
+    await expect(question(page)).toHaveAccessibleName("Merge “Palyn” into “Pałyn”?")
     await expect(question(page)).toContainText(
       "2 goes in 1 rehearsal become Pałyn 10–11, and their folders and cloud copies are renamed. To split them again, rename the takes one by one."
     )
@@ -214,7 +214,7 @@ test.describe("Rename song, from a song's page", () => {
       dialog(page).getByText("Pałyn is another song: Palyn's goes join it.")
     ).toBeVisible()
     await dialog(page).getByRole("button", { name: "Merge…", exact: true }).click()
-    await expect(question(page)).toHaveAccessibleName("Merge Palyn into Pałyn?")
+    await expect(question(page)).toHaveAccessibleName("Merge “Palyn” into “Pałyn”?")
   })
 
   test("after a merge the page is the target song's, with every go, numbered after its own", async ({
@@ -261,7 +261,7 @@ test.describe("Rename song, from a song's page", () => {
     await titleField(page).fill("Old")
     await expect(dialog(page).getByText("3 goes become Old.")).toBeVisible()
     await dialog(page).getByRole("button", { name: "Rename", exact: true }).click()
-    await expect(question(page)).toHaveAccessibleName("Merge Pałyn into Old?")
+    await expect(question(page)).toHaveAccessibleName("Merge “Pałyn” into “Old”?")
     await expect(question(page)).toContainText("3 goes in 2 rehearsals become Old 1–3")
     expect((await calls(page, "merge_songs")).map((c) => Boolean(c.args[2]))).toEqual([true])
     await question(page).getByRole("button", { name: "Merge", exact: true }).click()

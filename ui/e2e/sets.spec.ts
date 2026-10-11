@@ -751,7 +751,7 @@ test.describe("in Settings", () => {
   test("Delete set asks first and the set goes", async ({ page }) => {
     await openSets(page)
     await detail(page).getByRole("button", { name: "Delete set" }).click()
-    const ask = page.getByRole("dialog", { name: "Delete Gig on the 25th?" })
+    const ask = page.getByRole("dialog", { name: "Delete “Gig on the 25th”?" })
     await expect(ask).toContainText(
       "Rehearsals played by it keep their takes and their names."
     )

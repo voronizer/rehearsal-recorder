@@ -146,7 +146,7 @@ export function DraftsScreen({
         onOpenChange={(open) => !open && setToDiscard(null)}
         title="Discard this unsaved take?"
         description={`The recording ${goesTo()}. ${canBePutBack()}`}
-        confirmLabel="Discard"
+        actionLabel="Discard"
         onConfirm={() => {
           if (toDiscard) void discard(toDiscard)
           setToDiscard(null)

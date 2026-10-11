@@ -168,24 +168,28 @@ export function EveningActions({
       <ConfirmDialog
         open={asking !== null}
         onOpenChange={(open) => !open && setAsking(null)}
-        title={`Move ${n === 1 ? "1 false start" : `${n} false starts`} to ${trashName()}?`}
-        description={
-          <div className="flex flex-col gap-3">
-            <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
-              {(asking ?? []).map((t) => (
-                <li key={t.take_number} className="flex items-baseline justify-between gap-4">
-                  <span className="truncate text-foreground">{t.name}</span>
-                  <span className="tnum shrink-0">{formatMMSS(t.duration_sec)}</span>
-                </li>
-              ))}
-            </ul>
-            <p>
-              {`${n === 1 ? "The take and all its tracks" : "The takes and all their tracks"} ` +
-                `${goPlural()}.${rehearsalCloudToo(inCloud, n)} ${canBePutBack(n > 1)}`}
-            </p>
-          </div>
+        title={
+          asking && `Move ${n === 1 ? "1 false start" : `${n} false starts`} to ${trashName()}?`
         }
-        confirmLabel={`Move to ${trashName()}`}
+        description={
+          asking && (
+            <div className="flex flex-col gap-3">
+              <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+                {asking.map((t) => (
+                  <li key={t.take_number} className="flex items-baseline justify-between gap-4">
+                    <span className="truncate text-foreground">{t.name}</span>
+                    <span className="tnum shrink-0">{formatMMSS(t.duration_sec)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p>
+                {`${n === 1 ? "The take and all its tracks" : "The takes and all their tracks"} ` +
+                  `${goPlural()}.${rehearsalCloudToo(inCloud, n)} ${canBePutBack(n > 1)}`}
+              </p>
+            </div>
+          )
+        }
+        actionLabel={`Move to ${trashName()}`}
         onConfirm={() => {
           if (asking) void clear(asking)
           setAsking(null)

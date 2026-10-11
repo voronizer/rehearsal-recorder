@@ -198,7 +198,7 @@ describe("mergeQuestion", () => {
     expect(
       mergeQuestion("Palyn", "Pałyn", { goes: 2, rehearsals: 1, first: 8, last: 9 })
     ).toEqual({
-      title: "Merge Palyn into Pałyn?",
+      title: "Merge “Palyn” into “Pałyn”?",
       says:
         "2 goes in 1 rehearsal become Pałyn 8–9, and their folders and cloud copies are renamed. To split them again, rename the takes one by one.",
     })

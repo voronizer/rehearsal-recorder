@@ -45,11 +45,11 @@ test("finishing a rehearsal with takes in it asks, and is answered from the keyb
   // browser's: the window the app runs in on a Mac moves focus on Tab only
   // with macOS keyboard navigation on, so the arrows carry the weight.
   const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.innerText.trim() ?? "")
-  expect(await focused()).toBe("Keep going")
+  expect(await focused()).toBe("Cancel")
   await page.keyboard.press("ArrowRight")
   await expect.poll(focused).toBe("Finish")
   await page.keyboard.press("ArrowLeft")
-  await expect.poll(focused).toBe("Keep going")
+  await expect.poll(focused).toBe("Cancel")
   // Tab is taken over too, watched from the capture phase on window, where
   // the app takes the key and stops it.
   await page.evaluate(() => {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
-import { Popover } from "radix-ui"
 import { Check, ListChecks, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Progress } from "@/components/ui/progress"
 import { api, type ActivityEntry } from "@/lib/api"
 import { pollSoon, setListOpen, useActivity } from "@/lib/activity"
@@ -56,8 +56,8 @@ export function ActivityButton() {
     (unseen.length ? `, ${unseen.length} not yet seen` : "")
 
   return (
-    <Popover.Root open={open} onOpenChange={show}>
-      <Popover.Trigger asChild>
+    <Popover open={open} onOpenChange={show}>
+      <PopoverTrigger asChild>
         <Button
           variant="outline"
           size={active.length === 0 && unseen.length === 0 ? "icon" : "default"}
@@ -107,47 +107,45 @@ export function ActivityButton() {
             <ListChecks />
           )}
         </Button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
-          align="end"
-          sideOffset={8}
-          aria-label="Background work"
-          className="z-50 flex max-h-[70vh] w-80 flex-col gap-4 overflow-y-auto rounded-lg border bg-popover p-4 text-sm text-popover-foreground shadow-lg"
-        >
-          {active.length > 0 && (
-            <section aria-label="Working" className="flex flex-col gap-3">
-              <h2 className="text-xs tracking-wide text-muted-foreground uppercase">Working</h2>
-              {active.map((e) => (
-                <Running key={e.id} entry={e} recording={recording} />
-              ))}
-            </section>
-          )}
-          {finished.length > 0 && (
-            <section aria-label="Done" className="flex flex-col gap-3">
-              <h2 className="text-xs tracking-wide text-muted-foreground uppercase">Done</h2>
-              {finished.map((e) => (
-                <Finished key={e.id} entry={e} />
-              ))}
-              <Button
-                variant="ghost"
-                size="row"
-                className="self-end"
-                onClick={async () => {
-                  await api().clear_activity()
-                  // Nothing left to list: the button goes, and its list is
-                  // closed rather than left counted as open — that kept the
-                  // poll fast and marked later failures seen unseen.
-                  if (active.length === 0) show(false)
-                }}
-              >
-                Clear
-              </Button>
-            </section>
-          )}
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        aria-label="Background work"
+        className="flex max-h-[70vh] w-80 flex-col gap-4 overflow-y-auto p-4 text-sm shadow-lg"
+      >
+        {active.length > 0 && (
+          <section aria-label="Working" className="flex flex-col gap-3">
+            <h2 className="text-xs tracking-wide text-muted-foreground uppercase">Working</h2>
+            {active.map((e) => (
+              <Running key={e.id} entry={e} recording={recording} />
+            ))}
+          </section>
+        )}
+        {finished.length > 0 && (
+          <section aria-label="Done" className="flex flex-col gap-3">
+            <h2 className="text-xs tracking-wide text-muted-foreground uppercase">Done</h2>
+            {finished.map((e) => (
+              <Finished key={e.id} entry={e} />
+            ))}
+            <Button
+              variant="ghost"
+              size="row"
+              className="self-end"
+              onClick={async () => {
+                await api().clear_activity()
+                // Nothing left to list: the button goes, and its list is
+                // closed rather than left counted as open — that kept the
+                // poll fast and marked later failures seen unseen.
+                if (active.length === 0) show(false)
+              }}
+            >
+              Clear
+            </Button>
+          </section>
+        )}
+      </PopoverContent>
+    </Popover>
   )
 }
 

@@ -127,11 +127,14 @@ export function focusIsLeftover(el: Element | null): boolean {
  * purpose, so none of the shortcuts below should fire. Typing is the obvious
  * case; a dialog is the one that is easy to miss, because Radix closes it on
  * Escape without stopping the keydown from reaching these window listeners,
- * and `ConfirmDialog`/`ShareDialog` have no input to focus — Radix focuses
- * the dialog *content* instead, a plain `DIV` that a tag-only check waves
- * through. An open dropdown is the same: its arrows and Space pick from it.
- * One rule here, shared by every hook below, instead of three copies that
- * drift apart.
+ * and focus in a dialog is not always on something that types: it opens on
+ * the button Enter presses (the action, or Cancel where nothing can be
+ * undone — see DialogButtons), and a dialog with no control, the player's
+ * keys, has the dialog *content* itself focused, a plain `DIV` that a
+ * tag-only check waves through. Enter is never a shortcut here: it presses
+ * what has focus, and the dialog decides what that is. An open dropdown is
+ * the same: its arrows and Space pick from it. One rule here, shared by
+ * every hook below, instead of three copies that drift apart.
  */
 function keyIsClaimed(el: Element | null): boolean {
   if (!el) return false

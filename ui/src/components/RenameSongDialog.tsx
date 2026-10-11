@@ -1,11 +1,18 @@
 import { useState } from "react"
-import { Dialog as DialogPrimitive } from "radix-ui"
 import { Button } from "@/components/ui/button"
-import { contentClass, overlayClass } from "@/components/ConfirmDialog"
+import {
+  Dialog,
+  DialogButtons,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { TakeNameField } from "@/components/TakeNameField"
 import type { SongChoices, SongSummary } from "@/lib/api"
 import { goesLabel } from "@/lib/format"
 import { songNamed, UNNAMED } from "@/lib/goes"
+import { useHeld } from "@/lib/held"
 
 /**
  * Rename song, from the pencil beside a song's title (rename-and-merge-songs
@@ -32,33 +39,35 @@ export function RenameSongDialog({
   onRename: (title: string) => void
   onMerge: (into: { id: number; title: string }) => void
 }) {
+  // The song it was about, until it has faded out.
+  const shown = useHeld<SongSummary | null>(song, null)
   return (
-    <DialogPrimitive.Root open={song !== null} onOpenChange={onOpenChange}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className={overlayClass} />
-        <DialogPrimitive.Content className={contentClass}>
-          <DialogPrimitive.Title className="text-base font-semibold">
-            Rename song
-          </DialogPrimitive.Title>
-          {/* Keyed by the song, so another song opened starts from its title. */}
-          {song && (
-            <RenameSongForm
-              key={song.id}
-              song={song}
-              songs={songs}
-              onRename={(title) => {
-                onOpenChange(false)
-                onRename(title)
-              }}
-              onMerge={(into) => {
-                onOpenChange(false)
-                onMerge(into)
-              }}
-            />
-          )}
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+    <Dialog open={song !== null} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Rename song</DialogTitle>
+          <DialogDescription>
+            Every go is renamed, with its folder on disk and its copies in the cloud folder.
+          </DialogDescription>
+        </DialogHeader>
+        {/* Keyed by the song, so another song opened starts from its title. */}
+        {shown && (
+          <RenameSongForm
+            key={shown.id}
+            song={shown}
+            songs={songs}
+            onRename={(title) => {
+              onOpenChange(false)
+              onRename(title)
+            }}
+            onMerge={(into) => {
+              onOpenChange(false)
+              onMerge(into)
+            }}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -104,10 +113,7 @@ function RenameSongForm({
   }
 
   return (
-    <div className="mt-4 flex flex-col gap-4">
-      <span className="text-xs text-muted-foreground">
-        Every go is renamed, with its folder on disk and its copies in the cloud folder.
-      </span>
+    <div className="flex min-w-0 flex-col gap-4">
       <div className="flex min-w-0 flex-col gap-2">
         <TakeNameField
           id="rename-song"
@@ -135,18 +141,16 @@ function RenameSongForm({
                 : ""}
         </p>
       </div>
-      {/* As PromptDialog draws them. */}
-      <div className="mt-2 flex justify-end gap-3">
-        <DialogPrimitive.Close asChild>
-          <Button variant="ghost">Cancel</Button>
-        </DialogPrimitive.Close>
-        <Button
-          onClick={() => submit(draft ?? title)}
-          disabled={now.kind === "none" || now.kind === "refused"}
-        >
-          {now.kind === "merge" ? "Merge…" : "Rename"}
-        </Button>
-      </div>
+      <DialogButtons
+        action={
+          <Button
+            onClick={() => submit(draft ?? title)}
+            disabled={now.kind === "none" || now.kind === "refused"}
+          >
+            {now.kind === "merge" ? "Merge…" : "Rename"}
+          </Button>
+        }
+      />
     </div>
   )
 }

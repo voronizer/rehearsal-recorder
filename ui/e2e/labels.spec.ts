@@ -235,7 +235,7 @@ test("a label in use asks which label its marks get", async ({ page }) => {
   await row(page, "Went wrong").hover()
   await page.getByRole("button", { name: "Delete Went wrong" }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog).toContainText("Delete Went wrong?")
+  await expect(dialog).toContainText("Delete “Went wrong”?")
   await expect(dialog).toContainText("Its 1 mark gets:")
   await expect(dialog.getByRole("combobox", { name: "Label for its marks" })).toHaveText("Note")
   await dialog.getByRole("combobox", { name: "Label for its marks" }).click()

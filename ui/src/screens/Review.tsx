@@ -320,8 +320,7 @@ export function Review({
         onOpenChange={setDiscarding}
         title="Discard this take?"
         description={`The recording ${goesTo()}. ${canBePutBack()}`}
-        confirmLabel="Discard"
-        cancelLabel="Keep it"
+        actionLabel="Discard"
         onConfirm={discard}
       />
     </Shell>

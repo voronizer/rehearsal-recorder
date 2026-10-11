@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react"
-import { Dialog as DialogPrimitive } from "radix-ui"
 import { CloudUpload, FolderOpen, Loader2, Layers, Music4 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogButtons,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { api, type ShareWhat, type Take } from "@/lib/api"
 import { pollSoon } from "@/lib/activity"
 import { reloadEveningSettings } from "@/hooks/useEveningSettings"
-
-const overlayClass =
-  "fixed inset-0 z-50 bg-black/60 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-
-const contentClass =
-  "fixed top-1/2 left-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-6 shadow-lg data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+import { useHeld } from "@/lib/held"
 
 /**
  * Putting one take into the cloud folder.
@@ -36,7 +38,9 @@ export function ShareDialog({
   const [busy, setBusy] = useState<ShareWhat | "remove" | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const shared = take?.cloud ?? {}
+  // The take the dialog names, until it has faded out.
+  const shown = useHeld<Take | null>(take, null)
+  const shared = shown?.cloud ?? {}
   const isShared = Boolean(shared.mix || shared.tracks)
 
   useEffect(() => {
@@ -92,69 +96,70 @@ export function ShareDialog({
   }
 
   return (
-    <DialogPrimitive.Root open={take !== null} onOpenChange={onOpenChange}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className={overlayClass} />
-        <DialogPrimitive.Content className={contentClass}>
-          <DialogPrimitive.Title className="text-base font-semibold">
-            Copy “{take?.name ?? ""}” to the cloud
-          </DialogPrimitive.Title>
-          <DialogPrimitive.Description asChild>
-            <p className="mt-2 text-sm text-muted-foreground">
-              The files are copied into your cloud folder — whatever client
-              watches it does the uploading.
-            </p>
-          </DialogPrimitive.Description>
+    <Dialog open={take !== null} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Copy “{shown?.name ?? ""}” to the cloud</DialogTitle>
+          <DialogDescription>
+            The files are copied into your cloud folder — whatever client
+            watches it does the uploading.
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="mt-4 flex items-center gap-2 rounded-lg border bg-background/50 px-3 py-2">
-            <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
-            <span
-              className={cn(
-                "flex-1 truncate font-mono text-xs",
-                cloudDir ? "text-muted-foreground" : "text-warn"
-              )}
-            >
-              {cloudDir ?? "No cloud folder chosen yet"}
-            </span>
-            <Button variant="ghost" size="row" onClick={pickFolder}>
-              {cloudDir ? "Change" : "Choose"}
-            </Button>
-          </div>
+        <div className="flex items-center gap-2 rounded-lg border bg-background/50 px-3 py-2">
+          <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+          <span
+            className={cn(
+              "flex-1 truncate font-mono text-xs",
+              cloudDir ? "text-muted-foreground" : "text-warn"
+            )}
+          >
+            {cloudDir ?? "No cloud folder chosen yet"}
+          </span>
+          <Button variant="ghost" size="row" onClick={pickFolder}>
+            {cloudDir ? "Change" : "Choose"}
+          </Button>
+        </div>
 
-          <div className="mt-4 flex flex-col gap-2">
-            <ShareOption
-              icon={<Music4 />}
-              title="The mix"
-              hint="One stereo file with the balance you set here. This is what you send people."
-              done={Boolean(shared.mix)}
-              busy={busy === "mix"}
-              disabled={!cloudDir || busy !== null}
-              onClick={() => void share("mix")}
-            />
-            <ShareOption
-              icon={<Layers />}
-              title="The original tracks"
-              hint="Every track as recorded, untouched, and the notes as .mid — for opening in a DAW later."
-              done={Boolean(shared.tracks)}
-              busy={busy === "tracks"}
-              disabled={!cloudDir || busy !== null}
-              onClick={() => void share("tracks")}
-            />
-            <ShareOption
-              icon={<CloudUpload />}
-              title="Both"
-              hint="The mix to listen to, the tracks to work from."
-              done={Boolean(shared.mix && shared.tracks)}
-              busy={busy === "both"}
-              disabled={!cloudDir || busy !== null}
-              onClick={() => void share("both")}
-            />
-          </div>
+        <div className="flex flex-col gap-2">
+          <ShareOption
+            icon={<Music4 />}
+            title="The mix"
+            hint="One stereo file with the balance you set here. This is what you send people."
+            done={Boolean(shared.mix)}
+            busy={busy === "mix"}
+            disabled={!cloudDir || busy !== null}
+            onClick={() => void share("mix")}
+          />
+          <ShareOption
+            icon={<Layers />}
+            title="The original tracks"
+            hint="Every track as recorded, untouched, and the notes as .mid — for opening in a DAW later."
+            done={Boolean(shared.tracks)}
+            busy={busy === "tracks"}
+            disabled={!cloudDir || busy !== null}
+            onClick={() => void share("tracks")}
+          />
+          <ShareOption
+            icon={<CloudUpload />}
+            title="Both"
+            hint="The mix to listen to, the tracks to work from."
+            done={Boolean(shared.mix && shared.tracks)}
+            busy={busy === "both"}
+            disabled={!cloudDir || busy !== null}
+            onClick={() => void share("both")}
+          />
+        </div>
 
-          {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <div className="mt-6 flex items-center justify-between gap-3">
-            {isShared ? (
+        {/* The options act at once, so there is nothing to cancel: the one
+            button is the way out. */}
+        <DialogButtons
+          cancel="Close"
+          cancelDisabled={busy !== null}
+          aside={
+            isShared && (
               <Button
                 variant="ghost"
                 size="row"
@@ -165,18 +170,11 @@ export function ShareDialog({
                 {busy === "remove" && <Loader2 className="animate-spin" />}
                 Remove from the cloud
               </Button>
-            ) : (
-              <span />
-            )}
-            <DialogPrimitive.Close asChild>
-              <Button variant="ghost" disabled={busy !== null}>
-                Close
-              </Button>
-            </DialogPrimitive.Close>
-          </div>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+            )
+          }
+        />
+      </DialogContent>
+    </Dialog>
   )
 }
 

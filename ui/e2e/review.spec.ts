@@ -202,7 +202,7 @@ test("outside the dialog Space saves and Esc asks", async ({ page }) => {
   await nameTake(page, "Sonca")
   await page.keyboard.press("Escape")
   await expect(page.getByText("Discard this take?")).toBeVisible()
-  await page.getByRole("button", { name: "Keep it" }).click()
+  await page.getByRole("button", { name: "Cancel" }).click()
   await expect(page.getByText("Discard this take?")).toHaveCount(0)
   await page.keyboard.press("Space")
   await expect.poll(async () => (await calls(page, "keep_take")).at(-1)?.args[2]).toBe("Sonca")

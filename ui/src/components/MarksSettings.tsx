@@ -133,16 +133,14 @@ export function MarksSettings() {
         </Button>
       )}
 
-      {deleting && (
-        <DeleteInUse
-          label={deleting}
-          others={labels.filter((l) => l.id !== deleting.id)}
-          onClose={() => setDeleting(null)}
-          onDelete={async (marksTo) => {
-            answered(await api().delete_label(deleting.id, marksTo))
-          }}
-        />
-      )}
+      <DeleteInUse
+        label={deleting}
+        others={labels.filter((l) => l.id !== deleting?.id)}
+        onClose={() => setDeleting(null)}
+        onDelete={async (label, marksTo) => {
+          answered(await api().delete_label(label.id, marksTo))
+        }}
+      />
     </section>
   )
 }
@@ -262,45 +260,59 @@ function LabelRow({
   )
 }
 
-/** "Delete Do again? Its 12 marks get: [Went wrong ▾]" — the first of the
- *  other labels chosen. */
+/** "Delete “Do again”? Its 12 marks get: [Went wrong ▾]" — the first of the
+ *  other labels chosen. `label` is null when nothing is asked: the question
+ *  then keeps its words while it fades out. */
 function DeleteInUse({
   label,
   others,
   onClose,
   onDelete,
 }: {
-  label: Label
+  label: Label | null
   others: Label[]
   onClose: () => void
-  onDelete: (marksTo: number) => Promise<void>
+  onDelete: (label: Label, marksTo: number) => Promise<void>
 }) {
-  const [to, setTo] = useState(others[0]?.id ?? 0)
+  // The label picked for the marks, for the label asked about; until one is,
+  // the first of the others.
+  const [picked, setPicked] = useState<{ of: number; to: number } | null>(null)
+  const to = label && picked?.of === label.id ? picked.to : (others[0]?.id ?? 0)
   return (
     <ConfirmDialog
-      open
-      onOpenChange={(open) => !open && onClose()}
-      title={`Delete ${label.name}?`}
+      open={label !== null}
+      onOpenChange={(open) => {
+        if (open) return
+        setPicked(null)
+        onClose()
+      }}
+      title={label && `Delete “${label.name}”?`}
       description={
-        <div className="flex flex-wrap items-center gap-2">
-          <span>
-            Its {marksText(label.marks)} {label.marks === 1 ? "gets" : "get"}:
-          </span>
-          <Select value={String(to)} onValueChange={(v) => setTo(Number(v))}>
-            <SelectTrigger aria-label="Label for its marks" className="h-8 w-auto">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {others.map((l) => (
-                <SelectItem key={l.id} value={String(l.id)}>
-                  {l.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        label && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span>
+              Its {marksText(label.marks)} {label.marks === 1 ? "gets" : "get"}:
+            </span>
+            <Select
+              value={String(to)}
+              onValueChange={(v) => setPicked({ of: label.id, to: Number(v) })}
+            >
+              <SelectTrigger aria-label="Label for its marks" className="h-8 w-auto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {others.map((l) => (
+                  <SelectItem key={l.id} value={String(l.id)}>
+                    {l.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )
       }
-      onConfirm={() => void onDelete(to)}
+      actionLabel="Delete"
+      onConfirm={() => label && void onDelete(label, to)}
     />
   )
 }
