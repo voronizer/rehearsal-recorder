@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest"
 import changelog from "../../../CHANGELOG.md?raw"
 import { content, readContent } from "./index"
 import { leadAndBeats } from "./markdown"
-import { displayVersion, latestVersion, newsLead } from "./changelog"
+import { changelogHead, displayVersion, latestNews, latestVersion } from "./changelog"
+
+// What the build reads: the release's part of CHANGELOG.md (vite.config.ts).
+const head = changelogHead(changelog, import.meta.env.VITE_SITE_VERSION || undefined)
 
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
@@ -98,7 +101,14 @@ describe("the site's content", () => {
     const tag = import.meta.env.VITE_SITE_VERSION || latestVersion(changelog)
     expect(content.tag).toBe(tag)
     expect(content.version).toBe(displayVersion(tag))
-    expect(content.news).toBe(newsLead(changelog, content.version))
+    const latest = latestNews(head)
+    expect(content.news?.lead ?? null).toBe(latest?.lead ?? null)
+    expect(content.news?.version).toBe(latest?.version)
+  })
+
+  it("links the news to the release it is news of", () => {
+    const news = content.news!
+    expect(news.tag).toBe(news.version === content.version ? content.tag : news.version)
   })
 
   it("shows a release tagged with a v without it, and links the tag as it is", () => {
@@ -107,7 +117,10 @@ describe("the site's content", () => {
     expect(tagged.tag).toBe("v1.0.0")
   })
 
-  it("has no news, and still builds, for a version CHANGELOG.md has no section for", () => {
-    expect(readContent("99.0.0").news).toBeNull()
+  it("still builds for a version CHANGELOG.md has no section for, with the newest news there is", () => {
+    const content = readContent("99.0.0")
+    expect(content.version).toBe("99.0.0")
+    expect(content.news?.version).toBe(latestNews(head)?.version)
+    expect(content.news?.tag).toBe(content.news?.version)
   })
 })

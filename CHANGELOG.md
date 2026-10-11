@@ -5,6 +5,12 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.11.1
+
+- Nothing changed in the app. Its website, reha.stream, now measures how
+  fast it loads for its visitors, with Vercel's Speed Insights, and its 404
+  page leaves the addresses Vercel counts visits at to Vercel.
+
 ## 0.11.0
 
 - **Record what the e-kit plays, or the keyboard.** Every track card has an

@@ -21,6 +21,6 @@
       "continue": true
     },
     { "handle": "filesystem" },
-    { "src": "^/.*$", "status": 404, "dest": "/404.html" }
+    { "src": "^/(?!_vercel/).*$", "status": 404, "dest": "/404.html" }
   ]
 }
