@@ -1,13 +1,14 @@
 import type { Page } from "@playwright/test"
 import { readFileSync } from "node:fs"
-import { displayVersion, latestVersion, newsLead } from "../src/content/changelog.ts"
+import { changelogHead, displayVersion, latestNews, latestVersion } from "../src/content/changelog.ts"
 import { test, expect } from "./fixtures.ts"
 
 const CHANGELOG = readFileSync(new URL("../../CHANGELOG.md", import.meta.url), "utf-8")
 // What the build was given: a release's tag, or none for CHANGELOG's newest.
 const TAG = process.env.VITE_SITE_VERSION || latestVersion(CHANGELOG)
 const VERSION = displayVersion(TAG)
-const NEWS = newsLead(CHANGELOG, VERSION)
+// A release with nothing new in the app shows the news of the one before.
+const NEWS = latestNews(changelogHead(CHANGELOG, process.env.VITE_SITE_VERSION || undefined))
 const FEATURES = readFileSync(new URL("../content/features.md", import.meta.url), "utf-8")
 const TILE_HEADINGS = [...FEATURES.matchAll(/^## (.+?) \{#\w+\}$/gm)].map((m) => m[1])
 const RELEASES = "https://github.com/voronizer/rehearsal-recorder/releases"
@@ -32,15 +33,15 @@ test("the page has its heading", async ({ page }) => {
   )
 })
 
-test("the news line is the version's first change, with its notes", async ({ page }) => {
+test("the news line is the newest change that is news, with its notes", async ({ page }) => {
   await page.goto("/")
   const ribbon = page.locator(".ribbon")
   await expect(ribbon).toHaveText(
-    NEWS ? `New in ${VERSION}. ${NEWS} Release notes` : `New in ${VERSION}. Release notes`
+    NEWS ? `New in ${NEWS.version}. ${NEWS.lead} Release notes` : `New in ${VERSION}. Release notes`
   )
   await expect(ribbon.getByRole("link", { name: "Release notes" })).toHaveAttribute(
     "href",
-    `${RELEASES}/tag/${TAG}`
+    `${RELEASES}/tag/${NEWS && NEWS.version !== VERSION ? NEWS.version : TAG}`
   )
 })
 
@@ -359,14 +360,14 @@ test("a frame scrolled past holds still", async ({ page }) => {
   await expect.poll(() => heldIn(page, "hero")).toBe("false")
 })
 
-// Vercel's script itself is only on Vercel, once the project has Web
-// Analytics switched on; here it is a missing file.
-test("the page counts its visit with Vercel's analytics, the app in it does not", async ({ page }) => {
-  const analytics = 'script[src="/_vercel/insights/script.js"]'
+// Vercel's scripts themselves are only on Vercel, once the project has Web
+// Analytics and Speed Insights switched on; here they are missing files.
+test("the page counts its visit and its speed with Vercel's scripts, the app in it does not", async ({ page }) => {
+  const scripts = ['script[src="/_vercel/insights/script.js"]', 'script[src="/_vercel/speed-insights/script.js"]']
   await page.goto("/")
-  await expect(page.locator(analytics)).toHaveCount(1)
+  for (const script of scripts) await expect(page.locator(script)).toHaveCount(1)
   await expect.poll(() => sceneIn(page, "hero"), { timeout: 20_000 }).toBe("hero")
-  await expect(frame(page, "hero").contentFrame().locator(analytics)).toHaveCount(0)
+  for (const script of scripts) await expect(frame(page, "hero").contentFrame().locator(script)).toHaveCount(0)
 })
 
 // All of it is in the HTML as the build wrote it, for readers that run no

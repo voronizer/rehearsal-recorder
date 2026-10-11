@@ -3,7 +3,7 @@
 // section: see vite.config.ts). A file that does not have what the page
 // needs fails `npm test`, naming the file, and so the site's CI.
 import changelog from "virtual:changelog"
-import { displayVersion, latestVersion, newsLead } from "./changelog"
+import { displayVersion, latestNews, latestVersion } from "./changelog"
 import { parseDoc, sectionsByIds, sectionsByTitles, type Doc, type Section } from "./markdown"
 
 export type { Section } from "./markdown"
@@ -13,8 +13,10 @@ export type SiteContent = {
   version: string
   /** The release's tag, for its link: what VITE_SITE_VERSION says, or the version. */
   tag: string
-  /** The bold lead of the version's first change, or null. */
-  news: string | null
+  /** The bold lead of the version's first change, or, for a release with
+   *  nothing new in the app, of the newest one before it that has; null
+   *  when there is none. Its version and tag are the ones it is news of. */
+  news: { version: string; tag: string; lead: string } | null
   hero: {
     title: string
     lede: string
@@ -64,6 +66,9 @@ function doc(name: string): Doc {
 export function readContent(tagFromRelease?: string): SiteContent {
   const tag = tagFromRelease || latestVersion(changelog)
   const version = displayVersion(tag)
+  // Tags are bare (0.11.0), so an older version's tag is its version.
+  const latest = latestNews(changelog)
+  const news = latest && { ...latest, tag: latest.version === version ? tag : latest.version }
 
   const hero = doc("hero.md")
   const heroParts = sectionsByTitles("hero.md", hero, [
@@ -80,7 +85,7 @@ export function readContent(tagFromRelease?: string): SiteContent {
   return {
     version,
     tag,
-    news: newsLead(changelog, version),
+    news,
     hero: {
       title: hero.title!,
       lede: hero.intro,

@@ -80,6 +80,20 @@ describe("vercel-config.json", () => {
       expect(served(path)).toMatchObject({ status: 404, dest: "/404.html" })
     }
   })
+  // Vercel's own addresses: Web Analytics' and Speed Insights' scripts and
+  // where they send to. The 404 above them answered those too, and nothing
+  // was counted.
+  it("leaves Vercel's own addresses to Vercel", () => {
+    for (const path of [
+      "/_vercel/insights/script.js",
+      "/_vercel/insights/view",
+      "/_vercel/speed-insights/script.js",
+      "/_vercel/speed-insights/vitals",
+    ]) {
+      expect(served(path)).toBeUndefined()
+    }
+    expect(served("/_vercelx")).toMatchObject({ status: 404 })
+  })
   it("serves the build's own files as they are", () => {
     expect(BUILT).toContain("/favicon.svg")
     for (const path of [...BUILT, "/assets/index-Bx1y2z3.js"]) {
