@@ -144,6 +144,39 @@ for (const [system, script, order] of [
   })
 }
 
+test("a dialog opened with its Enter button disabled still has the keyboard inside it", async ({
+  page,
+}) => {
+  await openApp(page)
+  await startRehearsal(page)
+  await recordTake(page, 1)
+  await nameTake(page, "Pałyn")
+  await page.getByRole("button", { name: /Save take/ }).click()
+  await expect(page.getByRole("button", { name: /Record take 2/ })).toBeVisible()
+  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 1 Pałyn']").click()
+  await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByText("Choose").click()
+  // A copy that does not finish, and the dialog closed on it...
+  await page.evaluate(() => {
+    const w = window as unknown as { __HOLD__: Record<string, Promise<void>>; __LET_GO__: () => void }
+    w.__HOLD__ = { share_take: new Promise<void>((r) => (w.__LET_GO__ = r)) }
+  })
+  await dialog.getByRole("button", { name: "The mix", exact: true }).click()
+  await expect.poll(() => callCount(page, "share_take")).toBe(1)
+  await page.keyboard.press("Escape")
+  await expect(dialog).toHaveCount(0)
+  // ...opened again while it runs: Close, the one button here, is disabled,
+  // so it cannot be where the keyboard starts. It starts in the dialog all
+  // the same, not behind it.
+  await page.getByRole("button", { name: "Copy Pałyn 1 to the cloud" }).click()
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeDisabled()
+  await expect
+    .poll(() => dialog.evaluate((d) => d.contains(document.activeElement)))
+    .toBe(true)
+  await page.evaluate(() => (window as unknown as { __LET_GO__: () => void }).__LET_GO__())
+})
+
 test("the title and the text stay while the dialog closes", async ({ page }) => {
   await openApp(page)
   await page.getByRole("button", { name: "History", exact: true }).click()

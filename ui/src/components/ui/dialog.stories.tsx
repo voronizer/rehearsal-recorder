@@ -166,7 +166,7 @@ export const Narrow: Story = {
           <DialogTitle>Keys in the player</DialogTitle>
           <DialogDescription>Not while typing a name.</DialogDescription>
         </DialogHeader>
-        <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2.5 text-sm">
+        <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
           <dt><Kbd>Space</Kbd></dt>
           <dd>Play / pause</dd>
           <dt className="flex gap-1"><Kbd>←</Kbd><Kbd>→</Kbd></dt>

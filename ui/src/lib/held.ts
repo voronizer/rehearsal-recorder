@@ -20,6 +20,7 @@ export function held<T>(last: T, current: T | null | undefined): T {
  */
 export function useHeld<T>(current: T | null | undefined, initial: T): T {
   const last = useRef(initial)
+  // oxlint-disable-next-line react/refs -- the ref holds the last drawn value on purpose, so a closing dialog keeps its words
   const shown = held(last.current, current)
   useEffect(() => {
     last.current = shown

@@ -470,6 +470,26 @@ test.describe("on the start screen", () => {
     expect(await callCount(page, "start_rehearsal")).toBe(0)
   })
 
+  test("Enter in New set's name is Create set, once it has a name and a song", async ({ page }) => {
+    await openApp(page, { before: onlySets([SHORT_SET]) })
+    await picker(page).click()
+    await menu(page).getByRole("menuitem", { name: "New set…" }).click()
+    const dialog = page.getByRole("dialog", { name: "New set" })
+    const name = dialog.getByLabel("Name")
+    await expect(name).toBeFocused()
+    // Not ready: no song yet, so Enter does nothing.
+    await name.fill("Long")
+    await page.keyboard.press("Enter")
+    await expect(dialog).toBeVisible()
+    expect(await callCount(page, "add_set")).toBe(0)
+    await dialog.locator("[data-set-add]").getByRole("button", { name: "Dym" }).click()
+    await name.focus()
+    await page.keyboard.press("Enter")
+    await expect(dialog).toHaveCount(0)
+    expect((await calls(page, "add_set")).at(-1)?.args).toEqual(["Long", ["Dym"]])
+    await expect(picker(page)).toHaveText(/Long/)
+  })
+
   test("Create set needs a name and a song", async ({ page }) => {
     await openApp(page, { before: onlySets([SHORT_SET]) })
     await picker(page).click()

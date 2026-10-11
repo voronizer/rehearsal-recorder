@@ -78,7 +78,11 @@ export function SetPicker({
         aria-label="Sets"
         aria-labelledby={undefined}
         data-set-menu
-        className="w-72 max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))]"
+        // Goes at once, with no fade out: New set… opens a window as the menu
+        // closes, and a menu lingering under it gets the focus back as the
+        // pointer leaves its item (the window's veil is under it by then),
+        // taking it from the window's name field.
+        className="w-72 max-h-[min(28rem,var(--radix-dropdown-menu-content-available-height))] data-[state=closed]:animate-none!"
       >
         <DropdownMenuRadioGroup
           value={chosen === null ? "" : String(chosen)}
@@ -192,6 +196,14 @@ export function NewSetDialog({
               onChange={(e) => {
                 setName(e.target.value)
                 setError(null)
+              }}
+              onKeyDown={(e) => {
+                // As in the other dialogs with a name: Enter is the action.
+                // create() does nothing while the set is not ready.
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  void create()
+                }
               }}
             />
           </div>

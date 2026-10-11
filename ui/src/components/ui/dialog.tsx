@@ -64,13 +64,15 @@ const ENTER = "data-enter"
  * Where the keyboard starts when a dialog opens: a field that asked for it
  * (autoFocus, which Radix leaves alone), else the button DialogButtons marked
  * for Enter, else what Radix does: the first control, or the dialog itself.
+ * A disabled button cannot take focus, and taking over for it would leave the
+ * focus behind the dialog, so it is left to Radix too.
  */
 function focusTheEnterButton(event: Event) {
   const content = event.currentTarget
   if (!(content instanceof HTMLElement)) return
   const wanted =
-    content.querySelector<HTMLElement>("[autofocus]") ??
-    content.querySelector<HTMLElement>(`[${ENTER}]`)
+    content.querySelector<HTMLElement>("[autofocus]:not(:disabled)") ??
+    content.querySelector<HTMLElement>(`[${ENTER}]:not(:disabled)`)
   if (!wanted) return
   event.preventDefault()
   wanted.focus()

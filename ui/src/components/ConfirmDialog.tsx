@@ -135,6 +135,16 @@ export function PromptDialog({
   )
 }
 
+/** What the Rename take dialog is about, from a kept take or the draft. */
+type Renaming = {
+  key: number | string
+  name: string
+  fallback: string
+  id: string
+  note: string | null
+  draft: boolean
+}
+
 /**
  * Rename take: the take's name in the field it was named in before and after
  * recording, at the dialog's size, with the songs under it. ✕ puts back the
@@ -158,13 +168,13 @@ export function RenameTakeDialog({
   onOpenChange: (open: boolean) => void
   onSubmit: (name: string) => void
 }) {
-  const renaming = take
+  const renaming: Renaming | null = take
     ? {
         key: take.take_number,
         name: take.song ?? take.name,
         fallback: take.song ?? take.name,
         id: "rename-take",
-        note: "The folder on disk is renamed too." as string | null,
+        note: "The folder on disk is renamed too.",
         draft: false,
       }
     : draft

@@ -6,8 +6,10 @@ import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 /*
   A menu of things to pick or do (the set picker's), from shadcn's. A chosen
   item in a radio group is marked with a check, as in the Select, not a dot.
-  A menu that opens a window as it closes is not modal: DropdownMenu
-  modal={false}.
+  A menu that opens a window as it closes is not modal (DropdownMenu
+  modal={false}) and does not fade out (data-[state=closed]:animate-none on
+  its content): while it lingers, the pointer leaving its item, now under the
+  window's veil, gives the menu the focus back from the window.
 */
 
 function DropdownMenu({
@@ -159,7 +161,7 @@ function DropdownMenuLabel({
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(
-        "px-2 py-1.5 text-sm font-medium data-[inset]:pl-8",
+        "px-2 py-1.5 text-sm font-semibold data-[inset]:pl-8",
         className
       )}
       {...props}

@@ -1564,6 +1564,7 @@ window.__MAKE_API__ = () => ({
     return {ok:true};
   }),
   share_take: track('share_take', async (folder, n, what) => {
+    await held('share_take');
     if (!cloudDir) return {ok:false, error:'No cloud folder chosen', needs_dir:true};
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     const shared = cloudShare(what);
