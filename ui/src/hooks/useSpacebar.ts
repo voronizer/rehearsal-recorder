@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react"
 const NOT_TYPED = new Set(["range", "checkbox", "radio", "button", "submit", "reset"])
 
 /** Somebody is writing, so the keyboard is theirs letter by letter. */
-function isTyping(el: Element | null): boolean {
+export function isTyping(el: Element | null): boolean {
   if (!el) return false
   const tag = el.tagName
   if (tag === "INPUT") return !NOT_TYPED.has((el as HTMLInputElement).type)

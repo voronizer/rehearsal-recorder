@@ -78,12 +78,31 @@ function focusTheEnterButton(event: Event) {
   wanted.focus()
 }
 
+/**
+ * The notices stand above the veil (z-60), so a pointer down on one is
+ * outside the dialog to Radix, which would close it. A notice is not what the
+ * veil is for: the dialog stays, and the notice takes the click.
+ *
+ * Radix decides on the click, not on the pointer down, and Undo and ✕ remove
+ * their notice on that same click: by then the target is out of the region.
+ * A removed element still sits inside its own notice, so that is matched too.
+ */
+function leaveNoticesAlone(event: Event) {
+  if (
+    event.target instanceof Element &&
+    event.target.closest("[data-notices], [data-notice]")
+  ) {
+    event.preventDefault()
+  }
+}
+
 function DialogContent({
   className,
   children,
   size = "default",
   showCloseButton = false,
   onOpenAutoFocus,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   /** "narrow" for a list of keys, "tall" for a dialog that grows down. */
@@ -99,6 +118,10 @@ function DialogContent({
         onOpenAutoFocus={(event) => {
           onOpenAutoFocus?.(event)
           if (!event.defaultPrevented) focusTheEnterButton(event)
+        }}
+        onInteractOutside={(event) => {
+          onInteractOutside?.(event)
+          leaveNoticesAlone(event)
         }}
         className={cn(
           "fixed top-1/2 left-1/2 z-50 flex w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-xl border bg-card p-6 shadow-lg outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",

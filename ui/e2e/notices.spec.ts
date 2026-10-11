@@ -1,4 +1,4 @@
-import { expect, openApp, startButton, test } from "./app.ts"
+import { expect, openApp, openHistory, setFake, startButton, test } from "./app.ts"
 import type { Page } from "@playwright/test"
 
 // Notices: what happened goes in the corner. A message that appeared in the
@@ -182,4 +182,57 @@ test("a take that will not recover says so, and is still offered", async ({ page
   await page.getByRole("button", { name: "Recover" }).click()
   await expect(notices(page, "error")).toContainText("read-only")
   await expect(page.getByText("Unsaved takes found")).toHaveCount(1)
+})
+
+test("a notice stands above an open dialog, and closing it leaves the dialog open", async ({
+  page,
+}) => {
+  // Work that is still running keeps the app asking about it often, so the
+  // failure below arrives within a moment.
+  const copy = {
+    id: 1,
+    kind: "cloud",
+    title: "“Pałyn” → cloud",
+    folder: "/rec/X",
+    take_number: 1,
+    state: "running",
+    fraction: 0.4,
+    step: "Encoding the mix",
+    error: null,
+    detail: null,
+    retry: null,
+    seen: false,
+  }
+  await openApp(page, { before: "window.__ACTIVITY__ = [];" })
+  await setFake(page, "__ACTIVITY__", [copy])
+  await expect(page.locator("button[aria-label^='Background work']")).toBeVisible()
+  await openHistory(page)
+  await page.getByRole("button", { name: "Rename rehearsal Tuesday jam" }).click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog).toBeVisible()
+
+  // The copy fails while the dialog is open: its notice is raised behind the
+  // veil unless it stands above it.
+  await setFake(page, "__ACTIVITY__", [
+    { ...copy, state: "failed", step: null, error: "The cloud folder is gone" },
+  ])
+  const failed = notices(page, "error")
+  await expect(failed).toContainText("The cloud folder is gone")
+  await expect
+    .poll(() =>
+      failed.evaluate((n) => {
+        const r = n.getBoundingClientRect()
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+        return top !== null && n.contains(top)
+      })
+    )
+    .toBe(true)
+
+  // A click on it is not a click outside the dialog: the dialog stays and
+  // the notice goes.
+  await failed.getByRole("button", { name: "Close notice" }).click()
+  await expect(failed).toHaveCount(0)
+  // Open, not merely still on screen: a closing dialog is drawn for 220 ms.
+  await expect(dialog).toHaveAttribute("data-state", "open")
+  await expect(dialog).toBeVisible()
 })

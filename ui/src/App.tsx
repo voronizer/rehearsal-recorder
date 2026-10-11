@@ -16,6 +16,7 @@ import {
   type SessionState,
 } from "@/lib/api"
 import { useDialogFocusKeys } from "@/hooks/useSpacebar"
+import { useUndoKey } from "@/hooks/useUndoKey"
 import { reportBridgeError } from "@/lib/bridgeErrors"
 import { loadDeletionKind } from "@/lib/deletion"
 import { loadLabels } from "@/lib/labels"
@@ -40,6 +41,8 @@ export function App() {
   // the keyboard is this app's job, not the browser's — the window it runs
   // in on a Mac will not do it. See useDialogFocusKeys.
   useDialogFocusKeys()
+  // ⌘Z / Ctrl+Z, once: it runs the newest notice's action from any screen.
+  useUndoKey()
 
   const [screen, setScreen] = useState<Screen>({ name: "loading" })
   const [session, setSession] = useState<SessionState>({ active: false })

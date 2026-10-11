@@ -15,6 +15,14 @@ import { useSyncExternalStore } from "react"
  * - error: it did not work. Stays until closed — the ErrorBar exists because
  *   two failures went unseen, and a message that leaves by itself is how.
  *
+ * A notice can carry one action, such as Undo. It is for something done at
+ * once that can still be taken back, so it stays ACTION_MS whatever its kind:
+ * long enough to notice and reach for. `onGone` is the other end of the same
+ * thing: it runs when the notice leaves without its action, timed out or
+ * closed or replaced, and that is the moment the thing is let go for good.
+ * ⌘Z (Ctrl+Z elsewhere) runs the newest notice's action, see
+ * hooks/useUndoKey.ts.
+ *
  * `key` is the slot a notice takes: a new one with the same key replaces the
  * old, so a retry that works replaces the failure it retried. A screen uses
  * one key for what its actions say. Timers belong to a notice's `id`, never
@@ -22,10 +30,27 @@ import { useSyncExternalStore } from "react"
  */
 export type NoticeKind = "done" | "warning" | "error"
 
-export type Notice = { id: number; key: string; kind: NoticeKind; text: string }
+export type NoticeAction = { label: string; run: () => void }
+
+export type Notice = {
+  id: number
+  key: string
+  kind: NoticeKind
+  text: string
+  action?: NoticeAction
+  /** Runs once when the notice leaves without its action having run. */
+  onGone?: () => void
+}
 
 export const DONE_MS = 4000
+export const ACTION_MS = 10000
 export const MAX_NOTICES = 3
+
+/** How long a notice stays, or null for as long as it is not closed. */
+export function lifetime(n: Notice): number | null {
+  if (n.action) return ACTION_MS
+  return n.kind === "done" ? DONE_MS : null
+}
 
 let current: Notice[] = []
 let nextId = 1
@@ -35,24 +60,67 @@ function emit() {
   for (const l of listeners) l()
 }
 
-export function notify(n: { key: string; kind: NoticeKind; text: string }) {
-  const notice = { ...n, id: nextId++ }
-  current = [...current.filter((c) => c.key !== n.key), notice].slice(
-    -MAX_NOTICES
-  )
+/**
+ * Makes `next` the list, tells the screens, and only then calls `onGone` for
+ * each notice that is no longer in it, so a callback that raises another
+ * notice finds the store as it will stay. A notice leaves the list once, so
+ * its `onGone` runs once.
+ */
+function commit(next: Notice[]) {
+  const gone = current.filter((c) => !next.includes(c))
+  current = next
   emit()
+  for (const n of gone) n.onGone?.()
+}
+
+export function notify(n: {
+  key: string
+  kind: NoticeKind
+  text: string
+  action?: NoticeAction
+  onGone?: () => void
+}) {
+  const notice: Notice = { ...n, id: nextId++ }
+  commit(
+    [...current.filter((c) => c.key !== n.key), notice].slice(-MAX_NOTICES)
+  )
 }
 
 export function dismiss(key: string) {
   if (!current.some((c) => c.key === key)) return
-  current = current.filter((c) => c.key !== key)
-  emit()
+  commit(current.filter((c) => c.key !== key))
 }
 
 export function dismissNotice(id: number) {
   if (!current.some((c) => c.id === id)) return
-  current = current.filter((c) => c.id !== id)
+  commit(current.filter((c) => c.id !== id))
+}
+
+/**
+ * Runs a notice's action. The notice is off the list before the action
+ * starts (an action that raises its own notice, "could not undo", sees the
+ * list as it will be), and its `onGone` never runs: the action has dealt with
+ * what it was for.
+ */
+export function runAction(id: number) {
+  const notice = current.find((c) => c.id === id)
+  if (!notice?.action) return
+  current = current.filter((c) => c !== notice)
   emit()
+  notice.action.run()
+}
+
+/** Runs the newest action there is, whatever came after it; false when no
+ *  notice has one. */
+export function undoLatest(): boolean {
+  const newest = current.findLast((c) => c.action)
+  if (!newest) return false
+  runAction(newest.id)
+  return true
+}
+
+export function getNotices(): Notice[] {
+  return current
 }
 
 export function useNotices(): Notice[] {
@@ -61,6 +129,6 @@ export function useNotices(): Notice[] {
       listeners.add(onChange)
       return () => listeners.delete(onChange)
     },
-    () => current
+    getNotices
   )
 }
