@@ -1,7 +1,5 @@
+import { Kbd } from "@/components/ui/kbd"
 import { cn } from "@/lib/utils"
-
-const KEY =
-  "inline-flex h-5 min-w-5 items-center justify-center rounded border border-current/30 bg-current/10 px-1 font-mono text-[10px] leading-none font-normal"
 
 /**
  * ↑ and ↓ at the right of the Next take label: they pick the song before
@@ -19,8 +17,8 @@ export function SongKeys({ hidden = false }: { hidden?: boolean }) {
         hidden && "invisible"
       )}
     >
-      <kbd className={KEY}>↑</kbd>
-      <kbd className={KEY}>↓</kbd>
+      <Kbd>↑</Kbd>
+      <Kbd>↓</Kbd>
       <span>song</span>
     </span>
   )

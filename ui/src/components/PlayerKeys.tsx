@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import { Keyboard } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { useKey } from "@/hooks/useSpacebar"
 import { useSystem, words } from "@/lib/platform"
 
@@ -10,9 +11,6 @@ const overlayClass =
 
 const contentClass =
   "fixed top-1/2 left-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-card p-6 shadow-lg data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0"
-
-const kbdClass =
-  "inline-flex h-6 min-w-6 items-center justify-center rounded border bg-background px-1.5 font-mono text-xs"
 
 /**
  * The player's keys, listed behind "?" rather than drawn on its buttons.
@@ -48,7 +46,7 @@ export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: b
       <DialogPrimitive.Trigger asChild>
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon-row"
           aria-label="Player keys"
           aria-keyshortcuts="?"
           title="Keys (?)"
@@ -70,9 +68,7 @@ export function PlayerKeys({ spaceKey, goKeys }: { spaceKey: boolean; goKeys?: b
               <div key={what} className="contents">
                 <dt className="flex gap-1">
                   {keys.map((k) => (
-                    <kbd key={k} className={kbdClass}>
-                      {k}
-                    </kbd>
+                    <Kbd key={k}>{k}</Kbd>
                   ))}
                 </dt>
                 <dd>{what}</dd>

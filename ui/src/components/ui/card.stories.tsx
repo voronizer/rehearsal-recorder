@@ -34,7 +34,7 @@ export const Default: Story = {
       </CardHeader>
       <CardContent>The room mic was on all evening.</CardContent>
       <CardFooter>
-        <Button size="sm">Open</Button>
+        <Button size="row">Open</Button>
       </CardFooter>
     </Card>
   ),
@@ -47,7 +47,7 @@ export const WithAction: Story = {
         <CardTitle>Thursday rehearsal</CardTitle>
         <CardDescription>6 songs, 2 hours 10 minutes</CardDescription>
         <CardAction>
-          <Button variant="outline" size="sm">Share</Button>
+          <Button variant="outline" size="row">Share</Button>
         </CardAction>
       </CardHeader>
     </Card>

@@ -116,7 +116,7 @@ export function ShareDialog({
             >
               {cloudDir ?? "No cloud folder chosen yet"}
             </span>
-            <Button variant="ghost" size="sm" onClick={pickFolder}>
+            <Button variant="ghost" size="row" onClick={pickFolder}>
               {cloudDir ? "Change" : "Choose"}
             </Button>
           </div>
@@ -157,7 +157,7 @@ export function ShareDialog({
             {isShared ? (
               <Button
                 variant="ghost"
-                size="sm"
+                size="row"
                 disabled={busy !== null}
                 onClick={() => void remove()}
                 className="text-muted-foreground hover:text-destructive"

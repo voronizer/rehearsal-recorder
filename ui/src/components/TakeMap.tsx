@@ -105,7 +105,7 @@ export function TakeMap({
             </span>
             <Button
               variant="outline"
-              size="sm"
+              size="row"
               className="h-6 shrink-0 gap-1.5 px-2 text-xs"
               onClick={onWhole}
             >

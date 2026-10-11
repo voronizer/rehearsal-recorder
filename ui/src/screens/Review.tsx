@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
 import { Check, Cloud, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { FooterRow } from "@/components/FooterRow"
-import { Kbd, Shell } from "@/components/Shell"
+import { Shell } from "@/components/Shell"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { TakeSummary } from "@/components/TakeSummary"
@@ -240,24 +241,24 @@ export function Review({
                 It is still the button Escape leads to. */}
             <Button
               variant="outline"
-              size="lg"
+              size="footer-aside"
               onClick={discard}
               disabled={busy}
               aria-keyshortcuts="Escape"
             >
               <Trash2 />
               Discard
-              <Kbd>Esc</Kbd>
+              <Kbd aria-hidden>Esc</Kbd>
             </Button>
             <Button
-              size="lg"
+              size="footer-aside"
               onClick={keep}
               disabled={busy}
               aria-keyshortcuts="Space"
             >
               <Check />
               Save take
-              <Kbd>Space</Kbd>
+              <Kbd aria-hidden>Space</Kbd>
             </Button>
           </div>
           {cloud &&

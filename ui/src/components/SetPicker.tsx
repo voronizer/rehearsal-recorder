@@ -45,7 +45,7 @@ export function SetPicker({
       <DropdownMenu.Trigger asChild>
         <Button
           variant="outline"
-          size="xl"
+          size="footer"
           data-set-picker
           title={name ?? "Play freely, or pick a set"}
           // Focus the mouse left here (a set picked, the menu shut) is not

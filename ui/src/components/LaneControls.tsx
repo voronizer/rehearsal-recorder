@@ -184,7 +184,7 @@ export function LaneControls({
         </span>
         <Button
           variant={muted ? "default" : "outline"}
-          size="icon-sm"
+          size="icon-row"
           aria-pressed={muted}
           aria-label={`Mute ${name}`}
           onClick={onToggleMute}
@@ -197,7 +197,7 @@ export function LaneControls({
         </Button>
         <Button
           variant={soloed ? "default" : "outline"}
-          size="icon-sm"
+          size="icon-row"
           aria-pressed={soloed}
           aria-label={`Solo ${name}`}
           onClick={onToggleSolo}

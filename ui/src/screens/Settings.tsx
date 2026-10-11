@@ -399,7 +399,7 @@ export function Settings({
               <Button
                 key={t}
                 variant={theme === t ? "default" : "outline"}
-                size="sm"
+                size="row"
                 aria-pressed={theme === t}
                 onClick={() => onAppearanceChange(t, scale)}
               >
@@ -414,7 +414,7 @@ export function Settings({
               <Button
                 key={s}
                 variant={Math.abs(scale - s) < 0.001 ? "default" : "outline"}
-                size="sm"
+                size="row"
                 aria-pressed={Math.abs(scale - s) < 0.001}
                 aria-label={`Scale ${Math.round(s * 100)} percent`}
                 onClick={() => onAppearanceChange(theme, s)}
@@ -519,7 +519,7 @@ export function Settings({
               <Button
                 key={rate}
                 variant={settings?.samplerate === rate ? "default" : "outline"}
-                size="sm"
+                size="row"
                 aria-pressed={settings?.samplerate === rate}
                 aria-label={`${rate / 1000} kHz`}
                 onClick={() => {
@@ -549,7 +549,7 @@ export function Settings({
                 <Button
                   key={depth}
                   variant={settings?.bit_depth === depth ? "default" : "outline"}
-                  size="sm"
+                  size="row"
                   aria-pressed={settings?.bit_depth === depth}
                   aria-label={`${depth} bit`}
                   disabled={!allowed.includes(depth)}
@@ -713,7 +713,7 @@ export function Settings({
           {settings && dir !== settings.default_recordings_dir && (
             <Button
               variant="ghost"
-              size="sm"
+              size="row"
               className="self-start text-muted-foreground"
               onClick={() => applyDir(settings.default_recordings_dir)}
             >
@@ -790,7 +790,7 @@ export function Settings({
           {settings?.cloud_dir && (
             <Button
               variant="ghost"
-              size="sm"
+              size="row"
               className="self-start text-muted-foreground"
               onClick={async () => {
                 await api().clear_cloud_dir()
@@ -844,7 +844,7 @@ export function Settings({
                 <Button
                   key={f.id}
                   variant={settings?.cloud_format === f.id ? "default" : "outline"}
-                  size="sm"
+                  size="row"
                   aria-label={f.label}
                   aria-pressed={settings?.cloud_format === f.id}
                   // Only copies are written in these; with no cloud folder
@@ -928,7 +928,7 @@ export function Settings({
                     variant={
                       settings?.auto_publish_what === o.id ? "default" : "outline"
                     }
-                    size="sm"
+                    size="row"
                     aria-label={o.label}
                     aria-pressed={settings?.auto_publish_what === o.id}
                     // What automatic sending sends, and what Send starred

@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -30,7 +31,7 @@ import { NotesCheck } from "@/components/midi/NotesCheck"
 import { PortPicker } from "@/components/midi/PortPicker"
 import { NewDot } from "@/components/NewDot"
 import { NewSetDialog, SetPicker } from "@/components/SetPicker"
-import { Kbd, Shell } from "@/components/Shell"
+import { Shell } from "@/components/Shell"
 import { chosenSet, useSets } from "@/hooks/useSets"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEscape, useSpacebar } from "@/hooks/useSpacebar"
@@ -648,14 +649,14 @@ export function Setup({
               onNew={() => setMakingSet(true)}
             />
             <Button
-              size="xl"
+              size="footer"
               onClick={start}
               disabled={!canStart}
               aria-keyshortcuts={inHand ? undefined : "Space"}
             >
               <Radio />
               Start rehearsal
-              {!inHand && <Kbd>Space</Kbd>}
+              {!inHand && <Kbd aria-hidden>Space</Kbd>}
             </Button>
           </div>
           <NewSetDialog
@@ -727,7 +728,7 @@ export function Setup({
                     </p>
                     <Button
                       variant="outline"
-                      size="sm"
+                      size="row"
                       onClick={() => void lookAgain()}
                       disabled={rescanning}
                       className="shrink-0"
@@ -776,7 +777,7 @@ export function Setup({
               <div className="flex items-center gap-2">
                 <Button
                   variant={checking ? "default" : "outline"}
-                  size="sm"
+                  size="row"
                   onClick={checking ? stopCheck : startCheck}
                   disabled={!tracks.length || deviceIndex === null}
                 >
@@ -791,7 +792,7 @@ export function Setup({
                     </span>
                   </span>
                 </Button>
-                <Button variant="outline" size="sm" onClick={saveTemplate}>
+                <Button variant="outline" size="row" onClick={saveTemplate}>
                   {saved ? <Check /> : null}
                   {saved ? "Template saved" : "Save as template"}
                 </Button>
@@ -928,7 +929,7 @@ export function Setup({
                       />
                       <Button
                         variant="ghost"
-                        size="icon-sm"
+                        size="icon-row"
                         aria-label={`Remove track ${track.name}`}
                         onClick={() => {
                           setTracks((prev) => prev.filter((_, j) => j !== i))
@@ -978,7 +979,7 @@ export function Setup({
 
                         <Button
                           type="button"
-                          size="sm"
+                          size="row"
                           variant={track.stereo ? "default" : "outline"}
                           aria-pressed={!!track.stereo}
                           aria-label={`Track ${i + 1} in stereo`}

@@ -81,7 +81,7 @@ async function copyText(text: string): Promise<boolean> {
 function CopyReport({ label, variant = "outline", size }: {
   label: string
   variant?: "outline" | "ghost"
-  size?: "sm"
+  size?: "row"
 }) {
   const [copied, setCopied] = useState<boolean | null>(null)
   const copy = async () => {
@@ -122,7 +122,7 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
   const mine = latest && update.download?.version === latest.version ? update.download : null
   const ours = hood.version.split("+")[0]
   const whatsNew = (
-    <Button variant="outline" size="sm" onClick={() => void api().open_releases(true)}>
+    <Button variant="outline" size="row" onClick={() => void api().open_releases(true)}>
       What's new
     </Button>
   )
@@ -161,7 +161,7 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
             {mine.file} — unpack it, close this copy and open the new one.
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void api().show_update()}>
+        <Button variant="outline" size="row" onClick={() => void api().show_update()}>
           Show in folder
         </Button>
       </>
@@ -175,7 +175,7 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
           </div>
           <div className="text-xs text-destructive">{mine.error}</div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void startDownload()}>
+        <Button variant="outline" size="row" onClick={() => void startDownload()}>
           Try again
         </Button>
         {whatsNew}
@@ -192,7 +192,7 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
             You have {ours}
           </div>
         </div>
-        <Button size="sm" onClick={() => void startDownload()}>
+        <Button size="row" onClick={() => void startDownload()}>
           Download
         </Button>
         {whatsNew}
@@ -398,7 +398,7 @@ export function UnderTheHood() {
                 </div>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="row"
                   aria-label={`Show ${said.name}`}
                   onClick={() => void api().show_file(f.key)}
                 >
@@ -580,7 +580,7 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
           <div className="min-w-0 flex-1 text-sm font-semibold">
             Listening to {device?.name}… play or talk into the inputs
           </div>
-          <Button variant="outline" size="sm" onClick={() => void api().stop_interface_check()}>
+          <Button variant="outline" size="row" onClick={() => void api().stop_interface_check()}>
             Stop
           </Button>
         </div>
@@ -666,10 +666,10 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
 
       {done && (
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => void start()} disabled={disabled}>
+          <Button variant="outline" size="row" onClick={() => void start()} disabled={disabled}>
             Check again
           </Button>
-          <CopyReport label="Copy the report" size="sm" />
+          <CopyReport label="Copy the report" size="row" />
         </div>
       )}
 

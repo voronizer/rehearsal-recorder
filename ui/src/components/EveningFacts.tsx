@@ -50,7 +50,7 @@ export function EveningFacts({
       </dl>
       {/* The path is not shown (Alex, 2026-10-06): the button is enough, and
           it is there under the mouse for whoever wants it. */}
-      <Button variant="outline" size="sm" title={folder} onClick={() => void show()}>
+      <Button variant="outline" size="row" title={folder} onClick={() => void show()}>
         <FolderOpen className="text-muted-foreground" />
         {folderButton}
       </Button>

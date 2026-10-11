@@ -35,7 +35,7 @@ export function ErrorBar() {
       </div>
       <Button
         variant="ghost"
-        size="icon-sm"
+        size="icon-row"
         aria-label="Dismiss"
         onClick={dismissBridgeError}
       >

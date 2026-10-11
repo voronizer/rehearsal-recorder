@@ -1,6 +1,6 @@
 import { Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Kbd } from "@/components/Shell"
+import { Kbd } from "@/components/ui/kbd"
 import { RunningLine } from "@/components/RunningLine"
 import type { ActivityEntry } from "@/lib/api"
 
@@ -22,10 +22,16 @@ export function StopTake({
 }) {
   return (
     <>
-      <Button size="xl" onClick={onStop} disabled={stopping} aria-keyshortcuts="Space">
+      <Button
+        variant="strong"
+        size="footer"
+        onClick={onStop}
+        disabled={stopping}
+        aria-keyshortcuts="Space"
+      >
         <Square className="fill-current" />
         Stop
-        <Kbd>Space</Kbd>
+        <Kbd aria-hidden>Space</Kbd>
       </Button>
       {stopping ? (
         <RunningLine entry={saving} label="Saving the take" active />

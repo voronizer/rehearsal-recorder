@@ -71,7 +71,7 @@ export function MarkerDialog({
               <Button
                 key={l.id}
                 variant={chosen === l.id ? "default" : "outline"}
-                size="sm"
+                size="row"
                 aria-pressed={chosen === l.id}
                 aria-label={l.name}
                 onClick={() => setLabelId(l.id)}
@@ -101,7 +101,7 @@ export function MarkerDialog({
           <div className="mt-6 flex items-center justify-between gap-3">
             <Button
               variant="ghost"
-              size="sm"
+              size="row"
               onClick={() => {
                 if (marker) onDelete(marker.at)
                 onOpenChange(false)

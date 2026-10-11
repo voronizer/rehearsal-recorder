@@ -142,7 +142,7 @@ export function EveningActions({
     <>
       <Button
         variant="outline"
-        size="sm"
+        size="row"
         aria-disabled={sendOff || undefined}
         title={sendWhy}
         onClick={() => void send()}
@@ -154,7 +154,7 @@ export function EveningActions({
       </Button>
       <Button
         variant="outline"
-        size="sm"
+        size="row"
         aria-disabled={clearOff || undefined}
         title={clearWhy}
         onClick={() => !clearOff && setAsking(starts)}

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { FolderOpen, Library, Pencil, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { Shell, EmptyState } from "@/components/Shell"
 import { RehearsalList } from "@/components/RehearsalList"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
@@ -1056,8 +1057,8 @@ export function HistoryScreen({
               <RehearsalList rehearsals={rehearsals} current={current} onChoose={choose} />
             )}
             <p className="mt-auto flex items-center gap-1.5 px-3 pt-2 text-xs text-muted-foreground">
-              <kbd className="rounded border border-current/30 px-1 font-mono text-[10px]">↑</kbd>
-              <kbd className="rounded border border-current/30 px-1 font-mono text-[10px]">↓</kbd>
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd>
               to go through them
             </p>
           </nav>
@@ -1159,7 +1160,7 @@ export function HistoryScreen({
                       {!summary.missing && (
                         <Button
                           variant="ghost"
-                          size="icon-sm"
+                          size="icon-row"
                           aria-label={`Rename rehearsal ${summary.name}`}
                           onClick={() => setRehearsalToRename(summary)}
                           className="text-muted-foreground hover:text-foreground"
@@ -1211,12 +1212,12 @@ export function HistoryScreen({
                     </span>
                   </p>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => void locateRehearsal(summary)}>
+                    <Button variant="outline" size="row" onClick={() => void locateRehearsal(summary)}>
                       Locate folder…
                     </Button>
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="row"
                       onClick={() => setRehearsalToForget(summary)}
                       className="text-muted-foreground hover:text-destructive"
                     >

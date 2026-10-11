@@ -56,7 +56,7 @@ export function IconPicker({
         <Button
           type="button"
           variant="outline"
-          size="icon-sm"
+          size="icon-row"
           aria-label={label}
           title={current.label}
           data-icon={current.key}

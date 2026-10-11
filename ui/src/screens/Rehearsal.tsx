@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { Circle, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { FooterRow } from "@/components/FooterRow"
-import { Kbd, Shell } from "@/components/Shell"
+import { Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { EveningFacts } from "@/components/EveningFacts"
 import { RehearsalOverview } from "@/components/RehearsalOverview"
@@ -379,7 +380,7 @@ export function Rehearsal({
           {session.name}
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon-row"
             aria-label="Rename rehearsal"
             onClick={() => setRenamingRehearsal(true)}
             className="text-muted-foreground hover:text-foreground"
@@ -458,15 +459,15 @@ export function Rehearsal({
                 the take away — see useEscape above. */}
             <Button
               variant="outline"
-              size="lg"
+              size="footer-aside"
               onClick={finish}
               aria-keyshortcuts={inHand ? undefined : "Escape"}
             >
               Finish
-              {!inHand && <Kbd>Esc</Kbd>}
+              {!inHand && <Kbd aria-hidden>Esc</Kbd>}
             </Button>
             <Button
-              size="xl"
+              size="footer"
               variant="destructive"
               onClick={startTake}
               disabled={busy}
@@ -475,7 +476,7 @@ export function Rehearsal({
               <Circle className="fill-current" />
               Record take {session.next_take_number}
               {/* With a take in hand Space plays it, and the key is on Play. */}
-              {!inHand && <Kbd>Space</Kbd>}
+              {!inHand && <Kbd aria-hidden>Space</Kbd>}
             </Button>
           </div>
         </FooterRow>

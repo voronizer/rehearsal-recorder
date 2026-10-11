@@ -116,7 +116,7 @@ export function SetsSettings() {
             ))}
           </ul>
         )}
-        <Button variant="ghost" size="sm" className="self-start" onClick={() => void add()}>
+        <Button variant="ghost" size="row" className="self-start" onClick={() => void add()}>
           <Plus />
           New set
         </Button>
@@ -239,7 +239,7 @@ function SetDetail({
       </div>
       <Button
         variant="ghost"
-        size="sm"
+        size="row"
         onClick={onDelete}
         className="self-start text-muted-foreground hover:text-destructive"
       >

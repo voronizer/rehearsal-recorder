@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react"
 import { ActivityButton } from "@/components/ActivityButton"
 import { ListeningVolume } from "@/components/ListeningVolume"
 import { Button } from "@/components/ui/button"
+import { Kbd } from "@/components/ui/kbd"
 import { cn } from "@/lib/utils"
 
 /**
@@ -85,13 +86,13 @@ export function Shell({
           {onBack && (
             <Button
               variant="ghost"
-              size={backKey ? "sm" : "icon"}
+              size={backKey ? "row" : "icon"}
               onClick={onBack}
               aria-label="Back"
               aria-keyshortcuts={backKey ? "Escape" : undefined}
             >
               <ChevronLeft />
-              {backKey && <Kbd>Esc</Kbd>}
+              {backKey && <Kbd aria-hidden>Esc</Kbd>}
             </Button>
           )}
           <div className="min-w-0 flex-1">
@@ -133,31 +134,6 @@ export function Shell({
         </footer>
       )}
     </div>
-  )
-}
-
-/**
- * The key that presses this button, drawn on the button itself.
- *
- * It used to be a line under the main button — "Space: save take" — which
- * said the same thing twice and only for one key per screen. On the button
- * there is no distance between the key and what it does, and every key the
- * screen answers to can say so. Drawn in the button's own colour, so it
- * reads on a red Record as well as on a ghost button. Hidden from screen
- * readers, which get `aria-keyshortcuts` on the button instead.
- *
- * Only shown while the key really does press this button: with a take open
- * on the rehearsal screen Space plays it and Escape closes it, so Record and
- * Finish lose theirs until the take is closed again.
- */
-export function Kbd({ children }: { children: ReactNode }) {
-  return (
-    <kbd
-      aria-hidden
-      className="pointer-events-none ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded border border-current/30 bg-current/10 px-1 font-mono text-[10px] leading-none font-normal opacity-80"
-    >
-      {children}
-    </kbd>
   )
 }
 

@@ -26,7 +26,7 @@ export function StarButton({
   return (
     <Button
       variant="ghost"
-      size="icon-sm"
+      size="icon-row"
       aria-label={`Star ${take.name}`}
       aria-pressed={starred}
       title={starred ? "Starred. Click to take the star off" : "Star this take"}

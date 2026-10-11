@@ -100,7 +100,7 @@ export function LastTime({
           </div>
           <Button
             variant="outline"
-            size="sm"
+            size="row"
             onClick={() => onOpen(last.folder)}
             aria-label={`Open ${last.name} in history`}
           >

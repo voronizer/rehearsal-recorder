@@ -91,7 +91,7 @@ function NoticeItem({ notice, paused }: { notice: Notice; paused: boolean }) {
       </p>
       <Button
         variant="ghost"
-        size="icon-xs"
+        size="icon-tiny"
         aria-label="Close notice"
         onClick={() => dismissNotice(notice.id)}
         className="-my-0.5 shrink-0"

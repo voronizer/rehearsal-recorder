@@ -230,7 +230,7 @@ export function TakeStrip({
           {onRename && (
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon-row"
               aria-label={`Rename take ${live.name}`}
               onClick={() => onRename(live)}
               className="text-muted-foreground hover:text-foreground"
@@ -241,7 +241,7 @@ export function TakeStrip({
           {onShare && (
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon-row"
               aria-label={
                 isShared
                   ? `Cloud copies of ${live.name}`
@@ -263,7 +263,7 @@ export function TakeStrip({
           {onDelete && (
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon-row"
               aria-label={`Delete take ${live.name}`}
               onClick={() => onDelete(live)}
               className="text-muted-foreground hover:text-destructive"

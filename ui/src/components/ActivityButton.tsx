@@ -131,7 +131,7 @@ export function ActivityButton() {
               ))}
               <Button
                 variant="ghost"
-                size="sm"
+                size="row"
                 className="self-end"
                 onClick={async () => {
                   await api().clear_activity()
@@ -197,7 +197,7 @@ function Finished({ entry }: { entry: ActivityEntry }) {
       {failed && entry.kind === "cloud" && (
         <Button
           variant="outline"
-          size="sm"
+          size="row"
           onClick={async () => {
             const res = await api().retry_cloud(entry.id)
             if (!res.ok) {

@@ -310,7 +310,7 @@ function Transport({
     >
       <Button
         variant="ghost"
-        size="icon-sm"
+        size="icon-row"
         onClick={player.restart}
         aria-label="To start"
         aria-keyshortcuts="Home"
@@ -321,7 +321,7 @@ function Transport({
       </Button>
       <Button
         variant="ghost"
-        size="icon-sm"
+        size="icon-row"
         onClick={() => player.skip(-SKIP_SECONDS)}
         aria-label={`Back ${SKIP_SECONDS} seconds`}
         aria-keyshortcuts="ArrowLeft"
@@ -331,7 +331,7 @@ function Transport({
       </Button>
 
       <Button
-        size="icon-lg"
+        size="player"
         className="rounded-full"
         onClick={player.toggle}
         disabled={player.loading || !!player.loadError}
@@ -349,7 +349,7 @@ function Transport({
 
       <Button
         variant="ghost"
-        size="icon-sm"
+        size="icon-row"
         onClick={() => player.skip(SKIP_SECONDS)}
         aria-label={`Forward ${SKIP_SECONDS} seconds`}
         aria-keyshortcuts="ArrowRight"
@@ -368,7 +368,7 @@ function Transport({
           region, and sit under its times on the timeline. */}
       <Button
         variant={looping ? "default" : "outline"}
-        size="sm"
+        size="row"
         onClick={player.toggleLoop}
         disabled={player.loading}
         aria-pressed={looping}
@@ -385,7 +385,7 @@ function Transport({
         {onAddMarker && (
           <Button
             variant={nearby !== undefined ? "default" : "outline"}
-            size="sm"
+            size="row"
             onClick={mark}
             disabled={player.loading}
             aria-label={nearby !== undefined ? "Edit marker" : "Add marker"}

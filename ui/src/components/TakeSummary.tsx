@@ -163,7 +163,7 @@ export function TakeSummary({
           </h2>
           <Button
             variant="ghost"
-            size="icon-sm"
+            size="icon-row"
             aria-label="Rename take"
             title="Rename"
             onClick={() => setRenaming(true)}

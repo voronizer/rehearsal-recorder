@@ -124,7 +124,7 @@ export function MarksSettings() {
       ) : (
         <Button
           variant="ghost"
-          size="sm"
+          size="row"
           className="self-start"
           onClick={() => setDraft({ name: "", colour: firstFreeColour(labels) })}
         >
@@ -250,7 +250,7 @@ function LabelRow({
       {canDelete && (
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon-row"
           aria-label={`Delete ${label.name}`}
           onClick={onDelete}
           className="text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-destructive"

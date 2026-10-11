@@ -75,7 +75,7 @@ export function DraftsScreen({
             </p>
           }
         >
-          <Button variant="outline" size="lg" onClick={onDone}>
+          <Button variant="outline" size="footer-aside" onClick={onDone}>
             Decide later
           </Button>
         </FooterRow>
@@ -120,7 +120,7 @@ export function DraftsScreen({
 
               <Button
                 variant="ghost"
-                size="sm"
+                size="row"
                 onClick={() => setToDiscard(draft)}
                 disabled={busy !== null}
                 className="text-muted-foreground hover:text-destructive"
@@ -129,7 +129,7 @@ export function DraftsScreen({
                 Discard
               </Button>
               <Button
-                size="sm"
+                size="row"
                 onClick={() => recover(draft)}
                 disabled={busy !== null}
               >
