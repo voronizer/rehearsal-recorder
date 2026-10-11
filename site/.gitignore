@@ -3,4 +3,4 @@ dist/
 .vercel/
 playwright-report/
 test-results/
-vercel-output/
+vercel-upload/

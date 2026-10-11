@@ -8,12 +8,17 @@
 # attached the zips, so the page's download links work from the moment it is
 # up and it shows the version people get.
 #
-# Vercel never builds anything itself: the project there has no Git
-# connection, and this uploads the build it made (vercel deploy --prebuilt).
-# It needs three repository secrets: VERCEL_TOKEN, VERCEL_ORG_ID and
-# VERCEL_PROJECT_ID. What Vercel does with an address before serving a file
-# (the short links /mac and /windows, a year's cache for the build's hashed
-# files) is in site/vercel-config.json.
+# The project on Vercel has no Git connection: this uploads the files it
+# built, with a vercel.json that leaves Vercel nothing to install or build.
+# Vercel still makes the deployment through its own build step, and that
+# matters: it gives the addresses Web Analytics and Speed Insights load their
+# scripts from (/_vercel/insights/, /_vercel/speed-insights/) only to the
+# deployments it built, so a build uploaded ready-made (vercel deploy
+# --prebuilt, until 0.11.1) served neither. It needs three repository
+# secrets: VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID. What Vercel
+# does with an address before serving a file (the short links /mac and
+# /windows, a year's cache for the build's hashed files) is in
+# site/vercel-config.json.
 #
 # The picture a chat shows for a link to the site, og.png, is drawn here
 # from the build (npm run og, after the build and before the tests), so it
@@ -150,23 +155,27 @@ jobs:
           path: site/playwright-report/
           if-no-files-found: ignore
 
-      # Vercel's Build Output API: the files as they are, served as they are,
-      # with the site's routes from vercel-config.json. A release from before
-      # that file, deployed again by hand, goes up without them.
+      # What goes up to Vercel: the build's files, served as they are, and a
+      # vercel.json that says so (nothing to install, nothing to build, the
+      # files at the top), whatever the project's settings there say, with
+      # the site's routes from vercel-config.json. A release from before that
+      # file, deployed again by hand, goes up without them.
       - name: Lay out the build for Vercel
         run: |
-          mkdir -p site/vercel-output
-          cp -R site/dist site/vercel-output/static
+          mkdir -p site/vercel-upload
+          cp -R site/dist/. site/vercel-upload/
+          routes='[]'
           if [ -f site/vercel-config.json ]; then
-            cp site/vercel-config.json site/vercel-output/config.json
-          else
-            echo '{"version": 3}' > site/vercel-output/config.json
+            routes=$(jq '.routes' site/vercel-config.json)
           fi
+          jq -n --argjson routes "$routes" \
+            '{framework: null, installCommand: "", buildCommand: "", outputDirectory: ".", routes: $routes}' \
+            > site/vercel-upload/vercel.json
 
       - uses: actions/upload-artifact@v7
         with:
           name: site
-          path: site/vercel-output/
+          path: site/vercel-upload/
           if-no-files-found: error
 
   deploy:
@@ -181,7 +190,7 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: site
-          path: .vercel/output
+          path: site
 
       - name: Deploy
         env:
@@ -194,7 +203,7 @@ jobs:
             echo "::error::Deploying needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID."
             exit 1
           fi
-          url=$(npx --yes vercel@62.4.0 deploy --prebuilt --prod --token "$VERCEL_TOKEN")
+          url=$(npx --yes vercel@62.4.0 deploy site --prod --token "$VERCEL_TOKEN")
           echo "Deployed $TAG to $url"
           echo "The site for $TAG is at $url" >> "$GITHUB_STEP_SUMMARY"
 
@@ -218,7 +227,7 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: site
-          path: .vercel/output
+          path: site
 
       - name: Deploy
         id: deploy
@@ -227,6 +236,6 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          url=$(npx --yes vercel@62.4.0 deploy --prebuilt --token "$VERCEL_TOKEN")
+          url=$(npx --yes vercel@62.4.0 deploy site --token "$VERCEL_TOKEN")
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "This pull request's site is at $url" >> "$GITHUB_STEP_SUMMARY"
