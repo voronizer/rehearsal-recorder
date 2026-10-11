@@ -27,7 +27,7 @@ const PRESSED_BY_SPACE =
 
 /** What is on top of the screen and has the keyboard while it is open: a
  *  dialog, or the list of a dropdown. */
-const LAYERS = '[role="dialog"], [role="listbox"], [role="menu"]'
+export const LAYERS = '[role="dialog"], [role="listbox"], [role="menu"]'
 
 // The element the mouse last put focus on, or null when the keyboard did.
 let pointerFocused: Element | null = null

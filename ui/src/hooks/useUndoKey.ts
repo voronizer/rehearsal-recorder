@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { isTyping } from "@/hooks/useSpacebar"
+import { LAYERS, isTyping } from "@/hooks/useSpacebar"
 import { undoLatest } from "@/lib/notices"
 import { system, type System } from "@/lib/platform"
 
@@ -39,16 +39,17 @@ export function isUndoKey(
  * (see lib/notices.ts), from whichever screen is open.
  *
  * It stands down wherever Undo already means something else: a text field
- * undoes its own typing, an open dialog has the keyboard, and during a take
- * nothing is touched. And it does not repeat: a key held down must not walk
- * back through every removal on screen.
+ * undoes its own typing, an open dialog or list has the keyboard (the same
+ * layers the other shortcuts leave alone), and during a take nothing is
+ * touched. And it does not repeat: a key held down must not walk back
+ * through every removal on screen.
  */
 export function useUndoKey() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!isUndoKey(e, system()) || e.repeat) return
       if (isTyping(document.activeElement)) return
-      if (document.querySelector('[role="dialog"]')) return
+      if (document.querySelector(LAYERS)) return
       if (document.documentElement.hasAttribute("data-recording")) return
       if (undoLatest()) e.preventDefault()
     }

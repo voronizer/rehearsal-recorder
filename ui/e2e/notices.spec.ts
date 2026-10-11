@@ -61,6 +61,26 @@ test("a done notice under the pointer waits to be read", async ({ page }) => {
   await expect(saved).toHaveCount(0)
 })
 
+test("a notice closed under the pointer does not hold the next ones up", async ({ page }) => {
+  // Taking a notice away from under the pointer fires no mouseleave: the
+  // pause for "somebody is reading" must end with the notice that earned it.
+  await openSettings(page)
+  const look = page.getByRole("button", { name: "Look again" })
+  await look.click()
+  const first = page.locator("[data-notice='done']", { hasText: "No new interfaces" })
+  await expect(first).toBeVisible()
+  await first.hover()
+  await first.getByRole("button", { name: "Close notice" }).click()
+  await expect(notices(page)).toHaveCount(0)
+  await page.mouse.move(20, 20)
+
+  await look.click()
+  await expect(first).toBeVisible()
+  await page.mouse.move(20, 20)
+  await page.clock.fastForward(6000)
+  await expect(notices(page)).toHaveCount(0)
+})
+
 test("a failure stays until it is closed, and is one notice however often it happens", async ({
   page,
 }) => {
@@ -227,6 +247,15 @@ test("a notice stands above an open dialog, and closing it leaves the dialog ope
       })
     )
     .toBe(true)
+  // A modal dialog hides the rest of the page from a screen reader, but never
+  // a live region: the notice is still announced.
+  expect(
+    await page.evaluate(
+      () =>
+        document.querySelector("section[aria-label='Notifications']")!.closest("[aria-hidden='true']") ===
+        null
+    )
+  ).toBe(true)
 
   // A click on it is not a click outside the dialog: the dialog stays and
   // the notice goes.

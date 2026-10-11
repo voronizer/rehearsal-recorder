@@ -84,14 +84,12 @@ function focusTheEnterButton(event: Event) {
  * veil is for: the dialog stays, and the notice takes the click.
  *
  * Radix decides on the click, not on the pointer down, and Undo and ✕ remove
- * their notice on that same click: by then the target is out of the region.
- * A removed element still sits inside its own notice, so that is matched too.
+ * their notice on that same click: by then the target is out of the region,
+ * and is only still inside its own notice. The region takes no pointer
+ * events and holds nothing else, so the notice is what is matched.
  */
 function leaveNoticesAlone(event: Event) {
-  if (
-    event.target instanceof Element &&
-    event.target.closest("[data-notices], [data-notice]")
-  ) {
+  if (event.target instanceof Element && event.target.closest("[data-notice]")) {
     event.preventDefault()
   }
 }

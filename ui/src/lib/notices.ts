@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react"
+import { reportBridgeError } from "@/lib/bridgeErrors"
 
 /**
  * Things that happened, said in the corner of the window.
@@ -61,6 +62,19 @@ function emit() {
 }
 
 /**
+ * Runs a notice's callback. One that throws is said on the error bar and goes
+ * no further: the corner stays as it was left, the callbacks after it still
+ * run, and whoever raised or closed the notice is not the one that fails.
+ */
+function call(what: string, callback: () => void) {
+  try {
+    callback()
+  } catch (e) {
+    reportBridgeError(what, e)
+  }
+}
+
+/**
  * Makes `next` the list, tells the screens, and only then calls `onGone` for
  * each notice that is no longer in it, so a callback that raises another
  * notice finds the store as it will stay. A notice leaves the list once, so
@@ -70,16 +84,10 @@ function commit(next: Notice[]) {
   const gone = current.filter((c) => !next.includes(c))
   current = next
   emit()
-  for (const n of gone) n.onGone?.()
+  for (const n of gone) if (n.onGone) call("a notice's onGone", n.onGone)
 }
 
-export function notify(n: {
-  key: string
-  kind: NoticeKind
-  text: string
-  action?: NoticeAction
-  onGone?: () => void
-}) {
+export function notify(n: Omit<Notice, "id">) {
   const notice: Notice = { ...n, id: nextId++ }
   commit(
     [...current.filter((c) => c.key !== n.key), notice].slice(-MAX_NOTICES)
@@ -107,7 +115,7 @@ export function runAction(id: number) {
   if (!notice?.action) return
   current = current.filter((c) => c !== notice)
   emit()
-  notice.action.run()
+  call("a notice's action", notice.action.run)
 }
 
 /** Runs the newest action there is, whatever came after it; false when no

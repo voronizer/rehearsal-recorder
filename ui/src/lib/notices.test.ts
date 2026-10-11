@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   ACTION_MS,
   DONE_MS,
@@ -17,6 +17,10 @@ import { isUndoKey } from "@/hooks/useUndoKey"
 // The store is the app's one list; start every test from an empty corner.
 beforeEach(() => {
   for (const n of getNotices()) dismissNotice(n.id)
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 const idOf = (key: string) => getNotices().find((n) => n.key === key)!.id
@@ -98,6 +102,76 @@ describe("onGone", () => {
     })
     dismiss("a")
     expect(getNotices().map((n) => n.key)).toEqual(["b"])
+  })
+})
+
+describe("a callback that throws", () => {
+  // What the page does with an error it did not expect: reportBridgeError
+  // writes it with console.error and shows the bar.
+  const reported = () => vi.spyOn(console, "error").mockImplementation(() => {})
+
+  it("is reported, and does not stop the notice from leaving or the next one from being raised", () => {
+    const log = reported()
+    notify({
+      key: "a",
+      kind: "done",
+      text: "one",
+      onGone: () => {
+        throw new Error("the bridge blinked")
+      },
+    })
+    expect(() => dismiss("a")).not.toThrow()
+    expect(log).toHaveBeenCalledTimes(1)
+    expect(getNotices()).toHaveLength(0)
+
+    // Pushed out by a fourth: the fourth is still raised.
+    notify({
+      key: "b",
+      kind: "done",
+      text: "two",
+      onGone: () => {
+        throw new Error("the bridge blinked again")
+      },
+    })
+    for (const key of ["c", "d", "e"]) notify({ key, kind: "done", text: key })
+    expect(log).toHaveBeenCalledTimes(2)
+    expect(getNotices().map((n) => n.key)).toEqual(["c", "d", "e"])
+  })
+
+  it("leaves the next notice's onGone to run", () => {
+    const log = reported()
+    const second = vi.fn()
+    notify({
+      key: "a",
+      kind: "done",
+      text: "one",
+      onGone: () => {
+        throw new Error("the bridge blinked")
+      },
+    })
+    notify({ key: "b", kind: "done", text: "two", onGone: second })
+    dismiss("a")
+    dismiss("b")
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(log).toHaveBeenCalledTimes(1)
+  })
+
+  it("is reported when it is an action, and undoLatest still says it ran something", () => {
+    const log = reported()
+    notify({
+      key: "a",
+      kind: "done",
+      text: "one",
+      action: {
+        label: "Undo",
+        run: () => {
+          throw new Error("it is already gone")
+        },
+      },
+    })
+    expect(undoLatest()).toBe(true)
+    expect(log).toHaveBeenCalledTimes(1)
+    expect(getNotices()).toHaveLength(0)
   })
 })
 
