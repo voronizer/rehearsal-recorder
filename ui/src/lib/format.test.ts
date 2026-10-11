@@ -19,6 +19,7 @@ import {
   longAgo,
   notConnected,
   peakToDb,
+  savedLine,
   takesLabel,
 } from "@/lib/format"
 
@@ -72,6 +73,10 @@ describe("amounts", () => {
   it("counts takes in the singular and the plural", () => {
     expect(takesLabel(1)).toBe("1 take")
     expect(takesLabel(3)).toBe("3 takes")
+  })
+  it("says how many takes are saved, with a verb that agrees", () => {
+    expect(savedLine(1)).toBe("1 take is saved and stays where it is.")
+    expect(savedLine(3)).toBe("3 takes are saved and stay where they are.")
   })
   it("counts bytes in thousands, as the file manager does", () => {
     expect(formatBytes(0)).toBe("0 B")

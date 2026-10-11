@@ -139,6 +139,14 @@ export function takesLabel(n: number): string {
   return `${n} ${n === 1 ? "take" : "takes"}`
 }
 
+/** What a rehearsal's takes are, to the person about to leave it: kept, and
+ *  where they were. The verb agrees with the count. */
+export function savedLine(n: number): string {
+  return n === 1
+    ? "1 take is saved and stays where it is."
+    : `${n} takes are saved and stay where they are.`
+}
+
 /** "1 go", "4 goes": takes at one song, which are attempts at it. */
 export function goesLabel(n: number): string {
   return n === 1 ? "1 go" : `${n} goes`
