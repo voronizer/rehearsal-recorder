@@ -17,15 +17,25 @@ describe("Button variants", () => {
     expect(strong).toContain("text-strong-foreground")
   })
 
-  it("sets the filled ones in semibold", () => {
-    for (const variant of ["default", "strong", "destructive"] as const) {
-      expect(looks({ variant })).toContain("font-semibold")
+  it("sets every variant in one weight, so a toggle swapping variants never changes width", () => {
+    // Emphasis comes from the fill only: a heavier word is wider, and a row
+    // of pills would shift on every click.
+    for (const variant of ["default", "strong", "destructive", "outline", "ghost", "link"] as const) {
+      const css = looks({ variant })
+      expect(css, variant).toContain("font-normal")
+      expect(css, variant).not.toContain("font-semibold")
+      expect(css, variant).not.toContain("font-medium")
     }
   })
 
-  it("sets the others in regular weight", () => {
-    for (const variant of ["outline", "ghost", "link"] as const) {
-      expect(looks({ variant })).toContain("font-normal")
+  it("gives every variant the same 1 px border, clear on all but outline", () => {
+    // Outline's frame takes 2 px of width; a variant without one is 2 px
+    // narrower, so swapping between them would move whatever sits beside.
+    for (const variant of ["default", "strong", "destructive", "outline", "ghost", "link"] as const) {
+      const tokens = looks({ variant }).split(/\s+/)
+      expect(tokens, variant).toContain("border")
+      if (variant === "outline") expect(tokens, variant).not.toContain("border-transparent")
+      else expect(tokens, variant).toContain("border-transparent")
     }
   })
 

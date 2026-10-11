@@ -125,6 +125,40 @@ test("the theme and the scale apply at once, and are kept", async ({ page }) => 
   expect(await callCount(page, "save_appearance")).toBeGreaterThanOrEqual(2)
 })
 
+// A pill that swaps between default and outline when it is chosen must not
+// change width with it: a heavier word or a frame that one look has and the
+// other has not moves every pill beside it on a click.
+test("choosing a theme or a scale leaves every pill the width it was", async ({ page }) => {
+  await openSettings(page)
+  await group(page, "Appearance").click()
+  const themes = ["Dark", "Light", "Match system"].map((name) =>
+    page.getByRole("button", { name, exact: true })
+  )
+  const scales = [100, 115, 130, 150].map((n) =>
+    page.getByRole("button", { name: `Scale ${n} percent` })
+  )
+  const widths = (pills: Locator[]) =>
+    Promise.all(pills.map(async (p) => (await p.boundingBox())!.width))
+
+  // The theme: whichever is chosen, the three keep their widths.
+  const before = await widths(themes)
+  for (const pill of [themes[1]!, themes[2]!, themes[0]!]) {
+    await pill.click()
+    await expect(pill).toHaveAttribute("aria-pressed", "true")
+    expect(await widths(themes)).toEqual(before)
+  }
+
+  // The scale rescales the whole page, so the widths cannot be compared
+  // across a click. These four say a figure of three digits and a percent
+  // sign each, so they are as wide as one another whichever one is chosen.
+  for (const pill of [scales[2]!, scales[1]!]) {
+    await pill.click()
+    await expect(pill).toHaveAttribute("aria-pressed", "true")
+    const now = await widths(scales)
+    expect(new Set(now).size).toBe(1)
+  }
+})
+
 test.describe("Under the hood", () => {
   // The page someone opens when something has gone wrong: what this copy is
   // and runs on, where it keeps things, a report to paste into a message,
