@@ -3,8 +3,26 @@ Every Python suite, one command:
 
     python tests/run_all.py
 
-Five of them, because they answer different questions and need different
+Twelve of them, because they answer different questions and need different
 things to be true:
+
+    test_control_api.py shared control API and JSON bridge without MIDI.
+
+    test_controller_browse.py generation-bound song and take selection.
+
+    test_controller_diagnostics.py opt-in local rotating controller trace.
+
+    test_controller_extensions.py simulated controller through real transport:
+                       rehearsal lifecycle, bound take deletion and Undo.
+
+    test_controller_recovery.py song navigation, playback/record transitions
+                       and transient failures without a permanent error latch.
+
+    test_controller.py dedicated controller protocol, exclusive ownership,
+                       instrument isolation and disconnected-command rejection.
+
+    test_transport.py  shared UI/controller commands, automatic keep, overlap
+                       rejection, confirmed state and failed-save recovery.
 
     test_engine.py     the audio itself — mixing, seeking, disk safety,
                        crash recovery (a crashed take's notes included), both
@@ -92,7 +110,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SUITES = ("test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
+SUITES = ("test_control_api.py", "test_controller_browse.py", "test_controller_diagnostics.py", "test_controller_extensions.py", "test_controller_recovery.py", "test_controller.py", "test_transport.py", "test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
           "test_midi.py")
 
 # Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).

@@ -25,6 +25,27 @@ from rehearsal_recorder.midi.ports import PortInfo
 _NUMBER_IN_FRONT = re.compile(r"^\d+-\s*")
 _NUMBER_AT_END = re.compile(r"\s+\d+$")
 
+
+def controller_feedback(input_port: PortInfo, outputs: list[PortInfo]) -> list[PortInfo]:
+    """Automatic feedback candidates, never a guess between similar devices.
+
+    CoreMIDI commonly uses the same name in both directions. Windows BLE MIDI
+    adds explicit IN/OUT suffixes instead. Translate only that known suffix;
+    arbitrary similarly named ports still require an explicit output selection.
+    The caller accepts exactly one candidate and refuses ambiguous matches.
+    """
+    def compatible(port):
+        return not (input_port.device and port.device and input_port.device != port.device)
+
+    exact = [p for p in outputs if p.name == input_port.name and compatible(p)]
+    if exact:
+        return exact
+    name, changed = re.subn(r"\(Bluetooth MIDI IN\)$", "(Bluetooth MIDI OUT)",
+                           input_port.name, flags=re.IGNORECASE)
+    if not changed:
+        return []
+    return [p for p in outputs if p.name == name and compatible(p)]
+
 # The words that mark a port as a control or DAW port, not the one a device
 # plays. "MIDIIN2" is how Windows names a device's second MIDI input. "InControl"
 # holds "Control", so it is not listed again.

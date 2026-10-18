@@ -19,6 +19,9 @@ const track = (name, fn) => async (...args) => {
 const clock = () => performance.now() / 1000;
 let P = null;                 // player state, mirroring audio/player.py
 let session = null;
+let controlSequence = 0;
+let controlEvents = [];
+let controlPending = null;
 let takeCounter = 0;
 let nextName = null;            // api.set_next_take_name, until a take is kept
 let drafts = window.__DRAFTS__ || [];
@@ -1173,6 +1176,68 @@ window.__MAKE_API__ = () => ({
     return r;
   }),
 
+  open_controller_bluetooth: async () => ({ok:true}),
+  controller_state: track('controller_state', async () => ({enabled: !!window.__CONTROLLER_ENABLED__, selected: window.__CONTROLLER_SELECTED__ || null, port_open: !!window.__CONTROLLER_SELECTED__, synchronized:!!window.__CONTROLLER_SELECTED__, error:null, last_action:window.__CONTROLLER_ACTION__ || null})),
+  controller_ports: track('controller_ports', async () => {
+    await held('controller_ports');
+    return window.__CONTROLLER_PORTS__ || {system:'Fake MIDI', inputs:[], outputs:[]};
+  }),
+  set_controller: track('set_controller', async (input, output) => {
+    if (window.__CONTROLLER_SAVE_ERROR__) return {ok:false, error:window.__CONTROLLER_SAVE_ERROR__};
+    window.__CONTROLLER_SELECTED__ = input ? {input, output:output || window.__CONTROLLER_PORTS__?.outputs[0] || {name:input.name}} : null;
+    window.__CONTROLLER_ENABLED__ = !!input;
+    return {ok:true, ...await window.pywebview.api.controller_state()};
+  }),
+  control_state: track('control_state', async () => {
+    const api = window.pywebview.api;
+    const state = await api.transport_state();
+    if (controlPending && session?.takes.some(t => t.take_number === controlPending.take_number)) controlPending = null;
+    return {...state, state: controlPending ? 'unavailable' : state.state === 'unavailable' && !session ? 'idle' : state.state,
+      rehearsal_active:!!session, pending_take:controlPending, playback_open:!!P,
+      revision:controlSequence, action_sequence:controlSequence,
+      events:window.__CONTROL_EVENTS__ || controlEvents, ...window.__CONTROL_STATE__};
+  }),
+  control_catalog: async () => null,
+  control_command: track('control_command', async (action, parameters) => {
+    const result = await window.pywebview.api.transport_command(action, parameters);
+    if (result.ok && action === 'stop_review') controlPending = result;
+    if (result.ok && action === 'start') controlPending = null;
+    controlEvents.push({sequence:++controlSequence, action, ok:result.ok, error:result.error, undo:result.undo});
+    controlEvents = controlEvents.slice(-64);
+    return result;
+  }),
+  transport_state: async () => window.__TRANSPORT__ || ({state: midiTake && midiTake.ended === null && !session?.takes.some(t => t.take_number === takeCounter) ? 'recording' :
+    P?.playing ? 'playing' : session ? 'ready' : 'unavailable', busy:false,
+    error:null, pending_take:null, take_number:takeCounter, take_name:suggestName(), take_go:nextTake().go}),
+  transport_command: track('transport_command', async (action, parameters) => {
+    const api = window.pywebview.api;
+    if (action === 'start_rehearsal') {
+      const p = parameters || {};
+      return api.start_rehearsal(p.name || 'Rehearsal', p.device_index ?? 0, p.samplerate || 44100, p.tracks || [], p.bit_depth || 24, p.set_id);
+    }
+    if (action === 'stop_rehearsal') { await api.player_close(); return api.finish_rehearsal(); }
+    if (action === 'record_stop') action = midiTake && midiTake.ended === null ? 'stop_keep' : 'start';
+    if (action === 'start') {
+      const name = suggestName(), go = nextTake().go;
+      await api.player_pause();
+      return {...await api.start_take(), take_name:name, take_go:go};
+    }
+    if (action === 'stop_review') return api.stop_take();
+    if (action === 'stop_keep') {
+      const take = await api.stop_take();
+      if (!take.ok) return take;
+      try {
+        const kept = await api.keep_take(take.take_number, take.temp_dir,
+          take.suggested_name, take.duration_sec, take.tracks, [], null, take.notes);
+        if (!kept.ok) return {...kept, transport:{state:'error', error:kept.error, pending_take:take}};
+        return kept;
+      } catch (error) {
+        return {ok:false, error:error.message, transport:{state:'error', error:error.message, pending_take:take}};
+      }
+    }
+    return {ok:false, error:'Unknown transport action'};
+  }),
+
   start_take: track('start_take', async () => {
     takeCounter += 1;
     midiTake = {since: clock(), ended: null, read: {},
@@ -1311,10 +1376,11 @@ window.__MAKE_API__ = () => ({
       peaks: stereo(t.name) ? [row, row.map(v => v / 2)] : [row]};
   })),
 
-  player_open: track('player_open', async (tracks) => {
+  player_open: track('player_open', async (tracks, reuseExisting = false) => {
     await held('player_open');
+    if (reuseExisting && P && JSON.stringify(P.tracks) === JSON.stringify(tracks)) return {ok:true, ...playerState()};
     const dur = tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
-    P = {playing:false, position:0, t0:clock(), duration:dur, loop:null, muted:[], soloed:null,
+    P = {tracks, playing:false, position:0, t0:clock(), duration:dur, loop:null, muted:[], soloed:null,
          volumes:Object.fromEntries(tracks.map(t => [t.name, 1])),
          master:readCfg().master_volume ?? 1};
     const out = {ok:true, ...playerState()};

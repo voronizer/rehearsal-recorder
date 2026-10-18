@@ -316,6 +316,11 @@ def main():
     # starts.
     claim_taskbar_identity()
 
+    from rehearsal_recorder.midi.diagnostics import configure_trace
+    try:
+        controller_trace = configure_trace() # opt-in path through REHA_CONTROLLER_TRACE
+    except Exception as exc:
+        print(f"[controller trace] not enabled: {exc}", file=sys.stderr)
     keep_open = _arm_crash_log()  # noqa: F841 — the file must outlive main()
     api = Api(server_port=DEV_SERVER_PORT if dev else 0)
 

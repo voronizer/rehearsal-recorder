@@ -163,6 +163,7 @@ if sys.platform == "darwin":
         info_plist={
             # Without this the app is killed on its first take, with no
             # message anyone could act on.
+            "NSBluetoothAlwaysUsageDescription": "Connect your rehearsal MIDI controller.",
             "NSMicrophoneUsageDescription":
                 f"{APP_NAME} records your band through your audio interface.",
             "CFBundleName": APP_NAME,

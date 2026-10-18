@@ -102,6 +102,7 @@ export function Recording({
   tracks,
   lastAttempt,
   onStopped,
+  onSaveFailed,
 }: {
   takeNumber: number
   takeName: string
@@ -109,6 +110,7 @@ export function Recording({
   tracks: PlacedTrack[]
   /** The last go at this take's song, to measure this one against. */
   lastAttempt?: LastAttempt | null
+  onSaveFailed?: (error: string, take: PendingTake | null) => Promise<void>
   onStopped: (take: PendingTake) => void
 }) {
   const [elapsed, setElapsed] = useState(0)
@@ -203,13 +205,15 @@ export function Recording({
     if (stopping) return
     setStopping(true)
     dismiss(ERROR)
-    const res = await watching(api().stop_take())
+    const res = await watching(api().control_command("stop_review"))
     if (!res.ok) {
       setStopping(false)
-      sayError(("error" in res && res.error) || "Could not stop the recording")
+      const message = res.error || "Could not save the recording"
+      if (res.transport?.state === "error" && onSaveFailed) await onSaveFailed(message, res.transport.pending_take)
+      else sayError(message)
       return
     }
-    onStopped(res as PendingTake)
+    onStopped(res as unknown as PendingTake)
   }
   stopRef.current = stop
 

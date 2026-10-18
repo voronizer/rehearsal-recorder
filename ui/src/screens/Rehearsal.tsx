@@ -24,6 +24,7 @@ import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
+  type ControlState,
   type Marker,
   type SessionState,
   type Take,
@@ -52,10 +53,12 @@ export function Rehearsal({
   session,
   onStartTake,
   onFinished,
+  controlState,
   onChanged,
 }: {
   session: Extract<SessionState, { active: true }>
   onStartTake: (takeNumber: number, takeName: string, takeGo: number | null) => void
+  controlState?: ControlState | null
   onFinished: () => void
   /** Reads the session again, and answers it as it now is. */
   onChanged: () => Promise<SessionState>
@@ -76,6 +79,13 @@ export function Rehearsal({
   } = useTakeStripPlayer()
   // A take open in the player, or playing in the overview: either way Space
   // is its, and Escape puts it away before it finishes anything.
+  useEffect(() => {
+    if (!controlState) return
+    if (controlState.next_take_name && controlState.next_take_name !== session.next_take_name) void onChanged()
+    const take = session.takes.find(t => t.take_number === controlState.playback_take_number)
+    if (controlState.playback_open && take && selected?.take_number !== take.take_number && cued?.take_number !== take.take_number) select(take)
+  }, [controlState, session.takes, session.next_take_name, selected, cued, select, onChanged])
+
   const inHand = selected !== null || cued !== null
   const cropping = useRunning(
     "crop",
@@ -235,16 +245,15 @@ export function Rehearsal({
     if (busy) return
     setBusy(true)
     dismiss(ERROR)
-    player.pause()
     await naming.current
-    const res = await api().start_take()
+    const res = await api().control_command("start")
     setBusy(false)
     if (!res.ok || res.take_number == null) {
       sayError(res.error ?? "Could not start the take")
       return
     }
-    const name = nextNameRef.current
-    const known = knownGoRef.current
+    const name = res.take_name ?? nextNameRef.current
+    const known = res.take_go ?? knownGoRef.current
     onStartTake(res.take_number, name, known !== undefined ? known : goFor(name, nextChoices))
   }
 
@@ -257,8 +266,8 @@ export function Rehearsal({
   const spaceKeys = useKeysOn("space")
   const finish = async () => {
     dismiss(ERROR)
-    player.pause()
-    const res = await api().finish_rehearsal()
+    await player.pause()
+    const res = await api().control_command("stop_rehearsal")
     if (!res.ok) {
       sayError(res.error ?? "Could not finish the rehearsal")
       return

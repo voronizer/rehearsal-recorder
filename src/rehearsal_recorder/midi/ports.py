@@ -57,6 +57,9 @@ documentation says. Read this before changing anything below.
                             with QPC and cannot follow a drift between the
                             two over a long take (winmm/midi_in.hpp:173-176,
                             216);
+      Windows WinRT        the native event clock origin is not validated
+                            against Python's clock, so events are stamped on
+                            read, like MIDI Services below;
       Windows MIDI Services the raw time is `ump.Timestamp()` in MidiClock
                             (QPC) ticks (winmidi/midi_in.hpp:151), and
                             `absolute_timestamp()` answers 0. It may need
@@ -141,11 +144,13 @@ import collections
 import contextlib
 import ctypes
 import logging
+import queue
 import sys
 import threading
 import time
 from dataclasses import dataclass
 from typing import Callable
+from rehearsal_recorder.platform_support import WINDOWS
 
 log = logging.getLogger(__name__)
 
@@ -180,6 +185,7 @@ OFFSET_READS = 5
 # What the app calls each system, whatever the library does.
 _NAMES = {
     "COREMIDI": "CoreMIDI",
+    "WINDOWS_UWP": "Windows MIDI (WinRT)",
     "WINDOWS_MIDI_SERVICES": "Windows MIDI Services",
     "WINDOWS_MM": "Windows MIDI",
 }
@@ -272,7 +278,7 @@ class OpenPort:
         self._native = native
         self._on_event = on_event
         # False when the port's own times are no use (see the notes above).
-        self._library_time = system.api != lm.API.WINDOWS_MIDI_SERVICES
+        self._library_time = system.api.name not in ("WINDOWS_UWP", "WINDOWS_MIDI_SERVICES")
         self._offset = 0
         self._gone = False
         self._stop = threading.Event()
@@ -455,6 +461,74 @@ class OpenPort:
         self._gone = True
 
 
+class OpenOutput:
+    """Bounded output queue; all native output calls stay on its own thread."""
+    def __init__(self, system, native, info):
+        self.info, self._system, self._native = info, system, native
+        self._queue = queue.Queue(maxsize=64)
+        self._stop, self._ready = threading.Event(), threading.Event()
+        self._failure = None
+        self._thread = threading.Thread(target=self._run, name=f"midi-out {info.name}", daemon=True)
+        self._thread.start()
+        if not self._ready.wait(START_PATIENCE_SEC) or self._failure:
+            self.close()
+            raise PortBusy(self._failure or f"{info.name} did not open")
+
+    def _run(self):
+        with _com():
+            output = None
+            try:
+                lm = self._system._lm
+                output = lm.MidiOut(lm.OutputConfiguration(), self._system.api)
+                if output.get_current_api() != self._system.api:
+                    raise PortBusy("No native MIDI output available")
+                error = output.open_port(self._native)
+                if error:
+                    raise PortBusy(str(error))
+                self._ready.set()
+                while not self._stop.is_set():
+                    try:
+                        data = self._queue.get(timeout=0.1)
+                    except queue.Empty:
+                        continue
+                    if self._stop.is_set():
+                        break
+                    error = output.send_message(list(data))
+                    if error:
+                        raise PortBusy(str(error))
+            except Exception as exc:
+                self._failure = _reason(exc)
+            finally:
+                self._stop.set()
+                self._ready.set()
+                if output is not None:
+                    try:
+                        output.close_port()
+                    except Exception:
+                        log.exception("closing MIDI output")
+                self._native = None
+                self._system._forget(self)
+
+    def connected(self):
+        return not self._stop.is_set() and self._system._is_output_listed(self.info)
+
+    def _mark_gone(self):
+        self._stop.set()
+
+    def send(self, data):
+        if self._stop.is_set():
+            raise PortBusy(self._failure or "MIDI output closed")
+        try:
+            self._queue.put_nowait(bytes(data))
+        except queue.Full as exc:
+            raise PortBusy("MIDI feedback queue full") from exc
+
+    def close(self):
+        self._stop.set()
+        if self._thread is not threading.current_thread():
+            self._thread.join(timeout=2)
+
+
 class PortSystem:
     """
     The MIDI system of this machine: its input ports, told when one comes or
@@ -489,6 +563,8 @@ class PortSystem:
         self._stop = threading.Event()
         self._wake = threading.Event()
         # The observer's thread alone writes these two.
+        self._found_outputs = []
+        self._seen_outputs = collections.Counter()
         self._found = (0, [])
         self._seen = collections.Counter()
         self._relist_at = 0
@@ -506,6 +582,29 @@ class PortSystem:
     def inputs(self) -> list[PortInfo]:
         """The input ports the OS lists now."""
         return [info for info, _ in self._fresh()]
+
+    def outputs(self) -> list[PortInfo]:
+        if time.perf_counter_ns() - self._found[0] > LISTING_FRESH_SEC * 1e9:
+            self._fresh()
+        return [info for info, _ in self._found_outputs]
+
+    def open_output(self, port: PortInfo) -> OpenOutput:
+        self._fresh()
+        native = next((n for info, n in self._found_outputs if info == port), None)
+        if native is None:
+            raise PortBusy(f"{port.name} is not in the output list")
+        opened = OpenOutput(self, native, port)
+        with self._lock:
+            if not self._stop.is_set():
+                self._open.add(opened)
+                return opened
+        opened.close()
+        raise PortBusy("the MIDI system was closed")
+
+    def _is_output_listed(self, info):
+        if time.perf_counter_ns() - self._found[0] > LISTING_FRESH_SEC * 1e9:
+            self._fresh()
+        return any(i == info for i, _ in self._found_outputs)
 
     def watch(self, on_change: Callable[[], None]) -> None:
         """
@@ -586,18 +685,28 @@ class PortSystem:
         """List the ports (on the observer's thread). True if they differ from
         the listing before."""
         coremidi = self.api == self._lm.API.COREMIDI
+        winrt = self.api.name == "WINDOWS_UWP"
         found = []
         for p in observer.get_input_ports():
             found.append((PortInfo(
-                name=p.port_name or p.display_name,
+                name=(p.display_name or p.port_name) if winrt else (p.port_name or p.display_name),
                 device=p.device_name,
                 maker=p.manufacturer,
-                # Only CoreMIDI's number is the port's own, kept while the
-                # device is plugged in and across restarts.
-                id=str(p.port) if coremidi else "",
+                # WinRT keeps a device interface path in port_name; its
+                # display_name is the friendly label. WinMM indices are not IDs.
+                id=p.port_name if winrt else (str(p.port) if coremidi else ""),
             ), p))
+        outputs = []
+        for p in getattr(observer, "get_output_ports", lambda: [])():
+            outputs.append((PortInfo(name=(p.display_name or p.port_name) if winrt else (p.port_name or p.display_name),
+                device=p.device_name, maker=p.manufacturer,
+                id=p.port_name if winrt else (str(p.port) if coremidi else "")), p))
+        seen_outputs = collections.Counter(info for info, _ in outputs)
+        output_changed = seen_outputs != self._seen_outputs
+        self._seen_outputs = seen_outputs
+        self._found_outputs = outputs
         seen = collections.Counter(info for info, _ in found)
-        changed = seen != self._seen
+        changed = seen != self._seen or output_changed
         self._seen = seen
         self._found = (time.perf_counter_ns(), found)
         self._relist_at = time.perf_counter() + RELIST_SEC
@@ -644,6 +753,9 @@ class PortSystem:
             conf = lm.ObserverConfiguration()
             conf.input_added = self._notice
             conf.input_removed = self._notice
+            if hasattr(conf, "output_added"):
+                conf.output_added = self._notice
+                conf.output_removed = self._notice
             conf.track_hardware = True
             # A software instrument or a loopback cable is an input too.
             conf.track_virtual = True
@@ -705,6 +817,7 @@ class PortSystem:
             self._stop.set()
             askers, self._askers = self._askers, []
             self._found = (0, [])
+        self._found_outputs = []
         for asked in askers:
             asked.set()
 
@@ -714,7 +827,8 @@ class PortSystem:
         with self._lock:
             ports = list(self._open)
         for port in ports:
-            if port.info not in present:
+            listing = {info for info, _ in self._found_outputs} if isinstance(port, OpenOutput) else present
+            if port.info not in listing:
                 port._mark_gone()
 
     def _tell(self):
@@ -733,10 +847,9 @@ def open_system(quiet=False) -> tuple[PortSystem | None, str | None]:
     app without MIDI still records audio. Safe to call from any thread: the
     library is imported and used on threads of this module's, not the caller's.
 
-    On Windows, Windows MIDI Services first (the newer, which lets apps share
-    a port) if its observer starts, else the classic one. The app's log says
-    which, and why the first was not used if it was not, or why none; `quiet`
-    leaves that out, for --selftest, which says the system itself.
+    On Windows, Windows MIDI Services first, then classic MIDI. Both use
+    pylibremidi. The log names the chosen backend and any failed attempts.
+    quiet leaves that out for --selftest, which reports the system itself.
     """
     system, why, passed_over = _choose_system()
     if quiet:
@@ -752,6 +865,20 @@ def open_system(quiet=False) -> tuple[PortSystem | None, str | None]:
     else:
         log.error("%s", why)
     return system, why
+
+
+def open_controller_system(primary):
+    """BLE-capable control ports without changing instrument timestamps or IDs."""
+    if not WINDOWS or getattr(getattr(primary, "api", None), "name", None) != "WINDOWS_MM":
+        return primary
+    try:
+        system = PortSystem("WINDOWS_UWP")
+    except Exception as exc:
+        # WinMM still serves wired controllers when WinRT is unavailable.
+        log.error("Controller MIDI: using %s; WinRT unavailable: %s", primary.name, _reason(exc))
+        return primary
+    log.error("Controller MIDI: %s; instrument MIDI remains %s", system.name, primary.name)
+    return system
 
 
 def _choose_system() -> tuple[PortSystem | None, str | None, list[tuple[str, str]]]:

@@ -14,6 +14,7 @@ import { api } from "@/lib/api"
  * the header's slider has the same meter as the fader.
  */
 let volume = 1
+let muted = false
 let level = 0
 const listeners = new Set<() => void>()
 
@@ -40,18 +41,25 @@ export function useListeningVolume(): number {
   return useSyncExternalStore(subscribe, () => volume)
 }
 
+/** The recorder's master mute, independent of the saved listening level. */
+export function usePlaybackMuted(): boolean {
+  return useSyncExternalStore(subscribe, () => muted)
+}
+
 /** 0..1, the whole mix as it last went out; 0 while nothing plays. */
 export function useMixLevel(): number {
   return useSyncExternalStore(subscribe, () => level)
 }
 
 /** What Python says: the level a take opened at, the mix it measured. */
-export function heard(state: { volume?: number; level?: number }) {
+export function heard(state: { volume?: number; level?: number; muted?: boolean }) {
   const v = state.volume ?? volume
   const l = state.level ?? level
-  if (v === volume && l === level) return
+  const m = state.muted ?? muted
+  if (v === volume && l === level && m === muted) return
   volume = v
   level = l
+  muted = m
   emit()
 }
 

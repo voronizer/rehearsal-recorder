@@ -81,6 +81,9 @@ from rehearsal_recorder.midi import ports as midiports
 from rehearsal_recorder.midi.capture import CLOCK_FILE, MID_SUFFIX, MIDRAW_SUFFIX, note_stems
 from rehearsal_recorder.midi.clock import AudioClock
 from rehearsal_recorder.midi.rig import MidiRig
+from rehearsal_recorder.midi.controller import Controller
+from rehearsal_recorder.midi import bluetooth_setup
+from rehearsal_recorder.midi.identity import find_port, controller_feedback
 from rehearsal_recorder.midi.rules import (
     lane_after,
     notes_problem,
@@ -97,6 +100,8 @@ from rehearsal_recorder.store.library import (
     paths_overlap,
 )
 from rehearsal_recorder.store.db import DB_NAME
+from rehearsal_recorder.transport import Transport, serialised
+from rehearsal_recorder.control import ControlAPI
 from rehearsal_recorder import diagnostics
 from rehearsal_recorder.audio.probe import InterfaceCheck, plan_for, tracks_for
 from rehearsal_recorder.platform_support import (
@@ -663,6 +668,11 @@ def _is_output_choice(channels):
 
 class Api:
     def __init__(self, server_port=0):
+        self._config_lock = threading.RLock()
+        self._transport = Transport(self)
+        # Python adapters use controls; the webview exposes only the explicit
+        # control_* bridge methods, without traversing the service's internals.
+        self._transport._serializable = False
         self._recorder = None
         # The laptop and its screen stay awake while a take records, and a
         # take hears the system going to sleep anyway (platform_support).
@@ -685,6 +695,9 @@ class Api:
         # between takes so that what an instrument has set is in the next one.
         # No port is opened until a check or a rehearsal asks.
         system, midi_error = open_midi_system()
+        self._midi_system = system
+        self._controller_system = midiports.open_controller_system(system)
+        self._controller = Controller(self._controller_system, self.controls, threads=MIDI_THREADS)
         self._midi = MidiRig(system, midi_error, threads=MIDI_THREADS)
         # Settings › Under the hood's check of the interface; see probe.py.
         self._check = InterfaceCheck()
@@ -758,6 +771,10 @@ class Api:
         # Clear out leftovers from previous runs (rehearsal started, nothing
         # recorded, app closed).
         self.cleanup_empty_rehearsals()
+        selected = self._config.get("controller")
+        if isinstance(selected, dict) and isinstance(selected.get("input"), dict) and isinstance(selected.get("output"), dict):
+            self._midi.reserve_controller(selected["input"])
+            self._controller.configure(selected)
 
     def attach_window(self, window):
         """Needed for native dialogs (folder picker)."""
@@ -781,6 +798,9 @@ class Api:
         while it is still there to do it. Then the publishing worker is stood
         down instead of being killed wherever it happens to be.
         """
+        self._controller.close()
+        if self._controller_system is not None and self._controller_system is not self._midi_system:
+            self._controller_system.close()
         recorder, self._recorder = self._recorder, None
         if recorder is not None:
             try:
@@ -928,10 +948,11 @@ class Api:
         # Written beside the real file and moved onto it, so an app killed
         # mid-write leaves the old settings rather than half of new ones.
         # os.replace is atomic on every system we ship on.
-        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        writing = CONFIG_PATH.with_name("config.json.writing")
-        _write_text(writing, json.dumps(self._config, ensure_ascii=False, indent=2))
-        os.replace(writing, CONFIG_PATH)
+        with self._config_lock:
+            CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            writing = CONFIG_PATH.with_name("config.json.writing")
+            _write_text(writing, json.dumps(self._config, ensure_ascii=False, indent=2))
+            os.replace(writing, CONFIG_PATH)
 
     def _remember_device(self, key, index):
         """Saves a device choice as its index and what it is. `key` is
@@ -1701,7 +1722,7 @@ class Api:
             return {"ok": False, "error": "Recording in progress"}
         # A check would put the rig on its own ports while a Stop is still
         # ending the take's notes on them.
-        if self._stopping:
+        if self._stopping or self._transport.saving:
             return {"ok": False, "error": "Still saving the last take"}
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
@@ -1764,6 +1785,59 @@ class Api:
         return {"ok": True}
 
     # ---------- MIDI ports ----------
+
+    def controller_ports(self):
+        system = self._controller.system
+        return {"bluetooth_setup": bluetooth_setup.available(),
+                "system": system.name if system else None,
+                "inputs": [p.saved() for p in system.inputs()] if system else [],
+                "outputs": [p.saved() for p in system.outputs()] if system else []}
+
+    def open_controller_bluetooth(self):
+        return bluetooth_setup.open_picker()
+
+    def controller_state(self):
+        return self._controller.status()
+
+    @serialised
+    def set_controller(self, selected_input=None, selected_output=None):
+        system = self._controller.system
+        if self._recorder is not None or self._transport.saving:
+            return {"ok": False, "error": "Stop recording before changing the controller"}
+        if selected_input is None:
+            self._controller.configure(None)
+            self._midi.reserve_controller(None)
+            self._config.pop("controller", None)
+        else:
+            if not isinstance(selected_input, dict) or system is None:
+                return {"ok": False, "error": "No MIDI controller input available"}
+            inp, ambiguous = find_port(selected_input, system.inputs())
+            if inp is None or ambiguous:
+                return {"ok": False, "error": "The selected controller input cannot be identified. Connect the controller, refresh the port list and select its input again."}
+            outputs = system.outputs()
+            if selected_output is None:
+                matches = controller_feedback(inp, outputs)
+                if len(matches) != 1:
+                    return {"ok": False, "error": "Select the controller feedback output"}
+                out = matches[0]
+            elif isinstance(selected_output, dict):
+                out, ambiguous = find_port(selected_output, outputs)
+                if out is None or ambiguous:
+                    return {"ok": False, "error": "The selected controller feedback output cannot be identified. Refresh the port list and select its output again."}
+            else:
+                return {"ok": False, "error": "Invalid feedback output"}
+            tracks = (self._session or {}).get("tracks", self._config.get("tracks", []))
+            for track in tracks:
+                saved = port_of(track)
+                if records_notes(track) and saved and find_port(saved, [inp])[0]:
+                    return {"ok": False, "error": "Remove this port from instrument tracks before selecting it as a controller"}
+            selected = {"input": inp.saved(), "output": out.saved()}
+            self._controller.configure(None)
+            self._midi.reserve_controller(selected["input"])
+            self._controller.configure(selected)
+            self._config["controller"] = selected
+        self._write_config()
+        return {"ok": True, **self.controller_state()}
 
     def list_midi_ports(self):
         """The MIDI ports there are, for the port pickers: the system, each
@@ -1850,6 +1924,7 @@ class Api:
 
     # ---------- rehearsal ----------
 
+    @serialised
     def start_rehearsal(
         self, name, device_index, samplerate, tracks, bit_depth=DEFAULT_DEPTH,
         set_id=None,
@@ -1857,6 +1932,8 @@ class Api:
         """`set_id` is the set picked beside Start rehearsal: the rehearsal
         keeps a copy of it as it is now, and its first song is the first
         take. One that is not there any more starts it with none."""
+        if self._transport.pending_take:
+            return {"ok": False, "error": "Recover the failed take first"}
         if not tracks:
             return {"ok": False, "error": "No tracks configured"}
         # The take recording keeps the tracks it began with, notes and all.
@@ -2073,6 +2150,7 @@ class Api:
         title, or "Take N" — see _next_take."""
         return _field_text(self._next_take(take_number, chosen))
 
+    @serialised
     def set_next_take_name(self, name):
         """
         Names the take recorded next, picked on the rehearsal screen before
@@ -2138,7 +2216,12 @@ class Api:
                                   "also": also.get(s["name"], [])})
         return {"here": here, "other": other}
 
+    @serialised
     def finish_rehearsal(self):
+        if self._transport.pending_take:
+            return {"ok": False, "error": "Recover the failed take first"}
+        if self._recorder is not None:
+            return {"ok": False, "error": "Recording in progress"}
         if self._session is None:
             return {"ok": False, "error": "No rehearsal in progress"}
         folder = Path(self._session["folder"])
@@ -2269,7 +2352,30 @@ class Api:
 
     # ---------- take ----------
 
+    @property
+    def controls(self) -> ControlAPI:
+        """Application-owned control service for Python adapters."""
+        return self._transport
+
+    def control_state(self):
+        return self.controls.snapshot()
+
+    def control_command(self, action, parameters=None):
+        return self.controls.execute(action, parameters, wait=True)
+
+    def control_catalog(self):
+        return self.controls.catalog()
+
+    def transport_state(self):
+        return self._transport.state()
+
+    def transport_command(self, action):
+        return self._transport.command(action)
+
+    @serialised
     def start_take(self):
+        if self._transport.pending_take:
+            return {"ok": False, "error": "Recover the failed take first"}
         if self._session is None:
             return {"ok": False, "error": "No rehearsal in progress"}
         if self._recorder is not None:
@@ -2363,6 +2469,7 @@ class Api:
             return {}
         return self._recorder.get_levels()
 
+    @serialised
     def stop_take(self):
         if self._recorder is None:
             return {"ok": False, "error": "Not recording"}
@@ -2484,6 +2591,7 @@ class Api:
         ]
         return lanes, missing
 
+    @serialised
     def keep_take(
         self,
         take_number,
@@ -2769,6 +2877,7 @@ class Api:
                 found.append(info)
         return found
 
+    @serialised
     def recover_draft(self, draft_dir, name=None):
         """Turns a draft into a normal saved take of its rehearsal."""
         draft_dir = Path(draft_dir)
@@ -2841,6 +2950,7 @@ class Api:
         self._enqueue_publish(folder, take_number)
         return {"ok": True, "take": kept, "folder": str(folder), "ended": ended}
 
+    @serialised
     def discard_draft(self, draft_dir):
         """
         Moves a draft into the holding folder, where it waits for its Undo
@@ -3661,6 +3771,7 @@ class Api:
         with self._files_lock:
             return any(_ends(i, c) for i in idents if i for c in self._cropping)
 
+    @serialised
     def crop_take(self, folder, take_number, start_sec, end_sec):
         """
         Keeps only [start, end) of a saved take. The take keeps its number,
@@ -3752,7 +3863,7 @@ class Api:
             # transport would go on looking alive over a player Python has
             # closed.
             if playing:
-                self.player_open(playing)
+                self._player_open(playing)
             return done
 
         # The markers are read and rewritten in one transaction, now that the
@@ -3794,7 +3905,7 @@ class Api:
                 # and the answer names it, as nothing else on screen would.
                 # The player opens again, as for a crop that failed.
                 if playing:
-                    self.player_open(playing)
+                    self._player_open(playing)
                 return {"ok": False,
                         "error": "The crop is done but its marks could not follow; "
                                  f"the uncut take is in “{done['aside']}”."}
@@ -3856,6 +3967,7 @@ class Api:
             **({"error": error} if error else {}),
         }
 
+    @serialised
     def crop_draft(self, temp_dir, tracks, start_sec, end_sec, notes=None):
         """
         The same cut, one folder over. A take that has been stopped is proper
@@ -3923,7 +4035,7 @@ class Api:
             # See crop_take: the files the interface would reopen on have not
             # changed, so nothing over there will reopen them.
             if playing:
-                self.player_open(playing)
+                self._player_open(playing)
             return done
         with self._files_lock:
             token, error = self._hold_uncut({"item": ident, "rehearsal": ref}, done)
@@ -3939,11 +4051,19 @@ class Api:
 
     # ---------- playback ----------
 
-    def player_open(self, tracks):
+    @serialised
+    def player_open(self, tracks, reuse_existing=False):
+        return self._player_open(tracks, reuse_existing)
+
+    def _player_open(self, tracks, reuse_existing=False):
+        # File operations already own their transaction/file locks. Reacquiring
+        # the action gate there would invert the gate -> files -> player order.
         # Calls from the interface arrive on their own threads, so opening and
         # closing a player has to be serialised: a close landing in the middle
         # of an open used to leave a half-built stream behind.
         with self._player_lock:
+            if reuse_existing and self._player is not None and self._open_tracks == tracks:
+                return {"ok": True, **self._player.state()}
             self.player_close()
             try:
                 player = TakePlayer(tracks)
@@ -3957,9 +4077,16 @@ class Api:
             for name, v in self._config.get("volumes", {}).items():
                 player.set_volume(name, v)
             player.set_master(self._config.get("master_volume", 1.0))
+            player.set_master_muted(self._transport.playback_muted)
 
             self._player = player
             self._open_tracks = tracks
+            try:
+                selected = next((t for t in self._session_takes() if t["tracks"] == tracks), None)
+                self._transport.playback_take_number = selected["take_number"] if selected else None
+                self._transport.playback_take_name = selected["name"] if selected else None
+            except Exception:
+                self._transport.playback_take_number = None
             result = {"ok": True, **player.state()}
             if warning:
                 result["warning"] = warning
@@ -3969,6 +4096,8 @@ class Api:
         with self._player_lock:
             player, self._player = self._player, None
             self._open_tracks = None
+            self._transport.playback_take_number = None
+            self._transport.playback_take_name = None
             if player is not None:
                 player.close()
             return {"ok": True}
@@ -3976,8 +4105,9 @@ class Api:
     def player_state(self):
         if self._player is None:
             return {"open": False}
-        return {"open": True, **self._player.state()}
+        return {"open": True, "tracks": self._open_tracks, **self._player.state()}
 
+    @serialised
     def player_toggle(self):
         if self._player is None:
             return {"ok": False, "error": "No take open"}
@@ -3986,6 +4116,7 @@ class Api:
             return {"ok": True, **self._player.state()}
         return self.player_play()
 
+    @serialised
     def player_play(self):
         if self._player is None:
             return {"ok": False, "error": "No take open"}
@@ -4013,12 +4144,14 @@ class Api:
             **({"warning": reopened["warning"]} if reopened.get("warning") else {}),
         }
 
+    @serialised
     def player_pause(self):
         if self._player is None:
             return {"ok": True}
         self._player.pause()
         return {"ok": True, **self._player.state()}
 
+    @serialised
     def player_seek(self, seconds):
         if self._player is None:
             return {"ok": False, "error": "No take open"}
@@ -4603,6 +4736,7 @@ class Api:
                 self._kept(token, result.get("error"))
             return result
 
+    @serialised
     def undo_trash(self, token):
         """
         Undo: the item back where it came from, and its rows back in the
@@ -4902,7 +5036,7 @@ class Api:
 
         def reopened():
             if playing and self._open_tracks is None:
-                self.player_open(playing)
+                self._player_open(playing)
 
         def failed(error):
             """A failure once files may have moved: the cropped take back in

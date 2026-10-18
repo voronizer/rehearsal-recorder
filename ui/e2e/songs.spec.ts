@@ -231,6 +231,8 @@ test.describe("Songs in History", () => {
     await expect(head(page)).toHaveCount(0)
     await letGo(page, "get_song")
     await expect(head(page).getByRole("heading", { name: "Pałyn" })).toBeVisible()
+    // The DOM can be visible before the frame observer samples that paint.
+    await expect.poll(() => headsSeen(page)).toContain("Pałyn")
     const heads = await headsSeen(page)
     const seen = heads.filter((h, i) => h !== heads[i - 1])
     expect(seen).not.toContain("Daroha")

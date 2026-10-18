@@ -6,8 +6,27 @@ cd ui && npm test                    # the interface, what needs no browser
 cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
-Five Python suites and two for the interface, because they answer different
-questions.
+The twelve Python suites cover audio, storage, platform behaviour, MIDI and
+shared controls. Interface tests run as unit and browser suites.
+
+## test_control_api.py - shared controls
+
+Exercises JSON bridge calls without MIDI: laptop Review, explicit Keep,
+semantic results, bound catalog selection, execution-time state checks,
+normalised volume and overlapping calls.
+
+## test_controller.py — dedicated remote
+
+Checks channel/version/token validation, acknowledgements, duplicate suppression,
+exclusive input ownership, instrument isolation (including ambiguous replacement
+ports), disconnect cancellation and shared recording/playback actions.
+
+## test_transport.py — shared application controls
+
+Uses the engine suite's fake sound card and temporary libraries to verify
+Start, Stop-and-keep, playback, confirmed state during saving, overlapping UI
+and controller commands, save retry without a second Stop, and preserved drafts
+when finalisation fails. Run with `python tests/test_transport.py`.
 
 ## test_engine.py — the audio
 

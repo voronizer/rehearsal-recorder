@@ -152,6 +152,7 @@ class TakePlayer:
         # faders make the cloud mix too; this only makes listening louder or
         # quieter, so the tracks' meters are read before it.
         self.master = 1.0
+        self.master_muted = False
         self._master_gain = 1.0
         # Loudest sample of the last block of the whole mix, after the master
         # and before the clip — so a sum of tracks that goes past full scale
@@ -315,7 +316,7 @@ class TakePlayer:
                 track.levels = [0.0] * track.width
             # Turned down while paused, the take must start quiet, not ease
             # down from where it was over the first few blocks.
-            self._master_gain = self.master
+            self._master_gain = 0.0 if self.master_muted else self.master
             self.master_level = 0.0
             return result
 
@@ -385,9 +386,10 @@ class TakePlayer:
             self._pos += n
             written += n
 
-        self._master_gain += (self.master - self._master_gain) * GAIN_SMOOTHING
-        if abs(self.master - self._master_gain) < 1e-4:
-            self._master_gain = self.master
+        target_master = 0.0 if self.master_muted else self.master
+        self._master_gain += (target_master - self._master_gain) * GAIN_SMOOTHING
+        if abs(target_master - self._master_gain) < 1e-4:
+            self._master_gain = target_master
         if self._master_gain != 1.0:
             out *= self._master_gain
         self.master_level = max(float(out.max()), -float(out.min()))
@@ -486,6 +488,12 @@ class TakePlayer:
         with self._lock:
             self._soloed = name
 
+    def set_master_muted(self, muted):
+        with self._lock:
+            self.master_muted = bool(muted)
+            if self.master_muted and not self._playing:
+                self._master_gain = 0.0
+
     def set_master(self, volume):
         with self._lock:
             self.master = float(min(1.0, max(0.0, volume)))
@@ -533,6 +541,7 @@ class TakePlayer:
                 "muted": [t.name for t in self.tracks if t.muted],
                 "volumes": {t.name: t.volume for t in self.tracks},
                 "master": self.master,
+                "master_muted": self.master_muted,
             }
 
     def close_output(self):

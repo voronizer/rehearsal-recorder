@@ -819,6 +819,8 @@ test.describe("the track rows on the shared pieces", () => {
     // Beside Last time at 1180 px, the stress data's interface leaves its
     // figures too little room for all of them.
     await openBandApp(page, { stress: true })
+    // Fix font metrics so this deliberate no-room case is portable across OSes.
+    await page.addStyleTag({ content: "* { font-family: Arial, sans-serif !important; }" })
     const row = page.locator("[data-recording-with]")
     const name = row.getByText("Universal Audio Apollo Twin X DUO Heritage Edition", { exact: true })
     await expect(name).toBeVisible()
@@ -1945,6 +1947,8 @@ test.describe("Last time and long names on the shared pieces", () => {
       "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:1.5}));"
     )
     await openBandApp(page, { stress: true })
+    // Fix font metrics so this deliberate no-room case is portable across OSes.
+    await page.addStyleTag({ content: "* { font-family: Arial, sans-serif !important; }" })
     const row = page.locator("[data-recording-with]")
     const name = row.getByText("Universal Audio Apollo Twin X DUO Heritage Edition", { exact: true })
     await expect(name).not.toHaveAttribute("data-cut")

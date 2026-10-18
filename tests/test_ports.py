@@ -107,6 +107,7 @@ def windows_com(answer=0, platform="win32"):
     The platform stays patched for the whole block, as it would be for real.
     """
     world = fake_libremidi.install()
+    world.present_apis.add("WINDOWS_UWP")
 
     class Ole32:
         @staticmethod
@@ -232,6 +233,28 @@ def main():
            and not [n for n in names_of(world) if n.startswith("com")])
         finish()
 
+    print("\n[3b] Controller backend is separate from instrument MIDI")
+    from unittest.mock import patch
+    world = fake_libremidi.install()
+    world.present_apis.add("WINDOWS_UWP")
+    primary = ports.PortSystem("WINDOWS_MM")
+    systems.append(primary)
+    with patch.object(ports, 'WINDOWS', True):
+        controls = ports.open_controller_system(primary)
+    systems.append(controls)
+    ok("WinMM instrument MIDI is unchanged", primary.api.name == "WINDOWS_MM")
+    ok("controller gets a separate WinRT system", controls is not primary and controls.api.name == "WINDOWS_UWP")
+    with patch.object(ports, 'WINDOWS', False):
+        ok("other platforms share their existing system", ports.open_controller_system(primary) is primary)
+    finish()
+    world = fake_libremidi.install()
+    primary = ports.PortSystem("WINDOWS_MM")
+    systems.append(primary)
+    with patch.object(ports, 'WINDOWS', True):
+        ok("wired controls still work without WinRT", ports.open_controller_system(primary) is primary)
+        ok("disabled MIDI does not open an unrequested system", ports.open_controller_system(None) is None)
+    finish()
+
     print("\n[4] Which MIDI system a machine gets")
     # And that the app's log says which, once. The crash log is the only log a
     # windowed build has and it keeps ERROR only (app.py), so that is the level.
@@ -249,6 +272,49 @@ def main():
     ok("a Mac gets CoreMIDI", system is not None and system.name == "CoreMIDI")
     ok("and the log says so in one line, at a level the crash log keeps",
        said() == [("MIDI: CoreMIDI", logging.ERROR)])
+    finish()
+    world = fake_libremidi.install()
+    world.present_apis.add("WINDOWS_UWP")
+    sys.platform = "win32"
+    system, why = ports.open_system()
+    sys.platform = REAL_PLATFORM
+    systems.append(system)
+    ok("Windows retains MIDI Services even when WinRT is available",
+       system is not None and system.name == "Windows MIDI Services")
+    ok("the existing backend choice is logged",
+       said() == [("MIDI: Windows MIDI Services", logging.ERROR)])
+    finish()
+    world = fake_libremidi.install()
+    world.present_apis.add("WINDOWS_UWP")
+    system = ports.PortSystem("WINDOWS_UWP")
+    systems.append(system)
+    native = world.add_port("device-interface-id", 17)
+    native.display_name = "Controller (Bluetooth MIDI IN)"
+    ok("WinRT shows the friendly label and persists the interface path",
+       wait_for(lambda: system.inputs() == [ports.PortInfo(
+           "Controller (Bluetooth MIDI IN)", id="device-interface-id")]))
+    # Native WinRT output labels and IDs use the same mapping as inputs.
+    output = type(native)("feedback-interface-id", 18)
+    output.display_name = "Controller (Bluetooth MIDI OUT)"
+    world.observers[0].get_output_ports = lambda: [world.listed(output)]
+    ok("WinRT feedback retains its friendly name and persistent ID",
+       wait_for(lambda: system.outputs() == [ports.PortInfo(
+           "Controller (Bluetooth MIDI OUT)", id="feedback-interface-id")]))
+    # Connected output checks share the input listing's freshness window.
+    from unittest.mock import patch
+    system.inputs()
+    with patch.object(system, '_fresh', wraps=system._fresh) as listing:
+        system.outputs()
+        system.outputs()
+        system._is_output_listed(system.outputs()[0])
+        ok("fresh output checks reuse the cached listing", listing.call_count == 0)
+    got = []
+    rx = system.open(system.inputs()[0], lambda ns, data: got.append((ns, data)))
+    before = time.perf_counter_ns()
+    world.send("device-interface-id", [0xBF, 117, 1], ago_ns=1000000000)
+    ok("WinRT receives messages on Python's clock despite a foreign native epoch",
+       wait_for(lambda: got) and before <= got[0][0] <= time.perf_counter_ns()
+       and got[0][1] == bytes([0xBF, 117, 1]))
     finish()
     world, system, why = start("win32")
     ok("Windows gets MIDI Services where it can be had",
@@ -687,7 +753,7 @@ def main():
     # point at alive, and the library reports it as a leak when the process
     # ends. CI showed that on Windows, where MIDI Services is absent.
     world = fake_libremidi.install()
-    world.observer_raises.add("WINDOWS_MIDI_SERVICES")
+    world.observer_raises.update({"WINDOWS_UWP", "WINDOWS_MIDI_SERVICES"})
     sys.platform = "win32"
     system, why = ports.open_system()
     sys.platform = REAL_PLATFORM

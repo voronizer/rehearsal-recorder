@@ -189,6 +189,55 @@ export type ShareWhat = "mix" | "tracks" | "both"
 /** What the cloud copies are written as. */
 export type CloudFormat = "wav" | "flac" | "mp3"
 
+export type ControllerPort = { name: string; id?: string; device?: string; maker?: string }
+export type ControllerPorts = { bluetooth_setup?: boolean; system: string | null; inputs: ControllerPort[]; outputs: ControllerPort[] }
+export type ControllerState = {
+  enabled: boolean
+  selected: { input: ControllerPort; output: ControllerPort } | null
+  port_open: boolean
+  synchronized: boolean
+  error: string | null
+  last_action: { action: string; note: number; token: number; ok: boolean; error?: string; undo?: string | null; sequence?: number } | null
+}
+
+export type TransportState = {
+  rehearsal_active?: boolean
+  state: "ready" | "recording" | "playing" | "saving" | "error" | "unavailable"
+  busy: boolean
+  error: string | null
+  pending_take: PendingTake | null
+  take_number: number | null
+  take_name: string | null
+  take_go: number | null
+  master_volume?: number
+  playback_muted?: boolean
+  next_take_name?: string | null
+  playback_take_number: number | null
+}
+
+export type ControlAction = "start" | "stop_review" | "stop_keep" | "record_stop" | "play_stop" | "retry_save" | "restart" | "seek_back" | "seek_forward" | "previous_take" | "next_take" | "previous_song" | "next_song" | "start_rehearsal" | "stop_rehearsal" | "remove_take" | "select_take" | "select_song" | "set_volume" | "adjust_volume" | "volume_operations" | "mute_toggle"
+export type ControlEvent = { sequence: number; action: ControlAction; ok: boolean; error?: string | null; undo?: string | null }
+export type ControlState = Omit<TransportState, "state"> & {
+  state: TransportState["state"] | "idle"
+  readiness?: "ready" | "busy" | "attention" | "idle"
+  revision: number
+  action_sequence: number
+  events: ControlEvent[]
+  selection_reference: string | null
+  playback_open: boolean
+}
+export type ControlCatalog = { identity: string; songs: string[]; takes: number[]; selected_song: string | null; selected_take: number | null }
+
+export type TransportResult = Ok<{
+  take_number?: number
+  take_name?: string
+  take_go?: number | null
+  take?: Take
+  ended?: string[]
+  result?: "busy" | "unavailable" | "error"
+  transport?: TransportState
+}>
+
 /** A take that was just stopped — still a draft, still unnamed. */
 export type PendingTake = {
   ok: true
@@ -589,6 +638,7 @@ export type TakeNotes = { icon?: string } & (
 
 /** Player state on the Python side. */
 export type PlayerState = {
+  tracks?: TrackFile[]
   open?: boolean
   ok?: boolean
   error?: string
@@ -874,6 +924,15 @@ type PyApi = {
     Ok<{ folder?: string; take_count?: number; folder_removed?: boolean }>
   >
 
+  open_controller_bluetooth(): Promise<Ok>
+  controller_ports(): Promise<ControllerPorts>
+  controller_state(): Promise<ControllerState>
+  set_controller(input?: ControllerPort | null, output?: ControllerPort | null): Promise<Ok<ControllerState>>
+  control_state(): Promise<ControlState>
+  control_catalog(): Promise<ControlCatalog | null>
+  control_command(action: ControlAction, parameters?: Record<string, unknown>): Promise<TransportResult>
+  transport_state(): Promise<TransportState>
+  transport_command(action: "start" | "stop_review" | "stop_keep" | "record_stop" | "play_stop" | "retry_save" | "restart" | "seek_back" | "seek_forward" | "previous_take" | "next_take" | "previous_song" | "next_song"): Promise<TransportResult>
   start_take(): Promise<Ok<{ take_number?: number }>>
   /** Names the take recorded next; blank goes back to the name it would
    *  have had. Holds until a take is kept. */
@@ -1163,7 +1222,7 @@ type PyApi = {
    *  as they are, open, rather than closing them to open them again. */
   stop_monitor(keepPorts?: boolean): Promise<Ok>
 
-  player_open(tracks: TrackFile[]): Promise<PlayerState>
+  player_open(tracks: TrackFile[], reuseExisting?: boolean): Promise<PlayerState>
   player_close(): Promise<Ok>
   player_state(): Promise<PlayerState>
   player_toggle(): Promise<PlayerState>
@@ -1353,6 +1412,9 @@ export type UpdateDownload = {
 
 /** The read-only calls the interface asks for over and over. */
 type Pollable = {
+  control_state: ControlState
+  controller_state: ControllerState
+  transport_state: TransportState
   player_state: PlayerState
   /** One figure per channel of each track: a stereo track has two. */
   get_levels: Record<string, number[]>

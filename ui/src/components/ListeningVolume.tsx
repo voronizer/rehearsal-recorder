@@ -8,6 +8,7 @@ import {
   loadListeningVolume,
   turnListeningVolume,
   useListeningVolume,
+  usePlaybackMuted,
   useMixLevel,
 } from "@/lib/listening"
 
@@ -25,6 +26,7 @@ import {
  */
 export function ListeningVolume() {
   const volume = useListeningVolume()
+  const muted = usePlaybackMuted()
   // Opened with the mouse, focus stays on the speaker, so once the slider
   // is shut Space is the screen's again: hooks/useSpacebar lets go of a
   // button the mouse left focus on. With the slider focused on opening,
@@ -48,15 +50,16 @@ export function ListeningVolume() {
               variant="ghost"
               size="icon"
               aria-label="Playback volume"
+              aria-description={muted ? "Playback muted" : undefined}
               onPointerDown={() => (byPointer.current = true)}
               onKeyDown={() => (byPointer.current = false)}
               className="text-muted-foreground hover:text-foreground"
             >
-              <VolumeIcon volume={volume} />
+              <VolumeIcon volume={muted ? 0 : volume} />
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>{`Playback volume ${Math.round(volume * 100)}%`}</TooltipContent>
+        <TooltipContent>{muted ? "Playback muted" : `Playback volume ${Math.round(volume * 100)}%`}</TooltipContent>
       </Tooltip>
       <PopoverContent
         align="end"

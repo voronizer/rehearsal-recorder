@@ -155,6 +155,7 @@ def build(world):
         COREMIDI = 1
         ALSA_RAW = 3
         WINDOWS_MM = 5
+        WINDOWS_UWP = 6
         WINDOWS_MIDI_SERVICES = 4099
         DUMMY = 65535
 
