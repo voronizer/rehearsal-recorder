@@ -48,7 +48,8 @@ export function MetronomeRowView({
   lit: number | null
   line: Line
   onSwitch: (on: boolean) => void
-  /** A new tempo or signature, the other as it was. */
+  /** A new tempo or signature, the other as it was: a new signature
+   *  comes with the number kept, brought into its range. */
   onTempo: (tempo: number | null, signature: Signature) => void
   /** ▶ or ■, by the phase. */
   onPlay: () => void
@@ -135,24 +136,43 @@ export function MetronomeRowView({
   )
 }
 
+/** What "count it from the last take" counted, kept while the row is open
+ *  and shows it: the take, and the number in the row's signature. */
+type Count = {
+  song: string
+  take: { folder: string; take_number: number; name: string }
+  tempo: number
+  signature: Signature
+}
+
+type Answer = { ok: boolean; error?: string }
+
 /**
  * The metronome's row on the rehearsal screen, at the footer's left beside
  * Finish and Record. Python keeps the tempo and the signature and follows
  * the next take's name with them; the row shows what it says and sends
  * each change, which Python holds until the name names another song. The
  * click run with ▶ stops at ■, at Record, and when the screen is left.
+ *
+ * A tempo counted from the last take is kept while the row shows it: a
+ * signature picked then has Python count the same take again in that
+ * signature (spec Part 10), since what a count is in 6/8 is the counter's
+ * to say.
  */
 export function MetronomeRow() {
   const metronome = useMetronome()
   const { refresh } = metronome
   const sayError = useErrorNotice(SAID)
   // What was last sent, shown until Python's answer to it is in, so the
-  // field does not show the old number for a moment.
+  // field does not show the old number for a moment. Each change is
+  // numbered and only the last one's answer puts Python's back: two quick
+  // presses of + never show the first again.
   const [sent, setSent] = useState<{ tempo: number | null; signature: Signature } | null>(null)
   const [switched, setSwitched] = useState<boolean | null>(null)
-  // "Count it from the last take", kept for the song it was done for while
-  // the row is open.
-  const [counting, setCounting] = useState<{ song: string; value: Counting } | null>(null)
+  const changes = useRef({ tempo: 0, on: 0 })
+  // The song a count runs for, and what the last one counted.
+  const [countingFor, setCountingFor] = useState<string | null>(null)
+  const [count, setCount] = useState<Count | null>(null)
 
   const answer = metronome.state
   const state: MetronomeState | null = answer && {
@@ -161,53 +181,115 @@ export function MetronomeRow() {
     on: switched ?? answer.on,
   }
   const song = answer?.song?.title ?? null
-  const counted = counting && counting.song === song ? counting.value : null
+  // The count while the row still shows its number, for its song.
+  const shown =
+    count && count.song === song && state?.tempo === count.tempo && state.signature === count.signature
+      ? count
+      : null
+  const counted: Counting =
+    song !== null && countingFor === song ? "running" : shown ? { from: shown.take.name } : null
 
   // The click run between takes stops with the screen. Record has stopped
   // it already, in Python, when the take is what took the screen's place.
   const phase = useRef(answer?.phase)
+  const alive = useRef(true)
   useEffect(() => {
     phase.current = answer?.phase
   })
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
       if (phase.current === "preview") void api().metronome_stop()
-    },
-    []
-  )
+    }
+  }, [])
 
   /** Sends a change, says a refusal, and asks Python again. */
-  const send = async (call: Promise<{ ok: boolean; error?: string }>, fallback: string) => {
+  const send = async (call: () => Promise<Answer>, fallback: string) => {
     dismiss(SAID)
-    const res = await call
-    if (!res.ok) sayError(res.error ?? fallback)
+    let ok = false
+    try {
+      const res = await call()
+      ok = res.ok
+      if (!res.ok) sayError(res.error ?? fallback)
+    } catch {
+      sayError(fallback)
+    }
     await refresh()
-    return res.ok
+    return ok
   }
 
   const setTempo = async (tempo: number | null, signature: Signature) => {
+    const n = ++changes.current.tempo
     setSent({ tempo, signature })
-    await send(api().metronome_set(tempo, signature), "Could not set the tempo")
-    setSent(null)
+    try {
+      await send(() => api().metronome_set(tempo, signature), "Could not set the tempo")
+    } finally {
+      if (changes.current.tempo === n) setSent(null)
+    }
+  }
+
+  const switchClick = async (on: boolean) => {
+    const n = ++changes.current.on
+    setSwitched(on)
+    try {
+      await send(() => api().metronome_set_on(on), "Could not switch the click")
+    } finally {
+      if (changes.current.on === n) setSwitched(null)
+    }
+  }
+
+  /**
+   * Counts the tempo from `take` in `signature` and sets the row to it.
+   * A count that comes back after the next take has named another song is
+   * dropped: it is not that song's tempo. "failed" when Python could not
+   * count, said in the row's notice.
+   */
+  const countFrom = async (
+    take: Count["take"],
+    forSong: string,
+    signature: Signature
+  ): Promise<"counted" | "dropped" | "failed"> => {
+    setCountingFor(forSong)
+    dismiss(SAID)
+    let res: Answer & { tempo?: number }
+    try {
+      res = await api().count_tempo(take.folder, take.take_number, signature)
+    } catch {
+      res = { ok: false }
+    }
+    const now = await refresh()
+    if (!alive.current) return "dropped"
+    setCountingFor((f) => (f === forSong ? null : f))
+    if (now?.song?.title !== forSong) return "dropped"
+    if (!res.ok || res.tempo == null) {
+      sayError(res.error ?? "Could not count the tempo")
+      return "failed"
+    }
+    setCount({ song: forSong, take, tempo: res.tempo, signature })
+    await setTempo(res.tempo, signature)
+    return "counted"
+  }
+
+  /** A signature picked while the row shows a count: the take counted
+   *  again in it. Should that fail, the number stays, as with any other. */
+  const recount = async (from: Count, signature: Signature) => {
+    const kept = clampTempo(from.tempo, signature)
+    const n = ++changes.current.tempo
+    setSent({ tempo: kept, signature })
+    const done = await countFrom(from.take, from.song, signature)
+    if (done === "failed") await setTempo(kept, signature)
+    else if (done === "dropped" && changes.current.tempo === n) setSent(null)
   }
 
   const onLink = async (action: LinkAction) => {
     if (action === "save") {
-      await send(api().metronome_save_to_song(), "Could not save the tempo to the song")
+      await send(() => api().metronome_save_to_song(), "Could not save the tempo to the song")
       return
     }
-    const from = answer?.last_take
-    if (!answer || !from || !song) return
-    setCounting({ song, value: "running" })
-    dismiss(SAID)
-    const res = await api().count_tempo(from.folder, from.take_number, answer.signature)
-    if (!res.ok || res.tempo == null) {
-      setCounting(null)
-      sayError(res.error ?? "Could not count the tempo")
-      return
-    }
-    await setTempo(res.tempo, answer.signature)
-    setCounting({ song, value: { from: from.name } })
+    const take = answer?.last_take
+    if (!state || !take || !song) return
+    await countFrom(take, song, state.signature)
   }
 
   return (
@@ -215,15 +297,13 @@ export function MetronomeRow() {
       state={state}
       lit={metronome.lit}
       line={state ? statusLine(state, counted) : { text: "" }}
-      onSwitch={async (on) => {
-        setSwitched(on)
-        await send(api().metronome_set_on(on), "Could not switch the click")
-        setSwitched(null)
-      }}
-      onTempo={(tempo, signature) => void setTempo(tempo, signature)}
+      onSwitch={(on) => void switchClick(on)}
+      onTempo={(tempo, signature) =>
+        void (shown && signature !== shown.signature ? recount(shown, signature) : setTempo(tempo, signature))
+      }
       onPlay={() =>
         void send(
-          state?.phase === "preview" ? api().metronome_stop() : api().metronome_play(),
+          () => (state?.phase === "preview" ? api().metronome_stop() : api().metronome_play()),
           "Could not play the click"
         )
       }

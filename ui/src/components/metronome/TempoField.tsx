@@ -66,6 +66,8 @@ export function TempoField({
       {step("Slower", -1, <Minus />, tempo === null || tempo <= min)}
       <Input
         aria-label="Tempo"
+        // Empty, the row shows a dash: no tempo (spec Part 2).
+        placeholder="—"
         inputMode="numeric"
         autoComplete="off"
         spellCheck={false}

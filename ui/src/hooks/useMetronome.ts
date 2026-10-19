@@ -22,8 +22,10 @@ export type Metronome = {
    *  click. */
   countInEnd: number | null
   /** Asks again at once, after the screen has changed something; done once
-   *  an answer asked after the change is on screen. */
-  refresh: () => Promise<void>
+   *  an answer asked after the change is on screen, with that answer (the
+   *  last one heard should the asking fail, null after the screen has
+   *  gone). */
+  refresh: () => Promise<MetronomeState | null>
 }
 
 type View = Omit<Metronome, "refresh">
@@ -43,7 +45,7 @@ const same = (a: MetronomeState, b: MetronomeState) =>
  */
 export function useMetronome(): Metronome {
   const [view, setView] = useState<View>({ state: null, lit: null, countInEnd: null })
-  const ask = useRef<() => Promise<void>>(async () => {})
+  const ask = useRef<() => Promise<MetronomeState | null>>(async () => null)
 
   useEffect(() => {
     let alive = true
@@ -55,7 +57,7 @@ export function useMetronome(): Metronome {
     let last: Click | null = null
     // How many askings have started, and who waits for one started later.
     let started = 0
-    const waiting: { after: number; done: () => void }[] = []
+    const waiting: { after: number; done: (state: MetronomeState | null) => void }[] = []
 
     // What to show at this frame, and whether another is wanted.
     const draw = () => {
@@ -107,7 +109,7 @@ export function useMetronome(): Metronome {
       }
       if (!alive) return
       for (let i = waiting.length - 1; i >= 0; i--) {
-        if (waiting[i].after < n) waiting.splice(i, 1)[0].done()
+        if (waiting[i].after < n) waiting.splice(i, 1)[0].done(heard?.state ?? null)
       }
       if (again) {
         again = false
@@ -116,7 +118,7 @@ export function useMetronome(): Metronome {
     }
 
     ask.current = () =>
-      new Promise<void>((done) => {
+      new Promise<MetronomeState | null>((done) => {
         waiting.push({ after: started, done })
         void listen()
       })
@@ -125,7 +127,7 @@ export function useMetronome(): Metronome {
       alive = false
       window.clearTimeout(timer)
       cancelAnimationFrame(frame)
-      for (const w of waiting.splice(0)) w.done()
+      for (const w of waiting.splice(0)) w.done(null)
     }
   }, [])
 
