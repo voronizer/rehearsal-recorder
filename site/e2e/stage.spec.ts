@@ -117,6 +117,19 @@ test("a moment behind the app starts the story again, and walks to it", async ({
   await expect(page.locator("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']")).toBeVisible()
 })
 
+test("a moment asked for while the app pauses at it keeps it there, without starting again", async ({ page }) => {
+  await page.goto("/stage.html#story")
+  await step(page, 0)
+  const playing = page.locator("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']")
+  await expect(playing).toBeVisible({ timeout: 30_000 })
+  // Gone on a reload, as a start again would be.
+  await page.evaluate(() => ((window as unknown as { __same: boolean }).__same = true))
+  await moment(page, 0, 3)
+  await expect.poll(() => held(page), { timeout: 5_000 }).toBe("0.3")
+  expect(await page.evaluate(() => (window as unknown as { __same?: boolean }).__same)).toBe(true)
+  await expect(playing).toBeVisible()
+})
+
 test("the check's moment waits until the check has begun, however slow it is to open", async ({ page }) => {
   await page.goto("/stage.html#story")
   // The fake waits on window.__HOLD__[name] before it answers (see

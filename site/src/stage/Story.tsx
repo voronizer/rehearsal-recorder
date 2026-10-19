@@ -332,6 +332,8 @@ export function startStory(from: Target | null): (target: Target) => void {
    *  until a fresh frame there takes its place. */
   let still = false
   let fresh = from
+  /** Whether it is pausing after that line, on a step run through. */
+  let lingering = false
   let wake: (() => void) | null = null
   let running = false
 
@@ -345,23 +347,42 @@ export function startStory(from: Target | null): (target: Target) => void {
   function behind(target: Target): boolean {
     if (target.step !== step) return target.step < step
     if (target.beat === null) return true
-    return target.beat < last || (target.beat === last && !staying) || through
+    return target.beat < last || (target.beat === last && !staying && !lingering) || through
   }
 
   async function beat(at: number, n: number) {
     last = n
+    // A fresh frame can be shown from the first line of a step it is to
+    // run through, or at the line it was asked for: it says so before the
+    // line, so that the page hears the line from the frame on show.
+    if (!still && want?.step === at && (want.beat === null || want.beat === n)) there()
     tell({ type: "rr-beat", step: at, beat: n })
     while (still || (want?.step === at && want.beat === n)) {
-      if (!still) {
-        root.dataset.moment = `${at}.${n}`
-        there()
-      }
+      if (!still) root.dataset.moment = `${at}.${n}`
       staying = true
       await new Promise<void>((done) => (wake = done))
       wake = null
     }
     staying = false
     delete root.dataset.moment
+  }
+
+  /** The pause after line `n` of a step the page wants run through. Asked
+   *  for that line meanwhile, the app keeps still at it, as on getting
+   *  there; asked for anything else, the pause ends. */
+  async function linger(at: number, n: number, ms: number) {
+    if (!(want?.step === at && want.beat === null && !still)) return
+    lingering = true
+    await new Promise<void>((done) => {
+      const timer = setTimeout(done, ms)
+      wake = () => {
+        clearTimeout(timer)
+        done()
+      }
+    })
+    wake = null
+    lingering = false
+    if (want?.step === at && want.beat === n && !still) await beat(at, n)
   }
 
   async function run() {
@@ -374,10 +395,9 @@ export function startStory(from: Target | null): (target: Target) => void {
         step = next
         last = -1
         through = false
-        if (want.step === next && want.beat === null) there()
         await FORWARD[STORY[next]]({
           beat: (n) => beat(next, n),
-          linger: (ms) => (want?.step === next && want.beat === null && !still ? sleep(ms) : Promise.resolve()),
+          linger: (ms) => linger(next, last, ms),
         })
         through = true
         root.dataset.scene = STORY[next]

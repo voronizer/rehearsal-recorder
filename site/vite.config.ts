@@ -73,10 +73,9 @@ function seo(): Plugin {
 // drawn by the interface's own components. They are imported from ../ui/src
 // with the interface's `@/`, and run on the interface's own React, so there
 // is one copy of it, and draw its own icons; the site's package.json lists
-// neither. og.html is
-// the link picture's page, which scripts/og.mjs photographs into og.png, and
-// 404.html what Vercel answers for an address that is no file (see
-// vercel-config.json).
+// neither. og.html is the link picture's page, which scripts/og.mjs
+// photographs into og.png, and 404.html what Vercel answers for an address
+// that is no file (see vercel-config.json).
 export default defineConfig({
   base: "/",
   // The app's icons: the favicon, and the logo its screens show.

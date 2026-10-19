@@ -5,6 +5,14 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.13.1
+
+- Nothing changed in the app. Its website, reha.stream, now goes through a
+  rehearsal in four steps, from the soundcheck to the take you keep, with
+  the app beside them. A click on anything a step lists shows that part of
+  the app up close, with more about it underneath. On a big screen the page
+  is wider.
+
 ## 0.13.0
 
 - **A metronome, and each song keeps its tempo.** The rehearsal screen has

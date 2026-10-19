@@ -6,6 +6,7 @@ import { Fragment, type ReactNode } from "react"
 import { Metronome, Play } from "lucide-react"
 import { HealthLine } from "@/components/HealthLine"
 import { NoticeItem } from "@/components/Notices"
+import { FoldersSettings } from "@/components/FoldersSettings"
 import { MetronomeSettings } from "@/components/MetronomeSettings"
 import { BeatDots } from "@/components/metronome/BeatDots"
 import { MasterClickLane } from "@/components/metronome/MasterClickLane"
@@ -53,10 +54,10 @@ export type PieceId =
   | "drift"
   | "undo"
   | "cloud"
+  | "cloud-follows"
   | "wav-tempo"
 
 export type PieceData = {
-  rehearsals: RehearsalSummary[]
   last: RehearsalDetail
   /** The songs under the Next take field, each at its next go. */
   choices: SongChoices
@@ -104,7 +105,7 @@ export async function loadPieces(): Promise<PieceData> {
   const fresh = songs.find((s) => s.tempo == null) ?? null
   const counted = await countFrom(rehearsals, "Pałyn 4", song?.signature ?? "4/4")
   const master = await masterOf(rehearsals, "Pałyn 2")
-  return { rehearsals, last, choices, set: set ?? null, notes: siteNotes(), song, fresh, counted, master }
+  return { last, choices, set: set ?? null, notes: siteNotes(), song, fresh, counted, master }
 }
 
 /** The take of that name and its rehearsal's folder, the newest rehearsal's
@@ -199,7 +200,7 @@ function Goes({ last, song, only }: { last: RehearsalDetail; song: string; only?
 }
 
 /**
- * Master's row in the player (Timeline): the take's lane, the band's tempo
+ * The Master row in the player (Timeline): the take's lane, the band's tempo
  * along it bar by bar, on its group's fill. Its plate is left out, as the
  * player leaves it out where there is no room for it: beside the plate, a
  * lane in a window this size is too short for its tag and its chips both.
@@ -218,12 +219,12 @@ function MasterRow({ master }: { master: MasterData }) {
   )
 }
 
-/** What Master's row says of a take's tempo, for those who cannot see it. */
+/** What the Master row says of a take's tempo, for those who cannot see it. */
 function masterLabel({ take, drift }: MasterData): string {
   const said = drift.ok
     ? spokenDrift(drift.bars, stretches(drift.bars, drift.aim.tempo, DEFAULT_TOLERANCE), drift.aim.signature)
     : ""
-  return `Master's row in the player under ${take.name}'s tracks, with the band's tempo bar by bar. ${said}`.trim()
+  return `The Master row in the player under ${take.name}'s tracks, with the band's tempo bar by bar. ${said}`.trim()
 }
 
 /** Gig on the 25th mid-set: Pałyn played four times, Viasna up now. */
@@ -303,8 +304,8 @@ function rowOf(song: SongSummary, typed: number | null = null): MetronomeState |
 
 /**
  * The row as the rehearsal screen draws it, with the line its state says
- * (statusLine). As wide as the row, the line wrapping under it; on a phone,
- * where the row is wider than the window, its left part (`line`).
+ * (statusLine). As wide as the row, the line wrapping under it: on a phone
+ * the window makes it smaller to fit (`line`).
  */
 function Row({ state }: { state: MetronomeState }) {
   return (
@@ -403,6 +404,21 @@ function WavTempo() {
   return (
     <div className="flex w-[33rem] max-w-full flex-col [&>*:not(:has(#tempo-in-wav))]:hidden">
       <MetronomeSettings />
+    </div>
+  )
+}
+
+/**
+ * Settings › Folders at its Cloud folder group, as the tab lays it out: the
+ * band's Drive folder, what the copies are written as, and what gets sent,
+ * as Python has them (get_settings, which the tab asks itself). The groups
+ * over it are left out, and on a phone its hints too (page.css), or it is
+ * made too small to read.
+ */
+function CloudFolder() {
+  return (
+    <div className="cloud-folder flex w-[33rem] max-w-full flex-col [&>*:not(:has(#cloud-dir))]:hidden">
+      <FoldersSettings />
     </div>
   )
 }
@@ -509,7 +525,12 @@ export function itemPieces({
         />
       </Piece>
     ),
-    cloud: kept ? (
+    cloud: (
+      <Piece label="Settings › Folders at the cloud folder: what the copies are written as, and what gets sent">
+        <CloudFolder />
+      </Piece>
+    ),
+    "cloud-follows": kept ? (
       <Piece label={`${kept.name}, marked as the one to keep, in the cloud`}>
         <Goes last={last} song={kept.song ?? ""} only={(n) => n === kept.take_number} />
       </Piece>

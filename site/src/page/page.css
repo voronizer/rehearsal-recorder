@@ -88,6 +88,7 @@ body {
 .live { position: relative; overflow: hidden; background: var(--page-app); }
 .live iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; background: var(--page-app); }
 .live.passive iframe { pointer-events: none; }
+.live.settled iframe { transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
 .caption { text-align: center; color: var(--page-muted); font-size: 0.875rem; margin-top: 18px; }
 .caption b, .caption strong { color: var(--page-fg); font-weight: 600; }
 .caption.on-phone { display: none; }
@@ -157,7 +158,13 @@ body {
 @media (max-width: 559px) { .items { grid-template-columns: minmax(0, 1fr); } }
 
 .stage { position: sticky; top: 16px; z-index: 1; display: grid; gap: 14px; }
-.window { position: relative; }
+.window { display: grid; gap: 14px; }
+.view { position: relative; }
+/* The words under the window, as tall for every item, so that nothing
+   under them moves from one to the next: five lines of the longest. */
+.about { display: grid; align-content: start; gap: 4px; height: calc(1.25rem + 5 * 1.45 * 0.9375rem + 4px); overflow: hidden; }
+.about h4 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; }
+.about p { margin: 0; color: var(--page-muted); font-size: 0.9375rem; line-height: 1.45; text-wrap: pretty; }
 /* A piece of the app over the live one, on a tile's grey, in its middle:
    flex, so that a piece bigger than the window, before it is made smaller
    to fit, goes past it evenly on every side. */
@@ -172,10 +179,22 @@ body {
 @media (min-width: 900px) {
   .story { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(40px, 5vw, 72px); }
   /* In the middle of the screen, and never taller than it. */
-  .stage { order: 2; top: max(16px, calc(50vh - 21rem)); width: 100%; max-width: calc((100vh - 120px) * 1180 / 960); justify-self: end; }
+  .stage { order: 2; top: max(16px, calc(50vh - 26rem)); width: 100%; max-width: calc((100vh - 120px - 9rem) * 1180 / 960); justify-self: end; }
   .steps { order: 1; padding-bottom: 20vh; }
 }
-@media (max-width: 899px) { .stage { background: var(--page-bg); padding-block: 8px; } }
+@media (max-width: 899px) {
+  .stage { background: var(--page-bg); padding-block: 8px; gap: 10px; }
+  .window { gap: 10px; }
+  .about { height: calc(1.25rem + 7 * 1.4 * 0.8125rem + 4px); }
+  .about p { font-size: 0.8125rem; line-height: 1.4; }
+  .cloud-folder p { display: none; }
+}
+/* A phone on its side: the window no taller than half the screen, and its
+   words beside it, so the steps still have room under it. */
+@media (max-width: 899px) and (max-height: 560px) {
+  .window { grid-template-columns: min(100%, calc((50svh - 16px) * 1180 / 960)) minmax(0, 1fr); align-items: start; }
+  .about { height: auto; max-height: calc(50svh - 16px); }
+}
 
 /* ---- Questions ---- */
 .qa { max-width: 46rem; margin-inline: auto; border-top: 1px solid var(--page-line); }
@@ -209,4 +228,4 @@ body {
 .footer a { text-decoration: none; }
 .footer a:hover { color: var(--page-fg); }
 
-@media (prefers-reduced-motion: reduce) { .item { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .item, .live.settled iframe { transition: none; } }

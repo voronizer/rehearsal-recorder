@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { content, type ItemId } from "../content"
 import type { ToStage } from "../frame"
-import { KIND, SHOWS } from "./evening"
+import { BEAT_FOCUS, KIND, SHOWS, type Focus } from "./evening"
 import { LiveFrame } from "./LiveFrame"
 import { Paragraphs } from "./Md"
 import { itemPieces, type PieceData } from "./pieces"
 import { titleParts } from "./title"
 
-/** The step each item is in, by its id. */
-const STEP_OF = new Map(content.story.steps.flatMap((s, i) => s.items.map((item) => [item.id as ItemId, i])))
+/** The step each item is in, and the item, by its id. */
+const STEP_OF = new Map(content.story.steps.flatMap((s, i) => s.items.map((item) => [item.id, i])))
+const ITEM = new Map(content.story.steps.flatMap((s) => s.items.map((item) => [item.id, item])))
 
 /** Smooth, unless whoever is reading has asked for less motion. */
 const scrolling = (): ScrollBehavior =>
@@ -70,16 +71,22 @@ function Over({ children }: { children: ReactNode }) {
 
 /**
  * The four steps of an evening on the left, each with its tiles and cards,
- * and on the right the app's window. The step in the middle of the screen
- * is the one the app goes through; the rail under it fills as the page
- * scrolls, and jumps to a step. A click on a tile or card shows its moment
- * (evening.ts): the live app gets there, or a piece of it shows over it, at
- * once, while the app waits underneath. Moving into another step clears it.
+ * and on the right the app's window, near enough to read, with a few words
+ * under it on what it shows. The step in the middle of the screen is the
+ * one the app goes through, the window following it; the rail under the
+ * window fills as the page scrolls, and jumps to a step. A click on a tile
+ * or card shows its moment (evening.ts): the live app gets there and the
+ * window looks at what the item is about, or a piece of the app shows over
+ * it, at once, while the app waits underneath. Moving into another step
+ * clears it.
  */
 export function Story({ pieces }: { pieces: PieceData }) {
   const { story } = content
   const [active, setActive] = useState(0)
   const [picked, setPicked] = useState<ItemId | null>(null)
+  // The story's step and line the app last got to, for where the window
+  // looks while nothing is picked.
+  const [beat, setBeat] = useState<[number, number] | null>(null)
   const activeRef = useRef(0)
   const pickedRef = useRef<ItemId | null>(null)
   const send = useRef<((message: ToStage) => void) | null>(null)
@@ -150,6 +157,8 @@ export function Story({ pieces }: { pieces: PieceData }) {
     }
   }, [tell])
 
+  const onBeat = useCallback((step: number, n: number) => setBeat([step, n]), [])
+
   const onReady = useCallback(
     (to: (message: ToStage) => void) => {
       send.current = to
@@ -159,13 +168,18 @@ export function Story({ pieces }: { pieces: PieceData }) {
   )
 
   /** Scrolls a step's top to the top of the screen, or, on a phone, to just
-   *  under the window held at the top. */
+   *  under the window held at the top. A step shorter than the room down to
+   *  the middle of what is left (sync's focus line) has its middle put
+   *  there instead, or the step after it would be the one on screen. */
   const goTo = (i: number) => {
     const step = steps.current[i]
     const held = stage.current
     if (!step || !held) return
     const above = beside() ? 24 : parseFloat(getComputedStyle(held).top) + held.offsetHeight + 16
-    window.scrollTo({ top: window.scrollY + step.getBoundingClientRect().top - above, behavior: scrolling() })
+    const box = step.getBoundingClientRect()
+    const focus = (Math.min(beside() ? 0 : above, window.innerHeight / 2) + window.innerHeight) / 2
+    const top = box.height < focus - above ? focus - box.height / 2 : above
+    window.scrollTo({ top: window.scrollY + box.top - top, behavior: scrolling() })
   }
 
   const pick = (id: ItemId) => {
@@ -177,6 +191,12 @@ export function Story({ pieces }: { pieces: PieceData }) {
 
   const shows = picked && SHOWS[picked]
   const piece = shows && "piece" in shows ? shows.piece : null
+  // Where the window looks: at the picked moment's part of the screen, or
+  // where the app is in its step (under a piece too, which hides it).
+  const focus: Focus | null =
+    shows && "focus" in shows ? shows.focus : ((beat && BEAT_FOCUS[beat[0]]?.[beat[1]]) ?? null)
+  const about = picked ? ITEM.get(picked)! : null
+  const step = story.steps[active]
 
   return (
     <section className="section" id="how">
@@ -186,14 +206,24 @@ export function Story({ pieces }: { pieces: PieceData }) {
       <div className="story">
         <div ref={stage} className="stage">
           <div className="window">
-            <LiveFrame
-              scene="story"
-              title="РЭХА, following the steps on this page"
-              lazy
-              hold={piece !== null}
-              onReady={onReady}
-            />
-            {piece && <Over key={piece}>{drawn[piece]}</Over>}
+            <div className="view">
+              <LiveFrame
+                scene="story"
+                title="РЭХА, following the steps on this page"
+                lazy
+                hold={piece !== null}
+                focus={focus}
+                onReady={onReady}
+                onBeat={onBeat}
+              />
+              {piece && <Over key={piece}>{drawn[piece]}</Over>}
+            </div>
+            {/* What the window shows: the picked item's own words, or the
+                step's line while the app goes through it. */}
+            <div className="about" aria-live="polite">
+              <h4>{about ? about.title : step.title}</h4>
+              <Paragraphs text={about ? about.more : step.body} />
+            </div>
           </div>
           <div className="rail" role="group" aria-label="Steps">
             {story.steps.map((s, i) => (
@@ -212,13 +242,13 @@ export function Story({ pieces }: { pieces: PieceData }) {
         </div>
         <ol className="steps">
           {story.steps.map((s, i) => (
-            <li key={s.id} ref={(el) => void (steps.current[i] = el)} className={i === active ? "step on" : "step"}>
+            <li key={s.id} ref={(el) => void (steps.current[i] = el)} className="step">
               <span className="n">{i + 1}</span>
               <h3>{s.title}</h3>
               <Paragraphs text={s.body} />
               <div className="items">
                 {s.items.map((item) => {
-                  const id = item.id as ItemId
+                  const id = item.id
                   const on = picked === id
                   return (
                     <article key={id} className={`item ${KIND[id]}${on ? " on" : ""}`}>
@@ -227,7 +257,7 @@ export function Story({ pieces }: { pieces: PieceData }) {
                           <Title text={item.title} />
                         </button>
                       </h4>
-                      <Paragraphs text={item.body} />
+                      <Paragraphs text={item.line} />
                     </article>
                   )
                 })}

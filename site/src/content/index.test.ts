@@ -23,17 +23,18 @@ describe("the site's content", () => {
 
   it("has each step's items, in order: its tiles, then its cards", () => {
     for (const [i, step] of content.story.steps.entries())
-      expect(step.items.map((item) => item.id), step.id!).toEqual([...ITEMS[STEPS[i]]])
+      expect(step.items.map((item) => item.id), step.id).toEqual([...ITEMS[STEPS[i]]])
     // 31 picked: these 29, and the controller's block and its fourth line.
     expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(29)
   })
 
-  it("has a line for each step, and words for each item", () => {
+  it("has a line for each step, and for each item a line and what the window says", () => {
     for (const step of content.story.steps) {
-      expect(leadAndBeats(step.body), step.id!).toEqual({ lead: [expect.any(String)], beats: [] })
+      expect(leadAndBeats(step.body), step.id).toEqual({ lead: [expect.any(String)], beats: [] })
       for (const item of step.items) {
-        expect(item.title, item.id!).toMatch(/\.$/)
-        expect(item.body, item.id!).not.toBe("")
+        expect(item.title, item.id).toMatch(/\.$/)
+        expect(item.line, item.id).not.toBe("")
+        expect(item.more, item.id).not.toBe("")
       }
     }
     const before = content.story.steps[0]
@@ -42,7 +43,7 @@ describe("the site's content", () => {
 
   it("has the tap card's words, and the tempo drift tile's “+7”", () => {
     const items = content.story.steps.flatMap((s) => s.items)
-    const words = (id: string) => items.find((i) => i.id === id)!.body.replace(/\s+/g, " ")
+    const words = (id: string) => items.find((i) => i.id === id)!.line.replace(/\s+/g, " ")
     expect(words("tap")).toBe("Press Tap once, and the drummer taps the rest on any pad of the e-kit.")
     expect(words("drift")).toContain("the line turns amber: “+7”.")
   })

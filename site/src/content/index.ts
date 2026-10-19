@@ -29,7 +29,7 @@ export type SiteContent = {
    *  print, its link's words and what its photo shows. */
   controller: { title: string; body: string; finePrint: string; link: string; photo: string }
   /** The four steps of an evening, each with its items (story.md). */
-  story: { title: string; steps: Section[] }
+  story: { title: string; steps: StoryStep[] }
   faq: { title: string; questions: Section[] }
   closing: { title: string }
   /** The 404 page's heading and line. */
@@ -47,6 +47,11 @@ export const ITEMS = {
   later: ["song-page", "cloud", "mark-lead", "numbers", "cloud-follows", "phone-mix", "bars", "wav-tempo"],
 } as const satisfies Record<Step, readonly string[]>
 export type ItemId = (typeof ITEMS)[Step][number]
+
+/** An item of a step: its tile's or card's line, and what the window says
+ *  under the app once the item is picked. */
+export type Item = { id: ItemId; title: string; line: string; more: string }
+export type StoryStep = { id: Step; title: string; body: string; items: Item[] }
 
 const files = import.meta.glob<string>("../../content/*.md", {
   query: "?raw",
@@ -81,8 +86,12 @@ export function readContent(tagFromRelease?: string): SiteContent {
   const controller = doc("controller.md")
   const controllerParts = sectionsByTitles("controller.md", controller, ["fine print", "link", "photo"])
   const story = doc("story.md")
-  const steps = sectionsByIds("story.md", story, STEPS)
-  for (const step of steps) itemsByIds("story.md", step, ITEMS[step.id as Step])
+  const steps = sectionsByIds("story.md", story, STEPS).map((step) => ({
+    id: step.id as Step,
+    title: step.title,
+    body: step.body,
+    items: itemsByIds("story.md", step, ITEMS[step.id as Step]).map(item),
+  }))
   const faq = doc("faq.md")
   const notFound = doc("notfound.md")
 
@@ -110,6 +119,16 @@ export function readContent(tagFromRelease?: string): SiteContent {
     closing: { title: doc("closing.md").title! },
     notFound: { title: notFound.title!, lede: notFound.intro },
   }
+}
+
+/** A story item's two paragraphs, as story.md has them. */
+function item(section: Section): Item {
+  const [line, more, ...rest] = section.body.split(/\n\s*\n/).filter((p) => p.trim())
+  if (!line || !more || rest.length)
+    throw new Error(
+      `site/content/story.md, {#${section.id}}: an item has two paragraphs, its line and what the window says`
+    )
+  return { id: section.id as ItemId, title: section.title, line, more }
 }
 
 export const content: SiteContent = readContent(import.meta.env.VITE_SITE_VERSION)

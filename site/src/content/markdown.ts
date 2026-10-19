@@ -1,7 +1,8 @@
 // Just enough Markdown for site/content/: a title, an intro, sections under
 // `## ` headings with an optional `{#id}`, items under `### ` headings in a
-// section, a `- ` list, and inline bold, emphasis, code and links. The page's words are short; a full Markdown library would be
-// most of what the page downloads.
+// section, a `- ` list, and inline bold, emphasis, code and links. The
+// page's words are short; a full Markdown library would be most of what the
+// page downloads.
 
 /** A `##` section: its words before its first `###`, and its `###` items,
  *  each a section of its own (with no items). */
