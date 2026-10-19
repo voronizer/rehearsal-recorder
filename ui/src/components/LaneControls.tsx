@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { Volume1, Volume2, VolumeX } from "lucide-react"
 import { InstrumentIcon } from "@/components/InstrumentIcon"
 import { LanePlate } from "@/components/ui/lane-plate"
@@ -232,8 +233,11 @@ export function VolumeIcon({ volume, className }: { volume: number; className?: 
 /**
  * The whole mix, under the tracks, the way a desk ends in its master strip:
  * how loud the take plays, and how loud all of it is coming out. In the
- * player its plate is a group of its own, under the lanes group, and keeps
- * the plate's box.
+ * player its plate is the start of a group of its own, under the lanes
+ * group, with the click's lane beside it (`grouped`), and keeps the plate's
+ * box. The player puts the click's button after its name (`click`, the
+ * 20 px lane toggle, held to the name's 16 px line so the plate stays
+ * 56 px); the header's level, which has no take, has none.
  *
  * For listening only. The faders above are the band's balance, and the copy
  * sent to the cloud is mixed from them; turning all of them down to make the
@@ -249,6 +253,8 @@ export function MasterControls({
   level,
   onVolume,
   onVolumeCommit,
+  click,
+  grouped = false,
   className,
 }: {
   volume: number
@@ -256,10 +262,14 @@ export function MasterControls({
   level: number
   onVolume: (value: number) => void
   onVolumeCommit: () => void
+  /** After the name: the player's click with the take (MasterClick). */
+  click?: ReactNode
+  /** A plate in the player's master group, whose fill it is on. */
+  grouped?: boolean
   className?: string
 }) {
   return (
-    <LanePlate data-master-plate className={cn("gap-1", className)}>
+    <LanePlate data-master-plate grouped={grouped} className={cn("gap-1", className)}>
       <div className="flex h-4 items-center gap-2 text-sm">
         <VolumeIcon volume={volume} className="size-4 shrink-0 text-muted-foreground" />
         <Whole
@@ -268,6 +278,7 @@ export function MasterControls({
           data-plate-name="Master"
           className="min-w-0 flex-1 truncate leading-4"
         />
+        {click}
       </div>
       <div className="flex h-5 items-center gap-2">
         <div className="min-w-0 flex-1">

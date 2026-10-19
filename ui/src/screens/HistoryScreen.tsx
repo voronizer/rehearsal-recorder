@@ -874,7 +874,7 @@ export function HistoryScreen({
       return
     }
     if (res.take) reselect(placed(take.folder, res.take))
-    offerCropUndo(take.name, res, (r) => uncropped(take, r.folder ?? take.folder), SAID)
+    offerCropUndo(take.name, res, (r) => uncropped(take, r.folder ?? take.folder), SAID, from)
     await changed(take.folder)
   }
 
@@ -1096,6 +1096,7 @@ export function HistoryScreen({
           />
           <TakePlayer
             player={player}
+            take={liveTake(opened.takes, selected)}
             markers={liveTake(opened.takes, selected)?.markers ?? []}
             notes={selected.notes} notesMissing={selected.notes_missing}
             onAddMarker={(sec) => addMarker(selected, sec)}

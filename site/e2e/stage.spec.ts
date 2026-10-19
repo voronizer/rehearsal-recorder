@@ -11,9 +11,10 @@ const post = (page: Page, message: object) =>
   page.evaluate((m) => window.postMessage(m, "*"), message)
 const step = (page: Page, n: number) => post(page, { type: "rr-step", step: n })
 
-/** The player's clock, in seconds: "1:52 / 2:46" is 112. */
+/** The player's clock, in seconds: "1:52 / 2:43" is 112. The take's length
+ *  is the band's (ui/e2e/band.js), so it is not written here. */
 async function clock(page: Page): Promise<number> {
-  const text = await page.locator("span.tnum", { hasText: "/ 2:46" }).innerText()
+  const text = await page.locator("span.tnum", { hasText: /\/ \d+:\d\d/ }).innerText()
   const [m, s] = text.split("/")[0].trim().split(":").map(Number)
   return m * 60 + s
 }

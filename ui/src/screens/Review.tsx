@@ -248,10 +248,13 @@ export function Review({
       sayError(res.error ?? "Could not crop the take")
       return
     }
+    // Where Python cut it: a click take's region moves out to its bars.
+    const start = res.start_sec ?? from
+    const end = res.end_sec ?? to
     setMarkers((prev) =>
       prev
-        .filter((m) => m.at >= from && m.at <= to)
-        .map((m) => ({ ...m, at: Math.round((m.at - from) * 100) / 100 }))
+        .filter((m) => m.at >= start && m.at <= end)
+        .map((m) => ({ ...m, at: Math.round((m.at - start) * 100) / 100 }))
     )
     // The notes are cut with the audio. A new list is a take opened again:
     // the player reads them afresh, as it does the old ones after an Undo.
@@ -268,7 +271,8 @@ export function Review({
         onCropped(before.take)
         setMarkers(before.markers)
       },
-      "review"
+      "review",
+      from
     )
   }
 
@@ -393,6 +397,7 @@ export function Review({
       <div className="flex w-full flex-col gap-6">
         <TakePlayer
           player={player}
+          take={take}
           notes={take.notes}
           notesMissing={take.notes_missing}
           markers={markers}

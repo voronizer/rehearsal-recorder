@@ -9,8 +9,12 @@
 // chorus, bridge, a long last chorus and an outro. Every level here is a
 // function of time, so a zoomed-in window gets real detail, not a stretched
 // picture of the whole take.
+//
+// Played to the click: the take's first sample is the count-in's first
+// click, and the sticks count that bar in with it, so the song comes in on
+// the bar after it and every hit is on the grid Master's stripes draw.
 const BEAT = 60 / 128, BAR = 4 * BEAT;
-const START = 4 * BEAT + 2.8;
+const START = 4 * BEAT;
 const FORM = [['intro', 8], ['verse', 16], ['chorus', 8], ['verse', 16],
               ['chorus', 8], ['bridge', 8], ['chorus', 16], ['outro', 4]];
 const SONG_END = START + FORM.reduce((s, f) => s + f[1] * BAR, 0);
@@ -137,12 +141,15 @@ const SECTION = name => {
   let at = START;
   for (const [kind, bars] of FORM) { if (kind === name) return at; at += bars * BAR; }
 };
+// The marks sit where the music changes: the first chorus starts at 46.9 s,
+// the bridge at 106.9 and the last chorus at 121.9. Pałyn 1 breaks down
+// just after the chorus comes in.
 const EARLIER = [
-  takeOf(1, 'Pałyn', 58, 51, [{at: 50, note: 'lost the count', label_id: 3}]),
+  takeOf(1, 'Pałyn', 58, 48.2, [{at: 47.2, note: 'lost the count', label_id: 3}]),
   takeOf(2, 'Pałyn 2', Math.round(SONG_END + 4), SONG_END, [
-    {at: 50.5, note: 'chorus came in early', label_id: 3},
-    {at: 112, note: 'bridge — try it slower', label_id: 4},
-    {at: 131, note: 'this one is the take', label_id: 2}]),
+    {at: 47.7, note: 'chorus came in early', label_id: 3},
+    {at: 109.2, note: 'bridge — try it slower', label_id: 4},
+    {at: 128.2, note: 'this one is the take', label_id: 2}]),
   // A count-in that went wrong, and a take nobody named: what sorting the
   // evening is for. Ahoń, so tonight's Pałyn and Viasna keep their goes, and
   // before Viasna, so Viasna is still the last song played and the Next
@@ -185,11 +192,12 @@ api.list_input_devices = async () => [
    max_output_channels: 18, default_samplerate: 48000},
   {index: 5, name: 'Microphone Array (Realtek(R) Audio)', host_api: 'Windows WASAPI',
    max_input_channels: 2, max_output_channels: 0, default_samplerate: 48000}];
-api.list_output_devices = async () => [
+// What the click can play through is said of each, as the fake says it.
+api.list_output_devices = async () => withClickReason([
   {index: 1, name: 'Speakers (Realtek(R) Audio)', host_api: 'MME', max_input_channels: 0,
    max_output_channels: 2, default_samplerate: 48000},
   {index: 3, name: 'X18/XR18', host_api: 'ASIO', max_input_channels: 18,
-   max_output_channels: 18, default_samplerate: 48000}];
+   max_output_channels: 18, default_samplerate: 48000}]);
 api.recording_formats = async () => ({ok: true, formats: {'44100': [16, 24], '48000': [16, 24]}});
 api.load_default_tracks = async () => ({tracks: PARTS.map(p => ({...p, stereo: false}))});
 api.disk_estimate = async (count, rate, depth) => {

@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useMetronome } from "@/hooks/useMetronome"
+import { useTempoCount } from "@/hooks/useTempoCount"
 import { api, type MetronomeState, type Signature } from "@/lib/api"
 import {
   clampTempo,
@@ -42,6 +43,7 @@ export function MetronomeRowView({
   onTempo,
   onPlay,
   onLink,
+  onTapError,
   settings,
 }: {
   state: MetronomeState | null
@@ -54,6 +56,8 @@ export function MetronomeRowView({
   /** ▶ or ■, by the phase. */
   onPlay: () => void
   onLink: (action: LinkAction) => void
+  /** Python could not open the band's pads for Tap: its words. */
+  onTapError?: (text: string) => void
   /** What the gear opens on: the click's settings. */
   settings: ReactNode
 }) {
@@ -81,7 +85,12 @@ export function MetronomeRowView({
           // The number stays, brought into the new signature's range.
           onChange={(next) => onTempo(tempo === null ? null : clampTempo(tempo, next), next)}
         />
-        <TapButton signature={signature} disabled={off} onTempo={(next) => onTempo(next, signature)} />
+        <TapButton
+          signature={signature}
+          disabled={off}
+          onTempo={(next) => onTempo(next, signature)}
+          onError={onTapError}
+        />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -136,15 +145,6 @@ export function MetronomeRowView({
   )
 }
 
-/** What "count it from the last take" counted, kept while the row is open
- *  and shows it: the take, and the number in the row's signature. */
-type Count = {
-  song: string
-  take: { folder: string; take_number: number; name: string }
-  tempo: number
-  signature: Signature
-}
-
 type Answer = { ok: boolean; error?: string }
 
 /**
@@ -154,10 +154,9 @@ type Answer = { ok: boolean; error?: string }
  * each change, which Python holds until the name names another song. The
  * click run with ▶ stops at ■, at Record, and when the screen is left.
  *
- * A tempo counted from the last take is kept while the row shows it: a
- * signature picked then has Python count the same take again in that
- * signature (spec Part 10), since what a count is in 6/8 is the counter's
- * to say.
+ * "count it from the last take" counts as a song's page does
+ * (useTempoCount): the count is kept while the row shows it, and a
+ * signature picked then has Python count the same take again in it.
  */
 export function MetronomeRow() {
   const metronome = useMetronome()
@@ -170,39 +169,41 @@ export function MetronomeRow() {
   const [sent, setSent] = useState<{ tempo: number | null; signature: Signature } | null>(null)
   const [switched, setSwitched] = useState<boolean | null>(null)
   const changes = useRef({ tempo: 0, on: 0 })
-  // The song a count runs for, and what the last one counted.
-  const [countingFor, setCountingFor] = useState<string | null>(null)
-  const [count, setCount] = useState<Count | null>(null)
 
   const answer = metronome.state
-  const state: MetronomeState | null = answer && {
-    ...answer,
-    ...(sent ?? {}),
-    on: switched ?? answer.on,
-  }
   const song = answer?.song?.title ?? null
-  // The count while the row still shows its number, for its song.
-  const shown =
-    count && count.song === song && state?.tempo === count.tempo && state.signature === count.signature
-      ? count
-      : null
+  const asSent = answer && { ...answer, ...(sent ?? {}) }
+  const count = useTempoCount({
+    song,
+    tempo: asSent?.tempo ?? null,
+    signature: asSent?.signature ?? "4/4",
+    set: (tempo, signature) => setTempo(tempo, signature),
+    sayError,
+    said: SAID,
+    // A count that comes back after the next take has named another song
+    // is not that song's tempo.
+    songNow: async () => (await refresh())?.song?.title ?? null,
+  })
+  const state: MetronomeState | null = asSent && {
+    ...asSent,
+    ...(count.held ?? {}),
+    on: switched ?? asSent.on,
+  }
   const counted: Counting =
-    song !== null && countingFor === song ? "running" : shown ? { from: shown.take.name } : null
+    count.counting !== null ? "running" : count.shown ? { from: count.shown.take.name } : null
 
   // The click run between takes stops with the screen. Record has stopped
   // it already, in Python, when the take is what took the screen's place.
   const phase = useRef(answer?.phase)
-  const alive = useRef(true)
   useEffect(() => {
     phase.current = answer?.phase
   })
-  useEffect(() => {
-    alive.current = true
-    return () => {
-      alive.current = false
+  useEffect(
+    () => () => {
       if (phase.current === "preview") void api().metronome_stop()
-    }
-  }, [])
+    },
+    []
+  )
 
   /** Sends a change, says a refusal, and asks Python again. */
   const send = async (call: () => Promise<Answer>, fallback: string) => {
@@ -220,6 +221,7 @@ export function MetronomeRow() {
   }
 
   const setTempo = async (tempo: number | null, signature: Signature) => {
+    count.changed()
     const n = ++changes.current.tempo
     setSent({ tempo, signature })
     try {
@@ -239,51 +241,6 @@ export function MetronomeRow() {
     }
   }
 
-  /**
-   * Counts the tempo from `take` in `signature` and sets the row to it.
-   * A count that comes back after the next take has named another song is
-   * dropped, as it is not that song's tempo; so is one that comes back after
-   * a tempo was typed, tapped or stepped, which is the band's. "failed" when
-   * Python could not count, said in the row's notice.
-   */
-  const countFrom = async (
-    take: Count["take"],
-    forSong: string,
-    signature: Signature
-  ): Promise<"counted" | "dropped" | "failed"> => {
-    const since = changes.current.tempo
-    setCountingFor(forSong)
-    dismiss(SAID)
-    let res: Answer & { tempo?: number }
-    try {
-      res = await api().count_tempo(take.folder, take.take_number, signature)
-    } catch {
-      res = { ok: false }
-    }
-    const now = await refresh()
-    if (!alive.current) return "dropped"
-    setCountingFor((f) => (f === forSong ? null : f))
-    if (now?.song?.title !== forSong || changes.current.tempo !== since) return "dropped"
-    if (!res.ok || res.tempo == null) {
-      sayError(res.error ?? "Could not count the tempo")
-      return "failed"
-    }
-    setCount({ song: forSong, take, tempo: res.tempo, signature })
-    await setTempo(res.tempo, signature)
-    return "counted"
-  }
-
-  /** A signature picked while the row shows a count: the take counted
-   *  again in it. Should that fail, the number stays, as with any other. */
-  const recount = async (from: Count, signature: Signature) => {
-    const kept = clampTempo(from.tempo, signature)
-    const n = ++changes.current.tempo
-    setSent({ tempo: kept, signature })
-    const done = await countFrom(from.take, from.song, signature)
-    if (done === "failed") await setTempo(kept, signature)
-    else if (done === "dropped" && changes.current.tempo === n) setSent(null)
-  }
-
   const onLink = async (action: LinkAction) => {
     if (action === "save") {
       await send(() => api().metronome_save_to_song(), "Could not save the tempo to the song")
@@ -291,7 +248,7 @@ export function MetronomeRow() {
     }
     const take = answer?.last_take
     if (!state || !take || !song) return
-    await countFrom(take, song, state.signature)
+    await count.countFrom(take, state.signature, song)
   }
 
   return (
@@ -301,7 +258,9 @@ export function MetronomeRow() {
       line={state ? statusLine(state, counted) : { text: "" }}
       onSwitch={(on) => void switchClick(on)}
       onTempo={(tempo, signature) =>
-        void (shown && signature !== shown.signature ? recount(shown, signature) : setTempo(tempo, signature))
+        void (state && signature !== state.signature
+          ? count.pickSignature(signature)
+          : setTempo(tempo, signature))
       }
       onPlay={() =>
         void send(
@@ -310,6 +269,7 @@ export function MetronomeRow() {
         )
       }
       onLink={(action) => void onLink(action)}
+      onTapError={sayError}
       settings={<ClickSettings />}
     />
   )

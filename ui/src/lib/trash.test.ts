@@ -242,9 +242,28 @@ describe("offerUndo", () => {
 
 describe("offerCropUndo", () => {
   it("offers the crop's Undo, saying the uncut take went", () => {
-    offerCropUndo("Pałyn 5", { undo: "t1" }, vi.fn(), "rehearsal")
+    offerCropUndo("Pałyn 5", { undo: "t1" }, vi.fn(), "rehearsal", 3)
     expect(notice("t1")?.text).toBe("“Pałyn 5” is cropped. The uncut take went to the Trash.")
     expect(notice("t1")?.action?.label).toBe("Undo")
+  })
+
+  it("says where a click take now starts when the crop moved its start to a bar", () => {
+    // Python cuts a click take from the bar line at or before the region's
+    // start, and says where it cut.
+    offerCropUndo("Pałyn 5", { undo: "t2", start_sec: 1.875, end_sec: 9.375 }, vi.fn(), "rehearsal", 3)
+    expect(notice("t2")?.text).toBe(
+      "“Pałyn 5” is cropped. It now starts on the bar at 0:01. The uncut take went to the Trash."
+    )
+    // Cut where it was asked, there is nothing more to say.
+    offerCropUndo("Pałyn 6", { undo: "t3", start_sec: 3, end_sec: 9 }, vi.fn(), "rehearsal", 3)
+    expect(notice("t3")?.text).toBe("“Pałyn 6” is cropped. The uncut take went to the Trash.")
+  })
+
+  it("says it in the warning too, when there is no Undo", () => {
+    offerCropUndo("Pałyn 5", { undo: null, error: "No space left", start_sec: 1.875 }, vi.fn(), "rehearsal", 3)
+    expect(getNotices().find((x) => x.key === "rehearsal")!.text).toBe(
+      "“Pałyn 5” is cropped. It now starts on the bar at 0:01. The uncut take could not be moved out of the way, so the crop cannot be undone: No space left."
+    )
   })
 
   it("warns, with no Undo, when the uncut take could not wait for one", () => {
@@ -252,7 +271,8 @@ describe("offerCropUndo", () => {
       "Pałyn 5",
       { undo: null, error: "No space left on device, and is still at /rec/old/05 (before crop)" },
       vi.fn(),
-      "rehearsal"
+      "rehearsal",
+      3
     )
     const n = getNotices().find((x) => x.key === "rehearsal")!
     expect(n.kind).toBe("warning")
@@ -353,7 +373,7 @@ describe("endEveryOffer", () => {
     offer("old")
     dismiss("undo:old")
     await settle()
-    offerCropUndo("Pałyn 7", { undo: null, error: "Disk full" }, vi.fn(), "rehearsal")
+    offerCropUndo("Pałyn 7", { undo: null, error: "Disk full" }, vi.fn(), "rehearsal", 3)
     offer("take-5")
     endEveryOffer()
     await settle()

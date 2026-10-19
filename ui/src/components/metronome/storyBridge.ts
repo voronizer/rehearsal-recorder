@@ -1,9 +1,11 @@
 /**
  * A bridge for the showcase, so the metronome's settings have something to
  * read and save: two outputs, the settings as Python starts with them, and
- * every change kept for as long as the page is open. Only the stories use
- * it; the app's bridge is pywebview's. `saved` changes the settings it
- * starts with, and `missing` names a click output that is not plugged in.
+ * every change kept for as long as the page is open; and a song's tempo
+ * saved and counted, its click, and the click with a take, for the pieces
+ * that ask. Only the stories use it; the app's bridge is pywebview's.
+ * `saved` changes the settings it starts with, and `missing` names a click
+ * output that is not plugged in.
  */
 export function stubBridge(saved: Record<string, unknown> = {}, missing: string | null = null) {
   const settings: Record<string, unknown> = {
@@ -46,7 +48,37 @@ export function stubBridge(saved: Record<string, unknown> = {}, missing: string 
       metronome_preview: ok,
       metronome_tap_listen: ok,
       metronome_taps: async () => ({ ms_ago: [] }),
-      metronome_state: async () => ({ output_missing: missing }),
+      metronome_state: async () => ({
+        phase: "idle",
+        tempo: null,
+        signature: "4/4",
+        per_bar: 4,
+        on: true,
+        case: "free",
+        song: null,
+        held: false,
+        last_take: null,
+        upcoming: [],
+        count: 0,
+        since_count_in_ms: null,
+        output_missing: missing,
+      }),
+      metronome_play: ok,
+      metronome_stop: ok,
+      // A song's page: its tempo saved as it is, and a count of 104 a
+      // quarter (208 eighths in 6/8).
+      set_song_tempo: async (id: number, tempo: number | null, signature: string | null) => ({
+        ok: true,
+        id,
+        title: "Dym",
+        tempo,
+        signature: tempo === null ? null : signature,
+      }),
+      count_tempo: async (_folder: string, _take: number, signature: string) => ({
+        ok: true,
+        tempo: signature === "6/8" ? 208 : 104,
+      }),
+      player_set_click: ok,
     },
   }
 }

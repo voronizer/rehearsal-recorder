@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest"
-import type { MetronomeState } from "@/lib/api"
+import type { MetronomeState, SongGo } from "@/lib/api"
 import { formatMeter, formatMeterShort, formatTempo, tempoUnit } from "@/lib/format"
 import {
   accentOf,
   beatAt,
   CLICK_SOUNDS,
   clampTempo,
+  clickLines,
   countDigit,
   litFor,
   parseTempo,
@@ -13,6 +14,7 @@ import {
   SIGNATURES,
   songLine,
   statusLine,
+  takesToCount,
   tapTempo,
   tempoRange,
   unitTitle,
@@ -298,6 +300,14 @@ describe("the status line", () => {
     expect(line.warn).toBe(true)
     expect(line.text).toBe("The click's output, X18, is not connected. The beat will only flash.")
   })
+  it("warns with no name when Python has none for the missing output", () => {
+    // "" is an output that is missing and has no name; null is none missing.
+    const nameless = "The click's output is not connected. The beat will only flash."
+    expect(statusLine(state({ output_missing: "" }), null)).toEqual({ text: nameless, warn: true })
+    const inTake = statusLine(state({ phase: "take", since_count_in_ms: 1200, output_missing: "" }), null)
+    expect(inTake).toEqual({ text: nameless, warn: true })
+    expect(statusLine(state({ output_missing: null }), null).warn).toBeUndefined()
+  })
 })
 
 describe("the count-in's digits", () => {
@@ -382,5 +392,66 @@ describe("the beat on screen", () => {
       lit: null,
       count: 0,
     })
+  })
+})
+
+describe("the click's lines on Master", () => {
+  // 128 a minute: a click every 0.46875 s, a 4/4 bar every 1.875 s.
+  const CLICK = 60 / 128
+  const at = (lines: { t: number }[]) => lines.map((l) => Math.round(l.t * 1e6) / 1e6)
+
+  it("draws every click from the file's first sample while 120 or fewer are in view", () => {
+    const lines = clickLines(128, "4/4", 0, 2)
+    expect(at(lines)).toEqual([0, 0.46875, 0.9375, 1.40625, 1.875])
+    expect(lines.map((l) => l.bar)).toEqual([true, false, false, false, true])
+    // Click k is at k times its length, wherever the view starts.
+    const later = clickLines(128, "4/4", 100, 101)
+    expect(later.every((l) => Math.abs(l.t / CLICK - Math.round(l.t / CLICK)) < 1e-9)).toBe(true)
+    expect(later.length).toBe(2)
+    expect(clickLines(128, "4/4", 0, 120 * CLICK).length).toBe(121)
+  })
+
+  it("draws only the bars past 120 clicks in view", () => {
+    const lines = clickLines(128, "4/4", 0, 121 * CLICK)
+    expect(lines.every((l) => l.bar)).toBe(true)
+    expect(at(lines).slice(0, 3)).toEqual([0, 1.875, 3.75])
+    // 6/8 counts six clicks a bar.
+    const six = clickLines(198, "6/8", 0, 200 * (60 / 198))
+    expect(six.every((l) => l.bar)).toBe(true)
+    expect(Math.round((six[1].t - six[0].t) * 1e6) / 1e6).toBe(Math.round(6 * (60 / 198) * 1e6) / 1e6)
+  })
+
+  it("draws every fourth bar past 480 clicks, the same bars as the view moves", () => {
+    const lines = clickLines(128, "4/4", 0, 600)
+    expect(lines.every((l) => l.bar)).toBe(true)
+    expect(at(lines).slice(0, 3)).toEqual([0, 7.5, 15])
+    const moved = clickLines(128, "4/4", 3, 603)
+    expect(at(moved)[0]).toBe(7.5)
+  })
+
+  it("draws nothing outside the take's time", () => {
+    expect(clickLines(128, "4/4", -1, 0.4).length).toBe(1)
+    expect(clickLines(128, "4/4", 5, 5)).toEqual([])
+  })
+})
+
+describe("the takes a song's tempo is counted from", () => {
+  const go = (folder: string, created_at: string, n: number, starred = false): SongGo => ({
+    folder,
+    rehearsal: folder,
+    created_at,
+    missing: false,
+    take: { take_number: n, name: `Dym ${n}`, starred, duration_sec: 200, tracks: [] },
+  })
+
+  it("lists the starred takes first, then the newest", () => {
+    const goes = [
+      go("/old", "2026-09-15T19:00:00", 1),
+      go("/sat", "2026-09-19T15:00:00", 2),
+      go("/sat", "2026-09-19T15:00:00", 5, true),
+      go("/sat", "2026-09-19T15:00:00", 3),
+      go("/old", "2026-09-15T19:00:00", 4, true),
+    ]
+    expect(takesToCount(goes).map((g) => g.take.take_number)).toEqual([5, 4, 3, 2, 1])
   })
 })

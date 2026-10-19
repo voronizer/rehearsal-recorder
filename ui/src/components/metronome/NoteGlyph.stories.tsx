@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
-import { NoteGlyph, TempoUnit } from "./NoteGlyph"
+import { MeterText, NoteGlyph, TempoUnit } from "./NoteGlyph"
 
 const meta = {
   title: "Metronome/NoteGlyph",
@@ -33,6 +33,18 @@ export const Units: Story = {
       <span className="tnum font-semibold">
         198 <TempoUnit signature="6/8" className="font-normal" />
       </span>
+    </div>
+  ),
+}
+
+/** A tempo and its signature in a line of words, as Master's tip and tag
+ *  say them: "bpm" in x/4, the drawn eighth in 6/8. */
+export const Meter: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3 text-sm">
+      <MeterText tempo={128} signature="4/4" />
+      <MeterText tempo={96} signature="3/4" />
+      <MeterText tempo={198} signature="6/8" />
     </div>
   ),
 }

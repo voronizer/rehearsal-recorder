@@ -8,7 +8,7 @@
  * screen decides from that.
  */
 
-import type { ClickSound, MetronomePhase, MetronomeState, Signature } from "@/lib/api"
+import type { ClickSound, MetronomePhase, MetronomeState, Signature, SongGo } from "@/lib/api"
 import { formatMeterShort } from "@/lib/format"
 
 /** The four, in the order the select lists them. */
@@ -167,8 +167,15 @@ export type StatusLine = {
 /** How the row's line and the song page's begin for a song with no tempo yet. */
 const NO_TEMPO_YET = "No tempo yet: type or tap one"
 
+/** The click's output cannot play: by its name, or without one when Python
+ *  has none for it (`output_missing` is then ""). */
 function missingOutput(device: string): StatusLine {
-  return { text: `The click's output, ${device}, is not connected. The beat will only flash.`, warn: true }
+  return {
+    text: device
+      ? `The click's output, ${device}, is not connected. The beat will only flash.`
+      : "The click's output is not connected. The beat will only flash.",
+    warn: true,
+  }
 }
 
 /**
@@ -188,7 +195,7 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
     // (`since_count_in_ms` is null), so switching it on mid-take starts no click.
     const unclicked = state.phase === "take" && state.since_count_in_ms === null
     if (!state.on || unclicked) return { text: "Click off. The tempo still goes into the take." }
-    if (state.output_missing) return missingOutput(state.output_missing)
+    if (state.output_missing !== null) return missingOutput(state.output_missing)
     if (state.phase === "take") return { text: "Clicking to Stop." }
     const { digit, of } = countDigit(state.count, state.per_bar)
     return { text: `Count-in: ${digit} of ${of}` }
@@ -203,7 +210,7 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
       link: { label: "save it to the song", action: "save" },
     }
   }
-  if (hasTempo && state.output_missing) return missingOutput(state.output_missing)
+  if (hasTempo && state.output_missing !== null) return missingOutput(state.output_missing)
 
   switch (state.case) {
     case "song": {
@@ -268,4 +275,59 @@ export function songLine(title: string, tempo: number | null, counted: string | 
     }
   }
   return { parts: [`Picking ${title} at a rehearsal puts this in the metronome.`] }
+}
+
+/**
+ * The takes of a song its tempo can be counted from, as its page lists
+ * them (Part 7): the starred ones first, then the newest, the last take of
+ * the newest rehearsal at the top.
+ */
+export function takesToCount(goes: readonly SongGo[]): SongGo[] {
+  return [...goes].sort(
+    (a, b) =>
+      Number(b.take.starred ?? false) - Number(a.take.starred ?? false) ||
+      b.created_at.localeCompare(a.created_at) ||
+      b.take.take_number - a.take.take_number
+  )
+}
+
+/** A line of the click on Master: when, in the take's seconds, and whether
+ *  it is the first of a bar. */
+export type ClickLine = { t: number; bar: boolean }
+
+/** Past this many clicks in view only the bars are drawn, and past the
+ *  second only every fourth bar: closer, the lines would be a grey fill. */
+const ALL_CLICKS = 120
+const BARS_ONLY = 480
+
+/**
+ * The click of a click take between two of its times, as Master's lane
+ * draws it (Part 8): its bars start at the files' first sample, so click k
+ * is at k · 60 / tempo seconds, worked out from k and never added up. With
+ * more than 120 clicks in view only the bars are drawn, with more than 480
+ * every fourth bar, counted from the first, so a line stays where it is
+ * while the view moves.
+ */
+export function clickLines(tempo: number, signature: Signature, from: number, to: number): ClickLine[] {
+  const period = 60 / tempo
+  const bar = perBar(signature)
+  const inView = (to - from) / period
+  const every = inView > BARS_ONLY ? 4 * bar : inView > ALL_CLICKS ? bar : 1
+  const lines: ClickLine[] = []
+  const first = Math.max(0, Math.ceil(from / period / every - 1e-9)) * every
+  for (let k = first; k * period <= to + 1e-9; k += every) {
+    lines.push({ t: k * period, bar: k % bar === 0 })
+  }
+  return lines
+}
+
+/** What a take says of the click it was recorded to (spec Part 1): a take
+ *  from before the metronome says nothing, and is no click take. */
+export type TakeClick = { tempo?: number | null; signature?: Signature | null; click?: boolean }
+
+/** A click take's tempo and signature, or null for a take recorded without
+ *  the click: one with the switch off has a tempo and no click to play. */
+export function clickOf(take: TakeClick | null | undefined): { tempo: number; signature: Signature } | null {
+  if (!take?.click || !take.tempo || !take.signature) return null
+  return { tempo: take.tempo, signature: take.signature }
 }

@@ -1,6 +1,6 @@
-import { api, type PendingTake, type UndoResult } from "@/lib/api"
+import { api, type CutAt, type PendingTake, type UndoResult } from "@/lib/api"
 import { reportPageError } from "@/lib/bridgeErrors"
-import { croppedText, goneText, trashName } from "@/lib/deletion"
+import { croppedText, goneText, startsOnBar, trashName } from "@/lib/deletion"
 import { dismiss, getNotices, notify } from "@/lib/notices"
 
 /**
@@ -127,15 +127,24 @@ export function endEveryOffer() {
  * take's earlier crops are ended by Python (the crop's `ended`, which the
  * caller hands to endedByPython); this one ends when the take is saved,
  * discarded, deleted or cropped again, and Python says so then.
+ *
+ * `asked` is where the region started. Python cuts a click take from the
+ * bar line at or before it (its answer's `start_sec`), and the notice then
+ * says where the take now starts, whichever screen the crop was made on.
  */
 export function offerCropUndo(
   name: string,
-  res: { undo?: string | null; error?: string },
+  res: { undo?: string | null; error?: string } & CutAt,
   onUndone: (r: UndoResult) => unknown,
-  key: string
+  key: string,
+  asked: number
 ) {
+  // Moved by more than a rounding: a crop cut where it was asked says
+  // nothing more.
+  const from =
+    typeof res.start_sec === "number" && Math.abs(res.start_sec - asked) > 0.001 ? res.start_sec : null
   if (res.undo) {
-    offerUndo({ text: croppedText(name), token: res.undo, onUndone })
+    offerUndo({ text: croppedText(name, from), token: res.undo, onUndone })
     return
   }
   if (res.error) {
@@ -144,7 +153,10 @@ export function offerCropUndo(
     notify({
       key,
       kind: "warning",
-      text: `“${name}” is cropped, but the uncut take could not be moved out of the way, so the crop cannot be undone: ${res.error}.`,
+      text:
+        from === null
+          ? `“${name}” is cropped, but the uncut take could not be moved out of the way, so the crop cannot be undone: ${res.error}.`
+          : `“${name}” is cropped. ${startsOnBar(from)} The uncut take could not be moved out of the way, so the crop cannot be undone: ${res.error}.`,
     })
   }
 }
