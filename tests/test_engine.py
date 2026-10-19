@@ -12553,6 +12553,20 @@ def main():
     ok("  and its .mid: a key a quarter second after the first click is at 0.25 s",
        [(round(sec * 1920), data) for sec, data in events80] == [(480, b"\x90\x3c\x40"), (768, b"\x80\x3c\x00")])
 
+    # The card gone just after Record: Stop has fewer frames than lead up to
+    # the first click, so the take has no grid and keeps all it recorded,
+    # with no tempo in its WAVs, rather than WAVs with a tempo and no audio.
+    lost80 = tmp80 / "card lost"
+    tc80f = TakeClick80(120, "4/4", 1, voices80, (0, 1))
+    rec80f = Rec80(0, SR, two80, lost80, click=tc80f)
+    rec80f.start()
+    block80(rec80f, 0)
+    result80f = rec80f.stop()
+    ok("the card gone before the first click came: no grid, all 1024 frames kept, no tempo in the WAVs",
+       tc80f.first_click_frame is None and len(wav80(lost80 / "Gtr.wav")) == 1024
+       and read_acid80(lost80 / "Gtr.wav") is None and abs(result80f["duration_sec"] - 1024 / SR) < 1e-9
+       and record80(lost80)["click"]["first_click_frame"] is None)
+
     # The card will not open its outputs with its inputs: Record still
     # records, from the inputs alone, a click take on its grid, the beat still
     # lit on the screen (spec Part 4).
@@ -13170,7 +13184,9 @@ def main():
         ok("a click take thrown away, a false start, gives its song no tempo",
            a83._lib.tempo_for("Ahon")["song"]["tempo"] is None)
         ok("  and the row still holds 128", state83(a83, "tempo", "held") == (128, True))
-        stopped, kept = take83(a83, keep="Ahon")
+        # Twelve blocks, past the first click at frame 9600: a take whose card
+        # goes quiet before it is no click take ([80]).
+        stopped, kept = take83(a83, keep="Ahon", blocks=12)
         song = a83._lib.tempo_for("Ahon")["song"]
         ok("the first click take kept gives the song its tempo: 128 in 4/4",
            (kept["take"]["tempo"], kept["take"]["signature"], kept["take"]["click"]) == (128, "4/4", True)

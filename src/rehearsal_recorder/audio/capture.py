@@ -695,10 +695,13 @@ class AudioRecorder:
         if click is not None:
             click.stop()
             self._click_done(click)
-            if click.end_frame is None:
-                # Stopped before its first click, or a block after Stop chose
-                # one too late: no grid, as take.json then says (cut_of).
+            if click.end_frame is None or click.end_frame <= click.first_click_frame:
+                # Stopped before its first click, a block after Stop chose one
+                # too late, or the card gone before the first click was
+                # captured: no grid, as take.json then says (cut_of), and all
+                # the audio there is, rather than none.
                 click.first_click_frame = None
+                click.end_frame = None
             self._write_record()
 
         # A click take's files run from its first click to its end_frame; one
