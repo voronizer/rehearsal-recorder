@@ -19,12 +19,17 @@ click is made here (`take_click`) and played by the recorder.
 The settings live in the app's config, saved through the function the app
 saves it with: there is no file of the metronome's own.
 
-`state` is polled; it never waits for a stream to open or close. One lock
-keeps the row, held only for a few assignments; another keeps the click's
-streams, so ▶, Stop and a bar's end never open and close at once.
+`state` is polled; it never waits for a stream to open or close, and never
+asks PortAudio anything: where the click's output is comes from the device
+list as last read, under the lock a rescan holds, and is read again at most
+every DEVICES_FRESH_SEC there, or at once when the app asks for the click or
+tells it the devices changed. One lock keeps the row, held only for a few
+assignments; another keeps the click's streams, so ▶, Stop and a bar's end
+never open and close at once.
 """
 
 import collections
+import logging
 import threading
 import time
 
@@ -33,8 +38,11 @@ import sounddevice as sd
 from rehearsal_recorder.audio.click import SIGNATURES, SOUNDS, Voices, per_bar, tempo_range
 from rehearsal_recorder.audio.click_output import ClickOutput, SilentOutput
 from rehearsal_recorder.audio.click_source import ClickSource
-from rehearsal_recorder.audio.take_click import TakeClick
+from rehearsal_recorder.audio.devices import STREAM_LOCK
+from rehearsal_recorder.audio.take_click import TakeClick, whole
 from rehearsal_recorder.store.names import UNNAMED_TAKE
+
+log = logging.getLogger(__name__)
 
 DEFAULTS = {"click_sound": "click", "click_volume": 0.7, "count_in_bars": 1,
             "tempo_in_wav": True, "metronome_on": True}
@@ -49,14 +57,17 @@ PREVIEW_SLACK_SEC = 1.0
 # How far ahead the screen is told of the clicks.
 UPCOMING_SEC = 1.5
 
+# How old the device list's word on the click's output may be when the screen
+# asks: the list is read again no more often than this from a poll.
+DEVICES_FRESH_SEC = 2.0
+
+# The four signatures as a refusal names them: "4/4, 3/4, 2/4 and 6/8".
+_SIGNATURES_SAID = f"{', '.join(SIGNATURES[:-1])} and {SIGNATURES[-1]}"
+
 # The click between takes: its source, "player" or "own", the player or
 # output it plays in, and whether the screen shows it (▶) or not (a bar
 # played for a setting).
 _Free = collections.namedtuple("_Free", "source kind sink shown")
-
-
-def _whole(value):
-    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _channels(value):
@@ -65,7 +76,7 @@ def _channels(value):
     if value is None:
         return None
     if (isinstance(value, (list, tuple)) and len(value) in (1, 2)
-            and all(_whole(c) and c >= 1 for c in value)
+            and all(whole(c) and c >= 1 for c in value)
             and (len(value) == 1 or value[1] == value[0] + 1)):
         return list(value)
     raise ValueError("The click's outputs are a pair, such as 3-4, or one output")
@@ -82,7 +93,7 @@ def _checked(key, value):
             raise ValueError("The volume is from 0 to 1")
         return float(value)
     if key == "count_in_bars":
-        if not _whole(value) or value not in (0, 1, 2):
+        if not whole(value) or value not in (0, 1, 2):
             raise ValueError("The count-in is none, 1 bar or 2 bars")
         return value
     if key in ("tempo_in_wav", "metronome_on"):
@@ -97,9 +108,21 @@ def _checked(key, value):
 def _outputs(index):
     """How many outputs a device has; 0 when it says nothing."""
     try:
-        return int(sd.query_devices(index).get("max_output_channels", 0))
+        with STREAM_LOCK:
+            return int(sd.query_devices(index).get("max_output_channels", 0))
     except Exception:
         return 0
+
+
+def _system_output():
+    """The index of the system's output device, None when it says none. With
+    STREAM_LOCK held."""
+    try:
+        info = sd.query_devices(kind="output")
+    except Exception:
+        return None
+    index = info.get("index") if isinstance(info, dict) else None
+    return index if whole(index) else None
 
 
 def _refused(error):
@@ -135,6 +158,10 @@ class Metronome:
         # (tempo, signature, TakeClick or None) while a take records.
         self._take = None
         self._free = None
+        # (when it was read, by time.monotonic(); the click device's index,
+        # the player's output device's, the system output's), each None for
+        # none, as the device list last said: see _devices.
+        self._found = None
 
     # ---------- settings ----------
 
@@ -153,7 +180,7 @@ class Metronome:
 
     def settings(self):
         """The settings, for Settings and the gear."""
-        return {"click_device_index": self._lookup("click_device"),
+        return {"click_device_index": self._devices()[0],
                 "click_channels": self._click_channels(),
                 **{key: self._setting(key) for key in DEFAULTS}}
 
@@ -210,10 +237,10 @@ class Metronome:
         """A change in the row, held until the name leads somewhere else.
         `tempo` None empties the row."""
         if signature not in SIGNATURES:
-            return _refused("The time signature is one of 4/4, 3/4, 2/4 and 6/8")
+            return _refused(f"The time signature is one of {_SIGNATURES_SAID}")
         if tempo is not None:
             low, high = tempo_range(signature)
-            if not _whole(tempo) or not low <= tempo <= high:
+            if not whole(tempo) or not low <= tempo <= high:
                 return _refused(f"A tempo in {signature} is a whole number from {low} to {high}")
         with self._lock:
             if self._take is not None:
@@ -272,25 +299,56 @@ class Metronome:
 
     # ---------- where the click goes ----------
 
+    def _devices(self, wait=True):
+        """
+        (the click device's index, the player's output device's, the system
+        output's), each None for none, as the device list says. Read under the
+        lock a rescan holds while it rebuilds the list. With `wait`, read now;
+        without, as last read, and read again when older than
+        DEVICES_FRESH_SEC unless the lock is busy; None if never read.
+        """
+        found = self._found
+        if not wait and found is not None and time.monotonic() - found[0] < DEVICES_FRESH_SEC:
+            return found[1]
+        if not STREAM_LOCK.acquire(blocking=wait):
+            return None if found is None else found[1]
+        try:
+            read = (self._lookup("click_device"), self._lookup("output_device"), _system_output())
+        finally:
+            STREAM_LOCK.release()
+        self._found = (time.monotonic(), read)
+        return read
+
+    def devices_changed(self):
+        """The device list was rebuilt (a rescan), or the click's device or
+        the player's chosen: where they are is read again. Only their indices
+        are kept; their outputs and identities are read from the settings
+        each time."""
+        self._devices()
+
     def _saved(self):
         """Whether a click device is saved: until one is, the click goes where
         the player plays."""
         return self._config.get("click_device") is not None or self._config.get("click_device_index") is not None
 
-    def _target(self):
+    def _target(self, wait=True):
         """
         (the device the click goes to, its outputs as the card counts them or
         None for none of its own, the name of a saved device that is not
         plugged in or None). With no click device saved: the player's device
-        and outputs.
+        and outputs. `wait` as in _devices; (None, None, None) while the
+        device list has not been read.
         """
+        found = self._devices(wait)
+        if found is None:
+            return None, None, None
+        index, output_index, _ = found
         if not self._saved():
             try:
                 channels = _channels(self._config.get("output_channels"))
             except ValueError:
                 channels = None
-            return self._lookup("output_device"), channels, None
-        index = self._lookup("click_device")
+            return output_index, channels, None
         if index is None:
             identity = self._config.get("click_device")
             name = identity.get("name") if isinstance(identity, dict) else None
@@ -300,7 +358,7 @@ class Metronome:
     def extra_channels(self, device_index):
         """The click's outputs, when its device is `device_index`: the player
         opening there opens its stream wide enough for them."""
-        index = self._lookup("click_device")
+        index = self._devices()[0]
         if index is None or index != device_index:
             return ()
         return tuple(self._click_channels() or ())
@@ -337,11 +395,14 @@ class Metronome:
         if tempo is None or not on:
             return None
         device, channels, missing = self._target()
+        # The system output is a device too: when it is the recording card,
+        # the click rides the take's stream there as well.
+        here = device if device is not None else self._devices(wait=False)[2]
         output, route = None, None
         if missing is not None:
             output = SilentOutput(missing, samplerate=int(samplerate))
-        elif device is not None and device == device_index:
-            outputs = _outputs(device)
+        elif here is not None and here == device_index:
+            outputs = _outputs(here)
             channels = channels or [1, 2]
             if max(channels) > outputs:
                 channels = [1, 2] if outputs >= 2 else [1]
@@ -388,7 +449,7 @@ class Metronome:
         120 with none, in `sound` or the one set. Not shown on the screen."""
         if sound is not None and sound not in SOUNDS:
             return _refused("The sound is Click, Woodblock or Hi-hat")
-        if not _whole(bars) or bars < 1:
+        if not whole(bars) or bars < 1:
             return _refused("A preview is a bar or more")
         with self._lock:
             if self._take is not None:
@@ -415,9 +476,10 @@ class Metronome:
                 try:
                     sink.start(source)
                 except Exception:
-                    # Counted by the computer's clock instead, so the beat
-                    # still flashes and the screen says why nothing is heard.
-                    sink = SilentOutput(sink.name, sink.problem())
+                    # Counted by the computer's clock instead, at the rate the
+                    # source was made for, so the beat still flashes on time
+                    # and the screen says why nothing is heard.
+                    sink = SilentOutput(sink.name, sink.problem(), sink.samplerate)
                     sink.start(source)
             free = _Free(source, kind, sink, shown)
             with self._lock:
@@ -440,6 +502,8 @@ class Metronome:
             free.sink.play_free_click(None)
         else:
             free.sink.stop()
+        if free.source.fault is not None:
+            log.error("The click between takes failed and went quiet: %s", free.source.fault)
 
     def _reap(self, free, wait=True):
         """A bar played for a setting is over: let it go, unless something else
@@ -455,6 +519,7 @@ class Metronome:
     def resink(self):
         """The player opened or closed: a ▶ click goes on in the stream that
         now has its device, in its place in the bar; a bar for a setting stops."""
+        self.devices_changed()
         free = self._free
         if free is None:
             return
@@ -483,7 +548,7 @@ class Metronome:
             if click is not None and click.problem() is not None:
                 return click.output.name
             return None
-        missing = self._target()[2]
+        missing = self._target(wait=False)[2]
         if missing is not None:
             return missing
         free = self._free

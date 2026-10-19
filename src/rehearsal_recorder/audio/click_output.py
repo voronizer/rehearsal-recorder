@@ -55,11 +55,13 @@ class ClickOutput:
         self.device_index = device_index
         self.channels = tuple(channels)
         self.route = tuple(c - 1 for c in self.channels)
-        info = _device(device_index)
+        # Under the lock a rescan holds while it rebuilds the device list.
+        with STREAM_LOCK:
+            info = _device(device_index)
+            self._latency = output_latency(sd, device_index)
         self.name = info.get("name") or ("the system output" if device_index is None else "the click's output")
         rate = samplerate or info.get("default_samplerate") or DEFAULT_RATE
         self.samplerate = int(round(rate))
-        self._latency = output_latency(sd, device_index)
         self._source = None
         self._stream = None
         self._frames = 0
@@ -143,7 +145,9 @@ class SilentOutput:
     Where the click goes when its output is not there: nowhere, but counted
     by the computer's clock as a stream would count it, a block at a time, as
     far as `pump` is asked to, so the screen can light each click on time.
-    `name` is the output that is missing; `problem` says why.
+    `name` is the output that is missing; `problem` says why. `samplerate` is
+    the rate the source was made at, the missing output's own, so its clicks
+    are counted at their pace; its blocks are as wide as the source's route.
     """
 
     LEAD_SEC = 0.05
@@ -155,22 +159,26 @@ class SilentOutput:
         self.route = (0,)
         self.samplerate = samplerate
         self._reason = reason
-        self._source = None
+        # (the source, a block as wide as its route to render it into), or
+        # None: replaced whole, as pump reads it from another thread.
+        self._fed = None
         self._started_ns = None
         self._frames = 0
-        self._scratch = np.zeros((BLOCK_FRAMES, 1), np.float32)
         self._pumping = threading.Lock()
 
     def start(self, source):
         self._started_ns = time.perf_counter_ns()
         self._frames = 0
-        self._source = source
+        self.swap(source)
 
     def swap(self, source):
-        self._source = source
+        if source is None:
+            self._fed = None
+        else:
+            self._fed = (source, np.zeros((BLOCK_FRAMES, max(source.route) + 1), np.float32))
 
     def stop(self):
-        self._source = None
+        self._fed = None
 
     def problem(self):
         return self._reason
@@ -178,9 +186,10 @@ class SilentOutput:
     def pump(self, now_ns=None):
         """Counts the click on to `now_ns` and a little beyond, as an output
         would have written it by then."""
-        source = self._source
-        if source is None or self._started_ns is None or not self._pumping.acquire(blocking=False):
+        fed = self._fed
+        if fed is None or self._started_ns is None or not self._pumping.acquire(blocking=False):
             return
+        source, scratch = fed
         try:
             now = time.perf_counter_ns() if now_ns is None else now_ns
             lead = round(self.LEAD_SEC * 1e9)
@@ -189,8 +198,8 @@ class SilentOutput:
             if behind > 1e9:
                 self._frames += int(behind * self.samplerate / 1e9) // BLOCK_FRAMES * BLOCK_FRAMES
             while self._due(self._frames, lead) <= now:
-                self._scratch.fill(0)
-                source.render(self._scratch, self._frames, self._due(self._frames, lead), self.LEAD_SEC)
+                scratch.fill(0)
+                source.render(scratch, self._frames, self._due(self._frames, lead), self.LEAD_SEC)
                 self._frames += BLOCK_FRAMES
         finally:
             self._pumping.release()

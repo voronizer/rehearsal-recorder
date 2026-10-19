@@ -806,6 +806,64 @@ def on_its_own():
     m.stop()
     ok("Stop stops it", player.free is None and m.state()["phase"] == "idle")
 
+    print("  Where the click goes, and the device list")
+    real_query = _sd.query_devices
+
+    class Refusing:
+        def __init__(self, **kw):
+            raise RuntimeError("Device unavailable")
+
+    # A headphone amp at 44100 that will not open: the click is counted at
+    # its rate all the same, to no output.
+    _sd.query_devices = lambda index=None, kind=None: {"name": "Headphone amp", "max_output_channels": 2,
+                                                       "default_samplerate": 44100}
+    _sd.OutputStream = Refusing
+    try:
+        amp = Metronome({"click_device": {"name": "Headphone amp", "host_api": "CoreAudio"}, "click_device_index": 5},
+                        lambda: None, lambda: None, {"click_device": 5}.get, None)
+        amp.set(120, "4/4")
+        played = amp.play()["ok"]
+    finally:
+        _sd.query_devices = real_query
+        del _sd.OutputStream
+    state = amp.state()
+    gaps = [b[0] - a[0] for a, b in zip(state["upcoming"], state["upcoming"][1:])]
+    counted = amp._free.source
+    ok("a 44.1 kHz output that will not open: the beat still flashes every 500 ms at 120, and says which",
+       played and len(gaps) >= 1 and all(abs(g - 500) < 0.5 for g in gaps)
+       and state["output_missing"] == "Headphone amp")
+    ok("  counted at its rate, on its outputs, raising nothing", counted.fault is None and counted.samplerate == 44100)
+    amp.stop()
+
+    # The screen asks for the state many times a second; the device list is
+    # PortAudio's, which a rescan rebuilds under the app's stream lock.
+    asked = []
+    polled = Metronome({}, lambda: None, lambda: None, lambda key: asked.append(key), None)
+    polled.state()
+    once = list(asked)
+    queried = []
+    _sd.query_devices = lambda index=None, kind=None: queried.append(index) or real_query(index, kind)
+    try:
+        for _ in range(20):
+            polled.state()
+    finally:
+        _sd.query_devices = real_query
+    ok("the screen's polls ask where the click goes once, not each time, and never PortAudio",
+       once == ["click_device", "output_device"] and asked == once and queried == [])
+
+    # No click device saved, and the player on the system output, which is
+    # the recording card: the click rides the take's stream there.
+    _sd.query_devices = lambda index=None, kind=None: {"name": "Interface", "index": 0, "max_output_channels": 2,
+                                                       "default_samplerate": 48000}
+    try:
+        system = Metronome({}, lambda: None, lambda: None, lambda key: None, None)
+        system.set(120, "4/4")
+        on_card = system.take_click(0, 48000)
+    finally:
+        _sd.query_devices = real_query
+    ok("the system output is the recording card: one stream, no second one on it",
+       on_card is not None and on_card.duplex and on_card.route == (0, 1))
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
