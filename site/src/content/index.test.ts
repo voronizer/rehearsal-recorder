@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import changelog from "../../../CHANGELOG.md?raw"
-import { content, readContent } from "./index"
+import { content, ITEMS, readContent, STEPS } from "./index"
 import { leadAndBeats } from "./markdown"
 import { changelogHead, displayVersion, latestNews, latestVersion } from "./changelog"
 
@@ -10,78 +10,55 @@ const head = changelogHead(changelog, import.meta.env.VITE_SITE_VERSION || undef
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
 describe("the site's content", () => {
-  it("has the ten tiles, in order, the MIDI one right after the one on tracks", () => {
-    expect(content.features.tiles.map((t) => t.id)).toEqual([
-      "health",
-      "track",
-      "midi",
-      "rehearsals",
-      "marks",
-      "names",
-      "cloud",
-      "sets",
-      "metronome",
-      "trash",
+  it("has the four steps of an evening, in order", () => {
+    expect(content.story.title).toBe("From soundcheck to the take you keep.")
+    expect(content.story.steps.map((s) => s.id)).toEqual(["before", "during", "after", "later"])
+    expect(content.story.steps.map((s) => s.title)).toEqual([
+      "Before you play.",
+      "While you record.",
+      "After the take.",
+      "After the rehearsal.",
     ])
   })
 
-  it("has the MIDI tile's words", () => {
-    const midi = content.features.tiles.find((t) => t.id === "midi")!
-    expect(midi.title).toBe("Notes too, from an e-kit or a keyboard.")
-    expect(midi.body.replace(/\s+/g, " ").trim()).toBe(
-      "A track records its audio, its MIDI or both. The notes are saved as a .mid file " +
-        "beside the audio."
-    )
+  it("has each step's items, in order: its tiles, then its cards", () => {
+    for (const [i, step] of content.story.steps.entries())
+      expect(step.items.map((item) => item.id), step.id!).toEqual([...ITEMS[STEPS[i]]])
+    // 31 picked: these 29, and the controller's block and its fourth line.
+    expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(29)
   })
 
-  it("has the sets tile's words", () => {
-    const sets = content.features.tiles.find((t) => t.id === "sets")!
-    expect(sets.title).toBe("Rehearse the set, in order.")
-    expect(sets.body.replace(/\s+/g, " ").trim()).toBe(
-      "Make the gig's songs a set once. Every take is the song you are on until you move " +
-        "on, and History says which ones you never got to."
-    )
+  it("has a line for each step, and words for each item", () => {
+    for (const step of content.story.steps) {
+      expect(leadAndBeats(step.body), step.id!).toEqual({ lead: [expect.any(String)], beats: [] })
+      for (const item of step.items) {
+        expect(item.title, item.id!).toMatch(/\.$/)
+        expect(item.body, item.id!).not.toBe("")
+      }
+    }
+    const before = content.story.steps[0]
+    expect(before.body).toBe("The tracks are filled in from last time, and each song brings its tempo.")
   })
 
-  it("has the controller's words: three lines, its fine print, its link and its photo's", () => {
+  it("has the tap card's words, and the tempo drift tile's “+7”", () => {
+    const items = content.story.steps.flatMap((s) => s.items)
+    const words = (id: string) => items.find((i) => i.id === id)!.body.replace(/\s+/g, " ")
+    expect(words("tap")).toBe("Press Tap once, and the drummer taps the rest on any pad of the e-kit.")
+    expect(words("drift")).toContain("the line turns amber: “+7”.")
+  })
+
+  it("has the controller's words: four lines, its fine print, its link and its photo's", () => {
     const { controller } = content
     expect(controller.title).toBe("Start a take without going to the laptop.")
     expect(leadAndBeats(controller.body).beats).toEqual([
       "REC starts a take, and pressed again keeps it.",
       "PLAY plays the take back, and the knob sets how loud.",
       "Hold SONG or TAKE and turn the knob to pick another one.",
+      "With the click on, REC counts the band in, and the screen shows 00:00 until the band comes in.",
     ])
     expect(controller.finePrint).toContain("Settings › Controls")
     expect(controller.link).toBe("Victor Baikov's controller on GitHub")
     expect(controller.photo).toMatch(/^Victor Baikov's controller: a red REC button/)
-  })
-
-  it("has the five steps, in order", () => {
-    expect(content.story.steps.map((s) => s.id)).toEqual([
-      "setup",
-      "record",
-      "keep",
-      "history",
-      "compare",
-    ])
-  })
-
-  it("tells the second step as the app goes through it, the click and the count-in with it", () => {
-    const record = content.story.steps.find((s) => s.id === "record")!
-    expect(record.title).toBe("Hear last week, then record.")
-    expect(leadAndBeats(record.body).beats).toEqual([
-      "▶ beside Pałyn on the start screen plays its ★ take from last week.",
-      "Start, and ↑ picks Pałyn under Next take, and its 128 bpm for the click.",
-      "Record: a bar of clicks to count in, then the take's name over a big clock, and a tile per track that turns red when it clips.",
-    ])
-  })
-
-  it("every step has one line and three lines under it", () => {
-    for (const step of content.story.steps) {
-      const { lead, beats } = leadAndBeats(step.body)
-      expect(lead, step.id!).toHaveLength(1)
-      expect(beats, step.id!).toHaveLength(3)
-    }
   })
 
   it("has the hero's words", () => {
@@ -138,19 +115,8 @@ describe("the site's content", () => {
   })
 })
 
-// The metronome on reha.stream (spec, "On reha.stream"): a tile of its own,
-// the second step's lines (above) and a question.
+// The metronome on reha.stream (spec, "On reha.stream"): a question.
 describe("metronome on the site", () => {
-  it("has the metronome tile's words", () => {
-    const tile = content.features.tiles.find((t) => t.id === "metronome")!
-    expect(tile.title).toBe("A click for the drummer.")
-    expect(tile.body.replace(/\s+/g, " ").trim()).toBe(
-      "Each song keeps its tempo and time signature. The click can go to the drummer's " +
-        "headphones only, and during a take the edge of the screen lights on every click. " +
-        "After a take, the Master row shows where the band ran ahead or dragged."
-    )
-  })
-
   it("asks whether there is a metronome after the question on audio interfaces", () => {
     const titles = content.faq.questions.map((q) => q.title)
     const at = titles.indexOf("Is there a metronome?")
@@ -166,18 +132,9 @@ describe("metronome on the site", () => {
   })
 })
 
-// The tempo drift on reha.stream (drift spec, "On reha.stream"): the story's
-// last step, a question after the metronome's, and the metronome tile's last
-// sentence (above).
+// The tempo drift on reha.stream (drift spec, "On reha.stream"): a question
+// after the metronome's.
 describe("tempo drift on the site", () => {
-  it("says in the last step that Palyn 5 ran ahead in the bridge and Palyn 6 held it", () => {
-    const compare = content.story.steps.find((s) => s.id === "compare")!
-    expect(leadAndBeats(compare.body).beats.slice(0, 2)).toEqual([
-      "Open Pałyn 5 and loop its bridge: the Master row says it ran ahead, +7.",
-      "Step to Pałyn 6: the same bar, still looping, and the bridge held 128.",
-    ])
-  })
-
   it("asks whether it shows where we sped up, after the metronome's question", () => {
     const titles = content.faq.questions.map((q) => q.title)
     const at = titles.indexOf("Does it show where we sped up?")

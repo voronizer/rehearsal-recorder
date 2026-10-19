@@ -4,7 +4,7 @@
 // needs fails `npm test`, naming the file, and so the site's CI.
 import changelog from "virtual:changelog"
 import { displayVersion, latestNews, latestVersion } from "./changelog"
-import { parseDoc, sectionsByIds, sectionsByTitles, type Doc, type Section } from "./markdown"
+import { itemsByIds, parseDoc, sectionsByIds, sectionsByTitles, type Doc, type Section } from "./markdown"
 
 export type { Section } from "./markdown"
 
@@ -25,10 +25,10 @@ export type SiteContent = {
     caption: string
     phoneCaption: string
   }
-  /** Victor Baikov's controller: its words, a `- ` list of three, its fine
+  /** Victor Baikov's controller: its words, a `- ` list of four, its fine
    *  print, its link's words and what its photo shows. */
   controller: { title: string; body: string; finePrint: string; link: string; photo: string }
-  features: { title: string; lede: string; tiles: Section[] }
+  /** The four steps of an evening, each with its items (story.md). */
   story: { title: string; steps: Section[] }
   faq: { title: string; questions: Section[] }
   closing: { title: string }
@@ -36,19 +36,17 @@ export type SiteContent = {
   notFound: { title: string; lede: string }
 }
 
-export const TILES = [
-  "health",
-  "track",
-  "midi",
-  "rehearsals",
-  "marks",
-  "names",
-  "cloud",
-  "sets",
-  "metronome",
-  "trash",
-] as const
-export const STEPS = ["setup", "record", "keep", "history", "compare"] as const
+export const STEPS = ["before", "during", "after", "later"] as const
+export type Step = (typeof STEPS)[number]
+
+/** Each step's items, in order: its tiles, then its cards. */
+export const ITEMS = {
+  before: ["set", "tempo", "left-off", "tap", "counted", "first-take", "inputs"],
+  during: ["tracks", "midi", "count-in", "edge", "last-time", "clip", "awake", "unplugged", "disk"],
+  after: ["marks", "drift", "undo", "same-bar", "false-starts"],
+  later: ["song-page", "cloud", "mark-lead", "numbers", "cloud-follows", "phone-mix", "bars", "wav-tempo"],
+} as const satisfies Record<Step, readonly string[]>
+export type ItemId = (typeof ITEMS)[Step][number]
 
 const files = import.meta.glob<string>("../../content/*.md", {
   query: "?raw",
@@ -82,8 +80,9 @@ export function readContent(tagFromRelease?: string): SiteContent {
   ])
   const controller = doc("controller.md")
   const controllerParts = sectionsByTitles("controller.md", controller, ["fine print", "link", "photo"])
-  const features = doc("features.md")
   const story = doc("story.md")
+  const steps = sectionsByIds("story.md", story, STEPS)
+  for (const step of steps) itemsByIds("story.md", step, ITEMS[step.id as Step])
   const faq = doc("faq.md")
   const notFound = doc("notfound.md")
 
@@ -106,12 +105,7 @@ export function readContent(tagFromRelease?: string): SiteContent {
       link: controllerParts.link,
       photo: controllerParts.photo,
     },
-    features: {
-      title: features.title!,
-      lede: features.intro,
-      tiles: sectionsByIds("features.md", features, [...TILES]),
-    },
-    story: { title: story.title!, steps: sectionsByIds("story.md", story, [...STEPS]) },
+    story: { title: story.title!, steps },
     faq: { title: faq.title!, questions: faq.sections },
     closing: { title: doc("closing.md").title! },
     notFound: { title: notFound.title!, lede: notFound.intro },

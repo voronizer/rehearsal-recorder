@@ -2,7 +2,7 @@
 
 <!-- The block right after the app at the top of the page: these words on
      the left, its photo on the right (see
-     site/src/page/Controller.tsx). The list is its three lines. -->
+     site/src/page/Controller.tsx). The list is its four lines. -->
 
 Victor Baikov built a Bluetooth controller for РЭХА: five buttons, a knob and
 a small screen. Whoever has it starts and stops takes from where they play.
@@ -10,6 +10,8 @@ a small screen. Whoever has it starts and stops takes from where they play.
 - REC starts a take, and pressed again keeps it.
 - PLAY plays the take back, and the knob sets how loud.
 - Hold SONG or TAKE and turn the knob to pick another one.
+- With the click on, REC counts the band in, and the screen shows 00:00 until
+  the band comes in.
 
 ## fine print
 
