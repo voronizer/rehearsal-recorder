@@ -131,9 +131,15 @@ def describe(result, max_ms):
     heard = f"{result['onsets']} onsets in the audio"
     if not len(deltas):
         return text + f": none within {max_ms:g} ms of an onset ({heard})"
-    median = float(np.median(deltas)) * 1000
-    worst = float(deltas[np.argmax(np.abs(deltas))]) * 1000
-    return text + f", median {median:+.1f} ms, worst {worst:+.1f} ms ({heard})"
+    median = signed_ms(float(np.median(deltas)))
+    worst = signed_ms(float(deltas[np.argmax(np.abs(deltas))]))
+    return text + f", median {median} ms, worst {worst} ms ({heard})"
+
+
+def signed_ms(seconds):
+    """Seconds as milliseconds to a tenth, with a sign. A click on time, or
+    less than 0.05 ms early, rounds to -0.0; adding 0.0 makes it +0.0."""
+    return f"{round(seconds * 1000, 1) + 0.0:+.1f}"
 
 
 def main(argv=None):

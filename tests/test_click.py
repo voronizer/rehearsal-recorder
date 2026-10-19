@@ -1006,6 +1006,12 @@ def alignment_tool():
            "Vocals.wav" in out and "matched 0 of 40 clicks" in out)
         code, out, err = run(late, "--wav", "Click")
         ok("--wav measures that track alone", code == 0 and "Vocals.wav" not in out and len(seen.findall(out)) == 1)
+        code, out, err = run(late, "--wav", "Bass")
+        ok("--wav naming a file that is not there: exit 1, saying so", code == 1 and "no such file" in err)
+        code, out, err = run(late, "--tempo", 0)
+        ok("--tempo 0 refused", code not in (0, None) and "--tempo" in err and not seen.search(out))
+        code, out, err = run(late, "--max-ms", 0)
+        ok("--max-ms 0 refused", code not in (0, None) and "--max-ms" in err and not seen.search(out))
 
         # 6/8: the WAV says the quarter tempo, 99; the clicks are eighths, 198.
         eighths = root / "eighths"
@@ -1014,7 +1020,9 @@ def alignment_tool():
         code, out, err = run(eighths)
         got = seen.findall(out)
         ok("6/8 at 99 a quarter is measured as 198 clicks a minute, on time",
-           code == 0 and "the click at 198 a minute" in out and len(got) == 1 and got[0][2] in ("+0.0", "-0.0"))
+           code == 0 and "the click at 198 a minute" in out and len(got) == 1)
+        ok("  on time prints a median and a worst of +0.0 ms, never -0.0",
+           bool(got) and got[0][2] == "+0.0" and got[0][3] == "+0.0")
         ok("  and a name in another script printed as plain ASCII",
            "Aho\\u0144.wav" in out and all(ord(c) < 128 for c in out + err))
 
