@@ -8,3 +8,5 @@ export const releaseNotes = (tag: string) => `${RELEASES}/tag/${tag}`
 export const GUIDE = `${REPO}/blob/main/docs/using-it.md`
 export const CHANGES = `${REPO}/blob/main/CHANGELOG.md`
 export const NEW_ISSUE = `${REPO}/issues/new/choose`
+// Viktor Baikov's controller: its parts, wiring and firmware.
+export const CONTROLLER = "https://github.com/viktor-baikov/reha-controller"

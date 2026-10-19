@@ -99,6 +99,18 @@ body {
   .caption.on-phone { display: block; }
 }
 
+/* ---- Viktor Baikov's controller: its words beside its photo, or over it
+   on a phone. The photo goes to the block's edges, with no tile round it. ---- */
+.remote { background: var(--page-tile); border-radius: 28px; overflow: hidden; display: grid; }
+.remote .copy { padding: clamp(26px, 4.5vw, 56px); align-content: center; }
+@media (min-width: 900px) { .remote { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.remote h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; margin: 0 0 6px; }
+.remote ul { list-style: disc; margin: 0; padding-left: 1.1em; color: var(--page-muted); font-size: 0.875rem; display: grid; gap: 4px; max-width: 30rem; }
+.remote .fine p { color: var(--page-muted); font-size: 0.875rem; }
+/* On the narrowest phone the link is wider than the block. */
+.remote .more { white-space: normal; }
+.remote img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
 /* ---- What it does: a tile per point, each with a piece of the app ---- */
 /* Dense: on two columns, a half tile before a full-width one moves up beside
    the half tile before it, rather than leave a hole. */

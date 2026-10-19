@@ -67,6 +67,48 @@ test("on Windows, the Windows download is the button", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Download for macOS" })).toHaveAttribute("href", MAC_ZIP)
 })
 
+test("the controller has a block of its own after the app, its photo beside its words", async ({ page }) => {
+  await page.goto("/")
+  const block = page.locator("#controller")
+  await expect(block.getByRole("heading", { level: 2 })).toHaveText("Start a take without going to the laptop.")
+  await expect(block.getByRole("link", { name: "Viktor Baikov's controller on GitHub" })).toHaveAttribute(
+    "href",
+    "https://github.com/viktor-baikov/reha-controller"
+  )
+  const photo = block.getByRole("img", { name: /^Viktor Baikov's controller: a red REC button/ })
+  await expect(photo).toBeVisible()
+  await expect.poll(() => photo.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(1000)
+  const at = await page.evaluate(() => ({
+    hero: document.querySelector(".hero")!.getBoundingClientRect().bottom,
+    block: document.querySelector("#controller")!.getBoundingClientRect(),
+    features: document.querySelector("#features")!.getBoundingClientRect().top,
+    copy: document.querySelector("#controller .copy")!.getBoundingClientRect(),
+    photo: document.querySelector("#controller img")!.getBoundingClientRect(),
+  }))
+  expect(at.block.top).toBeGreaterThanOrEqual(at.hero)
+  expect(at.block.bottom).toBeLessThanOrEqual(at.features)
+  expect(at.copy.right).toBeLessThanOrEqual(at.photo.left)
+  // The photo goes to the block's edges: top, right and bottom.
+  expect(Math.abs(at.photo.top - at.block.top)).toBeLessThanOrEqual(1)
+  expect(Math.abs(at.photo.right - at.block.right)).toBeLessThanOrEqual(1)
+  expect(Math.abs(at.photo.bottom - at.block.bottom)).toBeLessThanOrEqual(1)
+})
+
+// On a phone the photo is under the words, across the whole block, and the
+// link still fits.
+for (const width of [320, 390]) {
+  test(`at ${width} px the controller's photo is across the block, and the page does not scroll sideways`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("/")
+    const block = (await page.locator("#controller").boundingBox())!
+    const photo = (await page.locator("#controller img").boundingBox())!
+    expect(Math.abs(photo.x - block.x)).toBeLessThanOrEqual(1)
+    expect(Math.abs(photo.x + photo.width - (block.x + block.width))).toBeLessThanOrEqual(1)
+    expect(Math.abs(photo.y + photo.height - (block.y + block.height))).toBeLessThanOrEqual(1)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+  })
+}
+
 test("the health piece is as wide as its words, with no room held for a longer sentence", async ({
   page,
 }) => {
