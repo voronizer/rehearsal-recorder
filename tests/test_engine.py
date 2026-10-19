@@ -33,10 +33,12 @@ class _FakeStream:
 
     opened = 0
     closed = 0
+    last = None  # the newest one, for a check that asks what was opened
 
     def __init__(self, **kw):
         self.kw = kw
         _FakeStream.opened += 1
+        _FakeStream.last = self
         self.active = False
 
     def start(self):
@@ -93,6 +95,8 @@ _sd.check_output_settings = _check_output_settings
 _sd.check_input_settings = _check_input_settings
 _sd.OutputStream = _FakeStream
 _sd.InputStream = _FakeStream
+# A stream with inputs and outputs: a take whose click is on the recording card.
+_sd.Stream = _FakeStream
 sys.modules["sounddevice"] = _sd
 # No suite opens a real MIDI port. With None in sys.modules, importing the
 # library raises ImportError, which midi/ports.open_system() answers as "MIDI is
@@ -12362,6 +12366,406 @@ def main():
     ok("and none when it is given none", read_acid(tmp79 / "Mix-plain.wav") is None)
     with wave.open(str(tmp79 / "Mix.wav"), "rb") as a79, wave.open(str(tmp79 / "Mix-plain.wav"), "rb") as b79:
         ok("  the audio the same either way", a79.readframes(a79.getnframes()) == b79.readframes(b79.getnframes()))
+
+    print("\n[80] Recording to the click")
+    # A click on the recording card rides the take's own stream, which has
+    # outputs as well as inputs (metronome spec, Part 3). The take's files start
+    # at its first click and end on a quarter, and a take the app did not live
+    # to finish is cut at the same frame. The arithmetic of the click itself is
+    # in test_click.py; here, the recorder and the drafts around it.
+    import threading as threading80
+
+    from rehearsal_recorder.audio.capture import AudioRecorder as Rec80
+    from rehearsal_recorder.audio.click import Voices as Voices80
+    from rehearsal_recorder.audio.click import click_frame as cf80
+    from rehearsal_recorder.audio.drafts import describe as describe80
+    from rehearsal_recorder.audio.drafts import finalize as finalize80
+    from rehearsal_recorder.audio.take_click import TakeClick as TakeClick80
+    from rehearsal_recorder.audio.wavfile import Acid as Acid80
+    from rehearsal_recorder.audio.wavfile import read_acid as read_acid80
+    from rehearsal_recorder.midi.capture import finish_draft as finish80
+    from rehearsal_recorder.midi.clock import save_line as save_line80
+    from rehearsal_recorder.midi.smf import read_events as read_events80
+
+    tmp80 = Path(tempfile.mkdtemp())
+    two80 = [{"name": "Gtr", "channel": 1}, {"name": "Voc", "channel": 2}]
+    voices80 = Voices80("click", SR, 0.7)
+
+    def numbered80(i):
+        """Block i of 1024, each sample saying which frame it is (mod 30000)."""
+        n = (np.arange(i * 1024, (i + 1) * 1024) % 30000).astype(np.int16)
+        return np.stack([n, n], axis=1)
+
+    def info80(i):
+        """The driver's word on block i: captured 5 ms ago, heard in 5 ms."""
+        now = 50.0 + i * 1024 / SR
+        return types.SimpleNamespace(currentTime=now, inputBufferAdcTime=now - 0.005,
+                                     outputBufferDacTime=now + 0.005)
+
+    def block80(rec, i):
+        if rec.click is not None and rec.click.duplex:
+            out = np.zeros((1024, 2), np.float32)
+            rec._duplex_callback(numbered80(i), out, 1024, info80(i), None)
+            return out
+        rec._callback(numbered80(i), 1024, info80(i), None)
+        return None
+
+    def stop80(rec, blocks_done):
+        """Stop, with the card going on from block `blocks_done` on a thread of
+        its own, as PortAudio's does, from when Stop has said where the take
+        ends; stopping the stream waits for it, as PortAudio's stop does."""
+        halt = threading80.Event()
+
+        def card():
+            i = blocks_done
+            while not halt.is_set():
+                if rec.click.end_frame is None:
+                    time.sleep(0.001)
+                    continue
+                block80(rec, i)
+                i += 1
+                time.sleep(0.0002)
+
+        feeder = threading80.Thread(target=card, daemon=True)
+        stream = rec._stream
+        stopping = stream.stop
+
+        def stop():
+            halt.set()
+            feeder.join()
+            stopping()
+
+        stream.stop = stop
+        feeder.start()
+        return rec.stop()
+
+    def record80(folder):
+        return json.loads((folder / "take.json").read_text(encoding="utf-8"))
+
+    def wav80(path):
+        with wave.open(str(path), "rb") as w:
+            return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+
+    def written80(folder, deadline=2.0):
+        """take.json once it has the first click, as the take's tick writes it."""
+        until = time.monotonic() + deadline
+        while time.monotonic() < until:
+            try:
+                found = record80(folder)["click"]
+                if found["first_click_frame"] is not None:
+                    return found
+            except (OSError, ValueError, KeyError):
+                pass
+            time.sleep(0.01)
+        return None
+
+    tc80 = TakeClick80(120, "4/4", 1, voices80, (0, 1))
+    duplex80 = tmp80 / "duplex"
+    rec80 = Rec80(0, SR, two80, duplex80, click=tc80)
+    rec80.start()
+    kw80 = rec80._stream.kw
+    ok("the click on the recording card: one stream with its inputs and its outputs",
+       kw80["device"] == (0, 0) and kw80["channels"] == (2, 2) and kw80["dtype"] == ("int16", "float32")
+       and kw80["callback"] == rec80._duplex_callback)
+    ok("take.json has the click from the start, its first click not chosen yet",
+       record80(duplex80)["click"] == {"tempo": 120, "signature": "4/4", "on": True, "wav_tempo": True,
+                                       "first_click_frame": None, "end_frame": None})
+    heard80 = np.concatenate([block80(rec80, i) for i in range(100)])
+    first80 = tc80.first_click_frame
+    ok("the first block chose the first click: 0.1 s on, and a 10 ms round trip after that", first80 == 4800 + 480)
+    ok("  the click written into the outputs a round trip early",
+       not heard80[:4800].any() and np.array_equal(heard80[4800:4800 + len(voices80.of(2)), 0], voices80.of(2)))
+    ok("  and take.json written again once it was chosen", (written80(duplex80) or {}).get("first_click_frame") == first80)
+    ok("a click take's problem is still only the recording's", rec80.problem() is None)
+    result80 = stop80(rec80, 100)
+    # Stopped at frame 102400: the next quarter from the first click is its fifth,
+    # 2.5 s on.
+    end80 = first80 + cf80(5, 120, SR)
+    ok("Stop recorded on to the next quarter", tc80.end_frame == end80 and abs(result80["duration_sec"] - 2.5) < 1e-9)
+    gtr80 = wav80(duplex80 / "Gtr.wav")
+    ok("each WAV starts at the first click and ends there",
+       len(gtr80) == end80 - first80 and gtr80[0] == first80 % 30000 and gtr80[-1] == (end80 - 1) % 30000
+       and np.array_equal(wav80(duplex80 / "Voc.wav"), gtr80))
+    ok("  and carries the take's tempo: 120 in 4/4, five quarters", read_acid80(duplex80 / "Gtr.wav") == Acid80(120.0, 4, 4))
+    ok("take.json is kept for the take's grid, with where the files end",
+       record80(duplex80)["click"]["first_click_frame"] == first80 and record80(duplex80)["click"]["end_frame"] == end80)
+    ok("the click take's raw files are gone", not list(duplex80.glob("*.raw")))
+
+    plain80 = tmp80 / "no tempo in the wav"
+    rec80b = Rec80(0, SR, two80, plain80, click=TakeClick80(120, "4/4", 1, voices80, (0, 1), wav_tempo=False))
+    rec80b.start()
+    for i in range(30):
+        block80(rec80b, i)
+    stop80(rec80b, 30)
+    ok("with the setting off the WAVs carry no tempo, and still start at the first click",
+       read_acid80(plain80 / "Gtr.wav") is None and wav80(plain80 / "Gtr.wav")[0] == first80 % 30000)
+
+    # The app dies mid-take: the raw files, take.json, and the notes as the rig
+    # left them. Recovered, the take is cut where the live one would have been.
+    crash80 = tmp80 / "rehearsal" / "_drafts" / "take 1"
+    rec80c = Rec80(0, SR, two80, crash80, click=TakeClick80(120, "4/4", 1, voices80, (0, 1)))
+    rec80c.start()
+    for i in range(60):
+        block80(rec80c, i)
+    ok("a take that dies has its first click in take.json already", (written80(crash80) or {}).get("first_click_frame") == first80)
+    rec80c.abandon()
+    t80, ms80 = 9_000_000_000, 1_000_000
+    first_ns80 = t80 + first80 * 1_000_000_000 // SR
+    (crash80 / "Keys.midraw").write_bytes("".join([
+        f"t {t80}\n",
+        f"n {first_ns80 - 50 * ms80} 903c40\n",   # struck in the moment before the first click
+        f"n {first_ns80 + 500 * ms80} 904040\n",  # half a second after it
+        f"n {first_ns80 + 750 * ms80} 804000\n",
+    ]).encode("ascii"))
+    (crash80 / "take.clock").write_bytes("".join(
+        save_line80(m) for m in [(t80, 0), (t80 + 1_000_000_000, SR)]).encode("ascii"))
+    ok("the draft's length is counted from its first click", abs(describe80(crash80, SR)["duration_sec"] - (61440 - first80) / SR) < 1e-9)
+    done80 = finalize80(crash80, SR, 16)
+    gtr80c = wav80(crash80 / "Gtr.wav")
+    ok("recovered, each WAV is cut at the same first click",
+       len(gtr80c) == 61440 - first80 and gtr80c[0] == first80 % 30000
+       and abs(done80["duration_sec"] - (61440 - first80) / SR) < 1e-9)
+    ok("  and carries its tempo", read_acid80(crash80 / "Gtr.wav") == Acid80(120.0, 4, 4))
+    names80, events80 = read_events80(crash80 / "Keys.mid")
+    ok("its .mid starts at the first click too: the key half a second after it is at 0.5 s",
+       [(round(sec * 1920), data) for sec, data in events80] == [(960, b"\x90\x40\x40"), (1440, b"\x80\x40\x00")])
+
+    # Review Focus 5: Stop in the count-in.
+    early80 = tmp80 / "stopped in the count-in"
+    rec80d = Rec80(0, SR, two80, early80, click=TakeClick80(120, "4/4", 1, voices80, (0, 1)))
+    rec80d.start()
+    for i in range(20):  # 20480 frames: between the count-in's first click and its second
+        block80(rec80d, i)
+    result80d = stop80(rec80d, 20)
+    gtr80d = wav80(early80 / "Gtr.wav")
+    ok("Stop in the count-in ends on the next quarter: the count-in's second click",
+       len(gtr80d) == cf80(1, 120, SR) and abs(result80d["duration_sec"] - 0.5) < 1e-9)
+    ok("  its WAVs start at the first click", gtr80d[0] == first80 % 30000)
+    first_ns80d = t80 + first80 * 1_000_000_000 // SR
+    (early80 / "Keys.midraw").write_bytes("".join([
+        f"t {t80}\n", f"n {first_ns80d + 250 * ms80} 903c40\n", f"n {first_ns80d + 400 * ms80} 803c00\n"]).encode("ascii"))
+    (early80 / "take.clock").write_bytes("".join(
+        save_line80(m) for m in [(t80, 0), (t80 + 1_000_000_000, SR)]).encode("ascii"))
+    finish80(early80, result80d["duration_sec"])
+    _, events80 = read_events80(early80 / "Keys.mid")
+    ok("  and its .mid: a key a quarter second after the first click is at 0.25 s",
+       [(round(sec * 1920), data) for sec, data in events80] == [(480, b"\x90\x3c\x40"), (768, b"\x80\x3c\x00")])
+
+    print("\n[81] The click elsewhere")
+    # The click on the desk while the interface records: the take's stream has
+    # inputs only, and the click a stream of its own, placed by both streams'
+    # clocks. Played here in made-up time, the streams taking turns as a
+    # machine's would.
+    from rehearsal_recorder.audio.click_output import ClickOutput as ClickOutput81
+    from rehearsal_recorder.metronome import Metronome as Metronome81
+    # The stub's streams, counted: main has a _FakeStream of its own, from [3].
+    Streams81 = _sd.OutputStream
+
+    out81 = ClickOutput81(3, (3, 4))
+    tc81 = TakeClick80(120, "4/4", 1, voices80, out81.route, output=out81)
+    elsewhere81 = tmp80 / "elsewhere"
+    rec81 = Rec80(0, SR, two80, elsewhere81, click=tc81)
+    opened81 = Streams81.opened
+    rec81.start()
+    ok("the take's stream has inputs only", rec81._stream.kw["channels"] == 2 and rec81._stream.kw["device"] == 0
+       and rec81._stream.kw["callback"] == rec81._callback)
+    ok("and the click a second stream, on the desk's outputs 3-4, at the desk's rate",
+       Streams81.opened == opened81 + 2 and out81._stream.kw["device"] == 3
+       and out81._stream.kw["channels"] == 4 and out81.samplerate == 48000 and not tc81.duplex)
+    real_ns81 = time.perf_counter_ns
+    T81 = 2_000_000_000_000
+    now81 = [T81]
+    time.perf_counter_ns = lambda: int(now81[0])
+    desk81 = []
+    try:
+        i81 = j81 = 0
+        # The interface's blocks arrive 3 ms after their last frame; the desk's
+        # callbacks run 15 ms before what they write is heard, its first frame
+        # heard 60 ms after the take began. Halfway, the desk goes, and its
+        # callbacks with it.
+        while i81 < 140:
+            due_in = T81 + (i81 + 1) * 1024 / SR * 1e9 + 3e6
+            due_out = T81 + 60e6 + j81 * 1024 / SR * 1e9 - 15e6
+            if due_in <= due_out or out81.problem() is not None:
+                now81[0] = due_in
+                rec81._callback(numbered80(i81), 1024, types.SimpleNamespace(
+                    currentTime=due_in / 1e9, inputBufferAdcTime=(T81 + i81 * 1024 / SR * 1e9) / 1e9), None)
+                i81 += 1
+                if i81 == 70:
+                    out81._finished()  # the headphone amp unplugged mid-take
+            else:
+                now81[0] = due_out
+                block = np.zeros((1024, 4), np.float32)
+                out81._callback(block, 1024, types.SimpleNamespace(
+                    currentTime=due_out / 1e9, outputBufferDacTime=(due_out + 15e6) / 1e9), None)
+                desk81.append(block)
+                j81 += 1
+    finally:
+        time.perf_counter_ns = real_ns81
+    first81 = tc81.first_click_frame
+    # The desk's first block ran at 45 ms, so the interface's block after it
+    # (block 1, in at 45.7 ms) chose the first click 0.2 s on.
+    ok("the first click chosen 0.2 s after the input block that followed the desk's first",
+       first81 == 1024 + 9600)
+    desk81 = np.concatenate(desk81)
+    # Each click's sound rises from silence: its first sample is 0.
+    heard81 = [int(f) - 1 for f in np.flatnonzero(desk81[:, 2]) if not desk81[max(0, f - 200):f, 2].any()]
+    want81 = [(first81 + cf80(k, 120, SR)) * 1e9 / SR - 60e6 for k in range(len(heard81))]
+    ok("the clicks on the desk's outputs 3-4 only, each heard on its frame of the take within 1 ms",
+       not desk81[:, :2].any() and np.array_equal(desk81[:, 2], desk81[:, 3]) and len(heard81) >= 2
+       and all(abs(h * 1e9 / SR - w) < 1e6 for h, w in zip(heard81, want81)))
+    ok("the desk gone mid-take: the click says so, the recording does not",
+       out81.problem() is not None and rec81.problem() is None and rec81.error is None)
+    ok("  and the recording went on", rec81._frames_written == 140 * 1024)
+    result81 = stop80(rec81, 140)
+    # Stopped at frame 143360, 132736 after the first click: the next quarter is the sixth.
+    ok("Stop works: the take ends on a quarter after its first click",
+       tc81.end_frame == first81 + cf80(6, 120, SR) and abs(result81["duration_sec"] - 3.0) < 1e-9)
+    ok("  and it is a click take: its WAVs start at the first click and carry the tempo",
+       wav80(elsewhere81 / "Gtr.wav")[0] == first81 % 30000 and read_acid80(elsewhere81 / "Gtr.wav") == Acid80(120.0, 4, 4)
+       and record80(elsewhere81)["click"]["first_click_frame"] == first81)
+    ok("the click's own stream is closed with the take", out81._stream is None)
+
+    # Which way the metronome sends a take's click.
+    cfg81 = {"click_device": {"name": "Interface", "host_api": "CoreAudio"}, "click_device_index": 0,
+             "click_channels": [1, 2]}
+    m81 = Metronome81(cfg81, lambda: None, lambda: None, lambda key: {"click_device": cfg81["click_device_index"]}.get(key), None)
+    m81.set(128, "4/4")
+    on_card81 = m81.take_click(0, SR)
+    ok("the click device is the recording card: one stream", on_card81.duplex and on_card81.route == (0, 1)
+       and on_card81.record()["tempo"] == 128 and on_card81.count_in_clicks == 4)
+    cfg81.update(click_device={"name": "Desk", "host_api": "CoreAudio"}, click_device_index=3, click_channels=[3, 4])
+    on_desk81 = m81.take_click(0, SR)
+    ok("another device: a stream of its own, on its outputs",
+       not on_desk81.duplex and on_desk81.output.device_index == 3 and on_desk81.output.channels == (3, 4))
+    m81.set_on(False)
+    ok("the switch off: no click for the take", m81.take_click(0, SR) is None)
+
+    print("\n[82] The click and the player")
+    # Between takes the click shares the player's stream when the player holds
+    # its device, and has one of its own when not. When a take plays back, its
+    # click is made again from its tempo (Part 8).
+    from rehearsal_recorder.audio.click_source import ClickSource as ClickSource82
+    from rehearsal_recorder.audio.click_output import ClickOutput as ClickOutput82
+
+    tmp82 = Path(tempfile.mkdtemp())
+    write_wav(tmp82 / "Quiet.wav", 0, seconds=20.0)
+    p82 = TakePlayer([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+    opened82 = Streams81.opened
+    p82.open_output(3, (1, 2), extra_channels=(3, 4))
+    ok("the player on the desk's outputs 1-2, the click on its 3-4: one stream of four",
+       Streams81.opened == opened82 + 1 and p82._stream.kw["channels"] == 4 and p82._stream.kw["device"] == 3)
+    cfg82 = {"click_device": {"name": "Desk", "host_api": "CoreAudio"}, "click_device_index": 3, "click_channels": [3, 4]}
+    holder82 = {"player": p82}
+    lookup82 = {"click_device": 3, "output_device": 3}
+    m82 = Metronome81(cfg82, lambda: None, lambda: holder82["player"], lookup82.get, None)
+    m82.set(120, "4/4")
+    ok("the click's outputs widen the player's stream on its device, and no other",
+       m82.extra_channels(3) == (3, 4) and m82.extra_channels(0) == ())
+    ok("the player holds the click's device: the click's sink is the player", m82.click_sink() == ("player", p82))
+    ok("play mixes into it and nothing else opens",
+       m82.play()["ok"] and isinstance(p82._free_click, ClickSource82) and Streams81.opened == opened82 + 1)
+    out82 = np.zeros((4096, 4), np.int16)
+    for b in range(4):
+        p82._callback(out82[b * 1024:(b + 1) * 1024], 1024, None, None)
+    ok("the click on 3 and 4, outside the take's own outputs, at the metronome's volume",
+       out82[:, 2].any() and np.array_equal(out82[:, 2], out82[:, 3]) and not out82[:, :2].any()
+       and abs(int(np.abs(out82[:, 2]).max()) - round(0.7 * 32767)) <= 2)
+    ok("  out of the player's meters", p82.state()["master_level"] == 0.0)
+    m82.stop()
+    ok("Stop takes it out of the player's stream", p82._free_click is None)
+    holder82["player"] = None
+    kind82, sink82 = m82.click_sink()
+    ok("with the player closed the click has a stream of its own",
+       kind82 == "own" and isinstance(sink82, ClickOutput82) and sink82.device_index == 3 and sink82.channels == (3, 4))
+    m82.play()
+    ok("  which play opens", Streams81.opened == opened82 + 2 and Streams81.last.kw["device"] == 3
+       and Streams81.last.kw["channels"] == 4 and Streams81.last.kw["dtype"] == "float32")
+    m82.stop()
+    ok("  and Stop closes", m82.state()["phase"] == "idle")
+
+    print("  The take's own click")
+    p82.set_take_click(120, "4/4", voices80)
+    p82.set_click_on(True)
+    ok("the player says its click is on", p82.state()["click"] is True)
+    p82.seek(10.0)
+    p82.play()
+    tick82 = voices80.of(2).astype(np.float64) * 32767
+    tock82 = voices80.of(0).astype(np.float64) * 32767
+
+    def expected82(length, places):
+        """The click as it should come out: each voice at its place."""
+        out = np.zeros(length)
+        for at, voice in places:
+            out[at:at + len(voice)] += voice[:max(0, length - at)]
+        return out
+
+    # Each block copied: _render hands back the same buffer every time.
+    heard82 = np.concatenate([p82._render(512).copy() for _ in range(100)])[:, 0].astype(np.float64)
+    # 10.0 s is click 20 exactly, the first of a bar; 21 is half a second on,
+    # and 22 a second.
+    ok("after a seek to 10.0 s, the click is at the take's own frames: 20 at 10.0 s, 21 at 10.5 s, 22 at 11.0 s",
+       np.allclose(heard82, expected82(51200, [(0, tick82), (24000, tock82), (48000, tock82)]), atol=1.0))
+    ok("  and out of the meters", p82.state()["levels"]["Quiet"] == [0.0] and p82.state()["master_level"] == 0.0)
+    p82.set_loop(10.25, 11.0)
+    looped82 = np.concatenate([p82._render(512).copy() for _ in range(200)])[:, 0].astype(np.float64)
+    # The loop is 492000 to 528000; click 21 at 504000 is 12000 into each pass.
+    ok("inside a loop it follows the take's frames round and round",
+       np.allclose(looped82, expected82(102400, [(12000, tock82), (48000, tock82), (84000, tock82)]), atol=1.0))
+    p82.set_loop(None, None)
+    p82.set_master(0.5)
+    settle(p82)
+    p82.seek(10.0)
+    half82 = np.concatenate([p82._render(512).copy() for _ in range(10)])[:, 0].astype(np.float64)
+    ok("under the master: half as loud at 0.5", np.allclose(half82, expected82(5120, [(0, tick82 * 0.5)]), atol=1.0))
+    p82.set_master_muted(True)
+    settle(p82)
+    p82.seek(10.0)
+    ok("  and silent while muted", not np.concatenate([p82._render(512).copy() for _ in range(10)]).any())
+    p82.set_master_muted(False)
+    p82.set_click_on(False)
+    settle(p82)
+    p82.seek(10.0)
+    ok("switched off, there is none", not np.concatenate([p82._render(512).copy() for _ in range(10)]).any()
+       and p82.state()["click"] is False)
+    p82.set_take_click(None, None, None)
+    p82.set_click_on(True)
+    settle(p82)
+    p82.seek(10.0)
+    ok("a take that was not recorded to the click has none", not np.concatenate([p82._render(512).copy() for _ in range(10)]).any())
+    p82.close()
+
+    print("  The settings, and where the click goes")
+    before82 = dict(cfg82)
+    ok("a volume of 2 and a count-in of 3 bars are refused, and nothing saved",
+       not m82.set_setting("click_volume", 2)["ok"] and not m82.set_setting("count_in_bars", 3)["ok"] and cfg82 == before82)
+    gone82 = {"click_device": {"name": "X18", "host_api": "CoreAudio"}, "click_device_index": 7}
+    opened82 = Streams81.opened
+    m82b = Metronome81(gone82, lambda: None, lambda: None, lambda key: None, None)
+    ok("a click device saved and not plugged in: its name is the problem",
+       m82b.output_problem() == "X18" and m82b.state()["output_missing"] == "X18")
+    m82b.set(120, "4/4")
+    ok("  play opens nothing, and the beat still flashes",
+       m82b.play()["ok"] and Streams81.opened == opened82 and m82b.state()["phase"] == "preview"
+       and len(m82b.state()["upcoming"]) >= 2)
+    m82b.stop()
+    ok("  and the take still clicks on its grid, to no output",
+       m82b.take_click(0, SR) is not None and m82b.take_click(0, SR).problem() is not None
+       and not m82b.take_click(0, SR).duplex)
+    p82c = TakePlayer([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+    p82c.open_output(3, (5, 6))
+    none82 = {"output_channels": [5, 6]}
+    m82c = Metronome81(none82, lambda: None, lambda: p82c, {"output_device": 3}.get, None)
+    m82c.set(120, "4/4")
+    ok("no click device saved: the click goes where the player plays", m82c.click_sink() == ("player", p82c)
+       and m82c.settings()["click_device_index"] is None and m82c.settings()["click_channels"] is None)
+    m82c.play()
+    ok("  on the player's own outputs", p82c._free_click is not None and p82c._free_click.route == (4, 5))
+    m82c.stop()
+    p82c.close()
+    kind82c, sink82c = m82c.click_sink()
+    ok("  and with the player closed, a stream of its own there",
+       kind82c == "own" and sink82c.device_index == 3 and sink82c.channels == (5, 6))
 
     print("\n" + "=" * 60)
     if problems:
