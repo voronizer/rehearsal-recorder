@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { Play, Settings2, Square } from "lucide-react"
+import { Play, Settings, Square } from "lucide-react"
 import { BeatDots } from "@/components/metronome/BeatDots"
 import { ClickSettings } from "@/components/metronome/ClickSettings"
 import { ClickSwitch } from "@/components/metronome/ClickSwitch"
@@ -125,7 +125,7 @@ export function MetronomeRowView({
                   onKeyDown={() => (byPointer.current = false)}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  <Settings2 />
+                  <Settings />
                 </Button>
               </PopoverTrigger>
             </TooltipTrigger>
