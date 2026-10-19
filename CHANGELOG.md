@@ -5,17 +5,8 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.13.0
 
-- **Plainer words in the app and the guide.** The player's row of marks is
-  called Marks, and a mark's dialog says “Mark at 1:24” and has a **Delete
-  mark** button. The interface check talks about your interface instead of
-  a card. Messages are plain sentences without dashes: when the chosen
-  output is gone, for example, the message says the take plays through the
-  system output. The guide, the README and reha.stream use the same words,
-  and the guide's pictures show Settings as it is now. reha.stream no
-  longer promises more than the app does, and its tile about formats is
-  gone.
 - **A metronome, and each song keeps its tempo.** The rehearsal screen has
   a metronome at the bottom left, beside **Finish** and **Record take**: a
   switch, the tempo with − and +, the time signature (4/4, 3/4, 2/4 or
@@ -75,6 +66,15 @@ opening.
   Logic ignore it. A song in 6/8 shows half its number in a DAW, which
   counts quarter notes. Cropping a take recorded to the click starts it on
   a bar line, and the notice says where it now starts.
+- **Plainer words in the app and the guide.** The player's row of marks is
+  called Marks, and a mark's dialog says “Mark at 1:24” and has a **Delete
+  mark** button. The interface check talks about your interface instead of
+  a card. Messages are plain sentences without dashes: when the chosen
+  output is gone, for example, the message says the take plays through the
+  system output. The guide, the README and reha.stream use the same words,
+  and the guide's pictures show Settings as it is now. reha.stream no
+  longer promises more than the app does, and its tile about formats is
+  gone.
 
 ## 0.12.1
 
