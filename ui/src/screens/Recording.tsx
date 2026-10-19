@@ -17,6 +17,7 @@ import {
   api,
   poll as pollPython,
   type LastAttempt,
+  type MetronomeState,
   type MidiActivity,
   type PendingTake,
   type RecordingHealth,
@@ -37,8 +38,9 @@ const LEVELS_POLL_MS = 70
 // Often enough that the clock turns 0:01 within a tenth of a second of the
 // second, counted from the count-in's end.
 const TIMER_TICK_MS = 100
-// How long the clock waits to hear whether the take counts in, at most:
-// past that it counts from Record, as with no click.
+// How long the clock waits for Python's first word on the metronome, at
+// most: with none by then (a bridge with no metronome) it counts from
+// Record, as with no click.
 const COUNT_IN_WAIT_MS = 1000
 // Disk space and stream health — every couple of seconds, not a hot path.
 const HEALTH_POLL_MS = 2000
@@ -93,6 +95,12 @@ function noteStep(
     ),
   }
 }
+
+/** Whether the take may still count in: Python's answer is the take's,
+ *  with a tempo and the switch on, and it has not said yet when the
+ *  count-in ends (Python chooses the first click once the stream runs). */
+const awaitsCountIn = (s: MetronomeState) =>
+  (s.phase === "count" || s.phase === "take") && s.tempo !== null && s.on
 
 /**
  * The take while it records, laid out to be read from behind the kit: nobody
@@ -171,22 +179,38 @@ export function Recording({
 
   // The click: the count-in in the clock's place, then the edge lit on
   // every click, and its row at the footer's left. A take with the click is
-  // timed from the count-in's end, which is where its files' bars start; the
-  // clock is not shown until it is known whether there is one.
+  // timed from the count-in's end, which is where its files' bars start, and
+  // one without from Record. Which of the two is settled once: by the first
+  // answer that says, or by no answer in a second. Until then the clock
+  // waits at 0:00 (and is not shown before any answer), so it never runs
+  // from Record and then gives way to the count-in.
   const metronome = useMetronome()
   const beat = metronome.state
   const waited = useAfter(true, COUNT_IN_WAIT_MS)
+  const [timedFrom, setTimedFrom] = useState<"count-in" | "record" | null>(null)
+  let settled = timedFrom
+  if (settled === null) {
+    if (metronome.countInEnd !== null) settled = "count-in"
+    else if (beat ? !awaitsCountIn(beat) : waited) settled = "record"
+  }
+  if (settled !== timedFrom) setTimedFrom(settled)
   const known = beat !== null || waited
-  const counting = beat?.phase === "count" && metronome.countInEnd !== null
-  const countInEnd = useRef<number | null>(null)
+  const counting = settled === "count-in" && beat?.phase === "count"
+  // Where the clock counts from, on the page's clock; null while it waits.
+  const clockFrom = useRef<number | null>(null)
   useLayoutEffect(() => {
-    countInEnd.current = metronome.countInEnd
+    clockFrom.current =
+      settled === "count-in"
+        ? (metronome.countInEnd ?? clockFrom.current)
+        : settled === "record"
+          ? startedAt.current
+          : null
   })
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      const from = countInEnd.current ?? startedAt.current
-      setElapsed(Math.max(0, (performance.now() - from) / 1000))
+      const from = clockFrom.current
+      setElapsed(from === null ? 0 : Math.max(0, (performance.now() - from) / 1000))
     }, TIMER_TICK_MS)
     return () => window.clearInterval(timer)
   }, [])

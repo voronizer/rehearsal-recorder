@@ -25,8 +25,9 @@ export function TakeRow({
   lit: number | null
   onSwitch: (on: boolean) => void
 }) {
-  // A take that began with the switch off has no count-in to click from.
-  const clicks = state.tempo !== null && state.since_count_in_ms !== null
+  // A take that began with the switch off has no count-in to click from;
+  // one whose first click Python has not chosen yet is counting in.
+  const clicks = state.tempo !== null && (state.since_count_in_ms !== null || state.phase === "count")
   const heard = clicks && state.on
   return (
     <section aria-label="Metronome" className="flex flex-col gap-1.5">
