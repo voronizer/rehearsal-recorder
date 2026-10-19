@@ -56,7 +56,9 @@ export function DevicePicker<D extends Device>({
   detail?: (d: D) => string
   /** Why a device cannot be picked here, or null when it can. Such a device
    *  is listed, greyed, with the reason under its name: left out, it would
-   *  look missing, or its driver would. */
+   *  look missing, or its driver would. One saved that can no longer be
+   *  picked shows its name alone in the box, which stays one line (B4),
+   *  and the reason under the box. */
   unavailable?: (d: D) => string | null
   /** While the list is being rebuilt: an index picked now may mean another
    *  device a moment later. */
@@ -92,6 +94,8 @@ export function DevicePicker<D extends Device>({
   // still applies.
   const devicePlaceholder =
     missing ?? (value !== null && !inShown && systemDefault ? "Pick an output" : placeholder)
+  // The saved device, when it can no longer be picked here: why.
+  const savedWhy = !missing && current && inShown ? (unavailable?.(current) ?? null) : null
 
   return (
     <div className="flex flex-col gap-2">
@@ -118,8 +122,15 @@ export function DevicePicker<D extends Device>({
         onValueChange={(v) => onChange(v === SYSTEM ? null : Number(v))}
         disabled={disabled}
       >
-        <SelectTrigger id={id} aria-label={label} className="w-full">
-          <SelectValue placeholder={devicePlaceholder} />
+        <SelectTrigger
+          id={id}
+          aria-label={label}
+          aria-describedby={savedWhy ? `${id}-why` : undefined}
+          className="w-full"
+        >
+          <SelectValue placeholder={devicePlaceholder}>
+            {savedWhy && current ? `${current.name}${detail ? detail(current) : ""}` : undefined}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {systemDefault && <SelectItem value={SYSTEM}>{systemLabel}</SelectItem>}
@@ -154,6 +165,11 @@ export function DevicePicker<D extends Device>({
           })}
         </SelectContent>
       </Select>
+      {savedWhy && (
+        <p id={`${id}-why`} className="text-xs text-muted-foreground">
+          {savedWhy}
+        </p>
+      )}
     </div>
   )
 }

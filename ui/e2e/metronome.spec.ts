@@ -1090,6 +1090,22 @@ test("a second ASIO card is not offered for the click", async ({ page }) => {
   await expect(output.getByRole("combobox", { name: "Click output" })).toHaveText("Where the player plays")
 })
 
+test("a saved click output that cannot be used now keeps one line, its reason under it", async ({ page }) => {
+  // X32 USB was the click's output; now it is the second ASIO card.
+  await metronomeTab(
+    page,
+    "window.__HOST_API__ = 'Windows WASAPI';" +
+      "window.localStorage.setItem('mock-python-config', JSON.stringify({theme:'dark', ui_scale:1, click_device_index:3}));"
+  )
+  const output = tabBody(page).getByRole("region", { name: "Click output" })
+  const trigger = output.getByRole("combobox", { name: "Click output" })
+  await expect(trigger).toHaveText("X32 USB · 16 outputs")
+  const driver = (await output.getByRole("combobox", { name: "Driver" }).boundingBox())!
+  expect((await trigger.boundingBox())!.height).toBe(driver.height)
+  await expect(output.getByText("Another ASIO card can't play while one records.")).toBeVisible()
+  await expect(trigger).toHaveAccessibleDescription("Another ASIO card can't play while one records.")
+})
+
 /** History's Songs view, on `title`'s page. */
 async function songPage(page: Page, title: string) {
   await page.getByRole("radio", { name: "Songs", exact: true }).click()

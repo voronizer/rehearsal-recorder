@@ -623,6 +623,8 @@ Metronome: the gear's pieces from `ClickSettings.tsx` in `SettingsGroup`s,
 and the tab's own checkbox for the tempo in WAV files. `DevicePicker`'s
 `unavailable` lists a device that cannot be picked there, greyed, with its
 reason under its name: the click's output says so of a second ASIO card.
+One already saved that cannot be picked now keeps its name alone in the
+box, on one line (B4), and the reason shows under the box.
 
 ## Writing components
 
