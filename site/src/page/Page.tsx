@@ -19,7 +19,7 @@ export function Page({ pieces }: { pieces: PieceData }) {
         <main>
           <Hero windows={isWindows(navigator.platform, navigator.userAgent)} />
           <Controller />
-          <Story />
+          <Story pieces={pieces} />
           <Faq />
         </main>
         <Closing />

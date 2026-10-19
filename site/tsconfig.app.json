@@ -8,13 +8,14 @@
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
-    // The interface's code, and its React: see vite.config.ts.
+    // The interface's code, its React and its icons: see vite.config.ts.
     "paths": {
       "@/*": ["../ui/src/*"],
       "react": ["../ui/node_modules/@types/react"],
       "react/*": ["../ui/node_modules/@types/react/*"],
       "react-dom": ["../ui/node_modules/@types/react-dom"],
-      "react-dom/*": ["../ui/node_modules/@types/react-dom/*"]
+      "react-dom/*": ["../ui/node_modules/@types/react-dom/*"],
+      "lucide-react": ["../ui/node_modules/lucide-react"]
     },
 
     /* Bundler mode */
