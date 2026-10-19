@@ -1,3 +1,5 @@
+import type { Signature } from "@/lib/api"
+
 export function formatMMSS(totalSec: number): string {
   if (!isFinite(totalSec) || totalSec < 0) totalSec = 0
   const m = Math.floor(totalSec / 60)
@@ -245,4 +247,32 @@ export function describeRescan(found: string[] = [], gone: string[] = []): strin
   if (found.length) return `Found ${quoted(found)}`
   if (gone.length) return goneText
   return "No new interfaces"
+}
+
+/**
+ * What a tempo counts, said in words: "bpm", beats a minute, and in 6/8 the
+ * eighth note "♪", since 6/8 counts eighths. Where the interface draws, the
+ * drawn eighth (NoteGlyph) stands in for the ♪; this is the form for a
+ * tooltip, an aria label and anywhere else that is only text.
+ */
+export function tempoUnit(signature: Signature): string {
+  return signature === "6/8" ? "♪" : "bpm"
+}
+
+/** "128 bpm", and "198 ♪" in 6/8 (tempoUnit). Every tempo on screen is
+ *  written through here (B8). */
+export function formatTempo(tempo: number, signature: Signature): string {
+  return `${tempo} ${tempoUnit(signature)}`
+}
+
+/** "128 bpm · 4/4": a tempo and its signature, as a click take's tooltip
+ *  and the lane's corner say them. */
+export function formatMeter(tempo: number, signature: Signature): string {
+  return `${formatTempo(tempo, signature)} · ${signature}`
+}
+
+/** "128 · 4/4": the same without the unit, in a line right under the row
+ *  that shows it ("The song has 128 · 4/4; …"). */
+export function formatMeterShort(tempo: number, signature: Signature): string {
+  return `${tempo} · ${signature}`
 }

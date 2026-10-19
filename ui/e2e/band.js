@@ -120,6 +120,9 @@ function goOfName(name) {
 }
 // The goes someone marked as the one to keep are starred.
 const isTheTake = markers => markers.some(m => /the take|keep this/.test(m.note));
+// The band plays to the click at the song's 128 in 4/4, so its takes are click
+// takes at it; the soundcheck's are not.
+const CLICKED = {tempo: 128, signature: '4/4', click: true};
 function takeOf(n, name, length, end, markers) {
   const tracks = PARTS.map(p => ({name: p.name, file: `/rec/tue/${n}/${p.name}.wav`}));
   for (const tr of tracks) {
@@ -127,7 +130,7 @@ function takeOf(n, name, length, end, markers) {
     fileDurations[tr.file] = length;
   }
   return {take_number: n, name, ...goOfName(name), starred: isTheTake(markers),
-          duration_sec: length, tracks, markers};
+          duration_sec: length, tracks, markers, ...CLICKED};
 }
 const SECTION = name => {
   let at = START;
@@ -230,7 +233,7 @@ api.stop_take = async () => {
   const draft = takeOf(takeCounter, 'draft', 151, 147, []);
   return {ok: true, take_number: takeCounter, temp_dir: '/rec/tue/_drafts',
           duration_sec: 151, suggested_name: suggestName(takeCounter),
-          default_name: suggestName(takeCounter), tracks: draft.tracks};
+          default_name: suggestName(takeCounter), tracks: draft.tracks, ...metroStop()};
 };
 api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
   const dur = fileDurations[t.file] ?? 6;
@@ -278,7 +281,7 @@ const PAST = {
     ['Take 2', 165, [{at: 65, note: 'the riff we jammed while setting up', label_id: 1}]]]]};
 const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => ({
   take_number: i + 1, name, ...goOfName(name), starred: isTheTake(markers),
-  duration_sec: length, markers,
+  duration_sec: length, markers, ...(folder === '/rec/soundcheck' ? NO_METER : CLICKED),
   tracks: PARTS.map(p => ({name: p.name, file: `${folder}/${i + 1}/${p.name}.wav`}))}));
 // The set a rehearsal was played by, when the page gives one
 // (window.__PLAYED_BY__): its songs are all the band's, so none is new. Not
