@@ -128,7 +128,7 @@ KIT_ON_BOTH = """
     return notes.sort((a, b) => a[0] - b[0]);
   };
 
-  const take = EARLIER[1], file = '/rec/tue/2/Drums.mid';
+  const take = EARLIER[1], file = `${TONIGHT}/2/Drums.mid`;
   take.notes = [{name: 'Drums', port: 'TD-17', after: 'Drums', file}];
   take.notes_missing = [];
   fileDurations[file] = take.duration_sec;
@@ -146,7 +146,7 @@ HEIGHT = {"unsaved-takes": 420, "setup": 930, "settings": 760, "marks": 420, "se
           "rehearsal": 770, "metronome-row": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
           "metronome-master": 1040,
-          "history": 820, "history-songs": 940, "history-marks": 820,
+          "history": 820, "history-songs": 1020, "history-marks": 820,
           "midi-card": 910, "midi-player": 1140}
 
 
@@ -272,6 +272,10 @@ def main():
         page.wait_for_selector("text=Record take 6")
         page.wait_for_timeout(500)
         shoot(page, "rehearsal")
+        # Its footer: the metronome's row with the next take's song, Viasna,
+        # at its own 128 in 4/4.
+        page.get_by_text("The song's tempo.").wait_for()
+        shoot(page, "metronome-row", footer)
 
         # Viasna has a tempo, so the take counts in first: a bar of big
         # digits where the clock goes, and the clock runs from its end. Stop
@@ -323,25 +327,6 @@ def main():
         page.mouse.move(0, 0)
         shoot(page, "metronome-master",
               around([page.get_by_role("group", name="Take timeline"), page.locator("[data-master-group]")]))
-        page.close()
-
-        # The metronome's row with Pałyn picked under Next take from the set:
-        # the song's 128 in 4/4. On a page of its own, as naming Pałyn has the
-        # fake read last Tuesday's takes of it, whose files have the paths of
-        # tonight's, and Pałyn 2 would then open in the player too long.
-        page = browser.new_page(viewport=VIEWPORT)
-        page.add_init_script(MOCK + BAND + COUNTED)
-        page.goto(server.base_url, wait_until="networkidle")
-        page.wait_for_selector("text=Start rehearsal")
-        page.fill("#rehearsal-name", "Tuesday jam")
-        page.click("[data-set-picker]")
-        page.get_by_role("menuitemradio", name="Gig on the 25th").click()
-        page.click("text=Start rehearsal")
-        page.wait_for_selector("text=Record take 6")
-        page.click("[data-set-song='Pałyn']")
-        page.wait_for_function("() => document.querySelector('#next-take-name').value.startsWith('Pałyn')")
-        page.get_by_text("The song's tempo.").wait_for()
-        shoot(page, "metronome-row", footer)
         page.close()
 
         page = browser.new_page(viewport=VIEWPORT)
