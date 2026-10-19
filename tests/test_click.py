@@ -568,8 +568,8 @@ def one_stream():
     ok("none in the WAVs when the setting is off",
        TakeClick(120, "4/4", 1, voices, (0, 1), wav_tempo=False).acid() is None)
     early = TakeClick(120, "4/4", 2, voices, (0, 1))
-    ok("Stop before the first block: the files start there and hold a quarter",
-       early.stop_frame(0) == click_frame(1, 120, SR) and early.first_click_frame == 0)
+    ok("Stop before the first click is chosen: no grid, the take ends where it is",
+       early.stop_frame(5000) == 5000 and early.first_click_frame is None and early.end_frame is None)
     ok("two bars of count-in are eight clicks", early.count_in_clicks == 8)
 
 

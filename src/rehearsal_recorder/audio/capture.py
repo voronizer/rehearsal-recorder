@@ -20,13 +20,14 @@ sees it for itself when it does not: see `_seen`.
 
 A take recorded to the metronome's click (audio/take_click.py) starts its files
 at the first click of its count-in, and Stop records on to the next quarter, so
-the files hold whole quarters (metronome spec, Part 3). When the click is on the
-recording card, the take's stream has outputs as well as inputs and the click is
-written into them in the callback that reads the inputs; on another device, the
-recorder only tells the click where the take is. Either way the click's troubles
-are its own: they never stop the take, nor show in `problem`. A card that will
-not open its outputs with its inputs records from its inputs alone, its click
-to no output and its grid kept.
+the files hold whole quarters (metronome spec, Part 3). One stopped before its
+first click was chosen keeps all its audio, as a take with no click. When the
+click is on the recording card, the take's stream has outputs as well as inputs
+and the click is written into them in the callback that reads the inputs; on
+another device, the recorder only tells the click where the take is. Either way
+the click's troubles are its own: they never stop the take, nor show in
+`problem`. A card that will not open its outputs with its inputs records from
+its inputs alone, its click to no output and its grid kept.
 """
 
 import json
@@ -685,21 +686,27 @@ class AudioRecorder:
             return self._result
         self._stopped = True
         click = self.click
-        if click is not None:
+        # Only a take with its first click has a quarter to run on to.
+        if click is not None and click.first_click_frame is not None:
             self._run_on(click)
         self._let_go()
         if click is not None:
             click.stop()
             self._click_done(click)
+            if click.end_frame is None:
+                # Stopped before its first click, or a block after Stop chose
+                # one too late: no grid, as take.json then says (cut_of).
+                click.first_click_frame = None
+            self._write_record()
 
-        # A click take's files run from its first click to its end_frame.
+        # A click take's files run from its first click to its end_frame; one
+        # with no first click keeps all its audio, as a take with no click.
         head, frames, acid = 0, None, None
-        if click is not None:
+        if click is not None and click.first_click_frame is not None:
             head = click.first_click_frame
             frames = max(0, click.end_frame - head)
             acid = click.acid()
             duration = frames / self.samplerate
-            self._write_record()
         else:
             duration = self._frames_written / self.samplerate
 

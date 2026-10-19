@@ -244,10 +244,12 @@ class TakeClick:
         Where the take's files end when Stop comes after `frames_done` frames:
         on the next quarter from the first click (the next click in x/4, the
         next even one in 6/8), and a quarter at least. Kept as `end_frame`. A
-        take stopped before it chose its first click has it there.
+        take stopped before it chose its first click has no grid to end on:
+        it ends where it is, its first click still None, and keeps all its
+        audio, as a take with no click (cut_of).
         """
         if self.first_click_frame is None:
-            self.first_click_frame = frames_done
+            return frames_done
         first = self.first_click_frame
         clicks = per_quarter(self.signature)
         minute = 60 * self.samplerate

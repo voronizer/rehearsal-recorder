@@ -12930,6 +12930,7 @@ def main():
 
     import rehearsal_recorder.api as apimod83
     import rehearsal_recorder.audio.capture as capture83
+    from rehearsal_recorder.audio.wavfile import read_acid as read_acid83
     from rehearsal_recorder.mediaserver import POLLABLE as POLLABLE83
 
     Recorder83 = capture83.AudioRecorder
@@ -13101,11 +13102,22 @@ def main():
         ok("Record: the take's inputs, and a stream of the click's own on the desk",
            _sd.Stream.opened == opened + 2 and rec._stream.kw["device"] == 0
            and not rec.click.duplex and rec.click.output.device_index == 3)
+        # The desk's stream never sends a block here, so the first click is
+        # never chosen: Stop keeps the take whole, a take with no click at the
+        # row's 120, as one stopped before a slow output starts.
         feed83(a83, 4)
-        a83.discard_take(a83.stop_take()["temp_dir"])
-        # The desk's stream never sends a block here, so the first click waits
-        # for Stop, which chooses it where the take stops. A Stop that breaks
-        # first leaves the take with none: no click take, at the row's 120.
+        stopped = a83.stop_take()
+        gtr = Path(stopped["tracks"][0]["file"])
+        with wave.open(str(gtr), "rb") as w:
+            frames = w.getnframes()
+        ok("Stop before the first click keeps all the audio before it, with no tempo in its WAV",
+           frames == 4 * 1024 and stopped["duration_sec"] == 4 * 1024 / SR and read_acid83(gtr) is None)
+        a83._meters.clear()
+        ok("  and it is no click take, but keeps its tempo, now and after a restart",
+           (stopped["tempo"], stopped["signature"], stopped["click"]) == (120, "4/4", False)
+           and a83._meter_of_draft(stopped["temp_dir"]) == {"tempo": 120, "signature": "4/4", "click": False})
+        a83.discard_take(stopped["temp_dir"])
+        # A Stop that breaks says the same in memory as its take.json does.
         a83.start_take()
         rec = a83._recorder
         feed83(a83, 4)
