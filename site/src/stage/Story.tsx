@@ -1,11 +1,13 @@
-// stage.html#story: the app going through the five steps the page tells,
-// one screen at a time, each with the props App would give it, after the
-// fake has been brought to where the app would have it.
+// stage.html#story: the app going through the four steps of an evening the
+// page tells, one screen at a time, each with the props App would give it,
+// after the fake has been brought to where the app would have it.
 //
-// The story only goes forward: a take cannot be unrecorded. A step back
-// starts the frame again (#story-<n>) and walks forward to the step. As it
-// gets to each of a step's three lines it tells the page (rr-beat), which
-// lights that line.
+// The page asks for a step, to run through, or for a moment of one (a
+// line of it, `beat`), to go to and stay at; a tile or card on the page
+// shows its moment (site/src/page/evening.ts). The story only goes
+// forward: a take cannot be unrecorded. For a place behind it, a fresh
+// frame is started there (#story-<step> or #story-<step>.<beat>) and walks
+// forward to it, while this one keeps still on show.
 import { useSyncExternalStore } from "react"
 import { Setup } from "@/screens/Setup"
 import { Recording } from "@/screens/Recording"
@@ -24,7 +26,14 @@ import { bandCameIn, CLIPS } from "./demo"
 import { Hero } from "./Hero"
 import { bringIntoView, button, dragTimeline, fill, hasText, key, press, sleep, waitFor } from "./drive"
 
-export const STORY = ["setup", "record", "keep", "history", "compare"] as const
+export const STORY = ["before", "during", "after", "later"] as const
+
+/** How many lines (moments) each step has: the beats in FORWARD below. */
+const BEATS = [5, 3, 3, 6]
+
+/** Where the page wants the app: a step to run through (beat null), or a
+ *  moment of one to stay at. */
+export type Target = { step: number; beat: number | null }
 
 type Scene =
   | { step: "setup" }
@@ -133,29 +142,29 @@ export function Story() {
 
 /**
  * How a step tells the page where it has got to: `beat(n)` as the app gets
- * to the step's line n (site/content/story.md), and `linger(ms)`, a pause
- * that keeps a line lit, made only on the step the page has on screen.
+ * to the step's moment n, which keeps the app there while the page wants
+ * that moment; and `linger(ms)`, a pause made only on a step the page wants
+ * run through, not on one walked past to a later place.
  */
-type Telling = { beat: (n: number) => void; linger: (ms: number) => Promise<void> }
+type Telling = { beat: (n: number) => Promise<void>; linger: (ms: number) => Promise<void> }
 
 /** Each step, from the one before it (or, for the first, from nothing). */
 const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> = {
-  async setup({ beat, linger }) {
+  // The start screen: the rehearsal named, its tracks, Check signal; then
+  // Pałyn's ★ take from last week, from Last time; Start, and ↑ up the songs
+  // under Next take to Pałyn, its 128 bpm in the metronome's row.
+  async before({ beat, linger }) {
     show({ step: "setup" })
     fill(await waitFor(() => document.querySelector<HTMLInputElement>("#rehearsal-name")), NAME)
-    beat(0)
+    await beat(0)
     await linger(BEAT_MS)
-    beat(1)
+    await beat(1)
     await linger(BEAT_MS)
     await press("Check signal")
-    beat(2)
     await waitFor(() => button("Stop checking"))
-  },
-  // Pałyn's ★ go from last week, from Last time on the start screen; then
-  // Start, and ↑ up the songs under Next take to Pałyn, its 128 bpm in the
-  // metronome's row; a moment later, Record on it: the next take is Pałyn
-  // 3, and it counts in.
-  async record({ beat, linger }) {
+    await beat(2)
+    await linger(BEAT_MS)
+
     button("Stop checking")?.click()
     ;(
       await waitFor(() =>
@@ -163,8 +172,8 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
       )
     ).click()
     await waitFor(() => document.querySelector("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']"))
-    beat(0)
-    await sleep(LAST_WEEK_MS)
+    await beat(3)
+    await linger(LAST_WEEK_MS)
 
     await press("Start rehearsal")
     const field = await waitFor(() => document.querySelector<HTMLTextAreaElement>("#next-take-name"))
@@ -176,9 +185,11 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
       await sleep(ARROW_MS)
     }
     if (!field.value.startsWith("Pałyn")) throw new Error("demo: ↑ did not get to Pałyn")
-    beat(1)
-    await linger(BEAT_MS)
-
+    await beat(4)
+  },
+  // Record on Pałyn: the next take is Pałyn 3, and it counts in; then the
+  // band comes in, and the guitar clips three times.
+  async during({ beat }) {
     // Record once Python has the name the field shows.
     let session = await api().session_state()
     for (let i = 0; i < 40 && session.active && !session.next_take_name.startsWith("Pałyn"); i++) {
@@ -197,46 +208,52 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
       lastAttempt: session.last_attempt ?? null,
     })
     await waitFor(() => button("Stop", true))
-    // The line says the count-in first: it is lit once the bar of clicks
-    // is counting on screen, or once Python says the take is not counting
-    // in, for a take with no count-in.
+    // The bar of clicks counting on screen, or Python saying the take is
+    // not counting in, for a take with no count-in.
     while (!document.querySelector("[data-count-in]") && (await api().metronome_state()).phase === "count")
       await sleep(50)
-    beat(2)
+    await beat(0)
+    const since = () => {
+      const cameIn = bandCameIn()
+      return cameIn === null ? -Infinity : performance.now() - cameIn
+    }
+    await waitFor(() => since() >= 0)
+    await beat(1)
+    await waitFor(() => since() >= LEAST_TAKE_MS)
+    await beat(2)
   },
   // Stop, save it, and back on the rehearsal screen the take nobody named
   // gets its song with one click; the false start is grey, and the
   // evening's two buttons are over the takes.
-  async keep({ beat, linger }) {
-    await waitFor(() => {
-      const cameIn = bandCameIn()
-      return cameIn !== null && performance.now() - cameIn >= LEAST_TAKE_MS
-    })
+  async after({ beat, linger }) {
     await press("Stop", { exact: true })
     await waitFor(() => document.querySelector("[data-take-summary]"))
-    beat(0)
+    await beat(0)
     await linger(BEAT_MS)
     await press("Save take")
     const pill = await waitFor(() =>
       document.querySelector<HTMLButtonElement>("[data-name-pills='4'] [data-song-choice='Sonca']")
     )
     bringIntoView(pill)
-    beat(1)
+    await beat(1)
     await sleep(900)
     await linger(BEAT_MS - 900)
     pill.click()
     await waitFor(() => document.querySelector("[role='group'][aria-label='Sonca'] [data-take='4']"))
     const send = await waitFor(() => button("Send starred"))
     bringIntoView(send)
-    beat(2)
+    await beat(2)
   },
   // Every rehearsal in History, then its Marks view: every Went wrong from
-  // every rehearsal, and from the first of them, the band's Pałyn.
-  async history({ beat, linger }) {
+  // every rehearsal, and from the first of them, the band's Pałyn. From the
+  // song's page, Pałyn 5 with its bridge on repeat, and on to the next take
+  // from its column: it starts at the same bar, still looping; and ↓ to the
+  // take after it, the way through every rehearsal.
+  async later({ beat, linger }) {
     await api().finish_rehearsal()
     show({ step: "history" })
     await waitFor(() => hasText("New songs"))
-    beat(0)
+    await beat(0)
     await linger(BEAT_MS)
     await press("Marks", { exact: true })
     ;(
@@ -247,8 +264,8 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
       )
     ).click()
     await waitFor(() => document.querySelector('section[aria-label="Went wrong"] [data-mark]'))
-    beat(1)
-    await sleep(MARKS_MS)
+    await beat(1)
+    await linger(MARKS_MS)
     ;(
       await waitFor(() =>
         [
@@ -259,71 +276,111 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
       )
     ).click()
     await waitFor(() => document.querySelector('[data-rung][aria-expanded="true"]'))
-    beat(2)
-  },
-  // From the song's page, Pałyn 5 with its bridge on repeat, and on to the
-  // next go from its column: it starts at the same bar, still looping; and
-  // ↓ to the go after it, the way through every rehearsal.
-  async compare({ beat, linger }) {
-    const go = (label: string) =>
+    await beat(2)
+    await linger(BEAT_MS)
+
+    const take = (label: string) =>
       waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`))
     const exactly = (label: string) =>
       waitFor(() => document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`))
-    ;(await go("Take 2 Pałyn 5")).click()
+    ;(await take("Take 2 Pałyn 5")).click()
     await waitFor(() => document.querySelector('[aria-label="Take timeline"]'))
     await sleep(700)
     await dragTimeline(0.55, 0.7)
     ;(await exactly("Repeat")).click()
     ;(await exactly("Play")).click()
     await waitFor(() => document.querySelector("button[aria-label='Pause']"))
-    beat(0)
+    await beat(3)
     await linger(BEAT_MS)
-    const openGo = (n: string) =>
+    const openTake = (n: string) =>
       waitFor(() =>
         document
           .querySelector("[data-tab][aria-current='true'] [data-tab-line]")
           ?.textContent?.startsWith(n)
       )
     await press("Songs", { exact: true })
-    ;(await go("Take 3 Pałyn 6")).click()
-    await openGo("6")
-    beat(1)
-    await sleep(LOOPING_MS)
+    ;(await take("Take 3 Pałyn 6")).click()
+    await openTake("6")
+    await beat(4)
+    await linger(LOOPING_MS)
     key("ArrowDown")
-    await openGo("7")
-    beat(2)
+    await openTake("7")
+    await beat(5)
   },
 }
 
+const same = (a: Target | null, b: Target | null) =>
+  a !== null && b !== null && a.step === b.step && a.beat === b.beat
+
 /**
- * Starts the story and returns how to move it. `from` is the step a fresh
- * frame walks forward to (#story-<n>), or null to wait to be told.
+ * Starts the story and returns how to move it. `from` is the place a fresh
+ * frame walks forward to (#story-<step>, #story-<step>.<beat>), and tells
+ * the page once it is there (rr-there); null to wait to be told.
  */
-export function startStory(from: number | null): (step: number) => void {
-  let at = -1
-  let want = from ?? -1
+export function startStory(from: Target | null): (target: Target) => void {
+  const root = document.documentElement
+  /** The step the app is in, or last ran through; -1 before the first. */
+  let step = -1
+  /** The last of that step's lines the app got to; -1 before the first. */
+  let last = -1
+  /** Whether the app has run that step through to its end. */
+  let through = false
+  /** Whether it is keeping still at that line. */
+  let staying = false
+  let want: Target | null = from
+  /** Asked for a place behind it: keeps still at the next line, on show
+   *  until a fresh frame there takes its place. */
+  let still = false
+  let fresh = from
+  let wake: (() => void) | null = null
   let running = false
+
+  const tell = (message: FromStage) => window.parent.postMessage(message, "*")
+  const there = () => {
+    if (fresh && same(fresh, want)) tell({ type: "rr-there" })
+    fresh = null
+  }
+
+  /** Whether the app has gone past `target`. */
+  function behind(target: Target): boolean {
+    if (target.step !== step) return target.step < step
+    if (target.beat === null) return true
+    return target.beat < last || (target.beat === last && !staying) || through
+  }
+
+  async function beat(at: number, n: number) {
+    last = n
+    tell({ type: "rr-beat", step: at, beat: n })
+    while (still || (want?.step === at && want.beat === n)) {
+      if (!still) {
+        root.dataset.moment = `${at}.${n}`
+        there()
+      }
+      staying = true
+      await new Promise<void>((done) => (wake = done))
+      wake = null
+    }
+    staying = false
+    delete root.dataset.moment
+  }
 
   async function run() {
     if (running) return
     running = true
     try {
-      while (at !== want) {
-        if (want < at) {
-          location.replace(`${location.pathname}#story-${want}`)
-          location.reload()
-          return
-        }
-        const step = at + 1
-        await FORWARD[STORY[step]]({
-          beat: (n) => {
-            const told: FromStage = { type: "rr-beat", step, beat: n }
-            window.parent.postMessage(told, "*")
-          },
-          linger: (ms) => (want === step ? sleep(ms) : Promise.resolve()),
+      while (want && !(want.step === step && through)) {
+        const next = step + 1
+        if (next > want.step) break
+        step = next
+        last = -1
+        through = false
+        if (want.step === next && want.beat === null) there()
+        await FORWARD[STORY[next]]({
+          beat: (n) => beat(next, n),
+          linger: (ms) => (want?.step === next && want.beat === null && !still ? sleep(ms) : Promise.resolve()),
         })
-        at += 1
-        document.documentElement.dataset.scene = STORY[at]
+        through = true
+        root.dataset.scene = STORY[next]
       }
     } catch (e) {
       console.warn(e)
@@ -333,9 +390,26 @@ export function startStory(from: number | null): (step: number) => void {
   }
 
   void run()
-  return (step) => {
-    if (!Number.isInteger(step) || step < 0 || step >= STORY.length) return
-    want = step
+  return (target) => {
+    const { step: s, beat: b } = target
+    if (!Number.isInteger(s) || s < 0 || s >= STORY.length) return
+    if (b !== null && (!Number.isInteger(b) || b < 0 || b >= BEATS[s])) return
+    if (same(target, want) && !still) return
+    if (behind(target)) {
+      still = true
+      const hash = b === null ? `story-${s}` : `story-${s}.${b}`
+      // On its own, as in its tests, the frame starts itself again there.
+      if (window.parent === window) {
+        location.replace(`${location.pathname}#${hash}`)
+        location.reload()
+      } else {
+        tell({ type: "rr-restart", hash })
+      }
+      return
+    }
+    still = false
+    want = target
+    wake?.()
     void run()
   }
 }
