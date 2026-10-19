@@ -873,6 +873,10 @@ def on_its_own():
     m.set(150, "4/4")
     ok("  nor once moved to another stream", isinstance(player.free, ClickSource) and player.free is not page
        and player.free.tempo == 96 and m.state()["tempo"] == 96)
+    moved = player.free
+    ok("  a change on the page while it plays goes on from its next click, not from a bar's first",
+       m.play(100, "3/4")["ok"] and player.free is moved and (moved.tempo, moved.signature) == (100, "3/4")
+       and (m.state()["tempo"], m.state()["phase"]) == (100, "preview"))
     m.stop()
     ok("stopped, the row is as it was", (m.take_meter(), m.state()["held"], m.state()["tempo"]) == ((150, "4/4", True), True, 150))
     ok("a tempo out of its range, or a signature not one of the four, is refused as the row's is",

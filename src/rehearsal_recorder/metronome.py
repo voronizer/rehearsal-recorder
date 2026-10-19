@@ -495,7 +495,15 @@ class Metronome:
                 return refused
         elif tempo is None:
             return _refused("No tempo to play: type or tap one")
-        self._start(tempo, signature, shown=True, fixed=fixed)
+        with self._sinks:
+            free = self._free
+            if fixed and free is not None and free.shown and free.fixed:
+                # A change on the song's page while its click plays: on from
+                # the next click, as the row's ▶ follows the row, not from a
+                # bar's first.
+                free.source.retime(tempo, signature)
+            else:
+                self._start_held(tempo, signature, shown=True, fixed=fixed)
         return {"ok": True}
 
     def preview(self, bars=1, sound=None):
@@ -523,12 +531,10 @@ class Metronome:
         timer.start()
         return {"ok": True}
 
-    def _start(self, tempo, signature, shown, bars=None, sound=None, start_k=0, fixed=False):
-        with self._sinks:
-            return self._start_held(tempo, signature, shown, bars, sound, start_k, fixed)
-
     def _start_held(self, tempo, signature, shown, bars=None, sound=None, start_k=0, fixed=False):
-        """_start, with `_sinks` already held."""
+        """A click between takes in place of the one there was, with `_sinks`
+        held: shown (▶) or a bar for a setting, `bars` long or until Stop,
+        from click `start_k` of its bar."""
         # Where it goes, its stream opened and kept in _free, in one hold
         # of STREAM_LOCK: see the module's note on the locks.
         with STREAM_LOCK:
