@@ -20,7 +20,6 @@ describe("the site's content", () => {
       "names",
       "cloud",
       "sets",
-      "formats",
       "trash",
     ])
   })
@@ -29,8 +28,8 @@ describe("the site's content", () => {
     const midi = content.features.tiles.find((t) => t.id === "midi")!
     expect(midi.title).toBe("Notes too, from an e-kit or a keyboard.")
     expect(midi.body.replace(/\s+/g, " ").trim()).toBe(
-      "A track records its audio, its MIDI or both. The notes are saved as .mid beside " +
-        "the audio, ready for your DAW."
+      "A track records its audio, its MIDI or both. The notes are saved as a .mid file " +
+        "beside the audio."
     )
   })
 
@@ -70,7 +69,7 @@ describe("the site's content", () => {
     const record = content.story.steps.find((s) => s.id === "record")!
     expect(record.title).toBe("Hear last week, then record.")
     expect(leadAndBeats(record.body).beats).toEqual([
-      "▶ beside Pałyn on the start screen plays its best take from last week.",
+      "▶ beside Pałyn on the start screen plays its ★ take from last week.",
       "Start, and ↑ picks Pałyn under Next take.",
       "Record: the take's name over a big clock, and a tile per track that turns red when it clips.",
     ])

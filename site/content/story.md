@@ -15,15 +15,15 @@ One track per musician, filled in from last time.
 
 ## Hear last week, then record. {#record}
 
-Hear how the song went last week, then play it.
+The start screen lists last time's songs, each with ▶.
 
-- ▶ beside Pałyn on the start screen plays its best take from last week.
+- ▶ beside Pałyn on the start screen plays its ★ take from last week.
 - Start, and ↑ picks Pałyn under Next take.
 - Record: the take's name over a big clock, and a tile per track that turns red when it clips.
 
 ## Keep the good ones. {#keep}
 
-Stop, listen, keep it. Sort the takes while everyone remembers them.
+Stop, listen, then save the take or discard it.
 
 - Stop, and the take opens to listen to. Save it.
 - A take nobody named: one click on Sonca names it.

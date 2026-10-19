@@ -1,7 +1,7 @@
 # Multitrack recording for band rehearsals
 
-One track per musician, a take you can hear the second you stop, and every
-rehearsal you have ever had.
+One track per musician. Stop, and you can listen to the take at once. Every
+rehearsal you record stays in History.
 
 ## eyebrow
 

@@ -13,7 +13,9 @@ opening.
   a card. Messages are plain sentences without dashes: when the chosen
   output is gone, for example, the message says the take plays through the
   system output. The guide, the README and reha.stream use the same words,
-  and the guide's pictures show Settings as it is now.
+  and the guide's pictures show Settings as it is now. reha.stream no
+  longer promises more than the app does, and its tile about formats is
+  gone.
 
 ## 0.12.1
 

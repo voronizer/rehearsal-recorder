@@ -1,14 +1,10 @@
 # РЭХА
 
 Multitrack recording for band rehearsals. One track per musician, written to
-disk as you play, a take you can listen back to the second you stop, and a
-history of every rehearsal you have ever had.
+disk as you play. Stop, and you can listen to the take at once. Every
+rehearsal you record stays in History.
 
 РЭХА is Belarusian for “echo”, and it sounds a little like “rehearsal”.
-
-Built for the room it is used in: nobody is watching the screen while the
-band plays, nobody is riding the gain, the laptop might get kicked, and there
-may be no internet.
 
 ![A four-piece take open in the player: drums, bass, guitar and vocals on one timeline, with coloured marks and the bridge selected to repeat](docs/screenshots/player.png)
 
@@ -50,15 +46,15 @@ Building needs Python and Node installed; the app it makes needs neither.
 
 **Records every musician to their own track** and keeps writing to disk the
 whole time. Every 30 seconds it makes sure all of it is safely on the disk.
-If the app dies or someone trips over the interface, you lose seconds, and
-the next launch offers the interrupted take back to you. While a take
+If the app dies or someone trips over the interface, you lose at most the
+last 30 seconds, and the next launch offers the interrupted take back to
+you. While a take
 records, the laptop and its screen stay awake; if the lid is closed anyway,
 the take ends there with everything before it kept.
 
-**Tells you it is fine while it is running.** The interface is connected, the
-disk has room for this long, the battery needs the charger, this input is
-clipping, that one is silent. All of it is on screen during the take, because
-that is the only moment anyone would act on it.
+**Shows trouble while you play.** The interface is connected, the disk has
+room for this long, the battery needs the charger, this input is clipping,
+that one is silent: all of it is on the recording screen during the take.
 
 **Plays the take back immediately**, all tracks in sync, with per-track
 volume, mute and solo, and marks you drop on a moment while listening. Every
@@ -85,15 +81,13 @@ Pick them one at a time, or switch on automatic sending and every take you
 save goes up on its own. It sends between takes, never while one is
 recording.
 
-**Records at the quality your interface can do.** 16- or 24-bit, at 44.1, 48
-or 96 kHz, and only the combinations your interface accepts are offered: the
-app asks it before showing the choice. If it does not answer, Settings says
-so. 24-bit is the default: at a rehearsal nobody watches the gain, and the
-headroom is worth the extra disk space.
+**24-bit by default.** At a rehearsal nobody watches the gain, and 24 bits
+leave room to set it low. 16-bit, and 44.1, 48 or 96 kHz, are in Settings,
+which offers only what your interface accepts.
 
-**Never destroys anything.** Anything you delete goes to the Trash (the
-Recycle Bin on Windows), or to a `_deleted` folder when there is neither to
-reach. A recording of a rehearsal cannot be made again.
+**Deleting goes to the Trash** (the Recycle Bin on Windows), or to a
+`_deleted` folder when there is neither. So does a take as it was before a
+crop. For 10 seconds, **Undo** brings it back.
 
 ## Where the rest of it is
 

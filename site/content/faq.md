@@ -29,7 +29,7 @@ another place.
 ## What if the laptop dies in the middle of a take?
 
 The take is written to disk as it records and made safe every 30 seconds, so
-you lose seconds. The next launch offers it back.
+you lose at most the last 30 seconds. The next launch offers it back.
 
 ## Will the laptop fall asleep in the middle of a take?
 
