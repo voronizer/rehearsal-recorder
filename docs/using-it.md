@@ -1054,8 +1054,9 @@ Metronome**, and a change in one shows in the other.
 - **Count-in**: **None**, **1 bar** or **2 bars**, before every take
   recorded to the click.
 
-**Settings › Metronome** also has **Write the tempo into WAV files** (see [A
-take's tempo in a DAW](#a-takes-tempo-in-a-daw)).
+**Settings › Metronome** also has **Drift shown past** (see [Where the band
+drifted](#where-the-band-drifted)) and **Write the tempo into WAV files**
+(see [A take's tempo in a DAW](#a-takes-tempo-in-a-daw)).
 
 ### Recording to the click
 
@@ -1087,7 +1088,7 @@ in 6/8), so that it ends in time with the click.
 
 ### Listening back to the click
 
-![Master under the tracks in the player with its click on, and beside it the take's bars and beats as stripes, with Click 128 bpm · 4/4 in the corner](screenshots/metronome-master.png)
+![Master under the tracks in the player with its click on: beside it the take's bars and beats as faint stripes, the band's tempo as a line over them, and Click 128 bpm · 4/4 in the corner](screenshots/metronome-master.png)
 
 To hear the click with a take, press the button with the metronome's icon
 after the name **Master**, under the tracks (see [Listening
@@ -1095,8 +1096,10 @@ back](#listening-back)). Pointing at it says “Click with the take: 128 bpm ·
 4/4”. The click plays in time with the take's count-in.
 
 Beside Master, the take's bars and beats are drawn as stripes, the bars
-longer, with “Click 128 bpm · 4/4” in the corner. They are dimmed while the
-click is off, and follow the zoom and the selection as the tracks do.
+longer, with “Click 128 bpm · 4/4” in the corner. They are faint under the
+band's tempo (see [Where the band drifted](#where-the-band-drifted)),
+fainter still while the click is off, and follow the zoom and the selection
+as the tracks do.
 
 The click comes through the player's output, mixed with the take, at the
 volume set in the click's settings. Turning **Master** down turns the click
@@ -1104,9 +1107,53 @@ down too. It is not in Master's meter, or in the mix sent to the cloud. The
 button is off when the app starts, and stays as you left it from one take
 to the next.
 
-A take recorded without the click has no stripes: “Recorded without the
-click” stands in their place, and the button is greyed. That includes every
-take from before the app had a metronome.
+A take recorded without the click has no stripes, and the button is
+greyed. That includes every take from before the app had a metronome. Its
+row still shows the band's tempo.
+
+### Where the band drifted
+
+![Master's row under Pałyn 2, played without the click: a dashed line across the middle, a grey band around it, and the band's tempo as a line that turns amber where it ran ahead in a chorus, +6, and in the bridge, +7, and where it dragged at the end, −5. The pointer over the bridge says Bar 61 · 135 bpm (+7).](screenshots/drift-master.png)
+
+After a take, Master's row in the player shows how fast the band played,
+bar by bar. The dashed line across the middle is the tempo the take was
+meant to have. The grey band around it is on tempo: within 2% either way,
+about 2.5 bpm at 128. The solid line is the band's own tempo, a point for
+each bar.
+
+Where the band was further off than that for two bars or more, the line
+turns amber, with a number that says by how much in bpm: “+7” where it ran
+ahead, “−5” where it dragged. Point anywhere along the row to see one bar:
+“Bar 61 · 135 bpm (+7)”. In 6/8 the numbers count eighths, as the
+metronome's do.
+
+The words in the row's corner say what the take is measured against:
+
+- “Click 128 bpm · 4/4”: the click it was recorded to.
+- “No click · 128 bpm · 4/4”: the tempo in the metronome's row when
+  **Record take** was pressed with the switch off.
+- “Pałyn 128 bpm”: the song's tempo, for a take with no tempo of its own,
+  such as one from before the app had a metronome.
+- “No tempo · middle 126 bpm”: the take's own middle, for a take of no
+  song or of a song with no tempo. Half its bars were faster than that, and
+  half slower.
+
+To find the beats, the app listens to the drums: the notes of the track
+with the drums icon when it records an e-kit, otherwise that track's sound.
+In a take with no drums icon, or when the drums give no beat to follow, it
+listens to all the tracks together, except one with the Backing track icon,
+and the words end “· from the mix”: the line is rougher then. Where the band stopped, the line breaks.
+
+The tempo is worked out when you open a take, and a long one takes a
+moment: a spinner shows in the corner until it is done. A take shorter than
+four bars says “Too short to show the tempo”, and one with no beat the app
+can follow says “No steady beat found”.
+
+A song has one tempo, so a change the song is meant to have, such as a
+slower bridge, shows as drift too.
+
+To turn more or fewer bars amber, change **Drift shown past** in **Settings
+› Metronome**: 1%, 2%, 3% or 5%.
 
 ### A take's tempo in a DAW
 

@@ -12,6 +12,7 @@ import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
 import { laneOrder } from "@/lib/midi"
 import type { TakeClick } from "@/lib/metronome"
+import type { DriftView } from "@/lib/drift"
 import { MIN_VIEW_SEC, tickTimes } from "@/lib/timeline"
 import type { Marker, MissingNotes, NotesFile, TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
@@ -84,11 +85,14 @@ export function Timeline({
   notesMissing,
   notesRead,
   take = null,
+  drift = null,
 }: {
   player: MultitrackPlayer
   /** The take's click, for Master's button and lane: its tempo and
    *  signature, and whether it was recorded to the click. */
   take?: TakeClick | null
+  /** The band's tempo through the take, drawn along Master's lane. */
+  drift?: DriftView | null
   markers?: Marker[]
   /** Crop, offered under the region's times, where the take can be cut. */
   crop?: RegionCrop
@@ -692,6 +696,7 @@ export function Timeline({
                 position={displayPosition}
                 region={band}
                 take={take}
+                drift={drift}
               />
             </div>
           </div>

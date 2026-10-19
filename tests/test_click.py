@@ -792,7 +792,7 @@ def on_its_own():
     ok("the settings and their defaults",
        m.settings() == {"click_device_index": None, "click_device_missing": None, "click_channels": None,
                         "click_sound": "click", "click_volume": 0.7, "count_in_bars": 1, "tempo_in_wav": True,
-                        "metronome_on": True})
+                        "metronome_on": True, "drift_tolerance": 0.02})
     ok("each is checked and saved", m.set_setting("click_sound", "wood")["ok"] and written[-1]["click_sound"] == "wood"
        and m.set_setting("count_in_bars", 2)["ok"] and m.set_setting("tempo_in_wav", False)["ok"]
        and m.set_setting("click_volume", 0.5)["ok"] and config["click_volume"] == 0.5)

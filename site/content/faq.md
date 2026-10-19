@@ -29,6 +29,14 @@ lights on every click. A take recorded to the click keeps its tempo, and its
 WAV and .mid files carry it: set your DAW to that tempo, and the take's bars
 sit on the project's bars.
 
+## Does it show where we sped up?
+
+Yes. Under the tracks, the Master row draws the band's tempo bar by bar:
+against the click the take was recorded to, or the song's tempo, or, for a
+song without one, the take's own middle. Where the band ran ahead or dragged
+by more than 2% (you can change that in Settings), the line turns amber and
+says by how much.
+
 ## Where do the recordings go?
 
 Into RehearsalRecordings in your home folder: a folder for each rehearsal, a

@@ -17,6 +17,7 @@ export function stubBridge(saved: Record<string, unknown> = {}, missing: string 
     count_in_bars: 1,
     tempo_in_wav: true,
     metronome_on: true,
+    drift_tolerance: 0.02,
     output_device_index: 3,
     output_channels: [1, 2],
     ...saved,

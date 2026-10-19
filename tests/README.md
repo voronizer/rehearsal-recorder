@@ -242,6 +242,26 @@ less than a third of the take as one array of memory. The time of a 3-minute
 take is printed, not asserted. No sound card, no MIDI port: WAVs and `.mid` files
 in a temporary folder. Run with `python tests/test_tempo.py`.
 
+## test_drift.py: where the band drifted
+
+The drift line on Master (drift spec Part 2): the beat tracker in
+`audio/tempo.py`, each bar's tempo in `audio/drift.py`, and `Api.take_drift`.
+The takes are the research's (tempo-drift/research/run.py): a tempo for every
+bar, drums with the band's bass, guitar and voice bleeding in, so every bar
+has a truth to be within 2% of, and the stretches more than 2% off are the ones
+played, to a bar at either end. Pałyn-like takes from the drums' WAV, their
+`.mid`, the mix and with no tempo; a waltz at 96, 6/8 at 198 eighths (audio and
+`.mid`), a ballad at 72; a steady take and one wandering by 1.2% with no
+stretch; bar 1 of a click take past a two-bar count-in, drums coming in after
+eight bars of guitar, a two-bar stop with no tempo; a kick mic and overheads
+summed, silent drums falling to the mix, a take under 4 bars "short", a held
+chord "no-beat". Then the Api: the aim from the click, the take's tempo, the
+song's (through the library) and the take's own middle; the sources by the
+band's icons, a backing track left out of the mix, missing files; the same
+answer again, a rewritten file counted afresh, 32 kept; Record stopping a
+count in progress; the `drift_tolerance` setting. Run with
+`python tests/test_drift.py`.
+
 ## The interface: in ui/, in TypeScript
 
 Beside the code it tests, in two kinds:

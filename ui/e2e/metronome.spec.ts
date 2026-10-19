@@ -1031,7 +1031,7 @@ test("the tab and the gear show the same settings", async ({ page }) => {
     "Clicked before every take that has the click. It is in the recording; the take's clock starts after it."
   )
   await expect(tab).toContainText(
-    "The same settings are behind the gear in the metronome row, on the rehearsal screen."
+    "The click's settings are also behind the gear in the metronome row, on the rehearsal screen."
   )
   // Changed in the tab, and the gear shows it: one setting underneath.
   await tab.getByRole("radio", { name: "Woodblock" }).click()
@@ -1296,7 +1296,9 @@ const said = (page: Page, text: string) =>
   })
 
 test("master click plays with the take", async ({ page }) => {
-  await openEvening(page, "", [
+  // The click's lane alone, as with a take whose files are not there: the
+  // drift line over it has tests of its own (drift.spec.ts).
+  await openEvening(page, "window.__DRIFT__ = {ok: false, why: 'missing'};", [
     { name: "Pałyn", duration_sec: 200 },
     { name: "Ahoń", duration_sec: 150 },
   ])
@@ -1400,7 +1402,9 @@ test("a take without the click", async ({ page }) => {
   await expect(masterClick(page)).toBeDisabled()
   await page.locator("[data-master-click]").hover()
   await expect(page.getByRole("tooltip")).toHaveText("This take was recorded without the click")
-  await expect(clickTag(page)).toHaveText("Recorded without the click")
+  // The lane has the band's tempo instead (drift spec Part 6), against the
+  // take's own middle: it has no song with a tempo.
+  await expect(clickTag(page)).toHaveText("No tempo · middle 120 bpm · from the mix")
   await expect(clickLines(page)).toHaveCount(0)
 })
 
@@ -1497,12 +1501,12 @@ test("the master plate keeps its height", async ({ page }) => {
 })
 
 test("stripes sit on the demo band's beats", async ({ page }) => {
-  // The band's Pałyn 2, played to the click at 128 in 4/4: a bar of the
+  // The band's Viasna, played to the click at 128 in 4/4: a bar of the
   // sticks to count in, then the song from the bar line after it.
   await openBandApp(page)
   await page.locator("#rehearsal-name").fill("Tuesday jam")
   await startButton(page).click()
-  await openTake(page, "Take 2 Pałyn 2")
+  await openTake(page, "Take 5 Viasna")
   // The closest zoom from the take's start: 0 to 2 s.
   const surface = page.getByRole("group", { name: "Take timeline" })
   await surface.evaluate((el) => {
@@ -1525,7 +1529,7 @@ test("stripes sit on the demo band's beats", async ({ page }) => {
     const api = (window as unknown as {
       pywebview: { api: { take_media: (...a: unknown[]) => Promise<{ peaks: number[][] }[]> } }
     }).pywebview.api
-    const [drums] = await api.take_media([{ name: "Drums", file: "/rec/tonight/2/Drums.wav" }], n, 0, 2)
+    const [drums] = await api.take_media([{ name: "Drums", file: "/rec/tonight/5/Drums.wav" }], n, 0, 2)
     const v = drums.peaks[0]
     const out: number[] = []
     for (let i = 0; i < v.length; i++) if (v[i] > 0.15 && (i === 0 || v[i - 1] <= 0.15)) out.push((i / n) * 2)

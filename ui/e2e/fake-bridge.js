@@ -798,12 +798,56 @@ function cutAt(meter, a, b, duration) {
   const start = Math.floor(a / bar + 1e-9) * bar;
   return [start, Math.min(duration, Math.ceil(b / quarter - 1e-9) * quarter)];
 }
+// The tempo through a take, as take_drift counts it, from the take's first
+// track: steady on its aim, unless the band (band.js) says how the take went
+// through driftCurve(file, aim's tempo or null): {start, end, seed, middle,
+// keys}, the band's tempo at a few times, [[seconds, bpm], ...], joined
+// smoothly, with a little unevenness from bar to bar on top. Past `end` the
+// band has stopped and the take rings on: no beat, so those bars have no
+// tempo. The aim is as Python finds it: the click's, the take's own, the
+// song's now, or the middle of the bars.
+let driftCurve = () => null;
+function driftKeyed(keys, t) {
+  if (t <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    const [t0, v0] = keys[i - 1], [t1, v1] = keys[i];
+    if (t <= t1) { const f = (t - t0) / (t1 - t0), s = f * f * (3 - 2 * f); return v0 + (v1 - v0) * s; }
+  }
+  return keys[keys.length - 1][1];
+}
+function fakeDrift(tracks, meter) {
+  if (!tracks || !tracks.length) return {ok:false, why:'missing'};
+  const {tempo, signature, click, song} = meter || {};
+  const own = song ? songTempos.get(song) : null;
+  const aim = tempo && signature ? {tempo, signature, from: click ? 'click' : 'take', song: null}
+    : own ? {tempo: own.tempo, signature: own.signature, from: 'song', song} : null;
+  const curve = driftCurve(tracks[0].file, aim ? aim.tempo : null);
+  const sig = aim ? aim.signature : '4/4';
+  const around = aim ? aim.tempo : curve ? curve.middle : 120;
+  const bar = PER_BAR[sig] * 60 / around;
+  const seconds = fileDurations[tracks[0].file] ?? (P ? P.duration : TAKE);
+  const start = curve ? curve.start : aim && aim.from === 'click' ? bar : 0;
+  const bars = [];
+  for (let n = 0, at = start; at + bar <= seconds + 0.01; n++, at += bar) {
+    const rang = curve && curve.end != null && at + bar / 2 > curve.end;
+    const played = curve ? driftKeyed(curve.keys, at + bar / 2) + (driftHash(n * 7 + curve.seed * 31) - 0.5) * 0.9 : around;
+    bars.push({n: n + 1, start: at, end: at + bar, tempo: rang ? null : Math.round(played * 10) / 10});
+  }
+  if (!bars.length) return {ok:false, why:'short'};
+  const sorted = bars.filter(b => b.tempo !== null).map(b => b.tempo).sort((a, b) => a - b);
+  const middle = sorted[sorted.length >> 1];
+  return {ok:true, source: tracks.some(t => isKit(t)) ? 'drums' : 'mix', per_bar: PER_BAR[sig], middle,
+          aim: aim || {tempo: Math.round(middle), signature: '4/4', from: 'middle', song: null}, bars};
+}
+function driftHash(n) { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
+
 // What set_metronome_setting takes, and what each setting may be.
 const CLICK_SETTINGS = {
   click_sound: (v) => CLICK_SOUNDS.includes(v),
   click_volume: (v) => typeof v === 'number' && v >= 0 && v <= 1,
   count_in_bars: (v) => [0, 1, 2].includes(v),
   tempo_in_wav: (v) => typeof v === 'boolean',
+  drift_tolerance: (v) => [0.01, 0.02, 0.03, 0.05].includes(v),
 };
 // What a quarter counts at, by song, when counting a tempo from a take.
 const COUNTED = {'Dym': 104, 'Ptuška': 86};
@@ -1472,6 +1516,15 @@ window.__MAKE_API__ = () => ({
     return (files || []).map(({name, file}) => withIcon(file
       ? notesOfFile(name, fileDurations[file] ?? (P ? P.duration : TAKE))
       : {name, error:'Notes file not found'}));
+  }),
+
+  // The band's tempo through a take, bar by bar (api.take_drift). See
+  // fakeDrift; window.__DRIFT__ says otherwise: an answer, or a function of
+  // the call's arguments giving one (null for the usual).
+  take_drift: track('take_drift', async (tracks, notes, meter) => {
+    await held('take_drift');
+    const said = typeof window.__DRIFT__ === 'function' ? window.__DRIFT__(tracks, notes, meter) : window.__DRIFT__;
+    return said || fakeDrift(tracks, meter);
   }),
 
   // Long work, scripted by the test through window.__ACTIVITY__. Counted, so
@@ -2485,7 +2538,7 @@ window.__MAKE_API__ = () => ({
     click_channels: readCfg().click_channels ?? null,
     click_sound: readCfg().click_sound ?? 'click', click_volume: readCfg().click_volume ?? 0.7,
     count_in_bars: readCfg().count_in_bars ?? 1, tempo_in_wav: readCfg().tempo_in_wav !== false,
-    metronome_on: clickOn(),
+    metronome_on: clickOn(), drift_tolerance: readCfg().drift_tolerance ?? 0.02,
     cloud_dir: cloudDir,
     server_url:'http://127.0.0.1:1234/', config_path:'/Users/alex/.rehearsal-recorder/config.json',
     version:'0.2.0'}),

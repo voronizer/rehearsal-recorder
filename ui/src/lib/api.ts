@@ -7,6 +7,7 @@
  */
 
 import { reportBridgeError } from "@/lib/bridgeErrors"
+import type { DriftTolerance, TakeDrift } from "@/lib/drift"
 
 export type Device = {
   index: number
@@ -890,12 +891,15 @@ export type MetronomeSettings = {
   tempo_in_wav: boolean
   /** The row's switch: does Record click. */
   metronome_on: boolean
+  /** How far off a bar of the drift line on Master may be before two in a
+   *  row turn amber: 0.01, 0.02, 0.03 or 0.05. */
+  drift_tolerance: DriftTolerance
 }
 
 /** The settings `set_metronome_setting` changes, with what each takes. The
  *  click's output goes through `set_click_device` and `set_click_channels`,
  *  and the switch through `metronome_set_on`. */
-export type MetronomeSettingKey = "click_sound" | "click_volume" | "count_in_bars" | "tempo_in_wav"
+export type MetronomeSettingKey = "click_sound" | "click_volume" | "count_in_bars" | "tempo_in_wav" | "drift_tolerance"
 
 /** Where the metronome is, for the row and the recording screen
  *  (`metronome_state`, polled): idle, ▶ running between takes (`preview`),
@@ -1386,6 +1390,15 @@ type PyApi = {
    *  appeared) is asked with a file of null, for its icon: it is answered
    *  "Notes file not found". */
   take_notes(files: (TrackFile | { name: string; file: null })[]): Promise<TakeNotes[]>
+  /** The band's tempo through a take, bar by bar, for the drift line on
+   *  Master: counted from the drums (their .mid, else their audio) or the mix,
+   *  against the aim Python finds from the take's own meter and its song.
+   *  The last 32 answers are kept, so a take opened again is instant. */
+  take_drift(
+    tracks: TrackFile[],
+    notes: { name: string; file: string }[],
+    meter: { tempo: number | null; signature: Signature | null; click: boolean; song: string | null }
+  ): Promise<TakeDrift>
   activity(): Promise<Activity>
   activity_seen(): Promise<Ok>
   clear_activity(): Promise<Ok>

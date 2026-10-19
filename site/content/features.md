@@ -45,7 +45,8 @@ move on, and History says which ones you never got to.
 
 Each song keeps its tempo and time signature. The click can go to the
 drummer's headphones only, and during a take the edge of the screen lights on
-every click.
+every click. After a take, the Master row shows where the band ran ahead or
+dragged.
 
 ## Deleting goes to the Trash. {#trash}
 

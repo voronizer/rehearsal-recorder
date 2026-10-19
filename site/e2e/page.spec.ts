@@ -436,7 +436,7 @@ test.describe("metronome on the site", () => {
   test("the tile is a picture: nothing plays, nothing to press, and T taps nothing", async ({ page }) => {
     await page.goto("/")
     const tile = metronomeTile(page)
-    const piece = tile.getByRole("img", { name: /128 bpm/ })
+    const piece = tile.getByRole("img", { name: /^The metronome's row/ })
     await expect(piece.locator("section[aria-label='Metronome']")).toBeVisible()
     await expect(piece.locator("[inert]")).toHaveCount(1)
     await expect(tile.locator("audio, video")).toHaveCount(0)
@@ -479,7 +479,7 @@ test.describe("metronome on the site", () => {
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto("/")
-    const piece = metronomeTile(page).getByRole("img", { name: /128 bpm/ })
+    const piece = metronomeTile(page).getByRole("img", { name: /^The metronome's row/ })
     await expect(piece.locator("section[aria-label='Metronome']")).toBeVisible()
     await piece.scrollIntoViewIfNeeded()
     const found = await piece.evaluate((el) => {
@@ -498,6 +498,44 @@ test.describe("metronome on the site", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
   })
 
+  // Under the words and the row, the whole tile wide (drift spec, "On
+  // reha.stream"): Master's row of Pałyn 2, the band's tempo bar by bar on
+  // its lane, its plate beside it where there is room.
+  for (const [width, plate] of [
+    [1280, true],
+    [390, false],
+  ] as const) {
+    test(`at ${width} px the tile shows Master's row of Palyn 2 with where the band drifted`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto("/")
+      const tile = metronomeTile(page)
+      await expect(
+        tile.getByText("After a take, the Master row shows where the band ran ahead or dragged.", { exact: false })
+      ).toBeVisible()
+      const piece = tile.getByRole("img", { name: /^Master's row in the player under Pałyn 2's tracks/ })
+      await expect(piece).toHaveAttribute("aria-label", /Tempo: ahead 6 bpm, bars \d+ to \d+; ahead 7 bpm, bars \d+ to \d+; behind 5 bpm, bars \d+ to \d+\.$/)
+      const lane = piece.locator("[data-master-lane]")
+      await expect(lane.locator("[data-click-tag]")).toHaveText("No click · 128 bpm · 4/4")
+      await expect(piece.locator("[data-master-plate]")).toBeVisible({ visible: plate })
+      await expect(lane.locator("[data-drift-chip]")).toHaveText(["+6", "+7", "−5"])
+      await expect(lane.locator("[data-drift-stretch]")).toHaveCount(3)
+      const found = await piece.evaluate((el) => {
+        const box = (e: Element) => e.getBoundingClientRect()
+        const lane = box(el.querySelector("[data-master-lane]")!)
+        const chips = [...el.querySelectorAll("[data-drift-chip]")].map(box)
+        return { lane, chips, tile: box(el.closest("article")!) }
+      })
+      for (const c of found.chips) {
+        expect(c.left).toBeGreaterThanOrEqual(found.lane.left)
+        expect(c.right).toBeLessThanOrEqual(found.lane.right)
+        expect(c.top).toBeGreaterThanOrEqual(found.lane.top)
+        expect(c.bottom).toBeLessThanOrEqual(found.lane.bottom)
+      }
+      expect(found.lane.right).toBeLessThanOrEqual(found.tile.right)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+    })
+  }
+
   // After the sets tile, whose songs bring their tempos with them: a row
   // of its own at every width, its words beside the row from 1000 px, and
   // the row whole, gear and all.
@@ -507,7 +545,7 @@ test.describe("metronome on the site", () => {
     }) => {
       await page.setViewportSize({ width, height: 900 })
       await page.goto("/")
-      const piece = metronomeTile(page).getByRole("img", { name: /128 bpm/ })
+      const piece = metronomeTile(page).getByRole("img", { name: /^The metronome's row/ })
       await expect(piece.locator("section[aria-label='Metronome']")).toBeVisible()
       const found = await page.locator("#features .bento").evaluate((bento) => {
         const box = (el: Element) => el.getBoundingClientRect()

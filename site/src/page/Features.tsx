@@ -64,17 +64,22 @@ export function Features({ data }: { data: PieceData }) {
             </div>
           )
           const pieces = s?.pieces && <div className={s.left ? "shot left" : "shot"}>{s.pieces}</div>
+          const under = s?.under && <div className="shot under">{s.under}</div>
           return (
             <article key={id} className={LAYOUT[id]}>
               {SPLIT.has(id) ? (
-                <div className="split">
-                  {copy}
-                  {pieces}
-                </div>
+                <>
+                  <div className="split">
+                    {copy}
+                    {pieces}
+                  </div>
+                  {under}
+                </>
               ) : (
                 <>
                   {copy}
                   {pieces}
+                  {under}
                 </>
               )}
             </article>
