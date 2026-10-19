@@ -77,6 +77,7 @@ from rehearsal_recorder.midi.capture import MidiRecorder
 from rehearsal_recorder.midi.identity import find_port, in_order
 from rehearsal_recorder.midi.ports import PortBusy
 from rehearsal_recorder.midi.rules import port_of, records_notes
+from rehearsal_recorder.midi.smf import NO_METER
 from rehearsal_recorder.midi.state import PortState
 
 log = logging.getLogger(__name__)
@@ -430,7 +431,7 @@ class MidiRig:
                 # event that came before.
                 self._queue.put((None, "begin", take, None, now))
 
-    def end_take(self, duration_sec, head_sec=0.0, meter=(500_000, None)) -> list[dict]:
+    def end_take(self, duration_sec, head_sec=0.0, meter=NO_METER) -> list[dict]:
         """
         The take has stopped, `duration_sec` of audio long. Once the writer has
         written everything that arrived before now, each port's notes become its
