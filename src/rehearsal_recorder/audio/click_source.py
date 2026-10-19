@@ -79,8 +79,11 @@ class ClickSource:
         self._rendered = [None] * RENDERED
         self._starts = []
         # Whether a block has been rendered: a take's click waits for that
-        # before it chooses its first click.
+        # before it chooses its first click. Then (the frame after the last
+        # block rendered, that block's length): the first click the take
+        # chooses must come after the block the stream may be rendering.
         self.started = False
+        self.written = None
         # repr() of the first error in render, which carries on in silence.
         self.fault = None
 
@@ -226,6 +229,8 @@ class ClickSource:
 
     def _render(self, out, first_frame, arrival_ns, lead_sec):
         self.clock.mark(arrival_ns, first_frame, lead_sec)
+        # `written` before `started`: whoever sees the one sees the other.
+        self.written = (first_frame + len(out), len(out))
         self.started = True
         asked = self._asked
         if asked is not None and asked[0] != self._taken:

@@ -533,6 +533,18 @@ def one_stream():
        (k, place) == (3, 76800 - 61440) and not back[:place].any()
        and np.array_equal(back[place:place + len(voices.of(0)), 0], voices.of(accent("4/4", k))))
 
+    # A driver that gives no times: the round trip is the stream's own
+    # latencies, which the recorder knows only once the stream is open (None
+    # until then). The ones it asked for are never taken for them.
+    blank = types.SimpleNamespace(currentTime=0.0, inputBufferAdcTime=0.0, outputBufferDacTime=0.0)
+    unsaid = TakeClick(120, "4/4", 1, voices, (0, 1))
+    out = np.zeros((1024, 2), np.float32)
+    unsaid.on_duplex_block(out, 0, 1024, blank, None, now_ns=T)
+    waited = unsaid.first_click_frame is None and not out.any()
+    unsaid.on_duplex_block(out, 1024, 1024, blank, (0.004, 0.006), now_ns=T + 21_333_333)
+    ok("a driver with no times: the first click waits for the stream's own latencies, 10 ms here",
+       waited and unsaid.first_click_frame == 1024 + 4800 + 480)
+
     print("  Stop records on to the next quarter")
     eight = TakeClick(180, "6/8", 1, voices, (0, 1))
     run(eight, 1)
@@ -567,7 +579,9 @@ def another_device():
     in_rate, out_rate = IN * (1 + 200e-6), OUT * (1 - 100e-6)
     T0 = 7_000_000_000
 
-    def take(seconds, late_sec, seed):
+    def take(seconds, late_sec, seed, lead_sec=0.02):
+        """`lead_sec`: how long before its frames are heard the jack's callback
+        runs, less up to 3 ms of jitter."""
         rnd = random.Random(seed)
         T1 = T0 + int((0.25 + late_sec) * 1e9)  # when the jack's first frame is heard
         output = FakeOutput(OUT)
@@ -584,7 +598,7 @@ def another_device():
             return T0 + (1024 * (i + 1)) / in_rate * 1e9 + 3e6 + rnd.random() * 3e6
 
         def output_due(j):
-            return T1 + 1024 * j / out_rate * 1e9 - 20e6 - rnd.random() * 3e6
+            return T1 + 1024 * j / out_rate * 1e9 - lead_sec * 1e9 - rnd.random() * 3e6
 
         next_in, next_out = input_due(0), output_due(0)
         end = T0 + seconds * 1e9
@@ -626,6 +640,13 @@ def another_device():
     ok("the jack starting 2 s late moves the first click after it", tc.first_click_frame > (2.0 + 0.2) * IN)
     ok("and the count-in stays whole, each heard on its frame",
        [a for _, a in clicks[:5]] == [2, 0, 0, 0, 2] and worst(tc, clicks, T1) < 1.0)
+
+    # Bluetooth headphones hear a block 0.3 s after it is written, so the
+    # first click comes late enough for the jack to have it in time.
+    tc, clicks, T1 = take(8, 0.0, 7, lead_sec=0.3)
+    ok("an output heard 0.3 s after it is written: the count-in whole, each click on its frame",
+       [a for _, a in clicks[:5]] == [2, 0, 0, 0, 2] and worst(tc, clicks, T1) < 1.0
+       and tc.first_click_frame > 0.3 * IN)
 
     made = TakeClick(120, "4/4", 1, Voices("click", IN, 0.7), (0,), output=FakeOutput(OUT))
     ok("the click is made at the jack's rate, 44100, not the desk's",

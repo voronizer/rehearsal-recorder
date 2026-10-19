@@ -24,7 +24,9 @@ the files hold whole quarters (metronome spec, Part 3). When the click is on the
 recording card, the take's stream has outputs as well as inputs and the click is
 written into them in the callback that reads the inputs; on another device, the
 recorder only tells the click where the take is. Either way the click's troubles
-are its own: they never stop the take, nor show in `problem`.
+are its own: they never stop the take, nor show in `problem`. A card that will
+not open its outputs with its inputs records from its inputs alone, its click
+to no output and its grid kept.
 """
 
 import json
@@ -41,6 +43,7 @@ from rehearsal_recorder.activity import Stages
 from rehearsal_recorder.audio import heartbeat
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
+    DriverNotAnswering,
     close_stream,
     input_latency,
     open_stream,
@@ -86,6 +89,10 @@ CLICK_TICK_SEC = 0.05
 # quiet for RUN_ON_QUIET_SEC.
 RUN_ON_SEC = 2.0
 RUN_ON_QUIET_SEC = 0.5
+
+# Why a click on the recording card is not heard when the card would not open
+# its outputs with its inputs.
+OUTPUTS_REFUSED = "Its outputs would not open with its inputs."
 
 
 def slept_notice(at):
@@ -140,6 +147,16 @@ def _stream_latency(stream, asked):
     if isinstance(latency, (int, float)) and math.isfinite(latency) and latency > 0:
         return float(latency)
     return asked
+
+
+def _device_name(index):
+    """A device's name, for the screen to say which; plainer words when
+    PortAudio cannot say."""
+    try:
+        with STREAM_LOCK:
+            return sd.query_devices(index)["name"]
+    except Exception:
+        return "the recording card"
 
 
 def _duplex_latency(stream, asked):
@@ -201,11 +218,13 @@ class AudioRecorder:
         # writes it to the log there.
         self.clock_fault = None
         # The same for the click: what it raised first, the take going on.
+        # Stop adds what the click's own rendering kept (ClickSource.fault),
+        # so the app has one place to read it from.
         self.click_fault = None
-        # The first click as take.json last said it, and the stream's
-        # (input, output) latency while it has outputs.
+        # The first click as take.json last said it, and the stream's own
+        # (input, output) latency while it has outputs, None until it says.
         self._click_written = None
-        self._duplex_latency = (0.0, 0.0)
+        self._duplex_latency = None
 
         self._stream = None
         self._raw_files = {}
@@ -467,9 +486,11 @@ class AudioRecorder:
             self._note_click()
 
     def _click_pending(self):
-        """Whether take.json has yet to say the first click the take chose."""
+        """Whether take.json has yet to say the first click the take chose,
+        or the take has yet to choose it."""
         click = self.click
-        return click is not None and self._click_written != click.first_click_frame
+        return click is not None and (click.first_click_frame is None
+                                      or self._click_written != click.first_click_frame)
 
     def _note_click(self):
         """take.json again, once the take has chosen its first click: a take
@@ -480,58 +501,32 @@ class AudioRecorder:
     def start(self):
         self._write_record()
         click = self.click
-        duplex = click is not None and click.duplex
         try:
             for track in self.tracks:
                 path = self.out_dir / f"{self.safe_name(track['name'])}{RAW_SUFFIX}"
                 self._raw_files[track["name"]] = open(path, "wb")
 
             latency = input_latency(sd, self.device_index)
-            if click is not None and not duplex:
-                # The click's own stream first, so the take's first blocks
-                # find it running and the count-in starts at once.
-                click.start()
-            with STREAM_LOCK:
-                if self._clock is not None:
-                    # open_stream starts the stream, and its first block can
-                    # be marked before it returns: the clock has the latency
-                    # that was asked for until the stream says what it is.
-                    self._clock.started_ns = time.perf_counter_ns()
-                    self._clock.latency_sec = latency
-                if duplex:
-                    # The card's own outputs carry the click, on the card's
-                    # clock: one stream, never a second on a card the take holds.
-                    asked = (latency, output_latency(sd, self.device_index))
-                    self._duplex_latency = asked
-                    self._stream = open_stream(
-                        sd.Stream,
-                        device=(self.device_index, self.device_index),
-                        channels=(self._max_channel, click.width),
-                        samplerate=self.samplerate,
-                        dtype=(self._dtype, "float32"),
-                        blocksize=BLOCK_FRAMES,
-                        latency=asked,
-                        callback=self._duplex_callback,
-                        finished_callback=self._finished,
-                    )
-                else:
-                    self._stream = open_stream(
-                        sd.InputStream,
-                        device=self.device_index,
-                        channels=self._max_channel,
-                        samplerate=self.samplerate,
-                        dtype=self._dtype,
-                        blocksize=BLOCK_FRAMES,
-                        latency=latency,
-                        callback=self._callback,
-                        finished_callback=self._finished,
-                    )
-            if duplex:
-                self._duplex_latency = _duplex_latency(self._stream, asked)
-                if self._clock is not None:
-                    self._clock.latency_sec = self._duplex_latency[0]
-            elif self._clock is not None:
-                self._clock.latency_sec = _stream_latency(self._stream, latency)
+            if click is not None and click.duplex:
+                try:
+                    self._open_duplex(latency)
+                except DriverNotAnswering:
+                    raise
+                except Exception as e:
+                    # Record still records (spec Part 4): from the inputs
+                    # alone, the click to no output, counted by the take's
+                    # clock, so the take keeps its grid and the screen still
+                    # lights the beat.
+                    print(f"[audio] the click's outputs did not open: {e}")
+                    click.without_outputs(_device_name(self.device_index), OUTPUTS_REFUSED)
+                    if self._clock is None:
+                        self._clock = AudioClock(self.samplerate)
+            if self._stream is None:
+                if click is not None:
+                    # The click's own stream first, so the take's first blocks
+                    # find it running and the count-in starts at once.
+                    click.start()
+                self._open_input(latency)
         except BaseException:
             if click is not None:
                 click.stop()
@@ -545,6 +540,55 @@ class AudioRecorder:
         self._flush_thread.start()
         self._tick_thread = threading.Thread(target=self._tick_loop, daemon=True)
         self._tick_thread.start()
+
+    def _open_duplex(self, latency):
+        """The take's stream with the card's outputs too, which carry the
+        click on the card's own clock: never a second stream on a card the
+        take holds."""
+        asked = (latency, output_latency(sd, self.device_index))
+        with STREAM_LOCK:
+            if self._clock is not None:
+                # As in _open_input; the click's round trip waits for the
+                # stream's own latencies (TakeClick.on_duplex_block).
+                self._clock.started_ns = time.perf_counter_ns()
+                self._clock.latency_sec = latency
+            self._stream = open_stream(
+                sd.Stream,
+                device=(self.device_index, self.device_index),
+                channels=(self._max_channel, self.click.width),
+                samplerate=self.samplerate,
+                dtype=(self._dtype, "float32"),
+                blocksize=BLOCK_FRAMES,
+                latency=asked,
+                callback=self._duplex_callback,
+                finished_callback=self._finished,
+            )
+        self._duplex_latency = _duplex_latency(self._stream, asked)
+        if self._clock is not None:
+            self._clock.latency_sec = self._duplex_latency[0]
+
+    def _open_input(self, latency):
+        """The take's stream, inputs only."""
+        with STREAM_LOCK:
+            if self._clock is not None:
+                # open_stream starts the stream, and its first block can
+                # be marked before it returns: the clock has the latency
+                # that was asked for until the stream says what it is.
+                self._clock.started_ns = time.perf_counter_ns()
+                self._clock.latency_sec = latency
+            self._stream = open_stream(
+                sd.InputStream,
+                device=self.device_index,
+                channels=self._max_channel,
+                samplerate=self.samplerate,
+                dtype=self._dtype,
+                blocksize=BLOCK_FRAMES,
+                latency=latency,
+                callback=self._callback,
+                finished_callback=self._finished,
+            )
+        if self._clock is not None:
+            self._clock.latency_sec = _stream_latency(self._stream, latency)
 
     def _discard_files(self):
         """
@@ -637,6 +681,7 @@ class AudioRecorder:
         self._let_go()
         if click is not None:
             click.stop()
+            self._click_done(click)
 
         # A click take's files run from its first click to its end_frame.
         head, frames, acid = 0, None, None
@@ -702,7 +747,14 @@ class AudioRecorder:
         self._let_go()
         if self.click is not None:
             self.click.stop()
+            self._click_done(self.click)
             self._note_click()
+
+    def _click_done(self, click):
+        """The click has played its last: what went wrong in its rendering, if
+        nothing went wrong here first, joins click_fault."""
+        if self.click_fault is None:
+            self.click_fault = click.source.fault
 
     def _run_on(self, click):
         """

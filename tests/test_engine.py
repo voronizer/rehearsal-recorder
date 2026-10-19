@@ -12475,7 +12475,9 @@ def main():
     ok("the first block chose the first click: 0.1 s on, and a 10 ms round trip after that", first80 == 4800 + 480)
     ok("  the click written into the outputs a round trip early",
        not heard80[:4800].any() and np.array_equal(heard80[4800:4800 + len(voices80.of(2)), 0], voices80.of(2)))
-    ok("  and take.json written again once it was chosen", (written80(duplex80) or {}).get("first_click_frame") == first80)
+    # The take's tick comes every 50 ms until take.json has it, not every second.
+    ok("  and take.json written again once it was chosen, within moments",
+       (written80(duplex80, deadline=0.5) or {}).get("first_click_frame") == first80)
     ok("a click take's problem is still only the recording's", rec80.problem() is None)
     result80 = stop80(rec80, 100)
     # Stopped at frame 102400: the next quarter from the first click is its fifth,
@@ -12550,6 +12552,41 @@ def main():
     _, events80 = read_events80(early80 / "Keys.mid")
     ok("  and its .mid: a key a quarter second after the first click is at 0.25 s",
        [(round(sec * 1920), data) for sec, data in events80] == [(480, b"\x90\x3c\x40"), (768, b"\x80\x3c\x00")])
+
+    # The card will not open its outputs with its inputs: Record still
+    # records, from the inputs alone, a click take on its grid, the beat still
+    # lit on the screen (spec Part 4).
+    from rehearsal_recorder.metronome import Metronome as Metronome80
+
+    class Refusing80:
+        def __init__(self, **kw):
+            raise RuntimeError("Invalid number of channels")
+
+    duplex_kind80 = _sd.Stream
+    _sd.Stream = Refusing80
+    refused80 = tmp80 / "outputs refused"
+    tc80e = TakeClick80(120, "4/4", 1, voices80, (0, 1))
+    rec80e = Rec80(0, SR, two80, refused80, click=tc80e)
+    try:
+        rec80e.start()
+    finally:
+        _sd.Stream = duplex_kind80
+    ok("a card whose outputs will not open with its inputs: the take records from its inputs alone",
+       rec80e._stream.kw["callback"] == rec80e._callback and rec80e._stream.kw["channels"] == 2
+       and not tc80e.duplex and tc80e.problem() == "Its outputs would not open with its inputs.")
+    m80 = Metronome80({}, lambda: None, lambda: None, lambda key: None, None)
+    m80.begin_take(120, "4/4", tc80e)
+    for i in range(10):
+        block80(rec80e, i)
+    state80 = m80.state()
+    ok("  its first click chosen at once, the screen told when each falls, and which card is mute",
+       tc80e.first_click_frame == 9600 and len(state80["upcoming"]) >= 2 and state80["output_missing"] == "Interface")
+    stop80(rec80e, 10)
+    m80.end_take()
+    gtr80e = wav80(refused80 / "Gtr.wav")
+    ok("  a click take all the same: its WAVs start at its first click and carry its tempo",
+       len(gtr80e) == cf80(1, 120, SR) and gtr80e[0] == 9600 and read_acid80(refused80 / "Gtr.wav") == Acid80(120.0, 4, 4)
+       and record80(refused80)["click"]["first_click_frame"] == 9600 and record80(refused80)["click"]["tempo"] == 120)
 
     print("\n[81] The click elsewhere")
     # The click on the desk while the interface records: the take's stream has

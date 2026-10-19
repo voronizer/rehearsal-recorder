@@ -34,14 +34,20 @@ import time
 
 from rehearsal_recorder.audio.click import (
     SIGNATURES, Voices, click_frame, per_bar, per_quarter, quarter_tempo, tempo_range)
+from rehearsal_recorder.audio.click_output import SilentOutput
 from rehearsal_recorder.audio.click_source import ClickSource
 from rehearsal_recorder.audio.click_timing import lead_of, round_trip_frames
 from rehearsal_recorder.audio.wavfile import Acid
 from rehearsal_recorder.midi.smf import meter_of
 
 # How long after the first block of another device's output the first click
-# comes: time for its stream to have it in a block, through two clocks.
+# comes, at the least: time for its stream to have it in a block, through two
+# clocks. An output heard long after it is written (Bluetooth) has it later,
+# after the block it may be writing as the click is chosen, in steps of
+# LATER_STEP_SEC and no more than LATEST_SEC on.
 OTHER_DEVICE_LEAD_SEC = 0.2
+LATER_STEP_SEC = 0.05
+LATEST_SEC = 2.0
 
 # How long a take waits for another device's output to start before it
 # chooses its first click anyway: the output is then taken for one that is not
@@ -55,9 +61,9 @@ def acid_of(tempo, signature):
     return Acid(float(quarter_tempo(tempo, signature)), num, den)
 
 
-def _whole(value):
-    """An int that is no bool, else None."""
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
+def whole(value):
+    """Whether `value` is a whole number: an int that is no bool."""
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def cut_of(click):
@@ -71,14 +77,14 @@ def cut_of(click):
     """
     if not isinstance(click, dict):
         return 0, None, None
-    first = _whole(click.get("first_click_frame"))
-    if first is None or first < 0:
+    first = click.get("first_click_frame")
+    if not whole(first) or first < 0:
         return 0, None, None
-    end = _whole(click.get("end_frame"))
-    frames = end - first if end is not None and end >= first else None
-    tempo, signature = _whole(click.get("tempo")), click.get("signature")
+    end = click.get("end_frame")
+    frames = end - first if whole(end) and end >= first else None
+    tempo, signature = click.get("tempo"), click.get("signature")
     acid = None
-    if (click.get("wav_tempo") is True and tempo is not None and signature in SIGNATURES
+    if (click.get("wav_tempo") is True and whole(tempo) and signature in SIGNATURES
             and tempo_range(signature)[0] <= tempo <= tempo_range(signature)[1]):
         acid = acid_of(tempo, signature)
     return first, frames, acid
@@ -128,16 +134,33 @@ class TakeClick:
         """
         The take's stream, with outputs, has a block: `frames_done` frames
         were written before it, and its output `outdata` (zeroed) is the same
-        frames on the output's side. `latency` is the stream's (input, output)
-        latency, what is believed where the driver's times are not. The first
-        block chooses the first click: `lead_sec` on, and a round trip after,
-        since it comes back into the inputs that much later.
+        frames on the output's side. `latency` is the stream's own (input,
+        output) latency, what is believed where the driver's times are not;
+        None until the stream says it, as its first blocks can come before
+        it is open. The first block whose round trip is known, the driver's
+        or from the stream's own latencies (never the ones asked for),
+        chooses the first click: `lead_sec` on, and a round trip after, since
+        it comes back into the inputs that much later.
         """
         if self.first_click_frame is None:
-            self._round_trip = round_trip_frames(time_info, latency[0] + latency[1], self.samplerate)
-            self.first_click_frame = frames_done + round(self.lead_sec * self.samplerate) + self._round_trip
-        self.source.render(outdata, frames_done, time.perf_counter_ns() if now_ns is None else now_ns,
-                           lead_of(time_info, latency[1]))
+            trip = round_trip_frames(time_info, None if latency is None else latency[0] + latency[1],
+                                     self.samplerate)
+            if trip is None:
+                return
+            self._round_trip = trip
+            self.first_click_frame = frames_done + round(self.lead_sec * self.samplerate) + trip
+        lead = lead_of(time_info, None if latency is None else latency[1])
+        if lead is not None:
+            self.source.render(outdata, frames_done, time.perf_counter_ns() if now_ns is None else now_ns, lead)
+
+    def without_outputs(self, name, reason):
+        """
+        The take's stream would not open with outputs: the click goes to
+        none, `name` with `reason` saying why. It is placed by the
+        recording's clock as on another device, so the take keeps its grid
+        and the screen still lights each click.
+        """
+        self.output = SilentOutput(name, reason, self.samplerate)
 
     # ---------- another device ----------
 
@@ -164,14 +187,25 @@ class TakeClick:
         """
         The recording's block from frame `frames_done` is in, and `clock` (an
         AudioClock) is marked with it. The first block after the output's
-        first, or after the wait for one, chooses the first click.
+        first, or after the wait for one, chooses the first click: heard no
+        sooner than the output's block after the one it may be writing now.
         """
         if self.first_click_frame is not None:
             return
-        if (self.source.started or self.output.problem() is not None
+        source = self.source
+        if not (source.started or self.output.problem() is not None
                 or frames_done >= OUTPUT_WAIT_SEC * self.samplerate):
-            self._in_clock = clock
-            self.first_click_frame = frames_done + round(OTHER_DEVICE_LEAD_SEC * self.samplerate)
+            return
+        first = frames_done + round(OTHER_DEVICE_LEAD_SEC * self.samplerate)
+        written = source.written
+        if written is not None:
+            due = source.clock.ns_at(written[0] + written[1])
+            step = round(LATER_STEP_SEC * self.samplerate)
+            latest = frames_done + round(LATEST_SEC * self.samplerate)
+            while due is not None and first < latest and clock.ns_at(first) < due:
+                first += step
+        self._in_clock = clock
+        self.first_click_frame = first
 
     # ---------- where each click goes ----------
 
