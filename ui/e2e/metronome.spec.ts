@@ -157,6 +157,69 @@ const litLook = (page: Page, accent: string) =>
 const digitsOf = (frames: Frame[]) =>
   frames.map((f) => f.digit).filter((d, i, all): d is string => d !== null && d !== all[i - 1])
 
+/** Holds the fake's answer to `name` until `letGo`. */
+const hold = (page: Page, name: string) =>
+  page.evaluate((n) => {
+    const w = window as unknown as { __HOLD__?: Record<string, Promise<void>>; __LET_GO__?: () => void }
+    w.__HOLD__ = { ...w.__HOLD__, [n]: new Promise<void>((r) => (w.__LET_GO__ = r)) }
+  }, name)
+const letGo = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __HOLD__?: object; __LET_GO__: () => void }
+    w.__HOLD__ = {}
+    w.__LET_GO__()
+  })
+
+/** From now on, each value the tempo field shows, once, in order; read back
+ *  with `tempos`. */
+const watchTempo = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __TEMPOS__: string[]; __WATCH_TEMPO__: boolean }
+    w.__TEMPOS__ = []
+    w.__WATCH_TEMPO__ = true
+    const look = () => {
+      if (!w.__WATCH_TEMPO__) return
+      const v = document.querySelector<HTMLInputElement>("footer input[aria-label='Tempo']")?.value
+      if (v !== undefined && v !== w.__TEMPOS__.at(-1)) w.__TEMPOS__.push(v)
+      requestAnimationFrame(look)
+    }
+    requestAnimationFrame(look)
+  })
+const tempos = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as { __TEMPOS__: string[]; __WATCH_TEMPO__: boolean }
+    w.__WATCH_TEMPO__ = false
+    return w.__TEMPOS__
+  })
+
+/** The fake's bridge, to change one of its answers while a test runs. */
+type Bridge = {
+  pywebview: { api: Record<string, (...args: unknown[]) => Promise<unknown>> }
+  __GATES__: (() => void)[]
+}
+
+/** Where the click was sent, in order: its device, then its outputs. */
+const clickOutputCalls = (page: Page) =>
+  page.evaluate(() =>
+    (window as unknown as { __CALLS__: { name: string; args: unknown[] }[] }).__CALLS__
+      .filter((c) => c.name === "set_click_device" || c.name === "set_click_channels")
+      .map((c) => [c.name, ...c.args])
+  )
+
+/** The player plays through UA Monitors, the fake's first output. */
+const playerOnMonitors = (page: Page) =>
+  page.evaluate(() => (window as unknown as Bridge).pywebview.api.set_output_device(0))
+
+/** A song with a take tonight and no tempo: Dym, the next take's name. */
+async function dymToCount(page: Page) {
+  await openApp(page, { before: "window.__TONIGHT__ = [{name: 'Dym', duration_sec: 200}];" })
+  await startRehearsal(page, 2)
+  // The field offers Dym again, so another song is named first.
+  await nameNext(page, "Pałyn")
+  await nameNext(page, "Dym")
+  await expect(status(page)).toHaveText("No tempo yet: type or tap one, or count it from the last take")
+}
+
 test.describe("the row on the rehearsal screen", () => {
   test("metronome row follows the next song", async ({ page }) => {
     // Dym played once tonight, with no tempo: a take to count one from.
@@ -191,6 +254,89 @@ test.describe("the row on the rehearsal screen", () => {
     expect(await callCount(page, "metronome_save_to_song")).toBe(1)
   })
 
+  test("a signature picked after a count counts the take again", async ({ page }) => {
+    await dymToCount(page)
+    await status(page).getByRole("button", { name: "count it from the last take" }).click()
+    await expect(tempo(page)).toHaveValue("104")
+    // The same count in 6/8 is Python's to say, in eighths: not 104 kept.
+    await signature(page).click()
+    await page.getByRole("option", { name: "6/8" }).click()
+    await expect(tempo(page)).toHaveValue("208")
+    expect((await calls(page, "count_tempo")).map((c) => c.args.at(-1))).toEqual(["4/4", "6/8"])
+    expect((await sent(page)).at(-1)).toEqual([208, "6/8"])
+    await expect(status(page)).toHaveText(/^Counted from Dym \d+\. Pick the time signature, then save it to the song$/)
+
+    // A number typed over the count is the band's: a signature keeps it.
+    await tempo(page).fill("200")
+    await tempo(page).press("Enter")
+    await expect(status(page)).toHaveText(
+      "No tempo in the song yet: the first take played to the click keeps this one. Save now"
+    )
+    await signature(page).click()
+    await page.getByRole("option", { name: "3/4" }).click()
+    await expect(tempo(page)).toHaveValue("200")
+    expect((await sent(page)).at(-1)).toEqual([200, "3/4"])
+    expect(await calls(page, "count_tempo")).toHaveLength(2)
+  })
+
+  test("a count is dropped when the next take names another song meanwhile", async ({ page }) => {
+    await dymToCount(page)
+    await hold(page, "count_tempo")
+    await status(page).getByRole("button", { name: "count it from the last take" }).click()
+    await expect(status(page)).toHaveText("Counting the tempo from the last take…")
+    await nameNext(page, "Pałyn")
+    await expect(tempo(page)).toHaveValue("128")
+    await letGo(page)
+    await page.waitForTimeout(500)
+    // Dym's count is not Pałyn's tempo, nor held for Dym.
+    expect(await sent(page)).toEqual([])
+    await expect(tempo(page)).toHaveValue("128")
+    await expect(status(page)).toHaveText("The song's tempo.")
+    await nameNext(page, "Dym")
+    await expect(tempo(page)).toHaveValue("")
+  })
+
+  test("quick presses hold, and a refused change goes back", async ({ page }) => {
+    await rehearse(page, "Pałyn")
+    await expect(tempo(page)).toHaveValue("128")
+    // Python answers the first press late, and takes the second later
+    // still: the field never shows the first again meanwhile.
+    await page.evaluate(() => {
+      const w = window as unknown as Bridge
+      const api = w.pywebview.api
+      const real = api.metronome_set
+      w.__GATES__ = []
+      const gate = () => new Promise<void>((r) => w.__GATES__.push(r))
+      let n = 0
+      api.metronome_set = async (...args) => {
+        const k = n++
+        if (k === 1) await gate()
+        const res = await real(...args)
+        if (k === 0) await gate()
+        return res
+      }
+    })
+    await watchTempo(page)
+    const faster = row(page).getByRole("button", { name: "Faster" })
+    await faster.click()
+    await faster.click()
+    await expect(tempo(page)).toHaveValue("130")
+    await page.evaluate(() => (window as unknown as Bridge).__GATES__[0]())
+    await page.waitForTimeout(400)
+    await page.evaluate(() => (window as unknown as Bridge).__GATES__[1]())
+    await expect.poll(async () => (await metronome(page)).tempo).toBe(130)
+    await page.waitForTimeout(300)
+    expect(await tempos(page)).toEqual(["128", "129", "130"])
+
+    // Refused: the field goes back to what Python holds, and says why.
+    await page.evaluate(() => {
+      ;(window as unknown as Bridge).pywebview.api.metronome_set = async () => ({ ok: false, error: "Not now" })
+    })
+    await faster.click()
+    await expect(page.getByText("Not now")).toBeVisible()
+    await expect(tempo(page)).toHaveValue("130")
+  })
+
   test("a change holds until another song and saves to it", async ({ page }) => {
     await rehearse(page, "Pałyn")
     await expect(tempo(page)).toHaveValue("128")
@@ -222,7 +368,9 @@ test.describe("the row on the rehearsal screen", () => {
     await openApp(page)
     await startRehearsal(page)
     await expect(field(page)).toHaveValue("Take 1")
+    // Empty, the field shows a dash.
     await expect(tempo(page)).toHaveValue("")
+    await expect(tempo(page)).toHaveAttribute("placeholder", "—")
     await expect(status(page)).toHaveText("Free take: no click unless you set a tempo.")
     await expect(play(page)).toBeDisabled()
 
@@ -370,11 +518,19 @@ test.describe("the row on the rehearsal screen", () => {
     ]
     const boxes = async () => Promise.all(parts().map(box))
     const was = await boxes()
-    for (const name of ["Ahoń", "Dym", "Take 1", "Sonca", "Pałyn"]) {
+    // Each with its label in plain letters, as test labels keep to cp1252.
+    const songs = [
+      ["Ahoń", "Ahon"],
+      ["Dym", "Dym"],
+      ["Take 1", "Take 1"],
+      ["Sonca", "Sonca"],
+      ["Pałyn", "Palyn"],
+    ]
+    for (const [name, label] of songs) {
       await nameNext(page, name)
       await expect(status(page)).not.toHaveText("")
       await page.waitForTimeout(150)
-      expect(await boxes(), name).toEqual(was)
+      expect(await boxes(), label).toEqual(was)
     }
     // A change held, and its long line.
     await row(page).getByRole("button", { name: "Faster" }).click()
@@ -472,7 +628,7 @@ test.describe("the row on the rehearsal screen", () => {
       await expect(page.getByRole("group", { name: "Take timeline" })).toBeVisible()
       await settled(page)
       const inView = await lanes()
-      expect(inView, "lanes in view").toBeGreaterThanOrEqual(LANES_AT_960)
+      expect(inView, "lanes in view").toBe(LANES_AT_960)
       await nameNext(page, "Pałyn")
       await expect(status(page)).toHaveText("The song's tempo.")
       expect(await lanes(), "lanes in view after a song is picked").toBe(inView)
@@ -481,7 +637,8 @@ test.describe("the row on the rehearsal screen", () => {
 })
 
 /** The lanes of Pałyn 1 wholly in view at 960x680 before the row was in
- *  the footer. */
+ *  the footer, measured on that build (26dc6a8) in both themes: its one
+ *  lane, 18 px clear of the master's band. With the row it is 4 px clear. */
 const LANES_AT_960 = 1
 
 test.describe("while a take records", () => {
@@ -549,6 +706,27 @@ test.describe("while a take records", () => {
     expect(Math.abs(shown[0].t - end)).toBeLessThanOrEqual(200)
     const one = frames.find((f) => f.clockShown && f.clock === "0:01")!
     expect(Math.abs(one.t - end - 1000)).toBeLessThanOrEqual(200)
+  })
+
+  test("the clock waits at 0:00 until the count-in is known", async ({ page }) => {
+    // Python chooses the first click a second and a half after Record, as
+    // with the click on another device: until then the take says it counts
+    // in, with no time for it yet.
+    await rehearse(page, "Pałyn", "window.__COUNT_IN_LATE_MS__ = 1500;")
+    await watchBeat(page)
+    await record(page).click()
+    await expect(row(page).locator("[data-status-line]")).toHaveText("Clicking to Stop.", { timeout: 6_000 })
+    const frames = await beats(page)
+    const first = frames.findIndex((f) => f.digit !== null)
+    expect(first, "the count-in came").toBeGreaterThan(0)
+    // Held at 0:00 meanwhile: never a clock run from Record, then hidden.
+    const before = frames.slice(0, first)
+    expect(before.some((f) => f.clockShown), "the clock shown while it waits").toBe(true)
+    expect(before.filter((f) => f.clockShown && f.clock !== "0:00")).toEqual([])
+    expect(digitsOf(frames)).toEqual(["1", "2", "3", "4"])
+    // And from the count-in's end it counts from 0:00.
+    const after = frames.slice(first).filter((f) => f.clockShown)
+    expect(after[0].clock).toBe("0:00")
   })
 
   test("the switch silences the click mid-take", async ({ page }) => {
@@ -673,13 +851,75 @@ test("the gear holds the four settings, and a sound picked plays a bar", async (
     "count_in_bars",
     2,
   ])
-  // The volume is set when it is let go, and a bar plays at it.
+  // The volume is set when it is let go, and a bar plays at it: once for
+  // a run of key presses, not at each step.
+  const volumes = async () =>
+    (await calls(page, "set_metronome_setting")).filter((c) => c.args[0] === "click_volume").map((c) => c.args[1])
+  const previews = async () => (await calls(page, "metronome_preview")).map((c) => c.args)
   await pop.getByRole("slider", { name: "Click volume" }).focus()
-  await page.keyboard.press("ArrowLeft")
-  await expect.poll(async () => (await calls(page, "set_metronome_setting")).at(-1)?.args).toEqual([
-    "click_volume",
-    0.69,
-  ])
+  for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft")
+  await expect(pop.getByRole("slider", { name: "Click volume" })).toHaveAttribute("aria-valuenow", "0.67")
+  await expect.poll(volumes).toEqual([0.67])
+  await expect.poll(previews).toEqual([["wood"], []])
+  await page.waitForTimeout(500)
+  expect(await volumes()).toEqual([0.67])
+  expect(await previews()).toEqual([["wood"], []])
   await page.keyboard.press("Escape")
   await expect(pop).toHaveCount(0)
+})
+
+test.describe("the click's output", () => {
+  const device = (page: Page) =>
+    page.getByRole("dialog", { name: "Metronome settings" }).getByRole("combobox", { name: "Click output" })
+  const outputs = (page: Page) =>
+    page.getByRole("dialog", { name: "Metronome settings" }).getByRole("combobox", { name: "Outputs" })
+
+  test("the click goes where the player plays until its output is picked", async ({ page }) => {
+    await rehearse(page, "Pałyn")
+    // The player on the system output: nothing of the click's to pick.
+    await gear(page).click()
+    await expect(device(page)).toHaveText("Where the player plays")
+    await expect(outputs(page)).toHaveText("1–2")
+    await expect(outputs(page)).toBeDisabled()
+    await page.keyboard.press("Escape")
+
+    // The player on UA Monitors: its outputs are the ones shown.
+    await playerOnMonitors(page)
+    await gear(page).click()
+    await expect(device(page)).toHaveText("Where the player plays")
+    await expect(outputs(page)).toHaveText("1–2")
+    // Outputs picked with no device saved: the device is saved first, so
+    // the outputs shown are the ones the click uses.
+    await outputs(page).click()
+    await page.getByRole("option", { name: "2 (mono)" }).click()
+    await expect.poll(() => clickOutputCalls(page)).toEqual([
+      ["set_click_device", 0],
+      ["set_click_channels", [2]],
+    ])
+    await expect(device(page)).toContainText("UA Monitors")
+    await expect(outputs(page)).toHaveText("2 (mono)")
+
+    // And back to where the player plays.
+    await device(page).click()
+    await page.getByRole("option", { name: "Where the player plays" }).click()
+    await expect.poll(async () => (await clickOutputCalls(page)).at(-1)).toEqual(["set_click_device", null])
+    await expect(device(page)).toHaveText("Where the player plays")
+    await expect(outputs(page)).toHaveText("1–2")
+  })
+
+  test("an unplugged click output shows under its own name", async ({ page }) => {
+    await rehearse(
+      page,
+      "Pałyn",
+      `localStorage.setItem("mock-python-config", JSON.stringify({theme: "dark", ui_scale: 1,
+        click_device_index: 7, click_channels: [3, 4]}));
+      window.__CLICK_MISSING__ = "Headphone amp";`
+    )
+    // The player has an output of its own, which is not the click's.
+    await playerOnMonitors(page)
+    await gear(page).click()
+    await expect(device(page)).toHaveText("“Headphone amp” is not connected")
+    await expect(outputs(page)).toHaveText("3–4")
+    await expect(outputs(page)).toBeDisabled()
+  })
 })

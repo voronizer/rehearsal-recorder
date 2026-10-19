@@ -761,6 +761,10 @@ function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); 
 //                                         index (by default, with __HOST_API__,
 //                                         the ASIO desk)
 //   window.__COUNT_ERROR__ = 'No files'   count_tempo fails with it
+//   window.__COUNT_IN_LATE_MS__ = 1500    a click take's first click is chosen
+//                                         this long after Record, as on another
+//                                         device: till then it says `count`
+//                                         with no count-in time
 //   window.__PAD_TAP__()                  a hit on a pad: a tap, while the screen
 //                                         has asked to hear them
 // and a test can change them while it runs.
@@ -885,7 +889,10 @@ async function metroState() {
   if (take) {
     // The row cannot change under a take: what it shows is the take's.
     Object.assign(out, {phase:'take', tempo:take.tempo, signature:take.signature});
-    if (take.click) {
+    if (take.click && now < take.grid.t0) {
+      // The first click is not chosen yet: no time, and nothing to hear.
+      out.phase = 'count';
+    } else if (take.click) {
       out.since_count_in_ms = (now - take.countEnd) * 1000;
       if (now < take.countEnd) {
         out.phase = 'count';
@@ -910,7 +917,8 @@ function metroStartTake(number) {
   metroFollow();
   metro.run = null;
   const {tempo, signature} = metro, click = tempo !== null && clickOn();
-  const bars = readCfg().count_in_bars ?? 1, t0 = clock();
+  const bars = readCfg().count_in_bars ?? 1;
+  const t0 = clock() + (click ? (window.__COUNT_IN_LATE_MS__ || 0) / 1000 : 0);
   metro.meters[number] = {tempo, signature: tempo === null ? null : signature, click};
   metro.take = {tempo, signature, click,
     grid: click ? gridOf(tempo, signature, t0) : null,
