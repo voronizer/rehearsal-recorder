@@ -2713,6 +2713,11 @@ class Api:
             if fault is not None:
                 log.error("The take's click failed during the take and went quiet; "
                           "the take recorded on: %s", fault)
+            # A take whose first click was never chosen (Stop before the
+            # card's first block, or a click output slow to start) is no
+            # click take: its files start where they started. Its take.json
+            # says so, and so does this, for Keep in this session.
+            meter["click"] = meter["click"] and whole(getattr(recorder.click, "first_click_frame", None))
         notes, missing = self._note_lanes(band, result["tracks"], result["notes"])
         return {
             "ok": True,

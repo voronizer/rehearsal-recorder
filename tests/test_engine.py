@@ -13100,8 +13100,17 @@ def main():
         ok("Record: the take's inputs, and a stream of the click's own on the desk",
            _sd.Stream.opened == opened + 2 and rec._stream.kw["device"] == 0
            and not rec.click.duplex and rec.click.output.device_index == 3)
+        # The desk's stream never sends a block here, so the first click is
+        # never chosen: the take is no click take, and keeps its tempo.
         feed83(a83, 4)
-        a83.discard_take(a83.stop_take()["temp_dir"])
+        stopped = a83.stop_take()
+        ok("an output that never started: Stop says no click take, at the row's 120",
+           rec.click.first_click_frame is None
+           and (stopped["tempo"], stopped["signature"], stopped["click"]) == (120, "4/4", False))
+        a83._meters.clear()
+        ok("  as its take.json says once the app has started again",
+           a83._meter_of_draft(stopped["temp_dir"]) == {"tempo": 120, "signature": "4/4", "click": False})
+        a83.discard_take(stopped["temp_dir"])
         ok("no click device: the click goes back to where the player plays", a83.set_click_device(None)["ok"]
            and a83.get_settings()["click_device_index"] is None and a83.get_settings()["click_channels"] is None)
 
