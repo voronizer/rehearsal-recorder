@@ -4892,7 +4892,7 @@ class Api:
         try:
             self._tap.listen(self._config.get("tracks") or [])
         except Exception as e:
-            log.exception("Tap could not open the band's ports")
+            log.error("Tap could not open the band's ports: %s", e)
             return {"ok": False, "error": f"The band's MIDI ports could not be opened: {e}"}
         return {"ok": True}
 
