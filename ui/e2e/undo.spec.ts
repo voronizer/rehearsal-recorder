@@ -271,9 +271,9 @@ test.describe("on the screen after a take", () => {
     await recordTake(page)
     await nameTake(page, "Sonca")
     await expect(title(page)).toHaveText("Sonca 1")
-    await page.getByRole("button", { name: "Add marker" }).click()
+    await page.getByRole("button", { name: "Add mark" }).click()
     await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click()
-    await expect(page.getByRole("button", { name: /^Remove marker at/ })).toHaveCount(1)
+    await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
 
     await page.keyboard.press("Escape")
     await expect(title(page)).toHaveCount(0)
@@ -282,7 +282,7 @@ test.describe("on the screen after a take", () => {
     await said(page, "“Sonca 1” went to the Trash.").getByRole("button", { name: "Undo" }).click()
 
     await expect(title(page)).toHaveText("Sonca 1")
-    await expect(page.getByRole("button", { name: /^Remove marker at/ })).toHaveCount(1)
+    await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
     await page.getByRole("button", { name: /Save take/ }).click()
     await expect.poll(() => callCount(page, "keep_take")).toBe(1)
     const kept = (await calls(page, "keep_take"))[0].args
@@ -353,19 +353,19 @@ test.describe("on the screen after a take", () => {
     await startRehearsal(page)
     await recordTake(page)
     // A mark at the start, outside the part kept.
-    await page.getByRole("button", { name: "Add marker" }).click()
+    await page.getByRole("button", { name: "Add mark" }).click()
     await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click()
-    await expect(page.getByRole("button", { name: /^Remove marker at/ })).toHaveCount(1)
+    await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
 
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
     await expect(page.getByRole("dialog")).toHaveCount(0)
     await expect(page.locator("span", { hasText: "/ 0:03" }).first()).toBeVisible()
-    await expect(page.getByRole("button", { name: /^Remove marker at/ })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(0)
     const notice = said(page, "“Take 1” is cropped. The uncut take went to the Trash.")
     await notice.getByRole("button", { name: "Undo" }).click()
     await expect(page.locator("span", { hasText: "/ 0:06" }).first()).toBeVisible()
-    await expect(page.getByRole("button", { name: /^Remove marker at/ })).toHaveCount(1)
+    await expect(page.getByRole("button", { name: /^Remove mark at/ })).toHaveCount(1)
   })
 
   test("saving the take ends its crop's offer", async ({ page }) => {

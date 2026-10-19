@@ -28,7 +28,7 @@ another place.
 
 ## What if the laptop dies in the middle of a take?
 
-The take is written to disk as it records and forced out every 30 seconds, so
+The take is written to disk as it records and made safe every 30 seconds, so
 you lose seconds. The next launch offers it back.
 
 ## Will the laptop fall asleep in the middle of a take?
@@ -41,4 +41,4 @@ charger at 20%.
 ## How does the band get the takes?
 
 Pick the good ones, or switch on automatic sending, and they are copied to a
-folder your Google Drive or Dropbox client syncs, as WAV, FLAC or MP3.
+folder your Google Drive or Dropbox app syncs, as WAV, FLAC or MP3.

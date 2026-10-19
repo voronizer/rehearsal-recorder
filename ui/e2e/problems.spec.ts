@@ -201,7 +201,7 @@ test("a card gone quiet during the signal check stops it, and says so in place",
   await setFake(
     page,
     "__CHECK_QUIET__",
-    "No sound from “Interface” for 3 seconds — it was unplugged, switched off or " +
+    "No sound from “Interface” for 3 seconds. It was unplugged, switched off or " +
       "stopped answering. Plug it back in and press Check signal."
   )
   await expect(page.getByRole("status").filter({ hasText: "No sound from" })).toHaveCount(1)
@@ -229,7 +229,7 @@ test("a card gone quiet during playback pauses the take, and play tries it again
   await setFake(
     page,
     "__OUTPUT_QUIET__",
-    "Playback stopped: nothing has gone out through “Interface” for 3 seconds — it " +
+    "Playback stopped: nothing has gone out through “Interface” for 3 seconds. It " +
       "was unplugged, switched off or stopped answering. Press play to try it again."
   )
   await expect(page.getByText("Playback stopped")).toBeVisible()

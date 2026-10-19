@@ -23,7 +23,7 @@ Hear how the song went last week, then play it.
 
 ## Keep the good ones. {#keep}
 
-Stop, listen, keep it. The evening sorts itself while everyone remembers.
+Stop, listen, keep it. Sort the takes while everyone remembers them.
 
 - Stop, and the take opens to listen to. Save it.
 - A take nobody named: one click on Sonca names it.
@@ -35,7 +35,7 @@ Every rehearsal, every mark and every song, in History.
 
 - History opens on the newest rehearsal.
 - Marks: every Went wrong, from every rehearsal. ▶ plays from just before it.
-- A click on Pałyn: its page, every take of it, one line an evening.
+- A click on Pałyn: its page, every take of it, one line per rehearsal.
 
 ## Compare takes. {#compare}
 

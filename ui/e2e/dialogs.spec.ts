@@ -52,7 +52,7 @@ test("Escape with takes in the rehearsal asks to finish, on Cancel, and Enter le
   await expect.poll(() => focusedText(page)).toBe("Cancel")
   // Its words, and the right number of them.
   await expect(dialog).toContainText(
-    "2 takes are saved and stay where they are. You cannot add to this rehearsal afterwards — a later one starts its own folder."
+    "2 takes are saved and stay where they are. You cannot add to this rehearsal afterwards. A later one starts its own folder."
   )
   await expect(dialog.getByRole("button")).toHaveText(["Cancel", "Finish"])
 
@@ -130,14 +130,14 @@ for (const [system, script, order] of [
     await openApp(page)
     await startRehearsal(page)
     await recordTake(page, 1)
-    await page.getByRole("button", { name: "Add marker" }).click()
+    await page.getByRole("button", { name: "Add mark" }).click()
     const dialog = page.getByRole("dialog")
     const names = ["Delete marker", "Cancel", "Save"]
     const xs = await Promise.all(names.map((n) => left(dialog, n)))
     const across = names.map((n, i) => [n, xs[i]] as const).sort((a, b) => a[1] - b[1])
     expect(across.map(([n]) => n)).toEqual(order)
     // The note has the keyboard: Enter there is Save.
-    await expect(dialog.getByRole("textbox", { name: "Marker note" })).toBeFocused()
+    await expect(dialog.getByRole("textbox", { name: "Comment" })).toBeFocused()
     await page.keyboard.type("guitar drifts")
     await page.keyboard.press("Enter")
     await expect(dialog).toHaveCount(0)
@@ -278,7 +278,7 @@ const CONVERTED: { name: string; open: (page: Page) => Promise<void> }[] = [
       await openApp(page)
       await startRehearsal(page)
       await recordTake(page, 1)
-      await page.getByRole("button", { name: "Add marker" }).click()
+      await page.getByRole("button", { name: "Add mark" }).click()
     },
   },
   {

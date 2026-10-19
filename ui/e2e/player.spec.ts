@@ -93,7 +93,7 @@ test.describe("the review screen", () => {
     // Repeat is part of how the take plays, so it sits with the playing.
     const repeatAt = (await transport(page).getByRole("button", { name: "Repeat" }).boundingBox())!
     const markAt = (await transport(page)
-      .locator("button[aria-label='Add marker'], button[aria-label='Edit marker']")
+      .locator("button[aria-label='Add mark'], button[aria-label='Open mark']")
       .first()
       .boundingBox())!
     const timeAt = (await transport(page).locator("span.tnum").first().boundingBox())!
@@ -219,10 +219,10 @@ test.describe("the review screen", () => {
   test("a mark made before saving goes with the take when it is saved", async ({ page }) => {
     // There is no folder for it yet, so it rides along with keep_take.
     await secondTake(page)
-    await page.getByRole("button", { name: "Add marker" }).click()
-    await expect(page.getByText("Marker at")).toBeVisible()
+    await page.getByRole("button", { name: "Add mark" }).click()
+    await expect(page.getByText("Mark at")).toBeVisible()
     await page.getByRole("radio", { name: "Keep this" }).click()
-    await page.fill("input[aria-label='Marker note']", "this one is the take")
+    await page.fill("input[aria-label='Comment']", "this one is the take")
     await page.getByRole("button", { name: "Save", exact: true }).click()
     await expect(page.getByText("this one is the take")).toHaveCount(1)
     await page.getByRole("button", { name: /Save take/ }).click()
@@ -241,9 +241,9 @@ async function savedTake(page: Page) {
   await nameTake(page, "Pałyn")
   await page.getByRole("button", { name: /Save take/ }).click()
   await recordTake(page, 2)
-  await page.getByRole("button", { name: "Add marker" }).click()
+  await page.getByRole("button", { name: "Add mark" }).click()
   await page.getByRole("radio", { name: "Keep this" }).click()
-  await page.fill("input[aria-label='Marker note']", "this one is the take")
+  await page.fill("input[aria-label='Comment']", "this one is the take")
   await page.getByRole("button", { name: "Save", exact: true }).click()
   await page.getByRole("button", { name: /Save take/ }).click()
   await expect(page.getByRole("button", { name: /Record take 3/ })).toBeVisible()
@@ -286,9 +286,9 @@ test.describe("a saved take", () => {
     expect(((await calls(page, "add_take_marker"))[0].args[2] as number) > 0).toBe(true)
     // The thought about what just went wrong does not survive a hunt through
     // the interface.
-    await expect(page.getByText("Marker at")).toBeVisible()
+    await expect(page.getByText("Mark at")).toBeVisible()
     await page.getByRole("radio", { name: "Went wrong" }).click()
-    await page.fill("input[aria-label='Marker note']", "guitar drifts here")
+    await page.fill("input[aria-label='Comment']", "guitar drifts here")
     await page.getByRole("button", { name: "Save", exact: true }).click()
     await expect
       .poll(async () => (await calls(page, "update_take_marker")).at(-1)?.args.slice(3))
@@ -299,14 +299,14 @@ test.describe("a saved take", () => {
     // On top of an existing mark the button opens it rather than adding a
     // second one; somewhere else it adds, and both live side by side.
     await page.getByRole("button", { name: "To start" }).click()
-    await expect(page.getByRole("button", { name: "Edit marker", exact: true })).toHaveCount(1)
-    await page.getByRole("button", { name: "Edit marker", exact: true }).click()
-    await expect(page.getByText("Marker at")).toBeVisible()
+    await expect(page.getByRole("button", { name: "Open mark", exact: true })).toHaveCount(1)
+    await page.getByRole("button", { name: "Open mark", exact: true }).click()
+    await expect(page.getByText("Mark at")).toBeVisible()
     await page.getByRole("button", { name: "Cancel" }).click()
     await page.getByRole("button", { name: "Back 10 seconds" }).click()
     await page.getByRole("button", { name: "Forward 10 seconds" }).click()
-    await expect(page.locator("button[aria-label^='Remove marker at']")).toHaveCount(2)
-    await expect(page.locator("button[aria-label^='Edit marker at']")).toHaveCount(2)
+    await expect(page.locator("button[aria-label^='Remove mark at']")).toHaveCount(2)
+    await expect(page.locator("button[aria-label^='Edit mark at']")).toHaveCount(2)
   })
 
   test("still opens when the chosen output is gone, and says where the sound went", async ({
@@ -324,7 +324,7 @@ test.describe("a saved take", () => {
       ;(window as unknown as { __OUTPUT_GONE__: boolean }).__OUTPUT_GONE__ = true
     })
     await page.locator("button[aria-label^='Take 2 Pałyn 2']").click()
-    await expect(page.getByText("using the system output")).toBeVisible()
+    await expect(page.getByText("so the take plays through the system output")).toBeVisible()
     await expect(page.getByRole("button", { name: "Mute Guitar" })).toHaveCount(1)
   })
 
@@ -1048,7 +1048,7 @@ test.describe("cropping a saved take", () => {
     await expect(page.getByRole("button", { name: "Crop to the region" })).toBeDisabled()
     await page.evaluate(() => (window as unknown as { __RELEASE_CROP__: () => void }).__RELEASE_CROP__())
     const swept = page
-      .locator("section[aria-label='Notifications'] [data-notice='warning']")
+      .locator("section[aria-label='Notices'] [data-notice='warning']")
       .filter({ hasText: "could not be moved out of the way" })
     await expect(swept).toHaveCount(1)
     await expect(swept).toContainText("is still at /rec/Tuesday jam/take 2 (before crop)")

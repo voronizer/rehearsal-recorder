@@ -115,7 +115,7 @@ export const Line: Story = {
     <div className="flex flex-col">
       <Alert {...args} size="line" variant="warning">
         <TriangleAlert />
-        <AlertDescription>That playback device is gone — using the system output.</AlertDescription>
+        <AlertDescription>That playback device is gone, so the take plays through the system output.</AlertDescription>
       </Alert>
       <Alert {...args} size="line" variant="destructive">
         <CircleAlert />
@@ -130,7 +130,7 @@ export const Line: Story = {
 }
 
 const CUT_WORDS =
-  "Playback stopped: nothing has gone out through “Interface” for 3 seconds — it was " +
+  "Playback stopped: nothing has gone out through “Interface” for 3 seconds. It was " +
   "unplugged, switched off or stopped answering. Press play to try it again."
 
 function CutLine(args: React.ComponentProps<typeof Alert>) {

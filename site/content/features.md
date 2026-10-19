@@ -24,7 +24,7 @@ beside the audio, ready for your DAW.
 
 What was played, how long it ran, what it weighs. Nothing to fill in.
 
-## Marks say what happened, not just where. {#marks}
+## Marks say what happened. {#marks}
 
 Keep this, Went wrong or the band's own, with a comment, right on the take.
 
@@ -42,7 +42,7 @@ Only the ones you keep, into your Drive or Dropbox folder.
 Make the gig's songs a set once. Every take is the song you are on until you
 move on, and History says which ones you never got to.
 
-## Records at what the card can do. {#formats}
+## Records as the interface allows. {#formats}
 
 Only what your interface accepts is offered.
 

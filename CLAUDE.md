@@ -18,6 +18,4 @@ The repository's rules beat the skills:
 - English, British spelling.
 - Test labels: cp1252 characters only.
 
-Texts written before these rules are not checked yet (#51), so don't copy their style.
-
 Skills in `.claude/skills/`, unchanged, MIT: humanizer from blader/humanizer@8c307f3, sokrati from iamursky/sokrati@6255b82.

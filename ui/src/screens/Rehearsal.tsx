@@ -661,7 +661,7 @@ export function Rehearsal({
         title="Finish this rehearsal?"
         description={`${savedLine(
           session.takes.length
-        )} You cannot add to this rehearsal afterwards — a later one starts its own folder.`}
+        )} You cannot add to this rehearsal afterwards. A later one starts its own folder.`}
         actionLabel="Finish"
         destructive={false}
         onConfirm={() => void finish()}

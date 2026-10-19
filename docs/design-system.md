@@ -62,8 +62,8 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   (`lib/labels.ts`); orange stands sixth in Settings' picker, where blue
   was.
 - **F4. A group has no border.** An outline round every panel made the
-  screens busy. In the dark theme a card a shade lighter than the page sets
-  a group apart quietly. In the light theme the page is white, as the card
+  screens busy. In the dark theme a card a shade lighter than the page is
+  enough to set a group apart. In the light theme the page is white, as the card
   is: a grey page with grey fills on it read as grey on grey, and grey text
   on them fell under 4.5 to 1. So there air and the group's own lines set
   it apart, and grey is left for a side panel, a well, what is selected, a
@@ -126,7 +126,7 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   and in every place (after a take, under Last time, in History's strip, on
   a song's page and in Marks): one 2 px wide is a pill, since the browser
   cuts a corner down to fit the side it is on. A
-  graphic, such as a 1-2 px line or a marker's diamond, keeps its own, with
+  graphic, such as a 1-2 px line or a mark's diamond, keeps its own, with
   a `design-ok` comment ([the check](#the-check)). The check refuses
   `rounded-xs`, `rounded-2xl` and up, and a radius of one's own in
   brackets; `rounded-none` passes.
@@ -146,8 +146,8 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   word for it. While a take records, the screen is read from across the room
   by people playing: it is there to show that the take is running, how long
   it has run and what is coming in, so apart from the meters and the clock
-  nothing on it should move or draw the eye. That is on purpose: do not add
-  an animation to the recording screen. Under Reduce motion, and while a
+  nothing on it should move or draw the eye. Do not add an animation to the
+  recording screen. Under Reduce motion, and while a
   take records, `animate-rise`, `animate-in` and `animate-out` do not play:
   a dialog is simply there. Spinners and pulses (`animate-spin`,
   `animate-ping`, `animate-pulse`) stand still too: a still arc still says
@@ -259,7 +259,8 @@ piece of its own moves onto the shared one when it is redone.
   the bar rather than at each change. A problem raised in the page itself,
   such as a notice's callback that threw, goes in through `reportPageError`,
   which also sends it to crash.log (`log_problem`), once per problem, so the
-  bar's "all of them are in crash.log" holds for it too.
+  bar's "all of them are in ~/.rehearsal-recorder/crash.log" holds for it
+  too.
 - **C5. Kbd**, `kbd.tsx`: one key chip, in the colour of the text round it,
   so the same chip reads on a page and on a filled button. Its ⌘ or Ctrl is
   `words().mod`. On a button the chip is `aria-hidden`, and the button names
@@ -299,57 +300,57 @@ piece of its own moves onto the shared one when it is redone.
   page's colour was faint on the card in dark, and in light, where the page
   is white as the card is (F4), it would not show at all.
   `lib/theme.test.ts` checks that a well is the side panel's colour.
-- **C8. Everything else that is built more than once.** About thirty kinds
-  of piece are built two to sixteen times each, and each copy drifts from
-  the others. Each becomes one shared piece, taken from shadcn/ui where it
-  has one (U1). Some are in `components/ui/` already, and the copies made by
-  hand move onto them: dividers (`Separator`), chips (`Badge`), progress
-  bars (`Progress`), and, added with the start screen, on/off and pick-one
-  buttons (`Toggle` and `ToggleGroup`, with arrow keys inside a group), one
-  list row (`Item`, every row reachable by keyboard), warnings (`Alert`),
-  loading (`Spinner`), empty states (`Empty`), tooltips (`Tooltip`) and
-  meters (`Meter`); added with Review, checkboxes (`Checkbox`) and a song's
-  takes as columns (`TakeColumns`), which Last time and Review share; added
-  with History, expanding (`Collapsible`), which opens a rung of a song's
-  ladder. Two more of our own live in `components/`. The set card,
-  `SetCard` (`components/NextTakeSongs.tsx`), is one piece under Next take
-  and in History, with the same title on both, "Gig on the 25th · 4 of 6
-  played". Given `onGoTo` it is History's: a song played goes to its takes,
-  one not played is disabled and says so, and no song is next or lit. The
-  pane head, `PaneHead` (`components/PaneHead.tsx`), heads History's three
-  pages, a rehearsal's, a song's and a label's: what leads it, the title
-  with the pencil after it, the lines under it and the actions at the right
-  (B6). Only History uses it, so it is not in `components/ui/` (U3).
-  Settings' tabs are built from two more, in `components/SettingsGroup.tsx`.
-  `SettingsGroup` is one group of a tab: a `Card` 24 px inside that rises
-  in at its place. Given a title, it is a region named by its heading, with
-  a hint under the heading and an action at its right, where Keys puts its
-  switches. `PickRow` is a pick-one in a group: the row's name with the
-  shared `switch` beside it, named by it. Rate, Depth, the copies' format,
-  What gets sent, Theme and Scale are `PickRow`s, and Keys' On and Off are
-  the same switch at a group's head, so every choice of one among a few
-  words in Settings looks and works alike. Only Settings uses them, so they
-  are not in `components/ui/` (U3). The rest are added by the first
-  screen's pull request that needs them: one ✕,
-  one link, one size of icon button, a field with a button (InputGroup),
-  screen header and side panel. A take's name is written by `TakeTitle`
-  (`components/TakeTitle.tsx`) everywhere, where today one list uses it and
-  the rest write the name their own way. A track that records is one tile,
-  `TrackTile` (`components/TrackTile.tsx`), where the MIDI tile was a copy
-  of it: its levels, with a narrow column for its notes on Both, or with
-  `kind="notes"` a MIDI track's notes alone. Its fill is `Meter` up, and its
-  name is `TileName` (B6). On the recording screen the tiles are one group
+- **C8. Everything else that is built more than once.** About thirty kinds of
+  piece are built two to sixteen times each, and each copy drifts from the
+  others. Each becomes one shared piece, taken from shadcn/ui where it has one
+  (U1). Some are in `components/ui/` already, and the copies made by hand move
+  onto them: dividers (`Separator`), chips (`Badge`), progress bars
+  (`Progress`), and, added with the start screen, on/off and pick-one buttons
+  (`Toggle` and `ToggleGroup`, with arrow keys inside a group), one list row
+  (`Item`, every row reachable by keyboard), warnings (`Alert`), loading
+  (`Spinner`), empty states (`Empty`), tooltips (`Tooltip`) and meters
+  (`Meter`); added with Review, checkboxes (`Checkbox`) and a song's takes as
+  columns (`TakeColumns`), which Last time and Review share; added with
+  History, expanding (`Collapsible`), which opens a rung of a song's ladder.
+  Two more of our own live in `components/`. The set card, `SetCard`
+  (`components/NextTakeSongs.tsx`), is one piece under Next take and in
+  History, with the same title on both, "Gig on the 25th · 4 of 6 played".
+  Given `onGoTo` it is History's: a song played goes to its takes, one not
+  played is disabled and says so, and no song is next or lit. The pane head,
+  `PaneHead` (`components/PaneHead.tsx`), heads History's three pages, a
+  rehearsal's, a song's and a label's: what leads it, the title with the
+  pencil after it, the lines under it and the actions at the right (B6). Only
+  History uses it, so it is not in `components/ui/` (U3). Settings' tabs are
+  built from two more, in `components/SettingsGroup.tsx`. `SettingsGroup` is
+  one group of a tab: a `Card` 24 px inside that rises in at its place. Given
+  a title, it is a region named by its heading, with a hint under the heading
+  and an action at its right, where Keys puts its switches. `PickRow` is a
+  pick-one in a group: the row's name with the shared `switch` beside it,
+  named by it. Rate, Depth, the copies' format, What gets sent, Theme and
+  Scale are `PickRow`s, and Keys' On and Off are the same switch at a group's
+  head, so every choice of one among a few words in Settings looks and works
+  alike. Only Settings uses them, so they are not in `components/ui/` (U3).
+  The rest are added by the first screen's pull request that needs them: one
+  ✕, one link, one size of icon button, a field with a button (InputGroup),
+  screen header and side panel. A take's name is written by
+  `components/TakeTitle.tsx` (`TakeTitle` in lists, `GoTitle` in headers and
+  pills); only the song tabs (`SongTab.tsx`) and the song ladder
+  (`SongLadder.tsx`) still draw the number themselves. A track that records is
+  one tile, `TrackTile` (`components/TrackTile.tsx`), where the MIDI tile was
+  a copy of it: its levels, with a narrow column for its notes on Both, or
+  with `kind="notes"` a MIDI track's notes alone. Its fill is `Meter` up, and
+  its name is `TileName` (B6). On the recording screen the tiles are one group
   on the card's fill, each tile on a well of its own (C7), and reha.stream
-  shows them so. A take drawn as a bar is as tall as
-  it ran against the longest, through `drawnLength` (`lib/takeScale.ts`),
-  never under a few pixels. The bars of an evening's takes, on the
-  rehearsal screen and in History, of a song's ladder and of the Marks page
-  are filled alike, from `TAKE_FILLS` beside it: the plain fill, the
-  starred one and the quiet one (a false start, or a take not on disk). Each
-  place adds only what its bars do under the pointer. "Selected" has two
-  looks instead of seven: the white plate inside a switch, and a grey fill
-  for a row, pill, tab or toggle that is on. The full table, with every
-  place each piece is built today, is C8 in the spec.
+  shows them so. A take drawn as a bar is as tall as it ran against the
+  longest, through `drawnLength` (`lib/takeScale.ts`), never under a few
+  pixels. The bars of an evening's takes, on the rehearsal screen and in
+  History, of a song's ladder and of the Marks page are filled alike, from
+  `TAKE_FILLS` beside it: the plain fill, the starred one and the quiet one (a
+  false start, or a take not on disk). Each place adds only what its bars do
+  under the pointer. "Selected" has two looks instead of seven: the white
+  plate inside a switch, and a grey fill for a row, pill, tab or toggle that
+  is on. The full table, with every place each piece is built today, is C8 in
+  the spec.
 
 The other shared components, each with its stories:
 
@@ -422,8 +423,8 @@ The other shared components, each with its stories:
   stay the list's while one of them has focus. With `type="single"`,
   pressing the chosen item again empties the group (`onValueChange("")`),
   so a pick-one that must always have one chosen ignores the "", as
-  Audio · Both · MIDI does (`ModeSwitch`), and so does the kind of a
-  marker. In a dialog a pick-one group is one Tab stop too
+  Audio · Both · MIDI does (`ModeSwitch`), and so does a mark's label
+  (`MarkerDialog`). In a dialog a pick-one group is one Tab stop too
   (`useDialogFocusKeys`). C8's three identical segmented switches and its
   pick-one groups.
 - **Alert**, `alert.tsx`: a box for a line the screen has to say, with an
@@ -442,12 +443,11 @@ The other shared components, each with its stories:
 - **Spinner**, `spinner.tsx`: lucide's `Loader2Icon`, turning, `role="status"`
   and named Loading. It is there from the start but invisible for the first
   second (`SPINNER_AFTER_MS`, or its `after` in ms), so a quick answer does
-  not flash it and nothing moves when it shows (B4, B5). It stands still
-  under Reduce motion and while a take records (F11). C8's loading signs. A
-  control that keeps its own icon until the spinner takes its place, as the
-  small player, Look again, Check signal and Start do, counts the second
-  with `useAfter`
-  (`hooks/useAfter.ts`), the hook the Spinner counts with.
+  not flash it and nothing moves when it shows (B4, B5). It stands still under
+  Reduce motion and while a take records (F11). C8's loading signs. A control
+  that keeps its own icon until the spinner takes its place, as the small
+  player, Look again, Check signal and Start do, counts the second with
+  `useAfter` (`hooks/useAfter.ts`), the hook the Spinner counts with.
 - **Empty**, `empty.tsx`: an empty list that says what will be here and how it
   gets here (B7): a title, a line, and the button that fills it. C8's empty
   states.
@@ -728,26 +728,24 @@ as the `cn` import.
   sentence said in two places comes from one place. Each kind of figure is
   written one way, through `lib/format.ts`, and a screen shows a figure
   once.
-- **B9. Single-key shortcuts can be turned off**, in Settings › Keys, and
-  are on by default. Space starts a take and ↑ and ↓ pick the next take's
-  song, and WCAG 2.1.4 asks for a way to turn off shortcuts that are one
-  plain key. The tab has two groups, each with its switch at its head (the
-  shared `switch`, On and Off) and a row per screen under it of what its
-  keys do there. "Space and Esc" is Space's main action and Esc's step back
-  on every screen. "The player's keys" are the arrows, Home, M, R and ? in
-  the player, and ↑ and ↓ on the rehearsal screen and in History's lists.
-  `lib/keys.ts` holds the two, in force as soon as they are switched, and
-  Python keeps them (`save_keys`, as `space_keys` and `player_keys`).
-  Anything there but `false` is on, so a config edited by hand never turns
-  keys off. Off, the key hooks (`hooks/useSpacebar.ts`) leave those keys to
-  the browser: Space presses the focused button, and ↑ and ↓ in the Next
-  take field are the field's. A click leaves a button focused on Windows
-  (Chromium) but not on the Mac (WebKit), so the words for musicians say
-  only Tab. Their chips
-  (`Kbd`) are not drawn (B4), and their keys leave the buttons'
-  `aria-keyshortcuts`. The player's keys button stays, and its list names
-  only the keys that work. ⌘Z or Ctrl+Z, and Esc in a dialog or a text
-  field, always work.
+- **B9. Single-key shortcuts can be turned off**, in Settings › Keys, and are
+  on by default. Space starts a take and ↑ and ↓ pick the next take's song,
+  and WCAG 2.1.4 asks for a way to turn off shortcuts that are one plain key.
+  The tab has two groups, each with its switch at its head (the shared
+  `switch`, On and Off) and a row per screen under it of what its keys do
+  there. "Space and Esc" is Space's main action and Esc's step back on every
+  screen. "The player's keys" are the arrows, Home, M, R and ? in the player,
+  and ↑ and ↓ on the rehearsal screen and in History's lists. `lib/keys.ts`
+  holds the two, in force as soon as they are switched, and Python keeps them
+  (`save_keys`, as `space_keys` and `player_keys`). Anything there but `false`
+  is on, so a config edited by hand never turns keys off. Off, the key hooks
+  (`hooks/useSpacebar.ts`) leave those keys to the browser: Space presses the
+  focused button, and ↑ and ↓ in the Next take field are the field's. A click
+  leaves a button focused on Windows (Chromium) but not on the Mac (WebKit),
+  so the words for musicians say only Tab. Their chips (`Kbd`) are not drawn
+  (B4), and their keys leave the buttons' `aria-keyshortcuts`. The player's
+  keys button stays, and its list names only the keys that work. ⌘Z or Ctrl+Z,
+  and Esc in a dialog or a text field, always work.
 
 ## Where the rules live
 
@@ -763,7 +761,7 @@ as the `cn` import.
   it is not published, neither in pull request previews nor on reha.stream.
   CI builds it, so a story that does not build fails the pull request.
 - **K3. CI refuses what breaks the rules**, with `npm run design-check`, the
-  Design check step of the interface job in `.github/workflows/tests.yml`. A
+  Design check step of the interface job in `.github/workflows/checks.yml`. A
   rule that lives only in a document wears away one screen at a time; the
   check names the line on the pull request, before a reviewer has to.
   Spacing is not checked (F8).
@@ -823,7 +821,7 @@ Nothing in `components/ui/` could ever be listed: that is where the rules
 are kept, so a problem there is fixed.
 
 **`design-ok`.** Two kinds of thing are outside what the rules mean: a
-small graphic that keeps its own corner, such as a marker's diamond on the
+small graphic that keeps its own corner, such as a mark's diamond on the
 waveform or a tooltip's arrow, and text sized from the window rather than
 from the scale (the recording clock, the names and readouts on the track
 tiles). Such a line is let off one rule by a comment on it, or on the line

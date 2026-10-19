@@ -5,6 +5,16 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Plainer words in the app and the guide.** The player's row of marks is
+  called **Marks**, and a mark's dialog says "Mark at 1:24". The interface
+  check talks about your interface instead of a card. Messages are plain
+  sentences without dashes: when the chosen output is gone, for example,
+  the message says the take plays through the system output. The guide, the
+  README and reha.stream use the same words, and the guide's pictures show
+  Settings as it is now.
+
 ## 0.12.1
 
 - **Victor Baikov's controller on Windows.** It has been tried on Windows as

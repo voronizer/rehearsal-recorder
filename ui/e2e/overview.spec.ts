@@ -295,7 +295,7 @@ test.describe("the take row", () => {
     await said.hover()
     await expect(page.getByRole("tooltip")).toHaveText("Cloud folder not found")
     // And the bar says it to a screen reader: the take, its state, then why.
-    await expect(bar(overview, 6)).toHaveAccessibleName("Take 6 Take 6 — Not in the cloud")
+    await expect(bar(overview, 6)).toHaveAccessibleName("Take 6 Take 6, not in the cloud")
     await expect(bar(overview, 6)).toHaveAccessibleDescription("Cloud folder not found")
   })
 

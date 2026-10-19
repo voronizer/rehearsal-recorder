@@ -151,6 +151,9 @@ function FolderPath({ folder }: { folder: string }) {
 // What an action here said — one slot, so each says over the last.
 const SAID = "history"
 
+// A rehearsal with no takes left, said in its overview and above its player.
+const NO_TAKES = "Nothing was kept from this rehearsal, or every take since got deleted."
+
 /**
  * History: past rehearsals and their takes. Read from disk, so it survives a
  * restart of the app.
@@ -1089,7 +1092,7 @@ export function HistoryScreen({
             onShare={(take) => setTakeToShare(here(take))}
             onDelete={(take) => void deleteTake(here(take))}
             onStar={(take, starred) => void starTake(here(take), starred)}
-            emptyHint="Nothing was kept from this rehearsal, or every take since got deleted."
+            emptyHint={NO_TAKES}
           />
           <TakePlayer
             player={player}
@@ -1440,9 +1443,7 @@ export function HistoryScreen({
                   <Empty>
                     <EmptyHeader>
                       <EmptyTitle>No takes</EmptyTitle>
-                      <EmptyDescription>
-                        Nothing was kept from this rehearsal, or every take since got deleted.
-                      </EmptyDescription>
+                      <EmptyDescription>{NO_TAKES}</EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 )

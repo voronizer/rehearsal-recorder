@@ -1439,7 +1439,7 @@ test.describe("last time, on the setup screen", () => {
 
   test("Open and the other rehearsals lead into history, on the one chosen", async ({ page }) => {
     await openApp(page)
-    await lastTime(page).getByRole("button", { name: "Open Tuesday jam in history" }).click()
+    await lastTime(page).getByRole("button", { name: "Open Tuesday jam in History" }).click()
     await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
     await page.keyboard.press("Escape")
 

@@ -14,7 +14,7 @@ export const SHARE_OPTIONS: { id: ShareWhat; label: string; hint: string }[] = [
   {
     id: "mix",
     label: "The mix",
-    hint: "One stereo file with the balance you set here. This is what you send people.",
+    hint: "One stereo file with the balance from the player. This is what you send people.",
   },
   {
     id: "tracks",

@@ -860,14 +860,14 @@ export function Setup({
           </div>
           {stillMissing && !rescanning && (
             <Warning>
-              Still not there. Check that it is switched on and its cable is in this computer —
-              some desks take a minute to start.
+              Still not there. Check that it is switched on and its cable is in this computer.
+              Some desks take a minute to start.
             </Warning>
           )}
         </div>
       ) : (
         <p className="col-start-2 text-xs text-muted-foreground">
-          Changed in Settings — it belongs to the room, not to one rehearsal.
+          Change it in Settings. It belongs to the room, not to one rehearsal.
         </p>
       )}
     </div>
@@ -884,13 +884,13 @@ export function Setup({
         <Warning>
           {tooManyTracks ? (
             <>
-              “{device?.name}” has {inputsLabel(maxChannels)} — not enough for {soundTracks}{" "}
+              “{device?.name}” has {inputsLabel(maxChannels)}, not enough for {soundTracks}{" "}
               tracks. Record fewer at once, or use an interface with more inputs.
             </>
           ) : (
             <>
               {needInput.map((t) => named(t.name)).join(", ")}
-              {needInput.length === 1 ? " has" : " have"} no input on “{device?.name}” — it
+              {needInput.length === 1 ? " has" : " have"} no input on “{device?.name}”, which
               has {inputsLabel(maxChannels)}. Pick one below.
             </>
           )}
@@ -912,7 +912,7 @@ export function Setup({
         from.
       </span>
       <span className={cn("col-start-1 row-start-1", !checking && "invisible")}>
-        Have everyone play in turn — the bar should move next to their own
+        Have everyone play in turn. The bar should move next to their own
         track. If the wrong one moves, change the input number.
       </span>
     </p>

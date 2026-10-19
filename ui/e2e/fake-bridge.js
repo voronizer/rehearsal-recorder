@@ -991,8 +991,8 @@ window.__MAKE_API__ = () => ({
     // What Python says when a take is open and the card refused it.
     const name = ['UA Monitors', 'MacBook Speakers'][idx] || 'That output';
     return window.__OUTPUT_FALLBACK__
-      ? {ok:true, warning:'“' + name + '” will not take 44100 Hz right now — ' +
-          'using the system output.'}
+      ? {ok:true, warning:'“' + name + '” will not take 44100 Hz right now, ' +
+          'so the take plays through the system output.'}
       : {ok:true};
   }),
   set_output_channels: track('set_output_channels', async (channels) => {
@@ -1384,7 +1384,7 @@ window.__MAKE_API__ = () => ({
          volumes:Object.fromEntries(tracks.map(t => [t.name, 1])),
          master:readCfg().master_volume ?? 1};
     const out = {ok:true, ...playerState()};
-    if (window.__OUTPUT_GONE__) out.warning = 'That playback device is gone — using the system output.';
+    if (window.__OUTPUT_GONE__) out.warning = 'That playback device is gone, so the take plays through the system output.';
     return out;
   }),
   player_close: track('player_close', async () => { P = null; return {ok:true}; }),
@@ -2017,11 +2017,11 @@ window.__MAKE_API__ = () => ({
         const hushed = result === 'silent';
         mine.peaks = hushed ? [0, 0, 0, 0, 0, 0] : [0.4, 0.3, 0, 0.2, 0, 0];
         mine.signal = hushed
-          ? "sound arrives, but every input is silent — play into them, or look at what the card's own routing sends, and check again"
+          ? "sound arrives, but every input is silent: play into them, or look at what the interface's own routing sends, and check again"
           : 'signal on inputs 1, 2, 4; the rest silent';
       } else {
         mine.rows = [first, {...first, label:'the first two channels only'}];
-        mine.verdict = {cause:'no_sound', headline:'The card opens, but sends no sound.',
+        mine.verdict = {cause:'no_sound', headline:'The interface opens, but sends no sound.',
           advice:'The driver takes the stream and then delivers little or nothing.'};
       }
       mine.checked_at = '2026-09-29T14:05:00';
