@@ -21,6 +21,7 @@ the separate cloud folder is for — only the takes worth keeping go there.
 import functools
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -70,7 +71,9 @@ from rehearsal_recorder.audio.devices import (
     saved_device,
 )
 from rehearsal_recorder.audio import tempo as tempomod
-from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, clamp_tempo, click_frame, snap_region
+from rehearsal_recorder.audio.click import (
+    SIGNATURE_RULE, SIGNATURES, clamp_tempo, click_frame, per_quarter, snap_region,
+)
 from rehearsal_recorder.audio.take_click import whole
 from rehearsal_recorder.audio.wavfile import read_acid
 from rehearsal_recorder.metronome import Metronome
@@ -2916,9 +2919,10 @@ class Api:
         """
         A stopped take's {"tempo", "signature", "click"}: as its Stop left
         them, or from its take.json, for a draft rescued after a crash or kept
-        after the app started again. A click take whose first click was never
-        chosen keeps its tempo but is no click take: its files start where
-        they started. Each is None, and "click" False, for what it does not have.
+        after the app started again, or from its WAVs when that has gone
+        (_meter_of_wavs). A click take whose first click was never chosen
+        keeps its tempo but is no click take: its files start where they
+        started. Each is None, and "click" False, for what it does not have.
         """
         found = self._meters.get(self._draft_key(draft_dir))
         if found is not None:
@@ -2929,10 +2933,34 @@ class Api:
             record = None
         click = record.get("click") if isinstance(record, dict) else None
         if not isinstance(click, dict):
-            return {"tempo": None, "signature": None, "click": False}
+            return self._meter_of_wavs(draft_dir)
         tempo, signature = as_tempo(click.get("tempo"), click.get("signature"))
         return {"tempo": tempo, "signature": signature,
                 "click": tempo is not None and whole(click.get("first_click_frame"))}
+
+    @staticmethod
+    def _meter_of_wavs(draft_dir):
+        """
+        A draft's meter from its first WAV's acid chunk, which only a click
+        take's files carry: for a draft with no take.json to say it, as when
+        a crop before Keep put it aside with a notes file not yet made, and
+        the app has started again since. None and False for a WAV with none.
+        """
+        none = {"tempo": None, "signature": None, "click": False}
+        wavs = sorted(p for p in Path(draft_dir).glob("*.wav") if not p.name.startswith(WRITING_PREFIX))
+        try:
+            acid = read_acid(wavs[0]) if wavs else None
+        except OSError:
+            acid = None
+        signature = None if acid is None else f"{acid.num}/{acid.den}"
+        if signature not in SIGNATURES:
+            return none
+        # The chunk says quarters a minute: 99.5 for 6/8 at 199.
+        counted = acid.quarter_tempo * per_quarter(signature)
+        if not math.isfinite(counted) or abs(counted - round(counted)) > 0.01:
+            return none
+        tempo, signature = as_tempo(round(counted), signature)
+        return {"tempo": tempo, "signature": signature, "click": tempo is not None}
 
     @classmethod
     def _move_take_files(cls, draft_dir, take_dir, tracks, notes):

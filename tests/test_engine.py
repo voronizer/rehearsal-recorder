@@ -13375,7 +13375,7 @@ def main():
         ok("  its WAV still saying 120 quarters a minute in 6/8",
            read_acid84(cut["take"]["tracks"][0]["file"]) == Acid84(120.0, 6, 8))
 
-    @scenario66("a region to the take's end")
+    @scenario66("a region to the take's end, and a draft whose take.json went aside")
     def _():
         d, tracks, notes = draft84(6, 225, signature="6/8")
         # At 225 in 6/8 a bar is 1.6 s and a quarter 0.53 s: the take's 12 s
@@ -13384,9 +13384,14 @@ def main():
         ok("a region ending in the take's last part of a quarter ends at the take's end: 3.2 to 12.0 s",
            cut["ok"] and (cut["start_sec"], cut["end_sec"], cut["duration_sec"]) == (3.2, 12.0, 8.8)
            and len(frames84(d / "Gtr.wav")) == round(8.8 * SR))
+        # A crop puts take.json aside with a notes file not yet made, and the
+        # app started again forgets what Stop said: the WAV's tempo is left.
+        (d / "take.json").unlink()
+        a84._meters.clear()
+        ok("a draft with no take.json is a click take by its WAV's tempo: 225 in 6/8",
+           a84._meter_of_draft(d) == {"tempo": 225, "signature": "6/8", "click": True})
         take = a84.keep_take(6, str(d), "Dym", cut["duration_sec"], tracks, notes=notes)["take"]
-        ok("  and kept, it is a click take at 225 in 6/8",
-           (take["tempo"], take["signature"], take["click"]) == (225, "6/8", True))
+        ok("  and kept as one", (take["tempo"], take["signature"], take["click"]) == (225, "6/8", True))
 
     @scenario66("the cloud")
     def _():
