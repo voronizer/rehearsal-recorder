@@ -907,7 +907,7 @@ test.describe("the click's output", () => {
     await expect(outputs(page)).toHaveText("1–2")
   })
 
-  test("an unplugged click output shows under its own name", async ({ page }) => {
+  test("an unplugged click output shows under its own name, and is not replaced", async ({ page }) => {
     await rehearse(
       page,
       "Pałyn",
@@ -915,11 +915,24 @@ test.describe("the click's output", () => {
         click_device_index: 7, click_channels: [3, 4]}));
       window.__CLICK_MISSING__ = "Headphone amp";`
     )
+    // As Python does, the settings give no device for an output that is not
+    // plugged in: only metronome_state names it.
+    const saved = await page.evaluate(() =>
+      (window as unknown as Bridge).pywebview.api.get_settings()
+    )
+    expect(saved).toMatchObject({ click_device_index: null, click_channels: [3, 4] })
     // The player has an output of its own, which is not the click's.
     await playerOnMonitors(page)
     await gear(page).click()
     await expect(device(page)).toHaveText("“Headphone amp” is not connected")
+    await expect(device(page)).not.toContainText("Where the player plays")
     await expect(outputs(page)).toHaveText("3–4")
+    // Its outputs cannot be picked, so the player's device is never saved
+    // over it.
     await expect(outputs(page)).toBeDisabled()
+    await outputs(page).click({ force: true })
+    await page.waitForTimeout(300)
+    await expect(page.getByRole("option")).toHaveCount(0)
+    expect(await clickOutputCalls(page)).toEqual([])
   })
 })

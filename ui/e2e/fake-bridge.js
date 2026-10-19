@@ -937,6 +937,17 @@ function metroGives(take) {
     songTempos.set(take.song, {tempo: take.tempo, signature: take.signature});
 }
 
+// The outputs there are: a Windows machine's with __HOST_API__, else a Mac's.
+const outputDevices = () => window.__HOST_API__ ? [
+  {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
+   max_output_channels:2, default_samplerate:48000},
+  {index:3, name:'X32 USB', host_api:'ASIO', max_input_channels:16,
+   max_output_channels:16, default_samplerate:48000}] : [
+  {index:0, name:'UA Monitors', host_api:'Core Audio', max_input_channels:0,
+   max_output_channels:2, default_samplerate:48000},
+  {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
+   max_output_channels:2, default_samplerate:48000}];
+
 // Why the click cannot play through an output, by device index.
 const clickReasons = () => window.__CLICK_UNAVAILABLE__
   || (window.__HOST_API__ ? {3: "Another ASIO card can't play while one records."} : {});
@@ -1210,15 +1221,7 @@ window.__MAKE_API__ = () => ({
     }
     return {ok:true, found:[], gone:[]};
   }),
-  list_output_devices: async () => withClickReason(window.__HOST_API__ ? [
-    {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
-     max_output_channels:2, default_samplerate:48000},
-    {index:3, name:'X32 USB', host_api:'ASIO', max_input_channels:16,
-     max_output_channels:16, default_samplerate:48000}] : [
-    {index:0, name:'UA Monitors', host_api:'Core Audio', max_input_channels:0,
-     max_output_channels:2, default_samplerate:48000},
-    {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
-     max_output_channels:2, default_samplerate:48000}]),
+  list_output_devices: async () => withClickReason(outputDevices()),
   set_output_device: track('set_output_device', async (idx) => {
     outputDevice = {index: idx, channels: [1, 2]};
     // What Python says when a take is open and the card refused it.
@@ -2424,8 +2427,10 @@ window.__MAKE_API__ = () => ({
     // Settings › Keys, as api.get_settings: anything but false is on.
     space_keys: readCfg().space_keys !== false, player_keys: readCfg().player_keys !== false,
     // The metronome's, as api.get_settings: none for the click's output until
-    // one is picked.
-    click_device_index: readCfg().click_device_index ?? null,
+    // one is picked, and none for one saved that is not plugged in (its name
+    // is metronome_state's output_missing, as Python has it).
+    click_device_index: outputDevices().some(d => d.index === readCfg().click_device_index)
+      ? readCfg().click_device_index : null,
     click_channels: readCfg().click_channels ?? null,
     click_sound: readCfg().click_sound ?? 'click', click_volume: readCfg().click_volume ?? 0.7,
     count_in_bars: readCfg().count_in_bars ?? 1, tempo_in_wav: readCfg().tempo_in_wav !== false,

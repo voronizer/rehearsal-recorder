@@ -20,6 +20,16 @@ const VOLUME_SETTLE_MS = 400
 
 type Answer = { ok: boolean; error?: string; warning?: string }
 
+/** The click's saved output by name when it cannot play (Python knows the
+ *  name of a device that is not plugged in, the list does not), or null. */
+async function missingNow(): Promise<string | null> {
+  try {
+    return (await poll("metronome_state")).output_missing
+  } catch {
+    return null
+  }
+}
+
 /**
  * The metronome's four settings as Python keeps them (spec Part 6): where
  * the click is heard, how loud, its sound and the count-in. Each change is
@@ -30,8 +40,10 @@ type Answer = { ok: boolean; error?: string; warning?: string }
  * plays, and its outputs are shown as the ones it uses. Picking outputs
  * then saves that device as the click's first, so what is shown is always
  * what is used. A saved output that is not plugged in keeps its place,
- * under its own name: the click never seems to be on the player's device
- * while Python is waiting for its own.
+ * under its own name, with its outputs not to be picked: the click never
+ * seems to be on the player's device while Python is waiting for its own,
+ * and the player's device is never saved over it. Python gives no index for
+ * such a device and names it in `metronome_state`'s `output_missing`.
  */
 export function useClickSettings() {
   const [settings, setSettings] = useState<Settings | null>(null)
@@ -56,12 +68,8 @@ export function useClickSettings() {
       } catch {
         /* the bar across the top has said why */
       }
-      try {
-        const state = await poll("metronome_state")
-        if (alive) setMissingName(state.output_missing)
-      } catch {
-        /* the name is only for a device that is gone */
-      }
+      const name = await missingNow()
+      if (alive) setMissingName(name)
     })()
     return () => {
       alive = false
@@ -73,7 +81,9 @@ export function useClickSettings() {
 
   const reread = async () => {
     try {
-      setSettings(await api().get_settings())
+      const [read, name] = await Promise.all([api().get_settings(), missingNow()])
+      setSettings(read)
+      setMissingName(name)
     } catch {
       /* said in the bar */
     }
@@ -100,29 +110,37 @@ export function useClickSettings() {
 
   const saved = settings?.click_device_index ?? null
   const own = outputs.find((d) => d.index === saved)
+  // Saved and not plugged in: named by Python with no index, or an index
+  // the list does not have. One that is there is shown as itself.
+  const missing = settings !== null && !own && (missingName !== null || saved !== null)
   const player = settings?.output_device_index ?? null
   // The device the click plays through now: its own, or the player's.
-  const card = saved !== null ? own : outputs.find((d) => d.index === player)
+  const card = missing ? undefined : saved !== null ? own : outputs.find((d) => d.index === player)
 
   return {
     settings,
     /** The outputs the click can play through: another ASIO card cannot
      *  while one records, and is not offered. */
     outputs: outputs.filter((d) => !d.click_unavailable),
-    /** The click's own device; null while it goes where the player plays. */
-    device: saved,
+    /** The click's own device; null while it goes where the player plays,
+     *  and while its own is not plugged in. */
+    device: missing ? null : saved,
     /** The saved device when it is not plugged in: its name, if Python
      *  has it, or "" without one. Null while it is there, or none is saved. */
-    missing: settings && saved !== null && !own ? (missingName ?? "") : null,
-    /** The device the click plays through now, and its outputs in use. */
+    missing: missing ? (missingName ?? "") : null,
+    /** The device the click plays through now, and its outputs in use:
+     *  a missing device's as saved. */
     card,
-    channels: (saved !== null ? settings?.click_channels : settings?.output_channels) ?? [1, 2],
+    channels:
+      (missing || saved !== null ? settings?.click_channels : settings?.output_channels) ?? [1, 2],
     volume: sliding ?? settings?.click_volume ?? null,
     setDevice: async (index: number | null) => {
       if (said(await api().set_click_device(index), "Could not switch the click's output"))
         await reread()
     },
     setChannels: async (channels: number[]) => {
+      // Not while its own device is missing: that stays saved.
+      if (missing) return
       // Picked while the click follows the player: the player's device
       // becomes the click's own first, or the outputs would not be used.
       if (saved === null) {
