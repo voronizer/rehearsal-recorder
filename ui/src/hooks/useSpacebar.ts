@@ -300,12 +300,13 @@ export function useEscape(handler: () => void, enabled = true) {
 
 /**
  * One more key for a button that had none: Home to the start, M to mark,
- * R to repeat. `key` is compared with `KeyboardEvent.key`, case-insensitive,
- * so R works with Caps Lock on. The same rules as Space: nothing while
- * typing or behind a dialog, nothing with Ctrl/Cmd/Alt held — those belong
- * to the system — and nothing on a slider reached with the keyboard, where
- * Home already means "to the bottom of this slider". One the mouse only
- * dragged is let go, as a clicked button is for Space.
+ * R to repeat, T to tap a tempo (the metronome's Tap). `key` is compared
+ * with `KeyboardEvent.key`, case-insensitive, so R works with Caps Lock on.
+ * The same rules as Space: nothing while typing or behind a dialog, nothing
+ * with Ctrl/Cmd/Alt held — those belong to the system — and nothing on a
+ * slider reached with the keyboard, where Home already means "to the bottom
+ * of this slider". One the mouse only dragged is let go, as a clicked button
+ * is for Space.
  *
  * Every key bound here is one of the player's keys, and does nothing while
  * Settings › Keys has them off (lib/keys.ts).

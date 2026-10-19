@@ -3,6 +3,7 @@ import { Circle, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { FooterRow } from "@/components/FooterRow"
+import { MetronomeRow } from "@/components/metronome/MetronomeRow"
 import { Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { EveningFacts } from "@/components/EveningFacts"
@@ -523,7 +524,7 @@ export function Rehearsal({
         </aside>
       }
       footer={
-        <FooterRow>
+        <FooterRow left={<MetronomeRow />}>
           <div className="flex items-center gap-3">
             {/* Escape finishes only with no take in hand; with one, it puts
                 the take away — see useEscape above. */}

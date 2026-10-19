@@ -8,7 +8,7 @@
  * screen decides from that.
  */
 
-import type { ClickSound, MetronomeState, Signature } from "@/lib/api"
+import type { ClickSound, MetronomePhase, MetronomeState, Signature } from "@/lib/api"
 import { formatMeterShort } from "@/lib/format"
 
 /** The four, in the order the select lists them. */
@@ -100,6 +100,52 @@ export function tapTempo(timesMs: number[], signature: Signature): number | null
  */
 export function countDigit(count: number, perBar: number): { digit: number; of: number } {
   return { digit: ((Math.max(1, count) - 1) % perBar) + 1, of: perBar }
+}
+
+/** The longest a click stays lit, in milliseconds. */
+const LIT_MAX_MS = 150
+
+/** How long a click at `tempo` stays lit: half the time to the next click,
+ *  and never more than 150 ms, so the light goes dark between clicks even at
+ *  600 a minute. Nothing lights with no tempo. */
+export function litFor(tempo: number | null): number {
+  return tempo ? Math.min(LIT_MAX_MS, 30_000 / tempo) : 0
+}
+
+/** A click heard at `at` on the page's clock (performance.now()), the
+ *  `index`th of its bar from 0. */
+export type Click = { at: number; index: number }
+
+/** An answer of `metronome_state`, and when on the page's clock it was
+ *  given: its `upcoming` and `since_count_in_ms` count from then. */
+export type Heard = { state: MetronomeState; at: number }
+
+/** What the screen shows of the beat at a moment: the click lit (its index
+ *  in the bar) or none, where the take is, and the count-in's click. `last`
+ *  is the latest click heard, to carry into the next answer. */
+export type Beat = { lit: number | null; phase: MetronomePhase; count: number; last: Click | null }
+
+/**
+ * The beat at `now`, from the last answer and the click lit before it.
+ * Python says when the next clicks are heard and how far the count-in is,
+ * and the screen counts on from that at each frame: no clock of its own
+ * that could drift from the click (Part 5). The count-in ends when Python
+ * said it would, and the take is on from then.
+ */
+export function beatAt(heard: Heard, last: Click | null, now: number): Beat {
+  const { state, at } = heard
+  let latest = last
+  let passed = 0
+  for (const [ms, index] of state.upcoming) {
+    const t = at + ms
+    if (t > now) continue
+    passed += 1
+    if (latest === null || t >= latest.at) latest = { at: t, index }
+  }
+  const lit = latest !== null && now - latest.at < litFor(state.tempo) ? latest.index : null
+  const ended = state.since_count_in_ms !== null && state.since_count_in_ms + (now - at) >= 0
+  const phase = state.phase === "count" && ended ? "take" : state.phase
+  return { lit, phase, count: phase === "count" ? state.count + passed : 0, last: latest }
 }
 
 /**

@@ -155,9 +155,13 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   `data-recording` on `<html>` while it is up; what CSS cannot reach,
   such as a smooth scroll, asks `motionOff()` in `lib/motion.ts` as it
   moves (a scroll through `scrollBehavior()`). Meters and the clock are
-  readings, not motion, and keep moving; the record dot is still. Nothing
-  takes longer than 400 ms (`lib/theme.test.ts` checks every duration in
-  the file).
+  readings, not motion, and keep moving; the record dot is still. So are the
+  metronome's beat dots and the window's edge lit on each click
+  (`BeatDots`, `EdgeLight`): they go on and off on the click with no fade
+  or transition, and keep doing so while a take records and under Reduce
+  motion, since the band may count on them. The count-in's digits are a
+  reading in the clock's place. Nothing takes longer than 400 ms
+  (`lib/theme.test.ts` checks every duration in the file).
 
 ## The system's habits
 
@@ -181,8 +185,10 @@ same wherever it appears. Those that exist are in `ui/src/components/ui/`,
 each with a story for every state (U5), except three that are shared but
 live outside it: the notices (`components/Notices.tsx` and
 `lib/notices.ts`), `ConfirmDialog` (`components/ConfirmDialog.tsx`) and
-`TakeTitle` (`components/TakeTitle.tsx`). A screen that still builds a
-piece of its own moves onto the shared one when it is redone.
+`TakeTitle` (`components/TakeTitle.tsx`). The metronome's pieces live
+together in `components/metronome/`, each with its story beside it (the
+last lines below). A screen that still builds a piece of its own moves onto
+the shared one when it is redone.
 
 - **C1. Button.** Every button is the shared `Button`: a hand-made
   `<button>` has to remember the focus ring, the hover and the disabled look
@@ -320,16 +326,19 @@ piece of its own moves onto the shared one when it is redone.
   pages, a rehearsal's, a song's and a label's: what leads it, the title
   with the pencil after it, the lines under it and the actions at the right
   (B6). Only History uses it, so it is not in `components/ui/` (U3).
-  Settings' tabs are built from two more, in `components/SettingsGroup.tsx`.
-  `SettingsGroup` is one group of a tab: a `Card` 24 px inside that rises
-  in at its place. Given a title, it is a region named by its heading, with
-  a hint under the heading and an action at its right, where Keys puts its
-  switches. `PickRow` is a pick-one in a group: the row's name with the
-  shared `switch` beside it, named by it. Rate, Depth, the copies' format,
-  What gets sent, Theme and Scale are `PickRow`s, and Keys' On and Off are
-  the same switch at a group's head, so every choice of one among a few
-  words in Settings looks and works alike. Only Settings uses them, so they
-  are not in `components/ui/` (U3). The rest are added by the first
+  Settings' tabs are built from two more. `SettingsGroup`
+  (`components/SettingsGroup.tsx`) is one group of a tab: a `Card` 24 px
+  inside that rises in at its place. Given a title, it is a region named by
+  its heading, with a hint under the heading and an action at its right,
+  where Keys puts its switches. Only Settings uses it, so it is not in
+  `components/ui/` (U3). `PickRow` (`components/ui/pick-row.tsx`) is a
+  pick-one in a group: the row's name with the shared `switch` beside it,
+  named by it. Rate, Depth, the copies' format, What gets sent, Theme and
+  Scale are `PickRow`s, and Keys' On and Off are the same switch at a
+  group's head, so every choice of one among a few words looks and works
+  alike. The metronome's Sound and Count-in are `PickRow`s as well, behind
+  the gear on the rehearsal screen and in Settings, so it moved to
+  `components/ui/` (U3). The rest are added by the first
   screen's pull request that needs them: one ✕,
   one link, one size of icon button, a field with a button (InputGroup),
   screen header and side panel. A take's name is written by `TakeTitle`
@@ -531,6 +540,53 @@ The other shared components, each with its stories:
   on it, and Enter or Space opens and closes the part. A rung of a song's
   ladder in History is its one use so far: the rung is the trigger, its
   chevron says whether it is open, and its takes are the part.
+- **Slider**, `slider.tsx`: shadcn's, on the theme. A thin grey track, the
+  part set in the text's colour rather than the accent (F2: a setting, not
+  what plays), and a round thumb that shows keyboard focus in the shared
+  ring, as a fader's does (C6). Its name and its reading in words go on the
+  thumb, which is what a screen reader reaches. `onValueCommit` is the value
+  let go of, by the pointer or a key, for a setting saved and heard only
+  then. The click's volume is its first use.
+- **PickRow**, `pick-row.tsx`: a pick-one of a few words beside its name,
+  as C8 says.
+
+The metronome's pieces, in `components/metronome/` (spec Parts 4 and 5):
+
+- **NoteGlyph**, `NoteGlyph.tsx`: the eighth note, drawn, after every tempo
+  in 6/8 the interface draws; plain text says "♪" (`tempoUnit` in
+  `lib/format.ts`). `TempoUnit` beside it is what a tempo counts, "bpm" or
+  the eighth, with the tip "Beats a minute" or "Eighths a minute: the six
+  clicks of a bar", in the room "bpm" takes either way.
+- **TempoField**, `TempoField.tsx`: the tempo as a number field with − and
+  + on either side and its unit after it. Enter or leaving the field counts
+  what was typed; not a number puts the last one back, and empty is no
+  tempo.
+- **SignatureSelect**, `SignatureSelect.tsx`: 4/4, 3/4, 2/4 or 6/8, in the
+  shared select, each as wide as the others.
+- **TapButton**, `TapButton.tsx`: Tap, and T while the player's keys are on
+  (B9). After a press the band's pads count as taps until they pause.
+- **ClickSwitch**, `ClickSwitch.tsx`: the metronome's icon as a `Toggle`,
+  grey when on: whether Record clicks, and mid-take whether it still does.
+- **BeatDots**, `BeatDots.tsx`: a dot a click, the accented ones larger, 6/8
+  in two groups of three, the click heard now lit in the accent with no
+  fade (F11). It keeps the room of six.
+- **StatusLine**, `StatusLine.tsx`: the line under the row, with its one
+  link after the words, a warning's icon in amber and its words in the
+  text's colour. It keeps two lines' room.
+- **ClickSettings**, `ClickSettings.tsx`: the click's output, volume, sound
+  and count-in, behind the row's gear, and its pieces for Settings ›
+  Metronome (`useClickSettings`).
+- **MetronomeRow**, `MetronomeRow.tsx`: the row at the rehearsal screen's
+  footer, left of Finish and Record. `MetronomeRowView` draws it from its
+  props alone.
+- **TakeRow**, `TakeRow.tsx`: the row while a take records, at the
+  footer's far left: the switch, the take's tempo and signature, the dots
+  and the line.
+- **CountIn**, `CountIn.tsx`: the count-in's digit in the clock's place and
+  at its size, the accented ones in the accent.
+- **EdgeLight**, `EdgeLight.tsx`: the window's edge lit in the accent on
+  each click of a take, 14 px on the first of a bar and 7 px on the others,
+  on and off with no fade (F11), hidden from a screen reader.
 
 ## Writing components
 
@@ -735,7 +791,9 @@ as the `cn` import.
   shared `switch`, On and Off) and a row per screen under it of what its
   keys do there. "Space and Esc" is Space's main action and Esc's step back
   on every screen. "The player's keys" are the arrows, Home, M, R and ? in
-  the player, and ↑ and ↓ on the rehearsal screen and in History's lists.
+  the player, ↑ and ↓ on the rehearsal screen and in History's lists, and
+  T, which taps a tempo on the rehearsal screen and on a song's page (the
+  metronome's Tap, through `useKey`).
   `lib/keys.ts` holds the two, in force as soon as they are switched, and
   Python keeps them (`save_keys`, as `space_keys` and `player_keys`).
   Anything there but `false` is on, so a config edited by hand never turns
