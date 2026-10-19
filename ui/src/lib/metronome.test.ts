@@ -148,6 +148,12 @@ describe("tapping a tempo", () => {
     expect(tapTempo([1000, 0, 500], "4/4")).toBe(120)
     expect(tapTempo([400, 400], "4/4")).toBeNull()
   })
+  it("takes two hits within 50 ms for one: a pad that sends two note-ons, or a kit on two ports", () => {
+    expect(tapTempo([0, 0, 500, 500, 1000, 1000], "4/4")).toBe(120)
+    expect(tapTempo([0, 20, 500, 530, 1000, 1049], "4/4")).toBe(120)
+    // 600 eighths a minute are 100 ms apart, and every one is a tap.
+    expect(tapTempo([0, 100, 200, 300], "6/8")).toBe(600)
+  })
 })
 
 describe("the figures", () => {
@@ -227,6 +233,12 @@ describe("the status line", () => {
       link: { label: "save it to the song", action: "save" },
     })
   })
+  it("says what the song has when its row is emptied, with nothing to save", () => {
+    // Python holds no empty row: a song's tempo is taken away on its page.
+    expect(statusLine(state({ tempo: null, held: false }), null)).toEqual({
+      text: "The song has 128 · 4/4; this holds until another song.",
+    })
+  })
   it("goes back to the song's own line once the count is saved", () => {
     const saved = state({ case: "song", held: false })
     expect(statusLine(saved, { from: "Dym 5" })).toEqual({ text: "The song's tempo." })
@@ -248,6 +260,18 @@ describe("the status line", () => {
     })
     expect(statusLine(state({ output_missing: "X18", phase: "preview" }), null).warn).toBe(true)
   })
+  it("says the click's output is missing and keeps a held change's link", () => {
+    expect(statusLine(state({ tempo: 120, held: true, output_missing: "X18" }), null)).toEqual({
+      text: "The click's output, X18, is not connected.",
+      link: { label: "Save to song", action: "save" },
+      warn: true,
+    })
+    expect(statusLine(state({ ...WITHOUT, tempo: 104, held: true, output_missing: "" }), null)).toEqual({
+      text: "The click's output is not connected.",
+      link: { label: "Save now", action: "save" },
+      warn: true,
+    })
+  })
   it("has nothing to warn of without a tempo, and no warning otherwise", () => {
     expect(statusLine(state({ ...WITHOUT, output_missing: "X18" }), null).warn).toBeUndefined()
     expect(statusLine(state(), null).warn).toBeUndefined()
@@ -265,6 +289,12 @@ describe("the status line", () => {
     // Python says "count" from Record, and the time only once it has chosen
     // the first click: no "Count-in: 1 of 4" before a click is heard.
     expect(statusLine(state({ phase: "count", count: 0, since_count_in_ms: null }), null)).toEqual({
+      text: "",
+    })
+  })
+  it("says nothing of the count-in before its first click is heard", () => {
+    // Chosen, and not heard yet: Python's count is 0 until it is.
+    expect(statusLine(state({ phase: "count", count: 0, since_count_in_ms: -400 }), null)).toEqual({
       text: "",
     })
   })
@@ -314,7 +344,9 @@ describe("the count-in's digits", () => {
   it("go from 1 to the clicks of a bar, and again for a second bar", () => {
     expect([1, 2, 3, 4, 5, 6, 7, 8].map((n) => countDigit(n, 4).digit)).toEqual([1, 2, 3, 4, 1, 2, 3, 4])
     expect(countDigit(5, 6)).toEqual({ digit: 5, of: 6 })
-    expect(countDigit(0, 4)).toEqual({ digit: 1, of: 4 })
+  })
+  it("are none before the first click is heard", () => {
+    expect(countDigit(0, 4)).toEqual({ digit: null, of: 4 })
   })
 })
 

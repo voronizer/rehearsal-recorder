@@ -7,7 +7,9 @@ The row follows the next take's name (Part 2). A name that leads to a song
 puts the song's tempo in the row, or empties it for a song without one; an
 empty name or "Take N" empties it. A change made in the row is held until
 the name leads somewhere else: a keystroke in the same song's name keeps it.
-A row not held follows its song's tempo when the song is given one.
+A row not held follows its song's tempo when the song is given one. An
+emptied row is not held: there is nothing to save, and a song's tempo is taken
+away on its page.
 A free take and a title no song has yet are both "no song", so a tempo set
 for one holds through the other.
 
@@ -39,8 +41,9 @@ and lets it go (`let_go_for_rescan`), or comes before it is opened. Hence:
 - play, preview, stop, resink, begin_take, close, and set and follow (which
   stop ▶ when the row empties) take `_sinks`: never call them with
   STREAM_LOCK held, for a play() on another thread holds `_sinks` and waits
-  for STREAM_LOCK. let_go_for_rescan takes no `_sinks` and is the one to call
-  inside a rescan's locks; state never waits for either.
+  for STREAM_LOCK. let_go_for_rescan and make_room take no `_sinks`: they are
+  the ones to call inside a rescan's locks or the player's; state never
+  waits for either.
 - `device_lookup` and `player_getter` are called with STREAM_LOCK held, so
   they must never take the Api's `_player_lock`, which rescan_devices takes
   before STREAM_LOCK.
@@ -56,7 +59,7 @@ import sounddevice as sd
 from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, SOUNDS, Voices, per_bar, tempo_range
 from rehearsal_recorder.audio.click_output import ClickOutput, SilentOutput
 from rehearsal_recorder.audio.click_source import ClickSource
-from rehearsal_recorder.audio.devices import STREAM_LOCK
+from rehearsal_recorder.audio.devices import STREAM_LOCK, _is_asio
 from rehearsal_recorder.audio.take_click import TakeClick, whole
 from rehearsal_recorder.store.names import UNNAMED_TAKE
 
@@ -78,6 +81,10 @@ UPCOMING_SEC = 1.5
 # How old the device list's word on the click's output may be when the screen
 # asks: the list is read again no more often than this from a poll.
 DEVICES_FRESH_SEC = 2.0
+
+# Why the click cannot go to a card, as Settings › Metronome says it, and why
+# a take's click there is not heard: PortAudio opens one ASIO stream at a time.
+ANOTHER_ASIO = "Another ASIO card can't play while one records."
 
 # The click between takes: its source, "player" or "own", the player or
 # output it plays in, whether the screen shows it (▶) or not (a bar played
@@ -138,6 +145,12 @@ def _name(index):
     except Exception:
         return ""
     return name if isinstance(name, str) else ""
+
+
+def _asio(index):
+    """Whether a device is reached through ASIO."""
+    with STREAM_LOCK:
+        return _is_asio(index)
 
 
 def _system_output():
@@ -218,8 +231,12 @@ class Metronome:
             return None
 
     def settings(self):
-        """The settings, for Settings and the gear."""
+        """The settings, for Settings and the gear. `click_device_missing`:
+        the name of the click's own device when one is saved and not plugged
+        in ("" for one saved with no name), else None. An output that is there
+        and will not play is said in the state's `output_missing` only."""
         return {"click_device_index": self._devices()[0],
+                "click_device_missing": self._target(wait=False)[2],
                 "click_channels": self._click_channels(),
                 **{key: self._setting(key) for key in DEFAULTS}}
 
@@ -317,11 +334,12 @@ class Metronome:
         return tempo, signature, self._setting("metronome_on")
 
     def _held(self):
+        """Whether the row has a tempo of its own for the song: one that is
+        not the song's, which Save to song saves."""
         song = self._song
-        if song is None:
+        if song is None or self._tempo is None:
             return False
-        row = (self._tempo, None if self._tempo is None else self._signature)
-        return row != (song["tempo"], song["signature"])
+        return (self._tempo, self._signature) != (song["tempo"], song["signature"])
 
     def _case(self):
         if self._free_name:
@@ -435,7 +453,8 @@ class Metronome:
         The click for a take recorded from `device_index` at `samplerate`, or
         None for a take without one (no tempo, or the switch off). On the
         recording card it rides the take's stream; elsewhere it has its own,
-        or none when its device is not plugged in, and the take keeps its grid.
+        or none when its device is not plugged in or is a second ASIO card,
+        and the take keeps its grid.
         """
         tempo, signature, on = self.take_meter()
         if tempo is None or not on:
@@ -458,6 +477,10 @@ class Metronome:
                 output = SilentOutput(_name(here), "It has no outputs to click on.", int(samplerate))
             else:
                 route = tuple(c - 1 for c in channels)
+        elif here is not None and _asio(device_index) and _asio(here):
+            # The take's stream is the one ASIO stream PortAudio opens: the
+            # take records as it would, its click to no output, and says why.
+            output = SilentOutput(_name(here), ANOTHER_ASIO, int(samplerate))
         else:
             output = ClickOutput(device, channels or (1, 2))
         return TakeClick(tempo, signature, self._setting("count_in_bars"),
@@ -495,7 +518,15 @@ class Metronome:
                 return refused
         elif tempo is None:
             return _refused("No tempo to play: type or tap one")
-        self._start(tempo, signature, shown=True, fixed=fixed)
+        with self._sinks:
+            free = self._free
+            if fixed and free is not None and free.shown and free.fixed:
+                # A change on the song's page while its click plays: on from
+                # the next click, as the row's ▶ follows the row, not from a
+                # bar's first.
+                free.source.retime(tempo, signature)
+            else:
+                self._start_held(tempo, signature, shown=True, fixed=fixed)
         return {"ok": True}
 
     def preview(self, bars=1, sound=None):
@@ -511,19 +542,22 @@ class Metronome:
             tempo, signature = self._tempo, self._signature
         if tempo is None:
             tempo = PREVIEW_TEMPO
-        free = self._start(tempo, signature, shown=False, bars=bars, sound=sound)
+        with self._sinks:
+            if self._free is not None and self._free.shown:
+                # ▶ plays: that is the bar to hear, in the sound and at the
+                # volume set_setting has just given it. A bar here would stop it.
+                return {"ok": True}
+            free = self._start_held(tempo, signature, shown=False, bars=bars, sound=sound)
         timer = threading.Timer(bars * per_bar(signature) * 60 / tempo + PREVIEW_SLACK_SEC,
                                 self._reap, args=(free,))
         timer.daemon = True
         timer.start()
         return {"ok": True}
 
-    def _start(self, tempo, signature, shown, bars=None, sound=None, start_k=0, fixed=False):
-        with self._sinks:
-            return self._start_held(tempo, signature, shown, bars, sound, start_k, fixed)
-
     def _start_held(self, tempo, signature, shown, bars=None, sound=None, start_k=0, fixed=False):
-        """_start, with `_sinks` already held."""
+        """A click between takes in place of the one there was, with `_sinks`
+        held: shown (▶) or a bar for a setting, `bars` long or until Stop,
+        from click `start_k` of its bar."""
         # Where it goes, its stream opened and kept in _free, in one hold
         # of STREAM_LOCK: see the module's note on the locks.
         with STREAM_LOCK:
@@ -562,6 +596,28 @@ class Metronome:
         play() opens its stream once the rescan is over.
         """
         self._stop_free()
+
+    def make_room(self, device_index):
+        """
+        The player is about to open its stream on `device_index` (None: the
+        system's output). A click between takes with a stream of its own there
+        closes it first: the app never opens a second stream on a device it
+        holds (spec Part 3), and ASIO refuses one. A ▶ click is kept, closed,
+        where it is in the bar, and resink carries it on in the player's
+        stream from its next click; a bar for a setting stops. Called with the
+        Api's _player_lock held, and inside a rescan's locks, so it takes no
+        `_sinks`, as let_go_for_rescan.
+        """
+        with STREAM_LOCK:
+            with self._lock:
+                free = self._free
+            if (free is None or free.kind != "own" or not isinstance(free.sink, ClickOutput)
+                    or free.sink.device_index != device_index):
+                return
+            if free.shown:
+                free.sink.stop()
+            else:
+                self._stop_free()
 
     def _stop_free(self):
         """Lets go of the click between takes: taken out of _free and its
@@ -610,11 +666,13 @@ class Metronome:
                 return
             kind, sink, route = self._sink()
             # The same player still playing it, or a stream of its own on the
-            # same device: nothing to move. A player that closed and opened its
-            # output again has let go of it.
+            # same device and still open: nothing to move. A player that closed
+            # and opened its output again has let go of it, and a stream closed
+            # for the player (make_room) is no stream.
             if kind == free.kind and route == free.source.route and (
                     sink is free.sink and sink.free_click is free.source if kind == "player"
-                    else type(sink) is type(free.sink) and sink.device_index == free.sink.device_index):
+                    else type(sink) is type(free.sink) and sink.device_index == free.sink.device_index
+                    and not free.sink.closed):
                 return
             source = free.source
             self._start_held(source.tempo, source.signature, shown=True, start_k=source.next_in_bar,

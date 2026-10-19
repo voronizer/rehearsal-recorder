@@ -976,6 +976,20 @@ test.describe("the click's output", () => {
     await expect(page.getByRole("option")).toHaveCount(0)
     expect(await clickOutputCalls(page)).toEqual([])
   })
+
+  test("a click that cannot play with no output of its own saved still goes where the player plays", async ({
+    page,
+  }) => {
+    // Python names the output that cannot play, here the player's (the
+    // click's stream there would not open). No output of the click's own is
+    // saved, so none is unplugged: the gear offers the player's outputs.
+    await rehearse(page, "Pałyn", `window.__CLICK_MISSING__ = "UA Monitors";`)
+    await playerOnMonitors(page)
+    await gear(page).click()
+    await expect(device(page)).toHaveText("Where the player plays")
+    await expect(outputs(page)).toHaveText("1–2")
+    await expect(outputs(page)).toBeEnabled()
+  })
 })
 
 // ---- Settings › Metronome, a song's page in History, and Master --------

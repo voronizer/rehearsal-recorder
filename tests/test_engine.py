@@ -12553,6 +12553,20 @@ def main():
     ok("  and its .mid: a key a quarter second after the first click is at 0.25 s",
        [(round(sec * 1920), data) for sec, data in events80] == [(480, b"\x90\x3c\x40"), (768, b"\x80\x3c\x00")])
 
+    # The card gone just after Record: Stop has fewer frames than lead up to
+    # the first click, so the take has no grid and keeps all it recorded,
+    # with no tempo in its WAVs, rather than WAVs with a tempo and no audio.
+    lost80 = tmp80 / "card lost"
+    tc80f = TakeClick80(120, "4/4", 1, voices80, (0, 1))
+    rec80f = Rec80(0, SR, two80, lost80, click=tc80f)
+    rec80f.start()
+    block80(rec80f, 0)
+    result80f = rec80f.stop()
+    ok("the card gone before the first click came: no grid, all 1024 frames kept, no tempo in the WAVs",
+       tc80f.first_click_frame is None and len(wav80(lost80 / "Gtr.wav")) == 1024
+       and read_acid80(lost80 / "Gtr.wav") is None and abs(result80f["duration_sec"] - 1024 / SR) < 1e-9
+       and record80(lost80)["click"]["first_click_frame"] is None)
+
     # The card will not open its outputs with its inputs: Record still
     # records, from the inputs alone, a click take on its grid, the beat still
     # lit on the screen (spec Part 4).
@@ -12677,6 +12691,82 @@ def main():
        not on_desk81.duplex and on_desk81.output.device_index == 3 and on_desk81.output.channels == (3, 4))
     m81.set_on(False)
     ok("the switch off: no click for the take", m81.take_click(0, SR) is None)
+
+    print("  Two ASIO cards")
+    # PortAudio opens one ASIO stream at a time: with the interface recording
+    # on ASIO, a click on another ASIO card has no stream of its own, and the
+    # take records all the same (spec Part 4).
+    from rehearsal_recorder.audio.click_output import SilentOutput as SilentOutput81
+
+    class OneAsio81(Streams81):
+        """A stream as PortAudio's ASIO opens it: one on a card in `asio` is
+        refused while another such stream is open, on that card or another."""
+
+        asio = set()
+        open_now = []
+
+        @staticmethod
+        def card(kw):
+            device = kw.get("device")
+            return device[0] if isinstance(device, tuple) else device
+
+        def __init__(self, **kw):
+            if self.card(kw) in OneAsio81.asio and any(s.card(s.kw) in OneAsio81.asio for s in OneAsio81.open_now):
+                raise RuntimeError("Error opening stream: Unanticipated host error [PaErrorCode -9999]")
+            super().__init__(**kw)
+            OneAsio81.open_now.append(self)
+
+        def close(self):
+            super().close()
+            if self in OneAsio81.open_now:
+                OneAsio81.open_now.remove(self)
+
+    kinds81 = (_sd.InputStream, _sd.OutputStream, _sd.Stream)
+    _sd.InputStream = _sd.OutputStream = _sd.Stream = OneAsio81
+    OneAsio81.asio = {0, 3}
+    try:
+        tc81b = TakeClick80(120, "4/4", 1, voices80, (0, 1), output=ClickOutput81(3, (1, 2)))
+        rec81b = Rec80(0, SR, two80, tmp80 / "two asio cards", click=tc81b)
+        try:
+            rec81b.start()
+            started81 = True
+        except Exception as e:
+            print(f"  (Record failed: {e})")
+            started81 = False
+        ok("the click's own output on a second ASIO card: the take's stream opens first, and records",
+           started81 and rec81b._stream is not None and rec81b._stream.kw["device"] == 0
+           and tc81b.problem() is not None)
+        if started81:
+            for i in range(4):
+                block80(rec81b, i)
+            rec81b.stop()
+    finally:
+        _sd.InputStream, _sd.OutputStream, _sd.Stream = kinds81
+        OneAsio81.open_now.clear()
+
+    another81 = "Another ASIO card can't play while one records."
+    hostapis81 = _sd.query_hostapis
+    _sd.query_hostapis = lambda: [{"name": "ASIO"}]  # every card on ASIO
+    try:
+        desk81 = Metronome81({"click_device": {"name": "Desk", "host_api": "ASIO"}, "click_device_index": 3,
+                              "click_channels": [1, 2]}, lambda: None, lambda: None, {"click_device": 3}.get, None)
+        desk81.set(128, "4/4")
+        on_desk81b = desk81.take_click(0, SR)
+        follows81 = Metronome81({}, lambda: None, lambda: None, {"output_device": 3}.get, None)
+        follows81.set(128, "4/4")
+        on_player81 = follows81.take_click(0, SR)
+        card81 = Metronome81({"click_device": {"name": "Interface", "host_api": "ASIO"}, "click_device_index": 0,
+                              "click_channels": [1, 2]}, lambda: None, lambda: None, {"click_device": 0}.get, None)
+        card81.set(128, "4/4")
+        on_card81b = card81.take_click(0, SR)
+    finally:
+        _sd.query_hostapis = hostapis81
+    ok("the click saved on another ASIO card: no stream of its own for the take, and it says why",
+       not on_desk81b.duplex and isinstance(on_desk81b.output, SilentOutput81)
+       and on_desk81b.output.name == "Desk" and on_desk81b.problem() == another81)
+    ok("  the same with none saved and the player on that card",
+       isinstance(on_player81.output, SilentOutput81) and on_player81.problem() == another81)
+    ok("  on the recording card itself it rides the take's stream, as before", on_card81b.duplex)
 
     print("\n[82] The click and the player")
     # Between takes the click shares the player's stream when the player holds
@@ -12920,6 +13010,51 @@ def main():
             else:
                 setattr(_sd, name82, value82)
 
+    print("  Play first, then the player opens on its device")
+    # Play with the player closed has a stream of its own where the player
+    # plays. A take opened there must not open a second stream on that card:
+    # ASIO refuses one, and the player would go to the system's output. The
+    # click lets go of its stream first and goes on in the player's, from its
+    # next click.
+    a82 = fresh_api(Path(tempfile.mkdtemp()))[1]
+    kinds82 = (_sd.OutputStream, _sd.InputStream, _sd.Stream)
+    _sd.OutputStream = _sd.InputStream = _sd.Stream = OneAsio81
+    OneAsio81.asio = {3}
+    try:
+        a82.set_output_device(3)
+        a82.metronome_set(120, "4/4")
+        played82 = a82.metronome_play()
+        own82 = a82._metronome._free
+        for b in range(30):  # 30720 frames at 120: clicks 0 and 1 played, click 2 next
+            own82.sink._callback(np.zeros((1024, 2), np.float32), 1024, None, None)
+        opened82b = a82.player_open([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+        moved82 = a82._metronome._free
+        ok("play first, the take opened after on the click's card: the player opens there, no warning",
+           played82["ok"] and own82.kind == "own" and opened82b["ok"] and "warning" not in opened82b
+           and a82._player.holds(3))
+        ok("  and the click goes on in the player's stream from the bar's third click",
+           moved82 is not None and moved82.kind == "player" and a82._player.free_click is moved82.source
+           and moved82.source.next_in_bar == 2 and own82.sink._stream is None)
+        a82.player_close()
+        ok("  closed, the click has its own stream again", a82._metronome._free is not None
+           and a82._metronome._free.kind == "own" and a82._metronome._free.sink._stream is not None)
+        a82.metronome_stop()
+        # The click's own output saved on the desk, the player on the
+        # interface; then the player is moved onto the desk.
+        a82.set_click_device(3)
+        a82.set_output_device(0)
+        a82.player_open([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+        a82.metronome_play()
+        own82 = a82._metronome._free
+        moved82b = a82.set_output_device(3)
+        ok("the player moved onto the card the click plays on: it opens there, and takes the click",
+           own82.kind == "own" and own82.sink.device_index == 3 and moved82b["ok"] and "warning" not in moved82b
+           and a82._player.holds(3) and a82._metronome._free.kind == "player")
+    finally:
+        _sd.OutputStream, _sd.InputStream, _sd.Stream = kinds82
+        OneAsio81.open_now.clear()
+        a82.shutdown()
+
     print("\n[83] The metronome through the Api")
     # Record takes its tempo, signature and click from the metronome's row,
     # whoever presses it (spec Parts 2 to 4), and the take keeps them. The
@@ -13049,7 +13184,9 @@ def main():
         ok("a click take thrown away, a false start, gives its song no tempo",
            a83._lib.tempo_for("Ahon")["song"]["tempo"] is None)
         ok("  and the row still holds 128", state83(a83, "tempo", "held") == (128, True))
-        stopped, kept = take83(a83, keep="Ahon")
+        # Twelve blocks, past the first click at frame 9600: a take whose card
+        # goes quiet before it is no click take ([80]).
+        stopped, kept = take83(a83, keep="Ahon", blocks=12)
         song = a83._lib.tempo_for("Ahon")["song"]
         ok("the first click take kept gives the song its tempo: 128 in 4/4",
            (kept["take"]["tempo"], kept["take"]["signature"], kept["take"]["click"]) == (128, "4/4", True)
@@ -13307,6 +13444,8 @@ def main():
         a83._metronome.devices_changed()
         ok("its index in the settings is none, and its name is in the state",
            a83.get_settings()["click_device_index"] is None and a83.metronome_state()["output_missing"] == "X18")
+        ok("  the settings name it as the unplugged device, which no output that will not open is",
+           a83.get_settings().get("click_device_missing") == "X18")
         a83._config["click_device"] = {"host_api": "CoreAudio"}
         a83._metronome.devices_changed()
         ok("  one saved with no name: an empty name, and the screen says it without one",

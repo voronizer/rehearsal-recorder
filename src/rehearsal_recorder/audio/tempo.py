@@ -28,6 +28,7 @@ import logging
 
 import numpy as np
 
+from rehearsal_recorder.audio.click import SIGNATURES, per_quarter, tempo_range
 from rehearsal_recorder.audio.format import unpack24
 from rehearsal_recorder.audio.player import _open_track
 from rehearsal_recorder.midi.notes import DRUM_MAP, DRUM_ROWS
@@ -35,9 +36,9 @@ from rehearsal_recorder.midi.smf import read_events
 
 log = logging.getLogger(__name__)
 
-# What a signature's number may be, and where the preference sits: 120 beats
-# a minute, which in 6/8 is 240 eighths. The click's range (global constraints).
-RANGES = {"4/4": (30, 300, 120.0), "3/4": (30, 300, 120.0), "2/4": (30, 300, 120.0), "6/8": (60, 600, 240.0)}
+# What a signature's number may be, the click's own range, and where the
+# preference sits: 120 beats a minute, which in 6/8 is 240 eighths.
+RANGES = {s: (*tempo_range(s), 120.0 * per_quarter(s)) for s in SIGNATURES}
 
 WINDOW_SEC = 8.0
 # How a gap's strength is scored: the autocorrelation (1 at no gap, near 0 for

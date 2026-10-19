@@ -1895,6 +1895,20 @@ def main():
     kept18 = lib.update_take(night18, 5, duration_sec=9.0)
     ok("and a change of something else leaves them as they are",
        (kept18["tempo"], kept18["signature"], kept18["click"], kept18["duration_sec"]) == (90, "4/4", True, 9.0))
+    unclicked18 = lib.update_take(night18, 5, click=False)
+    ok("update_take with click=False keeps the tempo and makes it no click take",
+       (unclicked18["tempo"], unclicked18["signature"], unclicked18["click"]) == (90, "4/4", False))
+
+    # What the metronome could not have shown is kept as no tempo at all.
+    fast18 = add18(11, "Burza", tempo=301, signature="4/4", click=True)
+    ok("a take at 301 in 4/4, past the range, keeps no tempo, is no click take and gives its song none",
+       (fast18["tempo"], fast18["signature"], fast18["click"]) == (None, None, False) and meter18("Burza") == (None, None))
+    five18 = add18(12, "Burza", tempo=120, signature="5/4", click=True)
+    ok("a take in 5/4, a signature the metronome does not have, keeps no tempo either",
+       (five18["tempo"], five18["signature"], five18["click"]) == (None, None, False) and meter18("Burza") == (None, None))
+    bare_click18 = add18(13, "Burza", click=True)
+    ok("a take said to have clicked with no tempo is no click take",
+       (bare_click18["tempo"], bare_click18["click"]) == (None, False) and meter18("Burza") == (None, None))
 
     print("  merging songs")
     merges18 = rec18 / "Merges"

@@ -76,7 +76,7 @@ from rehearsal_recorder.audio.click import (
 )
 from rehearsal_recorder.audio.take_click import whole
 from rehearsal_recorder.audio.wavfile import read_acid
-from rehearsal_recorder.metronome import Metronome
+from rehearsal_recorder.metronome import ANOTHER_ASIO, Metronome
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
@@ -157,9 +157,6 @@ MIDI_THREADS = True
 # Part 11), looked at this often. The suites shorten both.
 TAP_QUIET_SEC = 2.0
 TAP_POLL_SEC = 0.1
-
-# Why the click cannot go to a card, as Settings › Metronome says it.
-ANOTHER_ASIO = "Another ASIO card can't play while one records."
 
 log = logging.getLogger(__name__)
 
@@ -4466,11 +4463,16 @@ class Api:
         try:
             player = TakePlayer(tracks)
             index = saved_device(self._config, "output_device", False)
-            # Wide enough for the click's outputs, when its device is this one.
-            warning = player.open_output(
-                index, self._output_channels(),
-                extra_channels=self._metronome.extra_channels(index),
-            )
+            # A click between takes with a stream of its own there lets go of
+            # it first; _resink then carries it on in this one. STREAM_LOCK
+            # held throughout, so no ▶ reopens it on the device in between.
+            with STREAM_LOCK:
+                self._metronome.make_room(index)
+                # Wide enough for the click's outputs, when its device is this one.
+                warning = player.open_output(
+                    index, self._output_channels(),
+                    extra_channels=self._metronome.extra_channels(index),
+                )
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -4713,10 +4715,13 @@ class Api:
             state = self._player.state()
             try:
                 index = saved_device(self._config, "output_device", False)
-                warning = self._player.open_output(
-                    index, self._output_channels(),
-                    extra_channels=self._metronome.extra_channels(index),
-                )
+                # As in _open_player: never a second stream on the click's.
+                with STREAM_LOCK:
+                    self._metronome.make_room(index)
+                    warning = self._player.open_output(
+                        index, self._output_channels(),
+                        extra_channels=self._metronome.extra_channels(index),
+                    )
             except Exception as e:
                 return {"ok": False, "error": str(e)}
             self._player.seek(state["position"])

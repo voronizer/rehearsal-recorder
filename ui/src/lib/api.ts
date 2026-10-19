@@ -874,6 +874,10 @@ export type MetronomeSettings = {
   /** The click's own output, as `output_device_index` is the player's; null
    *  until one is picked, and the click then goes where the player plays. */
   click_device_index: number | null
+  /** The click's own output by name when it is saved and not plugged in
+   *  ("" for one saved with no name), else null. An output that is there
+   *  and cannot play is only `metronome_state`'s `output_missing`. */
+  click_device_missing: string | null
   /** Outputs of that card the click comes out of, from 1; null with no
    *  device picked. */
   click_channels: number[] | null

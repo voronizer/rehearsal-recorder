@@ -1127,10 +1127,11 @@ tempo and the time signature into every WAV of a take recorded to the
 click, and is on until you turn it off. Cubase, Nuendo, Pro Tools and
 Studio One read it and fit the take to the project's tempo, and so does FL
 Studio when its own setting for that is on. At any other project tempo,
-they stretch the take. Ableton Live and Logic ignore it. To have them all leave your takes as they are, turn the setting off.
-The change applies to the takes you record after that. A take recorded
-without the click never gets a tempo in its WAVs: the band was not playing
-to a click, and a DAW would stretch it for nothing.
+they stretch the take. Ableton Live and Logic ignore it. To have every DAW
+leave your takes as they are, turn the setting off. The change applies to
+the takes you record after that. A take recorded without the click never
+gets a tempo in its WAVs: the band was not playing to a click, and a DAW
+would stretch it for nothing.
 
 Copies sent to the cloud as WAV (**As recorded**) keep the tempo, the mix
 included. FLAC and MP3 copies do not.

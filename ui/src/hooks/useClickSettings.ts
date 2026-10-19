@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react"
 import { useNoticesGoWithPage } from "@/hooks/useErrorNotice"
 import {
   api,
-  poll,
   type ClickSound,
   type MetronomeSettings,
   type OutputDevice,
@@ -20,16 +19,6 @@ const VOLUME_SETTLE_MS = 400
 
 type Answer = { ok: boolean; error?: string; warning?: string }
 
-/** The click's saved output by name when it cannot play (Python knows the
- *  name of a device that is not plugged in, the list does not), or null. */
-async function missingNow(): Promise<string | null> {
-  try {
-    return (await poll("metronome_state")).output_missing
-  } catch {
-    return null
-  }
-}
-
 /**
  * The metronome's four settings as Python keeps them (spec Part 6): where
  * the click is heard, how loud, its sound and the count-in. Each change is
@@ -43,14 +32,13 @@ async function missingNow(): Promise<string | null> {
  * under its own name, with its outputs not to be picked: the click never
  * seems to be on the player's device while Python is waiting for its own,
  * and the player's device is never saved over it. Python gives no index for
- * such a device and names it in `metronome_state`'s `output_missing`.
+ * such a device and names it in the settings' `click_device_missing`: an
+ * output that is there and will not play is not unplugged, and an output
+ * that is not saved is not either.
  */
 export function useClickSettings() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [outputs, setOutputs] = useState<OutputDevice[]>([])
-  // The click's output by name when it cannot play: Python knows the name
-  // of a device that is not plugged in, the list does not.
-  const [missingName, setMissingName] = useState<string | null>(null)
   // The volume while it moves, and one waiting to be saved.
   const [sliding, setSliding] = useState<number | null>(null)
   const pending = useRef<number | null>(null)
@@ -68,8 +56,6 @@ export function useClickSettings() {
       } catch {
         /* the bar across the top has said why */
       }
-      const name = await missingNow()
-      if (alive) setMissingName(name)
     })()
     return () => {
       alive = false
@@ -81,9 +67,7 @@ export function useClickSettings() {
 
   const reread = async () => {
     try {
-      const [read, name] = await Promise.all([api().get_settings(), missingNow()])
-      setSettings(read)
-      setMissingName(name)
+      setSettings(await api().get_settings())
     } catch {
       /* said in the bar */
     }
@@ -110,9 +94,10 @@ export function useClickSettings() {
 
   const saved = settings?.click_device_index ?? null
   const own = outputs.find((d) => d.index === saved)
-  // Saved and not plugged in: named by Python with no index, or an index
+  // Saved and not plugged in: named by Python, with no index, or an index
   // the list does not have. One that is there is shown as itself.
-  const missing = settings !== null && !own && (missingName !== null || saved !== null)
+  const missingName = settings?.click_device_missing ?? null
+  const missing = settings !== null && (missingName !== null || (saved !== null && !own))
   const player = settings?.output_device_index ?? null
   // The device the click plays through now: its own, or the player's.
   const card = missing ? undefined : saved !== null ? own : outputs.find((d) => d.index === player)

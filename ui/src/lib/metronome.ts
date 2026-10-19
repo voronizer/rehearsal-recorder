@@ -72,14 +72,23 @@ const TAP_PAUSE_MS = 2000
 /** The taps that count towards a tempo: the last four gaps. */
 const TAP_GAPS = 4
 
+/** Two taps closer than this, in milliseconds, are one: a pad that sends two
+ *  note-ons for a hit, or a kit on two ports. It is half the shortest gap
+ *  there can be between taps, 100 ms at 600 a minute (6/8's fastest). Python
+ *  drops a pad's hit the same way (DOUBLE_HIT_SEC in midi/rig.py). */
+const DOUBLE_HIT_MS = 50
+
 /**
  * The tempo the taps beat: the average of the last four gaps between them,
  * from the taps since the last pause of more than two seconds. A tap is a
- * click, so in 6/8 it is an eighth. null until there are two taps to make a
- * gap of.
+ * click, so in 6/8 it is an eighth. A tap within 50 ms of the one before is
+ * that tap again. null until there are two taps to make a gap of.
  */
 export function tapTempo(timesMs: number[], signature: Signature): number | null {
-  const times = [...timesMs].sort((a, b) => a - b)
+  const times: number[] = []
+  for (const t of [...timesMs].sort((a, b) => a - b)) {
+    if (times.length === 0 || t - times[times.length - 1] >= DOUBLE_HIT_MS) times.push(t)
+  }
   let from = 0
   for (let i = 1; i < times.length; i++) if (times[i] - times[i - 1] > TAP_PAUSE_MS) from = i
   const gaps = times
@@ -88,8 +97,6 @@ export function tapTempo(timesMs: number[], signature: Signature): number | null
     .slice(-TAP_GAPS)
   if (gaps.length === 0) return null
   const mean = gaps.reduce((sum, g) => sum + g, 0) / gaps.length
-  // Two hits at once make no tempo.
-  if (!(mean > 0)) return null
   return clampTempo(60_000 / mean, signature)
 }
 
@@ -97,9 +104,10 @@ export function tapTempo(timesMs: number[], signature: Signature): number | null
  * Which click of the bar the count-in is on, and how many a bar has: "2 of
  * 4". Python counts the clicks of the whole count-in; a count-in of two bars
  * counts the bar twice (Part 5), whether the number runs on or starts again.
+ * No digit (null) before the first click is heard, which Python counts as 0.
  */
-export function countDigit(count: number, perBar: number): { digit: number; of: number } {
-  return { digit: ((Math.max(1, count) - 1) % perBar) + 1, of: perBar }
+export function countDigit(count: number, perBar: number): { digit: number | null; of: number } {
+  return { digit: count < 1 ? null : ((count - 1) % perBar) + 1, of: perBar }
 }
 
 /** The longest a click stays lit, in milliseconds. */
@@ -181,7 +189,8 @@ function missingOutput(device: string): StatusLine {
 /**
  * The line under the metronome row, always one of Part 4's and, while a take
  * is on, one of Part 5's. Save to song and Save now are offered only while
- * the row is held; counting from the last take only when the song has a take.
+ * the row is held, and stay while the click's output cannot play; counting
+ * from the last take only when the song has a take.
  */
 export function statusLine(state: MetronomeState, counting: Counting = null): StatusLine {
   const hasTempo = state.tempo !== null
@@ -198,6 +207,8 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
     if (state.output_missing !== null) return missingOutput(state.output_missing)
     if (state.phase === "take") return { text: "Clicking to Stop." }
     const { digit, of } = countDigit(state.count, state.per_bar)
+    // Chosen and not heard yet: no click counted, and the line keeps its room.
+    if (digit === null) return { text: "" }
     return { text: `Count-in: ${digit} of ${of}` }
   }
 
@@ -210,15 +221,38 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
       link: { label: "save it to the song", action: "save" },
     }
   }
-  if (hasTempo && state.output_missing !== null) return missingOutput(state.output_missing)
+  const line = caseLine(state)
+  if (!hasTempo || state.output_missing === null) return line
+  // The click's output cannot play. A change held keeps its link, so it can
+  // still be saved, after the short form of the warning, which keeps the
+  // line to its two lines.
+  if (state.held && line.link) {
+    const device = state.output_missing
+    return {
+      text: device
+        ? `The click's output, ${device}, is not connected.`
+        : "The click's output is not connected.",
+      link: line.link,
+      warn: true,
+    }
+  }
+  return missingOutput(state.output_missing)
+}
 
+/** The status line between takes for where the row's tempo comes from
+ *  (Part 2's three cases). */
+function caseLine(state: MetronomeState): StatusLine {
+  const hasTempo = state.tempo !== null
   switch (state.case) {
     case "song": {
       const song = state.song
-      if (state.held && song && song.tempo !== null && song.signature !== null) {
+      // The row is not the song's: a tempo held, which the link saves, or
+      // the row emptied, which is not held (a song's tempo is taken away on
+      // its page in History).
+      if (song && song.tempo !== null && song.signature !== null && (state.held || !hasTempo)) {
         return {
           text: `The song has ${formatMeterShort(song.tempo, song.signature)}; this holds until another song.`,
-          link: { label: "Save to song", action: "save" },
+          link: state.held ? { label: "Save to song", action: "save" } : undefined,
         }
       }
       return { text: "The song's tempo." }

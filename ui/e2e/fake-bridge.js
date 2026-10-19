@@ -907,8 +907,11 @@ async function metroState() {
     out.song = await songRow(song);
     out.last_take = await lastTakeOf(song);
   }
-  out.held = out.case === 'song' ? out.tempo !== own.tempo || out.signature !== own.signature
-    : out.case === 'song_without' ? out.tempo !== null : false;
+  // As Metronome._held: a tempo of the row's own, for a song the library
+  // has. An emptied row, and a title no song has yet, hold nothing.
+  out.held = out.song !== null && out.tempo !== null
+    && (out.case === 'song' ? out.tempo !== own.tempo || out.signature !== own.signature
+      : out.case === 'song_without');
   if (take) {
     // The row cannot change under a take: what it shows is the take's.
     Object.assign(out, {phase:'take', tempo:take.tempo, signature:take.signature});
@@ -2471,10 +2474,14 @@ window.__MAKE_API__ = () => ({
     // Settings › Keys, as api.get_settings: anything but false is on.
     space_keys: readCfg().space_keys !== false, player_keys: readCfg().player_keys !== false,
     // The metronome's, as api.get_settings: none for the click's output until
-    // one is picked, and none for one saved that is not plugged in (its name
-    // is metronome_state's output_missing, as Python has it).
+    // one is picked, and none for one saved that is not plugged in, which is
+    // named instead (window.__CLICK_MISSING__, metronome_state's
+    // output_missing too, as Python has it).
     click_device_index: outputDevices().some(d => d.index === readCfg().click_device_index)
       ? readCfg().click_device_index : null,
+    click_device_missing: readCfg().click_device_index != null
+      && !outputDevices().some(d => d.index === readCfg().click_device_index)
+      ? (window.__CLICK_MISSING__ || '') : null,
     click_channels: readCfg().click_channels ?? null,
     click_sound: readCfg().click_sound ?? 'click', click_volume: readCfg().click_volume ?? 0.7,
     count_in_bars: readCfg().count_in_bars ?? 1, tempo_in_wav: readCfg().tempo_in_wav !== false,

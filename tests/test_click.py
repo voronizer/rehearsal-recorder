@@ -686,9 +686,10 @@ def on_its_own():
     p120, p140 = 60 * SR / 120, 60 * SR / 140
 
     def blocks(source, count, start=0, size=512):
+        """`count` blocks of `source`, as wide as its outputs reach."""
         out = []
         for b in range(start, start + count):
-            block = np.zeros((size, 1), np.float32)
+            block = np.zeros((size, max(source.route) + 1), np.float32)
             source.render(block, b * size, 9_000_000_000 + b * size * 1_000_000_000 // SR, 0.01)
             out.append(block)
         return np.concatenate(out)
@@ -755,6 +756,9 @@ def on_its_own():
     ok("a change in the row is held", m.set(132, "4/4")["ok"] and m.state()["held"] and m.take_meter()[0] == 132)
     m.follow("Palyn")
     ok("  through a keystroke in the same song's name", m.state()["tempo"] == 132 and m.state()["held"])
+    m.set(None, "4/4")
+    ok("an emptied row is not held, so there is nothing to save to the song: its page takes a tempo away",
+       m.state()["tempo"] is None and not m.state()["held"] and not m.save_to_song()["ok"] and library.saved == [])
     m.follow("Dym")
     state = m.state()
     ok("2. a song without a tempo: the row is empty, and the take records without a click",
@@ -786,8 +790,9 @@ def on_its_own():
 
     print("  Its settings, and a bar heard")
     ok("the settings and their defaults",
-       m.settings() == {"click_device_index": None, "click_channels": None, "click_sound": "click",
-                        "click_volume": 0.7, "count_in_bars": 1, "tempo_in_wav": True, "metronome_on": True})
+       m.settings() == {"click_device_index": None, "click_device_missing": None, "click_channels": None,
+                        "click_sound": "click", "click_volume": 0.7, "count_in_bars": 1, "tempo_in_wav": True,
+                        "metronome_on": True})
     ok("each is checked and saved", m.set_setting("click_sound", "wood")["ok"] and written[-1]["click_sound"] == "wood"
        and m.set_setting("count_in_bars", 2)["ok"] and m.set_setting("tempo_in_wav", False)["ok"]
        and m.set_setting("click_volume", 0.5)["ok"] and config["click_volume"] == 0.5)
@@ -806,6 +811,8 @@ def on_its_own():
     heard = blocks(bar, 400)
     ok("it stops after one bar", len([f for f in np.flatnonzero(heard[:, 0])
                                       if f == 0 or not heard[max(0, f - 200):f, 0].any()]) == 4 and bar.done)
+    ok("  on both the player's outputs, nothing gone wrong", bar.fault is None
+       and heard.shape[1] == 2 and np.array_equal(heard[:, 0], heard[:, -1]))
     m.state()
     ok("  and then lets go of the player's stream", player.free is None)
     ok("the click between takes runs on the player's stream too", m.play()["ok"] and m.state()["phase"] == "preview")
@@ -818,6 +825,15 @@ def on_its_own():
     m.play()
     m.stop()
     ok("Stop stops it", player.free is None and m.state()["phase"] == "idle")
+    m.play()
+    run = player.free
+    ok("a sound picked while it plays: it goes on in that sound, and no bar takes its place",
+       m.set_setting("click_sound", "click")["ok"] and m.preview(sound="click")["ok"]
+       and player.free is run and run.voices.sound == "click" and m.state()["phase"] == "preview")
+    ok("  and the volume let go of likewise", m.set_setting("click_volume", 0.6)["ok"] and m.preview()["ok"]
+       and player.free is run and run.voices.volume == 0.6 and m.state()["phase"] == "preview")
+    m.set_setting("click_volume", 0.5)
+    m.stop()
     m.play()
     run = player.free
     # The player closed its output and opened it again (a rescan, or its card
@@ -864,6 +880,10 @@ def on_its_own():
     m.set(150, "4/4")
     ok("  nor once moved to another stream", isinstance(player.free, ClickSource) and player.free is not page
        and player.free.tempo == 96 and m.state()["tempo"] == 96)
+    moved = player.free
+    ok("  a change on the page while it plays goes on from its next click, not from a bar's first",
+       m.play(100, "3/4")["ok"] and player.free is moved and (moved.tempo, moved.signature) == (100, "3/4")
+       and (m.state()["tempo"], m.state()["phase"]) == (100, "preview"))
     m.stop()
     ok("stopped, the row is as it was", (m.take_meter(), m.state()["held"], m.state()["tempo"]) == ((150, "4/4", True), True, 150))
     ok("a tempo out of its range, or a signature not one of the four, is refused as the row's is",
@@ -901,6 +921,12 @@ def on_its_own():
        played and len(gaps) >= 1 and all(abs(g - 500) < 0.5 for g in gaps)
        and state["output_missing"] == "Headphone amp")
     ok("  counted at its rate, on its outputs, raising nothing", counted.fault is None and counted.samplerate == 44100)
+    ok("  plugged in all the same: the settings name no unplugged device",
+       amp.settings().get("click_device_missing", "absent") is None)
+    gone = Metronome({"click_device": {"name": "X18", "host_api": "CoreAudio"}, "click_device_index": 7},
+                     lambda: None, lambda: None, lambda key: None, None)
+    ok("a click device saved and not plugged in: the settings name it, with no index",
+       gone.settings().get("click_device_missing") == "X18" and gone.settings()["click_device_index"] is None)
     amp.stop()
 
     # The screen asks for the state many times a second; the device list is
