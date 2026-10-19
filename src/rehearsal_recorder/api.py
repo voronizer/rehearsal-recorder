@@ -2674,7 +2674,8 @@ class Api:
         self._recorder_band = None
         self._recorder_meter = None
         # What Keep gives the take, the controller's Stop and a draft kept
-        # later alike (_meter_of_draft).
+        # later alike (_meter_of_draft). A discarded draft's entry stays: an
+        # Undo of the discard puts the draft back, to be kept with it.
         self._meters[self._draft_key(temp_dir)] = meter
 
         try:
