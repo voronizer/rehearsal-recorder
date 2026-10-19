@@ -13531,6 +13531,20 @@ def main():
                                                      "midi_port": td17.saved()}]
             a.save_default_tracks({"device_index": 0, "tracks": band})
             ok("no port is open outside a rehearsal", not fake.open_ports)
+            real_use = a._midi.use
+
+            def half_open(tracks, check=False):
+                real_use(tracks, check)
+                raise OSError("the system refused")
+
+            a._midi.use = half_open
+            try:
+                refused = a.metronome_tap_listen()
+            finally:
+                a._midi.use = real_use
+            ok("ports that will not open: Tap is told why, and none is left open",
+               refused == {"ok": False, "error": "The band's MIDI ports could not be opened: the system refused"}
+               and not fake.open_ports and not a._midi.listening())
             ok("Tap on a song's page opens the band's ports",
                a.metronome_tap_listen()["ok"] and sorted(p.info.name for p in fake.open_ports) == ["TD-17"])
             fake.send("TD-17", time.perf_counter_ns(), bytes([0x99, 38, 100]))

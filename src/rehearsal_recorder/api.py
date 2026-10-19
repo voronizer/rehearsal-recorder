@@ -745,10 +745,19 @@ class _TapPorts:
 
     def listen(self, tracks):
         """Tap was pressed: the pads' hits count as taps from now until a
-        pause, from the ports `tracks` name when none are open."""
+        pause, from the ports `tracks` name when none are open. Raises what
+        opening them raises, with none of them left open."""
         with self._lock:
             if not self._opened and not self._checking and not self._in_rehearsal():
-                self._midi.use(tracks)
+                try:
+                    self._midi.use(tracks)
+                except Exception:
+                    # Nothing would give back a port left open here.
+                    try:
+                        self._midi.release()
+                    except Exception:
+                        log.exception("The ports Tap opened could not be closed")
+                    raise
                 self._opened = True
             self._midi.listen_taps(TAP_QUIET_SEC)
             if self._opened and (self._watch is None or not self._watch.is_alive()):
@@ -4877,8 +4886,13 @@ class Api:
 
     def metronome_tap_listen(self):
         """Tap was pressed: the pads' hits count as taps until a pause, from
-        the band's ports, opened for it outside a rehearsal (_TapPorts)."""
-        self._tap.listen(self._config.get("tracks") or [])
+        the band's ports, opened for it outside a rehearsal (_TapPorts). Ports
+        that will not open are said, for Tap to show, and never raised."""
+        try:
+            self._tap.listen(self._config.get("tracks") or [])
+        except Exception as e:
+            log.exception("Tap could not open the band's ports")
+            return {"ok": False, "error": f"The band's MIDI ports could not be opened: {e}"}
         return {"ok": True}
 
     def metronome_taps(self):
