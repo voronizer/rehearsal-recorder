@@ -590,6 +590,13 @@ As the Q12 mockup's variant C has it (M14):
   only what the app does, so the metronome tile finds its place among the
   others, every row still full and the Trash tile still the whole width;
   Alex sees it before the merge.
+- Since 19 Oct 2026 (Alex, «Уточнить»), two phrases above say only what the
+  app does. The tile and the FAQ say "during a take the edge of the screen
+  lights on every click" for "the beat flashes on screen" and "the screen
+  flashes on every beat", and the FAQ ends "its WAV and .mid files carry it:
+  set your DAW to that tempo, and the take's bars sit on the project's
+  bars." The edge lights only on the recording screen, and the bars meet
+  only in a project at the take's tempo.
 - The site's demo songs get tempos as the demo band plays them (Pałyn 128),
   and its takes are click takes, so the hero player shows Master's stripes;
   the plan checks they sit on the band's beats. The click stays silent on
