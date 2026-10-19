@@ -20,6 +20,12 @@ which are whole in one step under the GIL. The fit itself is `fit`, a function
 of the marks alone, so a take whose app died is placed again from the marks that
 reached the disk (`save_line`, `load`), the way it would have been placed alive.
 
+`ns_at` asks the other way round, when a frame of the take is captured, for the
+metronome's click on another device than the recording card (metronome spec,
+Part 3). That device's own stream asks with every block, so it reads a line that
+is refitted only as a mark is kept, and an output stream's clock
+(audio/click_timing.py) is kept the same way: both are a `StreamClock`.
+
 It imports neither the MIDI library nor mido, nor sounddevice: it is handed
 numbers.
 """
@@ -46,10 +52,74 @@ MAX_AGE_SEC = 1.0
 _NS = 1e9
 
 
-class AudioClock:
+class StreamClock:
+    """
+    What one stream's callback marks: (ns, frame), a moment on the computer's
+    clock and the stream's frame at that moment. One mark a second is kept for
+    the fit and the latest is kept besides, and the line through the kept marks
+    is refitted as each is kept.
+
+    Another stream's callback reads that line (`ns_at`) with one look at one
+    attribute, a tuple replaced whole: no lock and no fit on that thread, and
+    never half a line. The fit as a mark is kept is a few additions, at the end
+    of an hour as at the start (see `_summed`).
+    """
+
+    def __init__(self, samplerate):
+        self.samplerate = samplerate
+        # `_kept` only grows, and `_latest` is the newest mark of all, kept or
+        # not. The one thread that marks sets `_latest` first and appends to
+        # `_kept` after, so a reader that copies `_kept` and then reads
+        # `_latest` never sees a latest older than the end of its copy.
+        self._kept = []
+        self._latest = None
+        # The kept marks' sums, for the marking thread alone, and the line
+        # through them, for any.
+        self._sums = None
+        self._line = None
+
+    def _keep(self, mark):
+        """Audio thread: single assignments and one append, nothing else shared."""
+        self._latest = mark
+        kept = self._kept
+        if not kept or mark[1] - kept[-1][1] >= MARK_EVERY_SEC * self.samplerate:
+            self._sums = _summed(self._sums, mark)
+            self._line = _line(self._sums, self.samplerate)
+            kept.append(mark)
+
+    def marks(self):
+        """The kept marks, one for each second of frames, and the latest: a new
+        list each time, oldest first, as (ns, frame)."""
+        # The copy first and the latest after, see __init__.
+        out = list(self._kept)
+        latest = self._latest
+        if latest is not None and (not out or latest[1] > out[-1][1]):
+            out.append(latest)
+        return out
+
+    def ns_at(self, frame):
+        """When `frame` is on the line through the kept marks, as a whole ns on
+        the computer's clock; ahead of the last mark, the line read forward.
+        None before the first mark."""
+        line = self._line
+        if line is None:
+            return None
+        return _ns_on(line, frame)
+
+    def _frame_at(self, ns):
+        """The frame the line through the kept marks puts at `ns`, not rounded;
+        None before the first mark."""
+        line = self._line
+        if line is None:
+            return None
+        return _frame_on(line, ns)
+
+
+class AudioClock(StreamClock):
     """
     One take's clock. The recorder marks it with every block it writes; a note
-    asks it for a time in the take.
+    asks it for a time in the take, and a click on another device than the
+    recording card asks it when a frame of the take is captured.
 
     `latency_sec` is the interface's input latency, set when the stream is
     open, and `started_ns` is when the take was started. They stand in for what
@@ -59,16 +129,9 @@ class AudioClock:
     """
 
     def __init__(self, samplerate):
-        self.samplerate = samplerate
+        super().__init__(samplerate)
         self.latency_sec = 0.0
         self.started_ns = None
-        # (ns, frame): the computer's time of a block's first frame, and that
-        # frame's number. `_kept` only grows, and `_latest` is the newest of
-        # all, kept or not. The one thread that marks sets `_latest` first
-        # and appends to `_kept` after, so a reader that copies `_kept` and then
-        # reads `_latest` never sees a latest older than the end of its copy.
-        self._kept = []
-        self._latest = None
         # (the newest mark it was fitted through, the fit): see to_seconds.
         self._fitted = None
 
@@ -88,21 +151,7 @@ class AudioClock:
             # The block is as old as it is long when its last frame has just
             # arrived, plus the time the interface took to hand it over.
             back = frames / self.samplerate + self.latency_sec
-        mark = (arrival_ns - int(back * _NS), first)
-        self._latest = mark
-        kept = self._kept
-        if not kept or first - kept[-1][1] >= MARK_EVERY_SEC * self.samplerate:
-            kept.append(mark)
-
-    def marks(self):
-        """The kept marks, one for each second of frames, and the latest: a new
-        list each time, oldest first, as (ns, frame)."""
-        # The copy first and the latest after, see __init__.
-        out = list(self._kept)
-        latest = self._latest
-        if latest is not None and (not out or latest[1] > out[-1][1]):
-            out.append(latest)
-        return out
+        self._keep((arrival_ns - int(back * _NS), first))
 
     def to_seconds(self, ns):
         """
@@ -113,16 +162,29 @@ class AudioClock:
         latest = self._latest
         if latest is None:
             return fit([], self.samplerate, self.started_ns)(ns)
-        # The fit is kept until there is a newer mark. A take's notes are all
-        # placed at its end, thousands of them against the same few thousand
-        # marks. Two threads asking at once each fit and one wins, which
-        # costs a little time and nothing else.
+        # Fitted through the latest mark too, and kept until there is a newer
+        # one. A take's notes are all placed at its end, thousands of them
+        # against the same few thousand marks. Two threads asking at once each
+        # fit and one wins, which costs a little time and nothing else.
         fitted = self._fitted
         if fitted is None or fitted[0] is not latest:
             marks = self.marks()
             fitted = (marks[-1], fit(marks, self.samplerate, self.started_ns))
             self._fitted = fitted
         return fitted[1](ns)
+
+    def ns_at(self, frame):
+        """
+        When the take's frame `frame` is captured, by the computer's clock: the
+        line through the kept marks, read forward for a frame still to come.
+        It moves only as a mark is kept, so the click's own stream can ask
+        with every block. With no mark yet, from when the take started, as
+        to_seconds counts.
+        """
+        at = super().ns_at(frame)
+        if at is None:
+            return (self.started_ns or 0) + round(frame * _NS / self.samplerate)
+        return at
 
 
 def fit(marks, samplerate, started_ns):
@@ -148,23 +210,59 @@ def fit(marks, samplerate, started_ns):
             return lambda ns: 0.0
         return lambda ns: (ns - started_ns) / _NS
 
-    first_ns, first_frame = marks[0]
-    xs = [frame - first_frame for _, frame in marks]
-    ys = [ns - first_ns for ns, _ in marks]
-    xbar = sum(xs) / len(xs)
-    ybar = sum(ys) / len(ys)
-
-    slope = _NS / samplerate  # ns to a frame
-    if len(marks) >= 2 and max(xs) - min(xs) >= FIT_MIN_SPAN_SEC * samplerate:
-        sxx = sum((x - xbar) ** 2 for x in xs)
-        sxy = sum((x - xbar) * (y - ybar) for x, y in zip(xs, ys))
-        if sxy > 0:
-            slope = sxy / sxx
+    sums = None
+    for mark in marks:
+        sums = _summed(sums, mark)
+    line = _line(sums, samplerate)
 
     def seconds(ns):
-        return (first_frame + xbar + (ns - first_ns - ybar) / slope) / samplerate
+        return _frame_on(line, ns) / samplerate
 
     return seconds
+
+
+def _summed(sums, mark):
+    """
+    `sums` with one more mark in it; None is no marks. A mark is taken as its
+    distance from the first, frames x and nanoseconds y, and the sums are
+    (first mark, count, Σx, Σy, Σx², Σxy, least x, greatest x). Whole numbers,
+    so they are exact however many marks they hold, and one more is a few
+    additions, in any order.
+    """
+    if sums is None:
+        return (mark, 1, 0, 0, 0, 0, 0, 0)
+    first, n, sx, sy, sxx, sxy, low, high = sums
+    x, y = mark[1] - first[1], mark[0] - first[0]
+    return (first, n + 1, sx + x, sy + y, sxx + x * x, sxy + x * y, min(low, x), max(high, x))
+
+
+def _line(sums, samplerate):
+    """
+    The line through the summed marks, by the rules of `fit`: (the first
+    mark's ns and frame, the mean distance from it in frames and in ns, ns a
+    frame), the line passing through the mean.
+    """
+    first, n, sx, sy, sxx, sxy, low, high = sums
+    slope = _NS / samplerate  # ns to a frame
+    if n >= 2 and high - low >= FIT_MIN_SPAN_SEC * samplerate:
+        # n² times the covariance and the variance, exact, so the slope is
+        # their ratio rounded once.
+        rising = n * sxy - sx * sy
+        if rising > 0:
+            slope = rising / (n * sxx - sx * sx)
+    return (first[0], first[1], sx / n, sy / n, slope)
+
+
+def _frame_on(line, ns):
+    """The frame a line puts at `ns`, not rounded."""
+    first_ns, first_frame, xbar, ybar, slope = line
+    return first_frame + xbar + (ns - first_ns - ybar) / slope
+
+
+def _ns_on(line, frame):
+    """The whole ns a line puts `frame` at."""
+    first_ns, first_frame, xbar, ybar, slope = line
+    return first_ns + round(ybar + (frame - first_frame - xbar) * slope)
 
 
 # One mark of a take.clock file: an ns, a space, a frame, and a newline. Up to
