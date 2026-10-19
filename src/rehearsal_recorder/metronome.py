@@ -41,8 +41,9 @@ and lets it go (`let_go_for_rescan`), or comes before it is opened. Hence:
 - play, preview, stop, resink, begin_take, close, and set and follow (which
   stop ▶ when the row empties) take `_sinks`: never call them with
   STREAM_LOCK held, for a play() on another thread holds `_sinks` and waits
-  for STREAM_LOCK. let_go_for_rescan takes no `_sinks` and is the one to call
-  inside a rescan's locks; state never waits for either.
+  for STREAM_LOCK. let_go_for_rescan and make_room take no `_sinks`: they are
+  the ones to call inside a rescan's locks or the player's; state never
+  waits for either.
 - `device_lookup` and `player_getter` are called with STREAM_LOCK held, so
   they must never take the Api's `_player_lock`, which rescan_devices takes
   before STREAM_LOCK.
@@ -596,6 +597,28 @@ class Metronome:
         """
         self._stop_free()
 
+    def make_room(self, device_index):
+        """
+        The player is about to open its stream on `device_index` (None: the
+        system's output). A click between takes with a stream of its own there
+        closes it first: the app never opens a second stream on a device it
+        holds (spec Part 3), and ASIO refuses one. A ▶ click is kept, closed,
+        where it is in the bar, and resink carries it on in the player's
+        stream from its next click; a bar for a setting stops. Called with the
+        Api's _player_lock held, and inside a rescan's locks, so it takes no
+        `_sinks`, as let_go_for_rescan.
+        """
+        with STREAM_LOCK:
+            with self._lock:
+                free = self._free
+            if (free is None or free.kind != "own" or not isinstance(free.sink, ClickOutput)
+                    or free.sink.device_index != device_index):
+                return
+            if free.shown:
+                free.sink.stop()
+            else:
+                self._stop_free()
+
     def _stop_free(self):
         """Lets go of the click between takes: taken out of _free and its
         stream closed in one hold of STREAM_LOCK."""
@@ -643,11 +666,13 @@ class Metronome:
                 return
             kind, sink, route = self._sink()
             # The same player still playing it, or a stream of its own on the
-            # same device: nothing to move. A player that closed and opened its
-            # output again has let go of it.
+            # same device and still open: nothing to move. A player that closed
+            # and opened its output again has let go of it, and a stream closed
+            # for the player (make_room) is no stream.
             if kind == free.kind and route == free.source.route and (
                     sink is free.sink and sink.free_click is free.source if kind == "player"
-                    else type(sink) is type(free.sink) and sink.device_index == free.sink.device_index):
+                    else type(sink) is type(free.sink) and sink.device_index == free.sink.device_index
+                    and not free.sink.closed):
                 return
             source = free.source
             self._start_held(source.tempo, source.signature, shown=True, start_k=source.next_in_bar,

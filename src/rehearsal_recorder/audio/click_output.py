@@ -115,6 +115,11 @@ class ClickOutput:
             except Exception as e:
                 print(f"[click] close: {e}")
 
+    @property
+    def closed(self):
+        """Whether stop() has closed it: it plays nothing again."""
+        return self._stopping
+
     def problem(self):
         """Why the click is not being heard, or None. Plain reads, so a take's
         callback may ask."""
@@ -167,6 +172,7 @@ class SilentOutput:
         self._started_ns = None
         self._frames = 0
         self._pumping = threading.Lock()
+        self.closed = False
 
     def start(self, source):
         self._started_ns = time.perf_counter_ns()
@@ -181,6 +187,7 @@ class SilentOutput:
 
     def stop(self):
         self._fed = None
+        self.closed = True
 
     def problem(self):
         return self._reason

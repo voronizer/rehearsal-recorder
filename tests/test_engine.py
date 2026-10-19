@@ -12996,6 +12996,51 @@ def main():
             else:
                 setattr(_sd, name82, value82)
 
+    print("  Play first, then the player opens on its device")
+    # Play with the player closed has a stream of its own where the player
+    # plays. A take opened there must not open a second stream on that card:
+    # ASIO refuses one, and the player would go to the system's output. The
+    # click lets go of its stream first and goes on in the player's, from its
+    # next click.
+    a82 = fresh_api(Path(tempfile.mkdtemp()))[1]
+    kinds82 = (_sd.OutputStream, _sd.InputStream, _sd.Stream)
+    _sd.OutputStream = _sd.InputStream = _sd.Stream = OneAsio81
+    OneAsio81.asio = {3}
+    try:
+        a82.set_output_device(3)
+        a82.metronome_set(120, "4/4")
+        played82 = a82.metronome_play()
+        own82 = a82._metronome._free
+        for b in range(30):  # 30720 frames at 120: clicks 0 and 1 played, click 2 next
+            own82.sink._callback(np.zeros((1024, 2), np.float32), 1024, None, None)
+        opened82b = a82.player_open([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+        moved82 = a82._metronome._free
+        ok("play first, the take opened after on the click's card: the player opens there, no warning",
+           played82["ok"] and own82.kind == "own" and opened82b["ok"] and "warning" not in opened82b
+           and a82._player.holds(3))
+        ok("  and the click goes on in the player's stream from the bar's third click",
+           moved82 is not None and moved82.kind == "player" and a82._player.free_click is moved82.source
+           and moved82.source.next_in_bar == 2 and own82.sink._stream is None)
+        a82.player_close()
+        ok("  closed, the click has its own stream again", a82._metronome._free is not None
+           and a82._metronome._free.kind == "own" and a82._metronome._free.sink._stream is not None)
+        a82.metronome_stop()
+        # The click's own output saved on the desk, the player on the
+        # interface; then the player is moved onto the desk.
+        a82.set_click_device(3)
+        a82.set_output_device(0)
+        a82.player_open([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+        a82.metronome_play()
+        own82 = a82._metronome._free
+        moved82b = a82.set_output_device(3)
+        ok("the player moved onto the card the click plays on: it opens there, and takes the click",
+           own82.kind == "own" and own82.sink.device_index == 3 and moved82b["ok"] and "warning" not in moved82b
+           and a82._player.holds(3) and a82._metronome._free.kind == "player")
+    finally:
+        _sd.OutputStream, _sd.InputStream, _sd.Stream = kinds82
+        OneAsio81.open_now.clear()
+        a82.shutdown()
+
     print("\n[83] The metronome through the Api")
     # Record takes its tempo, signature and click from the metronome's row,
     # whoever presses it (spec Parts 2 to 4), and the take keeps them. The

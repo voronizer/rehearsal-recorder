@@ -4463,6 +4463,9 @@ class Api:
         try:
             player = TakePlayer(tracks)
             index = saved_device(self._config, "output_device", False)
+            # A click between takes with a stream of its own there lets go of
+            # it first; _resink then carries it on in this one.
+            self._metronome.make_room(index)
             # Wide enough for the click's outputs, when its device is this one.
             warning = player.open_output(
                 index, self._output_channels(),
@@ -4710,6 +4713,8 @@ class Api:
             state = self._player.state()
             try:
                 index = saved_device(self._config, "output_device", False)
+                # As in _open_player: never a second stream on the click's.
+                self._metronome.make_room(index)
                 warning = self._player.open_output(
                     index, self._output_channels(),
                     extra_channels=self._metronome.extra_channels(index),
