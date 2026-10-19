@@ -569,7 +569,8 @@ The metronome's pieces, in `components/metronome/` (spec Parts 4 to 8):
 - **SignatureSelect**, `SignatureSelect.tsx`: 4/4, 3/4, 2/4 or 6/8, in the
   shared select, each as wide as the others.
 - **TapButton**, `TapButton.tsx`: Tap, and T while the player's keys are on
-  (B9). After a press the band's pads count as taps until they pause.
+  (B9). After a press the band's pads count as taps until they pause; pads
+  Python cannot open are said in the screen's notice (`onError`).
 - **ClickSwitch**, `ClickSwitch.tsx`: the metronome's icon as a `Toggle`,
   grey when on: whether Record clicks, and mid-take whether it still does.
 - **BeatDots**, `BeatDots.tsx`: a dot a click, the accented ones larger, 6/8

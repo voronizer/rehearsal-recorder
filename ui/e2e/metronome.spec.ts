@@ -1201,6 +1201,16 @@ test("song page tempo saves at once", async ({ page }) => {
   await expect.poll(() => callCount(page, "metronome_tap_listen")).toBe(2)
 })
 
+test("Tap on a song page says when the band's pads cannot be opened", async ({ page }) => {
+  await page.addInitScript("window.__TAP_ERROR__ = 'X18 MIDI is in use';")
+  await openBandApp(page)
+  await openHistory(page)
+  await songPage(page, "Pałyn")
+  await songRow(page).getByRole("button", { name: /^Tap/ }).click()
+  await expect.poll(() => callCount(page, "metronome_tap_listen")).toBe(1)
+  await expect(said(page, "The band's MIDI ports could not be opened: X18 MIDI is in use")).toHaveCount(1)
+})
+
 test("a song page's click leaves a change held in the row", async ({ page }) => {
   await openBandApp(page)
   // The row holds 96 in 3/4 from the last rehearsal, as Python keeps it.

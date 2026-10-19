@@ -150,7 +150,11 @@ export function SongTempoRow({ song, takes }: { song: TempoSong; takes: SongGo[]
         <Metronome aria-hidden className="mr-1 size-4 shrink-0 text-muted-foreground" />
         <TempoField tempo={tempo} signature={signature} onChange={(next) => void save(next, signature)} />
         <SignatureSelect value={signature} onChange={(sig) => void count.pickSignature(sig)} />
-        <TapButton signature={signature} onTempo={(next) => void save(next, signature)} />
+        <TapButton
+          signature={signature}
+          onTempo={(next) => void save(next, signature)}
+          onError={sayError}
+        />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

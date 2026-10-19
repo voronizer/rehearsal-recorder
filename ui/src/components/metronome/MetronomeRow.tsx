@@ -43,6 +43,7 @@ export function MetronomeRowView({
   onTempo,
   onPlay,
   onLink,
+  onTapError,
   settings,
 }: {
   state: MetronomeState | null
@@ -55,6 +56,8 @@ export function MetronomeRowView({
   /** ▶ or ■, by the phase. */
   onPlay: () => void
   onLink: (action: LinkAction) => void
+  /** Python could not open the band's pads for Tap: its words. */
+  onTapError?: (text: string) => void
   /** What the gear opens on: the click's settings. */
   settings: ReactNode
 }) {
@@ -82,7 +85,12 @@ export function MetronomeRowView({
           // The number stays, brought into the new signature's range.
           onChange={(next) => onTempo(tempo === null ? null : clampTempo(tempo, next), next)}
         />
-        <TapButton signature={signature} disabled={off} onTempo={(next) => onTempo(next, signature)} />
+        <TapButton
+          signature={signature}
+          disabled={off}
+          onTempo={(next) => onTempo(next, signature)}
+          onError={onTapError}
+        />
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -261,6 +269,7 @@ export function MetronomeRow() {
         )
       }
       onLink={(action) => void onLink(action)}
+      onTapError={sayError}
       settings={<ClickSettings />}
     />
   )

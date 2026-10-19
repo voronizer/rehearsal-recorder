@@ -771,6 +771,7 @@ function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); 
 //                                         with no count-in time
 //   window.__PAD_TAP__()                  a hit on a pad: a tap, while the screen
 //                                         has asked to hear them
+//   window.__TAP_ERROR__ = 'X18 is busy'  the band's ports will not open for Tap
 //   window.__CROP_ON_GRID__ = true        a click take's crop is cut on its grid, as
 //                                         Python cuts one whose files it reads: the
 //                                         start back to the bar line, the end on to
@@ -1359,6 +1360,8 @@ window.__MAKE_API__ = () => ({
   // Hits on the pads count as taps from now until a pause of two seconds
   // (window.__PAD_TAP__), and each is told once, as milliseconds ago.
   metronome_tap_listen: track('metronome_tap_listen', async () => {
+    if (window.__TAP_ERROR__)
+      return {ok:false, error:`The band's MIDI ports could not be opened: ${window.__TAP_ERROR__}`};
     metro.tapUntil = clock() + 2;
     return {ok:true};
   }),

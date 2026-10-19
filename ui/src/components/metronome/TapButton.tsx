@@ -24,23 +24,29 @@ const KEPT = 16
  * band's MIDI pads count as taps too, until they pause: Python hears them
  * (`metronome_tap_listen`) and says when each was (`metronome_taps`).
  *
+ * Should Python not open the pads, `onError` says why in the screen's
+ * notice, and the taps on the button count all the same.
+ *
  * T is one of the player's keys: with those off in Settings › Keys it does
  * nothing, and the button shows no chip (B9).
  */
 export function TapButton({
   signature,
   onTempo,
+  onError,
   disabled = false,
 }: {
   signature: Signature
   onTempo: (tempo: number) => void
+  /** Python could not open the band's pads for the tapping: its words. */
+  onError?: (text: string) => void
   disabled?: boolean
 }) {
   const keys = useKeysOn("player")
   const taps = useRef<number[]>([])
-  const live = useRef({ signature, onTempo })
+  const live = useRef({ signature, onTempo, onError })
   useLayoutEffect(() => {
-    live.current = { signature, onTempo }
+    live.current = { signature, onTempo, onError }
   })
   // Until when the pads count, on the page's clock, and the asking for them.
   const padsUntil = useRef(0)
@@ -83,12 +89,21 @@ export function TapButton({
     const now = performance.now()
     count([now])
     padsUntil.current = now + PADS_FOR_MS
+    let bridge: ReturnType<typeof api>
     try {
-      void api().metronome_tap_listen()
+      bridge = api()
     } catch {
       /* no bridge (a still picture of the row): the taps count all the same */
       return
     }
+    void bridge.metronome_tap_listen().then(
+      (res) => {
+        if (alive.current && !res.ok) live.current.onError?.(res.error ?? "The band's pads could not be opened")
+      },
+      () => {
+        /* the bar across the top says why */
+      }
+    )
     if (!timer.current) timer.current = window.setTimeout(hearPads, PADS_POLL_MS)
   }
 
