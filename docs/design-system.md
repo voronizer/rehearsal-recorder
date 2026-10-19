@@ -25,11 +25,11 @@ the shared ones, New set's song list included, which the start screen
 shares with Settings' Sets, and the check's [allow-list](#the-check) is
 empty. Where a rule below says "as each screen is redone", the screens'
 pull requests have carried it out. On reha.stream the pieces of the app are
-the real components and follow the theme already, but the page itself takes
-only the accent from it so far (`--page-accent: var(--primary)` in
-`site/src/page/page.css`). Next, reha.stream's own background, text colours
-and font (Instrument Sans) take the shared ones, and then the new look goes
-out in one release.
+the real components, and the page around them takes the app's light colours,
+the system's font and the five text sizes (`site/src/page/page.css`); its big
+headings, corners and layout are its own. Only the link picture
+(`site/og.html`) keeps Instrument Sans, since it is drawn once into a PNG.
+The new look goes out in one release.
 
 ## The foundation
 

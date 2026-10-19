@@ -5,10 +5,10 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.12.0
 
-- **The start of a new look: cobalt, calmer type, rounder corners and lower
-  track lanes.** The blue of the main button, and of what plays, is a
+- **A new look: cobalt, calmer type, rounder corners and lower track
+  lanes.** The blue of the main button, and of what plays, is a
   stronger cobalt, the same in both themes, and it is the only blue left:
   **Stop** is now the colour of the text, and a mark's blue label is orange.
   The player's time, the levels on the recording screen and most other

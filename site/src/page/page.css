@@ -10,19 +10,22 @@
    element or a descendant selector that could reach into a piece of the
    app, which has to look as it does in the app. */
 /* The page's own colours and type, named apart from the app's (--muted,
-   --accent and the rest are the app's, and its pieces use them). */
+   --accent and the rest are the app's, and its pieces use them). Each is
+   the app's own light value (D4): the tiles are a side panel's grey, the
+   text and lines the app's, and the font the system's, as in the app. Only
+   the icon's red is the page's. */
 :root {
-  --page-bg: #ffffff;
-  --page-tile: #f4f5f7;
-  --page-line: #e6e8ec;
-  --page-app: var(--background); /* the app's own light ground, from its theme */
-  --page-fg: #16181d;
-  --page-muted: #6a707a;
-  --page-accent: var(--primary); /* the app's own accent, from its theme */
-  --page-accent-fg: #ffffff;
+  --page-bg: var(--background);
+  --page-tile: var(--panel);
+  --page-line: var(--border);
+  --page-app: var(--background);
+  --page-fg: var(--foreground);
+  --page-muted: var(--muted-foreground);
+  --page-accent: var(--primary);
+  --page-accent-fg: var(--primary-foreground);
   --page-rec: #e5484d; /* the red of the icon */
-  --page-sans: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --page-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --page-sans: --theme(--font-sans);
+  --page-mono: --theme(--font-mono);
   color-scheme: light;
 }
 
@@ -38,7 +41,7 @@ body {
   background: var(--page-bg);
   color: var(--page-fg);
   font-family: var(--page-sans);
-  font-size: 17px;
+  font-size: 1rem;
   line-height: 1.5;
   user-select: auto;
   -webkit-user-select: auto;
@@ -49,20 +52,20 @@ body {
 .h1, .h2, .copy h3, .step h3 { text-wrap: balance; margin: 0; }
 .h2 { font-size: clamp(2rem, 4.8vw, 3.5rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; max-width: 20ch; }
 .lede { color: var(--page-muted); font-size: clamp(1.05rem, 1.6vw, 1.3rem); max-width: 36rem; text-wrap: pretty; }
-.more { color: var(--page-accent); text-decoration: none; font-weight: 500; white-space: nowrap; }
+.more { color: var(--page-accent); text-decoration: none; font-weight: 600; white-space: nowrap; }
 .more::after { content: " ›"; }
 .more:hover { text-decoration: underline; }
 .wrap :focus-visible, .ribbon :focus-visible { outline: 2px solid var(--page-accent); outline-offset: 3px; border-radius: 6px; }
 
 /* ---- What's new, as one line at the top ---- */
-.ribbon { text-align: center; font-size: 0.88rem; color: var(--page-muted); padding: 10px 16px; background: var(--page-tile); margin: 0 -20px; }
+.ribbon { text-align: center; font-size: 0.875rem; color: var(--page-muted); padding: 10px 16px; background: var(--page-tile); margin: 0 -20px; }
 .ribbon b { color: var(--page-fg); font-weight: 600; }
 
 /* ---- Menu ---- */
 .nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 18px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; }
 .brand svg { width: 28px; height: 28px; }
-.menu { display: flex; align-items: center; gap: 26px; font-size: 0.9rem; color: var(--page-muted); }
+.menu { display: flex; align-items: center; gap: 26px; font-size: 0.875rem; color: var(--page-muted); }
 .menu a { text-decoration: none; }
 .menu a:hover { color: var(--page-fg); }
 .menu .get { color: var(--page-accent-fg); background: var(--page-accent); padding: 5px 14px; border-radius: 999px; font-weight: 600; }
@@ -72,20 +75,20 @@ body {
 /* ---- Hero ---- */
 .hero { padding-block: clamp(40px, 7vw, 96px) clamp(72px, 11vw, 150px); display: grid; gap: clamp(40px, 6vw, 72px); }
 .hero-text { display: grid; gap: 22px; justify-items: center; text-align: center; }
-.eyebrow { font-size: 0.95rem; font-weight: 600; color: var(--page-rec); }
+.eyebrow { font-size: 1rem; font-weight: 600; color: var(--page-rec); }
 .h1 { font-size: clamp(2.7rem, 7.2vw, 5.4rem); line-height: 1; font-weight: 600; letter-spacing: -0.045em; max-width: 14ch; }
 .cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 26px; margin-top: 4px; }
 .btn { display: inline-flex; align-items: center; gap: 9px; padding: 13px 24px; border-radius: 999px; font-weight: 600; font-size: 1rem; text-decoration: none; background: var(--page-accent); color: var(--page-accent-fg); }
 .btn svg { width: 18px; height: 18px; flex: none; }
 .btn:hover { filter: brightness(1.06); }
-.fine { font-size: 0.86rem; color: var(--page-muted); }
+.fine { font-size: 0.875rem; color: var(--page-muted); }
 
 /* ---- The app, live, in a frame ---- */
 .screen { border-radius: 18px; overflow: hidden; background: var(--page-app); box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.06), 0 40px 80px -48px rgba(16, 24, 40, 0.45); }
 .live { position: relative; overflow: hidden; background: var(--page-app); }
 .live iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; background: var(--page-app); }
 .live.passive iframe { pointer-events: none; }
-.caption { text-align: center; color: var(--page-muted); font-size: 0.9rem; margin-top: 18px; }
+.caption { text-align: center; color: var(--page-muted); font-size: 0.875rem; margin-top: 18px; }
 .caption b, .caption strong { color: var(--page-fg); font-weight: 600; }
 .caption.on-phone { display: none; }
 /* On a phone the app is shown whole, scaled to the screen, and not used:
@@ -131,18 +134,18 @@ body {
 .steps { list-style: none; margin: 0; padding: 0; display: grid; }
 .step { min-height: 70vh; display: grid; align-content: center; gap: 10px; padding-block: 24px; opacity: 0.28; transition: opacity 0.35s ease; }
 .step.on { opacity: 1; }
-.step .n { font-family: var(--page-mono); font-size: 0.82rem; color: var(--page-muted); }
+.step .n { font-family: var(--page-mono); font-size: 0.875rem; color: var(--page-muted); }
 .step h3 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; }
 .step p { color: var(--page-muted); max-width: 26rem; margin: 0; }
 /* A step's three lines; the one the app is on is lit, with the same padding
    lit or not, so nothing moves when it lights. */
-.beats { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; max-width: 27rem; counter-reset: b; font-size: 0.94rem; }
+.beats { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; max-width: 27rem; counter-reset: b; font-size: 0.875rem; }
 .beats li { counter-increment: b; display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 8px 12px; margin-left: -12px; border-radius: 10px; color: var(--page-muted); transition: background-color 0.3s ease, color 0.3s ease; }
-.beats li::before { content: counter(b); font-family: var(--page-mono); font-size: 0.78rem; padding-top: 0.2em; }
+.beats li::before { content: counter(b); font-family: var(--page-mono); font-size: 0.75rem; padding-top: 0.2em; }
 .beats li.now { background: var(--page-tile); color: var(--page-fg); }
 .stage { position: sticky; top: 16px; z-index: 1; display: grid; gap: 14px; }
 .rail { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
-.rail button { all: unset; cursor: pointer; display: grid; gap: 7px; font-size: 0.8rem; color: var(--page-muted); }
+.rail button { all: unset; cursor: pointer; display: grid; gap: 7px; font-size: 0.75rem; color: var(--page-muted); }
 .rail button i { display: block; height: 2px; border-radius: 2px; background: var(--page-line); overflow: hidden; }
 .rail button i::after { content: ""; display: block; height: 100%; background: var(--page-fg); transform: scaleX(var(--p, 0)); transform-origin: left; }
 .rail button.on { color: var(--page-fg); }
@@ -156,9 +159,9 @@ body {
 /* ---- Questions ---- */
 .qa { max-width: 46rem; margin-inline: auto; border-top: 1px solid var(--page-line); }
 .qa details { border-bottom: 1px solid var(--page-line); padding-block: 20px; }
-.qa summary { cursor: pointer; font-weight: 600; font-size: 1.08rem; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+.qa summary { cursor: pointer; font-weight: 600; font-size: 1rem; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
 .qa summary::-webkit-details-marker { display: none; }
-.qa summary::after { content: "+"; color: var(--page-muted); font-weight: 400; font-size: 1.3rem; line-height: 1; }
+.qa summary::after { content: "+"; color: var(--page-muted); font-weight: 400; font-size: 1.25rem; line-height: 1; }
 .qa details[open] summary::after { content: "–"; }
 .qa p { color: var(--page-muted); margin: 10px 0 0; max-width: 40rem; }
 
@@ -180,7 +183,7 @@ body {
 .nf-take { padding: 16px; border-radius: 18px; overflow: hidden; }
 
 /* ---- Footer ---- */
-.footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-block: 24px 40px; border-top: 1px solid var(--page-line); color: var(--page-muted); font-size: 0.82rem; }
+.footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-block: 24px 40px; border-top: 1px solid var(--page-line); color: var(--page-muted); font-size: 0.75rem; }
 .footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
 .footer a { text-decoration: none; }
 .footer a:hover { color: var(--page-fg); }

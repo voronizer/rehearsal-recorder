@@ -2096,9 +2096,9 @@ test.describe("Last time and long names on the shared pieces", () => {
     await expect(rows.nth(1)).toContainText("First rehearsal")
     // With the shared focus ring.
     await expect(rows.nth(1)).not.toHaveCSS("box-shadow", "none")
-    // A rehearsal whose folder is gone says so, quietly.
+    // A rehearsal whose folder is gone says so, as History does.
     await expect(rows.nth(2)).toContainText("Missing jam")
-    await expect(rows.nth(2).getByText("Not on disk", { exact: true })).toHaveClass(/text-muted-foreground/)
+    await expect(rows.nth(2).getByText("Not found on disk", { exact: true })).toHaveClass(/text-destructive/)
 
     await page.keyboard.press("Enter")
     await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
