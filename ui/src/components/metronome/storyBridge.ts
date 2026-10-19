@@ -2,9 +2,10 @@
  * A bridge for the showcase, so the metronome's settings have something to
  * read and save: two outputs, the settings as Python starts with them, and
  * every change kept for as long as the page is open. Only the stories use
- * it; the app's bridge is pywebview's.
+ * it; the app's bridge is pywebview's. `saved` changes the settings it
+ * starts with, and `missing` names a click output that is not plugged in.
  */
-export function stubBridge() {
+export function stubBridge(saved: Record<string, unknown> = {}, missing: string | null = null) {
   const settings: Record<string, unknown> = {
     click_device_index: null,
     click_channels: null,
@@ -15,6 +16,7 @@ export function stubBridge() {
     metronome_on: true,
     output_device_index: 3,
     output_channels: [1, 2],
+    ...saved,
   }
   const ok = async () => ({ ok: true })
   const w = window as unknown as { pywebview?: { api: Record<string, unknown> } }
@@ -44,6 +46,7 @@ export function stubBridge() {
       metronome_preview: ok,
       metronome_tap_listen: ok,
       metronome_taps: async () => ({ ms_ago: [] }),
+      metronome_state: async () => ({ output_missing: missing }),
     },
   }
 }

@@ -560,7 +560,7 @@ The metronome's pieces, in `components/metronome/` (spec Parts 4 and 5):
 - **TempoField**, `TempoField.tsx`: the tempo as a number field with − and
   + on either side and its unit after it. Enter or leaving the field counts
   what was typed; not a number puts the last one back, and empty is no
-  tempo.
+  tempo, shown as "—".
 - **SignatureSelect**, `SignatureSelect.tsx`: 4/4, 3/4, 2/4 or 6/8, in the
   shared select, each as wide as the others.
 - **TapButton**, `TapButton.tsx`: Tap, and T while the player's keys are on
@@ -575,7 +575,10 @@ The metronome's pieces, in `components/metronome/` (spec Parts 4 and 5):
   text's colour. It keeps two lines' room.
 - **ClickSettings**, `ClickSettings.tsx`: the click's output, volume, sound
   and count-in, behind the row's gear, and its pieces for Settings ›
-  Metronome (`useClickSettings`).
+  Metronome, which read and save through `hooks/useClickSettings.ts`. The
+  output's first item is "Where the player plays", shown until the click
+  has an output of its own; one saved and not plugged in shows under its
+  own name, through `DevicePicker`'s `missing`.
 - **MetronomeRow**, `MetronomeRow.tsx`: the row at the rehearsal screen's
   footer, left of Finish and Record. `MetronomeRowView` draws it from its
   props alone.
