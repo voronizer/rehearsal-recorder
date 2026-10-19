@@ -839,7 +839,8 @@ function clicksIn(g, now) {
 // click, in the same bar unless the signature changes (it then restarts on
 // 1), and stops when the tempo goes.
 function metroApply(tempo, signature) {
-  if (metro.run) {
+  // A song page's click plays its own tempo, whatever the row does.
+  if (metro.run && !metro.run.fixed) {
     if (tempo === null) metro.run = null;
     else {
       const g = metro.run.grid, k = firstClick(g, clock());
@@ -926,6 +927,8 @@ async function metroState() {
   } else if (metro.run) {
     out.phase = 'preview';
     out.upcoming = clicksIn(metro.run.grid, now);
+    // A song page's ▶: the tempo heard, the row's left as it is.
+    if (metro.run.fixed) Object.assign(out, metro.run.fixed);
   }
   out.per_bar = PER_BAR[out.signature];
   return out;
@@ -1304,12 +1307,19 @@ window.__MAKE_API__ = () => ({
     return {ok:true};
   }),
   // The click between takes: from now, at the row's tempo, until Stop, Record
-  // or the end of the rehearsal.
-  metronome_play: track('metronome_play', async () => {
+  // or the end of the rehearsal. With a tempo, a song page's ▶: that tempo,
+  // from its first beat, and the row left as it is.
+  metronome_play: track('metronome_play', async (tempo = null, signature = null) => {
     metroFollow();
-    if (metro.take) return {ok:false, error:'A take is recording'};
-    if (metro.tempo === null) return {ok:false, error:'Set a tempo first'};
-    if (!metro.run) metro.run = {grid: gridOf(metro.tempo, metro.signature, clock())};
+    if (metro.take) return {ok:false, error:'The take has its own click'};
+    if (tempo !== null) {
+      const refusal = tempoRefusal(tempo, signature);
+      if (refusal) return {ok:false, error:refusal};
+      metro.run = {grid: gridOf(tempo, signature, clock()), fixed: {tempo, signature}};
+      return {ok:true};
+    }
+    if (metro.tempo === null) return {ok:false, error:'No tempo to play: type or tap one'};
+    if (!metro.run || metro.run.fixed) metro.run = {grid: gridOf(metro.tempo, metro.signature, clock())};
     return {ok:true};
   }),
   metronome_stop: track('metronome_stop', async () => { metro.run = null; return {ok:true}; }),

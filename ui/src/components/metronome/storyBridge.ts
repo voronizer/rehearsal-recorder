@@ -2,9 +2,10 @@
  * A bridge for the showcase, so the metronome's settings have something to
  * read and save: two outputs, the settings as Python starts with them, and
  * every change kept for as long as the page is open; and a song's tempo
- * saved and counted, and the click with a take, for the pieces that ask. Only the stories use
- * it; the app's bridge is pywebview's. `saved` changes the settings it
- * starts with, and `missing` names a click output that is not plugged in.
+ * saved and counted, its click, and the click with a take, for the pieces
+ * that ask. Only the stories use it; the app's bridge is pywebview's.
+ * `saved` changes the settings it starts with, and `missing` names a click
+ * output that is not plugged in.
  */
 export function stubBridge(saved: Record<string, unknown> = {}, missing: string | null = null) {
   const settings: Record<string, unknown> = {
@@ -62,7 +63,6 @@ export function stubBridge(saved: Record<string, unknown> = {}, missing: string 
         since_count_in_ms: null,
         output_missing: missing,
       }),
-      metronome_set: ok,
       metronome_play: ok,
       metronome_stop: ok,
       // A song's page: its tempo saved as it is, and a count of 104 a

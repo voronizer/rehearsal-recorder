@@ -1171,20 +1171,24 @@ test("song page tempo saves at once", async ({ page }) => {
   await row.getByRole("combobox", { name: "Time signature" }).click()
   await page.getByRole("option", { name: "3/4" }).click()
   await expect.poll(async () => (await songTempos(page)).at(-1)).toEqual([140, "3/4"])
-  // ▶ clicks at the song's tempo, unlike the head's round ▶, and leaves the
-  // metronome as it found it.
+  // ▶ clicks at the song's tempo, unlike the head's round ▶, and its dots
+  // light on the click.
   const play = row.getByRole("button", { name: "Play the click" })
   expect((await play.boundingBox())!.height).toBe(32)
   await play.click()
-  await expect.poll(() => callCount(page, "metronome_play")).toBe(1)
-  expect((await calls(page, "metronome_set")).map((c) => c.args)).toEqual([[140, "3/4"]])
+  await expect.poll(async () => (await calls(page, "metronome_play")).map((c) => c.args)).toEqual([
+    [140, "3/4"],
+  ])
   await expect.poll(async () => (await metronome(page)).phase).toBe("preview")
+  await page.waitForFunction(() => document.querySelector("[data-song-head] [data-beat-dots] [data-lit]") !== null)
+  // A change while it plays plays the new tempo.
+  await row.getByRole("button", { name: "Faster" }).click()
+  await expect.poll(async () => (await calls(page, "metronome_play")).at(-1)?.args).toEqual([141, "3/4"])
   await row.getByRole("button", { name: "Stop the click" }).click()
   await expect.poll(() => callCount(page, "metronome_stop")).toBe(1)
-  await expect.poll(async () => (await calls(page, "metronome_set")).map((c) => c.args)).toEqual([
-    [140, "3/4"],
-    [null, "4/4"],
-  ])
+  expect(await callCount(page, "metronome_set")).toBe(0)
+  await row.getByRole("button", { name: "Slower" }).click()
+  await expect.poll(async () => (await songTempos(page)).at(-1)).toEqual([140, "3/4"])
   // Saved: the page opened again reads it back.
   await songPage(page, "Viasna")
   await songPage(page, "Pałyn")
@@ -1195,6 +1199,34 @@ test("song page tempo saves at once", async ({ page }) => {
   await expect.poll(() => callCount(page, "metronome_tap_listen")).toBe(1)
   await page.keyboard.press("t")
   await expect.poll(() => callCount(page, "metronome_tap_listen")).toBe(2)
+})
+
+test("a song page's click leaves a change held in the row", async ({ page }) => {
+  await openBandApp(page)
+  // The row holds 96 in 3/4 from the last rehearsal, as Python keeps it.
+  await page.evaluate(() =>
+    (window as unknown as { pywebview: { api: { metronome_set: (t: number, s: string) => Promise<unknown> } } })
+      .pywebview.api.metronome_set(96, "3/4")
+  )
+  await openHistory(page)
+  await songPage(page, "Pałyn")
+  const row = songRow(page)
+  await row.getByRole("button", { name: "Play the click" }).click()
+  await expect.poll(async () => (await calls(page, "metronome_play")).map((c) => c.args)).toEqual([
+    [128, "4/4"],
+  ])
+  // What plays is the page's, and the dots light on it outside a rehearsal.
+  await expect.poll(async () => {
+    const m = await metronome(page)
+    return [m.phase, m.tempo, m.signature]
+  }).toEqual(["preview", 128, "4/4"])
+  await page.waitForFunction(() => document.querySelector("[data-song-head] [data-beat-dots] [data-lit]") !== null)
+  await row.getByRole("button", { name: "Stop the click" }).click()
+  await expect.poll(async () => (await metronome(page)).phase).toBe("idle")
+  // The row is as it was left: 96 in 3/4, and nothing set it meanwhile.
+  const after = await metronome(page)
+  expect([after.tempo, after.signature]).toEqual([96, "3/4"])
+  expect((await calls(page, "metronome_set")).map((c) => c.args)).toEqual([[96, "3/4"]])
 })
 
 /** A take of the evening, opened in the player. */

@@ -586,7 +586,8 @@ The metronome's pieces, in `components/metronome/` (spec Parts 4 to 8):
   own name, through `DevicePicker`'s `missing`.
 - **MetronomeRow**, `MetronomeRow.tsx`: the row at the rehearsal screen's
   footer, left of Finish and Record. `MetronomeRowView` draws it from its
-  props alone.
+  props alone. Its count from the last take is `hooks/useTempoCount.ts`,
+  as a song's page counts.
 - **TakeRow**, `TakeRow.tsx`: the row while a take records, at the
   footer's far left: the switch, the take's tempo and signature, the dots
   and the line.
@@ -601,7 +602,9 @@ The metronome's pieces, in `components/metronome/` (spec Parts 4 to 8):
   `PlayButton`, C2), and its line from `songLine`. A change is saved to the
   song at once. "count it from a take" opens a `DropdownMenu` of the song's
   takes, the starred first, then the newest; halve and double follow a
-  count, which is kept while the page is open.
+  count, which is kept while the page is open (`hooks/useTempoCount.ts`).
+  ▶ plays the page's tempo and leaves the rehearsal screen's row as it is;
+  its dots light from what Python says it plays.
 - **MasterClick**, `MasterClick.tsx`: the click with the take, in Master's
   plate after its name: the metronome's icon as the 20 px lane toggle,
   held to the name's line so the plate stays 56 px, grey when on, disabled

@@ -1336,8 +1336,12 @@ type PyApi = {
   /** The switch, mid-take too. */
   metronome_set_on(on: boolean): Promise<Ok>
   /** Runs the click between takes; it stops at `metronome_stop` and at
-   *  Record. Refused with no tempo. */
-  metronome_play(): Promise<Ok>
+   *  Record, and is refused during a take. With no tempo, the row's, which
+   *  it follows while it runs; refused while the row has none. With one, a
+   *  song page's ▶: that tempo in `signature`, checked as the row's is, and
+   *  the row and a change held in it left as they are. `metronome_state`
+   *  says what it plays, in the phase `preview`. */
+  metronome_play(tempo?: number | null, signature?: Signature | null): Promise<Ok>
   metronome_stop(): Promise<Ok>
   /** Plays a bar of `sound`, or of the one set. */
   metronome_preview(sound?: ClickSound | null): Promise<Ok>
