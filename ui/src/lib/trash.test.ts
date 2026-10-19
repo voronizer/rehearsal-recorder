@@ -247,6 +247,25 @@ describe("offerCropUndo", () => {
     expect(notice("t1")?.action?.label).toBe("Undo")
   })
 
+  it("says where a click take now starts when the crop moved its start to a bar", () => {
+    // Python cuts a click take from the bar line at or before the region's
+    // start, and says where it cut.
+    offerCropUndo("Pałyn 5", { undo: "t2", start_sec: 1.875, end_sec: 9.375 }, vi.fn(), "rehearsal", 3)
+    expect(notice("t2")?.text).toBe(
+      "“Pałyn 5” is cropped from the bar at 0:01. The uncut take went to the Trash."
+    )
+    // Cut where it was asked, there is nothing more to say.
+    offerCropUndo("Pałyn 6", { undo: "t3", start_sec: 3, end_sec: 9 }, vi.fn(), "rehearsal", 3)
+    expect(notice("t3")?.text).toBe("“Pałyn 6” is cropped. The uncut take went to the Trash.")
+  })
+
+  it("says it in the warning too, when there is no Undo", () => {
+    offerCropUndo("Pałyn 5", { undo: null, error: "No space left", start_sec: 1.875 }, vi.fn(), "rehearsal", 3)
+    expect(getNotices().find((x) => x.key === "rehearsal")!.text).toBe(
+      "“Pałyn 5” is cropped from the bar at 0:01, but the uncut take could not be moved out of the way, so the crop cannot be undone: No space left."
+    )
+  })
+
   it("warns, with no Undo, when the uncut take could not wait for one", () => {
     offerCropUndo(
       "Pałyn 5",

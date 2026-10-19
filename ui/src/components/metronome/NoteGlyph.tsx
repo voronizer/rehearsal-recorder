@@ -1,7 +1,7 @@
 import type { SVGProps } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Signature } from "@/lib/api"
-import { tempoUnit } from "@/lib/format"
+import { formatMeter, tempoUnit } from "@/lib/format"
 import { unitTitle } from "@/lib/metronome"
 import { cn } from "@/lib/utils"
 
@@ -53,5 +53,19 @@ export function TempoUnit({ signature, className }: { signature: Signature; clas
       </TooltipTrigger>
       <TooltipContent>{unitTitle(signature)}</TooltipContent>
     </Tooltip>
+  )
+}
+
+/**
+ * A tempo and its signature in a line of words, "128 bpm · 4/4", with the
+ * drawn eighth in 6/8 where plain text says "♪" (formatMeter), named for a
+ * screen reader as the unit's tip says it.
+ */
+export function MeterText({ tempo, signature }: { tempo: number; signature: Signature }) {
+  if (signature !== "6/8") return <span className="tnum">{formatMeter(tempo, signature)}</span>
+  return (
+    <span className="tnum">
+      {tempo} <NoteGlyph role="img" aria-hidden={false} aria-label={unitTitle(signature)} /> · {signature}
+    </span>
   )
 }

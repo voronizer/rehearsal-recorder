@@ -356,7 +356,7 @@ export function Rehearsal({
     }
     if (res.take) reselect(res.take)
     onChanged()
-    offerCropUndo(take.name, res, () => uncropped(take), "rehearsal")
+    offerCropUndo(take.name, res, () => uncropped(take), "rehearsal", from)
   }
 
   // A crop's Undo: the uncut take is under the same paths again, and only a
@@ -601,6 +601,7 @@ export function Rehearsal({
         {selected ? (
           <TakePlayer
             player={player}
+            take={liveTake(session.takes, selected)}
             markers={liveTake(session.takes, selected)?.markers ?? []}
             notes={selected.notes} notesMissing={selected.notes_missing}
             onAddMarker={(sec) => addMarker(selected, sec)}

@@ -2,10 +2,15 @@ import {
   callCount,
   calls,
   colour,
+  dragRegion,
   expect,
+  notices,
   openApp,
+  openBandApp,
   openEvening,
+  openHistory,
   settled,
+  startButton,
   startRehearsal,
   test,
   themed,
@@ -557,6 +562,8 @@ test.describe("the row on the rehearsal screen", () => {
 
   test("a signature change keeps the number", async ({ page }) => {
     await rehearse(page, "Pałyn")
+    // The row has followed the name to Pałyn's tempo before it is changed.
+    await expect(tempo(page)).toHaveValue("128")
     await signature(page).click()
     await page.getByRole("option", { name: "6/8" }).click()
     await expect(signature(page)).toHaveText("6/8")
@@ -969,4 +976,423 @@ test.describe("the click's output", () => {
     await expect(page.getByRole("option")).toHaveCount(0)
     expect(await clickOutputCalls(page)).toEqual([])
   })
+})
+
+// ---- Settings › Metronome, a song's page in History, and Master --------
+// (spec Parts 6, 7 and 8): the same settings in the tab as behind the gear,
+// a song's tempo saved from its page at once, and the click on Master with
+// its stripes in the player.
+
+/** Settings, on its Metronome tab. */
+async function metronomeTab(page: Page, before = "") {
+  await openApp(page, { before })
+  await page.getByRole("button", { name: "Settings" }).click()
+  await sectionButton(page, "Metronome").click()
+  await expect(page.locator("[data-tab-head]")).toContainText("Where the click is heard, its sound, and the count-in")
+}
+const sectionButton = (page: Page, name: string) =>
+  page.getByRole("navigation", { name: "Settings sections" }).getByRole("button", { name, exact: true })
+const tabBody = (page: Page) => page.locator("[data-tab-body]")
+const settingCalls = async (page: Page) => (await calls(page, "set_metronome_setting")).map((c) => c.args)
+const previews = async (page: Page) => (await calls(page, "metronome_preview")).map((c) => c.args)
+const checkedIn = (where: Locator, group: string) =>
+  where.getByRole("radiogroup", { name: group }).getByRole("radio", { checked: true })
+
+test("the tab and the gear show the same settings", async ({ page }) => {
+  await metronomeTab(
+    page,
+    `localStorage.setItem("mock-python-config", JSON.stringify({theme: "dark", ui_scale: 1,
+      click_sound: "hihat", click_volume: 0.4, count_in_bars: 2}));`
+  )
+  const tab = tabBody(page)
+  const output = tab.getByRole("region", { name: "Click output" })
+  await expect(output).toContainText(
+    "Where the click is heard. A pair of outputs that feeds only the headphones keeps it off the mics."
+  )
+  await expect(output.getByRole("combobox", { name: "Click output" })).toHaveText("Where the player plays")
+  await expect(checkedIn(tab, "Sound")).toHaveText("Hi-hat")
+  await expect(checkedIn(tab, "Count-in")).toHaveText("2 bars")
+  await expect(tab.getByRole("slider", { name: "Click volume" })).toHaveAttribute("aria-valuenow", "0.4")
+  await expect(tab).toContainText(
+    "Clicked before every take that has the click. It is in the recording; the take's clock starts after it."
+  )
+  await expect(tab).toContainText(
+    "The same settings are behind the gear in the metronome row, on the rehearsal screen."
+  )
+  // Changed in the tab, and the gear shows it: one setting underneath.
+  await tab.getByRole("radio", { name: "Woodblock" }).click()
+  await expect.poll(() => settingCalls(page)).toEqual([["click_sound", "wood"]])
+  await page.getByRole("button", { name: "Back" }).click()
+  await startRehearsal(page)
+  await nameNext(page, "Pałyn")
+  await gear(page).click()
+  const pop = page.getByRole("dialog", { name: "Metronome settings" })
+  await expect(pop.getByRole("combobox", { name: "Click output" })).toHaveText("Where the player plays")
+  await expect(checkedIn(pop, "Sound")).toHaveText("Woodblock")
+  await expect(checkedIn(pop, "Count-in")).toHaveText("2 bars")
+  await expect(pop.getByRole("slider", { name: "Click volume" })).toHaveAttribute("aria-valuenow", "0.4")
+  // The WAV setting is the tab's only.
+  await expect(pop.getByRole("checkbox")).toHaveCount(0)
+})
+
+test("picking a sound plays a bar", async ({ page }) => {
+  await metronomeTab(page)
+  const tab = tabBody(page)
+  await expect(tab).toContainText("The first beat of a bar is higher, in 6/8 the fourth too. Pick one to hear it.")
+  await tab.getByRole("radio", { name: "Hi-hat" }).click()
+  await expect.poll(() => settingCalls(page)).toEqual([["click_sound", "hihat"]])
+  await expect.poll(() => previews(page)).toEqual([["hihat"]])
+  await expect(checkedIn(tab, "Sound")).toHaveText("Hi-hat")
+  // The volume plays a bar once it is let go, at the sound picked.
+  await tab.getByRole("slider", { name: "Click volume" }).focus()
+  await page.keyboard.press("ArrowRight")
+  await expect.poll(() => settingCalls(page)).toEqual([
+    ["click_sound", "hihat"],
+    ["click_volume", 0.71],
+  ])
+  await expect.poll(() => previews(page)).toEqual([["hihat"], []])
+})
+
+test("the WAV checkbox is on by default and saves", async ({ page }) => {
+  await metronomeTab(page)
+  const tab = tabBody(page)
+  const wav = tab.getByRole("checkbox", { name: "Write the tempo into WAV files" })
+  await expect(wav).toBeChecked()
+  await expect(tab).toContainText(
+    "Takes recorded to the click get their tempo and time signature in each WAV. Cubase, Pro Tools, Studio One and FL Studio then fit them to the project's tempo, so set the project to the song's tempo first. Ableton Live and Logic ignore it."
+  )
+  await wav.click()
+  await expect.poll(() => settingCalls(page)).toEqual([["tempo_in_wav", false]])
+  await expect(wav).not.toBeChecked()
+  // Read back from the settings when the tab opens again.
+  await sectionButton(page, "Audio").click()
+  await sectionButton(page, "Metronome").click()
+  await expect(tabBody(page).getByRole("checkbox", { name: "Write the tempo into WAV files" })).not.toBeChecked()
+  await tabBody(page).getByRole("checkbox", { name: "Write the tempo into WAV files" }).click()
+  await expect.poll(async () => (await settingCalls(page)).at(-1)).toEqual(["tempo_in_wav", true])
+})
+
+test("a second ASIO card is not offered for the click", async ({ page }) => {
+  // On Windows the fake's X32 USB is an ASIO card that cannot take the click.
+  await metronomeTab(page, "window.__HOST_API__ = 'Windows WASAPI';")
+  const output = tabBody(page).getByRole("region", { name: "Click output" })
+  await output.getByRole("combobox", { name: "Driver" }).click()
+  await page.getByRole("option", { name: "ASIO" }).click()
+  await output.getByRole("combobox", { name: "Click output" }).click()
+  const card = page.getByRole("option", { name: /X32 USB/ })
+  // Listed, so its reason is seen, and not to be picked.
+  await expect(card).toHaveAttribute("aria-disabled", "true")
+  await expect(card).toContainText("Another ASIO card can't play while one records.")
+  await card.click({ force: true })
+  await page.waitForTimeout(200)
+  expect(await clickOutputCalls(page)).toEqual([])
+  await page.keyboard.press("Escape")
+  await expect(output.getByRole("combobox", { name: "Click output" })).toHaveText("Where the player plays")
+})
+
+/** History's Songs view, on `title`'s page. */
+async function songPage(page: Page, title: string) {
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
+  await page.getByRole("navigation", { name: "Songs" }).locator(`[data-song='${title}']`).click()
+  await expect(page.locator("[data-song-head]").getByRole("heading", { name: title, exact: true })).toBeVisible()
+}
+/** The tempo row under a song's title, and its line. */
+const songRow = (page: Page) => page.locator("[data-song-head]").getByRole("region", { name: "Tempo" })
+const songLine = (page: Page) => songRow(page).locator("[data-song-tempo-line]")
+const songTempos = async (page: Page) => (await calls(page, "set_song_tempo")).map((c) => c.args.slice(1))
+
+test("song page counts a tempo and halves it", async ({ page }) => {
+  await openBandApp(page)
+  await openHistory(page)
+  await songPage(page, "Dym")
+  const row = songRow(page)
+  await expect(row.getByRole("textbox", { name: "Tempo" })).toHaveValue("")
+  await expect(songLine(page)).toHaveText("No tempo yet: type or tap one, or count it from a take")
+  await row.getByRole("button", { name: "count it from a take" }).click()
+  const menu = page.getByRole("menu", { name: "count it from a take" })
+  await expect(menu).toContainText("Count the tempo from a whole take of the song:")
+  // The starred take first, then the newest.
+  expect(
+    await menu.getByRole("menuitem").evaluateAll((els) => els.map((e) => e.getAttribute("data-take")))
+  ).toEqual(["Dym 5", "Dym 4", "Dym 3", "Dym 2", "Dym"])
+  await menu.getByRole("menuitem").first().click()
+  await expect.poll(async () => (await calls(page, "count_tempo")).map((c) => c.args)).toEqual([
+    ["/rec/sat", 4, "4/4"],
+  ])
+  // Saved to the song at once.
+  await expect.poll(() => songTempos(page)).toEqual([[104, "4/4"]])
+  await expect(row.getByRole("textbox", { name: "Tempo" })).toHaveValue("104")
+  await expect(songLine(page)).toHaveText(
+    "Counted from Dym 5; pick the time signature. If the click runs twice too fast or too slow: halve or double."
+  )
+  await songLine(page).getByRole("button", { name: "halve" }).click()
+  await expect(row.getByRole("textbox", { name: "Tempo" })).toHaveValue("52")
+  await songLine(page).getByRole("button", { name: "double" }).click()
+  await expect(row.getByRole("textbox", { name: "Tempo" })).toHaveValue("104")
+  await expect.poll(() => songTempos(page)).toEqual([
+    [104, "4/4"],
+    [52, "4/4"],
+    [104, "4/4"],
+  ])
+  // The count is kept while the page is open: a signature picked counts
+  // the same take in it.
+  await row.getByRole("combobox", { name: "Time signature" }).click()
+  await page.getByRole("option", { name: "6/8" }).click()
+  await expect.poll(async () => (await calls(page, "count_tempo")).at(-1)?.args).toEqual(["/rec/sat", 4, "6/8"])
+  await expect(row.getByRole("textbox", { name: "Tempo" })).toHaveValue("208")
+  await expect.poll(async () => (await songTempos(page)).at(-1)).toEqual([208, "6/8"])
+  await expect(row.locator("[data-tempo-unit] svg")).toHaveCount(1)
+  await expect(songLine(page)).toContainText("Counted from Dym 5")
+  // Away and back, the song has its tempo and the count is over.
+  await songPage(page, "Pałyn")
+  await songPage(page, "Dym")
+  await expect(songRow(page).getByRole("textbox", { name: "Tempo" })).toHaveValue("208")
+  await expect(songLine(page)).toHaveText("Picking Dym at a rehearsal puts this in the metronome.")
+})
+
+test("song page tempo saves at once", async ({ page }) => {
+  await openBandApp(page)
+  await openHistory(page)
+  await songPage(page, "Pałyn")
+  const row = songRow(page)
+  const field = row.getByRole("textbox", { name: "Tempo" })
+  await expect(field).toHaveValue("128")
+  await expect(songLine(page)).toHaveText("Picking Pałyn at a rehearsal puts this in the metronome.")
+  // Counting is not offered for a song that has a tempo.
+  await expect(row.getByRole("button", { name: "count it from a take" })).toHaveCount(0)
+  await row.getByRole("button", { name: "Faster" }).click()
+  await expect.poll(() => songTempos(page)).toEqual([[129, "4/4"]])
+  await field.fill("140")
+  await field.press("Enter")
+  await expect.poll(() => songTempos(page)).toEqual([
+    [129, "4/4"],
+    [140, "4/4"],
+  ])
+  await row.getByRole("combobox", { name: "Time signature" }).click()
+  await page.getByRole("option", { name: "3/4" }).click()
+  await expect.poll(async () => (await songTempos(page)).at(-1)).toEqual([140, "3/4"])
+  // ▶ clicks at the song's tempo, unlike the head's round ▶, and leaves the
+  // metronome as it found it.
+  const play = row.getByRole("button", { name: "Play the click" })
+  expect((await play.boundingBox())!.height).toBe(32)
+  await play.click()
+  await expect.poll(() => callCount(page, "metronome_play")).toBe(1)
+  expect((await calls(page, "metronome_set")).map((c) => c.args)).toEqual([[140, "3/4"]])
+  await expect.poll(async () => (await metronome(page)).phase).toBe("preview")
+  await row.getByRole("button", { name: "Stop the click" }).click()
+  await expect.poll(() => callCount(page, "metronome_stop")).toBe(1)
+  await expect.poll(async () => (await calls(page, "metronome_set")).map((c) => c.args)).toEqual([
+    [140, "3/4"],
+    [null, "4/4"],
+  ])
+  // Saved: the page opened again reads it back.
+  await songPage(page, "Viasna")
+  await songPage(page, "Pałyn")
+  await expect(songRow(page).getByRole("textbox", { name: "Tempo" })).toHaveValue("140")
+  await expect(songRow(page).getByRole("combobox", { name: "Time signature" })).toHaveText("3/4")
+  // Tap, and T, listen to the band's pads. Last, as two taps make a tempo.
+  await songRow(page).getByRole("button", { name: /^Tap/ }).click()
+  await expect.poll(() => callCount(page, "metronome_tap_listen")).toBe(1)
+  await page.keyboard.press("t")
+  await expect.poll(() => callCount(page, "metronome_tap_listen")).toBe(2)
+})
+
+/** A take of the evening, opened in the player. */
+async function openTake(page: Page, label: string) {
+  await page.locator(`[aria-label='Rehearsal overview'] button[aria-label^='${label}']`).click()
+  await expect(page.locator("[data-master-plate]")).toBeVisible()
+  await settled(page)
+}
+const masterClick = (page: Page) =>
+  page.locator("[data-master-plate]").getByRole("button", { name: "Click with the take" })
+const masterLane = (page: Page) => page.locator("[data-master-lane]")
+const clickTag = (page: Page) => masterLane(page).locator("[data-click-tag]")
+const clickLines = (page: Page) => masterLane(page).locator("[data-click-line]")
+/** The middle of each stripe, in the page's pixels. */
+const stripesAt = (page: Page) =>
+  clickLines(page).evaluateAll((els) =>
+    els.map((e) => {
+      const r = e.getBoundingClientRect()
+      return r.x + r.width / 2
+    })
+  )
+const clickSent = async (page: Page) => (await calls(page, "player_set_click")).map((c) => c.args)
+/** A notice that says exactly `text`. */
+const said = (page: Page, text: string) =>
+  notices(page).filter({
+    has: page.locator("p", { hasText: new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`) }),
+  })
+
+test("master click plays with the take", async ({ page }) => {
+  await openEvening(page, "", [
+    { name: "Pałyn", duration_sec: 200 },
+    { name: "Ahoń", duration_sec: 150 },
+  ])
+  await openTake(page, "Take 1 Pałyn")
+  const button = masterClick(page)
+  // Off when the app starts.
+  await expect(button).toBeEnabled()
+  await expect(button).toHaveAttribute("aria-pressed", "false")
+  await button.hover()
+  await expect(page.getByRole("tooltip")).toHaveText("Click with the take: 128 bpm · 4/4")
+  await expect(clickTag(page)).toHaveText("Click 128 bpm · 4/4")
+  await expect(masterLane(page).locator("[data-click-lines]")).toHaveCSS("opacity", "0.5")
+  await button.click()
+  await expect.poll(() => clickSent(page)).toEqual([[true]])
+  await expect(button).toHaveAttribute("aria-pressed", "true")
+  // Grey when on, as every switch: never the accent.
+  await expect(button).toHaveCSS("background-color", await colour(page, "--selected"))
+  await expect(masterLane(page).locator("[data-click-lines]")).toHaveCSS("opacity", "1")
+  // It stays as left from one take to the next; in 6/8 the tag counts eighths.
+  await page.getByRole("group", { name: "Take strip" }).getByRole("button", { name: /^Ahoń, take 1,/ }).click()
+  await expect(clickTag(page)).toHaveText(/^Click 198\s*· 6\/8$/)
+  await expect(clickTag(page).locator("svg")).toHaveCount(1)
+  await expect(masterClick(page)).toHaveAttribute("aria-pressed", "true")
+  await masterClick(page).click()
+  await expect.poll(() => clickSent(page)).toEqual([[true], [false]])
+  await expect(masterClick(page)).toHaveAttribute("aria-pressed", "false")
+})
+
+test("master stripes follow zoom", async ({ page }) => {
+  // Ten minutes at 128: 1280 clicks.
+  await openEvening(page, "", [{ name: "Pałyn", duration_sec: 600 }])
+  await openTake(page, "Take 1 Pałyn")
+  const well = (await masterLane(page).boundingBox())!
+  // The whole take: every fourth bar, 7.5 s apart, the first on the file's
+  // first sample.
+  await expect(clickLines(page)).toHaveCount(81)
+  expect(await clickLines(page).evaluateAll((els) => els.every((e) => e.hasAttribute("data-bar")))).toBe(true)
+  const whole = await stripesAt(page)
+  expect(Math.abs(whole[0] - well.x)).toBeLessThanOrEqual(1)
+  for (let i = 1; i < whole.length; i++)
+    expect(Math.abs(whole[i] - whole[i - 1] - (well.width * 7.5) / 600)).toBeLessThanOrEqual(0.6)
+  // Closest: two seconds in view, every click, the bars among them.
+  const surface = (await page.getByRole("group", { name: "Take timeline" }).boundingBox())!
+  await page.mouse.move(surface.x + surface.width / 2, surface.y + surface.height / 2)
+  await page.keyboard.down("Control")
+  await page.mouse.wheel(0, -3000)
+  await page.keyboard.up("Control")
+  await expect(page.getByText("closest zoom")).toBeVisible()
+  const near = await stripesAt(page)
+  expect(near.length).toBeGreaterThanOrEqual(4)
+  expect(near.length).toBeLessThanOrEqual(5)
+  for (let i = 1; i < near.length; i++)
+    expect(Math.abs(near[i] - near[i - 1] - (well.width * (60 / 128)) / 2)).toBeLessThanOrEqual(0.6)
+  const bars = await clickLines(page).evaluateAll((els) => els.map((e) => e.hasAttribute("data-bar")))
+  expect(bars.filter(Boolean).length).toBeGreaterThanOrEqual(1)
+  expect(bars.filter((b) => !b).length).toBeGreaterThanOrEqual(2)
+})
+
+test("a take without the click", async ({ page }) => {
+  await openEvening(page)
+  await openTake(page, "Take 6")
+  await expect(masterClick(page)).toBeDisabled()
+  await page.locator("[data-master-click]").hover()
+  await expect(page.getByRole("tooltip")).toHaveText("This take was recorded without the click")
+  await expect(clickTag(page)).toHaveText("Recorded without the click")
+  await expect(clickLines(page)).toHaveCount(0)
+})
+
+test("a cropped click take says where it starts", async ({ page }) => {
+  // Python puts a click take's region on its grid: its start back to the
+  // bar line before it.
+  await openEvening(page, "window.__CROP_ON_GRID__ = true;")
+  await openTake(page, "Take 2 Pałyn 2")
+  await dragRegion(page, 0.25, 0.75)
+  await page.getByRole("button", { name: "Crop to the region" }).click()
+  await expect.poll(() => callCount(page, "crop_take")).toBe(1)
+  await expect(said(page, "“Pałyn 2” is cropped from the bar at 0:01. The uncut take went to the Trash.")).toHaveCount(1)
+  // The same notice for a take still on the review screen.
+  await page.keyboard.press("Escape")
+  await nameNext(page, "Pałyn")
+  await page.getByRole("button", { name: /Record take 11/ }).click()
+  await page.getByRole("button", { name: /^Stop/ }).click()
+  await expect(page.locator("[data-take-summary]")).toBeVisible()
+  await settled(page)
+  await dragRegion(page, 0.4, 0.9)
+  await page.getByRole("button", { name: "Crop to the region" }).click()
+  await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
+  await expect(said(page, "“Pałyn 5” is cropped from the bar at 0:01. The uncut take went to the Trash.")).toHaveCount(1)
+})
+
+test("master lane lines up with the tracks at 960", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 680 })
+  await openEvening(page)
+  await openTake(page, "Take 1 Pałyn")
+  const group = (await page.locator("[data-master-group]").boundingBox())!
+  const lanes = (await page.locator("[data-lanes]").boundingBox())!
+  expect(Math.abs(group.x - lanes.x)).toBeLessThanOrEqual(0.5)
+  expect(Math.abs(group.width - lanes.width)).toBeLessThanOrEqual(0.5)
+  // On a well as the tracks' pictures are, over the same seconds.
+  const well = (await masterLane(page).boundingBox())!
+  const wave = (await page.locator("[data-lane]").first().locator(":scope > *").first().boundingBox())!
+  expect(Math.abs(well.x - wave.x)).toBeLessThanOrEqual(0.5)
+  expect(Math.abs(well.width - wave.width)).toBeLessThanOrEqual(0.5)
+  expect(Math.abs(well.height - wave.height)).toBeLessThanOrEqual(0.5)
+  expect(await masterLane(page).evaluate((e) => getComputedStyle(e).backgroundColor)).toBe(
+    await colour(page, "--well")
+  )
+  const tag = (await clickTag(page).boundingBox())!
+  expect(tag.x + tag.width).toBeLessThanOrEqual(well.x + well.width)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(960)
+})
+
+test("the master plate keeps its height", async ({ page }) => {
+  await openEvening(page)
+  await openTake(page, "Take 1 Pałyn")
+  const plate = (await page.locator("[data-master-plate]").boundingBox())!
+  const track = (await page.locator("[data-plate]").first().boundingBox())!
+  expect(plate.height).toBe(56)
+  expect(track.height).toBe(56)
+  // The 20 px lane toggle, as M and S, on the name's line.
+  const button = (await masterClick(page).boundingBox())!
+  expect([button.width, button.height]).toEqual([20, 20])
+  const name = (await page.locator("[data-master-plate] [data-plate-name='Master']").boundingBox())!
+  expect(Math.abs(button.y + button.height / 2 - (name.y + name.height / 2))).toBeLessThanOrEqual(1)
+  expect(button.x).toBeGreaterThan(name.x)
+})
+
+test("stripes sit on the demo band's beats", async ({ page }) => {
+  // The band's Pałyn 2, played to the click at 128 in 4/4: a bar of the
+  // sticks to count in, then the song from the bar line after it.
+  await openBandApp(page)
+  await page.locator("#rehearsal-name").fill("Tuesday jam")
+  await startButton(page).click()
+  await openTake(page, "Take 2 Pałyn 2")
+  // The closest zoom from the take's start: 0 to 2 s.
+  const surface = page.getByRole("group", { name: "Take timeline" })
+  await surface.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    el.dispatchEvent(
+      new WheelEvent("wheel", {
+        deltaY: -3000,
+        ctrlKey: true,
+        clientX: r.left,
+        clientY: r.top + r.height / 2,
+        bubbles: true,
+        cancelable: true,
+      })
+    )
+  })
+  await expect(page.getByText("closest zoom")).toBeVisible()
+  // Where the drums' waveform rises, from the peaks the player draws.
+  const N = 2000
+  const onsets = await page.evaluate(async (n) => {
+    const api = (window as unknown as {
+      pywebview: { api: { take_media: (...a: unknown[]) => Promise<{ peaks: number[][] }[]> } }
+    }).pywebview.api
+    const [drums] = await api.take_media([{ name: "Drums", file: "/rec/tue/2/Drums.wav" }], n, 0, 2)
+    const v = drums.peaks[0]
+    const out: number[] = []
+    for (let i = 0; i < v.length; i++) if (v[i] > 0.15 && (i === 0 || v[i - 1] <= 0.15)) out.push((i / n) * 2)
+    return out
+  }, N)
+  const wave = (await page.locator("[data-lane='Drums'] > *").first().boundingBox())!
+  const xOf = (t: number) => wave.x + (t / 2) * wave.width
+  const stripes = await stripesAt(page)
+  expect(onsets.length).toBeGreaterThanOrEqual(1)
+  // The first beat's stripe on the first onset.
+  expect(Math.abs(stripes[0] - xOf(onsets[0]))).toBeLessThanOrEqual(2)
+  // And every stripe in view on a hit: the count-in's sticks, then the one.
+  for (const x of stripes) expect(Math.min(...onsets.map((t) => Math.abs(xOf(t) - x)))).toBeLessThanOrEqual(2)
 })

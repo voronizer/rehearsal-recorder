@@ -252,7 +252,17 @@ test("Keys is a tab between Appearance and Controls, two switches over their scr
   await openApp(page)
   await openKeys(page)
   const tabs = page.locator("nav[aria-label='Settings sections'] [data-tab]")
-  await expect(tabs).toHaveText(["Audio", "Folders", "Marks", "Sets", "Appearance", "Keys", "Controls", "Under the hood"])
+  await expect(tabs).toHaveText([
+    "Audio",
+    "Metronome",
+    "Folders",
+    "Marks",
+    "Sets",
+    "Appearance",
+    "Keys",
+    "Controls",
+    "Under the hood",
+  ])
   await expect(page.locator("[data-tab-head] p")).toHaveText(
     "Keys that work with one press, and when to turn them off"
   )

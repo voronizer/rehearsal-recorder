@@ -257,6 +257,12 @@ export type TransportResult = Ok<{
   transport?: TransportState
 }>
 
+/** Where a crop cut the take, in its seconds before the crop: for a click
+ *  take, its start back on the bar line at or before the region's and its
+ *  end on the next quarter, so the files still start on a bar; for any
+ *  other, the region as it was asked. */
+export type CutAt = { start_sec?: number; end_sec?: number }
+
 /** A take that was just stopped — still a draft, still unnamed. */
 export type PendingTake = {
   ok: true
@@ -693,6 +699,9 @@ export type PlayerState = {
   /** 0..1 per channel of each track, as it came out of the mix a moment
    *  ago. A list even for a mono track, so one shape serves both. */
   levels?: Record<string, number[]>
+  /** Whether the click plays with the take, as player_set_click left it:
+   *  off in a fresh app, and kept from one take to the next. */
+  click?: boolean
   /** The chosen output could not be used and the system one was taken. */
   warning?: string
   /** Why playback stopped by itself: the output went quiet under it. Stays
@@ -1073,7 +1082,14 @@ type PyApi = {
     startSec: number,
     endSec: number
   ): Promise<
-    Ok<{ take?: Take; markers_dropped?: number; undo?: string | null; ended?: string[] }>
+    Ok<
+      {
+        take?: Take
+        markers_dropped?: number
+        undo?: string | null
+        ended?: string[]
+      } & CutAt
+    >
   >
   /** The same, for a take that is still on the review screen. */
   crop_draft(
@@ -1091,7 +1107,7 @@ type PyApi = {
       duration_sec?: number
       undo?: string | null
       ended?: string[]
-    }>
+    } & CutAt>
   >
 
   list_rehearsals(): Promise<RehearsalSummary[]>
@@ -1333,7 +1349,9 @@ type PyApi = {
     songId: number,
     tempo: number | null,
     signature: Signature | null
-  ): Promise<Ok<{ tempo?: number | null; signature?: Signature | null }>>
+  ): Promise<
+    Ok<{ id?: number; title?: string; tempo?: number | null; signature?: Signature | null }>
+  >
   /** Pad hits count as taps from now until a pause of about two seconds. */
   metronome_tap_listen(): Promise<Ok>
   metronome_taps(): Promise<MetronomeTaps>

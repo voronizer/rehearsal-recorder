@@ -1,5 +1,15 @@
 import { useState } from "react"
-import { FolderOpen, Gamepad2, Info, Keyboard, ListMusic, Palette, Sliders, Tags } from "lucide-react"
+import {
+  FolderOpen,
+  Gamepad2,
+  Info,
+  Keyboard,
+  ListMusic,
+  Metronome,
+  Palette,
+  Sliders,
+  Tags,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ITEM_CHOSEN, Item } from "@/components/ui/item"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -9,6 +19,7 @@ import { ControllerSettings } from "@/components/ControllerSettings"
 import { FoldersSettings } from "@/components/FoldersSettings"
 import { KeysSettings } from "@/components/KeysSettings"
 import { MarksSettings } from "@/components/MarksSettings"
+import { MetronomeSettings } from "@/components/MetronomeSettings"
 import { NewDot } from "@/components/NewDot"
 import { SetsSettings } from "@/components/SetsSettings"
 import { Shell } from "@/components/Shell"
@@ -20,7 +31,16 @@ import { useUpdate } from "@/lib/update"
 import { cn } from "@/lib/utils"
 import { SETTINGS_WIDE_REM, useWide } from "@/lib/wide"
 
-type TabId = "audio" | "folders" | "marks" | "sets" | "appearance" | "keys" | "controls" | "about"
+type TabId =
+  | "audio"
+  | "metronome"
+  | "folders"
+  | "marks"
+  | "sets"
+  | "appearance"
+  | "keys"
+  | "controls"
+  | "about"
 
 // Every tab Settings has, in the order the section list gives them: a tab
 // added here gets its row, its icon and its tip.
@@ -38,6 +58,12 @@ const TABS: {
     label: "Audio",
     icon: <Sliders className="size-4" />,
     blurb: "Which interface, what quality, where it plays back",
+  },
+  {
+    id: "metronome",
+    label: "Metronome",
+    icon: <Metronome className="size-4" />,
+    blurb: "Where the click is heard, its sound, and the count-in",
   },
   {
     id: "folders",
@@ -136,7 +162,7 @@ export function Settings({
           the column, 56 rem wide at most. */}
       <div className="flex min-h-0 min-w-0 flex-1 px-8 pt-8">
         <div className="mx-auto flex min-h-0 w-full max-w-4xl gap-8">
-          {/* The section list. Eight groups is few enough to show at once,
+          {/* The section list. Nine groups is few enough to show at once,
               so nothing is hidden behind a menu. */}
           <nav
             aria-label="Settings sections"
@@ -201,6 +227,7 @@ export function Settings({
               )}
             >
               {tab === "audio" && <AudioSettings />}
+              {tab === "metronome" && <MetronomeSettings />}
               {tab === "folders" && <FoldersSettings />}
               {tab === "marks" && <MarksSettings />}
               {tab === "sets" && <SetsSettings />}

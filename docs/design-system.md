@@ -279,6 +279,7 @@ the shared one when it is redone.
   Under it is the fader, with M and S after it. M and S are
   `Toggle size="lane"`: 20 px, 12 px text and 4 px corners, 6 px apart,
   which keeps their 24 px touch areas apart (WCAG 2.5.8), and grey when on.
+  Master's click button after its name is the same toggle.
   The fader shows keyboard focus on its thumb, in the shared ring, wherever
   a player stands (Review, the rehearsal screen, History): the browser's own
   outline would go round the whole track.
@@ -290,8 +291,10 @@ the shared one when it is redone.
   `LanePlate` is the plate beside a lane, the same for audio, notes and the
   master; `LanePlate grouped` is a plate in the group, with no fill or
   corners of its own. A notes lane is as tall as its plate needs. Master is
-  its own group, a plate with the card's fill, sticky at the bottom in a
-  band as wide as the lanes, so that no part of a lane shows beside it.
+  its own group on the card's fill, sticky at the bottom in a band as wide
+  as the lanes, so that no part of a lane shows beside it: its plate and,
+  right of it on the same columns as a track's row, the click's lane on a
+  well (`MasterClickLane`).
 - **C7. Group**, `Card`: a panel set apart as F4 says, with 12 px
   corners, 16 px inside, and no border or shadow. A screen gives it more air
   with `className`. It takes the place of about 21 hand-made bordered boxes
@@ -550,13 +553,15 @@ The other shared components, each with its stories:
 - **PickRow**, `pick-row.tsx`: a pick-one of a few words beside its name,
   as C8 says.
 
-The metronome's pieces, in `components/metronome/` (spec Parts 4 and 5):
+The metronome's pieces, in `components/metronome/` (spec Parts 4 to 8):
 
 - **NoteGlyph**, `NoteGlyph.tsx`: the eighth note, drawn, after every tempo
   in 6/8 the interface draws; plain text says "♪" (`tempoUnit` in
   `lib/format.ts`). `TempoUnit` beside it is what a tempo counts, "bpm" or
   the eighth, with the tip "Beats a minute" or "Eighths a minute: the six
-  clicks of a bar", in the room "bpm" takes either way.
+  clicks of a bar", in the room "bpm" takes either way. `MeterText` is a
+  tempo and its signature in a line, "128 bpm · 4/4", with the drawn eighth
+  in 6/8: Master's tip and tag.
 - **TempoField**, `TempoField.tsx`: the tempo as a number field with − and
   + on either side and its unit after it. Enter or leaving the field counts
   what was typed; not a number puts the last one back, and empty is no
@@ -590,6 +595,29 @@ The metronome's pieces, in `components/metronome/` (spec Parts 4 and 5):
 - **EdgeLight**, `EdgeLight.tsx`: the window's edge lit in the accent on
   each click of a take, 14 px on the first of a bar and 7 px on the others,
   on and off with no fade (F11), hidden from a screen reader.
+- **SongTempoRow**, `SongTempoRow.tsx`: a song's tempo on its page in
+  History, in the pane head's lines: the tempo field, the signature, Tap
+  and the metronome's ▶ (32 px and square, not the head's round 48 px
+  `PlayButton`, C2), and its line from `songLine`. A change is saved to the
+  song at once. "count it from a take" opens a `DropdownMenu` of the song's
+  takes, the starred first, then the newest; halve and double follow a
+  count, which is kept while the page is open.
+- **MasterClick**, `MasterClick.tsx`: the click with the take, in Master's
+  plate after its name: the metronome's icon as the 20 px lane toggle,
+  held to the name's line so the plate stays 56 px, grey when on, disabled
+  for a take recorded without the click, its tip on the box round it so it
+  shows then too. On or off for the whole app (`hooks/usePlayerClick.ts`).
+- **MasterClickLane**, `MasterClickLane.tsx`: Master's lane, its click as
+  stripes on a well over the same seconds as the tracks' pictures, a bar's
+  stronger than a beat's, from `clickLines` (bars only past 120 clicks in
+  view, every fourth bar past 480), at half strength while the click is
+  off, with the playhead and the tempo in its corner.
+
+`MetronomeSettings` (`components/MetronomeSettings.tsx`) is Settings ›
+Metronome: the gear's pieces from `ClickSettings.tsx` in `SettingsGroup`s,
+and the tab's own checkbox for the tempo in WAV files. `DevicePicker`'s
+`unavailable` lists a device that cannot be picked there, greyed, with its
+reason under its name: the click's output says so of a second ASIO card.
 
 ## Writing components
 

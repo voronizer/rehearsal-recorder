@@ -1,4 +1,5 @@
 import { api } from "@/lib/api"
+import { formatClock } from "@/lib/format"
 import { words } from "@/lib/platform"
 
 /**
@@ -60,7 +61,15 @@ export function goneText(): string {
     : `It has already gone to ${words().trash}.`
 }
 
-/** The notice for a take that was cropped: the take as it was is what went. */
-export function croppedText(name: string): string {
-  return `“${name}” is cropped. The uncut take ${wentToEnd()}`
+/** "“Palyn 3” is cropped", and, for a click take whose start the crop
+ *  moved back to a bar line, where it now starts: "… is cropped from the
+ *  bar at 0:01". `from` is in the take's seconds before the crop. */
+export function croppedWhere(name: string, from: number | null = null): string {
+  return from === null ? `“${name}” is cropped` : `“${name}” is cropped from the bar at ${formatClock(from)}`
+}
+
+/** The notice for a take that was cropped: the take as it was is what went,
+ *  and where a click take now starts (croppedWhere). */
+export function croppedText(name: string, from: number | null = null): string {
+  return `${croppedWhere(name, from)}. The uncut take ${wentToEnd()}`
 }

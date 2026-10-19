@@ -45,6 +45,7 @@ export function ClickOutputPickers({ c }: { c: ClickSettingsValue }) {
               : "The click's output is not connected"
         }
         detail={(d) => outputsOf(d.max_output_channels)}
+        unavailable={(d) => d.click_unavailable ?? null}
         onChange={(index) => void c.setDevice(index)}
         disabled={!c.settings}
       />

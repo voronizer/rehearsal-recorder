@@ -98,7 +98,7 @@ export function useClickSettings() {
     else dismiss(SAID)
     return true
   }
-  const save = async <K extends "click_sound" | "click_volume" | "count_in_bars">(
+  const save = async <K extends "click_sound" | "click_volume" | "count_in_bars" | "tempo_in_wav">(
     key: K,
     value: MetronomeSettings[K]
   ) => {
@@ -119,9 +119,10 @@ export function useClickSettings() {
 
   return {
     settings,
-    /** The outputs the click can play through: another ASIO card cannot
-     *  while one records, and is not offered. */
-    outputs: outputs.filter((d) => !d.click_unavailable),
+    /** The outputs there are. One the click cannot play through (another
+     *  ASIO card while one records) says why in `click_unavailable`, and is
+     *  listed with its reason, not to be picked. */
+    outputs,
     /** The click's own device; null while it goes where the player plays,
      *  and while its own is not plugged in. */
     device: missing ? null : saved,
@@ -169,6 +170,9 @@ export function useClickSettings() {
       else void done()
     },
     setCountIn: (bars: MetronomeSettings["count_in_bars"]) => void save("count_in_bars", bars),
+    /** Whether a click take's WAVs carry its tempo; Settings › Metronome
+     *  only. */
+    setTempoInWav: (on: boolean) => void save("tempo_in_wav", on),
   }
 }
 

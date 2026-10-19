@@ -45,3 +45,46 @@ test("a rehearsal of the band's played by its set says so in History", async ({ 
   await expect(page.locator("[data-set-name]").first()).toHaveText("Gig on the 25th")
   await expect(page.locator("[data-set-card] h2")).toHaveText("Gig on the 25th · 4 of 6 played")
 })
+
+test("the band plays on the click's grid from the first sample", async ({ page }) => {
+  await openBandApp(page)
+  // Pałyn 2's drums, a take played to the click at 128 in 4/4: the sticks
+  // count in a bar from the file's first sample, as the click's count-in
+  // does, and the song comes in on the bar after it.
+  const onsets = await page.evaluate(async () => {
+    const api = (window as unknown as {
+      pywebview: { api: { take_media: (...a: unknown[]) => Promise<{ peaks: number[][] }[]> } }
+    }).pywebview.api
+    const n = 4000
+    const [drums] = await api.take_media([{ name: "Drums", file: "/rec/tue/2/Drums.wav" }], n, 0, 4)
+    const v = drums.peaks[0]
+    const out: number[] = []
+    for (let i = 0; i < n; i++) if (v[i] > 0.15 && (i === 0 || v[i - 1] <= 0.15)) out.push((i / n) * 4)
+    return out
+  })
+  const click = 60 / 128
+  expect(onsets.length).toBeGreaterThanOrEqual(5)
+  for (const [k, t] of onsets.slice(0, 5).entries()) {
+    expect(Math.abs(t - k * click), `hit ${k + 1}`).toBeLessThanOrEqual(0.003)
+  }
+})
+
+test("the band's click output offers its desk on ASIO", async ({ page }) => {
+  await openBandApp(page)
+  const outputs = await page.evaluate(() =>
+    (window as unknown as {
+      pywebview: { api: { list_output_devices: () => Promise<{ click_unavailable?: string | null }[]> } }
+    }).pywebview.api.list_output_devices()
+  )
+  expect(outputs.every((d) => d.click_unavailable === null)).toBe(true)
+  await page.getByRole("button", { name: "Settings" }).click()
+  await page
+    .getByRole("navigation", { name: "Settings sections" })
+    .getByRole("button", { name: "Metronome", exact: true })
+    .click()
+  const output = page.locator("[data-tab-body]").getByRole("region", { name: "Click output" })
+  await output.getByRole("combobox", { name: "Driver" }).click()
+  await page.getByRole("option", { name: "ASIO" }).click()
+  await output.getByRole("combobox", { name: "Click output" }).click()
+  await expect(page.getByRole("option", { name: /X18\/XR18/ })).not.toHaveAttribute("aria-disabled", "true")
+})

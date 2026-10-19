@@ -18,6 +18,7 @@ const track = (name, fn) => async (...args) => {
 
 const clock = () => performance.now() / 1000;
 let P = null;                 // player state, mirroring audio/player.py
+let playerClick = false;       // player_set_click: off in a fresh app, kept from take to take
 let session = null;
 let controlSequence = 0;
 let controlEvents = [];
@@ -110,7 +111,7 @@ function playerState() {
   if (!P) return {open:false};
   return {open:true, ok:true, playing:P.playing, position:position(), duration:P.duration,
           loop:P.loop, muted:P.muted, soloed:P.soloed, volumes:P.volumes, master:P.master,
-          levels:levels(), master_level:masterLevel()};
+          levels:levels(), master_level:masterLevel(), click:playerClick};
 }
 function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = clock(); }
 
@@ -171,6 +172,7 @@ function keepMarks(folder, n, take) {
 async function cropPast(folder, n, a, b) {
   const take = await markedTake(folder, n);
   if (!take) return {ok:false, error:'Take not found'};
+  [a, b] = cutAt(take, a, b, take.duration_sec);
   const key = `${folder}#${n}`;
   const was = {crop: pastCrops[key], marks: pastMarks[key]};
   let dropped = 0;
@@ -190,7 +192,7 @@ async function cropPast(folder, n, a, b) {
     return {kind:'crop', folder, take_numbers:[n]};
   }, {folder, takes:[n], crop:true});
   return JSON.parse(JSON.stringify({ok:true, take:{...take, duration_sec: b - a, tracks, markers},
-    markers_dropped:dropped, undo, ended}));
+    markers_dropped:dropped, undo, ended, start_sec:a, end_sec:b}));
 }
 
 // The library's labels, in their order, as list_labels gives them: the four
@@ -769,6 +771,12 @@ function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); 
 //                                         with no count-in time
 //   window.__PAD_TAP__()                  a hit on a pad: a tap, while the screen
 //                                         has asked to hear them
+//   window.__CROP_ON_GRID__ = true        a click take's crop is cut on its grid, as
+//                                         Python cuts one whose files it reads: the
+//                                         start back to the bar line, the end on to
+//                                         the next quarter. Without it the fake's
+//                                         takes are cut as asked, as Python cuts a
+//                                         take whose audio it cannot read.
 // and a test can change them while it runs.
 const PER_BAR = {'4/4': 4, '3/4': 3, '2/4': 2, '6/8': 6};
 const tempoBounds = (signature) => (signature === '6/8' ? [60, 600] : [30, 300]);
@@ -780,6 +788,15 @@ const tempoRefusal = (tempo, signature) => {
     ? null : `A tempo in ${signature} is a whole number from ${low} to ${high}`);
 };
 const CLICK_SOUNDS = ['click', 'wood', 'hihat'];
+// Where a crop of a take with this meter cuts it (api._on_grid, snap_region):
+// a click take's region on its grid with __CROP_ON_GRID__, else as asked.
+function cutAt(meter, a, b, duration) {
+  if (!window.__CROP_ON_GRID__ || !meter || !meter.click || !meter.tempo) return [a, b];
+  const click = 60 / meter.tempo, bar = PER_BAR[meter.signature] * click;
+  const quarter = (meter.signature === '6/8' ? 2 : 1) * click;
+  const start = Math.floor(a / bar + 1e-9) * bar;
+  return [start, Math.min(duration, Math.ceil(b / quarter - 1e-9) * quarter)];
+}
 // What set_metronome_setting takes, and what each setting may be.
 const CLICK_SETTINGS = {
   click_sound: (v) => CLICK_SOUNDS.includes(v),
@@ -1327,7 +1344,7 @@ window.__MAKE_API__ = () => ({
       if (refusal) return {ok:false, error:refusal};
       songTempos.set(title, {tempo, signature});
     }
-    return {ok:true, ...tempoOf(title)};
+    return {ok:true, id, title, ...tempoOf(title)};
   }),
   // Hits on the pads count as taps from now until a pause of two seconds
   // (window.__PAD_TAP__), and each is told once, as milliseconds ago.
@@ -1340,8 +1357,12 @@ window.__MAKE_API__ = () => ({
     metro.taps = [];
     return {ms_ago};
   },
-  // Whether the player plays the click with the take; a test sees the call.
-  player_set_click: track('player_set_click', async () => ({ok:true})),
+  // Whether the player plays the click with the take, kept for the session as
+  // Python keeps it: player_state says it.
+  player_set_click: track('player_set_click', async (on) => {
+    playerClick = Boolean(on);
+    return {ok:true};
+  }),
   load_default_tracks: track('load_default_tracks', async (band) => window.__PLUGGED_IN_LATE__ ? ({
     // Like layouts.for_device: with no card there is one input to go round;
     // with the desk, every name gets its own.
@@ -1672,6 +1693,7 @@ window.__MAKE_API__ = () => ({
     if (!(session && folder === session.folder)) return cropPast(folder, n, a, b);
     const take = session.takes.find(t => t.take_number === n);
     if (!take) return {ok:false, error:'Take not found'};
+    [a, b] = cutAt(take, a, b, take.duration_sec);
     // The take as it was, for the crop's Undo.
     const was = JSON.parse(JSON.stringify(take));
     let dropped = 0;
@@ -1697,10 +1719,14 @@ window.__MAKE_API__ = () => ({
     }, {folder, takes:[n], crop:true});
     // Deep copy, same as rename_take — a live handle would let the interface
     // alias the mock's own state, which the real bridge never allows.
-    return JSON.parse(JSON.stringify({ok:true, take, markers_dropped:dropped, undo, ended}));
+    return JSON.parse(JSON.stringify({ok:true, take, markers_dropped:dropped, undo, ended,
+      start_sec:a, end_sec:b}));
   }),
   crop_draft: track('crop_draft', async (dir, tracks, a, b, notes) => {
     await held('crop_draft');
+    // The draft is the take last stopped, with the meter it was recorded at.
+    const length = tracks && tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
+    [a, b] = cutAt(metro.meters[takeCounter], a, b, length);
     const cut = (tracks || []).map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
     for (const t of cut) fileDurations[t.file] = b - a;
     // The notes are cut with the audio, and come back when they were sent.
@@ -1713,7 +1739,8 @@ window.__MAKE_API__ = () => ({
       return {kind:'crop', temp_dir:dir};
     }, {folder:dir, crop:true});
     return JSON.parse(JSON.stringify(
-      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, undo, ended}));
+      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, undo, ended,
+       start_sec:a, end_sec:b}));
   }),
 
   take_media: track('take_media', async (tracks, _buckets, _from, _to) => tracks.map(t => {

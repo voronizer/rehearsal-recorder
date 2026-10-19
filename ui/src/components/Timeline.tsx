@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useId, useRef, useState } from "react"
 import { LaneControls, MasterControls } from "@/components/LaneControls"
+import { MasterClick } from "@/components/metronome/MasterClick"
+import { MasterClickLane } from "@/components/metronome/MasterClickLane"
 import { RegionTag, type RegionCrop } from "@/components/RegionTag"
 import { TakeMap } from "@/components/TakeMap"
 import { Waveform } from "@/components/Waveform"
@@ -9,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, labelOf, useLabels } from "@/lib/labels"
 import { laneOrder } from "@/lib/midi"
+import type { TakeClick } from "@/lib/metronome"
 import { MIN_VIEW_SEC, tickTimes } from "@/lib/timeline"
 import type { Marker, MissingNotes, NotesFile, TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
@@ -80,8 +83,12 @@ export function Timeline({
   notes,
   notesMissing,
   notesRead,
+  take = null,
 }: {
   player: MultitrackPlayer
+  /** The take's click, for Master's button and lane: its tempo and
+   *  signature, and whether it was recorded to the click. */
+  take?: TakeClick | null
   markers?: Marker[]
   /** Crop, offered under the region's times, where the take can be cut. */
   crop?: RegionCrop
@@ -634,24 +641,45 @@ export function Timeline({
           flow.
 
           It is not a row of the lanes group above but a group of its own
-          under it, a plate with its own fill: it is the sum of the lanes,
-          not one of them, and it is the one that sticks. Its band is as wide
-          as the lanes, plates and pictures, in the page's colour: stuck, the
-          lanes slide under all of it, and no part of a lane shows beside the
-          master or under it. */}
+          under it, with its own fill: it is the sum of the lanes, not one of
+          them, and it is the one that sticks. Its band is as wide as the
+          lanes, plates and pictures, in the page's colour: stuck, the lanes
+          slide under all of it, and no part of a lane shows beside the
+          master or under it.
+
+          The group is a row as a track's is (Q11 D): the plate, and right
+          of it the click's lane, on the same columns and on a well 3 px in
+          from the group's edges, so its stripes stand under the tracks'
+          pictures over the same seconds. */}
       {rows > 0 && (
         <div
           data-master-band
           className="sticky z-10 -mt-1 -mb-2 bg-background pt-1 pb-2"
           style={{ bottom: "calc(-1 * var(--screen-pad-y))" }}
         >
-          <div style={{ width: GUTTER_PX }}>
-            <MasterControls
-              volume={player.master}
-              level={player.masterLevel}
-              onVolume={player.setMaster}
-              onVolumeCommit={player.persistMaster}
-            />
+          <div
+            data-master-group
+            className="grid rounded-lg bg-card"
+            style={{
+              gridTemplateColumns: COLUMNS,
+              columnGap: COLUMN_GAP_PX,
+              height: `${LANE_REM}rem`,
+              gridTemplateRows: "minmax(0, 1fr)",
+            }}
+          >
+            <div className="min-h-0">
+              <MasterControls
+                grouped
+                volume={player.master}
+                level={player.masterLevel}
+                onVolume={player.setMaster}
+                onVolumeCommit={player.persistMaster}
+                click={<MasterClick take={take} />}
+              />
+            </div>
+            <div className="min-w-0 py-[3px]">
+              <MasterClickLane from={from} to={to} position={displayPosition} take={take} />
+            </div>
           </div>
         </div>
       )}

@@ -22,7 +22,7 @@ const SYSTEM = "default"
  *
  * Changing the driver saves nothing: nothing is chosen until a device is.
  */
-export function DevicePicker({
+export function DevicePicker<D extends Device>({
   id,
   label,
   devices,
@@ -33,13 +33,14 @@ export function DevicePicker({
   systemLabel = "System output",
   missing,
   detail,
+  unavailable,
   disabled = false,
 }: {
   id: string
   /** The device list's name, for a screen reader: the group it is in says
    *  it on screen. */
   label: string
-  devices: Device[]
+  devices: D[]
   value: number | null
   onChange: (index: number | null) => void
   placeholder: string
@@ -52,7 +53,11 @@ export function DevicePicker({
    *  said under its own name (`notConnected`), whatever `value` is (Python
    *  gives no index for a device that is not there). */
   missing?: string
-  detail?: (d: Device) => string
+  detail?: (d: D) => string
+  /** Why a device cannot be picked here, or null when it can. Such a device
+   *  is listed, greyed, with the reason under its name: left out, it would
+   *  look missing, or its driver would. */
+  unavailable?: (d: D) => string | null
   /** While the list is being rebuilt: an index picked now may mean another
    *  device a moment later. */
   disabled?: boolean
@@ -118,12 +123,35 @@ export function DevicePicker({
         </SelectTrigger>
         <SelectContent>
           {systemDefault && <SelectItem value={SYSTEM}>{systemLabel}</SelectItem>}
-          {shown.map((d) => (
-            <SelectItem key={d.index} value={String(d.index)}>
-              {d.name}
-              {detail ? detail(d) : ""}
-            </SelectItem>
-          ))}
+          {shown.map((d) => {
+            const why = unavailable?.(d) ?? null
+            if (why === null) {
+              return (
+                <SelectItem key={d.index} value={String(d.index)}>
+                  {d.name}
+                  {detail ? detail(d) : ""}
+                </SelectItem>
+              )
+            }
+            // Greyed by its words, not by fading the whole row: the reason
+            // has to stay readable.
+            return (
+              <SelectItem
+                key={d.index}
+                value={String(d.index)}
+                disabled
+                className="data-[disabled]:opacity-100"
+              >
+                <span className="flex flex-col items-start text-muted-foreground">
+                  <span>
+                    {d.name}
+                    {detail ? detail(d) : ""}
+                  </span>
+                  <span className="text-xs">{why}</span>
+                </span>
+              </SelectItem>
+            )
+          })}
         </SelectContent>
       </Select>
     </div>

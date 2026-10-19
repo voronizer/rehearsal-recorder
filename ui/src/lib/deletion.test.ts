@@ -55,6 +55,16 @@ describe("croppedText", () => {
       "“Palyn 3” is cropped. The uncut take moved to the _deleted folder.",
     )
   })
+
+  it("says where a click take now starts, the bar its start moved back to", () => {
+    setSystem("mac")
+    expect(croppedText("Palyn 3", 1.875)).toBe(
+      "“Palyn 3” is cropped from the bar at 0:01. The uncut take went to the Trash.",
+    )
+    expect(croppedText("Palyn 3", 75)).toBe(
+      "“Palyn 3” is cropped from the bar at 1:15. The uncut take went to the Trash.",
+    )
+  })
 })
 
 describe("goneText", () => {

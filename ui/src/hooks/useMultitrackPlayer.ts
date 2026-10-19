@@ -9,6 +9,7 @@ import {
   useMixLevel,
 } from "@/lib/listening"
 import { MIN_VIEW_SEC } from "@/lib/timeline"
+import { heardPlayerClick } from "@/hooks/usePlayerClick"
 
 export type MultitrackPlayer = ReturnType<typeof useMultitrackPlayer>
 
@@ -119,6 +120,7 @@ export function useMultitrackPlayer(
       problem?: string | null
       reopened?: boolean
       warning?: string
+      click?: boolean
     }) => {
       // The output went quiet under the take, and Python paused it. Said
       // where the other word about the output is said: the next play tries
@@ -135,6 +137,7 @@ export function useMultitrackPlayer(
       if (s.soloed !== undefined) setSoloed(s.soloed)
       if (s.volumes) setVolumes(s.volumes)
       heard({ volume: s.master, level: s.master_level })
+      if (typeof s.click === "boolean") heardPlayerClick(s.click)
       if (s.levels) setLevels(s.levels)
       if (s.loop !== undefined) setLooping(s.loop !== null)
     },
