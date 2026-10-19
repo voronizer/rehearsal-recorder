@@ -44,7 +44,8 @@ move on, and History says which ones you never got to.
 ## A click for the drummer. {#metronome}
 
 Each song keeps its tempo and time signature. The click can go to the
-drummer's headphones only, and the beat flashes on screen.
+drummer's headphones only, and during a take the edge of the screen lights on
+every click.
 
 ## Deleting goes to the Trash. {#trash}
 

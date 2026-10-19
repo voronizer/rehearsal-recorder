@@ -146,7 +146,7 @@ describe("metronome on the site", () => {
     expect(tile.title).toBe("A click for the drummer.")
     expect(tile.body.replace(/\s+/g, " ").trim()).toBe(
       "Each song keeps its tempo and time signature. The click can go to the drummer's " +
-        "headphones only, and the beat flashes on screen."
+        "headphones only, and during a take the edge of the screen lights on every click."
     )
   })
 
@@ -157,9 +157,10 @@ describe("metronome on the site", () => {
     expect(content.faq.questions[at].body.replace(/\s+/g, " ").trim()).toBe(
       "Yes. Each song keeps its tempo and time signature: typed, tapped, or counted from " +
         "an old take. The click plays through the output you choose, so it can go to the " +
-        "drummer's headphones only, and the screen flashes on every beat. A take recorded " +
-        "to the click keeps its tempo, and its WAV and .mid files carry it, so the bars " +
-        "line up in your DAW."
+        "drummer's headphones only, and during a take the edge of the screen lights on " +
+        "every click. A take recorded to the click keeps its tempo, and its WAV and .mid " +
+        "files carry it: set your DAW to that tempo, and the take's bars sit on the " +
+        "project's bars."
     )
   })
 })

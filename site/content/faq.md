@@ -24,9 +24,10 @@ driver: the other drivers often show only two inputs.
 
 Yes. Each song keeps its tempo and time signature: typed, tapped, or counted
 from an old take. The click plays through the output you choose, so it can
-go to the drummer's headphones only, and the screen flashes on every beat. A
-take recorded to the click keeps its tempo, and its WAV and .mid files carry
-it, so the bars line up in your DAW.
+go to the drummer's headphones only, and during a take the edge of the screen
+lights on every click. A take recorded to the click keeps its tempo, and its
+WAV and .mid files carry it: set your DAW to that tempo, and the take's bars
+sit on the project's bars.
 
 ## Where do the recordings go?
 
