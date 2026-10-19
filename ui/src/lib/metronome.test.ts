@@ -292,6 +292,12 @@ describe("the status line", () => {
       text: "",
     })
   })
+  it("says nothing of the count-in before its first click is heard", () => {
+    // Chosen, and not heard yet: Python's count is 0 until it is.
+    expect(statusLine(state({ phase: "count", count: 0, since_count_in_ms: -400 }), null)).toEqual({
+      text: "",
+    })
+  })
   it("says the click runs to Stop", () => {
     expect(statusLine(state({ phase: "take", since_count_in_ms: 1200 }), null)).toEqual({
       text: "Clicking to Stop.",
@@ -338,7 +344,9 @@ describe("the count-in's digits", () => {
   it("go from 1 to the clicks of a bar, and again for a second bar", () => {
     expect([1, 2, 3, 4, 5, 6, 7, 8].map((n) => countDigit(n, 4).digit)).toEqual([1, 2, 3, 4, 1, 2, 3, 4])
     expect(countDigit(5, 6)).toEqual({ digit: 5, of: 6 })
-    expect(countDigit(0, 4)).toEqual({ digit: 1, of: 4 })
+  })
+  it("are none before the first click is heard", () => {
+    expect(countDigit(0, 4)).toEqual({ digit: null, of: 4 })
   })
 })
 

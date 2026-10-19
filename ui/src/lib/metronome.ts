@@ -104,9 +104,10 @@ export function tapTempo(timesMs: number[], signature: Signature): number | null
  * Which click of the bar the count-in is on, and how many a bar has: "2 of
  * 4". Python counts the clicks of the whole count-in; a count-in of two bars
  * counts the bar twice (Part 5), whether the number runs on or starts again.
+ * No digit (null) before the first click is heard, which Python counts as 0.
  */
-export function countDigit(count: number, perBar: number): { digit: number; of: number } {
-  return { digit: ((Math.max(1, count) - 1) % perBar) + 1, of: perBar }
+export function countDigit(count: number, perBar: number): { digit: number | null; of: number } {
+  return { digit: count < 1 ? null : ((count - 1) % perBar) + 1, of: perBar }
 }
 
 /** The longest a click stays lit, in milliseconds. */
@@ -206,6 +207,8 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
     if (state.output_missing !== null) return missingOutput(state.output_missing)
     if (state.phase === "take") return { text: "Clicking to Stop." }
     const { digit, of } = countDigit(state.count, state.per_bar)
+    // Chosen and not heard yet: no click counted, and the line keeps its room.
+    if (digit === null) return { text: "" }
     return { text: `Count-in: ${digit} of ${of}` }
   }
 
