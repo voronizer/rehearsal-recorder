@@ -912,6 +912,34 @@ buttons. With **Space and Esc** off, Space presses the button you moved to
 with Tab. ⌘Z or Ctrl+Z still undoes, and Esc still closes a dialog and
 leaves a text field.
 
+## A controller
+
+РЭХА works with one controller: the Bluetooth MIDI controller Viktor Baikov
+built for it ([reha-controller](https://github.com/viktor-baikov/reha-controller)).
+With it, whoever is nearest can start and stop a take without going to the
+laptop. Other MIDI controllers do not work this way.
+
+To set it up, open **Settings → Controls** and pick the controller in the
+**Controller** list. On a Mac, if it is not in the list, press **Pair
+Bluetooth MIDI controller** to open the Mac's own Bluetooth MIDI window,
+pair it there, and come back. When the line under the list says
+"Controller ready", it works.
+
+From the controller:
+
+- **Record/Stop** starts a take. Pressed again, it stops the take and keeps
+  it. The laptop's **Stop** is different: it opens the screen where you save
+  or discard the take.
+- **Play/Stop** plays a kept take, or stops it.
+- You can also go back to the start of the take, skip back or forward,
+  move to the previous or next song or take, set the volume, and start and
+  finish the rehearsal.
+- Removing a take from the controller works like deleting it in the app:
+  a notice says "Take removed", and its **Undo** brings the take back.
+
+What the controller sends is never recorded into a track's notes. If the
+controller drops out during a take, the take keeps recording.
+
 ## Undo
 
 Deleting a take or a rehearsal, clearing false starts, discarding a take

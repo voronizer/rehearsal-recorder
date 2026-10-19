@@ -27,6 +27,20 @@ opening.
   a spinner stands still. While a take records nothing moves but the meters
   and the clock: the red dot beside *Recording* no longer pulses. A red
   button is full red in the dark theme too.
+- **A controller for the band: start and stop a take away from the laptop.**
+  РЭХА now works with the Bluetooth MIDI controller Viktor Baikov built for
+  it ([reha-controller](https://github.com/viktor-baikov/reha-controller)).
+  Its **Record/Stop** starts a take, and pressed again stops the take and
+  keeps it; the laptop's **Stop** still opens the screen where you save or
+  discard. From the controller you can also play a kept take and stop it,
+  go back to its start, skip back or forward, move to the previous or next
+  song or take, set the volume, start and finish the rehearsal, and remove
+  a take, which the app's **Undo** brings back. Pick the controller in the
+  new **Settings → Controls**; on a Mac, **Pair Bluetooth MIDI controller**
+  there opens the Mac's own Bluetooth MIDI window. What the controller
+  sends never ends up in a track's notes, and a take keeps recording if the
+  controller drops out. Since its last changes it has been tried only on a
+  Mac.
 - **Deleting, discarding and cropping happen at once, with Undo for 10 s.**
   Deleting a take or a rehearsal, clearing false starts, discarding a take
   and cropping one no longer ask first: a notice says what went, and its
