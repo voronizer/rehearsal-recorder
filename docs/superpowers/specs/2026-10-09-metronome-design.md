@@ -586,6 +586,10 @@ As the Q12 mockup's variant C has it (M14):
   goes the whole width. The MIDI tile and the sets tile join the same
   section first, so where the three go is settled when this is built, with
   every row full.
+  Since 19 Oct 2026 (#64) the tile about formats is gone and the site says
+  only what the app does, so the metronome tile finds its place among the
+  others, every row still full and the Trash tile still the whole width;
+  Alex sees it before the merge.
 - The site's demo songs get tempos as the demo band plays them (Pałyn 128),
   and its takes are click takes, so the hero player shows Master's stripes;
   the plan checks they sit on the band's beats. The click stays silent on
