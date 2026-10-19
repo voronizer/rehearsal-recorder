@@ -761,6 +761,12 @@ function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); 
 //                                         index (by default, with __HOST_API__,
 //                                         the ASIO desk)
 //   window.__COUNT_ERROR__ = 'No files'   count_tempo fails with it
+//   window.__TAKE_LATE_MS__ = 500         for this long after Record, metronome_state
+//                                         still answers as between takes
+//   window.__COUNT_IN_LATE_MS__ = 1500    a click take's first click is chosen
+//                                         this long after Record, as on another
+//                                         device: till then it says `count`
+//                                         with no count-in time
 //   window.__PAD_TAP__()                  a hit on a pad: a tap, while the screen
 //                                         has asked to hear them
 // and a test can change them while it runs.
@@ -789,7 +795,8 @@ const metro = {
   followed: undefined,   // the song it follows, lower case; '' for a take that is no song's
   tempo: null, signature: '4/4',
   run: null,             // the click running between takes: {grid}
-  take: null,            // the take recording: {tempo, signature, click, grid, countEnd}
+  take: null,            // the take recording: {tempo, signature, click, said, grid, countEnd},
+                         // said: from when metronome_state tells of it
   meters: {},            // each take's tempo, signature and click, by number, till it is kept
   tapUntil: 0, taps: [],
 };
@@ -871,7 +878,8 @@ async function lastTakeOf(title) {
 
 async function metroState() {
   metroFollow();
-  const now = clock(), song = nextTake().song, take = metro.take;
+  const now = clock(), song = nextTake().song;
+  const take = metro.take && now >= metro.take.said ? metro.take : null;
   const own = song ? songTempos.get(song) : null;
   const out = {phase:'idle', tempo:metro.tempo, signature:metro.signature, on:clickOn(),
     case: !song ? 'free' : own ? 'song' : 'song_without', song:null, held:false, last_take:null,
@@ -885,7 +893,10 @@ async function metroState() {
   if (take) {
     // The row cannot change under a take: what it shows is the take's.
     Object.assign(out, {phase:'take', tempo:take.tempo, signature:take.signature});
-    if (take.click) {
+    if (take.click && now < take.grid.t0) {
+      // The first click is not chosen yet: no time, and nothing to hear.
+      out.phase = 'count';
+    } else if (take.click) {
       out.since_count_in_ms = (now - take.countEnd) * 1000;
       if (now < take.countEnd) {
         out.phase = 'count';
@@ -910,9 +921,10 @@ function metroStartTake(number) {
   metroFollow();
   metro.run = null;
   const {tempo, signature} = metro, click = tempo !== null && clickOn();
-  const bars = readCfg().count_in_bars ?? 1, t0 = clock();
+  const bars = readCfg().count_in_bars ?? 1;
+  const t0 = clock() + (click ? (window.__COUNT_IN_LATE_MS__ || 0) / 1000 : 0);
   metro.meters[number] = {tempo, signature: tempo === null ? null : signature, click};
-  metro.take = {tempo, signature, click,
+  metro.take = {tempo, signature, click, said: clock() + (window.__TAKE_LATE_MS__ || 0) / 1000,
     grid: click ? gridOf(tempo, signature, t0) : null,
     countEnd: click ? t0 + bars * PER_BAR[signature] * 60 / tempo : null};
 }
@@ -928,6 +940,17 @@ function metroGives(take) {
   if (take.song && !songTempos.has(take.song))
     songTempos.set(take.song, {tempo: take.tempo, signature: take.signature});
 }
+
+// The outputs there are: a Windows machine's with __HOST_API__, else a Mac's.
+const outputDevices = () => window.__HOST_API__ ? [
+  {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
+   max_output_channels:2, default_samplerate:48000},
+  {index:3, name:'X32 USB', host_api:'ASIO', max_input_channels:16,
+   max_output_channels:16, default_samplerate:48000}] : [
+  {index:0, name:'UA Monitors', host_api:'Core Audio', max_input_channels:0,
+   max_output_channels:2, default_samplerate:48000},
+  {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
+   max_output_channels:2, default_samplerate:48000}];
 
 // Why the click cannot play through an output, by device index.
 const clickReasons = () => window.__CLICK_UNAVAILABLE__
@@ -1202,15 +1225,7 @@ window.__MAKE_API__ = () => ({
     }
     return {ok:true, found:[], gone:[]};
   }),
-  list_output_devices: async () => withClickReason(window.__HOST_API__ ? [
-    {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
-     max_output_channels:2, default_samplerate:48000},
-    {index:3, name:'X32 USB', host_api:'ASIO', max_input_channels:16,
-     max_output_channels:16, default_samplerate:48000}] : [
-    {index:0, name:'UA Monitors', host_api:'Core Audio', max_input_channels:0,
-     max_output_channels:2, default_samplerate:48000},
-    {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
-     max_output_channels:2, default_samplerate:48000}]),
+  list_output_devices: async () => withClickReason(outputDevices()),
   set_output_device: track('set_output_device', async (idx) => {
     outputDevice = {index: idx, channels: [1, 2]};
     // What Python says when a take is open and the card refused it.
@@ -2416,8 +2431,10 @@ window.__MAKE_API__ = () => ({
     // Settings › Keys, as api.get_settings: anything but false is on.
     space_keys: readCfg().space_keys !== false, player_keys: readCfg().player_keys !== false,
     // The metronome's, as api.get_settings: none for the click's output until
-    // one is picked.
-    click_device_index: readCfg().click_device_index ?? null,
+    // one is picked, and none for one saved that is not plugged in (its name
+    // is metronome_state's output_missing, as Python has it).
+    click_device_index: outputDevices().some(d => d.index === readCfg().click_device_index)
+      ? readCfg().click_device_index : null,
     click_channels: readCfg().click_channels ?? null,
     click_sound: readCfg().click_sound ?? 'click', click_volume: readCfg().click_volume ?? 0.7,
     count_in_bars: readCfg().count_in_bars ?? 1, tempo_in_wav: readCfg().tempo_in_wav !== false,

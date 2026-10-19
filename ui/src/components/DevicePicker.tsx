@@ -30,6 +30,8 @@ export function DevicePicker({
   onChange,
   placeholder,
   systemDefault = false,
+  systemLabel = "System output",
+  missing,
   detail,
   disabled = false,
 }: {
@@ -43,6 +45,13 @@ export function DevicePicker({
   placeholder: string
   /** Offer "System output" first, under any driver. */
   systemDefault?: boolean
+  /** That first item's words, where it means something else than the
+   *  system's output: the click's "Where the player plays". */
+  systemLabel?: string
+  /** The saved device is not plugged in: these words show in its place,
+   *  said under its own name (`notConnected`), whatever `value` is (Python
+   *  gives no index for a device that is not there). */
+  missing?: string
   detail?: (d: Device) => string
   /** While the list is being rebuilt: an index picked now may mean another
    *  device a moment later. */
@@ -68,13 +77,16 @@ export function DevicePicker({
   const several = drivers.length > 1
   const shown = several ? devices.filter((d) => d.host_api === driver) : devices
   const inShown = value !== null && shown.some((d) => d.index === value)
-  const selected = value === null ? (systemDefault ? SYSTEM : "") : inShown ? String(value) : ""
+  // Nothing shows as chosen while the saved device is missing.
+  const chosen = value === null ? (systemDefault ? SYSTEM : "") : inShown ? String(value) : ""
+  const selected = missing ? "" : chosen
   // A device chosen on another driver than the one shown is not "nothing
   // chosen" — "System output" must only appear when it is actually
-  // selected (value null). With no device to show, the ordinary placeholder
+  // selected (value null). One saved but not plugged in is said as
+  // `missing` says it. With no device to show, the ordinary placeholder
   // still applies.
   const devicePlaceholder =
-    value !== null && !inShown && systemDefault ? "Pick an output" : placeholder
+    missing ?? (value !== null && !inShown && systemDefault ? "Pick an output" : placeholder)
 
   return (
     <div className="flex flex-col gap-2">
@@ -105,7 +117,7 @@ export function DevicePicker({
           <SelectValue placeholder={devicePlaceholder} />
         </SelectTrigger>
         <SelectContent>
-          {systemDefault && <SelectItem value={SYSTEM}>System output</SelectItem>}
+          {systemDefault && <SelectItem value={SYSTEM}>{systemLabel}</SelectItem>}
           {shown.map((d) => (
             <SelectItem key={d.index} value={String(d.index)}>
               {d.name}

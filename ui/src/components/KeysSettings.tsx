@@ -40,7 +40,13 @@ const SPACE_ROWS: Row[] = [
 ]
 
 const PLAYER_ROWS: Row[] = [
-  { screen: "Rehearsal", uses: [[["↑", "↓"], "next song"]] },
+  {
+    screen: "Rehearsal",
+    uses: [
+      [["↑", "↓"], "next song"],
+      [["T"], "tap the tempo"],
+    ],
+  },
   {
     screen: "Listening",
     uses: [
@@ -52,7 +58,13 @@ const PLAYER_ROWS: Row[] = [
       [["?"], "keys"],
     ],
   },
-  { screen: "History", uses: [[["↑", "↓"], "next in the list"]] },
+  {
+    screen: "History",
+    uses: [
+      [["↑", "↓"], "next in the list"],
+      [["T"], "tap a song's tempo"],
+    ],
+  },
 ]
 
 /**
@@ -76,7 +88,7 @@ export function KeysSettings() {
       <KeysGroup
         kind="player"
         title="The player's keys"
-        hint="Arrows, Home, M, R and ? in the player; ↑ and ↓ in the lists."
+        hint="Arrows, Home, M, R and ? in the player; ↑ and ↓ in the lists; T to tap a tempo."
         rows={PLAYER_ROWS}
         rise={2}
       />

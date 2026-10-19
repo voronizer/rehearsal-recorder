@@ -232,12 +232,12 @@ const SPACE_ROWS: [string, string[]][] = [
   ["History, Settings", ["Esc back to the start screen"]],
 ]
 const PLAYER_ROWS: [string, string[]][] = [
-  ["Rehearsal", ["↑ ↓ next song"]],
+  ["Rehearsal", ["↑ ↓ next song", "T tap the tempo"]],
   [
     "Listening",
     ["← → 10 seconds", "Home start", "↑ ↓ next take of the song", "M mark", "R repeat", "? keys"],
   ],
-  ["History", ["↑ ↓ next in the list"]],
+  ["History", ["↑ ↓ next in the list", "T tap a song's tempo"]],
 ]
 
 /** The keys of "↑ ↓ next song": what comes before the first word. */
@@ -262,7 +262,7 @@ test("Keys is a tab between Appearance and Controls, two switches over their scr
   const grey = await colour(page, "--muted-foreground")
   const groups = [
     ["Space and Esc", "Start and stop a take, save or discard it, and finish the rehearsal.", SPACE_ROWS],
-    ["The player's keys", "Arrows, Home, M, R and ? in the player; ↑ and ↓ in the lists.", PLAYER_ROWS],
+    ["The player's keys", "Arrows, Home, M, R and ? in the player; ↑ and ↓ in the lists; T to tap a tempo.", PLAYER_ROWS],
   ] as const
   for (const [title, hint, rows] of groups) {
     const group = keysGroup(page, title)

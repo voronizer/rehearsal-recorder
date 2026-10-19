@@ -303,7 +303,8 @@ test.describe("the footer", () => {
       bar: await box(bar),
       field: await box(field),
     }
-    const chips = page.locator("footer kbd")
+    // Finish's and Record's: the metronome's T is in the footer too.
+    const chips = page.locator("footer [data-footer-actions] kbd")
     const hidden = async () =>
       chips.evaluateAll((all) => all.map((k) => getComputedStyle(k).visibility))
     expect(await hidden()).toEqual(["visible", "visible"])

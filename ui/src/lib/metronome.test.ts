@@ -3,9 +3,11 @@ import type { MetronomeState } from "@/lib/api"
 import { formatMeter, formatMeterShort, formatTempo, tempoUnit } from "@/lib/format"
 import {
   accentOf,
+  beatAt,
   CLICK_SOUNDS,
   clampTempo,
   countDigit,
+  litFor,
   parseTempo,
   perBar,
   SIGNATURES,
@@ -251,11 +253,18 @@ describe("the status line", () => {
 
   it("counts the count-in", () => {
     const count = (n: number, extra: Partial<MetronomeState> = {}) =>
-      statusLine(state({ phase: "count", count: n, ...extra }), null)
+      statusLine(state({ phase: "count", count: n, since_count_in_ms: -1000, ...extra }), null)
     expect(count(2)).toEqual({ text: "Count-in: 2 of 4" })
     // Two bars count twice.
     expect(count(6)).toEqual({ text: "Count-in: 2 of 4" })
     expect(count(5, { signature: "6/8", per_bar: 6, tempo: 198 }).text).toBe("Count-in: 5 of 6")
+  })
+  it("says nothing of the count-in before its first click is chosen", () => {
+    // Python says "count" from Record, and the time only once it has chosen
+    // the first click: no "Count-in: 1 of 4" before a click is heard.
+    expect(statusLine(state({ phase: "count", count: 0, since_count_in_ms: null }), null)).toEqual({
+      text: "",
+    })
   })
   it("says the click runs to Stop", () => {
     expect(statusLine(state({ phase: "take", since_count_in_ms: 1200 }), null)).toEqual({
@@ -321,5 +330,57 @@ describe("a song's page line", () => {
     const line = songLine("Dym", 104, null)
     expect(text(line)).toBe("Picking Dym at a rehearsal puts this in the metronome.")
     expect(line.parts.every((p) => typeof p === "string")).toBe(true)
+  })
+})
+
+describe("the beat on screen", () => {
+  // Asked at 1000 on the page's clock: clicks at 1100, 1569 and 2038 (128 a
+  // minute), the second of a bar next.
+  const heard = (over: Partial<MetronomeState> = {}) => ({
+    state: state({
+      phase: "preview",
+      upcoming: [
+        [100, 1],
+        [569, 2],
+        [1038, 3],
+      ],
+      ...over,
+    }),
+    at: 1000,
+  })
+
+  it("lights a click as it is heard, for half its time at most 150 ms, and is dark between", () => {
+    expect(litFor(128)).toBe(150)
+    expect(litFor(600)).toBe(50)
+    expect(litFor(null)).toBe(0)
+    expect(beatAt(heard(), null, 1099).lit).toBeNull()
+    expect(beatAt(heard(), null, 1100).lit).toBe(1)
+    expect(beatAt(heard(), null, 1249).lit).toBe(1)
+    expect(beatAt(heard(), null, 1250).lit).toBeNull()
+    expect(beatAt(heard(), null, 1600).lit).toBe(2)
+  })
+
+  it("keeps the click it lit through a newer answer that has only later ones", () => {
+    const first = beatAt(heard(), null, 1110)
+    const newer = { state: state({ phase: "preview", upcoming: [[459, 2]] }), at: 1110 }
+    expect(beatAt(newer, first.last, 1200)).toMatchObject({ lit: 1 })
+    expect(beatAt(newer, first.last, 1260).lit).toBeNull()
+  })
+
+  it("counts the count-in on from what was said, and ends it when Python said it would", () => {
+    const counting = heard({ phase: "count", count: 1, since_count_in_ms: -1500 })
+    expect(beatAt(counting, null, 1050)).toMatchObject({ phase: "count", count: 1 })
+    expect(beatAt(counting, null, 1100)).toMatchObject({ phase: "count", count: 2 })
+    expect(beatAt(counting, null, 1600)).toMatchObject({ phase: "count", count: 3 })
+    expect(beatAt(counting, null, 2500)).toMatchObject({ phase: "take", count: 0 })
+  })
+
+  it("leaves a take, a click between takes and idle as they were said", () => {
+    expect(beatAt(heard({ phase: "take", since_count_in_ms: 300 }), null, 1100).phase).toBe("take")
+    expect(beatAt(heard({ phase: "idle", upcoming: [] }), null, 1100)).toMatchObject({
+      phase: "idle",
+      lit: null,
+      count: 0,
+    })
   })
 })

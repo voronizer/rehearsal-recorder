@@ -1,4 +1,5 @@
-import { PickRow, SettingsGroup } from "@/components/SettingsGroup"
+import { SettingsGroup } from "@/components/SettingsGroup"
+import { PickRow } from "@/components/ui/pick-row"
 import { SCALE_OPTIONS, THEME_LABELS, type Theme } from "@/lib/appearance"
 
 const THEMES: Theme[] = ["dark", "light", "system"]
