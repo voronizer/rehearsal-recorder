@@ -722,6 +722,68 @@ class _LiveLibrary:
         return self._api._lib.set_song_tempo(song_id, tempo, signature)
 
 
+class _TapPorts:
+    """
+    The band's MIDI ports for Tap on a song's page, whose pads' hits count as
+    taps until a pause (spec Part 11). In a rehearsal, or while the signal
+    check has them, they are open already. Otherwise Tap opens them through
+    the rehearsal's own rig, as the check does, and gives them back after the
+    pause: a second rig would miss the controller's port, kept out of the
+    rig's, and on Windows a port opens only once. The check and a rehearsal
+    take over ports Tap opened, and Tap then leaves them to them.
+    """
+
+    def __init__(self, midi, in_rehearsal):
+        self._midi = midi
+        self._in_rehearsal = in_rehearsal
+        self._lock = threading.Lock()
+        # Whether Tap opened the ports itself, to give back after the pause
+        # (_give_back, on a thread of its own), and whether the check has them.
+        self._opened = False
+        self._checking = False
+        self._watch = None
+
+    def listen(self, tracks):
+        """Tap was pressed: the pads' hits count as taps from now until a
+        pause, from the ports `tracks` name when none are open."""
+        with self._lock:
+            if not self._opened and not self._checking and not self._in_rehearsal():
+                self._midi.use(tracks)
+                self._opened = True
+            self._midi.listen_taps(TAP_QUIET_SEC)
+            if self._opened and (self._watch is None or not self._watch.is_alive()):
+                self._watch = threading.Thread(target=self._give_back, name="tap ports", daemon=True)
+                self._watch.start()
+
+    def take_over(self, use, checking=False):
+        """The signal check (`checking`) or a rehearsal opens its ports with
+        `use()`, and has them from now on, whatever Tap opened before."""
+        with self._lock:
+            self._opened = False
+            self._checking = self._checking or checking
+            use()
+
+    def check_over(self):
+        """The signal check is over."""
+        self._checking = False
+
+    def _give_back(self):
+        """Waits for the pause that ends Tap's listening, then closes the
+        ports Tap opened, unless a rehearsal or the check has them now."""
+        while True:
+            time.sleep(TAP_POLL_SEC)
+            with self._lock:
+                if self._midi.listening():
+                    continue
+                if self._opened and not self._checking and not self._in_rehearsal():
+                    try:
+                        self._midi.release()
+                    except Exception:
+                        log.exception("The ports Tap opened could not be closed")
+                self._opened = False
+                return
+
+
 class Api:
     def __init__(self, server_port=0):
         self._config_lock = threading.RLock()
@@ -805,13 +867,8 @@ class Api:
         # True from Record opening the take's streams until the recorder is
         # kept: a rescan in between would let go of streams the take holds.
         self._starting = False
-        # Whether Tap opened the band's ports itself, outside a rehearsal, to
-        # give them back after the pause (_give_back_taps, on its own thread);
-        # and whether the signal check has them, which Tap leaves to it.
-        self._tapping = False
-        self._checking = False
-        self._tap_watch = None
-        self._tap_lock = threading.Lock()
+        # The band's ports for Tap on a song's page, outside a rehearsal.
+        self._tap = _TapPorts(self._midi, lambda: self._session is not None)
         # Whether a newer version is out — see updates.py. Asked only once the
         # window is up, and never while a take records.
         self._updates = updates.UpdateChecker(
@@ -1864,11 +1921,8 @@ class Api:
             except Exception as e:
                 return {"ok": False, "error": str(e)}
             self._monitor = monitor
-        with self._tap_lock:
-            # The check's ports now, whatever Tap opened before it.
-            self._tapping = False
-            self._checking = True
-            self._midi.use(tracks, check=True)
+        # The check's ports now, whatever Tap opened before it.
+        self._tap.take_over(lambda: self._midi.use(tracks, check=True), checking=True)
         self._midi.reset_counts()
         return {"ok": True}
 
@@ -1902,7 +1956,7 @@ class Api:
             except Exception as e:
                 print(f"[monitor] stop: {e}")
             self._monitor = None
-        self._checking = False
+        self._tap.check_over()
         if not keep_ports and self._session is None:
             try:
                 self._midi.release()
@@ -2124,9 +2178,7 @@ class Api:
         # they still name stays open as it is; the rest of the check's close.
         # What was played during the check is not the rehearsal's. Tap's
         # listening goes on in them.
-        with self._tap_lock:
-            self._tapping = False
-            self._midi.use(tracks)
+        self._tap.take_over(lambda: self._midi.use(tracks))
         self._midi.reset_counts()
         self._follow_next()
         return {"ok": True, "folder": str(folder)}
@@ -4824,39 +4876,10 @@ class Api:
         return {"ok": True, **saved}
 
     def metronome_tap_listen(self):
-        """
-        Tap was pressed: the pads' hits count as taps until a pause (spec Part
-        11). In a rehearsal, or while the signal check is on, the band's ports
-        are open already. Otherwise they are opened here, through the
-        rehearsal's own rig as the check opens them, and given back after the
-        pause: a second rig would miss the controller's port, kept out of the
-        rig's, and on Windows a port opens only once.
-        """
-        with self._tap_lock:
-            if self._session is None and not self._checking and not self._tapping:
-                self._midi.use(self._config.get("tracks") or [])
-                self._tapping = True
-            self._midi.listen_taps(TAP_QUIET_SEC)
-            if self._tapping and (self._tap_watch is None or not self._tap_watch.is_alive()):
-                self._tap_watch = threading.Thread(target=self._give_back_taps, name="tap ports", daemon=True)
-                self._tap_watch.start()
+        """Tap was pressed: the pads' hits count as taps until a pause, from
+        the band's ports, opened for it outside a rehearsal (_TapPorts)."""
+        self._tap.listen(self._config.get("tracks") or [])
         return {"ok": True}
-
-    def _give_back_taps(self):
-        """Waits for the pause that ends Tap's listening, then closes the ports
-        Tap opened, unless a rehearsal or the check has taken them over."""
-        while True:
-            time.sleep(TAP_POLL_SEC)
-            with self._tap_lock:
-                if self._midi.listening():
-                    continue
-                if self._tapping and self._session is None and not self._checking:
-                    try:
-                        self._midi.release()
-                    except Exception:
-                        log.exception("The ports Tap opened could not be closed")
-                self._tapping = False
-                return
 
     def metronome_taps(self):
         """The pads' hits since the last asking, as milliseconds ago, oldest
