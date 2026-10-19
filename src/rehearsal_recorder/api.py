@@ -18,6 +18,7 @@ client or a network share cannot be trusted with that. Sharing takes is what
 the separate cloud folder is for — only the takes worth keeping go there.
 """
 
+import functools
 import json
 import logging
 import os
@@ -26,6 +27,7 @@ import shutil
 import sys
 import threading
 import time
+import wave
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
@@ -60,12 +62,18 @@ from rehearsal_recorder.audio.crop import crop_wav
 from rehearsal_recorder.audio.mixdown import mixdown
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
+    _is_asio,
     channels_available,
     device_identity,
     recording_formats,
     rescan,
     saved_device,
 )
+from rehearsal_recorder.audio import tempo as tempomod
+from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, clamp_tempo, click_frame, snap_region
+from rehearsal_recorder.audio.take_click import whole
+from rehearsal_recorder.audio.wavfile import read_acid
+from rehearsal_recorder.metronome import Metronome
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
@@ -92,12 +100,12 @@ from rehearsal_recorder.midi.rules import (
     records_audio,
     records_notes,
 )
-from rehearsal_recorder.midi.smf import crop_mid
+from rehearsal_recorder.midi.smf import NO_METER, crop_mid, meter_of
 from rehearsal_recorder.store.db import LibraryUnavailable
 from rehearsal_recorder.store.importer import import_all, read_text
 from rehearsal_recorder.store.library import (
     REHEARSAL_GONE, TAKE_GONE, LabelRefused, Library, SetRefused, SongRefused, as_marker,
-    paths_overlap,
+    as_tempo, paths_overlap,
 )
 from rehearsal_recorder.store.db import DB_NAME
 from rehearsal_recorder.transport import Transport, serialised
@@ -140,6 +148,15 @@ DEFAULT_SAMPLERATE = 44100
 # replace both: they have no port to open, and drive the rig themselves.
 open_midi_system = midiports.open_system
 MIDI_THREADS = True
+
+# Tap on a song's page, outside a rehearsal: the band's ports are opened for
+# the pads' hits and given back once this long has passed with none (spec
+# Part 11), looked at this often. The suites shorten both.
+TAP_QUIET_SEC = 2.0
+TAP_POLL_SEC = 0.1
+
+# Why the click cannot go to a card, as Settings › Metronome says it.
+ANOTHER_ASIO = "Another ASIO card can't play while one records."
 
 log = logging.getLogger(__name__)
 
@@ -666,6 +683,42 @@ def _is_output_choice(channels):
             and channels[1] == channels[0] + 1)
 
 
+def _follows(method):
+    """After `method`, which can change what the next take is (a take renamed,
+    deleted or put back, songs merged), the metronome's row follows its name."""
+    @functools.wraps(method)
+    def call(api, *args, **kwargs):
+        result = method(api, *args, **kwargs)
+        if isinstance(result, dict) and result.get("ok"):
+            api._follow_next()
+        return result
+    return call
+
+
+class _LiveLibrary:
+    """
+    The library as the metronome asks it: whichever is open now, as a new
+    recordings folder chosen in Settings opens another. With none open, or one
+    that cannot answer, a name leads to no song, which the row shows as none.
+    """
+
+    def __init__(self, api):
+        self._api = api
+
+    def tempo_for(self, name):
+        library = self._api._library
+        if library is None:
+            return {"song": None, "last_take": None}
+        try:
+            return library.tempo_for(name)
+        except Exception:
+            log.exception("The metronome could not read the next take's song")
+            return {"song": None, "last_take": None}
+
+    def set_song_tempo(self, song_id, tempo, signature):
+        return self._api._lib.set_song_tempo(song_id, tempo, signature)
+
+
 class Api:
     def __init__(self, server_port=0):
         self._config_lock = threading.RLock()
@@ -731,6 +784,31 @@ class Api:
         )
 
         self._config = self._read_config()
+        # The metronome: the row's tempo, the click between takes, and its
+        # settings, kept in this same config (metronome.py). Its two getters
+        # take no lock of this side's: see its note on the locks.
+        self._metronome = Metronome(
+            self._config, self._write_config, lambda: self._player,
+            lambda key: saved_device(self._config, key, False), _LiveLibrary(self),
+        )
+        # Whether the player plays a take's click with it (Master's button):
+        # off when the app starts, then as left from one take to the next.
+        self._player_click = False
+        # Each stopped take's tempo, signature and whether it clicked, by its
+        # draft's folder, until it is kept (_meter_of_draft), and the one
+        # recording now.
+        self._meters = {}
+        self._recorder_meter = None
+        # True from Record opening the take's streams until the recorder is
+        # kept: a rescan in between would let go of streams the take holds.
+        self._starting = False
+        # Whether Tap opened the band's ports itself, outside a rehearsal, to
+        # give them back after the pause (_give_back_taps, on its own thread);
+        # and whether the signal check has them, which Tap leaves to it.
+        self._tapping = False
+        self._checking = False
+        self._tap_watch = None
+        self._tap_lock = threading.Lock()
         # Whether a newer version is out — see updates.py. Asked only once the
         # window is up, and never while a take records.
         self._updates = updates.UpdateChecker(
@@ -818,7 +896,12 @@ class Api:
                 let_go()
             except Exception as e:
                 print(f"[shutdown] letting go of the MIDI ports: {e}")
-        self.player_close()
+        # The click between takes stops with the window, its stream closed.
+        try:
+            self._metronome.close()
+        except Exception as e:
+            print(f"[shutdown] stopping the click: {e}")
+        self._close_player()
         self._cloud_queue.stop()
         self._names_pass.stop()
         self._updates.stop()
@@ -1014,6 +1097,9 @@ class Api:
             "server_url": self._server.base_url,
             "config_path": str(CONFIG_PATH),
             "version": __version__,
+            # Settings › Metronome and the gear in the row: where the click
+            # is heard, its sound, the count-in and the switch.
+            **self._metronome.settings(),
         }
 
     # ---------- Settings › Under the hood ----------
@@ -1574,7 +1660,17 @@ class Api:
             return {"ok": False, "error": str(e)}
 
     def list_output_devices(self):
-        return self._describe_devices(want_input=False)
+        """The devices that can play, each with `click_unavailable`: why the
+        metronome's click cannot go there, or None. With the recording card on
+        ASIO, no other ASIO card can play while it records."""
+        found = self._describe_devices(want_input=False)
+        recording = (self._session["device_index"] if self._session is not None
+                     else saved_device(self._config, "device", True))
+        asio = recording is not None and _is_asio(recording)
+        for d in found:
+            d["click_unavailable"] = (ANOTHER_ASIO if asio and d["host_api"] == "ASIO"
+                                      and d["index"] != recording else None)
+        return found
 
     def _missing_device(self):
         """The saved recording interface when it is not plugged in, as
@@ -1618,26 +1714,41 @@ class Api:
         # takes them in. The other way round, a player opening while this
         # runs would leave each waiting for the other.
         with self._player_lock, STREAM_LOCK:
-            if self._recorder is not None:
+            # A take whose streams are opening (start_take) is not recording
+            # yet, and its streams are as much the rescan's to break.
+            if self._recorder is not None or self._starting:
                 return {
                     "ok": False,
                     "error": "Not while recording. Stop the take first, then "
                              "look again.",
                 }
-            self.stop_monitor()
-            # Look again reads the MIDI ports too, in case the system missed
-            # one coming or going.
-            self._midi.refresh()
+            result = self._rescan_held()
+        # Once both locks are let go: where the click's output is is read
+        # again, and a click between takes follows the player (metronome.py's
+        # note on the locks).
+        self._metronome.devices_changed()
+        self._resink()
+        return result
 
-            before = self._device_names()
-            if self._player is not None:
-                self._player.close_output()
-            trouble = rescan()
-            if trouble is not None:
-                return {"ok": False, "error": trouble}
-            after = self._device_names()
+    def _rescan_held(self):
+        """rescan_devices, with the player's lock and STREAM_LOCK held."""
+        self.stop_monitor()
+        # Look again reads the MIDI ports too, in case the system missed
+        # one coming or going.
+        self._midi.refresh()
 
-            reopened = self._reopen_output()
+        before = self._device_names()
+        # The click between takes lets go of its own stream as the player
+        # does of its, before PortAudio is stopped.
+        self._metronome.let_go_for_rescan()
+        if self._player is not None:
+            self._player.close_output()
+        trouble = rescan()
+        if trouble is not None:
+            return {"ok": False, "error": trouble}
+        after = self._device_names()
+
+        reopened = self._reopen_output()
 
         result = {
             "ok": True,
@@ -1742,7 +1853,11 @@ class Api:
             except Exception as e:
                 return {"ok": False, "error": str(e)}
             self._monitor = monitor
-        self._midi.use(tracks, check=True)
+        with self._tap_lock:
+            # The check's ports now, whatever Tap opened before it.
+            self._tapping = False
+            self._checking = True
+            self._midi.use(tracks, check=True)
         self._midi.reset_counts()
         return {"ok": True}
 
@@ -1776,6 +1891,7 @@ class Api:
             except Exception as e:
                 print(f"[monitor] stop: {e}")
             self._monitor = None
+        self._checking = False
         if not keep_ports and self._session is None:
             try:
                 self._midi.release()
@@ -1995,9 +2111,13 @@ class Api:
             raise
         # Exactly the ports the final tracks name: one the check had open that
         # they still name stays open as it is; the rest of the check's close.
-        # What was played during the check is not the rehearsal's.
-        self._midi.use(tracks)
+        # What was played during the check is not the rehearsal's. Tap's
+        # listening goes on in them.
+        with self._tap_lock:
+            self._tapping = False
+            self._midi.use(tracks)
         self._midi.reset_counts()
+        self._follow_next()
         return {"ok": True, "folder": str(folder)}
 
     def _session_rehearsal(self):
@@ -2165,8 +2285,24 @@ class Api:
             return {"ok": False, "error": "No rehearsal in progress"}
         self._session["next_name"] = (name or "").strip() or None
         coming = self._next_take()
+        self._follow_next()
         return {"ok": True, "next_take_name": _field_text(coming),
                 "next_take_go": coming["go"]}
+
+    def _follow_next(self):
+        """The metronome's row follows the next take's name (spec Part 2),
+        wherever it changes: a name picked, a take kept, renamed or deleted, a
+        rehearsal begun or over. Never raises: the row is the screen's, and
+        a library that cannot say leaves it with no song."""
+        try:
+            name = _field_text(self._next_take()) if self._session is not None else ""
+        except Exception:
+            log.exception("The next take's name could not be read for the metronome")
+            name = ""
+        try:
+            self._metronome.follow(name)
+        except Exception:
+            log.exception("The metronome could not follow the next take's name")
 
     def song_choices(self, folder=None, take_number=None):
         """
@@ -2193,14 +2329,21 @@ class Api:
         own = next((t for t in takes if t.get("take_number") == take_number), None)
         nexts = self._lib.next_goes()
         also = self._lib.song_names()
+        # What the metronome's row shows when the song is picked.
+        tempos = self._lib.song_tempos()
 
         def go_for(song):
             if own is not None and own.get("song") == song:
                 return own["go"]
             return nexts.get(song, 1)
 
+        def tempo_of(song):
+            tempo, signature = tempos.get(song, (None, None))
+            return {"tempo": tempo, "signature": signature}
+
         here = [{"song": s["name"], "go": go_for(s["name"]),
-                 "also": also.get(s["name"], []), "last_take": max(s["take_numbers"])}
+                 "also": also.get(s["name"], []), "last_take": max(s["take_numbers"]),
+                 **tempo_of(s["name"])}
                 for s in _songs_of(takes)]
         seen = {c["song"].casefold() for c in here}
         other = []
@@ -2213,7 +2356,7 @@ class Api:
                 if key not in seen:
                     seen.add(key)
                     other.append({"song": s["name"], "go": go_for(s["name"]),
-                                  "also": also.get(s["name"], [])})
+                                  "also": also.get(s["name"], []), **tempo_of(s["name"])})
         return {"here": here, "other": other}
 
     @serialised
@@ -2228,6 +2371,10 @@ class Api:
         rehearsal = self._lib.rehearsal(folder)
         take_count = len(rehearsal["takes"]) if rehearsal else 0
         self._session = None
+        # The click between takes stops with the rehearsal, and the row has
+        # no next take to follow.
+        self._metronome.stop()
+        self._follow_next()
         try:
             self._midi.release()
         except Exception as e:
@@ -2400,6 +2547,19 @@ class Api:
         take_number = s["take_counter"] + 1
         temp_dir = s["folder"] / DRAFTS_DIR / f"take {take_number}"
 
+        # The take's tempo, signature and click are the metronome's row as it
+        # is now, whoever pressed Record (spec Part 4): its click rides this
+        # card's stream when its output is this card, else has its own.
+        self._follow_next()
+        tempo, signature, _ = self._metronome.take_meter()
+        click = None
+        try:
+            click = self._metronome.take_click(s["device_index"], s["samplerate"])
+        except Exception:
+            log.exception("The take's click could not be made, so it records without one")
+        if click is not None:
+            tempo, signature = click.tempo, click.signature
+
         clock, notes = None, []
         if notes_tracks:
             # A signal check run since the last take may have left the rig on
@@ -2418,6 +2578,8 @@ class Api:
                       "port": (port_of(t) or {}).get("name", "")}
                      for t in notes_tracks]
 
+        # A click on another device places itself by a clock of the take's
+        # audio, which the recorder makes when the notes have not.
         recorder = AudioRecorder(
             s["device_index"],
             s["samplerate"],
@@ -2426,24 +2588,40 @@ class Api:
             s.get("bit_depth", LEGACY_DEPTH),
             clock=clock,
             notes=notes,
+            click=click,
+            meter=(tempo, signature) if click is None and tempo is not None else None,
         )
+        # The click between takes stops before the card is opened for the
+        # take, which has its own; from here the screen is told of the take's
+        # count-in, its first click still to be chosen.
+        self._metronome.begin_take(tempo, signature, click)
+        # Until the recorder is kept, a rescan would let go of the streams it
+        # opens: it waits for this, under the lock it holds (rescan_devices).
+        with STREAM_LOCK:
+            self._starting = True
         try:
-            recorder.start()
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-        s["take_counter"] = take_number
+            try:
+                recorder.start()
+            except Exception as e:
+                self._metronome.end_take()
+                return {"ok": False, "error": str(e)}
+            s["take_counter"] = take_number
 
-        # Right after the audio has started, with the clock's start set: what
-        # arrives before is the state the notes begin from, what arrives
-        # after is in the take.
-        if notes_tracks:
-            self._notes_step("The take's notes could not begin",
-                             self._midi.begin_take, temp_dir, clock)
+            # Right after the audio has started, with the clock's start set: what
+            # arrives before is the state the notes begin from, what arrives
+            # after is in the take.
+            if notes_tracks:
+                self._notes_step("The take's notes could not begin",
+                                 self._midi.begin_take, temp_dir, clock)
 
-        self._recorder = recorder
+            self._recorder = recorder
+        finally:
+            self._starting = False
         self._recorder_take_number = take_number
         self._recorder_temp_dir = temp_dir
         self._recorder_band = s["tracks"]
+        self._recorder_meter = {"tempo": tempo, "signature": signature if tempo is not None else None,
+                                "click": click is not None}
         # Held only once the take is really recording; a lock the system
         # refuses is no reason to stop it (KeepAwake never raises, but this
         # must not be the line that ends a take).
@@ -2478,6 +2656,7 @@ class Api:
         take_number = self._recorder_take_number
         temp_dir = self._recorder_temp_dir
         band = self._recorder_band or []
+        meter = self._recorder_meter or {"tempo": None, "signature": None, "click": False}
         # Set before the recorder is let go of, and cleared once the take's
         # files are written: start_take and start_monitor wait for it.
         self._stopping = True
@@ -2485,6 +2664,10 @@ class Api:
         self._recorder_take_number = None
         self._recorder_temp_dir = None
         self._recorder_band = None
+        self._recorder_meter = None
+        # What Keep gives the take, the controller's Stop and a draft kept
+        # later alike (_meter_of_draft).
+        self._meters[self._draft_key(temp_dir)] = meter
 
         try:
             field = self.suggest_take_name(take_number)
@@ -2523,6 +2706,13 @@ class Api:
         finally:
             self._stopping = False
             self._awake.release()
+            self._metronome.end_take()
+            # As the notes' clock's: the audio callback keeps the click's
+            # first fault and says nothing.
+            fault = getattr(recorder, "click_fault", None)
+            if fault is not None:
+                log.error("The take's click failed during the take and went quiet; "
+                          "the take recorded on: %s", fault)
         notes, missing = self._note_lanes(band, result["tracks"], result["notes"])
         return {
             "ok": True,
@@ -2534,6 +2724,7 @@ class Api:
             "notes_missing": missing,
             "suggested_name": field,
             "default_name": default,
+            **meter,
         }
 
     def _end_notes(self, recorder, band, temp_dir, duration_sec):
@@ -2553,15 +2744,29 @@ class Api:
             log.error("The clock that places the take's notes failed during the "
                       "take, so they are placed without the audio card's own "
                       "time: %s", fault)
+        # A click take's .mid starts at its first click, as its audio does,
+        # and says its tempo and signature (spec Part 9); one with a tempo and
+        # no click says its tempo; one with none is at 120.
+        click = getattr(recorder, "click", None)
+        without_click = getattr(recorder, "meter", None)
+        head_sec, meter = 0.0, NO_METER
+        if click is not None:
+            if click.first_click_frame is not None:
+                head_sec = click.first_click_frame / recorder.samplerate
+            meter = click.meter()
+        elif without_click is not None:
+            meter = meter_of(*without_click)
         notes = self._notes_step("The take's notes could not be finished",
-                                 self._midi.end_take, duration_sec) or []
+                                 self._midi.end_take, duration_sec, head_sec, meter) or []
 
         # AudioRecorder.stop left take.json for the notes to find their ports
         # in: it goes once no notes file is left that a later try would need it
         # for. One that cannot go (Windows, while another program has it open)
         # costs Stop nothing: it is said in the log and goes with the drafts folder.
+        # A take with a tempo keeps it: it says the take's grid and tempo, for
+        # a crop of the draft and for Keep, and goes with the draft's folder.
         def forget_record():
-            if not any(Path(temp_dir).glob(f"*{MIDRAW_SUFFIX}")):
+            if click is None and without_click is None and not any(Path(temp_dir).glob(f"*{MIDRAW_SUFFIX}")):
                 (Path(temp_dir) / TAKE_RECORD).unlink(missing_ok=True)
 
         self._notes_step("The take's record could not be removed", forget_record)
@@ -2651,6 +2856,9 @@ class Api:
         # The review screen is still playing these very files.
         self._release_player_in(temp_dir)
 
+        # Read before the files move: take.json can go with a notes file not
+        # yet made (_move_unmade_notes).
+        meter = self._meter_of_draft(temp_dir)
         notes = self._draft_notes(temp_dir, s["tracks"], notes)
         moved, moved_notes, undo = self._move_take_files(temp_dir, take_dir, tracks, notes)
 
@@ -2661,6 +2869,9 @@ class Api:
             "tracks": moved,
             "notes": moved_notes,
             "markers": [self._as_marker(m) for m in (markers or [])],
+            # What the metronome showed at Record, and whether it clicked: a
+            # song with no tempo takes a click take's (Library.add_take).
+            **meter,
         }
         if send_to_cloud is False:
             take_info["cloud_skip"] = True
@@ -2673,12 +2884,41 @@ class Api:
         # from it. A draft rescued from an earlier take leaves it alone.
         if take_number == s["take_counter"]:
             s.pop("next_name", None)
+        self._meters.pop(self._draft_key(temp_dir), None)
 
         shutil.rmtree(temp_dir, ignore_errors=True)
         self._cleanup_drafts_dir(temp_dir)
         self._enqueue_publish(s["folder"], take_number, take=kept)
         self._retry_failed_publishes()
+        self._follow_next()
         return {"ok": True, "take": kept, "ended": ended}
+
+    @staticmethod
+    def _draft_key(draft_dir):
+        """A draft's folder as _meters knows it, however the path was spelled."""
+        return os.path.normcase(os.path.abspath(draft_dir))
+
+    def _meter_of_draft(self, draft_dir):
+        """
+        A stopped take's {"tempo", "signature", "click"}: as its Stop left
+        them, or from its take.json, for a draft rescued after a crash or kept
+        after the app started again. A click take whose first click was never
+        chosen keeps its tempo but is no click take: its files start where
+        they started. Each is None, and "click" False, for what it does not have.
+        """
+        found = self._meters.get(self._draft_key(draft_dir))
+        if found is not None:
+            return dict(found)
+        try:
+            record = json.loads((Path(draft_dir) / TAKE_RECORD).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            record = None
+        click = record.get("click") if isinstance(record, dict) else None
+        if not isinstance(click, dict):
+            return {"tempo": None, "signature": None, "click": False}
+        tempo, signature = as_tempo(click.get("tempo"), click.get("signature"))
+        return {"tempo": tempo, "signature": signature,
+                "click": tempo is not None and whole(click.get("first_click_frame"))}
 
     @classmethod
     def _move_take_files(cls, draft_dir, take_dir, tracks, notes):
@@ -2840,8 +3080,11 @@ class Api:
         """
         with self._player_lock:
             open_tracks = self._open_tracks or []
-            if any(_is_inside(t["file"], folder) for t in open_tracks):
-                self.player_close()
+            closing = any(_is_inside(t["file"], folder) for t in open_tracks)
+            if closing:
+                self._close_player()
+        if closing:
+            self._resink()
 
     @staticmethod
     def _cleanup_drafts_dir(temp_dir):
@@ -2914,6 +3157,8 @@ class Api:
             return {**result, "ended": ended}
 
         take_number = max((t["take_number"] for t in r["takes"]), default=0) + 1
+        # Its tempo and click, before the files move (as at keep_take).
+        meter = self._meter_of_draft(draft_dir)
         # A draft rescued with no name is a take nobody named: "Take 5".
         display_name = (name or "").strip()
         named = self._lib.resolve_name(folder, display_name, take_number)
@@ -2931,10 +3176,12 @@ class Api:
             "notes": moved_notes,
             # A rescued take was never listened to, so it has no marks yet.
             "markers": [],
+            **meter,
         }
         kept = self._add_moved_take(folder, take_info, undo, take_dir)
         if kept is None:
             return {"ok": False, "error": "Rehearsal not found", "ended": ended}
+        self._meters.pop(self._draft_key(draft_dir), None)
 
         shutil.rmtree(draft_dir, ignore_errors=True)
         self._cleanup_drafts_dir(draft_dir)
@@ -2948,6 +3195,7 @@ class Api:
         # case there is no startup sweep for, so this is the only thing that
         # ever sends it.
         self._enqueue_publish(folder, take_number)
+        self._follow_next()
         return {"ok": True, "take": kept, "folder": str(folder), "ended": ended}
 
     @serialised
@@ -3236,6 +3484,7 @@ class Api:
 
         return (old_dir, new_dir), at_new(take["tracks"]), at_new(take.get("notes") or []), None
 
+    @_follows
     def rename_take(self, folder, take_number, new_name):
         """Renames a take and its folder on disk, keeping paths in sync."""
         folder = Path(folder)
@@ -3286,6 +3535,7 @@ class Api:
             self._rename_take_copies(folder, take_number, updated)
             return {"ok": True, "take": updated}
 
+    @_follows
     def rename_song(self, song_id, title):
         """
         Gives a song another title, from its page in History (Library.rename_song):
@@ -3309,6 +3559,7 @@ class Api:
                 f"Renaming {done['from']} to {done['title']} · {_takes(done['takes'])}")
         return {"ok": True, "title": done["title"], "goes": len(done["takes"])}
 
+    @_follows
     def merge_songs(self, from_id, into_id, dry_run=False):
         """
         Merges song `from_id` into song `into_id` (Library.merge_songs):
@@ -3582,6 +3833,28 @@ class Api:
                     f"A take has to keep at least {MIN_CROP_SEC:g} second"}
         return {"start": start, "end": end}
 
+    @staticmethod
+    def _on_grid(tracks, span, tempo, signature):
+        """
+        A click take's region put on its grid (spec Part 9, snap_region): its
+        start back to the bar line at or before it, its end on to the next
+        quarter, both inside the take, whose bars run from its files' first
+        sample. So the cropped files still start on a bar and hold whole
+        quarters. A take whose audio cannot be read is cut as asked.
+        """
+        rate, frames = None, 0
+        for t in tracks:
+            try:
+                with wave.open(str(t["file"]), "rb") as w:
+                    rate = rate or w.getframerate()
+                    frames = max(frames, w.getnframes())
+            except (OSError, EOFError, wave.Error):
+                continue
+        if not rate or not whole(tempo) or signature not in SIGNATURES:
+            return span
+        start, end = snap_region(span["start"], span["end"], tempo, signature, rate, frames)
+        return {"start": start / rate, "end": end / rate}
+
     def _crop_tracks(self, tracks, start_sec, end_sec, progress=None, notes=()):
         """
         Rewrites every track shorter, and every notes file (a .mid) with them,
@@ -3803,6 +4076,8 @@ class Api:
             span = self._crop_span(take["duration_sec"], start_sec, end_sec)
             if "error" in span:
                 return {"ok": False, "error": span["error"]}
+            if take.get("click"):
+                span = self._on_grid(tracks, span, take.get("tempo"), take.get("signature"))
             return {"ok": True, "take": take, "tracks": tracks, "notes": notes, "span": span}
 
         asked = what_to_crop()
@@ -3961,6 +4236,10 @@ class Api:
             "take": self._lib.take(folder, take_number),
             "markers_dropped": dropped,
             "undo": token,
+            # Where it was cut, which for a click take is on its grid and not
+            # quite where it was asked: the notice says where it now starts.
+            "start_sec": span["start"],
+            "end_sec": span["end"],
             # Present only when the uncut take could not be held: the crop
             # still succeeded, but there is no Undo, and this says where the
             # uncut take is instead.
@@ -3995,6 +4274,9 @@ class Api:
             span = self._crop_span(0, start_sec, end_sec)
             if "error" in span:
                 return {"ok": False, "error": span["error"]}
+            meter = self._meter_of_draft(temp_dir)
+            if meter["click"]:
+                span = self._on_grid(live, span, meter["tempo"], meter["signature"])
             return {"ok": True, "live": live, "given": given, "live_notes": live_notes,
                     "span": span}
 
@@ -4046,6 +4328,8 @@ class Api:
             "notes": given,
             "duration_sec": done["duration_sec"],
             "undo": token,
+            "start_sec": span["start"],
+            "end_sec": span["end"],
             **({"error": error} if error else {}),
         }
 
@@ -4064,35 +4348,96 @@ class Api:
         with self._player_lock:
             if reuse_existing and self._player is not None and self._open_tracks == tracks:
                 return {"ok": True, **self._player.state()}
-            self.player_close()
-            try:
-                player = TakePlayer(tracks)
-                warning = player.open_output(
-                    saved_device(self._config, "output_device", False),
-                    self._output_channels(),
-                )
-            except Exception as e:
-                return {"ok": False, "error": str(e)}
+            result = self._open_player(tracks)
+        # Once the player's lock is let go, never inside it: a click between
+        # takes on this device moves into the new stream, or keeps its own
+        # (metronome.py's note on the locks).
+        self._resink()
+        return result
 
-            for name, v in self._config.get("volumes", {}).items():
-                player.set_volume(name, v)
-            player.set_master(self._config.get("master_volume", 1.0))
-            player.set_master_muted(self._transport.playback_muted)
+    def _open_player(self, tracks):
+        """_player_open's part with the player's lock held: the one open
+        before closed, without moving a click between takes (that comes
+        after), and this one opened."""
+        self._close_player()
+        try:
+            player = TakePlayer(tracks)
+            index = saved_device(self._config, "output_device", False)
+            # Wide enough for the click's outputs, when its device is this one.
+            warning = player.open_output(
+                index, self._output_channels(),
+                extra_channels=self._metronome.extra_channels(index),
+            )
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
-            self._player = player
-            self._open_tracks = tracks
-            try:
-                selected = next((t for t in self._session_takes() if t["tracks"] == tracks), None)
-                self._transport.playback_take_number = selected["take_number"] if selected else None
-                self._transport.playback_take_name = selected["name"] if selected else None
-            except Exception:
-                self._transport.playback_take_number = None
-            result = {"ok": True, **player.state()}
-            if warning:
-                result["warning"] = warning
-            return result
+        for name, v in self._config.get("volumes", {}).items():
+            player.set_volume(name, v)
+        player.set_master(self._config.get("master_volume", 1.0))
+        player.set_master_muted(self._transport.playback_muted)
+        # A click take plays with its own click when Master's button is on
+        # (spec Part 8): made again from its tempo, at the metronome's volume.
+        meter = self._take_click_of(tracks)
+        try:
+            if meter is not None:
+                player.set_take_click(*meter, self._metronome.voices(player.samplerate))
+            player.set_click_on(self._player_click)
+        except Exception:
+            # The take plays all the same, without its click.
+            log.exception("The take's click could not be set up in the player")
+
+        self._player = player
+        self._open_tracks = tracks
+        try:
+            selected = next((t for t in self._session_takes() if t["tracks"] == tracks), None)
+            self._transport.playback_take_number = selected["take_number"] if selected else None
+            self._transport.playback_take_name = selected["name"] if selected else None
+        except Exception:
+            self._transport.playback_take_number = None
+        result = {"ok": True, **player.state()}
+        if warning:
+            result["warning"] = warning
+        return result
+
+    def _take_click_of(self, tracks):
+        """
+        (tempo, signature) of the click take whose files `tracks` are, or None
+        for a take that was not recorded to the click: a draft's from its Stop
+        or its take.json, a kept take's from the library, found by its first
+        file. Never raises: a take whose click cannot be found plays without.
+        """
+        try:
+            first = next(Path(t["file"]) for t in tracks or [] if t.get("file"))
+        except StopIteration:
+            return None
+        try:
+            home = first.parent
+            if home.parent.name == DRAFTS_DIR:
+                meter = self._meter_of_draft(home)
+            elif self._recordings_key(home.parent) is None:
+                # Files from outside the recordings folder: no take of the library's.
+                return None
+            else:
+                rehearsal = self._library.rehearsal(home.parent) if self._library is not None else None
+                meter = next((t for t in (rehearsal or {}).get("takes", [])
+                              if any(Path(f["file"]) == first for f in t["tracks"])), None)
+        except Exception:
+            log.exception("A take's click could not be found, so it plays without one")
+            return None
+        if not meter or not meter.get("click") or meter.get("tempo") is None:
+            return None
+        return meter["tempo"], meter["signature"]
 
     def player_close(self):
+        self._close_player()
+        # Outside the player's lock: a click between takes in the player's
+        # stream goes on in a stream of its own.
+        self._resink()
+        return {"ok": True}
+
+    def _close_player(self):
+        """The player closed, a click between takes left where it is: the
+        caller moves it (_resink) once no lock of this side's is held."""
         with self._player_lock:
             player, self._player = self._player, None
             self._open_tracks = None
@@ -4100,7 +4445,40 @@ class Api:
             self._transport.playback_take_name = None
             if player is not None:
                 player.close()
-            return {"ok": True}
+
+    def _resink(self):
+        """A click between takes follows the player opening and closing
+        (Metronome.resink). Never with STREAM_LOCK or the player's lock held.
+        A click that cannot follow is said in the log; the player is not the
+        worse for it."""
+        try:
+            self._metronome.resink()
+        except Exception:
+            log.exception("The click between takes could not follow the player")
+
+    def player_set_click(self, on):
+        """Master's metronome button: whether a click take plays with its
+        click. Off when the app starts, and kept from one take to the next."""
+        self._player_click = bool(on)
+        with self._player_lock:
+            if self._player is not None:
+                self._player.set_click_on(self._player_click)
+        return {"ok": True}
+
+    def _refresh_take_click(self):
+        """The open player's take click made again, at the metronome's
+        sound and volume as they are now."""
+        with self._player_lock:
+            player = self._player
+            if player is None:
+                return
+            meter = self._take_click_of(self._open_tracks)
+            try:
+                if meter is not None:
+                    player.set_take_click(*meter, self._metronome.voices(player.samplerate))
+            except Exception:
+                # The setting is saved; the take plays on with the click it had.
+                log.exception("The take's click could not be made again in the player")
 
     def player_state(self):
         if self._player is None:
@@ -4137,6 +4515,7 @@ class Api:
             if self._player is None or self._player.output_problem() is None:
                 return {}
             reopened = self._reopen_output()
+        self._resink()
         if not reopened.get("ok", True):
             return reopened
         return {
@@ -4201,7 +4580,10 @@ class Api:
         self._remember_device("output_device", device_index)
         self._config["output_channels"] = [1, 2]
         self._write_config()
-        return self._reopen_output()
+        self._metronome.devices_changed()
+        reopened = self._reopen_output()
+        self._resink()
+        return reopened
 
     def set_output_channels(self, channels):
         """Which outputs of the playback card the mix comes out of: a pair
@@ -4210,9 +4592,14 @@ class Api:
             return {"ok": False, "error": f"Not a pair of outputs: {channels}"}
         self._config["output_channels"] = list(channels)
         self._write_config()
-        return self._reopen_output()
+        reopened = self._reopen_output()
+        self._resink()
+        return reopened
 
     def _reopen_output(self):
+        """The open player's stream opened again where the settings say now.
+        A click between takes it carried is moved by the caller, after
+        (_resink): never in here, which a rescan calls with STREAM_LOCK held."""
         with self._player_lock:
             if self._player is None:
                 return {"ok": True}
@@ -4222,9 +4609,10 @@ class Api:
             # but silence after a device change.
             state = self._player.state()
             try:
+                index = saved_device(self._config, "output_device", False)
                 warning = self._player.open_output(
-                    saved_device(self._config, "output_device", False),
-                    self._output_channels(),
+                    index, self._output_channels(),
+                    extra_channels=self._metronome.extra_channels(index),
                 )
             except Exception as e:
                 return {"ok": False, "error": str(e)}
@@ -4233,11 +4621,213 @@ class Api:
                 self._player.play()
             return {"ok": True, **({"warning": warning} if warning else {})}
 
+    # ---------- the metronome ----------
+
+    def set_click_device(self, device_index):
+        """
+        The click's own output (Settings › Metronome), as set_output_device is
+        the player's; None puts the click back where the player plays. Its
+        outputs go back to 1-2, or 1 on a card that has one: which outputs
+        are which belongs to one card. Refused for a card the click cannot
+        play through (list_output_devices' `click_unavailable`). A player
+        open on that card opens again, wide enough for the click's outputs.
+        """
+        if device_index is None:
+            for key in ("click_device", "click_device_index", "click_channels"):
+                self._config.pop(key, None)
+        else:
+            found = next((d for d in self.list_output_devices() if d["index"] == device_index), None)
+            if found is None:
+                return {"ok": False, "error": "That device has no outputs to play the click on."}
+            if found["click_unavailable"]:
+                return {"ok": False, "error": found["click_unavailable"]}
+            self._remember_device("click_device", device_index)
+            self._config["click_channels"] = [1, 2] if found["max_output_channels"] >= 2 else [1]
+        self._write_config()
+        return self._click_moved()
+
+    def set_click_channels(self, channels):
+        """Which outputs of the click's own device it comes out of: a pair
+        such as [3, 4], or one output on its own, [5]. Counted from 1."""
+        if not _is_output_choice(channels):
+            return {"ok": False, "error": f"Not a pair of outputs: {channels}"}
+        saved = self._metronome.set_setting("click_channels", list(channels))
+        if not saved.get("ok"):
+            return saved
+        return self._click_moved()
+
+    def _click_moved(self):
+        """The click's output was chosen: where it is is read again, a player
+        open on it opens again with the click's outputs or without them, and
+        a click between takes follows. The choice is kept whatever the player
+        did, which comes back as a warning."""
+        self._metronome.devices_changed()
+        reopened = self._reopen_output()
+        self._resink()
+        warning = reopened.get("warning") if reopened.get("ok", True) else reopened.get("error")
+        return {"ok": True, **({"warning": warning} if warning else {})}
+
+    def set_metronome_setting(self, key, value):
+        """One of Settings › Metronome's: the sound, the volume, the count-in,
+        and whether a click take's WAVs carry its tempo. The click's output
+        and the switch have calls of their own."""
+        if key not in ("click_sound", "click_volume", "count_in_bars", "tempo_in_wav"):
+            return {"ok": False, "error": f"No metronome setting is called {key}"}
+        saved = self._metronome.set_setting(key, value)
+        if saved.get("ok") and key in ("click_sound", "click_volume"):
+            # A take playing back with its click hears the new one too.
+            self._refresh_take_click()
+        return saved
+
+    def metronome_set(self, tempo, signature):
+        """A change in the row: held until the next take's name names another
+        song (Metronome.set)."""
+        return self._metronome.set(tempo, signature)
+
+    def metronome_save_to_song(self):
+        """The row's tempo and signature become the song's, the song the next
+        take is named for."""
+        try:
+            return self._metronome.save_to_song()
+        except (SongRefused, LibraryUnavailable) as e:
+            return {"ok": False, "error": str(e)}
+
+    def metronome_set_on(self, on):
+        """The row's switch, mid-take too: whether Record clicks."""
+        return self._metronome.set_on(on)
+
+    @serialised
+    def metronome_play(self):
+        """▶: the click between takes at the row's tempo, until Stop, Record
+        or the row being emptied."""
+        return self._metronome.play()
+
+    @serialised
+    def metronome_stop(self):
+        """■: the click between takes stops. A take's own click is the take's."""
+        return self._metronome.stop()
+
+    @serialised
+    def metronome_preview(self, sound=None):
+        """A bar of the click in `sound`, or the one set, for Settings."""
+        return self._metronome.preview(sound=sound)
+
+    def metronome_state(self):
+        """What the metronome is doing, for the row and the recording screen:
+        polled, and never waits (Metronome.state)."""
+        return self._metronome.state()
+
+    def _take_elapsed(self):
+        """
+        How far into the take recording now, for the controller's display:
+        for a click take from its count-in's end, as the screen's clock counts
+        (0:00 when the band comes in, and until then); otherwise from Record.
+        """
+        recorder = self._recorder
+        if recorder is None:
+            return 0
+        frames, rate = recorder._frames_written, recorder.samplerate
+        click = recorder.click
+        if click is None:
+            return frames / rate
+        first = click.first_click_frame
+        if first is None:
+            return 0
+        return max(0, frames - first - click_frame(click.count_in_clicks, click.tempo, rate)) / rate
+
+    def count_tempo(self, folder, take_number, signature):
+        """
+        A take's tempo, counted from its files (spec Part 10), as a whole
+        number in `signature`'s own count: the drums' .mid when it has one,
+        else the drums' WAV (the band's track with the drums icon), else
+        every track mixed. {"ok": True, "tempo"}, or {"ok": False, "error"}.
+        """
+        if signature not in SIGNATURES:
+            return {"ok": False, "error": SIGNATURE_RULE}
+        folder = Path(folder)
+        if not self._inside_recordings(folder):
+            return {"ok": False, "error": "Folder is outside the recordings directory"}
+        take = self._lib.take(folder, take_number)
+        if take is None:
+            return {"ok": False, "error": "Take not found"}
+        missing = [Path(t["file"]).name for t in take["tracks"] if not Path(t["file"]).is_file()]
+        if missing or not take["tracks"]:
+            return {"ok": False,
+                    "error": f"Missing from the take's folder: {', '.join(missing)}" if missing
+                    else "The take has no files left on disk"}
+        icons = layouts.icons(self._config.get("tracks"))
+        drums = [t["file"] for t in take["tracks"] if icons.get(t["name"]) == "drums"]
+        hits = [n["file"] for n in take.get("notes") or []
+                if icons.get(n["name"]) == "drums" and Path(n["file"]).is_file()]
+        try:
+            found = tempomod.count(drums_mid=hits[0] if hits else None,
+                                   drums_wav=drums[0] if drums else None,
+                                   wavs=[t["file"] for t in take["tracks"]], signature=signature)
+        except (OSError, EOFError, wave.Error, ValueError) as e:
+            return {"ok": False, "error": f"Could not read the take: {e}"}
+        if found is None:
+            return {"ok": False, "error": "This take is too short or too quiet to count a tempo from."}
+        return {"ok": True, "tempo": clamp_tempo(found, signature)}
+
+    @_follows
+    def set_song_tempo(self, song_id, tempo, signature):
+        """A song's own tempo and signature, from its page; `tempo` None takes
+        both away. The row follows when the next take is the song's."""
+        try:
+            saved = self._lib.set_song_tempo(song_id, tempo, signature)
+        except SongRefused as e:
+            return {"ok": False, "error": str(e)}
+        if saved is None:
+            return {"ok": False, "error": "Song not found"}
+        return {"ok": True, **saved}
+
+    def metronome_tap_listen(self):
+        """
+        Tap was pressed: the pads' hits count as taps until a pause (spec Part
+        11). In a rehearsal, or while the signal check is on, the band's ports
+        are open already. Otherwise they are opened here, through the
+        rehearsal's own rig as the check opens them, and given back after the
+        pause: a second rig would miss the controller's port, kept out of the
+        rig's, and on Windows a port opens only once.
+        """
+        with self._tap_lock:
+            if self._session is None and not self._checking and not self._tapping:
+                self._midi.use(self._config.get("tracks") or [])
+                self._tapping = True
+            self._midi.listen_taps(TAP_QUIET_SEC)
+            if self._tapping and (self._tap_watch is None or not self._tap_watch.is_alive()):
+                self._tap_watch = threading.Thread(target=self._give_back_taps, name="tap ports", daemon=True)
+                self._tap_watch.start()
+        return {"ok": True}
+
+    def _give_back_taps(self):
+        """Waits for the pause that ends Tap's listening, then closes the ports
+        Tap opened, unless a rehearsal or the check has taken them over."""
+        while True:
+            time.sleep(TAP_POLL_SEC)
+            with self._tap_lock:
+                if self._midi.listening():
+                    continue
+                if self._tapping and self._session is None and not self._checking:
+                    try:
+                        self._midi.release()
+                    except Exception:
+                        log.exception("The ports Tap opened could not be closed")
+                self._tapping = False
+                return
+
+    def metronome_taps(self):
+        """The pads' hits since the last asking, as milliseconds ago, oldest
+        first (polled)."""
+        now = time.perf_counter_ns()
+        return {"ms_ago": [round((now - t) / 1e6, 1) for t in self._midi.taps()]}
+
     # ---------- deleting ----------
 
     def _inside_recordings(self, path):
         return self._recordings_key(path) is not None
 
+    @_follows
     def delete_take(self, folder, take_number):
         """
         Moves the take into the holding folder and drops its rows, asking
@@ -4265,6 +4855,7 @@ class Api:
             return {"ok": True, "undo": held["undo"], "takes_left": held["takes_left"],
                     "ended": held["ended"]}
 
+    @_follows
     def delete_takes(self, folder, take_numbers):
         """Several takes at once, as delete_take deletes one: Clear false
         starts. All of them wait in one holding entry, with one Undo
@@ -4737,6 +5328,7 @@ class Api:
             return result
 
     @serialised
+    @_follows
     def undo_trash(self, token):
         """
         Undo: the item back where it came from, and its rows back in the
@@ -5793,7 +6385,15 @@ class Api:
         # is whole, the same way config.json is — see WRITING_PREFIX.
         if what in ("mix", "both"):
             writing = _writing_path(target / f"{base}.wav")
-            res = mixdown(tracks, writing, volumes, progress=stages.part(0))
+            # A click take's mix carries its tempo as its WAVs do (spec Part
+            # 9): none when they carry none, as the setting was at Record.
+            acid = None
+            if take.get("click"):
+                try:
+                    acid = read_acid(tracks[0]["file"])
+                except OSError:
+                    acid = None
+            res = mixdown(tracks, writing, volumes, progress=stages.part(0), acid=acid)
             if not res["ok"]:
                 writing.unlink(missing_ok=True)
                 return res

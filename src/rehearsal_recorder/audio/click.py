@@ -22,6 +22,10 @@ import numpy as np
 SIGNATURES = ("4/4", "3/4", "2/4", "6/8")
 SOUNDS = ("click", "wood", "hihat")
 
+# How a refusal states the rule, wherever a signature is refused (the
+# metronome's row, a song's tempo): "... 4/4, 3/4, 2/4 and 6/8".
+SIGNATURE_RULE = f"The time signature is one of {', '.join(SIGNATURES[:-1])} and {SIGNATURES[-1]}"
+
 _PER_BAR = {"4/4": 4, "3/4": 3, "2/4": 2, "6/8": 6}
 
 # The tempo's range in quarter notes a minute. 6/8 counts eighths, so its

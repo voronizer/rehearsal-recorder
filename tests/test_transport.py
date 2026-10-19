@@ -104,5 +104,77 @@ def main():
             api.shutdown()
 
 
+def metronome():
+    """Record from the controller (metronome plan, Review Focus 6): the same
+    count-in and click as Record on the screen, at the row's tempo with a
+    change held in it; the take keeps that tempo; and the controller's display
+    reads 0:00 when the band comes in."""
+    import rehearsal_recorder.audio.capture as capture
+    from rehearsal_recorder.audio.click import click_frame
+
+    with tempfile.TemporaryDirectory() as folder:
+        mod, api = fresh_api(Path(folder))
+        quiet = capture.RUN_ON_QUIET_SEC
+        # Stop runs on to the next quarter while the card sends blocks; none
+        # come here after the last one fed.
+        capture.RUN_ON_QUIET_SEC = 0.02
+        try:
+            assert api.start_rehearsal("Click", 0, SR, [{"name": "Guitar", "channel": 1}])["ok"]
+            assert api.set_click_device(0)["ok"]
+
+            def feed(blocks):
+                rec = api._recorder
+                for _ in range(blocks):
+                    data = np.zeros((1024, 1), rec._dtype)
+                    if rec.click is not None:
+                        rec._duplex_callback(data, np.zeros((1024, rec.click.width), np.float32), 1024, None, None)
+                    else:
+                        rec._callback(data, 1024, None, None)
+
+            # A song with a tempo of its own, and the row holding another.
+            api.set_next_take_name("Palyn")
+            assert api.transport_command("record_stop")["ok"]
+            assert api._recorder.click is None
+            feed(4)
+            assert api.transport_command("record_stop")["ok"]
+            assert api._session_takes()[-1]["song"] == "Palyn"
+            assert api.set_song_tempo(api._lib.song_id("Palyn"), 120, "4/4")["ok"]
+            assert api.metronome_state()["tempo"] == 120
+            assert api.metronome_set(128, "4/4")["ok"]
+            assert api.set_next_take_name("Palyn 3")["ok"]
+            assert (api.metronome_state()["tempo"], api.metronome_state()["held"]) == (128, True)
+
+            heard = []
+            for start, stop in ((lambda: api.control_command("start"), lambda: api.transport_command("record_stop")),
+                                (lambda: api.transport_command("record_stop"), lambda: api.control_command("stop_keep"))):
+                started = start()
+                assert started["ok"], started
+                click = api._recorder.click
+                heard.append((click.tempo, click.signature, click.duplex, click.count_in_clicks))
+                assert api.metronome_state()["phase"] == "count"
+                assert api.transport_state()["elapsed"] == 0
+                feed(1)
+                # The band comes in on the click after the count-in's last, at
+                # input frame `end`: the controller's display reads 0:00 until then.
+                end = click.first_click_frame + click_frame(click.count_in_clicks, click.tempo, SR)
+                feed(end // 1024 - 1)
+                assert api._recorder._frames_written <= end
+                assert api.transport_state()["elapsed"] == 0
+                feed(1)
+                assert api.transport_state()["elapsed"] == (api._recorder._frames_written - end) / SR > 0
+                stopped = stop()
+                assert stopped["ok"], stopped
+                kept = api._session_takes()[-1]
+                assert (kept["tempo"], kept["signature"], kept["click"]) == (128, "4/4", True), kept
+            assert heard[0] == heard[1] == (128, "4/4", True, 4), heard
+            # The row's change is still held: the takes were the same song's.
+            assert (api.metronome_state()["tempo"], api.metronome_state()["held"]) == (128, True)
+            print("Metronome from the controller: all checks passed.")
+        finally:
+            capture.RUN_ON_QUIET_SEC = quiet
+            api.shutdown()
+
+
 if __name__ == "__main__":
     main()
+    metronome()

@@ -190,6 +190,38 @@ def selftest():
             raise RuntimeError(f"wrote {len(notes)} notes, got back {len(back)}: {meta}")
         return f"mido {smf.library_version()}, a .mid written and read back"
 
+    def click_and_wav_tempo():
+        # Renders a bar of each of the metronome's sounds, made by the app, and
+        # writes a WAV carrying a click take's tempo, read back both ways: a
+        # build that lost what either needs fails here, in CI, not at Record.
+        import tempfile
+        import wave
+        from pathlib import Path
+
+        import numpy as np
+
+        from rehearsal_recorder.audio.click import SOUNDS, Voices, accent, click_frame, mix_clicks
+        from rehearsal_recorder.audio.wavfile import Acid, WavWriter, read_acid
+
+        rate, length = 48000, click_frame(4, 120, 48000)
+        bars = np.zeros((length * len(SOUNDS), 1), np.float32)
+        for i, sound in enumerate(SOUNDS):
+            starts = [(i * length + click_frame(k, 120, rate), accent("4/4", k)) for k in range(4)]
+            mix_clicks(bars, 0, starts, Voices(sound, rate, 0.7), (0,))
+            if not bars[i * length:(i + 1) * length].any():
+                raise RuntimeError(f"the {sound} sound came out silent")
+        pcm = (bars[:, 0] * 32767).astype("<i2")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "click.wav"
+            with WavWriter(path, rate, 1, 2, acid=Acid(120.0, 4, 4)) as w:
+                w.write(pcm.tobytes())
+            acid = read_acid(path)
+            with wave.open(str(path), "rb") as r:
+                back = np.frombuffer(r.readframes(r.getnframes()), dtype="<i2")
+        if acid != Acid(120.0, 4, 4) or not np.array_equal(back, pcm):
+            raise RuntimeError(f"wrote 120 bpm in 4/4, read back {acid}")
+        return f"a bar of each of {len(SOUNDS)} sounds, a wav at 120 bpm in 4/4 read back"
+
     def encoder():
         from rehearsal_recorder.audio.encode import available
 
@@ -262,6 +294,7 @@ def selftest():
         check("ASIO", asio)
     check("MIDI", midi_up)
     check("MIDI files", midi_files)
+    check("click and WAV tempo", click_and_wav_tempo)
     check("sample formats", encoder)
     check("numpy", numpy_works)
     check("history database", database)

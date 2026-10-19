@@ -150,13 +150,13 @@ def _stream_latency(stream, asked):
 
 
 def _device_name(index):
-    """A device's name, for the screen to say which; plainer words when
-    PortAudio cannot say."""
+    """A device's name, for the screen to say which; "" when PortAudio cannot
+    say, and the screen says it without one."""
     try:
         with STREAM_LOCK:
             return sd.query_devices(index)["name"]
     except Exception:
-        return "the recording card"
+        return ""
 
 
 def _duplex_latency(stream, asked):
@@ -173,7 +173,7 @@ def _duplex_latency(stream, asked):
 
 class AudioRecorder:
     def __init__(self, device_index, samplerate, tracks, out_dir, bit_depth=16,
-                 clock=None, notes=(), click=None):
+                 clock=None, notes=(), click=None, meter=None):
         """
         tracks: list of {"name": str, "channel": int, "stereo": bool};
                 channel is 1-based, the way it is shown in the interface
@@ -191,6 +191,10 @@ class AudioRecorder:
                metronome. Duplex, the stream is opened with its outputs too;
                otherwise the click has its own, placed by `clock`, which is
                made here when the take has none for notes.
+        meter: (tempo, signature) of a take with a tempo and no click (the
+               metronome's switch off). take.json keeps it as the take's
+               click, never on and with no first click, so its .mid states
+               the tempo and a draft rescued after a crash still has it.
         """
         if not tracks:
             raise ValueError("No tracks configured")
@@ -203,6 +207,7 @@ class AudioRecorder:
         self._full_scale = full_scale(self.bit_depth)
         self.tracks = tracks
         self.click = click
+        self.meter = meter if click is None else None
         if click is not None and not click.duplex and clock is None:
             clock = AudioClock(samplerate)
         self._clock = clock
@@ -645,6 +650,10 @@ class AudioRecorder:
             # beside the file and moved onto it: a crash mid-write leaves the
             # one before.
             record["click"] = click.record()
+        elif self.meter is not None:
+            tempo, signature = self.meter
+            record["click"] = {"tempo": tempo, "signature": signature, "on": False, "wav_tempo": False,
+                               "first_click_frame": None, "end_frame": None}
         path = self.out_dir / TAKE_RECORD
         try:
             if click is None:
@@ -723,8 +732,8 @@ class AudioRecorder:
         # and it says which port each came from (midi/capture.finish_draft).
         # The app removes it once no notes file is left that needs it. A click
         # take keeps it too: it says the take's grid, for its .mid files and
-        # for a crop of the draft.
-        if not self._notes and click is None:
+        # for a crop of the draft; one with a tempo and no click, for its tempo.
+        if not self._notes and click is None and self.meter is None:
             (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
 
         self._result = {"duration_sec": duration, "tracks": finalized}

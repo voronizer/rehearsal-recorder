@@ -59,7 +59,9 @@ class ClickOutput:
         with STREAM_LOCK:
             info = _device(device_index)
             self._latency = output_latency(sd, device_index)
-        self.name = info.get("name") or ("the system output" if device_index is None else "the click's output")
+        # "" when the device list has no name for it: the screen then says
+        # it without one.
+        self.name = info.get("name") or ""
         rate = samplerate or info.get("default_samplerate") or DEFAULT_RATE
         self.samplerate = int(round(rate))
         self._source = None
