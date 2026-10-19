@@ -431,7 +431,7 @@ chunk before the data, the only place a WAV carries a tempo
 
 What DAWs do with it, from their documentation: Cubase and Nuendo turn
 Musical Mode on and fit the file to the project's tempo; Pro Tools conforms
-it to the session's tempo; Studio One shows it as the file's tempo; FL
+it to the session's tempo; Studio One fits it to the song's tempo; FL
 Studio reads it when its own setting is on; Reaper probably fits it.
 Ableton Live ignores it, and Logic does not list it among what it reads.
 For those two the bar at the file's first sample and the `.mid` remain.
