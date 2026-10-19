@@ -148,6 +148,12 @@ describe("tapping a tempo", () => {
     expect(tapTempo([1000, 0, 500], "4/4")).toBe(120)
     expect(tapTempo([400, 400], "4/4")).toBeNull()
   })
+  it("takes two hits within 50 ms for one: a pad that sends two note-ons, or a kit on two ports", () => {
+    expect(tapTempo([0, 0, 500, 500, 1000, 1000], "4/4")).toBe(120)
+    expect(tapTempo([0, 20, 500, 530, 1000, 1049], "4/4")).toBe(120)
+    // 600 eighths a minute are 100 ms apart, and every one is a tap.
+    expect(tapTempo([0, 100, 200, 300], "6/8")).toBe(600)
+  })
 })
 
 describe("the figures", () => {

@@ -100,6 +100,12 @@ ECHO_MS = 5
 ECHO_HITS = 4
 _ECHO_KEPT = 16
 
+# Two hits closer than this are one tap: a pad that sends two note-ons for a
+# hit, or a kit on two ports. It is half the shortest gap there can be between
+# taps, 100 ms at 600 a minute (6/8's fastest). The screen drops a tap the same
+# way (DOUBLE_HIT_MS in ui/src/lib/metronome.ts).
+DOUBLE_HIT_SEC = 0.05
+
 # How long the end of a take waits for the writer to reach it, and shutdown for a
 # thread to stop, before going on without it.
 _END_PATIENCE_SEC = 10
@@ -221,6 +227,7 @@ class MidiRig:
         self._listening = False  # listen_taps was asked, and no pause has ended it
         self._listen_from = 0  # the rig's clock when it was asked: a hit struck before is no tap
         self._listen_until = 0  # ns: a hit later than this ends the listening; each tap moves it on
+        self._last_tap = None  # ns of the last tap: a hit within DOUBLE_HIT_SEC of it is the same one
         self._quiet = 0  # ns: the pause that ends it
         self._ticks = 0
         self._changed = False  # the observer said the list changed
@@ -333,6 +340,7 @@ class MidiRig:
                 self._listen_until = max(self._listen_until, now + self._quiet)
             else:
                 self._taps = []
+                self._last_tap = None
                 self._listening = True
                 self._listen_from = now
                 self._listen_until = now + self._quiet
@@ -573,14 +581,18 @@ class MidiRig:
 
     def _tapped(self, ns):
         """Whether a hit at `ns` is a tap (under the lock): listening, struck since it
-        was asked, and within the pause of the last tap. The first hit after
-        the pause ends the listening and is not one."""
+        was asked, within the pause of the last tap, and not that tap heard
+        again (DOUBLE_HIT_SEC). The first hit after the pause ends the
+        listening and is not one."""
         if not self._listening or ns < self._listen_from:
             return False
         if ns > self._listen_until:
             self._listening = False
             return False
         self._listen_until = max(self._listen_until, ns + self._quiet)
+        if self._last_tap is not None and abs(ns - self._last_tap) < DOUBLE_HIT_SEC * _NS:
+            return False
+        self._last_tap = ns
         return True
 
     def _marker(self, item):

@@ -72,14 +72,23 @@ const TAP_PAUSE_MS = 2000
 /** The taps that count towards a tempo: the last four gaps. */
 const TAP_GAPS = 4
 
+/** Two taps closer than this, in milliseconds, are one: a pad that sends two
+ *  note-ons for a hit, or a kit on two ports. It is half the shortest gap
+ *  there can be between taps, 100 ms at 600 a minute (6/8's fastest). Python
+ *  drops a pad's hit the same way (DOUBLE_HIT_SEC in midi/rig.py). */
+const DOUBLE_HIT_MS = 50
+
 /**
  * The tempo the taps beat: the average of the last four gaps between them,
  * from the taps since the last pause of more than two seconds. A tap is a
- * click, so in 6/8 it is an eighth. null until there are two taps to make a
- * gap of.
+ * click, so in 6/8 it is an eighth. A tap within 50 ms of the one before is
+ * that tap again. null until there are two taps to make a gap of.
  */
 export function tapTempo(timesMs: number[], signature: Signature): number | null {
-  const times = [...timesMs].sort((a, b) => a - b)
+  const times: number[] = []
+  for (const t of [...timesMs].sort((a, b) => a - b)) {
+    if (times.length === 0 || t - times[times.length - 1] >= DOUBLE_HIT_MS) times.push(t)
+  }
   let from = 0
   for (let i = 1; i < times.length; i++) if (times[i] - times[i - 1] > TAP_PAUSE_MS) from = i
   const gaps = times
@@ -88,8 +97,6 @@ export function tapTempo(timesMs: number[], signature: Signature): number | null
     .slice(-TAP_GAPS)
   if (gaps.length === 0) return null
   const mean = gaps.reduce((sum, g) => sum + g, 0) / gaps.length
-  // Two hits at once make no tempo.
-  if (!(mean > 0)) return null
   return clampTempo(60_000 / mean, signature)
 }
 

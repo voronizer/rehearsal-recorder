@@ -3743,6 +3743,20 @@ def main():
     ok("asked again while listening, the hit not yet read is kept and the next is added",
        rig12.taps() == [now12[0] + 100 * MS, now12[0] + 200 * MS])
 
+    # One hit heard twice is one tap: a kit on two ports, or a pad that
+    # sends two note-ons. Taps 100 ms apart, 600 eighths a minute, are two.
+    now12[0] += 5 * S
+    rig12.listen_taps()
+    at12 = now12[0]
+    fake12.send("TD-17", at12 + 100 * MS, HIT)
+    fake12.send("SPD-SX", at12 + 103 * MS, HIT)                # the same hit on the kit's other port
+    fake12.send("TD-17", at12 + 600 * MS, HIT)
+    fake12.send("TD-17", at12 + 649 * MS, HIT)                 # a pad that triggers twice
+    fake12.send("TD-17", at12 + 749 * MS, HIT)
+    rig12.drain()
+    ok("a hit within 50 ms of the last tap is the same tap; 100 ms after it is the next",
+       rig12.taps() == [at12 + 100 * MS, at12 + 600 * MS, at12 + 749 * MS])
+
     # A hit in a take is a tap and a note.
     now12[0] += 5 * S
     clock12 = AudioClock(SR)
