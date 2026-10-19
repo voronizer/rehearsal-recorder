@@ -20,7 +20,7 @@ import {
   type SessionState,
   type Take,
 } from "@/lib/api"
-import { CLIPS } from "./demo"
+import { bandCameIn, CLIPS } from "./demo"
 import { Hero } from "./Hero"
 import { bringIntoView, button, dragTimeline, fill, hasText, key, press, sleep, waitFor } from "./drive"
 
@@ -53,8 +53,9 @@ const subscribe = (l: () => void) => {
 }
 
 const NAME = "Tuesday jam"
-/** The least a take runs before it is stopped: past the guitar's last clip,
- *  so whoever moves on quickly has still seen it clip all three times. */
+/** The least a take runs once the band has come in, before it is stopped:
+ *  past the guitar's last clip, so whoever moves on quickly has still seen
+ *  it clip all three times. */
 const LEAST_TAKE_MS = (Math.max(...CLIPS) + 0.3) * 1000
 /** How long last week's go plays before Start is pressed. */
 const LAST_WEEK_MS = 3000
@@ -67,7 +68,6 @@ const MARKS_MS = 1800
 const BEAT_MS = 1500
 /** How long Pałyn 6 loops before ↓ steps on to Pałyn 7. */
 const LOOPING_MS = 2500
-let takeStarted = 0
 let rehearsalName = NAME
 
 const nothing = () => {}
@@ -188,7 +188,6 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     if (!session.active) throw new Error("demo: the rehearsal is not going")
     const started = await api().start_take()
     if (!started.ok || started.take_number == null) throw new Error("demo: the take did not start")
-    takeStarted = performance.now()
     show({
       step: "record",
       takeNumber: started.take_number,
@@ -199,15 +198,20 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     })
     await waitFor(() => button("Stop", true))
     // The line says the count-in first: it is lit once the bar of clicks
-    // is counting on screen.
-    await waitFor(() => document.querySelector("[data-count-in]"))
+    // is counting on screen, or once Python says the take is not counting
+    // in, for a take with no count-in.
+    while (!document.querySelector("[data-count-in]") && (await api().metronome_state()).phase === "count")
+      await sleep(50)
     beat(2)
   },
   // Stop, save it, and back on the rehearsal screen the take nobody named
   // gets its song with one click; the false start is grey, and the
   // evening's two buttons are over the takes.
   async keep({ beat, linger }) {
-    await waitFor(() => performance.now() - takeStarted >= LEAST_TAKE_MS)
+    await waitFor(() => {
+      const cameIn = bandCameIn()
+      return cameIn !== null && performance.now() - cameIn >= LEAST_TAKE_MS
+    })
     await press("Stop", { exact: true })
     await waitFor(() => document.querySelector("[data-take-summary]"))
     beat(0)
