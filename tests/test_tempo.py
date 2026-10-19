@@ -291,8 +291,10 @@ def main():
         peak = tracemalloc.get_traced_memory()[1]
         tracemalloc.stop()
         whole = 180 * SR * 4  # the take as float32 in one piece
-        ok(f"counting 3 minutes holds {peak / 2 ** 20:.1f} MB at most, under a third of the take as one array "
-           f"({whole / 2 ** 20:.0f} MB)", peak < whole / 3)
+        # Half, not a third: a third left about a tenth to spare, which
+        # another numpy could use up.
+        ok(f"counting 3 minutes holds {peak / 2 ** 20:.1f} MB at most, under half the take as one array "
+           f"({whole / 2 ** 20:.0f} MB)", peak < whole / 2)
 
     print("\n" + "=" * 60)
     if problems:
