@@ -220,8 +220,12 @@ class Metronome:
             return None
 
     def settings(self):
-        """The settings, for Settings and the gear."""
+        """The settings, for Settings and the gear. `click_device_missing`:
+        the name of the click's own device when one is saved and not plugged
+        in ("" for one saved with no name), else None. An output that is there
+        and will not play is said in the state's `output_missing` only."""
         return {"click_device_index": self._devices()[0],
+                "click_device_missing": self._target(wait=False)[2],
                 "click_channels": self._click_channels(),
                 **{key: self._setting(key) for key in DEFAULTS}}
 

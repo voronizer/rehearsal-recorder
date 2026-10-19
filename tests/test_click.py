@@ -790,8 +790,9 @@ def on_its_own():
 
     print("  Its settings, and a bar heard")
     ok("the settings and their defaults",
-       m.settings() == {"click_device_index": None, "click_channels": None, "click_sound": "click",
-                        "click_volume": 0.7, "count_in_bars": 1, "tempo_in_wav": True, "metronome_on": True})
+       m.settings() == {"click_device_index": None, "click_device_missing": None, "click_channels": None,
+                        "click_sound": "click", "click_volume": 0.7, "count_in_bars": 1, "tempo_in_wav": True,
+                        "metronome_on": True})
     ok("each is checked and saved", m.set_setting("click_sound", "wood")["ok"] and written[-1]["click_sound"] == "wood"
        and m.set_setting("count_in_bars", 2)["ok"] and m.set_setting("tempo_in_wav", False)["ok"]
        and m.set_setting("click_volume", 0.5)["ok"] and config["click_volume"] == 0.5)
@@ -920,6 +921,12 @@ def on_its_own():
        played and len(gaps) >= 1 and all(abs(g - 500) < 0.5 for g in gaps)
        and state["output_missing"] == "Headphone amp")
     ok("  counted at its rate, on its outputs, raising nothing", counted.fault is None and counted.samplerate == 44100)
+    ok("  plugged in all the same: the settings name no unplugged device",
+       amp.settings().get("click_device_missing", "absent") is None)
+    gone = Metronome({"click_device": {"name": "X18", "host_api": "CoreAudio"}, "click_device_index": 7},
+                     lambda: None, lambda: None, lambda key: None, None)
+    ok("a click device saved and not plugged in: the settings name it, with no index",
+       gone.settings().get("click_device_missing") == "X18" and gone.settings()["click_device_index"] is None)
     amp.stop()
 
     # The screen asks for the state many times a second; the device list is

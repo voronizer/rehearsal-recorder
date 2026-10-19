@@ -10,6 +10,7 @@
 export function stubBridge(saved: Record<string, unknown> = {}, missing: string | null = null) {
   const settings: Record<string, unknown> = {
     click_device_index: null,
+    click_device_missing: missing,
     click_channels: null,
     click_sound: "click",
     click_volume: 0.7,

@@ -2474,10 +2474,14 @@ window.__MAKE_API__ = () => ({
     // Settings › Keys, as api.get_settings: anything but false is on.
     space_keys: readCfg().space_keys !== false, player_keys: readCfg().player_keys !== false,
     // The metronome's, as api.get_settings: none for the click's output until
-    // one is picked, and none for one saved that is not plugged in (its name
-    // is metronome_state's output_missing, as Python has it).
+    // one is picked, and none for one saved that is not plugged in, which is
+    // named instead (window.__CLICK_MISSING__, metronome_state's
+    // output_missing too, as Python has it).
     click_device_index: outputDevices().some(d => d.index === readCfg().click_device_index)
       ? readCfg().click_device_index : null,
+    click_device_missing: readCfg().click_device_index != null
+      && !outputDevices().some(d => d.index === readCfg().click_device_index)
+      ? (window.__CLICK_MISSING__ || '') : null,
     click_channels: readCfg().click_channels ?? null,
     click_sound: readCfg().click_sound ?? 'click', click_volume: readCfg().click_volume ?? 0.7,
     count_in_bars: readCfg().count_in_bars ?? 1, tempo_in_wav: readCfg().tempo_in_wav !== false,

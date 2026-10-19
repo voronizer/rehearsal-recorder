@@ -13307,6 +13307,8 @@ def main():
         a83._metronome.devices_changed()
         ok("its index in the settings is none, and its name is in the state",
            a83.get_settings()["click_device_index"] is None and a83.metronome_state()["output_missing"] == "X18")
+        ok("  the settings name it as the unplugged device, which no output that will not open is",
+           a83.get_settings().get("click_device_missing") == "X18")
         a83._config["click_device"] = {"host_api": "CoreAudio"}
         a83._metronome.devices_changed()
         ok("  one saved with no name: an empty name, and the screen says it without one",
