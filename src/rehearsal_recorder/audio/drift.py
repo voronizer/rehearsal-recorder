@@ -40,12 +40,13 @@ def count(*, drums_mid=(), drums=(), mix=(), tempo=None, signature="4/4", click=
     "source" is "drums-mid", "drums" or "mix"; "tempo" what the beats were
     found around; "middle" the median of the bars' tempos; "bars" as
     `tempo.bar_tempos` gives them, a bar with no hits having a tempo of None.
-    "short" is a take under 4 bars, "no-beat" one where no source gave a
+    "short" is a take under 4 bars, or a source with a steady beat for fewer
+    (a false start after a count-in); "no-beat" one where no source gave a
     steady beat. A WAV that cannot be read raises what reading it raises;
     `stop` raises tempo.Cancelled when it says so.
     """
     per_bar = BEATS_A_BAR[signature]
-    mix = [m for m in mix or () if str(m) not in {str(d) for d in drums}] if drums else list(mix or ())
+    short = False
     sources = []
     if drums_mid:
         sources.append(("drums-mid", lambda: tempomod._hits_envelope(drums_mid[0])))
@@ -74,10 +75,11 @@ def count(*, drums_mid=(), drums=(), mix=(), tempo=None, signature="4/4", click=
         bars = tempomod.bar_tempos(times, found, per_bar, first)
         counted = [b["tempo"] for b in bars if b["tempo"] is not None]
         if len(counted) < max(MIN_BARS, COUNTED_SHARE * len(bars)):
+            short = short or len(counted) >= COUNTED_SHARE * len(bars)
             continue
         return {"ok": True, "source": name, "per_bar": per_bar, "tempo": float(aim),
                 "middle": float(np.median(counted)), "bars": bars}
-    return {"ok": False, "why": "no-beat"}
+    return {"ok": False, "why": "short" if short else "no-beat"}
 
 
 def _bar_one(times, tempo, per_bar):

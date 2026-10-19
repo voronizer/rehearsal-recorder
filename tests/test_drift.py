@@ -261,6 +261,11 @@ def main():
     ok("a take under 4 bars is too short",
        drift.count(drums=[write_wav(folder / "short.wav", loud(drums(hits(beat_times(np.full(3, 128.0), 4), 4, "rock"), 6.0)))],
                    tempo=128) == {"ok": False, "why": "short"})
+    # A false start: two bars of count-in and three played, then "again".
+    false_start = write_wav(folder / "false-start.wav",
+                            loud(drums(hits(beat_times(np.full(3, 128.0), 4, start=3.75), 4, "rock"), 9.4)))
+    ok("a false start after a count-in is too short too",
+       drift.count(drums=[false_start], mix=[false_start], tempo=128, click=True) == {"ok": False, "why": "short"})
     tt = np.arange(30 * SR) / SR
     chord = sum(np.sin(2 * np.pi * f * tt) for f in (110, 138.6, 164.8, 220)) * np.exp(-tt / 20) * 0.2
     held = str(write_wav(folder / "chord.wav", loud(chord + 0.01 * rng.standard_normal(len(tt)))))
@@ -335,6 +340,19 @@ def main():
         drift.count = real
     ok(f"{apimod.DRIFTS_KEPT} answers are kept: the oldest is counted again after one more",
        len(counted) == apimod.DRIFTS_KEPT + 2)
+    counted, both = [], []
+    drift.count = lambda **kw: counted.append(1) or time.sleep(0.3) or {"ok": False, "why": "no-beat"}
+    try:
+        asks = [threading.Thread(target=lambda: both.append(api.take_drift(kit, [], {"tempo": 97, "signature": "4/4"})))
+                for _ in range(2)]
+        for a in asks:
+            a.start()
+        for a in asks:
+            a.join(5)
+    finally:
+        drift.count = real
+    ok("two asks for one take at once count it once, and both get the answer",
+       counted == [1] and both == [{"ok": False, "why": "no-beat"}] * 2)
 
     print("\n[7] Record stops a count, and the tolerance")
     entered, results = threading.Event(), []
@@ -361,6 +379,38 @@ def main():
     ok("and none is counted while a take records",
        api.take_drift(kit, [], meter) == {"ok": False, "why": "recording"})
     api.stop_take()
+    give_up = time.monotonic() + 10
+    while api._stopping and time.monotonic() < give_up:
+        time.sleep(0.05)
+
+    class Refused:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            raise RuntimeError("The interface is gone")
+    released, results = threading.Event(), []
+    entered.clear()
+
+    def holds(**kw):
+        entered.set()
+        while not released.wait(0.01):
+            if kw["stop"]():
+                raise tempo.Cancelled()
+        return {"ok": False, "why": "no-beat"}
+    recorder, apimod.AudioRecorder, drift.count = apimod.AudioRecorder, Refused, holds
+    try:
+        worker = threading.Thread(target=lambda: results.append(api.take_drift(kit, [], {"tempo": 98, "signature": "4/4"})))
+        worker.start()
+        ok("another count has begun", entered.wait(5))
+        ok("a Record that cannot start says why", api.start_take().get("error") == "The interface is gone")
+        # Long enough for the count to see a stop, were it told to.
+        time.sleep(0.2)
+        released.set()
+        worker.join(5)
+    finally:
+        apimod.AudioRecorder, drift.count = recorder, real
+    ok("and leaves the count to finish", results == [{"ok": False, "why": "no-beat"}])
 
     ok("the tolerance is 2% until it is changed", api.get_settings()["drift_tolerance"] == 0.02)
     ok("3% is kept", api.set_metronome_setting("drift_tolerance", 0.03)["ok"]

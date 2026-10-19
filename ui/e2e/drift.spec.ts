@@ -125,6 +125,54 @@ for (const [take, said] of [
   })
 }
 
+test("a mark refreshes the screen, and the line stays put without being asked for again", async ({ page }) => {
+  await bandTake(page, "Take 2 Pałyn 2")
+  await expect(chips(page)).toHaveCount(3)
+  const asked = (await calls(page, "take_drift")).length
+  // Watched from here on: the line must not leave the lane even for a frame.
+  await page.evaluate(() => {
+    const w = window as unknown as { __LEFT__: boolean }
+    w.__LEFT__ = false
+    new MutationObserver(() => {
+      if (!document.querySelector("[data-master-lane] [data-drift-line]")) w.__LEFT__ = true
+    }).observe(document.body, { childList: true, subtree: true })
+  })
+  await page.getByRole("button", { name: "Add mark" }).click()
+  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(page.getByRole("button", { name: "Open mark", exact: true })).toBeVisible()
+  await settled(page)
+  expect((await calls(page, "take_drift")).length).toBe(asked)
+  expect(await page.evaluate(() => (window as unknown as { __LEFT__: boolean }).__LEFT__)).toBe(false)
+})
+
+test("a count Record stopped is asked for again once the take is over", async ({ page }) => {
+  await bandTake(
+    page,
+    "Take 2 Pałyn 2",
+    "let asked = 0; window.__DRIFT__ = () => (asked++ === 0 ? {ok: false, why: 'recording'} : null);"
+  )
+  await expect(line(page)).toBeVisible()
+  await expect(chips(page)).toHaveText(["+6", "+7", "−5"])
+})
+
+test("a stop inside a stretch is a gap in its amber too, with one chip", async ({ page }) => {
+  const tempos = [128, 128, 134, 134, null, null, 134, 134, 128, 128, 128, 128]
+  const bars = tempos.map((tempo, i) => ({ n: i + 1, start: 2 * i, end: 2 * i + 2, tempo }))
+  const answer = {
+    ok: true,
+    source: "drums",
+    per_bar: 4,
+    middle: 128,
+    aim: { tempo: 128, signature: "4/4", from: "take", song: null },
+    bars,
+  }
+  await openEvening(page, `window.__DRIFT__ = ${JSON.stringify(answer)};`)
+  await page.locator("[aria-label='Rehearsal overview'] button[aria-label^='Take 6']").click()
+  await expect(chips(page)).toHaveText(["+6"])
+  await expect(line(page).locator("[data-drift-stretch]")).toHaveCount(2)
+  await expect(line(page).locator("[data-drift-tempo]")).toHaveCount(2)
+})
+
 test("Review right after a take shows its line", async ({ page }) => {
   await openEvening(page)
   await recordTake(page, 11)

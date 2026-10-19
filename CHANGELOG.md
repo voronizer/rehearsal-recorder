@@ -58,10 +58,11 @@ opening.
   recorded to, or the song's tempo, or, with neither, the take's own middle.
   Where the band was more than 2% off for two bars or more, the line turns
   amber with a number such as “+7”, and pointing at a bar says its tempo.
-  The app listens to the drums, or to all the tracks when none has the
-  drums icon. Takes from before this version get the line too. **Drift
-  shown past**, in **Settings › Metronome**, sets how far off is off: 1%,
-  2%, 3% or 5%. reha.stream shows the line on the metronome's tile.
+  The app listens to the drums, or, when no track has the drums icon, to
+  all the tracks but a backing track. Takes from before this version get
+  the line too. **Drift shown past**, in **Settings › Metronome**, sets how
+  far off is off: 1%, 2%, 3% or 5%. reha.stream shows the line on the
+  metronome's tile.
 - **Takes recorded to the click sit on the bars in a DAW.** Their files
   start on the first click of the count-in, so with the project at the
   song's tempo, a take put at bar 1 has its bars on the project's bars. A

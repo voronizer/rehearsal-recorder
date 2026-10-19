@@ -170,7 +170,7 @@ describe("metronome on the site", () => {
 // last step, a question after the metronome's, and the metronome tile's last
 // sentence (above).
 describe("tempo drift on the site", () => {
-  it("says in the last step that Pałyn 5 ran ahead in the bridge and Pałyn 6 held it", () => {
+  it("says in the last step that Palyn 5 ran ahead in the bridge and Palyn 6 held it", () => {
     const compare = content.story.steps.find((s) => s.id === "compare")!
     expect(leadAndBeats(compare.body).beats.slice(0, 2)).toEqual([
       "Open Pałyn 5 and loop its bridge: the Master row says it ran ahead, +7.",

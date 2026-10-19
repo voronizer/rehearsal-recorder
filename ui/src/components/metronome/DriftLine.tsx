@@ -104,7 +104,12 @@ export function DriftLine({
     else pieces.push([b])
   }
   const lines = pieces.filter((p) => p.length > 1)
-  const amber = (s: Stretch) => bars.slice(s.first, s.last + 1).filter((b) => b.tempo !== null)
+  // A stretch's amber, in pieces where the line breaks: a stop inside it is
+  // drawn as a gap, as on the line.
+  const amber = (s: Stretch) => lines.flatMap((p) => {
+    const inside = p.filter((b) => b.n >= bars[s.first].n && b.n <= bars[s.last].n)
+    return inside.length > 1 ? [inside] : []
+  })
   const top = yOf(aim * (1 + tolerance), aim)
   const bottom = yOf(aim * (1 - tolerance), aim)
 
@@ -134,17 +139,15 @@ export function DriftLine({
           strokeDasharray="4 3"
           vectorEffect="non-scaling-stroke"
         />
-        {found.map((s) => {
-          const inside = amber(s)
-          if (!inside.length) return null
-          return (
+        {found.flatMap((s) =>
+          amber(s).map((inside) => (
             <polygon
-              key={`fill-${s.first}`}
+              key={`fill-${inside[0].n}`}
               points={`${mid(inside[0])},50 ${inside.map(point).join(" ")} ${mid(inside[inside.length - 1])},50`}
               className="fill-warn/30"
             />
-          )
-        })}
+          ))
+        )}
         {lines.map((piece) => (
           <polyline
             key={piece[0].n}
@@ -157,18 +160,20 @@ export function DriftLine({
             vectorEffect="non-scaling-stroke"
           />
         ))}
-        {found.map((s) => (
-          <polyline
-            key={`line-${s.first}`}
-            data-drift-stretch
-            points={amber(s).map(point).join(" ")}
-            fill="none"
-            className="stroke-warn"
-            strokeWidth="2"
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
+        {found.flatMap((s) =>
+          amber(s).map((inside) => (
+            <polyline
+              key={`line-${inside[0].n}`}
+              data-drift-stretch
+              points={inside.map(point).join(" ")}
+              fill="none"
+              className="stroke-warn"
+              strokeWidth="2"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))
+        )}
       </svg>
       {placed.map((s) => {
         if (!shown.has(s)) return null

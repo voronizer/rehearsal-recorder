@@ -884,6 +884,9 @@ class Api:
         self._drifts = collections.OrderedDict()
         self._drifts_lock = threading.Lock()
         self._drift_round = 0
+        # The counts under way, by the same key: a second ask for a take
+        # waits for the first's answer (take_drift).
+        self._drifts_counting = {}
         # The band's ports for Tap on a song's page, outside a rehearsal.
         self._tap = _TapPorts(self._midi, lambda: self._session is not None)
         # Whether a newer version is out — see updates.py. Asked only once the
@@ -2612,9 +2615,6 @@ class Api:
         # the one the old Stop then ends, with the old take's notes unmade.
         if self._stopping:
             return {"ok": False, "error": "Still saving the last take"}
-        # A drift line still being counted stops: its reading must not hold
-        # up the take's own (drift spec Part 4).
-        self._drift_round += 1
 
         s = self._session
         # Only the tracks that record sound reach the card: a MIDI track has no
@@ -2698,6 +2698,10 @@ class Api:
                                  self._midi.begin_take, temp_dir, clock)
 
             self._recorder = recorder
+            # A drift line still being counted stops: its reading must not
+            # hold up the take's own (drift spec Part 4). A Record that
+            # cannot start stops none.
+            self._drift_round += 1
         finally:
             self._starting = False
         self._recorder_take_number = take_number
@@ -4912,7 +4916,8 @@ class Api:
         "short", "no-beat", or "recording" when Record stopped it, which the
         player asks again for once it opens. The last 32 answers are kept by
         the files' paths, sizes and times and the aim, so a take opened again
-        is not counted again, and a cropped one is. Nothing is stored.
+        is not counted again, and a cropped one is; one asked for again while
+        it is counted waits for that count. Nothing is stored.
         """
         if self._recorder is not None:
             return {"ok": False, "why": "recording"}
@@ -4935,6 +4940,33 @@ class Api:
             if key in self._drifts:
                 self._drifts.move_to_end(key)
                 return self._drifts[key]
+            under_way = self._drifts_counting.get(key)
+            if under_way is None:
+                self._drifts_counting[key] = (threading.Event(), [])
+        if under_way is not None:
+            # The same take, asked for again while it is counted (opened,
+            # left and opened again): the first count's answer, whatever it is.
+            done, answer = under_way
+            done.wait()
+            return answer[0]
+        found = {"ok": False, "why": "missing"}
+        try:
+            found = self._count_drift(hits, drums, mix, tempo, signature, source, song)
+            if found.get("why") not in ("recording", "missing"):
+                with self._drifts_lock:
+                    self._drifts[key] = found
+                    while len(self._drifts) > DRIFTS_KEPT:
+                        self._drifts.popitem(last=False)
+            return found
+        finally:
+            with self._drifts_lock:
+                done, answer = self._drifts_counting.pop(key)
+            answer.append(found)
+            done.set()
+
+    def _count_drift(self, hits, drums, mix, tempo, signature, source, song):
+        """take_drift's count itself: stopped by Record, a file that cannot be
+        read is "missing", and a counted take gets its aim."""
         round_ = self._drift_round
         stop = lambda: self._drift_round != round_ or self._recorder is not None
         try:
@@ -4949,10 +4981,6 @@ class Api:
             aim = tempo if tempo is not None else round(found["middle"])
             found = {key_: found[key_] for key_ in ("ok", "source", "per_bar", "middle", "bars")}
             found["aim"] = {"tempo": aim, "signature": signature or "4/4", "from": source, "song": song}
-        with self._drifts_lock:
-            self._drifts[key] = found
-            while len(self._drifts) > DRIFTS_KEPT:
-                self._drifts.popitem(last=False)
         return found
 
     def _drift_aim(self, meter):

@@ -1140,9 +1140,9 @@ The words in the row's corner say what the take is measured against:
 
 To find the beats, the app listens to the drums: the notes of the track
 with the drums icon when it records an e-kit, otherwise that track's sound.
-In a take with no drums icon it listens to all the tracks together, except
-one with the Backing track icon, and the words end “· from the mix”: the
-line is rougher then. Where the band stopped, the line breaks.
+In a take with no drums icon, or when the drums give no beat to follow, it
+listens to all the tracks together, except one with the Backing track icon,
+and the words end “· from the mix”: the line is rougher then. Where the band stopped, the line breaks.
 
 The tempo is worked out when you open a take, and a long one takes a
 moment: a spinner shows in the corner until it is done. A take shorter than

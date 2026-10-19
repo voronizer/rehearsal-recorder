@@ -68,6 +68,9 @@ export type DriftTake = TakeClick & {
   song?: string | null
   tracks?: TrackFile[]
   notes?: NotesFile[]
+  /** How long the take is: a crop changes it, and the line is asked for
+   *  again. */
+  duration_sec?: number
 }
 
 /** Bars `first` to `last` (indices into the bars), off the same way: `sign`
@@ -127,7 +130,8 @@ export function stretches(bars: DriftBar[], aim: number, tolerance: number): Str
         peak = i
       }
     }
-    return { ...r, chip: r.sign * Math.round(most), peak }
+    // A bar is off by more than the tolerance, so never by 0 bpm.
+    return { ...r, chip: r.sign * Math.max(1, Math.round(most)), peak }
   })
 }
 
