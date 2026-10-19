@@ -57,7 +57,7 @@ COPY_BYTES = 4 * 1024 * 1024
 # told, and why it has to be.
 STALLED = (
     "Recording stopped: no sound has come from the audio interface for "
-    f"{heartbeat.SILENCE_SEC:.0f} seconds — it was unplugged, switched off or "
+    f"{heartbeat.SILENCE_SEC:.0f} seconds. It was unplugged, switched off or "
     "stopped answering. Everything captured up to that point has been saved."
 )
 

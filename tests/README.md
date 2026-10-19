@@ -10,26 +10,26 @@ The fourteen Python suites cover audio, storage, platform behaviour, MIDI,
 the tempo counter and shared controls. Interface tests run as unit and browser
 suites.
 
-## test_control_api.py - shared controls
+## test_control_api.py: shared controls
 
 Exercises JSON bridge calls without MIDI: laptop Review, explicit Keep,
 semantic results, bound catalog selection, execution-time state checks,
 normalised volume and overlapping calls.
 
-## test_controller.py — dedicated remote
+## test_controller.py: dedicated remote
 
 Checks channel/version/token validation, acknowledgements, duplicate suppression,
 exclusive input ownership, instrument isolation (including ambiguous replacement
 ports), disconnect cancellation and shared recording/playback actions.
 
-## test_transport.py — shared application controls
+## test_transport.py: shared application controls
 
 Uses the engine suite's fake sound card and temporary libraries to verify
 Start, Stop-and-keep, playback, confirmed state during saving, overlapping UI
 and controller commands, save retry without a second Stop, and preserved drafts
 when finalisation fails. Run with `python tests/test_transport.py`.
 
-## test_engine.py — the audio
+## test_engine.py: the audio
 
 Mixing, seeking, A–B looping, disk estimates, crash recovery (a crashed take
 that was recording notes comes back with a `.mid` too), take naming, renaming,
@@ -42,10 +42,10 @@ ports before a take run here too, through the Api on a fake port system: the
 signal check opens them (a band of nothing but MIDI is checked all the same),
 Start keeps what the check had open and opens what the final tracks say,
 Finish and closing the app let them go, and Under the hood and Copy details
-say what MIDI there is. A take with notes runs here as well, driven by the
-recorder's own callback and a fake port system: Start gives the card only the
-tracks that record sound (a MIDI track has no input) and begins the notes on
-the audio's clock, Stop stops the audio and then makes the `.mid` files and
+for a bug report say what MIDI there is. A take with notes runs here as well,
+driven by the recorder's own callback and a fake port system: Start gives the
+card only the tracks that record sound (a MIDI track has no input) and begins
+the notes on the audio's clock, Stop stops the audio and then makes the `.mid` files and
 says which tracks have none, Keep and Recover move them beside the WAVs (Keep
 finds any `.mid` it is not told of, and a recovered track's audio and notes
 come back under its name), everything or nothing when a file will not move, a
@@ -66,31 +66,31 @@ take's tempo through a crop and into the mix.
 
 No sound card and no browser: `sounddevice` is replaced by a stub before
 anything imports it, the renderer is called directly, and the samples that
-come out are inspected. That is why FLAC being lossless is a fact here rather
-than a claim — the bytes are compared.
+come out are inspected. That is how this suite shows that FLAC is lossless: it
+compares the bytes.
 
-## test_platform.py — the three systems
+## test_platform.py: the three systems
 
 Only one operating system is ever present, so the code is driven into each
 shape deliberately: no recycle bin, no encoder, Windows naming rules, a path
 near the 260-character limit.
 
 This proves the code takes the right branch, not that the branch works where
-it runs: only the system itself shows that. CI runs the Python suites on
-macOS and on Windows for exactly that reason — it used to run them on Linux,
-where a check about a filesystem that ignores case had nothing to catch and
-skipped itself for weeks.
+it runs: only the system itself shows that, so CI runs the Python suites on
+macOS and on Windows. It used to run them on Linux, where a check about a
+filesystem that ignores case had nothing to catch and skipped itself for
+weeks.
 
-## test_store.py — the history database
+## test_store.py: the history database
 
 The schema, the migrations and the move of every old `session.json` into the
 database. The migrations run for real on SQLite, the way the app runs them at
 start, and a chain of test-only migrations stands in for the ones later
-versions will add — so the backup taken first, and the rollback when one
+versions will add. That way the backup taken first, and the rollback when one
 fails halfway, are checked before there is a second real migration to need
 them.
 
-## test_ports.py — the MIDI ports
+## test_ports.py: the MIDI ports
 
 `midi/ports.py` is the one module that talks to the MIDI library, and this
 suite runs it against `fake_libremidi.py`, a stand-in for the library with the
@@ -104,7 +104,7 @@ on the Mac and the Windows machine. The other suites stub the library out with
 `sys.modules["pylibremidi"] = None`; the ones for code built on `ports.py`
 use `fake_midi.py`, a system with nothing behind it.
 
-## test_midi.py — notes beside the audio
+## test_midi.py: notes beside the audio
 
 So far: the three sentences that stop Start (no track that records sound, a
 track that takes notes with no port, two on one port), that the card check
@@ -195,7 +195,7 @@ to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 
-## test_click.py — the metronome's click
+## test_click.py: the metronome's click
 
 The click's arithmetic and sounds (`audio/click.py`): the four signatures,
 their tempo ranges and accents, every click of an hour on its frame at a tempo
@@ -213,7 +213,7 @@ take snapped to its bars. The metronome's heavy arithmetic goes here rather
 than in `test_engine.py`, whose length bounds the whole run. Later tasks add to
 it.
 
-## test_tempo.py — counting a tempo
+## test_tempo.py: counting a tempo
 
 `audio/tempo.py` counts a take's tempo with numpy alone (spec Part 10). The
 suite makes takes as the research harness does, a kick, a snare and hats
@@ -231,7 +231,7 @@ less than a third of the take as one array of memory. The time of a 3-minute
 take is printed, not asserted. No sound card, no MIDI port: WAVs and `.mid` files
 in a temporary folder. Run with `python tests/test_tempo.py`.
 
-## The interface — in ui/, in TypeScript
+## The interface: in ui/, in TypeScript
 
 Beside the code it tests, in two kinds:
 
@@ -258,10 +258,10 @@ run in three parts on three machines at once (`--shard`), since on one they
 took longer than everything else together. To run one part here, as CI does:
 `npm run test:e2e -- --shard=1/3`.
 
-## docs_screenshots.py — the pictures in the docs
+## docs_screenshots.py: the pictures in the docs
 
 Not a suite: it checks nothing and `run_all.py` does not run it. It takes the
-pictures in the README and `docs/using-it.md` — the built bundle and the
+pictures in the README and `docs/using-it.md` from the built bundle and the
 same `ui/e2e/fake-bridge.js`, with a band of four on an XR18 and waveforms
 worked out from a song, so the pictures look like a rehearsal rather than a
 test. The two MIDI pictures lay the drummer on Both, from the port "TD-17",

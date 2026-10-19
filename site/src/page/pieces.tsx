@@ -274,19 +274,6 @@ export function shots({
         </Piece>
       ) : null,
     },
-    formats: {
-      left: true,
-      pieces: (
-        <div className="fmt">
-          <span>
-            16 <i>/</i> 24-bit
-          </span>
-          <span>
-            44.1 <i>·</i> 48 <i>·</i> 96 kHz
-          </span>
-        </div>
-      ),
-    },
     trash: null,
   }
 }

@@ -4,7 +4,7 @@ import photo from "./controller.webp"
 import { Paragraphs } from "./Md"
 import { CONTROLLER } from "./links"
 
-/** Viktor Baikov's controller: its words beside its photo. */
+/** Victor Baikov's controller: its words beside its photo. */
 export function Controller() {
   const { controller } = content
   const { lead, beats } = leadAndBeats(controller.body)

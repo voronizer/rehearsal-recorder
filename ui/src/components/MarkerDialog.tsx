@@ -62,7 +62,7 @@ export function MarkerDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-baseline gap-2">
-            Marker at
+            Mark at
             <span className="tnum">{formatMMSS(shown?.at ?? 0)}</span>
           </DialogTitle>
           <DialogDescription>
@@ -75,7 +75,7 @@ export function MarkerDialog({
         <ToggleGroup
           type="single"
           variant="switch"
-          aria-label="Kind of marker"
+          aria-label="Label"
           value={String(chosen)}
           onValueChange={(id) => id && setLabelId(Number(id))}
           className="w-full flex-wrap"
@@ -104,7 +104,7 @@ export function MarkerDialog({
               save()
             }
           }}
-          aria-label="Marker note"
+          aria-label="Comment"
         />
 
         <DialogButtons
@@ -119,7 +119,7 @@ export function MarkerDialog({
               className="text-muted-foreground hover:text-destructive"
             >
               <Trash2 />
-              Delete marker
+              Delete mark
             </Button>
           }
           action={<Button onClick={save}>Save</Button>}

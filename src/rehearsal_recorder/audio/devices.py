@@ -552,7 +552,7 @@ def channels_available(device_index, tracks):
         listed = ", ".join(homeless)
         return (
             f"{listed} {'has' if len(homeless) == 1 else 'have'} no input yet. "
-            f"“{name}” has {inputs} — give them one, or take them out of this "
+            f"“{name}” has {inputs}: give them one, or take them out of this "
             "rehearsal."
         )
 
@@ -567,7 +567,7 @@ def channels_available(device_index, tracks):
             if c in claimed:
                 return (
                     f"“{claimed[c]}” and “{t['name']}” are both on input {c}. "
-                    "Two tracks cannot share one — a stereo track takes the "
+                    "Two tracks cannot share one, and a stereo track takes the "
                     "input after its own as well."
                 )
             claimed[c] = t["name"]
@@ -588,12 +588,12 @@ def channels_available(device_index, tracks):
 
     if len(tracks) > have:
         return (
-            f"“{name}” has {inputs} — not enough for {len(tracks)} tracks. "
+            f"“{name}” has {inputs}, not enough for {len(tracks)} tracks. "
             "Record fewer at once, or use an interface with more inputs."
         )
     return (
         f"“{name}” has {inputs}, but the tracks go up to {wanted}. They were "
-        "set up for another interface — give them inputs this one has."
+        "set up for another interface: give them inputs this one has."
     )
 
 
@@ -618,11 +618,11 @@ def usable_output(device_index, samplerate, channels=2):
     try:
         info = sd.query_devices(device_index)
     except Exception:
-        return None, "That playback device is gone — using the system output."
+        return None, "That playback device is gone, so the take plays through the system output."
 
     name = (info or {}).get("name", "the chosen device")
     if (info or {}).get("max_output_channels", 0) < channels:
-        return None, f"“{name}” has no stereo output — using the system output."
+        return None, f"“{name}” has no stereo output, so the take plays through the system output."
 
     # An ASIO card is not asked in advance. The question costs a full load,
     # initialise and unload of the driver — on every take, since this runs
@@ -642,7 +642,7 @@ def usable_output(device_index, samplerate, channels=2):
             ))
         except DriverNotAnswering:
             return None, (
-                f"“{name}” did not answer in time — using the system output."
+                f"“{name}” did not answer in time, so the take plays through the system output."
             )
         except Exception as e:
             # This asked one question — will you take this format — so an
@@ -698,20 +698,20 @@ def output_complaint(name, error, samplerate, platform=sys.platform,
 
     if code == PA_DEVICE_UNAVAILABLE:
         return (
-            f"“{name}” is already in use — using the system output. Something "
-            "else has it: this app's own recording through the same card, or "
+            f"“{name}” is already in use, so the take plays through the system "
+            "output. Something else has it: this app's own recording through the same card, or "
             "another program. A card reached through ASIO allows only one at "
             "a time."
         )
     if code == PA_INVALID_SAMPLE_RATE or (code is None and fallback == "rate"):
         return (
-            f"“{name}” will not take {int(samplerate)} Hz right now — using "
-            "the system output. Another app may be holding it at a different "
+            f"“{name}” will not take {int(samplerate)} Hz right now, so the take "
+            "plays through the system output. Another app may be holding it at a different "
             f"rate; {_rate_holder(platform)}."
         )
     return (
-        f"“{name}” would not open — using the system output. The driver said: "
-        f"{error}"
+        f"“{name}” would not open, so the take plays through the system output. "
+        f"The driver said: {error}"
     )
 
 

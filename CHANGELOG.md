@@ -5,6 +5,27 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Plainer words in the app and the guide.** The player's row of marks is
+  called Marks, and a mark's dialog says “Mark at 1:24” and has a **Delete
+  mark** button. The interface check talks about your interface instead of
+  a card. Messages are plain sentences without dashes: when the chosen
+  output is gone, for example, the message says the take plays through the
+  system output. The guide, the README and reha.stream use the same words,
+  and the guide's pictures show Settings as it is now. reha.stream no
+  longer promises more than the app does, and its tile about formats is
+  gone.
+
+## 0.12.1
+
+- **Victor Baikov's controller on Windows.** It has been tried on Windows as
+  well as on a Mac, and the guide now says how to pair it there: in the
+  Bluetooth settings of Windows, before you pick it in **Settings →
+  Controls**. His name is spelled as he spells it, and reha.stream says his
+  repository also has a case to print on a 3D printer. The app itself is the
+  same as in 0.12.0.
+
 ## 0.12.0
 
 - **A new look: cobalt, calmer type, rounder corners and lower track
@@ -28,7 +49,7 @@ opening.
   and the clock: the red dot beside *Recording* no longer pulses. A red
   button is full red in the dark theme too.
 - **A controller for the band: start and stop a take away from the laptop.**
-  РЭХА now works with the Bluetooth MIDI controller Viktor Baikov built for
+  РЭХА now works with the Bluetooth MIDI controller Victor Baikov built for
   it ([reha-controller](https://github.com/viktor-baikov/reha-controller)).
   Its **Record/Stop** starts a take, and pressed again stops the take and
   keeps it; the laptop's **Stop** still opens the screen where you save or
@@ -39,8 +60,7 @@ opening.
   new **Settings → Controls**; on a Mac, **Pair Bluetooth MIDI controller**
   there opens the Mac's own Bluetooth MIDI window. What the controller
   sends never ends up in a track's notes, and a take keeps recording if the
-  controller drops out. Since its last changes it has been tried only on a
-  Mac.
+  controller drops out. It has been tried on a Mac and on Windows.
 - **Deleting, discarding and cropping happen at once, with Undo for 10 s.**
   Deleting a take or a rehearsal, clearing false starts, discarding a take
   and cropping one no longer ask first: a notice says what went, and its

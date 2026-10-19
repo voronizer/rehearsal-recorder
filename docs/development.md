@@ -35,26 +35,26 @@ Playwright for Python only takes the pictures in the docs
 (`packaging/make_icons.py`): `pip install playwright && playwright install
 chromium` if you change either.
 
-## Changing Python — the audio, the API, the packaging
+## Changing Python: the audio, the API, the packaging
 
 ```bash
 cd ui && npm run build && cd ..   # once, unless you are changing the interface
 python3 -m rehearsal_recorder
 ```
 
-`rehearsal-recorder` on its own does the same thing — `pip install -e .` puts
+`rehearsal-recorder` on its own does the same thing: `pip install -e .` puts
 that command in the venv.
 
-`npm run build` writes `ui/dist`, which is what the app serves. It is not
-committed — it is build output — so a fresh clone needs this once before the
-app will start. Run without it and the app says so instead of opening an
-empty window.
+`npm run build` writes `ui/dist`, which is what the app serves. It is build
+output and not committed, so a fresh clone needs this once before the app
+will start. Run without it and the app says so instead of opening an empty
+window.
 
 Restart after a Python change. There is no reload; the audio engine holds
 open streams and file handles, and restarting is both faster and less
 surprising than trying to swap them underneath.
 
-## Changing the interface — with hot reload
+## Changing the interface, with hot reload
 
 Two terminals.
 
@@ -71,19 +71,18 @@ The window opens Vite's dev server instead of the built bundle, so edits to
 anything under `ui/src/` appear immediately, with React state kept where it
 can be. Python still does all the audio.
 
-The two halves are wired together like this: the bridge (`window.pywebview.api`)
-is injected by pywebview into whatever page is loaded, so it works unchanged.
-The calls that do **not** go over that bridge — `/api/...` for everything the
-meters poll, `/media/...` for the audio the player reads — are forwarded by
-Vite to the Python server. That is the `server.proxy` block in
-`ui/vite.config.ts`, and it is why the Python server takes a fixed port
-(`DEV_SERVER_PORT` in `src/rehearsal_recorder/app.py`) in this mode rather
-than a random one: a config file cannot be told a number that is picked at
-startup.
+pywebview injects the bridge (`window.pywebview.api`) into whatever page is
+loaded, so it works unchanged. Vite forwards the calls that do **not** go
+over that bridge to the Python server: `/api/...` for everything the meters
+poll, and `/media/...` for the audio the player reads. That is the
+`server.proxy` block in `ui/vite.config.ts`, and it is why the Python server
+takes a fixed port (`DEV_SERVER_PORT` in `src/rehearsal_recorder/app.py`) in
+this mode rather than a random one: a config file cannot be told a number
+that is picked at startup.
 
-If the window opens but every meter sits at zero, the forwarding is what to
-look at. The two ports have to agree — 17817 in `app.py` and in
-`vite.config.ts`, 5173 for Vite itself.
+If the window opens but every meter sits at zero, look at the forwarding. The
+ports have to agree: 17817 in `app.py` and in `vite.config.ts`, and 5173 for
+Vite itself.
 
 ## Before committing an interface change
 
@@ -92,8 +91,8 @@ cd ui && npm test && npm run build && npm run test:e2e && cd ..
 python tests/run_all.py
 ```
 
-The browser tests drive `ui/dist`, not `ui/src`, so a change that has not
-been built is a change they cannot see.
+The browser tests drive `ui/dist`, not `ui/src`, so they cannot see a change
+that has not been built.
 
 ## Tests
 
@@ -107,9 +106,9 @@ What each is for: [tests/README.md](../tests/README.md).
 
 CI (`.github/workflows/checks.yml`) runs the Python suites on macOS and on
 Windows, on every push to main and every pull request that changes more than
-the website. Both, because the two systems disagree about the things this
-app does most: a filesystem that ignores case, a file that cannot be moved
-while it is open, a code page with no Cyrillic. The interface's tests run
+the website. It runs them on both because the two systems disagree about the
+things this app does most: a filesystem that ignores case, a file that cannot
+be moved while it is open, a code page with no Cyrillic. The interface's tests run
 once, on Linux: they run in a browser against a faked Python side, and
 nothing in them depends on the system.
 
@@ -120,22 +119,22 @@ nothing in them depends on the system.
 build.bat              # Windows
 ```
 
-They are in the repository root rather than in `packaging/` because
-double-clicking them is the point. What they drive — the PyInstaller spec —
-lives in `packaging/`.
+Either one builds the interface, makes a private venv, packages everything
+with PyInstaller, and runs the built app's own self-test. Details and what
+the self-test is for: [building.md](building.md).
 
-Builds the interface, makes a private venv, packages everything with
-PyInstaller, and runs the built app's own self-test. Details and what the
-self-test is for: [building.md](building.md).
+They are in the repository root rather than in `packaging/` because they are
+meant to be double-clicked. The PyInstaller spec they drive lives in
+`packaging/`.
 
 ## Changing the history's schema
 
-The rehearsal history — `library.sqlite`, in the recordings folder — is
+The rehearsal history (`library.sqlite`, in the recordings folder) is
 described twice on purpose: `store/models.py` says what the code expects,
 and the migrations under `store/migrations/versions/` say how a database on
 disk gets there. `tests/test_store.py` fails the moment the two drift apart,
-so a schema change always means writing the migration for it, not just
-editing the models.
+so a schema change always needs a migration as well as the edit to the
+models.
 
 1. Edit `store/models.py`.
 2. Regenerate the migration against a clean database:
@@ -146,33 +145,33 @@ editing the models.
    alembic -c alembic.ini revision --autogenerate -m "<what changed>"
    ```
 
-3. Read the file Alembic just wrote — autogenerate gets the shape right and
+3. Read the file Alembic just wrote. Autogenerate gets the shape right and
    the judgement wrong:
    - SQLite can barely `ALTER` a table. Adding a column, or dropping one
      that is in no index or constraint, works in place (`ALTER TABLE … ADD
      COLUMN` / `DROP COLUMN`, SQLite 3.35 and later), and that is what to use
      on `rehearsal` and `take`. Anything more needs batch mode (`with
      op.batch_alter_table(...) as batch:`), which rebuilds the table: a copy,
-     `DROP TABLE`, and a rename. With foreign keys on — and the app always
-     turns them on — that `DROP TABLE` deletes the rows of every table that
+     `DROP TABLE`, and a rename. With foreign keys on (and the app always
+     turns them on), that `DROP TABLE` deletes the rows of every table that
      points at it with `ON DELETE CASCADE`: rebuilding `take` this way empties
      `take_file`, `marker` and `cloud_copy`. Batch mode is safe only on a
      table nothing cascades from. `env.py` renders migrations in batch mode,
      so check what the generated file does to those two tables; migration
      0002 shows the in-place way.
-   - A new column that is `NOT NULL` needs a `server_default` — the existing
-     rows have no value to put there otherwise, and the `ALTER` fails against
+   - A new column that is `NOT NULL` needs a `server_default`. Otherwise the
+     existing rows have no value to put there, and the `ALTER` fails against
      real data even though it succeeds against an empty test database.
    - Moving data from one shape to another (splitting a column, backfilling
      from another table) is not something autogenerate can write. Add it by
      hand, with `op.execute` or a small `sa.table()` for the rows it touches.
 4. Add a check to `tests/test_store.py` that loads data in the *previous*
-   revision's shape and confirms it still reads correctly after the upgrade —
-   see `migrations_with` there for building a database on an older revision.
+   revision's shape and confirms it still reads correctly after the upgrade.
+   See `migrations_with` there for building a database on an older revision.
    This is what caught the previous migration's backup-and-rollback behaviour
    before there was a second real migration to exercise it.
 5. `alembic -c alembic.ini check` should say "No new upgrade operations
-   detected" — if it does not, `models.py` and the migrations still disagree.
+   detected". If it does not, `models.py` and the migrations still disagree.
 
 ## A few things that will save you time
 
@@ -181,14 +180,14 @@ reused, peaks use scalar comparisons, nothing prints. That thread has a
 deadline.
 
 **Platform differences go in `platform_support.py`**, all of them. Scattered
-`sys.platform` checks are how this quietly became macOS-only once already.
+`sys.platform` checks are how this became macOS-only once already.
 
 **`~/.rehearsal-recorder/config.json`** holds the settings, and
 `~/RehearsalRecordings/` the takes. Delete the config to see what a first run
 looks like.
 
 **`~/.rehearsal-recorder/crash.log`** gets a Python traceback for every
-thread if the process dies hard — including the threads that are not yours.
+thread if the process dies hard, including the threads that are not yours.
 
 **`packaging/run-debug.sh`** (macOS) runs the app with the allocator checking
 itself on every operation. Slow, but a memory fault lands on the bad write
@@ -196,7 +195,7 @@ instead of on some innocent allocation later.
 
 ## Where things are
 
-Python does the audio — capture, mixing and playback through
+Python does the audio: capture, mixing and playback through
 sounddevice/PortAudio, with numpy for the sample work. The interface is React
 + Tailwind + shadcn/ui, running in a pywebview window. A small local HTTP
 server on 127.0.0.1 hands the interface its files, serves the audio to the
@@ -230,7 +229,7 @@ ui/src/screens/             one file per screen
 ui/src/components/          player, timeline, waveform, take strip, dialogs
 ui/dist/                    the built interface (build output, not in git)
 
-tests/                      the four suites
+tests/                      the Python suites
 docs/                       this file and its neighbours
 packaging/                  the PyInstaller spec, the debug-allocator run, and
                             the app's icon: icon.svg and icon-small.svg, drawn
@@ -245,7 +244,7 @@ Nothing but the entry points, the package metadata and the files GitHub
 insists on reading from the root (`README`, `LICENSE`, `CHANGELOG`,
 `CONTRIBUTING`, `.github/`) lives there.
 
-Several decisions in here look odd until you know why — playback in Python
+Several decisions in here look odd until you know why: playback in Python
 rather than the browser, the meters deliberately not using the pywebview
 bridge, raw PCM on disk instead of WAV while recording. Those are written
 down in [design-notes.md](design-notes.md), along with the ones that were

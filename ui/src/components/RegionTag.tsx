@@ -129,7 +129,7 @@ export function RegionTag({
                   <X className="size-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Clear it — Repeat then loops the whole take</TooltipContent>
+              <TooltipContent>Clear it, then Repeat loops the whole take</TooltipContent>
             </Tooltip>
           </div>
         )}

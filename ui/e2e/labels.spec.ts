@@ -62,9 +62,9 @@ test("the marker dialog's buttons are the labels, in their order, the first chos
   // interface gives it the first label itself.
   await startRehearsal(page)
   await recordTake(page)
-  await page.getByRole("button", { name: "Add marker" }).click()
+  await page.getByRole("button", { name: "Add mark" }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog.getByText("Marker at")).toBeVisible()
+  await expect(dialog.getByText("Mark at")).toBeVisible()
   expect(await dialog.locator("[role='radio'][aria-checked]").allInnerTexts()).toEqual([
     "Solo",
     "Note",
@@ -343,7 +343,7 @@ test("a label dragged to the top is the first, and a new mark gets it", async ({
   await page.keyboard.press("Escape")
   await startRehearsal(page)
   await recordTake(page)
-  await page.getByRole("button", { name: "Add marker" }).click()
+  await page.getByRole("button", { name: "Add mark" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByRole("radio", { name: "Do again" })).toHaveAttribute("aria-checked", "true")
   expect((await dialog.locator("[role='radio'][aria-checked]").allInnerTexts())[0]).toBe("Do again")
@@ -447,8 +447,8 @@ test("a folder typed in brings its library's labels to the marker dialog", async
   await page.keyboard.press("Escape")
   await startRehearsal(page)
   await recordTake(page)
-  await page.getByRole("button", { name: "Add marker" }).click()
+  await page.getByRole("button", { name: "Add mark" }).click()
   const dialog = page.getByRole("dialog")
-  await expect(dialog.getByText("Marker at")).toBeVisible()
+  await expect(dialog.getByText("Mark at")).toBeVisible()
   expect(await dialog.locator("[role='radio'][aria-checked]").allInnerTexts()).toEqual(["Riff", "Tempo"])
 })

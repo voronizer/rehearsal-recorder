@@ -405,5 +405,5 @@ function Column({
 function tabLabel(song: string | null, take: Take, status: string | null): string {
   const what = song ? `${song}, take ${take.go}` : `Take ${take.take_number}`
   const base = `${what}, ${formatMMSS(take.duration_sec)}${take.starred ? ", starred" : ""}`
-  return status ? `${base} — ${status}` : base
+  return status ? `${base}, ${status.charAt(0).toLowerCase()}${status.slice(1)}` : base
 }

@@ -57,7 +57,7 @@ export function takeCloudStatus(
  *  readers both key off, not replace it. */
 export function takeButtonLabel(take: Take, status: string | null): string {
   const base = `Take ${take.take_number} ${take.name}${take.starred ? ", starred" : ""}`
-  return status ? `${base} — ${status}` : base
+  return status ? `${base}, ${status.charAt(0).toLowerCase()}${status.slice(1)}` : base
 }
 
 /**

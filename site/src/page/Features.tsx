@@ -17,9 +17,9 @@ const LAYOUT: Record<Id, string> = {
   cloud: "tile s2",
   // A row of its own, its words beside the panel as the health tile's are.
   sets: "tile s6",
-  formats: "tile s2",
-  // Wide, so the last row is as full as the others.
-  trash: "tile s4 word",
+  // A row of its own on a desk; on two columns, beside the cloud tile, so
+  // neither is left with a hole beside it.
+  trash: "tile s6d word",
 }
 
 /** The tiles with their words beside the piece, not over it. */
@@ -45,7 +45,7 @@ export function Features({ data }: { data: PieceData }) {
     <section className="section" id="features">
       <div className="head">
         <h2 className="h2">{features.title}</h2>
-        <p className="lede">{features.lede}</p>
+        {features.lede && <p className="lede">{features.lede}</p>}
       </div>
       <div className="bento">
         {features.tiles.map((tile) => {

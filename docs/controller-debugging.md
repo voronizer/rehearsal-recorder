@@ -76,6 +76,6 @@ song/take catalog. Actual names/numbers are previewed locally; only release send
 one generation-bound absolute Select Take/Select Song request. Existing relative
 navigation remains supported for old peers/diagnostics. The worker rejects stale
 catalog identities before opening playback/changing the next song. Back/cancel
-never sends a selection. Tests/test_controller_browse.py covers this protocol
+never sends a selection. tests/test_controller_browse.py covers this protocol
 with fake MIDI/audio and temporary recordings. run_all.py runs fourteen suites.
 The optional Mac bridge must also route CC89..93, CC110 and Notes74/75.

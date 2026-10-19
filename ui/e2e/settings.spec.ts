@@ -1094,7 +1094,7 @@ test.describe("Under the hood", () => {
     // way it was tried, each as what was tried and what came of it.
     await setFake(page, "__CHECK_RESULT__", "no_sound")
     await start.click()
-    await said("failed", "The card opens, but sends no sound", "triangle-alert", "--destructive")
+    await said("failed", "The interface opens, but sends no sound", "triangle-alert", "--destructive")
     await expect(result).toContainText("delivers little or nothing")
     await expect(result.getByRole("listitem")).toHaveText([
       "The settings in force: opens, but sent 1,024 of ~48,000 frames",
@@ -1317,7 +1317,7 @@ test.describe("on a machine shaped like Windows", () => {
     ])
     await page.getByRole("option", { name: "ASIO" }).click()
     await page.click("#input-device")
-    await expect(page.getByRole("option")).toHaveText(["X32 USB · up to 16 ch"])
+    await expect(page.getByRole("option")).toHaveText(["X32 USB · up to 16 inputs"])
     // Changing the driver saved nothing on its own; picking the card does.
     expect((await calls(page, "set_recording_format")).some((c) => c.args[0] === 3)).toBe(false)
     await page.getByRole("option").first().click()
@@ -1515,7 +1515,7 @@ test.describe("a newer version", () => {
   for (const [before, said] of [
     ["window.__BUILT__ = true; window.__CHECKED__ = true;", "This is the latest version"],
     ["window.__BUILT__ = true;", "Not checked yet"],
-    ["", "Run from source, the app does not check"],
+    ["", "Run from source, so the app does not check"],
   ]) {
     test(`with none newer, there is no dot, and it says: ${said}`, async ({ page }) => {
       await openApp(page, { before })

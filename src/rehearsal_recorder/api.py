@@ -641,7 +641,7 @@ def _copy_detail(what, res):
         said = f"{mix} of the mix and every track"
     else:
         said = f"{mix} of the mix, {tracks} of every track"
-    note = f" — {res['note']}" if res.get("note") else ""
+    note = f". {res['note']}" if res.get("note") else ""
     return f"{said}{note}"
 
 
@@ -1621,7 +1621,7 @@ class Api:
             if self._recorder is not None:
                 return {
                     "ok": False,
-                    "error": "Not while recording — stop the take first, then "
+                    "error": "Not while recording. Stop the take first, then "
                              "look again.",
                 }
             self.stop_monitor()
@@ -1813,7 +1813,7 @@ class Api:
                 return {"ok": False, "error": "No MIDI controller input available"}
             inp, ambiguous = find_port(selected_input, system.inputs())
             if inp is None or ambiguous:
-                return {"ok": False, "error": "The selected controller input cannot be identified. Connect the controller, refresh the port list and select its input again."}
+                return {"ok": False, "error": "The selected controller input cannot be identified. Connect the controller, press Look again and select its input again."}
             outputs = system.outputs()
             if selected_output is None:
                 matches = controller_feedback(inp, outputs)
@@ -1823,7 +1823,7 @@ class Api:
             elif isinstance(selected_output, dict):
                 out, ambiguous = find_port(selected_output, outputs)
                 if out is None or ambiguous:
-                    return {"ok": False, "error": "The selected controller feedback output cannot be identified. Refresh the port list and select its output again."}
+                    return {"ok": False, "error": "The selected controller feedback output cannot be identified. Press Look again and select its output again."}
             else:
                 return {"ok": False, "error": "Invalid feedback output"}
             tracks = (self._session or {}).get("tracks", self._config.get("tracks", []))
@@ -2909,7 +2909,7 @@ class Api:
             return done
 
         result = self._journaled(
-            "recover", f"Recovering “{draft_dir.name}”", draft_dir, None, work)
+            "recover", f"Recovering a take of “{r['name']}”", draft_dir, None, work)
         if result.get("ok") is False:
             return {**result, "ended": ended}
 
@@ -5887,7 +5887,7 @@ class Api:
         # finished — the file in the band's folder, and its record.
         if self._cloud_queue.states(str(folder)).get(int(take_number)):
             return {"ok": False, "error":
-                    "This take is still being copied to the cloud — remove it "
+                    "This take is still being copied to the cloud. Remove it "
                     "once the copy has finished."}
 
         # Not a copy another take names too (two rows naming one file, as an

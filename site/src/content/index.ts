@@ -25,7 +25,7 @@ export type SiteContent = {
     caption: string
     phoneCaption: string
   }
-  /** Viktor Baikov's controller: its words, a `- ` list of three, its fine
+  /** Victor Baikov's controller: its words, a `- ` list of three, its fine
    *  print, its link's words and what its photo shows. */
   controller: { title: string; body: string; finePrint: string; link: string; photo: string }
   features: { title: string; lede: string; tiles: Section[] }
@@ -45,7 +45,6 @@ export const TILES = [
   "names",
   "cloud",
   "sets",
-  "formats",
   "trash",
 ] as const
 export const STEPS = ["setup", "record", "keep", "history", "compare"] as const

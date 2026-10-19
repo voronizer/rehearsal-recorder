@@ -211,7 +211,7 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
         {!update.on
           ? "Not checking for new versions."
           : hood.running_as !== "built"
-            ? "Run from source, the app does not check."
+            ? "Run from source, so the app does not check."
             : update.checked
               ? "This is the latest version."
               : "Not checked yet."}
@@ -474,8 +474,8 @@ export function UnderTheHood() {
           <Row label="Local server">
             <span className="font-mono text-xs">{hood.server_url}</span>
             <p className="mt-1 text-xs text-muted-foreground">
-              The server hands the interface and the audio to this machine only (127.0.0.1) and
-              lives as long as the app is open.
+              The server hands the app's screens and the audio to this machine only (127.0.0.1)
+              and lives as long as the app is open.
             </p>
           </Row>
         </dl>
@@ -652,7 +652,7 @@ function CheckTheInterface({ disabled, name }: { disabled: boolean; name?: strin
             <p>
               {works
                 ? sentence(check?.signal ?? "")
-                : "The card is fine; the band is not reaching it. Play or talk into the inputs while it listens, or look at where the card's own routing sends them, and check again."}
+                : "The interface is fine; the band is not reaching it. Play or talk into the inputs while it listens, or look at where the interface's own routing sends them, and check again."}
             </p>
             <ul
               aria-label="Inputs with signal"

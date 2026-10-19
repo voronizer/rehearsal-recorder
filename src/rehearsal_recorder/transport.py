@@ -59,7 +59,7 @@ class Transport(ControlAPI):
         # GUI calls wait; remote toggles must never execute later unexpectedly.
         # Lock order is action gate, file lock, player lock, stream lock.
         if not self._gate.acquire(blocking=wait):
-            return {"ok": False, "result": "busy", "error": "Still saving or handling another transport action"}
+            return {"ok": False, "result": "busy", "error": "Still saving, or busy with another command"}
         outer = not self._busy
         if outer:
             self._busy = True

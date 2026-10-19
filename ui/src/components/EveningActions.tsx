@@ -57,7 +57,7 @@ export function EveningActions({
     : !takes.some((t) => t.starred)
       ? "No take has ★"
       : toSend.length > 0
-        ? "Copy every ★ take to the cloud folder, as What gets sent says"
+        ? "Copy every ★ take to the cloud folder, as set in Settings › Folders"
         : onTheWay
           ? "Every ★ take is in the cloud folder or on its way"
           : "Every ★ take is in the cloud folder"

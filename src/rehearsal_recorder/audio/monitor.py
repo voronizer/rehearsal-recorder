@@ -99,8 +99,8 @@ class LevelMonitor:
         if self.error is None and self._heartbeat.silent():
             card = f"“{self._name}”" if self._name else "the audio interface"
             self.error = (
-                f"No sound from {card} for {heartbeat.SILENCE_SEC:.0f} seconds "
-                "— it was unplugged, switched off or stopped answering. Plug "
+                f"No sound from {card} for {heartbeat.SILENCE_SEC:.0f} seconds. "
+                "It was unplugged, switched off or stopped answering. Plug "
                 "it back in and press Check signal."
             )
         return self.error

@@ -35,7 +35,7 @@ const mapRow = (page: Page) =>
 const player = (page: Page) => transport(page).locator("xpath=..")
 
 const QUIET =
-  "Playback stopped: nothing has gone out through “Interface” for 3 seconds — it " +
+  "Playback stopped: nothing has gone out through “Interface” for 3 seconds. It " +
   "was unplugged, switched off or stopped answering. Press play to try it again."
 
 /** A take of the evening open in the player, loaded and settled. */
@@ -103,10 +103,10 @@ test.describe("the transport", () => {
           return { x: r.x, y: r.y, width: r.width, height: r.height }
         }
         const mark = document.querySelector(
-          "button[aria-label='Add marker'], button[aria-label='Edit marker']"
+          "button[aria-label='Add mark'], button[aria-label='Open mark']"
         )
         return {
-          near: mark?.getAttribute("aria-label") === "Edit marker",
+          near: mark?.getAttribute("aria-label") === "Open mark",
           transport: rect(document.querySelector("[role='toolbar'][aria-label='Transport']")),
           timeline: rect(document.querySelector("[role='group'][aria-label='Take timeline']")),
           mark: rect(mark),
@@ -361,9 +361,9 @@ test.describe("the marker's kind", () => {
     })
     await startRehearsal(page)
     await recordTake(page)
-    await page.getByRole("button", { name: "Add marker" }).click()
+    await page.getByRole("button", { name: "Add mark" }).click()
     const dialog = page.getByRole("dialog")
-    await expect(dialog.getByText("Marker at")).toBeVisible()
+    await expect(dialog.getByText("Mark at")).toBeVisible()
 
     // The kinds are radios of one group, the first chosen.
     const kinds = dialog.getByRole("radio")
@@ -385,7 +385,7 @@ test.describe("the marker's kind", () => {
     // Tab leaves the group for the next control, and Shift+Tab for the
     // one before; the group's own box is no stop to be handed back from.
     await page.keyboard.press("Tab")
-    await expect(dialog.getByRole("textbox", { name: "Marker note" })).toBeFocused()
+    await expect(dialog.getByRole("textbox", { name: "Comment" })).toBeFocused()
     // Back to the radio the group last had, which is where its tab stop is.
     await page.keyboard.press("Shift+Tab")
     await expect(kinds.nth(1)).toBeFocused()
@@ -411,10 +411,10 @@ test.describe("the marker's kind", () => {
     })
     await startRehearsal(page)
     await recordTake(page)
-    await page.getByRole("button", { name: "Add marker" }).click()
+    await page.getByRole("button", { name: "Add mark" }).click()
     const dialog = page.getByRole("dialog")
     const kinds = dialog.getByRole("radio")
-    const note = dialog.getByRole("textbox", { name: "Marker note" })
+    const note = dialog.getByRole("textbox", { name: "Comment" })
     const save = dialog.getByRole("button", { name: "Save" })
     await expect(kinds).toHaveCount(3)
 
@@ -445,10 +445,10 @@ test.describe("the marker's kind", () => {
     })
     await startRehearsal(page)
     await recordTake(page)
-    await page.getByRole("button", { name: "Add marker" }).click()
+    await page.getByRole("button", { name: "Add mark" }).click()
     const dialog = page.getByRole("dialog")
     const kinds = dialog.getByRole("radio")
-    await expect(dialog.getByRole("textbox", { name: "Marker note" })).toBeFocused()
+    await expect(dialog.getByRole("textbox", { name: "Comment" })).toBeFocused()
 
     // Back to the chosen kind, and along to the next: the arrow moves the
     // focus and leaves the choice where it was.
@@ -480,20 +480,20 @@ test.describe("the marker's kind", () => {
     })
     await startRehearsal(page)
     await recordTake(page)
-    await page.getByRole("button", { name: "Add marker" }).click()
+    await page.getByRole("button", { name: "Add mark" }).click()
     await page.getByRole("radio", { name: "Went wrong" }).click()
     await page.getByRole("dialog").getByRole("button", { name: "Save" }).click()
     await expect(page.getByRole("dialog")).toHaveCount(0)
 
     // The marker opened again is a fresh dialog, with Went wrong chosen.
-    await page.getByRole("button", { name: /^Edit marker at/ }).click()
+    await page.getByRole("button", { name: /^Edit mark at/ }).click()
     const dialog = page.getByRole("dialog")
     const kinds = dialog.getByRole("radio")
     await expect(kinds.nth(2)).toHaveAttribute("aria-checked", "true")
     expect(await kinds.evaluateAll((els) => els.map((el) => (el as HTMLElement).tabIndex))).toEqual([
       -1, -1, -1,
     ])
-    await expect(dialog.getByRole("textbox", { name: "Marker note" })).toBeFocused()
+    await expect(dialog.getByRole("textbox", { name: "Comment" })).toBeFocused()
     await page.keyboard.press("Shift+Tab")
     await expect(kinds.nth(2)).toBeFocused()
   })
@@ -505,10 +505,10 @@ test.describe("the marker's kind", () => {
     })
     await startRehearsal(page)
     await recordTake(page)
-    await page.getByRole("button", { name: "Add marker" }).click()
+    await page.getByRole("button", { name: "Add mark" }).click()
     const dialog = page.getByRole("dialog")
     const kinds = dialog.getByRole("radio")
-    const note = dialog.getByRole("textbox", { name: "Marker note" })
+    const note = dialog.getByRole("textbox", { name: "Comment" })
     await expect(note).toBeFocused()
 
     // Radix makes a focused kind its group's stop. Left on Solo while Went
@@ -643,7 +643,7 @@ test.describe("the marks and the region", () => {
     await settled(page)
     const chip = page.getByRole("button", { name: "0:04", exact: true }).locator("xpath=..")
     const row = chip.locator("xpath=..")
-    await expect(row).toContainText("Markers")
+    await expect(row).toContainText("Marks")
     expect((await chip.boundingBox())!.height).toBeCloseTo(30, 0)
     // One group, 24 px apart inside it (Q1): the row of marks starts 24 px
     // under the master, which is the last of the timeline.
@@ -695,7 +695,7 @@ test.describe("the marks and the region", () => {
     await says(loop, "Repeat it (R)")
     await says(
       page.getByRole("button", { name: "Clear the loop region" }),
-      "Clear it — Repeat then loops the whole take"
+      "Clear it, then Repeat loops the whole take"
     )
     await loop.click()
     await expect(loop).toHaveAttribute("aria-pressed", "true")

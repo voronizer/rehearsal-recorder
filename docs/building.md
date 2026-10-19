@@ -2,6 +2,7 @@
 
 How the app becomes something you double-click, and how the GitHub
 release builds work.
+
 ## Packaging
 
 `build.command` on macOS and `build.bat` on Windows do all of this in one
@@ -25,10 +26,11 @@ On macOS the self-test to run is the one inside the `.app`. `dist/Reha/Reha`
 is the same program before it is wrapped, with no Info.plist beside it, so
 its "version on the file" check fails though nothing else is wrong.
 
-One folder you open, with everything inside: Python, numpy, PortAudio through
-sounddevice, libsndfile through soundfile, the window toolkit and the built
-interface. Nothing is downloaded at startup — a rehearsal room with no wifi is
-normal, and an app that needs the internet before it can record is useless.
+The result is one folder you open, with everything inside: Python, numpy,
+PortAudio through sounddevice, libsndfile through soundfile, the window toolkit
+and the built interface. Nothing is downloaded at startup: a rehearsal room
+with no wifi is normal, and an app that needs the internet before it can
+record is useless.
 
 `ui/dist` has to be built first (`cd ui && npm run build`); the spec refuses
 to package without it rather than producing an app with no interface.
@@ -54,10 +56,10 @@ python.exe's icon. Run from source on macOS, the Dock is given the `.icns`,
 and the menu bar and About the app's name, version and copyright; otherwise
 they would say Python.
 
-**The self-test is the point.** A packaged app fails in a particular way: it
-starts, and then the first time it reaches for the sound card it turns out a
-native library was never bundled. Nothing in the source can catch that — only
-the built thing knows. So the built thing is asked:
+**The self-test** is there because a packaged app fails in a particular way:
+it starts, and then the first time it reaches for the sound card it turns out
+a native library was never bundled. Nothing in the source can catch that.
+Only the built app knows, so it is asked:
 
     $ dist/Reha/Reha --selftest
     РЭХА self-test on linux
@@ -81,14 +83,14 @@ Apple Developer certificate ($99/year) or an Authenticode certificate, so:
 
 - macOS: the first launch needs right-click → Open rather than a double-click.
   After that it opens normally. macOS also asks for microphone permission the
-  first time you record — the Info.plist key that makes that a question rather
-  than a silent kill is in the spec, and it is the single easiest thing to get
-  wrong in a packaged audio app.
-- Windows: SmartScreen may warn about an unrecognised publisher — "More info",
+  first time you record. The Info.plist key that makes that a question rather
+  than a silent kill is in the spec; it is the easiest thing to get wrong in a
+  packaged audio app.
+- Windows: SmartScreen may warn about an unrecognised publisher: "More info",
   then "Run anyway".
 
-Signing removes both. It is the only remaining thing between this and a clean
-double-click, and it is a purchase, not code.
+Signing removes both. It is the only thing left between this and a clean
+double-click, and what it takes is buying the certificates.
 
 **Builds for both systems** are in `.github/workflows/release.yml`. Publish a
 release on GitHub and it builds on a real Mac and a real Windows machine,
@@ -97,7 +99,3 @@ the zips to that release, then puts the website up for it. Run by hand, it
 asks what to do: **Rehearse the builds** (the default) runs the same builds
 without cutting a release, leaving them as workflow artifacts; **Put the site
 up again** deploys the latest release's website once more.
-
-This is also the only way this app has ever been built on Windows — there is
-no Windows in the environment it was written in, so the first real Windows
-build will be the one that workflow makes.
