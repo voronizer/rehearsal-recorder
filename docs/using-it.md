@@ -914,15 +914,16 @@ leaves a text field.
 
 ## A controller
 
-РЭХА works with one controller: the Bluetooth MIDI controller Viktor Baikov
+РЭХА works with one controller: the Bluetooth MIDI controller Victor Baikov
 built for it ([reha-controller](https://github.com/viktor-baikov/reha-controller)).
 With it, whoever is nearest can start and stop a take without going to the
 laptop. Other MIDI controllers do not work this way.
 
 To set it up, open **Settings → Controls** and pick the controller in the
-**Controller** list. On a Mac, if it is not in the list, press **Pair
-Bluetooth MIDI controller** to open the Mac's own Bluetooth MIDI window,
-pair it there, and come back. When the line under the list says
+**Controller** list. If it is not in the list, pair it first. On a Mac,
+press **Pair Bluetooth MIDI controller** to open the Mac's own Bluetooth
+MIDI window, pair it there, and come back. On Windows, pair it in the
+Bluetooth settings of Windows. When the line under the list says
 "Controller ready", it works.
 
 From the controller:

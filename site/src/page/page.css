@@ -99,7 +99,7 @@ body {
   .caption.on-phone { display: block; }
 }
 
-/* ---- Viktor Baikov's controller: its words beside its photo, or over it
+/* ---- Victor Baikov's controller: its words beside its photo, or over it
    on a phone. The photo goes to the block's edges, with no tile round it. ---- */
 .remote { background: var(--page-tile); border-radius: 28px; overflow: hidden; display: grid; }
 .remote .copy { padding: clamp(26px, 4.5vw, 56px); align-content: center; }

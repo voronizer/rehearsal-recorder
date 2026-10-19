@@ -28,7 +28,7 @@ opening.
   and the clock: the red dot beside *Recording* no longer pulses. A red
   button is full red in the dark theme too.
 - **A controller for the band: start and stop a take away from the laptop.**
-  РЭХА now works with the Bluetooth MIDI controller Viktor Baikov built for
+  РЭХА now works with the Bluetooth MIDI controller Victor Baikov built for
   it ([reha-controller](https://github.com/viktor-baikov/reha-controller)).
   Its **Record/Stop** starts a take, and pressed again stops the take and
   keeps it; the laptop's **Stop** still opens the screen where you save or
@@ -39,8 +39,7 @@ opening.
   new **Settings → Controls**; on a Mac, **Pair Bluetooth MIDI controller**
   there opens the Mac's own Bluetooth MIDI window. What the controller
   sends never ends up in a track's notes, and a take keeps recording if the
-  controller drops out. Since its last changes it has been tried only on a
-  Mac.
+  controller drops out. It has been tried on a Mac and on Windows.
 - **Deleting, discarding and cropping happen at once, with Undo for 10 s.**
   Deleting a take or a rehearsal, clearing false starts, discarding a take
   and cropping one no longer ask first: a notice says what went, and its
