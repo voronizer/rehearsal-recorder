@@ -4,6 +4,10 @@ import { formatMeter } from "@/lib/format"
 import { clickLines, clickOf, type TakeClick } from "@/lib/metronome"
 import { cn } from "@/lib/utils"
 
+/** What the lane says of a take that has no click, on screen and to a
+ *  screen reader. */
+const NO_CLICK = "Recorded without the click"
+
 /**
  * Master's lane, right of its plate and as tall as a track's (spec Part 8,
  * Q11 D): the take's click as stripes, a bar's taller and stronger than a
@@ -43,7 +47,7 @@ export function MasterClickLane({
     <div
       data-master-lane
       role="img"
-      aria-label={meter ? `Click ${formatMeter(meter.tempo, meter.signature)}` : "Recorded without the click"}
+      aria-label={meter ? `Click ${formatMeter(meter.tempo, meter.signature)}` : NO_CLICK}
       className={cn("relative h-full min-w-0 overflow-hidden rounded-md bg-well", className)}
     >
       <div data-click-lines aria-hidden className={cn("absolute inset-0", !on && "opacity-50")}>
@@ -85,7 +89,7 @@ export function MasterClickLane({
             Click <MeterText tempo={meter.tempo} signature={meter.signature} />
           </>
         ) : (
-          "Recorded without the click"
+          NO_CLICK
         )}
       </span>
     </div>
