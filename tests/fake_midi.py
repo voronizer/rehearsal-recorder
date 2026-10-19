@@ -49,6 +49,8 @@ class FakePortSystem:
     observer_notices = 0
 
     def __init__(self, ports=(), exclusive=False):
+        self._outputs = []
+        self.feedback = []
         self._ports = list(ports)
         self._watchers = []
         self._closed = False
@@ -68,6 +70,12 @@ class FakePortSystem:
 
     def inputs(self):
         return [] if self._closed else list(self._ports)
+
+    def outputs(self):
+        return list(self._outputs) if not self._closed else []
+
+    def open_output(self, info):
+        return FakeOutput(self, info)
 
     def watch(self, on_change):
         self._watchers.append(on_change)
@@ -128,3 +136,15 @@ class FakePortSystem:
             return
         for on_change in list(self._watchers):
             on_change()
+
+class FakeOutput:
+    def __init__(self, system, info):
+        self.system, self.info, self.closed = system, info, False
+    def connected(self):
+        return not self.closed and self.info in self.system._outputs
+    def send(self, data):
+        if not self.connected():
+            raise PortBusy("output disconnected")
+        self.system.feedback.append(bytes(data))
+    def close(self):
+        self.closed = True

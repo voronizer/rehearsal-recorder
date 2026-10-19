@@ -166,8 +166,10 @@ export function SongTab({
   const widest = useRef(0)
   useLayoutEffect(() => {
     const el = box.current
-    if (!el || el.offsetWidth <= widest.current) return
-    widest.current = el.offsetWidth
+    if (!el) return
+    const width = Math.ceil(el.getBoundingClientRect().width)
+    if (width <= widest.current) return
+    widest.current = width
     el.style.minWidth = `${widest.current}px`
   })
 

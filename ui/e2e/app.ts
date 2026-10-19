@@ -35,6 +35,10 @@ export const test = base.extend<{ pageErrors: string[] }>({
           }
         })
       }
+      await context.addInitScript(() => {
+        if (!Object.prototype.hasOwnProperty.call(navigator, "platform"))
+          Object.defineProperty(navigator, "platform", { get: () => "Linux x86_64", configurable: true })
+      })
       context.pages().forEach(watch)
       context.on("page", watch)
       await use(errors)

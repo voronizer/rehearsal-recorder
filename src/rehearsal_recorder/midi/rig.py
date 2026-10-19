@@ -200,6 +200,7 @@ class MidiRig:
     """
 
     def __init__(self, system, error=None, threads=True, now_ns=time.perf_counter_ns):
+        self._reserved = None
         self._system = system
         self._error = error
         self._now = now_ns
@@ -293,6 +294,13 @@ class MidiRig:
                     if track.echo is not None and (track.echo, track.name) not in self._echoes:
                         track.echo = None
             self._settle(listing)
+
+    def reserve_controller(self, saved):
+        """Remove the selected controller from instrument ownership and meters."""
+        with self._manage:
+            self._reserved = saved
+            if not self._closed:
+                self._look()
 
     def refresh(self) -> None:
         """Reads the list of ports again, as Look again on the setup screen asks."""
@@ -757,6 +765,14 @@ class MidiRig:
             return []
         try:
             listing = list(self._system.inputs())
+            if self._reserved:
+                reserved, ambiguous = find_port(self._reserved, listing)
+                if ambiguous:
+                    # Do not let a missing controller's ambiguous replacement
+                    # become an instrument merely because it has a new ID.
+                    listing = [p for p in listing if find_port(self._reserved, [p])[0] is None]
+                else:
+                    listing = [p for p in listing if p != reserved]
         except Exception:
             self._failed("listing the MIDI ports")
             with self._lock:

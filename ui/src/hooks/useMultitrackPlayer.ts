@@ -184,7 +184,7 @@ export function useMultitrackPlayer(
         if (broken) throw new Error(broken.error ?? `Missing file: ${broken.name}`)
         setMedia(info)
 
-        const opened = await api().player_open(tracks)
+        const opened = await api().player_open(tracks, true)
         if (cancelled) return
         if (!opened.ok) throw new Error(opened.error ?? "Could not open the take")
 
@@ -223,7 +223,7 @@ export function useMultitrackPlayer(
 
   // Poll the state while playing
   useEffect(() => {
-    if (!playing) return
+    if (!tracks) return
     let alive = true
     let timer = 0
 
@@ -232,7 +232,17 @@ export function useMultitrackPlayer(
       try {
         const s = await pollPython("player_state")
         if (!alive) return
-        if (s.open) applyState(s)
+        const matches = !s.tracks || (s.tracks.length === tracks.length &&
+          s.tracks.every((track, index) => track.file === tracks[index].file && track.name === tracks[index].name))
+        if (s.open && matches) {
+          openedRef.current = true
+          applyState(s)
+        } else {
+          openedRef.current = false
+          setPlaying(false)
+          anchor.current = null
+          heard({ level: 0 })
+        }
       } catch {
         /* the bridge blinked — skip this tick */
       }
@@ -244,7 +254,7 @@ export function useMultitrackPlayer(
       alive = false
       window.clearTimeout(timer)
     }
-  }, [playing, applyState])
+  }, [tracks, applyState])
 
   // Smooth cursor movement between answers from Python
   useEffect(() => {
@@ -430,7 +440,7 @@ export function useMultitrackPlayer(
     /** Opens a take that could not be opened once more, for a caller that
      *  says what to do once it is open. */
     openAgain: () => tryAgain(false),
-    pause: () => void call(() => api().player_pause()),
+    pause: () => call(() => api().player_pause()),
     restart: () => seek(region.a !== null && looping ? region.a : 0),
     skip: (delta: number) => seek(position + delta),
     seek,

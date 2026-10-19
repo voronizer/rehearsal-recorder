@@ -10,13 +10,17 @@ import { DraftsScreen } from "@/screens/DraftsScreen"
 import { Settings } from "@/screens/Settings"
 import {
   api,
+  poll,
   waitForApi,
+  type ControlState,
   type Draft,
   type PendingTake,
   type SessionState,
 } from "@/lib/api"
 import { useDialogFocusKeys } from "@/hooks/useSpacebar"
 import { useUndoKey } from "@/hooks/useUndoKey"
+import { heard } from "@/lib/listening"
+import { notify } from "@/lib/notices"
 import { reportBridgeError } from "@/lib/bridgeErrors"
 import { loadDeletionKind, wentTo } from "@/lib/deletion"
 import { loadKeys } from "@/lib/keys"
@@ -123,6 +127,79 @@ export function App() {
     }
     if (!back) setScreen({ name: "rehearsal" })
   }
+
+  // External transport changes navigate the same screens as UI commands.
+  const sessionRef = useRef(session)
+  sessionRef.current = session
+  const [controlState, setControlState] = useState<ControlState | null>(null)
+  const lastRemoteVolume = useRef<number | undefined>(undefined)
+  const externalAction = useRef(0)
+  const screenRef = useRef(screen)
+  screenRef.current = screen
+  useEffect(() => {
+    let alive = true
+    let timer = 0
+    const watch = async () => {
+      let delay = 1000
+      try {
+        // The presence check is cheap; a full snapshot also reads the library.
+        const controller = await poll("controller_state")
+        if (!alive) return
+        if (controller.enabled) {
+          delay = 300
+          const state = await poll("control_state")
+          if (alive) {
+            setControlState(state)
+            if (typeof state.playback_muted === "boolean") heard({ muted: state.playback_muted })
+            if (typeof state.master_volume === "number" && state.master_volume !== lastRemoteVolume.current) {
+              lastRemoteVolume.current = state.master_volume
+              heard({ volume: state.master_volume })
+            }
+            const current = screenRef.current
+            if (typeof state.rehearsal_active === "boolean" && state.rehearsal_active !== sessionRef.current.active) {
+              const latest = await refreshSession()
+              if (!alive) return
+              if (latest.active && ["setup", "history", "settings"].includes(current.name)) setScreen({ name: "rehearsal" })
+              else if (!latest.active && (current.name === "rehearsal" || current.name === "recording")) setScreen({ name: "setup" })
+            }
+            if (state.action_sequence < externalAction.current) externalAction.current = 0
+            if (state.events[0] && state.events[0].sequence > externalAction.current + 1) await refreshSession()
+            for (const action of state.events) {
+              if (action.sequence <= externalAction.current) continue
+              externalAction.current = action.sequence
+              if (action.ok && ["previous_take", "next_take", "previous_song", "next_song", "remove_take", "select_take", "select_song", "stop_keep", "record_stop"].includes(action.action)) await refreshSession()
+              if (alive && action.ok && action.action === "remove_take" && action.undo) {
+                offerUndo({ text: "Take removed", token: action.undo, onUndone: refreshSession })
+              }
+            }
+            if (alive && state.state === "recording" && current.name !== "recording" && state.take_number != null) {
+              await refreshSession()
+              if (alive) setScreen({ name: "recording", takeNumber: state.take_number,
+                takeName: state.take_name ?? `Take ${state.take_number}`, takeGo: state.take_go })
+            } else if (alive && current.name === "recording" && state.state === "ready") {
+              await refreshSession()
+              if (alive) setScreen({ name: "rehearsal" })
+            } else if (alive && current.name === "recording" && state.state === "error" &&
+                       state.events.some(e => e.sequence === state.action_sequence && e.action !== "stop_review")) {
+              notify({ key: "save-take", kind: "warning", text: state.error ?? "Could not save the take" })
+              if (state.pending_take) setScreen({ name: "review", take: state.pending_take })
+              else {
+                const drafts = await api().list_drafts()
+                if (alive) setScreen(drafts.length ? { name: "drafts", drafts } : { name: "rehearsal" })
+              }
+            }
+          }
+        } else {
+          setControlState(null)
+          heard({ muted: false })
+          lastRemoteVolume.current = undefined
+        }
+      } catch { /* temporary port/server interruption */ }
+      if (alive) timer = window.setTimeout(watch, delay)
+    }
+    void watch()
+    return () => { alive = false; window.clearTimeout(timer) }
+  }, [refreshSession])
 
   // Unsaved takes again, after an Undo brought back one discarded there
   // once the list had closed. Not over a take in hand.
@@ -297,6 +374,7 @@ export function App() {
     return (
       <Rehearsal
         session={session}
+        controlState={controlState}
         onStartTake={(takeNumber, takeName, takeGo) => {
           endDiscardOffer()
           setScreen({ name: "recording", takeNumber, takeName, takeGo })
@@ -320,7 +398,17 @@ export function App() {
         takeGo={screen.takeGo}
         tracks={session.tracks}
         lastAttempt={session.last_attempt}
-        onStopped={(take) => setScreen({ name: "review", take })}
+        onStopped={take => setScreen({ name: "review", take })}
+        onSaveFailed={async (error, take) => {
+          notify({ key: "save-take", kind: "warning", text: error })
+          if (take) {
+            setScreen({ name: "review", take })
+          } else {
+            const drafts = await api().list_drafts()
+            await refreshSession()
+            setScreen(drafts.length ? { name: "drafts", drafts } : { name: "rehearsal" })
+          }
+        }}
       />
     )
   }

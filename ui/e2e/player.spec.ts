@@ -39,6 +39,30 @@ async function secondTake(page: Page) {
 const transport = (page: Page) => page.getByRole("toolbar", { name: "Transport" })
 const keysList = (page: Page) => page.getByRole("dialog").filter({ hasText: "Keys in the player" })
 
+test("a take neither follows nor controls a different open player", async ({ page }) => {
+  await review(page)
+  await page.evaluate(() => {
+    const w = window as unknown as { __PLAYER_POLLS__:number; __RESTORE_PLAYER__:() => void; pywebview:{api:{player_state:() => Promise<Record<string,unknown>>}} }
+    const original = w.pywebview.api.player_state
+    w.__PLAYER_POLLS__ = 0
+    w.__RESTORE_PLAYER__ = () => { w.pywebview.api.player_state = original }
+    w.pywebview.api.player_state = async () => {
+      w.__PLAYER_POLLS__++
+      return {open:true, playing:true, position:99, duration:100, tracks:[{name:"Other", file:"/other/take.wav"}]}
+    }
+  })
+  await expect.poll(() => page.evaluate(() => (window as unknown as {__PLAYER_POLLS__:number}).__PLAYER_POLLS__)).toBeGreaterThan(1)
+  await expect(page.getByRole("button", {name:"Pause", exact:true})).toHaveCount(0)
+  await page.getByRole("button", {name:"Play", exact:true}).click()
+  expect(await callCount(page, "player_toggle")).toBe(0)
+  await page.evaluate(() => (window as unknown as {__RESTORE_PLAYER__:() => void}).__RESTORE_PLAYER__())
+  // A matching player becomes usable again after its next state poll.
+  await expect(async () => {
+    await page.getByRole("button", {name:"Play", exact:true}).click()
+    expect(await callCount(page, "player_toggle")).toBe(1)
+  }).toPass()
+})
+
 test.describe("the review screen", () => {
   test("names a first take, and puts its keys on its buttons", async ({ page }) => {
     await review(page)

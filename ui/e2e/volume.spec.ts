@@ -7,6 +7,7 @@ import {
   openHistory,
   recordTake,
   settled,
+  setFake,
   startRehearsal,
   test,
 } from "./app.ts"
@@ -41,6 +42,45 @@ async function lastArg(page: Page, name: string): Promise<number | undefined> {
 }
 
 test.describe("Playback volume in the header", () => {
+  test("controller mute uses the existing muted icon without changing volume", async ({ page }) => {
+    await openApp(page, { before: savedAt(0.4) + ";window.__CONTROLLER_ENABLED__ = true;" })
+    await setFake(page, "__CONTROL_STATE__", { playback_muted: true, master_volume: 0.4 })
+    await expect(headerVolume(page)).toHaveAccessibleDescription("Playback muted")
+    await expect(headerVolume(page).locator("svg")).toHaveClass(/lucide-volume-x/)
+    const slider = await openVolume(page)
+    await expect(slider).toHaveValue("0.4")
+    await page.keyboard.press("Escape")
+    await setFake(page, "__CONTROL_STATE__", { playback_muted: false, master_volume: 0.4 })
+    await expect(headerVolume(page).locator("svg")).toHaveClass(/lucide-volume-1/)
+    await expect(headerVolume(page)).not.toHaveAccessibleDescription("Playback muted")
+    await setFake(page, "__CONTROL_STATE__", { playback_muted: true, master_volume: 0.4 })
+    await expect(headerVolume(page)).toHaveAccessibleDescription("Playback muted")
+    await setFake(page, "__CONTROLLER_ENABLED__", false)
+    await expect(headerVolume(page)).not.toHaveAccessibleDescription("Playback muted")
+  })
+
+  test("unchanged recorder feedback does not reset a held slider", async ({ page }) => {
+    await openApp(page, { before: savedAt(0.4) + ";window.__CONTROLLER_ENABLED__ = true;" })
+    await page.evaluate(() => {
+      const w = window as unknown as { __VOLUME_POLLS__: number; pywebview: { api: { control_state: () => Promise<Record<string, unknown>> } } }
+      const original = w.pywebview.api.control_state
+      w.__VOLUME_POLLS__ = 0
+      w.pywebview.api.control_state = async () => {
+        w.__VOLUME_POLLS__++
+        return { ...await original(), master_volume: 0.4 }
+      }
+    })
+    const slider = await openVolume(page)
+    await expect.poll(() => page.evaluate(() => (window as unknown as {__VOLUME_POLLS__:number}).__VOLUME_POLLS__)).toBeGreaterThan(1)
+    const box = (await slider.boundingBox())!
+    await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2)
+    await page.mouse.down()
+    const value = await slider.inputValue()
+    await expect.poll(() => page.evaluate(() => (window as unknown as {__VOLUME_POLLS__:number}).__VOLUME_POLLS__)).toBeGreaterThan(4)
+    await expect(slider).toHaveValue(value)
+    await page.mouse.up()
+  })
+
   test("is there wherever a take can be played, and not while recording", async ({ page }) => {
     await openApp(page)
     await expect(headerVolume(page)).toBeVisible()

@@ -708,14 +708,10 @@ export function Setup({
     await stopMonitorQuietly(true)
     setStarting(true)
     dismiss(ERROR)
-    const res = await api().start_rehearsal(
-      name.trim() || "Rehearsal",
-      deviceIndex,
-      samplerate,
-      tracks,
-      bitDepth,
-      await chosenSet()
-    )
+    const res = await api().control_command("start_rehearsal", {
+      name: name.trim() || "Rehearsal", device_index: deviceIndex,
+      samplerate, tracks, bit_depth: bitDepth, set_id: await chosenSet(),
+    })
     setStarting(false)
     if (!res.ok) {
       // No rehearsal took the ports the check left open: they go, or one

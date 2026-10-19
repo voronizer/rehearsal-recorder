@@ -36,6 +36,9 @@ API_PREFIX = "/api/"
 # bridge.
 POLLABLE = (
     "player_state",
+    "control_state",
+    "transport_state",
+    "controller_state",
     "get_levels",
     "monitor_levels",
     "monitor_health",

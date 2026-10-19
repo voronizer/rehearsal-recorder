@@ -37,7 +37,7 @@ const group = (page: Page, name: string) =>
   page.getByRole("button", { name, exact: true }).first()
 
 /** The tabs, in the order the section list gives them. */
-const TAB_NAMES = ["Audio", "Folders", "Marks", "Sets", "Appearance", "Keys", "Under the hood"]
+const TAB_NAMES = ["Audio", "Folders", "Marks", "Sets", "Appearance", "Keys", "Controls", "Under the hood"]
 
 const CLOUD = "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';"
 
