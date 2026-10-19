@@ -1511,7 +1511,7 @@ test("stripes sit on the demo band's beats", async ({ page }) => {
     const api = (window as unknown as {
       pywebview: { api: { take_media: (...a: unknown[]) => Promise<{ peaks: number[][] }[]> } }
     }).pywebview.api
-    const [drums] = await api.take_media([{ name: "Drums", file: "/rec/tue/2/Drums.wav" }], n, 0, 2)
+    const [drums] = await api.take_media([{ name: "Drums", file: "/rec/tonight/2/Drums.wav" }], n, 0, 2)
     const v = drums.peaks[0]
     const out: number[] = []
     for (let i = 0; i < v.length; i++) if (v[i] > 0.15 && (i === 0 || v[i - 1] <= 0.15)) out.push((i / n) * 2)

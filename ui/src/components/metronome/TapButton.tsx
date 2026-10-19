@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { useKey } from "@/hooks/useSpacebar"
@@ -52,6 +52,12 @@ export function TapButton({
   const padsUntil = useRef(0)
   const timer = useRef(0)
   const alive = useRef(true)
+  // A still picture of the row, in an inert box (reha.stream's tile), hears
+  // no T: the page's keys stay the page's.
+  const [still, setStill] = useState(false)
+  const placed = useCallback((el: HTMLButtonElement | null) => {
+    if (el) setStill(el.closest("[inert]") !== null)
+  }, [])
 
   useEffect(() => {
     alive.current = true
@@ -107,10 +113,11 @@ export function TapButton({
     if (!timer.current) timer.current = window.setTimeout(hearPads, PADS_POLL_MS)
   }
 
-  useKey("t", tap, !disabled)
+  useKey("t", tap, !disabled && !still)
 
   return (
     <Button
+      ref={placed}
       variant="outline"
       size="row"
       onClick={tap}

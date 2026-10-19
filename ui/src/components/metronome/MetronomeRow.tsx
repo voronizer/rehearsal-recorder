@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { Play, Settings2, Square } from "lucide-react"
+import { Play, Settings, Square } from "lucide-react"
 import { BeatDots } from "@/components/metronome/BeatDots"
 import { ClickSettings } from "@/components/metronome/ClickSettings"
 import { ClickSwitch } from "@/components/metronome/ClickSwitch"
@@ -45,6 +45,7 @@ export function MetronomeRowView({
   onLink,
   onTapError,
   settings,
+  hold = true,
 }: {
   state: MetronomeState | null
   lit: number | null
@@ -60,6 +61,10 @@ export function MetronomeRowView({
   onTapError?: (text: string) => void
   /** What the gear opens on: the click's settings. */
   settings: ReactNode
+  /** Whether the line under the row keeps two lines' room, so that a
+   *  longer one moves nothing (B4). A still picture of the row, with
+   *  nothing to keep still for, ends under its words. */
+  hold?: boolean
 }) {
   const tempo = state?.tempo ?? null
   const signature = state?.signature ?? "4/4"
@@ -120,7 +125,7 @@ export function MetronomeRowView({
                   onKeyDown={() => (byPointer.current = false)}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  <Settings2 />
+                  <Settings />
                 </Button>
               </PopoverTrigger>
             </TooltipTrigger>
@@ -140,7 +145,7 @@ export function MetronomeRowView({
           </PopoverContent>
         </Popover>
       </div>
-      <StatusLine line={line} onLink={onLink} />
+      <StatusLine line={line} onLink={onLink} className={hold ? undefined : "min-h-0"} />
     </section>
   )
 }

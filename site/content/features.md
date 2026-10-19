@@ -41,6 +41,12 @@ Google Drive or Dropbox syncs.
 Make the gig's songs a set once. Every take is the song you are on until you
 move on, and History says which ones you never got to.
 
+## A click for the drummer. {#metronome}
+
+Each song keeps its tempo and time signature. The click can go to the
+drummer's headphones only, and during a take the edge of the screen lights on
+every click.
+
 ## Deleting goes to the Trash. {#trash}
 
 So does a take as it was before a crop. On Windows it is the Recycle Bin.
