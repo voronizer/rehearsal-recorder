@@ -30,6 +30,8 @@ from pathlib import Path
 
 import mido
 
+from rehearsal_recorder.audio.click import SIGNATURES, per_quarter
+
 from .state import PortState
 
 log = logging.getLogger(__name__)
@@ -39,14 +41,13 @@ TEMPO = 500_000  # microseconds to the beat: 120 bpm
 TICKS_PER_SEC = 1920  # 960 ticks to the beat, two beats a second, at 120 bpm
 NO_METER = (TEMPO, None)  # what a take with no tempo and no signature is written with
 
-# The time signature meta of each signature the metronome has: the numerator, the
-# denominator as a power of two, the MIDI clocks to a click (24 to a quarter),
-# and the 32nd notes to a quarter. x/4 clicks on the quarter, 6/8 on the eighth.
+# The time signature meta of each signature the metronome has (audio/click.py):
+# the numerator, the denominator as a power of two, the MIDI clocks to a click
+# (24 to a quarter), and the 32nd notes to a quarter. x/4 clicks on the quarter,
+# 6/8 on the eighth: 4/4 is (4, 2, 24, 8) and 6/8 (6, 3, 12, 8).
 _METERS = {
-    "4/4": (4, 2, 24, 8),
-    "3/4": (3, 2, 24, 8),
-    "2/4": (2, 2, 24, 8),
-    "6/8": (6, 3, 12, 8),
+    s: (int(s.split("/")[0]), int(s.split("/")[1]).bit_length() - 1, 24 // per_quarter(s), 8)
+    for s in SIGNATURES
 }
 _MAX_TEMPO_US = 0xFFFFFF  # a tempo meta is three bytes
 
@@ -150,7 +151,7 @@ def meter_of(tempo, signature) -> tuple[int, tuple | None]:
     meta = _METERS.get(signature) if isinstance(signature, str) else None
     tempo_us = TEMPO
     if isinstance(tempo, (int, float)) and not isinstance(tempo, bool) and tempo > 0:
-        found = 60_000_000 * (2 if signature == "6/8" else 1) / tempo
+        found = 60_000_000 * per_quarter(signature) / tempo
         if 1 <= found < _MAX_TEMPO_US:  # a tempo the meta cannot hold is none
             tempo_us = round(found)
     return tempo_us, meta

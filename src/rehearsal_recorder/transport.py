@@ -126,7 +126,8 @@ class Transport(ControlAPI):
             state = "unavailable"
         else:
             state = "ready"
-        elapsed = (getattr(api._recorder, "_frames_written", 0) / getattr(api._recorder, "samplerate", 1)) if api._recorder else player.get("position", 0) if owns_player else 0
+        # A click take's from its count-in's end, as the screen's clock counts.
+        elapsed = api._take_elapsed() if api._recorder else player.get("position", 0) if owns_player else 0
         return {"elapsed": elapsed, "state": state, "busy": self._busy, "rehearsal_active": api._session is not None,
                 "error": self.error, "pending_take": self.pending_take,
                 "take_number": api._recorder_take_number,
@@ -257,6 +258,8 @@ class Transport(ControlAPI):
     def _stop_rehearsal(self):
         if self.api._recorder is not None or self.pending_take or self.error or self.api.player_state().get("playing"):
             return {"ok": False, "result": "busy", "error": "Stop playback/recording and recover drafts first"}
+        # The click between takes stops with the rehearsal.
+        self.api._metronome.stop()
         self.api.player_close()
         return self.api.finish_rehearsal()
 
@@ -390,6 +393,10 @@ class Transport(ControlAPI):
         paused = api.player_pause()
         if paused.get("ok") is False:
             return paused
+        # The click between takes stops before the recorder opens the card,
+        # whose take has a click of its own; it is not moved into a stream
+        # of its own as the player closes.
+        api._metronome.stop()
         # A paused player still owns its output stream. Release it before
         # opening the recorder, especially on exclusive/single-stream cards.
         api.player_close()
@@ -428,6 +435,8 @@ class Transport(ControlAPI):
             self._saving = False
 
     def _save_pending(self):
+        # The take's tempo, signature and click are not passed: keep_take
+        # reads them by the draft's folder, as Stop left them.
         take = self.pending_take
         if take is None:
             return {"ok": False, "result": "unavailable", "error": "No finalised take to save; check Unsaved takes"}

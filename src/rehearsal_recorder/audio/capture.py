@@ -20,13 +20,14 @@ sees it for itself when it does not: see `_seen`.
 
 A take recorded to the metronome's click (audio/take_click.py) starts its files
 at the first click of its count-in, and Stop records on to the next quarter, so
-the files hold whole quarters (metronome spec, Part 3). When the click is on the
-recording card, the take's stream has outputs as well as inputs and the click is
-written into them in the callback that reads the inputs; on another device, the
-recorder only tells the click where the take is. Either way the click's troubles
-are its own: they never stop the take, nor show in `problem`. A card that will
-not open its outputs with its inputs records from its inputs alone, its click
-to no output and its grid kept.
+the files hold whole quarters (metronome spec, Part 3). One stopped before its
+first click was chosen keeps all its audio, as a take with no click. When the
+click is on the recording card, the take's stream has outputs as well as inputs
+and the click is written into them in the callback that reads the inputs; on
+another device, the recorder only tells the click where the take is. Either way
+the click's troubles are its own: they never stop the take, nor show in
+`problem`. A card that will not open its outputs with its inputs records from
+its inputs alone, its click to no output and its grid kept.
 """
 
 import json
@@ -150,13 +151,13 @@ def _stream_latency(stream, asked):
 
 
 def _device_name(index):
-    """A device's name, for the screen to say which; plainer words when
-    PortAudio cannot say."""
+    """A device's name, for the screen to say which; "" when PortAudio cannot
+    say, and the screen says it without one."""
     try:
         with STREAM_LOCK:
             return sd.query_devices(index)["name"]
     except Exception:
-        return "the recording card"
+        return ""
 
 
 def _duplex_latency(stream, asked):
@@ -173,7 +174,7 @@ def _duplex_latency(stream, asked):
 
 class AudioRecorder:
     def __init__(self, device_index, samplerate, tracks, out_dir, bit_depth=16,
-                 clock=None, notes=(), click=None):
+                 clock=None, notes=(), click=None, meter=None):
         """
         tracks: list of {"name": str, "channel": int, "stereo": bool};
                 channel is 1-based, the way it is shown in the interface
@@ -191,6 +192,10 @@ class AudioRecorder:
                metronome. Duplex, the stream is opened with its outputs too;
                otherwise the click has its own, placed by `clock`, which is
                made here when the take has none for notes.
+        meter: (tempo, signature) of a take with a tempo and no click (the
+               metronome's switch off). take.json keeps it as the take's
+               click, never on and with no first click, so its .mid states
+               the tempo and a draft rescued after a crash still has it.
         """
         if not tracks:
             raise ValueError("No tracks configured")
@@ -203,6 +208,7 @@ class AudioRecorder:
         self._full_scale = full_scale(self.bit_depth)
         self.tracks = tracks
         self.click = click
+        self.meter = meter if click is None else None
         if click is not None and not click.duplex and clock is None:
             clock = AudioClock(samplerate)
         self._clock = clock
@@ -645,6 +651,10 @@ class AudioRecorder:
             # beside the file and moved onto it: a crash mid-write leaves the
             # one before.
             record["click"] = click.record()
+        elif self.meter is not None:
+            tempo, signature = self.meter
+            record["click"] = {"tempo": tempo, "signature": signature, "on": False, "wav_tempo": False,
+                               "first_click_frame": None, "end_frame": None}
         path = self.out_dir / TAKE_RECORD
         try:
             if click is None:
@@ -676,21 +686,27 @@ class AudioRecorder:
             return self._result
         self._stopped = True
         click = self.click
-        if click is not None:
+        # Only a take with its first click has a quarter to run on to.
+        if click is not None and click.first_click_frame is not None:
             self._run_on(click)
         self._let_go()
         if click is not None:
             click.stop()
             self._click_done(click)
+            if click.end_frame is None:
+                # Stopped before its first click, or a block after Stop chose
+                # one too late: no grid, as take.json then says (cut_of).
+                click.first_click_frame = None
+            self._write_record()
 
-        # A click take's files run from its first click to its end_frame.
+        # A click take's files run from its first click to its end_frame; one
+        # with no first click keeps all its audio, as a take with no click.
         head, frames, acid = 0, None, None
-        if click is not None:
+        if click is not None and click.first_click_frame is not None:
             head = click.first_click_frame
             frames = max(0, click.end_frame - head)
             acid = click.acid()
             duration = frames / self.samplerate
-            self._write_record()
         else:
             duration = self._frames_written / self.samplerate
 
@@ -723,8 +739,8 @@ class AudioRecorder:
         # and it says which port each came from (midi/capture.finish_draft).
         # The app removes it once no notes file is left that needs it. A click
         # take keeps it too: it says the take's grid, for its .mid files and
-        # for a crop of the draft.
-        if not self._notes and click is None:
+        # for a crop of the draft; one with a tempo and no click, for its tempo.
+        if not self._notes and click is None and self.meter is None:
             (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
 
         self._result = {"duration_sec": duration, "tracks": finalized}

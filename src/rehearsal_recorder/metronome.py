@@ -7,14 +7,17 @@ The row follows the next take's name (Part 2). A name that leads to a song
 puts the song's tempo in the row, or empties it for a song without one; an
 empty name or "Take N" empties it. A change made in the row is held until
 the name leads somewhere else: a keystroke in the same song's name keeps it.
+A row not held follows its song's tempo when the song is given one.
 A free take and a title no song has yet are both "no song", so a tempo set
 for one holds through the other.
 
-The click between takes (▶) and a bar played for a setting go where the
-click's output is: into the player's stream when the player holds that
-device, else a stream of their own (audio/click_output.py), or nowhere when
-the device is not plugged in, still counted so the beat flashes. A take's
-click is made here (`take_click`) and played by the recorder.
+The click between takes (▶) plays the row's tempo, and follows it; a song's
+page has a ▶ of its own, at the tempo it asks for, which leaves the row as
+it is. That click and a bar played for a setting go where the click's output
+is: into the player's stream when the player holds that device, else a
+stream of their own (audio/click_output.py), or nowhere when the device is
+not plugged in, still counted so the beat flashes. A take's click is made
+here (`take_click`) and played by the recorder.
 
 The settings live in the app's config, saved through the function the app
 saves it with: there is no file of the metronome's own.
@@ -50,7 +53,7 @@ import time
 
 import sounddevice as sd
 
-from rehearsal_recorder.audio.click import SIGNATURES, SOUNDS, Voices, per_bar, tempo_range
+from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, SOUNDS, Voices, per_bar, tempo_range
 from rehearsal_recorder.audio.click_output import ClickOutput, SilentOutput
 from rehearsal_recorder.audio.click_source import ClickSource
 from rehearsal_recorder.audio.devices import STREAM_LOCK
@@ -76,13 +79,11 @@ UPCOMING_SEC = 1.5
 # asks: the list is read again no more often than this from a poll.
 DEVICES_FRESH_SEC = 2.0
 
-# The four signatures as a refusal names them: "4/4, 3/4, 2/4 and 6/8".
-_SIGNATURES_SAID = f"{', '.join(SIGNATURES[:-1])} and {SIGNATURES[-1]}"
-
 # The click between takes: its source, "player" or "own", the player or
-# output it plays in, and whether the screen shows it (▶) or not (a bar
-# played for a setting).
-_Free = collections.namedtuple("_Free", "source kind sink shown")
+# output it plays in, whether the screen shows it (▶) or not (a bar played
+# for a setting), and whether it plays a tempo of its own (a song page's ▶)
+# rather than the row's, which it then does not follow.
+_Free = collections.namedtuple("_Free", "source kind sink shown fixed")
 
 
 def _channels(value):
@@ -129,6 +130,16 @@ def _outputs(index):
         return 0
 
 
+def _name(index):
+    """A device's name; "" when it says none, and the screen says it without one."""
+    try:
+        with STREAM_LOCK:
+            name = sd.query_devices(index).get("name")
+    except Exception:
+        return ""
+    return name if isinstance(name, str) else ""
+
+
 def _system_output():
     """The index of the system's output device, None when it says none. With
     STREAM_LOCK held."""
@@ -142,6 +153,19 @@ def _system_output():
 
 def _refused(error):
     return {"ok": False, "error": error}
+
+
+def _refusal(tempo, signature):
+    """Why the metronome cannot take `tempo` in `signature`, or None: a
+    signature not one of the four, or a tempo that is not a whole number in
+    its range. `tempo` None passes, as an empty row."""
+    if signature not in SIGNATURES:
+        return _refused(SIGNATURE_RULE)
+    if tempo is not None:
+        low, high = tempo_range(signature)
+        if not whole(tempo) or not low <= tempo <= high:
+            return _refused(f"A tempo in {signature} is a whole number from {low} to {high}")
+    return None
 
 
 class Metronome:
@@ -211,7 +235,7 @@ class Metronome:
         if key in ("click_sound", "click_volume"):
             free = self._free
             if free is not None:
-                free.source.set_voices(self._voices(free.source.samplerate))
+                free.source.set_voices(self.voices(free.source.samplerate))
         if key == "metronome_on":
             take = self._take
             if take is not None and take[2] is not None:
@@ -223,7 +247,9 @@ class Metronome:
         the click and brings it back on the beat."""
         return self.set_setting("metronome_on", on)
 
-    def _voices(self, samplerate, sound=None):
+    def voices(self, samplerate, sound=None):
+        """The click's sounds at `samplerate`, in `sound` or the one set, at
+        the volume set: for a take played back with its click too."""
         return Voices(sound or self._setting("click_sound"), samplerate, self._setting("click_volume"))
 
     # ---------- the row ----------
@@ -237,12 +263,19 @@ class Metronome:
             found = self._library.tempo_for(name)
         song = (found or {}).get("song")
         with self._lock:
+            held = self._held()
+            was = self._song
             self._free_name = free
             self._song = song
             self._last_take = (found or {}).get("last_take")
             key = None if song is None else song["id"]
             if key == self._key:
-                return
+                # The same song, its tempo given since (its first click take
+                # kept, or its page): a row not held takes it. A change held
+                # in the row stays.
+                if (song is None or held or was is None
+                        or (song["tempo"], song["signature"]) == (was["tempo"], was["signature"])):
+                    return
             self._key = key
             self._tempo = None if song is None else song["tempo"]
             self._signature = (song or {}).get("signature") or "4/4"
@@ -251,12 +284,9 @@ class Metronome:
     def set(self, tempo, signature):
         """A change in the row, held until the name leads somewhere else.
         `tempo` None empties the row."""
-        if signature not in SIGNATURES:
-            return _refused(f"The time signature is one of {_SIGNATURES_SAID}")
-        if tempo is not None:
-            low, high = tempo_range(signature)
-            if not whole(tempo) or not low <= tempo <= high:
-                return _refused(f"A tempo in {signature} is a whole number from {low} to {high}")
+        refused = _refusal(tempo, signature)
+        if refused is not None:
+            return refused
         with self._lock:
             if self._take is not None:
                 return _refused("The tempo cannot change during a take")
@@ -303,7 +333,7 @@ class Metronome:
         """A ▶ click follows the row: retimed from its next click, or stopped
         when the row is emptied."""
         free = self._free
-        if free is None or not free.shown:
+        if free is None or not free.shown or free.fixed:
             return
         with self._lock:
             tempo, signature = self._tempo, self._signature
@@ -350,9 +380,9 @@ class Metronome:
         """
         (the device the click goes to, its outputs as the card counts them or
         None for none of its own, the name of a saved device that is not
-        plugged in or None). With no click device saved: the player's device
-        and outputs. `wait` as in _devices; (None, None, None) while the
-        device list has not been read.
+        plugged in ("" for one with no name) or None). With no click device
+        saved: the player's device and outputs. `wait` as in _devices;
+        (None, None, None) while the device list has not been read.
         """
         found = self._devices(wait)
         if found is None:
@@ -365,9 +395,10 @@ class Metronome:
                 channels = None
             return output_index, channels, None
         if index is None:
+            # "" when it was saved with no name: the screen says it without one.
             identity = self._config.get("click_device")
             name = identity.get("name") if isinstance(identity, dict) else None
-            return None, None, name or "the click's output"
+            return None, None, name if isinstance(name, str) else ""
         return index, self._click_channels(), None
 
     def extra_channels(self, device_index):
@@ -424,13 +455,13 @@ class Metronome:
             if outputs < 1:
                 # A card that says it has none: the take records as it would,
                 # its click to no output, rather than not at all.
-                output = SilentOutput("the recording card", "It has no outputs to click on.", int(samplerate))
+                output = SilentOutput(_name(here), "It has no outputs to click on.", int(samplerate))
             else:
                 route = tuple(c - 1 for c in channels)
         else:
             output = ClickOutput(device, channels or (1, 2))
         return TakeClick(tempo, signature, self._setting("count_in_bars"),
-                         self._voices(int(samplerate)), route or output.route,
+                         self.voices(int(samplerate)), route or output.route,
                          wav_tempo=self._setting("tempo_in_wav"), output=output, samplerate=samplerate)
 
     # ---------- a take ----------
@@ -448,15 +479,23 @@ class Metronome:
 
     # ---------- the click between takes ----------
 
-    def play(self):
-        """▶: the click at the row's tempo, until Stop, Record or the row is emptied."""
+    def play(self, tempo=None, signature=None):
+        """▶: the click at the row's tempo, until Stop, Record or the row is
+        emptied. With a `tempo`, a song page's ▶: the click at that tempo and
+        `signature`, until Stop or Record, and the row left as it is."""
         with self._lock:
             if self._take is not None:
                 return _refused("The take has its own click")
-            tempo, signature = self._tempo, self._signature
-        if tempo is None:
+            fixed = tempo is not None
+            if not fixed:
+                tempo, signature = self._tempo, self._signature
+        if fixed:
+            refused = _refusal(tempo, signature)
+            if refused is not None:
+                return refused
+        elif tempo is None:
             return _refused("No tempo to play: type or tap one")
-        self._start(tempo, signature, shown=True)
+        self._start(tempo, signature, shown=True, fixed=fixed)
         return {"ok": True}
 
     def preview(self, bars=1, sound=None):
@@ -479,18 +518,18 @@ class Metronome:
         timer.start()
         return {"ok": True}
 
-    def _start(self, tempo, signature, shown, bars=None, sound=None, start_k=0):
+    def _start(self, tempo, signature, shown, bars=None, sound=None, start_k=0, fixed=False):
         with self._sinks:
-            return self._start_held(tempo, signature, shown, bars, sound, start_k)
+            return self._start_held(tempo, signature, shown, bars, sound, start_k, fixed)
 
-    def _start_held(self, tempo, signature, shown, bars=None, sound=None, start_k=0):
+    def _start_held(self, tempo, signature, shown, bars=None, sound=None, start_k=0, fixed=False):
         """_start, with `_sinks` already held."""
         # Where it goes, its stream opened and kept in _free, in one hold
         # of STREAM_LOCK: see the module's note on the locks.
         with STREAM_LOCK:
             self._stop_free()
             kind, sink, route = self._sink()
-            source = ClickSource(tempo, signature, self._voices(sink.samplerate, sound), route,
+            source = ClickSource(tempo, signature, self.voices(sink.samplerate, sound), route,
                                  bars=bars, start_k=start_k)
             if kind == "player":
                 sink.play_free_click(source)
@@ -503,7 +542,7 @@ class Metronome:
                     # on time and the screen says why nothing is heard.
                     sink = SilentOutput(sink.name, sink.problem(), sink.samplerate)
                     sink.start(source)
-            free = _Free(source, kind, sink, shown)
+            free = _Free(source, kind, sink, shown, fixed)
             with self._lock:
                 self._free = free
         return free
@@ -578,7 +617,8 @@ class Metronome:
                     else type(sink) is type(free.sink) and sink.device_index == free.sink.device_index):
                 return
             source = free.source
-            self._start_held(source.tempo, source.signature, shown=True, start_k=source.next_in_bar)
+            self._start_held(source.tempo, source.signature, shown=True, start_k=source.next_in_bar,
+                             fixed=free.fixed)
 
     def close(self):
         """The app is closing."""
@@ -632,6 +672,9 @@ class Metronome:
                     upcoming = click.upcoming(now, UPCOMING_SEC)
         elif free is not None and free.shown:
             phase = "preview"
+            if free.fixed:
+                # A song page's ▶: the tempo heard, the row's left as it is.
+                tempo, signature = free.source.tempo, free.source.signature
             upcoming = free.source.upcoming(now, UPCOMING_SEC)
         return {"phase": phase, "tempo": tempo, "signature": signature, "per_bar": per_bar(signature),
                 **row, "upcoming": upcoming, "count": count, "since_count_in_ms": since,

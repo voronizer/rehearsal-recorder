@@ -46,7 +46,9 @@ class WavWriter:
     """
 
     def __init__(self, path, samplerate, channels, sampwidth, acid=None):
-        self._samplerate = samplerate
+        # A whole number: a stream's rate can come as 48000.0, and the header
+        # holds only whole ones.
+        self._samplerate = int(round(samplerate))
         self._channels = channels
         self._sampwidth = sampwidth
         self._acid = acid

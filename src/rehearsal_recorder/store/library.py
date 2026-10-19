@@ -18,6 +18,7 @@ from sqlalchemy import Integer, cast, func, select, update
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import object_session, selectinload, sessionmaker
 
+from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, tempo_range
 from rehearsal_recorder.midi import rules
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
@@ -37,9 +38,9 @@ REHEARSAL_GONE = "Its rehearsal is gone."
 TAKE_GONE = "Its take is gone."
 
 # The tempo a song or a take may have, by time signature: whole clicks a minute,
-# quarters in x/4 and eighths in 6/8 (the metronome spec, "Words"). audio/click.py
-# has the same four signatures and ranges for the click itself.
-TEMPO_RANGES = {"4/4": (30, 300), "3/4": (30, 300), "2/4": (30, 300), "6/8": (60, 600)}
+# quarters in x/4 and eighths in 6/8 (the metronome spec, "Words"), 30 to 300 and
+# 60 to 600. The click's own table (audio/click.py), so the two never differ.
+TEMPO_RANGES = {s: tempo_range(s) for s in SIGNATURES}
 
 
 class LabelRefused(ValueError):
@@ -500,6 +501,13 @@ class Library:
             song = self._songs_by_key(db).get((title or "").casefold())
             return None if song is None else song.id
 
+    def song_tempos(self):
+        """{title: (tempo, signature)} for every song, both None for one with
+        none: what the songs offered under a take's name carry. One query."""
+        with self._session() as db:
+            return {title: (tempo, signature) for title, tempo, signature
+                    in db.execute(select(Song.title, Song.tempo, Song.signature)).all()}
+
     def tempo_for(self, name):
         """
         What the metronome follows when the next take's name field holds
@@ -544,7 +552,7 @@ class Library:
             kept = (None, None)
         else:
             if not isinstance(signature, str) or signature not in TEMPO_RANGES:
-                raise SongRefused("The time signature is one of 4/4, 3/4, 2/4 and 6/8")
+                raise SongRefused(SIGNATURE_RULE)
             low, high = TEMPO_RANGES[signature]
             whole = _whole(tempo)
             if whole is None or not low <= whole <= high:

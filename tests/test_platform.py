@@ -621,6 +621,10 @@ def main():
     ok("the window toolkit's line says which pywebview, as a number",
        said is not None and "window toolkit — pywebview " in said
        and said.split("window toolkit — pywebview ", 1)[1][:1].isdigit())
+    # The metronome's sounds are made by the app, and a WAV carries a click
+    # take's tempo: a build that lost what either needs fails here.
+    ok("and it renders the click and writes a WAV with its tempo",
+       said is not None and "ok   click and WAV tempo" in said)
     # Its own line says the MIDI system, so the log is not asked to say it too.
     ok("and the MIDI system is not said a second time, on stderr",
        not [ln for ln in run.stderr.decode("utf-8", "replace").splitlines()
