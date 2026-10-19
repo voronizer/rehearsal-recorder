@@ -210,8 +210,19 @@ a click on another device than the recording card (`midi/clock.py`,
 hour, the click still heard within a millisecond of its frame, and the line the
 click's stream reads refitted only as a mark is kept. And a crop of a click
 take snapped to its bars. The metronome's heavy arithmetic goes here rather
-than in `test_engine.py`, whose length bounds the whole run. Later tasks add to
-it.
+than in `test_engine.py`, whose length bounds the whole run.
+
+The tool for the hand check of the metronome spec's Part 3,
+`tools/click_alignment.py`, is here too, as `midi_alignment.py` is in
+`test_midi.py`. With the click's output cabled into an input, it says how far
+each recorded click is from its place on the take's grid. The suite runs it
+through its `main()` on WAVs written by the app's own writer, the tempo in
+their `acid` chunk: clicks 2 ms late on a 120 grid (a median of +2.0 ms, all
+40 matched) beside a silent track that matches none, `--wav` for one track,
+6/8 read as eighths from a chunk that says 99 a quarter, a take of 130 s at 127
+on 44.1 kHz answered in two windows (2 ms late in the first minute, 4 ms in the
+last), a WAV with no tempo refused until `--tempo` is given, and a folder with
+no WAV, or none at all, exiting non-zero.
 
 ## test_tempo.py: counting a tempo
 

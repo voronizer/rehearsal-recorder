@@ -165,12 +165,14 @@ remembers which take was the good one. None of this has to be done:
   becomes the song's next take and moves into the song's group. For a song
   nobody has played yet, use the pencil.
 - A take shorter than 30 seconds, with no ★ and no marks, is a false
-  start: a count-in, or a stop after eight bars. Its bar is dashed, its
-  name and length are grey, and it says **false start**. **Clear false
-  starts**, at the head of the songs, moves them all to the Trash (the
-  Recycle Bin on Windows) at once, and their copies in the cloud go with
-  them; **Undo** brings them back. See [Undo](#undo). How short a false
-  start is can be changed in **Settings › Folders**, from 5 to 120 seconds.
+  start, such as a stop after eight bars, or a take that holds only the
+  count-in (the beats counted before the band comes in). Its bar is
+  dashed, its name and length are grey, and it says **false start**.
+  **Clear false starts**, at the head of the songs, moves them all to the
+  Trash (the Recycle Bin on Windows) at once, and their copies in the cloud
+  go with them; **Undo** brings them back. See [Undo](#undo). How short a
+  false start is can be changed in **Settings › Folders**, from 5 to 120
+  seconds.
 - **Send starred**, beside it, sends every ★ take that is not in the
   cloud folder yet, as **What gets sent** in **Settings › Folders** says.
   See [Sending takes to the cloud](#sending-takes-to-the-cloud).
@@ -183,7 +185,8 @@ pointing at it says why.
 Press **Record take**, or Space, to start recording. **Finish** ends the
 rehearsal and goes back to the start screen, where Last time shows the
 rehearsal just finished. Closing the app instead loses nothing: every take
-you saved is kept.
+you saved is kept. The row at the bottom left, beside **Finish**, is the
+metronome: see [The metronome](#the-metronome).
 
 The top of the window has the rehearsal's name and its figures so far:
 **Length**, how long its takes run; **Takes**, how many there are and of
@@ -238,8 +241,12 @@ The recording screen is big enough to read from where you play.
 - The take's name is over the clock, half its size, so you can see from
   where you stand what you are recording. If it says “Take 3”, nobody named
   the take: name it after **Stop**. A take you named has its place in the
-  rehearsal, “Take 6”, at the bottom left, after the red *Recording*.
-- The clock shows how long the take has been running.
+  rehearsal, “Take 6”, at the bottom beside **Stop**, after the red
+  *Recording*.
+- The clock shows how long the take has been running. A take recorded to
+  the metronome's click counts the band in first, in big digits in the
+  clock's place, and the clock starts when the count-in ends (see
+  [Recording to the click](#recording-to-the-click)).
 - The bar under the clock appears when this is another take of a song you
   have already played in this rehearsal: “Took 2:21 last time”. The
   rehearsal's first take of a song played before is measured against the
@@ -261,8 +268,8 @@ The recording screen is big enough to read from where you play.
   goes dim and says “silent”, which is normal while someone is not
   playing.
 
-At the bottom left, under the red *Recording*, a line says that the
-interface is connected and how much recording time the disk has left:
+At the bottom beside **Stop**, under the red *Recording*, a line says that
+the interface is connected and how much recording time the disk has left:
 “Interface connected · room for about 3 h 20 min of recording”. When the
 disk is nearly full, the line gets an amber icon and says “Low disk space:
 room for about 12 min. Free some up or finish the rehearsal.” It does the
@@ -398,6 +405,13 @@ A few things about cropping:
   audio back then, move its files back into the take's folder. The app
   still shows the shorter length, and the marks stay where the crop moved
   them.
+- A take recorded to the metronome's click (see [The
+  metronome](#the-metronome)) keeps its bars. The crop starts on the bar
+  line at or before the start of your selection, and ends in time with the
+  click, at most one click after the end of it (two in 6/8), so in a DAW
+  the cropped take still starts on a bar. When the start moved back to a
+  bar line, the notice says where: *“Pałyn 2” is cropped. It now starts on
+  the bar at 0:01. The uncut take went to the Trash.*
 
 Press Esc to close the take. With the strip's columns open, the first Esc
 closes them. If the take is playing, it goes on playing in the list of
@@ -860,10 +874,12 @@ the rehearsal's folder, and the take's folder is in it. In the cloud folder,
 
 ### In a DAW
 
-The `.mid` is written at 120 bpm, and the file says so. Set the project to
-120 bpm, or let the DAW take the file's tempo, and put the `.mid` at bar 1,
-where the WAVs start. Then they line up. At any other project tempo, the
-notes drift from the audio.
+The `.mid` says its tempo in bpm, beats a minute. A take recorded with a
+tempo in the metronome carries that tempo (see [The
+metronome](#the-metronome)), and a take recorded without one is written at
+120 bpm. Set the project to the file's tempo, or let the DAW take it, and
+put the `.mid` at bar 1, where the WAVs start. Then they line up. At any
+other project tempo, the notes drift from the audio.
 
 - Logic may ask about the file's tempo, or have that question turned off.
 - In Cubase, **Ignore Master Track Events on Merge** keeps the project's own
@@ -891,6 +907,234 @@ pointing at it shows *“TD-17” is in use by another app.* Close the other
 program. The app holds a port too, during **Check signal** and in a
 rehearsal.
 
+## The metronome
+
+![The metronome's row at the bottom left of the rehearsal screen, beside Finish and Record take: the switch, 128 bpm with − and +, 4/4, Tap, ▶, the beat's dots and the gear, over the line “The song's tempo.”](screenshots/metronome-row.png)
+
+The metronome clicks on every beat, higher on the first beat of a bar, so
+you hear where each bar starts. How fast it clicks is the tempo, counted in
+bpm, beats a minute. How many beats make a bar is the time signature: 4/4,
+3/4, 2/4 or 6/8.
+
+To record a take to the click, pick the song under **Next take** and check
+the tempo in the metronome's row. If the row is empty, type or tap a tempo
+first. Then press **Record take**. The take starts with the count-in, a bar
+of clicks before the band plays, so that everyone comes in together.
+
+In 6/8 the click comes on every eighth note, six to a bar, and the tempo
+counts those eighths. A song you feel in two at 66 is 198, three times 66.
+The row shows an eighth note in place of “bpm”. The first click of a bar is
+the highest, and the fourth is higher than the rest, so you hear the bar's
+two halves.
+
+### The row
+
+The metronome is one row at the bottom left of the rehearsal screen, beside
+**Finish** and **Record take**. From left to right:
+
+- The switch, the metronome's icon, turns the click in takes on or off.
+  Pointing at it says “Click in takes”. It is grey when on.
+- The tempo. Type a number and press Enter, or change it one at a time with
+  − and +, or with ↑ and ↓ in the field. It goes from 30 to 300 bpm, and
+  from 60 to 600 in 6/8. An empty field shows a dash: no tempo, and no
+  click.
+- The time signature, picked from a list. Changing it keeps the number: 4/4
+  at 128 becomes 6/8 at 128, and you then set the number you want.
+- **Tap**, to tap the tempo in (see [Tap](#tap)).
+- ▶ plays the click between takes, to try a tempo or to warm up, and ■
+  stops it. It also stops when you press **Record take**, since the take
+  starts its own click, and when you leave the screen.
+- A dot for each click of a bar, lit in time while ▶ plays. The first is
+  bigger, and in 6/8 the fourth too, with the six in two groups of three.
+- The gear opens the click's settings (see [The click's
+  settings](#the-clicks-settings)).
+
+The line under the row says where the tempo comes from, and what you can do
+next. With the switch off it says “Off: takes record without the click.”
+
+### A song's tempo
+
+The metronome follows the name under **Next take**. Pick another song
+there, on the screen or from the controller, and the row shows that song's
+tempo and time signature.
+
+- For a song with a tempo, the line says “The song's tempo.” You can change
+  it before a take. The change holds until you pick another song, and the
+  line says so: “The song has 128 · 4/4; this holds until another
+  song.” **Save to song** makes the change the song's own.
+- For a song with no tempo yet, such as one you played before the app had a
+  metronome, the row is empty and takes record without the click. Type or
+  tap a tempo. The first take you record to the click and keep gives the
+  song its tempo and time signature. **Save now** gives the tempo to the
+  song straight away.
+- If such a song has takes, the line offers **count it from the last
+  take**. The app listens to the song's last take and puts the tempo it
+  counts in the row. Pick the time signature, then press **save it to the
+  song**.
+- For a take nobody named, the line says “Free take: no click unless you
+  set a tempo.” A tempo you set stays with that take only, until you pick a
+  song. If you later name the take after a song with no tempo, the song
+  gets the take's tempo.
+
+A new song, made by keeping a take under a new title, starts with the take's
+tempo if the take was recorded to the click. Merging two songs keeps the
+tempo of the song you merge into, or takes the other's when that one has
+none.
+
+### On a song's page
+
+A song's page in History has its own row under the title: the tempo with −
+and +, the time signature, **Tap**, ▶ and the beat's dots. A change there is
+saved to the song at once. For a song with a tempo, the line under it says
+“Picking Pałyn at a rehearsal puts this in the metronome.” ▶ plays the
+song's tempo, and leaves the row on the rehearsal screen as it was.
+
+For a song with no tempo, **count it from a take** lists the song's takes,
+the starred ones first, then the newest. Pick a take of the whole song, then
+the time signature, and press ▶ to hear the count. If the click runs twice
+too fast or too slow, which happens with about one song in four, press
+**halve** or **double**.
+
+To count, the app listens to the drums: the notes of the track with the
+drums icon when it records an e-kit, otherwise that track's sound, otherwise
+all the tracks together. If the band sped up or slowed down, the count lands
+in between.
+
+### Tap
+
+Press **Tap**, or the T key, on each beat. The tempo is the average of the
+last four gaps between taps: five taps are enough. After two seconds
+without a tap, the next one starts a new count. In 6/8, tap the eighths:
+six taps to a bar. T works on the rehearsal screen and on a song's page,
+but not while you are typing in a field.
+
+After a press of **Tap** or T, the band's MIDI instruments tap too: the
+drummer can tap the tempo on an e-kit's pad, or anyone on a keyboard,
+through the ports the tracks record from (see [Recording
+MIDI](#recording-midi)). Two seconds without a hit ends it, and what the
+band plays after that leaves the tempo alone. A port another app is using
+gives no taps.
+
+### Where the click is heard
+
+Choose where the click plays in **Settings › Metronome**, under **Click
+output**: an interface and its outputs, chosen the same way as the playback
+output (see [Choose your interface](#choose-your-interface)). Until you
+choose one, **Where the player plays** is picked, and the click plays
+through the playback output.
+
+To keep the click to the drummer, pick outputs that feed only the
+drummer's headphones, such as 3–4 cabled to the drummer's headphone amp, or
+the laptop's own headphone socket. On many small interfaces the headphone
+socket plays outputs 1–2, the same as the monitors, so a click sent there
+comes out of the monitors too. A click through the speakers or the monitors
+reaches the microphones and ends up on the tracks. The app itself never
+records the click.
+
+If the click's output is not connected, the line under the row says so,
+with an amber icon: “The click's output, X18/XR18, is not connected. The
+beat will only flash.” **Record take** still records, and the take keeps
+its tempo.
+
+On Windows, while you record through ASIO, a second ASIO interface cannot
+play the click: ASIO lets the app use one interface at a time. The **Click
+output** list shows such an interface greyed, with the reason under its
+name.
+
+### The click's settings
+
+The gear at the end of the row has the same settings as **Settings ›
+Metronome**, and a change in one shows in the other.
+
+- **Click output**: where the click is heard, as above.
+- **Volume**: how loud the click is. A bar plays when you let go of the
+  slider.
+- **Sound**: **Click**, **Woodblock** or **Hi-hat**. Picking one plays a bar
+  of it.
+- **Count-in**: **None**, **1 bar** or **2 bars**, before every take
+  recorded to the click.
+
+**Settings › Metronome** also has **Write the tempo into WAV files** (see [A
+take's tempo in a DAW](#a-takes-tempo-in-a-daw)).
+
+### Recording to the click
+
+Press **Record take**, or Space, with the switch on and a tempo in the row.
+The count-in comes first, counted in big digits where the clock will be: 1
+to 4 in 4/4, the first one in blue, and 1 to 6 in 6/8, the first and fourth
+in blue. With **2 bars** it counts twice. With **None** there is no
+count-in, and the first click is the song's first beat. The clock starts at
+0:00 when the count-in ends.
+
+The count-in is part of the recording: the take's files start with it. In
+the player, then, a take starts with its count-in and runs that much longer
+than the clock showed.
+
+After the count-in, the edge of the window lights on every click until
+**Stop**, wider and brighter on the first of a bar. It does so even with
+Reduce motion on in the system's settings, since the band may count on it.
+
+The metronome's row stays at the bottom left, with the tempo, the time
+signature, the dots and a line: “Count-in: 2 of 4”, then “Clicking to
+Stop.” The tempo cannot change during a take. The switch turns the click
+off, and on again on the beat. A take started with the switch off stays
+without the click. Either way the take keeps its tempo, and the line says
+“Click off. The tempo still goes into the take.” With no tempo in the row,
+it says “No click: this take has no tempo.”
+
+After **Stop**, the take records on for a moment, at most one click (two
+in 6/8), so that it ends in time with the click.
+
+### Listening back to the click
+
+![Master under the tracks in the player with its click on, and beside it the take's bars and beats as stripes, with Click 128 bpm · 4/4 in the corner](screenshots/metronome-master.png)
+
+To hear the click with a take, press the button with the metronome's icon
+after the name **Master**, under the tracks (see [Listening
+back](#listening-back)). Pointing at it says “Click with the take: 128 bpm ·
+4/4”. The click plays in time with the take's count-in.
+
+Beside Master, the take's bars and beats are drawn as stripes, the bars
+longer, with “Click 128 bpm · 4/4” in the corner. They are dimmed while the
+click is off, and follow the zoom and the selection as the tracks do.
+
+The click comes through the player's output, mixed with the take, at the
+volume set in the click's settings. Turning **Master** down turns the click
+down too. It is not in Master's meter, or in the mix sent to the cloud. The
+button is off when the app starts, and stays as you left it from one take
+to the next.
+
+A take recorded without the click has no stripes: “Recorded without the
+click” stands in their place, and the button is greyed. That includes every
+take from before the app had a metronome.
+
+### A take's tempo in a DAW
+
+A take recorded to the click starts on a bar: its first click is at the
+very start of every WAV and every `.mid`. To line its bars up with the bars
+in a DAW:
+
+1. Before you bring the take in, set the project to the song's tempo and
+   time signature. A song in 6/8 shows half its number there, because a DAW
+   counts quarter notes: 198 in the row is 99 in the DAW.
+2. Put the take's files at bar 1.
+
+A take's `.mid` files carry the tempo and the time signature, so a DAW that
+reads the tempo from a `.mid` can set the project for you.
+
+**Write the tempo into WAV files**, in **Settings › Metronome**, puts the
+tempo and the time signature into every WAV of a take recorded to the
+click, and is on until you turn it off. Cubase, Nuendo, Pro Tools and
+Studio One read it and fit the take to the project's tempo, and so does FL
+Studio when its own setting for that is on. At any other project tempo,
+they stretch the take. Ableton Live and Logic ignore it. To have them all leave your takes as they are, turn the setting off.
+The change applies to the takes you record after that. A take recorded
+without the click never gets a tempo in its WAVs: the band was not playing
+to a click, and a DAW would stretch it for nothing.
+
+Copies sent to the cloud as WAV (**As recorded**) keep the tempo, the mix
+included. FLAC and MP3 copies do not.
+
 ## Keys
 
 Space does the main thing on each screen: start the rehearsal, start a take,
@@ -910,6 +1154,9 @@ While listening:
 
 On the rehearsal screen, with no take open, ↑ and ↓ name the next take
 after the song below or above the lit one.
+
+On the rehearsal screen and on a song's page in History, T taps the tempo,
+as **Tap** does (see [Tap](#tap)).
 
 In History, with no take open, ↑ and ↓ go through the rehearsals, the
 songs in the Songs view, or the labels in the Marks view.
@@ -936,9 +1183,9 @@ To turn off the keys that work with one press, open **Settings › Keys**. It
 has two switches, each **On** or **Off**, and both are on until you change
 them. **Space and Esc** is for Space and Esc on every screen, as above.
 **The player's keys** is for the arrows, Home, M, R and ? while listening,
-and for ↑ and ↓ on the rehearsal screen and in History. Under each switch
-is a list of what its keys do on each screen. A change applies at once,
-and the app keeps it for next time.
+for ↑ and ↓ on the rehearsal screen and in History, and for T. Under each
+switch is a list of what its keys do on each screen. A change applies at
+once, and the app keeps it for next time.
 
 When a switch is off, its keys do nothing and no longer show on the
 buttons. With **Space and Esc** off, Space presses the button you moved to
@@ -964,10 +1211,16 @@ From the controller:
 - **Record/Stop** starts a take. Pressed again, it stops the take and keeps
   it. The laptop's **Stop** is different: it opens the screen where you save
   or discard the take.
+- With the metronome's click on, **Record/Stop** counts the band in as
+  **Record take** does on the laptop, at the tempo in the metronome's row
+  (see [Recording to the click](#recording-to-the-click)). The controller's
+  display shows 00:00 until the count-in ends, then counts the take's time
+  from there, as the clock on the laptop's screen does.
 - **Play/Stop** plays a kept take, or stops it.
 - You can also go back to the start of the take, skip back or forward,
   move to the previous or next song or take, set the volume, and start and
-  finish the rehearsal.
+  finish the rehearsal. Moving to another song puts that song's tempo in
+  the metronome, as picking it on the laptop does.
 - Removing a take from the controller works like deleting it in the app:
   a notice says “Take removed”, and its **Undo** brings the take back.
 

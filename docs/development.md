@@ -209,6 +209,9 @@ src/rehearsal_recorder/     the Python application
   mediaserver.py            the local HTTP server (interface, audio, polling)
   platform_support.py       where macOS, Windows and Linux differ — all of it
   diagnostics.py            what Settings › Under the hood says, and its report
+  metronome.py              the metronome: the row's tempo, which follows the
+                            next take's name, the click between takes, its
+                            settings, and what the screen is told
   audio/capture.py          multichannel capture with continuous write
   audio/player.py           playback and mixing of a take
   audio/monitor.py          listening to inputs without recording
@@ -221,6 +224,19 @@ src/rehearsal_recorder/     the Python application
                             (--audio-probe, and Check the interface)
   audio/format.py           16- and 24-bit: packing, unpacking, what each costs
   audio/encode.py           compressing cloud copies (FLAC/MP3 via libsndfile)
+  audio/wavfile.py          the app's own WAV writer, which can carry a click
+                            take's tempo in an acid chunk
+  audio/click.py            the click's arithmetic (which frame each click
+                            falls on) and its three sounds
+  audio/click_source.py     one running click, rendered a block at a time into
+                            whichever stream plays it
+  audio/click_output.py     the click's own output stream, when no stream the
+                            app already holds can carry it
+  audio/take_click.py       a take's click: its count-in and its clicks to
+                            Stop, on the take's own grid
+  audio/click_timing.py     when a click written into an output is heard, so
+                            it lands on its frame of the recording
+  audio/tempo.py            counting a song's tempo from a take, numpy only
   store/                    the rehearsal history: models.py, db.py
                             (open + migrate), library.py (what api.py calls),
                             importer.py (session.json → rows), migrations/
