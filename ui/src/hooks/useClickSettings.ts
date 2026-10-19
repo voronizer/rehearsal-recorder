@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useNoticesGoWithPage } from "@/hooks/useErrorNotice"
+import { driftToleranceChanged } from "@/hooks/useTakeDrift"
 import {
   api,
   type ClickSound,
@@ -7,6 +8,7 @@ import {
   type OutputDevice,
   type Settings,
 } from "@/lib/api"
+import type { DriftTolerance } from "@/lib/drift"
 import { dismiss, notify } from "@/lib/notices"
 
 /** The notice the click's settings say a refusal in. */
@@ -82,7 +84,7 @@ export function useClickSettings() {
     else dismiss(SAID)
     return true
   }
-  const save = async <K extends "click_sound" | "click_volume" | "count_in_bars" | "tempo_in_wav">(
+  const save = async <K extends "click_sound" | "click_volume" | "count_in_bars" | "tempo_in_wav" | "drift_tolerance">(
     key: K,
     value: MetronomeSettings[K]
   ) => {
@@ -158,6 +160,11 @@ export function useClickSettings() {
     /** Whether a click take's WAVs carry its tempo; Settings › Metronome
      *  only. */
     setTempoInWav: (on: boolean) => void save("tempo_in_wav", on),
+    /** How far off two bars of the drift line on Master turn amber, said
+     *  to every player at once; Settings › Metronome only. */
+    setDriftTolerance: async (tolerance: DriftTolerance) => {
+      if (await save("drift_tolerance", tolerance)) driftToleranceChanged(tolerance)
+    },
   }
 }
 

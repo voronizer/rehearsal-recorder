@@ -129,12 +129,20 @@ function goOfName(name) {
 const isTheTake = markers => markers.some(m => /the take|keep this/.test(m.note));
 // The band plays each song to the click at the song's own tempo (the fake's
 // meterOf), so its takes are click takes at it; a song with no tempo, and
-// the soundcheck's takes of no song, were recorded without.
-const clickedAt = name => meterOf(goOfName(name).song);
+// the soundcheck's takes of no song, were recorded without. Pałyn they play
+// with the click switched off: its takes keep the tempo, 128, and Master
+// draws how far the band ran from it (the drift line, DRIFT below).
+const clickedAt = name => {
+  const {song} = goOfName(name);
+  return song === 'Pałyn' ? {...meterOf(song), click: false} : meterOf(song);
+};
+// Which take each file is, for its drift line.
+const NAMES = {};
 function takeOf(n, name, length, end, markers) {
   const tracks = PARTS.map(p => ({name: p.name, file: `${TONIGHT}/${n}/${p.name}.wav`}));
   for (const tr of tracks) {
     KIND[tr.file] = {part: tr.name, seed: n, end};
+    NAMES[tr.file] = name;
     fileDurations[tr.file] = length;
   }
   return {take_number: n, name, ...goOfName(name), starred: isTheTake(markers),
@@ -161,6 +169,44 @@ const EARLIER = [
   takeOf(4, 'Take 4', 108, 104, []),
   takeOf(5, 'Viasna', 141, 137, []),
 ];
+// ---- The tempo through each take (take_drift) -------------------------
+// The band's tempo at a few times in a take, bar 1 being where the song
+// comes in. Pałyn 2 ran in the choruses and most in the bridge ("bridge —
+// try it slower"), and the outro sank; Viasna, to the click, dragged for a
+// stretch; Take 4, of no song, is measured against its own middle. On
+// Tuesday Pałyn 5 ran ahead in its bridge and Pałyn 6 held it: the site's
+// story compares the two. Any other take leans a little in the choruses.
+const AT = bars => START + bars * BAR;
+const DRIFT = {
+  'Pałyn 2': {seed: 2, keys: [
+    [0, 127.4], [AT(8), 127.8], [AT(22), 128.6], [AT(25), 132.6], [AT(31), 133.4], [AT(34), 129.6],
+    [AT(46), 129.2], [AT(49), 131.8], [AT(55), 132.4], [AT(57), 134.6], [AT(62), 135.4], [AT(65), 131.4],
+    [AT(78), 130.6], [AT(80), 127.4], [AT(84), 122.6]]},
+  'Viasna': {seed: 5, keys: [[0, 128], [62, 128.2], [72, 125.6], [82, 124.6], [90, 127.6], [100, 128], [137, 128.1]]},
+  'Take 4': {seed: 4, middle: 126, keys: [
+    [0, 121.4], [20, 122.6], [36, 125.8], [52, 130.4], [64, 131.2], [76, 127.2], [92, 125.6], [104, 123.4]]},
+  'Pałyn 5': {seed: 15, keys: [
+    [0, 127.6], [40, 128.4], [AT(24), 129.4], [AT(28), 132.8], [AT(34), 129.4], [AT(52), 129.6],
+    [AT(55), 133.2], [AT(57), 134.8], [AT(63), 135], [AT(66), 131.4], [AT(78), 129.4], [AT(84), 126.4]]},
+  'Pałyn 6': {seed: 16, keys: [[0, 127.8], [50, 128.6], [62, 129.4], [80, 128.4], [110, 128.8], [130, 128.2],
+                              [160, 128.6], [AT(80), 126.8], [AT(84), 125.4]]},
+  'Pałyn 7': {seed: 17, keys: [[0, 128.2], [60, 128.8], [120, 128.4], [150, 128.6], [AT(84), 127.6]]},
+};
+driftCurve = (file, aim) => {
+  const name = NAMES[file];
+  if (!name) return null;
+  const own = DRIFT[name];
+  if (own) return {start: START, middle: own.middle ?? 128, ...own};
+  // Any other go: a little ahead or behind in the choruses and the bridge.
+  const seed = [...name].reduce((n, c) => n + c.charCodeAt(0), 0);
+  const ref = aim ?? 124 + (seed % 7);
+  const lean = k => (hash(seed + k) - 0.35) * 5;
+  return {start: START, seed, middle: ref, keys: [
+    [0, ref - 0.4], [AT(22), ref + 0.6], [AT(26), ref + lean(1)], [AT(31), ref + lean(1)], [AT(35), ref + 0.4],
+    [AT(50), ref + lean(2)], [AT(55), ref + lean(2)], [AT(58), ref + lean(3)], [AT(63), ref + lean(3)],
+    [AT(66), ref + 0.6], [AT(84), ref - 1]]};
+};
+
 // For the script driving the page: where things are in the song.
 window.__SONG__ = {length: n => fileDurations[`${TONIGHT}/${n}/Drums.wav`],
                    bridge: SECTION('bridge'), bar: BAR};
@@ -299,6 +345,7 @@ const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => 
   const tracks = PARTS.map(p => ({name: p.name, file: `${folder}/${i + 1}/${p.name}.wav`}));
   for (const tr of tracks) {
     KIND[tr.file] = {part: tr.name, seed, end};
+    NAMES[tr.file] = name;
     fileDurations[tr.file] = length;
   }
   return {take_number: i + 1, name, ...goOfName(name), starred: isTheTake(markers),

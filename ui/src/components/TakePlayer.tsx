@@ -22,6 +22,7 @@ import { WholeTip, useCut } from "@/components/ui/whole"
 import { Timeline } from "@/components/Timeline"
 import { PlayerKeys } from "@/components/PlayerKeys"
 import { useAfter } from "@/hooks/useAfter"
+import { useTakeDrift } from "@/hooks/useTakeDrift"
 import { useKey } from "@/hooks/useSpacebar"
 import { cn } from "@/lib/utils"
 import { useKeysOn } from "@/lib/keys"
@@ -31,7 +32,7 @@ import { rise } from "@/lib/motion"
 import { playLabel, SPINNER_AFTER_MS } from "@/lib/playLook"
 import { api, type Marker, type MissingNotes, type NotesFile, type TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
-import type { TakeClick } from "@/lib/metronome"
+import type { DriftTake } from "@/lib/drift"
 
 const SKIP_SECONDS = 10
 /** A region shorter than this is a slip of the mouse, not an intention. */
@@ -112,8 +113,9 @@ export function TakePlayer({
 }: {
   player: MultitrackPlayer
   /** The take's click: its tempo, its signature, and whether it was
-   *  recorded to the click, for Master's button and stripes. */
-  take?: TakeClick | null
+   *  recorded to the click, for Master's button and stripes; and its files
+   *  and song, for the band's tempo along Master's lane. */
+  take?: DriftTake | null
   /** The take's .mid files, drawn under their audio or in lanes of their
    *  own; and the tracks that took notes and got none. A take from before
    *  MIDI has neither. */
@@ -146,6 +148,7 @@ export function TakePlayer({
   rising?: boolean
 }) {
   const notesRead = useTakeNotes(notes, notesMissing)
+  const drift = useTakeDrift(take)
   // The same rule the timeline draws by: one end set reaches to the take's
   // own start or end.
   const { region, duration } = player
@@ -181,6 +184,7 @@ export function TakePlayer({
         <Timeline
           player={player}
           take={take}
+          drift={drift}
           markers={markers}
           notes={notes}
           notesMissing={notesMissing}

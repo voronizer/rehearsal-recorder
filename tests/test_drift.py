@@ -143,9 +143,9 @@ class Take:
 
 
 def runs(tempos, aim, tol=0.02):
-    """Stretches as the interface finds them (lib/drift.ts): bars more than
-    `tol` off the same way, two or more, joined across two bars or fewer; as
-    (first bar index, last, sign)."""
+    """Stretches as the interface finds them (lib/drift.ts): two bars or more
+    in a row, more than `tol` off the same way, joined across two bars or
+    fewer; as (first bar index, last, sign)."""
     sign = [0 if x is None or abs(x / aim - 1) <= tol else (1 if x > aim else -1) for x in tempos]
     out, i = [], 0
     while i < len(sign):
@@ -155,12 +155,13 @@ def runs(tempos, aim, tol=0.02):
         j = i
         while j + 1 < len(sign) and sign[j + 1] == sign[i]:
             j += 1
-        if out and out[-1][2] == sign[i] and i - out[-1][1] - 1 <= 2:
-            out[-1][1] = j
-        else:
-            out.append([i, j, sign[i]])
+        if j - i + 1 >= 2:
+            if out and out[-1][2] == sign[i] and i - out[-1][1] - 1 <= 2:
+                out[-1][1] = j
+            else:
+                out.append([i, j, sign[i]])
         i = j + 1
-    return [(a, b, s) for a, b, s in out if b - a + 1 >= 2]
+    return [tuple(r) for r in out]
 
 
 def close(found, take, aim, label, within=0.02, first_bar=0):

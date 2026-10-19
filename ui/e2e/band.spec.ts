@@ -48,9 +48,10 @@ test("a rehearsal of the band's played by its set says so in History", async ({ 
 
 test("the band plays on the click's grid from the first sample", async ({ page }) => {
   await openBandApp(page)
-  // Pałyn 2's drums, a take played to the click at 128 in 4/4: the sticks
-  // count in a bar from the file's first sample, as the click's count-in
-  // does, and the song comes in on the bar after it.
+  // Pałyn 2's drums, a take at 128 in 4/4 played on the click's grid (the
+  // band had the click switched off for it, band.js): the sticks count in a
+  // bar from the file's first sample, as the click's count-in does, and the
+  // song comes in on the bar after it.
   const onsets = await page.evaluate(async () => {
     const api = (window as unknown as {
       pywebview: { api: { take_media: (...a: unknown[]) => Promise<{ peaks: number[][] }[]> } }
