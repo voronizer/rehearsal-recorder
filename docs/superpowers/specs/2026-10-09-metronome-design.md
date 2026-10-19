@@ -84,7 +84,9 @@ were merged after this spec was approved. Re-read against them:
   from the count-in's end, as the screen's clock does.
 - **The recording screen's footer** now has the status row at its left
   (the recording screen's ruling «Статус у Stop», 17 Oct). Where the
-  metronome's row goes during a take was asked again: see Part 5.
+  metronome's row goes during a take was asked again (q14): «Слева, как
+  было», so it stays at the footer's far left, as on the rehearsal screen,
+  and the status row moves beside Stop (Part 5).
 - **The beat's light and F11.** F11 says nothing on the recording screen
   moves but the meters and the clock. M9 is Alex's own pick, made a day
   after that default was told, so it stands. The edge light and the lit
@@ -321,7 +323,8 @@ above, in both themes, with nothing cut.
   eighth. The light is a thin edge, not the screen, and stays under WCAG
   2.3.1's general flash threshold even at 600 a minute *(new)*; the plan
   checks it.
-- **The bottom-left row stays**: the switch, the tempo with its unit and
+- **The bottom-left row stays** (q14, «Слева, как было»: the status row
+  moves to the footer's right, beside Stop): the switch, the tempo with its unit and
   the signature, the dots, and a line: "Count-in: 2 of 4", "Clicking to
   Stop.", "Click off. The tempo still goes into the take." or "No click:
   this take has no tempo." No gear, no Tap and no
