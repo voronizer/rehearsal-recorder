@@ -3441,6 +3441,133 @@ def main():
         ok("the tool reads the .mid through the app's own smf and imports neither mido nor the MIDI library",
            "rehearsal_recorder.midi.smf" in tool_imports and not tool_imports & {"pylibremidi", "mido"})
 
+    print("\n[12] Pads that tap")
+    now12 = [500 * S]  # the rig's clock
+    drums12 = {"name": "Drums", "mode": "both", "channel": 2, "midi_port": {"name": "TD-17"}}
+    pad12 = {"name": "Pad", "mode": "midi", "channel": None, "midi_port": {"name": "SPD-SX"}}
+    keys12 = {"name": "Keys", "mode": "midi", "channel": None, "midi_port": {"name": "Launchkey Mini MK3"}}
+    remote12 = {"name": "Pad", "mode": "midi", "channel": None, "midi_port": {"name": "Remote"}}
+    td12 = PortInfo("TD-17", "TD-17", "Roland")
+    spd12 = PortInfo("SPD-SX", "SPD-SX", "Roland")
+    launch12 = PortInfo("Launchkey Mini MK3", "Launchkey Mini MK3", "Novation")
+    launch_daw12 = PortInfo("Launchkey Mini MK3 DAW", "Launchkey Mini MK3", "Novation")
+    remote_info12 = PortInfo("Remote", "Remote", "Reha")
+    HIT, OFF = b"\x99\x26\x64", b"\x89\x26\x00"
+
+    fake12 = FakePortSystem([td12, spd12])
+    rig12 = MidiRig(fake12, threads=False, now_ns=lambda: now12[0])
+    rig12.use([drums12, pad12])
+    ok("a rig that was never asked to listen has no taps and is not listening",
+       rig12.taps() == [] and rig12.listening() is False)
+    t0 = now12[0]
+    fake12.send("TD-17", t0 + 100 * MS, HIT)
+    rig12.drain()
+    ok("a hit before listen_taps is no tap", rig12.taps() == [])
+    fake12.send("TD-17", now12[0] - 1 * MS, HIT)               # struck a moment before, reaching the writer after
+    rig12.listen_taps()
+    ok("listen_taps starts the listening", rig12.listening() is True)
+    fake12.send("TD-17", t0 + 500 * MS, HIT)
+    fake12.send("SPD-SX", t0 + 800 * MS, b"\x9a\x30\x01")      # velocity 1 is a hit
+    rig12.drain()
+    ok("a hit struck before listen_taps, though it reached the writer after, is no tap, and the two after it are",
+       rig12.taps() == [t0 + 500 * MS, t0 + 800 * MS])
+    ok("taps hands each hit over once", rig12.taps() == [])
+    fake12.send("TD-17", t0 + 900 * MS, OFF)
+    fake12.send("TD-17", t0 + 910 * MS, b"\x99\x26\x00")        # a note-on at velocity 0 lets go
+    fake12.send("TD-17", t0 + 920 * MS, b"\xb9\x04\x5a")        # the hi-hat pedal
+    fake12.send("TD-17", t0 + 930 * MS, b"\xfe")                # active sensing
+    fake12.send("TD-17", t0 + 940 * MS, b"\xc9\x05")            # a program change
+    rig12.drain()
+    ok("a note-off, a note-on at velocity 0, a control change, active sensing and a program change are no taps",
+       rig12.taps() == [])
+    ok("and the meters count the notes as they did", rig12.activity()["Drums"]["notes"] == 3)
+
+    # A pause of 2 s ends the listening, counted from the last hit.
+    hits12 = [t0 + 800 * MS + step * 1900 * MS for step in (1, 2, 3)]  # 1.9 s after the one before, each
+    for at in hits12:
+        fake12.send("TD-17", at, HIT)
+    rig12.drain()
+    ok("hits 1.9 s apart keep the listening going", rig12.taps() == hits12 and rig12.listening() is True)
+    last = hits12[-1]
+    fake12.send("TD-17", last + 2100 * MS, HIT)
+    rig12.drain()
+    ok("2.1 s of quiet ends it: the hit after is no tap", rig12.taps() == [] and rig12.listening() is False)
+    fake12.send("TD-17", last + 2200 * MS, HIT)
+    rig12.drain()
+    ok("and the next is none either, until listen_taps is asked again", rig12.taps() == [])
+    now12[0] = last + 2300 * MS
+    rig12.listen_taps()
+    fake12.send("TD-17", now12[0] + 300 * MS, HIT)
+    rig12.drain()
+    ok("asked again, it listens afresh", rig12.taps() == [now12[0] + 300 * MS])
+
+    # Quiet with no hit at all ends it too, and the length of the pause is the caller's.
+    now12[0] += 10 * S
+    rig12.listen_taps()
+    now12[0] += 1900 * MS
+    ok("1.9 s on, with no hit, it is still listening", rig12.listening() is True)
+    now12[0] += 200 * MS
+    ok("2.1 s on, with no hit, it is not", rig12.listening() is False)
+    now12[0] += 5 * S
+    rig12.listen_taps(quiet_sec=0.5)
+    fake12.send("TD-17", now12[0] + 600 * MS, HIT)
+    rig12.drain()
+    ok("a pause of 0.5 s asked for ends it at 0.6 s", rig12.taps() == [] and rig12.listening() is False)
+
+    # Asked again while listening, it goes on and keeps the hits not yet read.
+    now12[0] += 5 * S
+    rig12.listen_taps()
+    fake12.send("TD-17", now12[0] + 100 * MS, HIT)
+    rig12.drain()
+    rig12.listen_taps()
+    fake12.send("TD-17", now12[0] + 200 * MS, HIT)
+    rig12.drain()
+    ok("asked again while listening, the hit not yet read is kept and the next is added",
+       rig12.taps() == [now12[0] + 100 * MS, now12[0] + 200 * MS])
+
+    # A hit in a take is a tap and a note.
+    now12[0] += 5 * S
+    clock12 = AudioClock(SR)
+    clock12.started_ns = now12[0]
+    with tempfile.TemporaryDirectory() as tmp12:
+        rig12.begin_take(Path(tmp12), clock12)
+        rig12.listen_taps()
+        fake12.send("TD-17", now12[0] + 400 * MS, HIT)
+        rig12.drain()
+        ok("in a take a hit is a tap, and the meters count it as well",
+           rig12.taps() == [now12[0] + 400 * MS] and rig12.activity()["Drums"]["notes"] == 1)
+        rig12.end_take(1.0)
+
+    # Only the ports given to the track cards.
+    rig12.release()
+    ok("releasing the rig ends the listening", rig12.listening() is False and rig12.taps() == [])
+    rig12.shutdown()
+
+    fake12 = FakePortSystem([td12, launch12, launch_daw12, remote_info12])
+    rig12 = MidiRig(fake12, threads=False, now_ns=lambda: now12[0])
+    rig12.reserve_controller(remote_info12.saved())
+    rig12.use([drums12, keys12, remote12], check=True)
+    ok("the check opens the Launchkey's other port as well, and the controller's is not opened",
+       sorted(port.info.name for port in fake12.open_ports) ==
+       ["Launchkey Mini MK3", "Launchkey Mini MK3 DAW", "TD-17"])
+    rig12.listen_taps()
+    t1 = now12[0]
+    ok("the controller's port hears nothing, so its buttons are no taps",
+       fake12.send("Remote", t1 + 100 * MS, HIT) is False)
+    fake12.send("Launchkey Mini MK3 DAW", t1 + 200 * MS, HIT)   # a port no track card has, only counted by the check
+    fake12.send("Launchkey Mini MK3", t1 + 300 * MS, HIT)
+    rig12.drain()
+    ok("a port that only the check opened is no tap either, the one a track card has is",
+       rig12.taps() == [t1 + 300 * MS])
+    rig12.reserve_controller(None)
+    ok("the controller's port is opened for a track card only once it is not the controller's",
+       "Remote" in {port.info.name for port in fake12.open_ports})
+    rig12.listen_taps()
+    fake12.send("Remote", now12[0] + 100 * MS, HIT)
+    rig12.drain()
+    ok("and then its hits are taps", rig12.taps() == [now12[0] + 100 * MS])
+    rig12.shutdown()
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

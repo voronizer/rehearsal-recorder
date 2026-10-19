@@ -217,6 +217,11 @@ class MidiRig:
         self._take = None  # the take begun and not yet ended, as the app sees it
         self._writing = None  # the take the writer feeds: between its beginning and its end on the queue
         self._zeroing = 0  # times the counts started again that the writer has not yet reached
+        self._taps = []  # ns of the hits since taps() last read them
+        self._listening = False  # listen_taps was asked, and no pause has ended it
+        self._listen_from = 0  # the rig's clock when it was asked: a hit struck before is no tap
+        self._listen_until = 0  # ns: a hit later than this ends the listening; each tap moves it on
+        self._quiet = 0  # ns: the pause that ends it
         self._ticks = 0
         self._changed = False  # the observer said the list changed
         self._closed = False
@@ -312,6 +317,39 @@ class MidiRig:
         """The notes counted, the loudest and the same notes twice start again."""
         with self._lock:
             self._zero()
+
+    def listen_taps(self, quiet_sec=2.0) -> None:
+        """
+        Tap was pressed: from now the note-ons of the ports the track cards have
+        are taps (spec Part 11), until `quiet_sec` passes with none. Hits struck
+        before now are not, whatever the writer has reached. Asked again while
+        listening it goes on, from the last tap or now, whichever is later, and
+        keeps the taps not yet read; asked after it ended, it starts afresh.
+        """
+        now = self._now()
+        with self._lock:
+            self._quiet = int(quiet_sec * _NS)
+            if self._listening and now <= self._listen_until:
+                self._listen_until = max(self._listen_until, now + self._quiet)
+            else:
+                self._taps = []
+                self._listening = True
+                self._listen_from = now
+                self._listen_until = now + self._quiet
+
+    def taps(self) -> list[int]:
+        """The hits since this was last called, each the ns its port gave, in the
+        order the writer reached them. A hit is a note-on with a velocity, on a
+        port a track card has while listening; the controller's port is not the
+        rig's (reserve_controller), so its buttons are never among them."""
+        with self._lock:
+            taps, self._taps = self._taps, []
+        return taps
+
+    def listening(self) -> bool:
+        """Whether listen_taps was asked and its pause has not yet passed."""
+        with self._lock:
+            return self._listening and self._now() <= self._listen_until
 
     def activity(self) -> dict:
         """
@@ -501,6 +539,8 @@ class MidiRig:
             else:
                 port.state.feed(data)
             take = self._writing
+            if note_on and port.tracks and self._tapped(ns):
+                self._taps.append(ns)
             # A note that arrived before the counts last started again, and
             # that the writer reaches after, is not counted.
             if note_on and not self._zeroing:
@@ -525,6 +565,18 @@ class MidiRig:
             # Active sensing says the port is alive, and a .mid leaves it out (F2).
             if status != _SENSING:
                 self._tell(take, take.recorder.feed, name, ns, data)
+
+    def _tapped(self, ns):
+        """Whether a hit at `ns` is a tap (under the lock): listening, struck since it
+        was asked, and within the pause of the last tap. The first hit after
+        the pause ends the listening and is not one."""
+        if not self._listening or ns < self._listen_from:
+            return False
+        if ns > self._listen_until:
+            self._listening = False
+            return False
+        self._listen_until = max(self._listen_until, ns + self._quiet)
+        return True
 
     def _marker(self, item):
         """
@@ -949,6 +1001,8 @@ class MidiRig:
             ports = list(self._live.values())
             self._tracks = {}
             self._check = False
+            self._listening = False
+            self._taps = []
             self._zero()
         for port in ports:
             self._close(port)
