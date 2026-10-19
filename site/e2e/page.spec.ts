@@ -88,17 +88,23 @@ test("the controller has a block of its own after the app, its photo beside its 
   expect(at.block.top).toBeGreaterThanOrEqual(at.hero)
   expect(at.block.bottom).toBeLessThanOrEqual(at.features)
   expect(at.copy.right).toBeLessThanOrEqual(at.photo.left)
+  // The photo goes to the block's edges: top, right and bottom.
+  expect(Math.abs(at.photo.top - at.block.top)).toBeLessThanOrEqual(1)
+  expect(Math.abs(at.photo.right - at.block.right)).toBeLessThanOrEqual(1)
+  expect(Math.abs(at.photo.bottom - at.block.bottom)).toBeLessThanOrEqual(1)
 })
 
-// On the narrowest phone the photo and the link still fit.
+// On a phone the photo is under the words, across the whole block, and the
+// link still fits.
 for (const width of [320, 390]) {
-  test(`at ${width} px the controller's photo fits, and the page does not scroll sideways`, async ({ page }) => {
+  test(`at ${width} px the controller's photo is across the block, and the page does not scroll sideways`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("/")
     const block = (await page.locator("#controller").boundingBox())!
     const photo = (await page.locator("#controller img").boundingBox())!
-    expect(photo.x).toBeGreaterThanOrEqual(block.x)
-    expect(photo.x + photo.width).toBeLessThanOrEqual(block.x + block.width)
+    expect(Math.abs(photo.x - block.x)).toBeLessThanOrEqual(1)
+    expect(Math.abs(photo.x + photo.width - (block.x + block.width))).toBeLessThanOrEqual(1)
+    expect(Math.abs(photo.y + photo.height - (block.y + block.height))).toBeLessThanOrEqual(1)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
   })
 }
