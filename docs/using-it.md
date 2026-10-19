@@ -909,7 +909,7 @@ rehearsal.
 
 ## The metronome
 
-![The metronome's row at the bottom left of the rehearsal screen, beside Finish and Record take: the switch, 128 bpm with − and +, 4/4, Tap, ▶, the beat's dots and the settings button, over the line “The song's tempo.”](screenshots/metronome-row.png)
+![The metronome's row at the bottom left of the rehearsal screen, beside Finish and Record take: the switch, 128 bpm with − and +, 4/4, Tap, ▶, the beat's dots and the gear, over the line “The song's tempo.”](screenshots/metronome-row.png)
 
 The metronome clicks on every beat, higher on the first beat of a bar, so
 you hear where each bar starts. How fast it clicks is the tempo, counted in
@@ -946,8 +946,8 @@ The metronome is one row at the bottom left of the rehearsal screen, beside
   starts its own click, and when you leave the screen.
 - A dot for each click of a bar, lit in time while ▶ plays. The first is
   bigger, and in 6/8 the fourth too, with the six in two groups of three.
-- The button with two sliders, **Metronome settings**, opens the click's
-  settings (see [The click's settings](#the-clicks-settings)).
+- The gear opens the click's settings (see [The click's
+  settings](#the-clicks-settings)).
 
 The line under the row says where the tempo comes from, and what you can do
 next. With the switch off it says “Off: takes record without the click.”
@@ -1043,8 +1043,8 @@ name.
 
 ### The click's settings
 
-The button with two sliders at the end of the row has the same settings as
-**Settings › Metronome**, and a change in one shows in the other.
+The gear at the end of the row has the same settings as **Settings ›
+Metronome**, and a change in one shows in the other.
 
 - **Click output**: where the click is heard, as above.
 - **Volume**: how loud the click is. A bar plays when you let go of the
