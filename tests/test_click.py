@@ -839,6 +839,34 @@ def on_its_own():
        not mover.is_alive() and player.free is None and m.state()["phase"] == "idle")
     m.stop()
 
+    print("  Play on a song's page")
+    # The row holds a change, 150 in 4/4, Ahon's own being 198 in 6/8.
+    held = (m.take_meter(), m.state()["held"])
+    played = m.play(96, "3/4")
+    page = player.free
+    state = m.state()
+    ok("a song's page plays its own tempo and signature, and the screen shows them",
+       played["ok"] and isinstance(page, ClickSource) and (page.tempo, page.signature) == (96, "3/4")
+       and (state["phase"], state["tempo"], state["signature"], state["per_bar"]) == ("preview", 96, "3/4", 3))
+    ok("  the row left as it was, its change still held",
+       held == ((150, "4/4", True), True) and (m.take_meter(), state["held"]) == held)
+    m.set(160, "4/4")
+    ok("  and it does not follow the row", player.free is page and page.tempo == 96)
+    player.free = None
+    m.resink()
+    m.set(150, "4/4")
+    ok("  nor once moved to another stream", isinstance(player.free, ClickSource) and player.free is not page
+       and player.free.tempo == 96 and m.state()["tempo"] == 96)
+    m.stop()
+    ok("stopped, the row is as it was", (m.take_meter(), m.state()["held"], m.state()["tempo"]) == ((150, "4/4", True), True, 150))
+    ok("a tempo out of its range, or a signature not one of the four, is refused as the row's is",
+       m.play(20, "4/4") == {"ok": False, "error": "A tempo in 4/4 is a whole number from 30 to 300"}
+       and m.play(96, "5/4") == {"ok": False, "error": "The time signature is one of 4/4, 3/4, 2/4 and 6/8"}
+       and m.play(96, None)["ok"] is False and m.play(96.5, "3/4")["ok"] is False and player.free is None)
+    ok("with no tempo it plays the row's, as before", m.play()["ok"] and player.free.tempo == 150
+       and (m.state()["phase"], m.state()["tempo"]) == ("preview", 150))
+    m.stop()
+
     print("  Where the click goes, and the device list")
     real_query = _sd.query_devices
 

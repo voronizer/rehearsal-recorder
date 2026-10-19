@@ -13264,6 +13264,30 @@ def main():
         ok("in an app just started the player's click is off", fresh._player.state()["click"] is False)
         fresh.shutdown()
 
+    @scenario66("Play on a song's page")
+    def _():
+        # The next take is Palyn's, at 120; 132 is typed in the row and held.
+        a83.metronome_set(132, "4/4")
+        played = a83.metronome_play(96, "3/4")
+        state = a83.metronome_state()
+        ok("a song's page plays its own tempo through the Api, and the screen shows it",
+           played["ok"] and (state["phase"], state["tempo"], state["signature"], state["per_bar"])
+           == ("preview", 96, "3/4", 3) and state["held"] is True)
+        a83.metronome_stop()
+        ok("  and once it stops, the row's held change is still there",
+           state83(a83, "phase", "tempo", "signature", "held") == ("idle", 132, "4/4", True))
+        ok("a tempo out of its range, or a signature not one of the four, is refused as the row's is",
+           a83.metronome_play(20, "4/4") == {"ok": False, "error": "A tempo in 4/4 is a whole number from 30 to 300"}
+           and a83.metronome_play(96, "5/4")["ok"] is False and a83.metronome_state()["phase"] == "idle")
+        ok("with no tempo it plays the row's, as before",
+           a83.metronome_play()["ok"] and state83(a83, "phase", "tempo") == ("preview", 132))
+        a83.metronome_stop()
+        a83.start_take()
+        ok("during a take it is refused", a83.metronome_play(96, "3/4") == {"ok": False, "error": "The take has its own click"})
+        feed83(a83, 4)
+        a83.discard_take(a83.stop_take()["temp_dir"])
+        a83.metronome_set(120, "4/4")
+
     @scenario66("a click device not plugged in")
     def _():
         a83._config["click_device"] = {"name": "X18", "host_api": "CoreAudio"}

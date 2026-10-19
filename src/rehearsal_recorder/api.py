@@ -4800,10 +4800,11 @@ class Api:
         return self._metronome.set_on(on)
 
     @serialised
-    def metronome_play(self):
+    def metronome_play(self, tempo=None, signature=None):
         """▶: the click between takes at the row's tempo, until Stop, Record
-        or the row being emptied."""
-        return self._metronome.play()
+        or the row being emptied. With a `tempo`, a song page's ▶: that tempo
+        in `signature`, checked as the row's is, and the row left as it is."""
+        return self._metronome.play(tempo, signature)
 
     @serialised
     def metronome_stop(self):
