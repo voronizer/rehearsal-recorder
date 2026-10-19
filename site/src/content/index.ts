@@ -26,8 +26,8 @@ export type SiteContent = {
     phoneCaption: string
   }
   /** Viktor Baikov's controller: its words, a `- ` list of three, its fine
-   *  print, its link's words and what its screen shows. */
-  controller: { title: string; body: string; finePrint: string; link: string; screen: string }
+   *  print, its link's words and what its photo shows. */
+  controller: { title: string; body: string; finePrint: string; link: string; photo: string }
   features: { title: string; lede: string; tiles: Section[] }
   story: { title: string; steps: Section[] }
   faq: { title: string; questions: Section[] }
@@ -81,7 +81,7 @@ export function readContent(tagFromRelease?: string): SiteContent {
     "caption on a phone",
   ])
   const controller = doc("controller.md")
-  const controllerParts = sectionsByTitles("controller.md", controller, ["fine print", "link", "screen"])
+  const controllerParts = sectionsByTitles("controller.md", controller, ["fine print", "link", "photo"])
   const features = doc("features.md")
   const story = doc("story.md")
   const faq = doc("faq.md")
@@ -104,7 +104,7 @@ export function readContent(tagFromRelease?: string): SiteContent {
       body: controller.intro,
       finePrint: controllerParts["fine print"],
       link: controllerParts.link,
-      screen: controllerParts.screen,
+      photo: controllerParts.photo,
     },
     features: {
       title: features.title!,

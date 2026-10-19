@@ -1,16 +1,10 @@
 import { content } from "../content"
 import { leadAndBeats } from "../content/markdown"
+import photo from "./controller.webp"
 import { Paragraphs } from "./Md"
 import { CONTROLLER } from "./links"
 
-/**
- * What the controller's 16 × 2 screen shows during a take, as its firmware
- * lays out the home screen (reha-controller, docs/menu-reference.md,
- * "home-rec"): the take and the song, then the state and the volume.
- */
-const SCREEN = ["T03-Viasna", "REC        V:080"].map((row) => [...row.padEnd(16)])
-
-/** Viktor Baikov's controller: its words beside its screen. */
+/** Viktor Baikov's controller: its words beside its photo. */
 export function Controller() {
   const { controller } = content
   const { lead, beats } = leadAndBeats(controller.body)
@@ -35,20 +29,8 @@ export function Controller() {
           </a>
         </p>
       </div>
-      <figure>
-        {/* Each character in a cell of its own, as on the screen, the
-            unlit ones faint. The caption says what is on it. */}
-        <div className="lcd" aria-hidden="true">
-          {SCREEN.map((row, r) => (
-            <div key={r}>
-              {row.map((c, i) => (
-                <span key={i}>{c === " " ? " " : c}</span>
-              ))}
-            </div>
-          ))}
-        </div>
-        <figcaption className="caption">{controller.screen}</figcaption>
-      </figure>
+      {/* 1000 px wide: sharp at twice the size it is shown. */}
+      <img src={photo} width={1000} height={734} alt={controller.photo} />
     </section>
   )
 }

@@ -43,17 +43,17 @@ describe("the site's content", () => {
     )
   })
 
-  it("has the controller's words: three lines, its fine print, its link and its screen", () => {
+  it("has the controller's words: three lines, its fine print, its link and its photo's", () => {
     const { controller } = content
     expect(controller.title).toBe("Start a take without going to the laptop.")
     expect(leadAndBeats(controller.body).beats).toEqual([
-      "Record/Stop starts a take, and pressed again keeps it.",
-      "Play/Stop plays the take back, and the knob sets how loud.",
+      "REC starts a take, and pressed again keeps it.",
+      "PLAY plays the take back, and the knob sets how loud.",
       "Hold SONG or TAKE and turn the knob to pick another one.",
     ])
     expect(controller.finePrint).toContain("Settings › Controls")
     expect(controller.link).toBe("Viktor Baikov's controller on GitHub")
-    expect(controller.screen).toBe("Its screen during a take: take 3 of Viasna, recording, the volume at 80.")
+    expect(controller.photo).toMatch(/^Viktor Baikov's controller: a red REC button/)
   })
 
   it("has the five steps, in order", () => {

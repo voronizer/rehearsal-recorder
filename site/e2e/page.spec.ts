@@ -67,7 +67,7 @@ test("on Windows, the Windows download is the button", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Download for macOS" })).toHaveAttribute("href", MAC_ZIP)
 })
 
-test("the controller has a block of its own after the app, its screen beside its words", async ({ page }) => {
+test("the controller has a block of its own after the app, its photo beside its words", async ({ page }) => {
   await page.goto("/")
   const block = page.locator("#controller")
   await expect(block.getByRole("heading", { level: 2 })).toHaveText("Start a take without going to the laptop.")
@@ -75,34 +75,30 @@ test("the controller has a block of its own after the app, its screen beside its
     "href",
     "https://github.com/viktor-baikov/reha-controller"
   )
-  // The screen as the controller's firmware lays it out, 16 cells a row.
-  const rows = block.locator(".lcd > div")
-  await expect(rows).toHaveCount(2)
-  await expect(rows.nth(0).locator("span")).toHaveCount(16)
-  await expect(rows.nth(0)).toHaveText("T03-Viasna\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0")
-  await expect(rows.nth(1)).toHaveText("REC\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0V:080")
-  await expect(block.locator("figcaption")).toHaveText(/^Its screen during a take/)
+  const photo = block.getByRole("img", { name: /^Viktor Baikov's controller: a red REC button/ })
+  await expect(photo).toBeVisible()
+  await expect.poll(() => photo.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(1000)
   const at = await page.evaluate(() => ({
     hero: document.querySelector(".hero")!.getBoundingClientRect().bottom,
     block: document.querySelector("#controller")!.getBoundingClientRect(),
     features: document.querySelector("#features")!.getBoundingClientRect().top,
     copy: document.querySelector("#controller .copy")!.getBoundingClientRect(),
-    screen: document.querySelector("#controller .lcd")!.getBoundingClientRect(),
+    photo: document.querySelector("#controller img")!.getBoundingClientRect(),
   }))
   expect(at.block.top).toBeGreaterThanOrEqual(at.hero)
   expect(at.block.bottom).toBeLessThanOrEqual(at.features)
-  expect(at.copy.right).toBeLessThanOrEqual(at.screen.left)
+  expect(at.copy.right).toBeLessThanOrEqual(at.photo.left)
 })
 
-// On the narrowest phone the screen's 16 cells and the link still fit.
+// On the narrowest phone the photo and the link still fit.
 for (const width of [320, 390]) {
-  test(`at ${width} px the controller's screen fits, and the page does not scroll sideways`, async ({ page }) => {
+  test(`at ${width} px the controller's photo fits, and the page does not scroll sideways`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("/")
     const block = (await page.locator("#controller").boundingBox())!
-    const screen = (await page.locator("#controller .lcd").boundingBox())!
-    expect(screen.x).toBeGreaterThanOrEqual(block.x)
-    expect(screen.x + screen.width).toBeLessThanOrEqual(block.x + block.width)
+    const photo = (await page.locator("#controller img").boundingBox())!
+    expect(photo.x).toBeGreaterThanOrEqual(block.x)
+    expect(photo.x + photo.width).toBeLessThanOrEqual(block.x + block.width)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
   })
 }
