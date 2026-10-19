@@ -13263,6 +13263,30 @@ def main():
         a83.set_click_device(None)
         ok("  and none once the click goes back to the player's output", a83.metronome_state()["output_missing"] is None)
 
+    @scenario66("drafts rescued after a restart")
+    def _():
+        # Two takes stopped and never kept, one to the click and one with the
+        # switch off, both at the row's 120. The app then starts again: what
+        # Stop said is gone, and each take.json is what is left.
+        a83.set_click_device(0)
+        a83.start_take()
+        feed83(a83, 16)
+        clicked = a83.stop_take()
+        a83.metronome_set_on(False)
+        a83.start_take()
+        feed83(a83, 16)
+        plain = a83.stop_take()
+        a83.metronome_set_on(True)
+        a83._meters.clear()
+        ok("the take with the switch off, its take.json read back: its tempo, and no click",
+           a83._meter_of_draft(plain["temp_dir"]) == {"tempo": 120, "signature": "4/4", "click": False})
+        rescued = [a83.recover_draft(t["temp_dir"]) for t in (clicked, plain)]
+        meters = [(r["take"]["tempo"], r["take"]["signature"], r["take"]["click"]) if r["ok"] else r
+                  for r in rescued]
+        ok("rescued, the click take keeps its tempo and its click", meters[0] == (120, "4/4", True))
+        ok("  and the other its tempo, with no click", meters[1] == (120, "4/4", False))
+        a83.set_click_device(None)
+
     a83.shutdown()
     capture83.RUN_ON_QUIET_SEC = quiet83
 
