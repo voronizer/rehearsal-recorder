@@ -2226,7 +2226,7 @@ def main():
                len(said7) == 1 and said7[0].levelno == logging.ERROR)
 
             class Unfinished(MidiRecorder):
-                def stop(self, duration_sec):
+                def stop(self, duration_sec, head_sec=0.0, meter=smf.NO_METER):
                     # A real stop lets go of its files before anything that can
                     # fail; Windows would not let the folder go otherwise.
                     self.abandon()
