@@ -3,7 +3,7 @@ Every Python suite, one command:
 
     python tests/run_all.py
 
-Thirteen of them, because they answer different questions and need different
+Fourteen of them, because they answer different questions and need different
 things to be true:
 
     test_control_api.py shared control API and JSON bridge without MIDI.
@@ -84,7 +84,15 @@ things to be true:
                        a rumble, 3 ms late or early, a take of two windows,
                        16, 24 and 32-bit float).
                        Later tasks add to it. No port is opened: the library
-                       is blocked and the rules are plain functions.
+                       is blocked and the rules are plain functions. Pads
+                       that tap are in it too: the rig's note-ons counted as
+                       taps only after Tap, from the instruments' ports and
+                       not the controller's, ending after a pause.
+
+    test_tempo.py      counting a song's tempo from a take (audio/tempo.py,
+                       numpy only), on synthetic takes: 4/4, 3/4, 6/8 and a
+                       drift, a drums .mid before the WAV and the WAV before
+                       the tracks mixed, silence and short takes giving none.
 
     test_click.py      the metronome's click: its tempos and accents, every
                        click of an hour on its frame, the three sounds and
@@ -119,7 +127,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SUITES = ("test_control_api.py", "test_controller_browse.py", "test_controller_diagnostics.py", "test_controller_extensions.py", "test_controller_recovery.py", "test_controller.py", "test_transport.py", "test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
-          "test_midi.py", "test_click.py")
+          "test_midi.py", "test_click.py", "test_tempo.py")
 
 # Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).
 LIMIT = 600

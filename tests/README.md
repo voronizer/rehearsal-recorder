@@ -6,8 +6,9 @@ cd ui && npm test                    # the interface, what needs no browser
 cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
-The thirteen Python suites cover audio, storage, platform behaviour, MIDI and
-shared controls. Interface tests run as unit and browser suites.
+The fourteen Python suites cover audio, storage, platform behaviour, MIDI,
+the tempo counter and shared controls. Interface tests run as unit and browser
+suites.
 
 ## test_control_api.py - shared controls
 
@@ -181,7 +182,16 @@ note beyond the window left unmatched and said so, `--max-ms` widening
 it, two notes at one click (one matched), a `.mid` with no WAV of its name and
 `--wav`, a folder with no `.mid`, no `.wav` or no folder at all exiting
 non-zero, an unreadable `.mid`, a soundfile that will not import, and the output
-staying ASCII, names in Cyrillic told apart by their escapes. Later tasks add to it.
+staying ASCII, names in Cyrillic told apart by their escapes; and the pads that
+tap (`MidiRig.listen_taps` and `taps`, on `fake_midi.py`): a hit before Tap is
+asked is no tap, one after it is, a hit struck before it but reaching the writer
+after it is none, a note-off, a note-on at velocity 0, a control change, active
+sensing and a program change are none, a pause of 2 s (or the length asked for)
+after the last tap ends the listening, with a hit or with none, asked again it
+goes on and keeps the taps not yet read, a hit in a take is a tap and a note, a
+port only the check opened gives none, and the controller's port, which the rig
+never opens, gives none until it is no longer the controller's. Later tasks add
+to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
 
@@ -202,6 +212,24 @@ click's stream reads refitted only as a mark is kept. And a crop of a click
 take snapped to its bars. The metronome's heavy arithmetic goes here rather
 than in `test_engine.py`, whose length bounds the whole run. Later tasks add to
 it.
+
+## test_tempo.py — counting a tempo
+
+`audio/tempo.py` counts a take's tempo with numpy alone (spec Part 10). The
+suite makes takes as the research harness does, a kick, a snare and hats
+rendered on a grid with 8 ms of jitter, so every answer has a truth: 4/4 at 128
+(or 64 or 256, said in the label as the halve and double case), 3/4 at 96 on a
+48 kHz take, 6/8 with the eighths at 198 (the eighth is what is counted, where a plain
+counter finds the quarter), a drift from 124 to 134 coming out near 129,
+and a drums `.mid` counted before a WAV that says something else, a `.mid` with
+no hits or that cannot be read handing the counting to the WAV, the drums WAV
+before the tracks mixed, a 24-bit stereo track mixed with a bass line, a take 40
+dB down, half a minute of playing followed by silence, 7 s too short and 10 s
+enough, silence and dither giving None, every answer inside the signature's
+range, a signature the app does not have refused, and 3 minutes counted in
+less than a third of the take as one array of memory. The time of a 3-minute
+take is printed, not asserted. No sound card, no MIDI port: WAVs and `.mid` files
+in a temporary folder. Run with `python tests/test_tempo.py`.
 
 ## The interface — in ui/, in TypeScript
 
