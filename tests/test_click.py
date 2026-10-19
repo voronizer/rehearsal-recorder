@@ -556,7 +556,7 @@ def one_stream():
     ok("  Stop before the first click still holds one quarter", eight.stop_frame(f8 - 100) == f8 + click_frame(2, 180, SR))
     ok("4/4: Stop in the count-in ends on its next click",
        tc.stop_frame(first + click_frame(1, 120, SR) + 1) == first + click_frame(2, 120, SR))
-    ok("the WAVs' tempo and the .mid's: 99 a quarter, 6/8",
+    ok("the WAVs' tempo and the .mid's: 180 eighths in 6/8 are 90 quarters",
        eight.acid() == Acid(90.0, 6, 8) and eight.meter() == (666667, (6, 3, 12, 8))
        and tc.acid() == Acid(120.0, 4, 4) and tc.meter() == (500000, (4, 2, 24, 8)))
     ok("none in the WAVs when the setting is off",

@@ -18,10 +18,11 @@ same position, so there is nothing to drift apart.
 The metronome's click rides this stream too (metronome spec, Parts 3 and 8). A
 click take plays back with its click, made again from its tempo at the take's
 own frames, so it follows a seek and a loop; it is under the master volume and
-out of the meters. Between takes, the click the metronome runs between takes
-is mixed in here when its output is this stream's device, on its own outputs,
-outside the take's mix: the app never opens a second stream on a device it
-already holds. The stream is opened wide enough for both.
+out of the meters. Between takes, the metronome's own click (▶, or a bar
+played for a setting) is mixed in here when its output is this stream's
+device, on its own outputs, outside the take's mix: the app never opens a
+second stream on a device it already holds. The stream is opened wide enough
+for both.
 """
 
 import threading
