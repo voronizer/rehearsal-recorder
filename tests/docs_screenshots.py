@@ -143,19 +143,36 @@ KIT_ON_BOTH = """
 # where there is a player, and no taller than the screen needs elsewhere,
 # so a picture is not half empty.
 HEIGHT = {"unsaved-takes": 420, "setup": 930, "settings": 760, "marks": 420, "sets": 720,
-          "rehearsal": 770,
+          "rehearsal": 770, "metronome-row": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
+          "metronome-master": 1040,
           "history": 820, "history-songs": 940, "history-marks": 820,
           "midi-card": 910, "midi-player": 1140}
 
 
-def shoot(page, name, clip=None):
-    """`clip`, if given, says what to cut out once the window is its height."""
+def shoot(page, name, clip=None, ready=None):
+    """`clip`, if given, says what to cut out once the window is its height;
+    `ready`, what to wait for after that, just before the picture."""
     OUT.mkdir(parents=True, exist_ok=True)
     page.set_viewport_size({"width": VIEWPORT["width"], "height": HEIGHT[name]})
     page.wait_for_timeout(400)
+    if ready:
+        ready(page)
     page.screenshot(path=str(OUT / f"{name}.png"), clip=clip(page) if clip else None)
     print(f"  {name}.png")
+
+
+def footer(page):
+    """What to cut out: the screen's footer, the whole width of the window."""
+    box = page.locator("footer").bounding_box()
+    return {"x": 0, "y": box["y"], "width": VIEWPORT["width"], "height": box["height"]}
+
+
+def between_clicks(page):
+    """Just after a click of the metronome: the window's edge has lit for it
+    and gone dark again, and stays dark till the next."""
+    page.wait_for_selector("[data-edge-light][data-lit]", state="attached")
+    page.wait_for_selector("[data-edge-light]:not([data-lit])", state="attached")
 
 
 def around(locators, margin=6):
@@ -256,12 +273,19 @@ def main():
         page.wait_for_timeout(500)
         shoot(page, "rehearsal")
 
+        # Viasna has a tempo, so the take counts in first: a bar of big
+        # digits where the clock goes, and the clock runs from its end. Stop
+        # is found as a button, since the metronome's line, "Clicking to
+        # Stop.", has the word too.
+        stop = page.get_by_role("button", name="Stop", exact=True)
         page.click("text=Record take 6")
-        page.wait_for_selector("text=Stop")
+        stop.wait_for()
+        page.wait_for_selector("[data-count-in]")
+        page.wait_for_selector("[data-count-in]", state="detached")
         page.wait_for_timeout(3200)
-        shoot(page, "recording")
+        shoot(page, "recording", ready=between_clicks)
 
-        page.click("text=Stop")
+        stop.click()
         page.wait_for_selector("[data-take-summary]")
         page.wait_for_timeout(1200)
         shoot(page, "review")
@@ -292,6 +316,32 @@ def main():
         page.mouse.click(box["x"] + box["width"] * 0.66, box["y"] + box["height"] / 2)
         page.wait_for_timeout(600)
         shoot(page, "zoom")
+
+        # The same few seconds with Master's click on: its bars and beats
+        # under the tracks. The pointer leaves the button, so no tip shows.
+        page.get_by_role("button", name="Click with the take").click()
+        page.mouse.move(0, 0)
+        shoot(page, "metronome-master",
+              around([page.get_by_role("group", name="Take timeline"), page.locator("[data-master-group]")]))
+        page.close()
+
+        # The metronome's row with Pałyn picked under Next take from the set:
+        # the song's 128 in 4/4. On a page of its own, as naming Pałyn has the
+        # fake read last Tuesday's takes of it, whose files have the paths of
+        # tonight's, and Pałyn 2 would then open in the player too long.
+        page = browser.new_page(viewport=VIEWPORT)
+        page.add_init_script(MOCK + BAND + COUNTED)
+        page.goto(server.base_url, wait_until="networkidle")
+        page.wait_for_selector("text=Start rehearsal")
+        page.fill("#rehearsal-name", "Tuesday jam")
+        page.click("[data-set-picker]")
+        page.get_by_role("menuitemradio", name="Gig on the 25th").click()
+        page.click("text=Start rehearsal")
+        page.wait_for_selector("text=Record take 6")
+        page.click("[data-set-song='Pałyn']")
+        page.wait_for_function("() => document.querySelector('#next-take-name').value.startsWith('Pałyn')")
+        page.get_by_text("The song's tempo.").wait_for()
+        shoot(page, "metronome-row", footer)
         page.close()
 
         page = browser.new_page(viewport=VIEWPORT)
