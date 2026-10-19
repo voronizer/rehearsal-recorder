@@ -1722,6 +1722,14 @@ class Api:
                     "error": "Not while recording. Stop the take first, then "
                              "look again.",
                 }
+            # Nor while Stop runs on to the next quarter: a click take's
+            # streams stay open for up to two seconds after Stop.
+            if self._stopping:
+                return {
+                    "ok": False,
+                    "error": "Not while a take is being saved. Look again "
+                             "once it is saved.",
+                }
             result = self._rescan_held()
         # Once both locks are let go: where the click's output is is read
         # again, and a click between takes follows the player (metronome.py's

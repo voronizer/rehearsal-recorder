@@ -12925,6 +12925,7 @@ def main():
     # whoever presses it (spec Parts 2 to 4), and the take keeps them. The
     # screen hears the count-in from metronome_state. Each part runs as [66]'s
     # do: one that breaks says so, and the rest still run.
+    import contextlib as contextlib83
     import threading as threading83
 
     import rehearsal_recorder.api as apimod83
@@ -13134,37 +13135,74 @@ def main():
         feed83(a83, 4)
         a83.discard_take(a83.stop_take()["temp_dir"])
 
-    @scenario66("Look again while Record opens the card")
-    def _():
-        answers, stops = [], []
-
-        def rescanning(rec):
-            real_start83(rec)
-            other = threading83.Thread(target=lambda: answers.append(a83.rescan_devices()), daemon=True)
-            other.start()
-            other.join(5)
-
+    @contextlib83.contextmanager
+    def portaudio_stops83():
+        """Look again, with PortAudio's stop and start counted rather than
+        done: what it yields lists each stop, which would end every stream."""
+        stops = []
         saved = {n: getattr(_sd, n, None) for n in ("_initialized", "_terminate", "_initialize")}
         _sd._initialized = 1
         _sd._terminate = lambda: stops.append("stopped")
         _sd._initialize = lambda: None
-        Recorder83.start = rescanning
         try:
-            started = a83.start_take()
-            Recorder83.start = real_start83
-            ok("between the take's streams opening and Record returning, Look again is refused",
-               started["ok"] and len(answers) == 1 and answers[0]["ok"] is False and stops == [])
-            feed83(a83, 4)
-            a83.discard_take(a83.stop_take()["temp_dir"])
-            ok("  and once the take is over it looks again", a83.rescan_devices()["ok"] and stops == ["stopped"])
+            yield stops
         finally:
-            Recorder83.start = real_start83
             for n, value in saved.items():
                 if value is None:
                     if hasattr(_sd, n):
                         delattr(_sd, n)
                 else:
                     setattr(_sd, n, value)
+
+    def look_again83(answers):
+        """Look again from another thread, as the screen asks it, while this one waits."""
+        other = threading83.Thread(target=lambda: answers.append(a83.rescan_devices()), daemon=True)
+        other.start()
+        other.join(5)
+
+    @scenario66("Look again while Record opens the card")
+    def _():
+        answers = []
+
+        def rescanning(rec):
+            real_start83(rec)
+            look_again83(answers)
+
+        with portaudio_stops83() as stops:
+            Recorder83.start = rescanning
+            try:
+                started = a83.start_take()
+            finally:
+                Recorder83.start = real_start83
+            ok("between the take's streams opening and Record returning, Look again is refused",
+               started["ok"] and len(answers) == 1 and answers[0]["ok"] is False and stops == [])
+            feed83(a83, 4)
+            a83.discard_take(a83.stop_take()["temp_dir"])
+            ok("  and once the take is over it looks again", a83.rescan_devices()["ok"] and stops == ["stopped"])
+
+    @scenario66("Look again while Stop runs on")
+    def _():
+        answers = []
+        real_stop = Recorder83.stop
+
+        def rescanning(rec, *args, **kwargs):
+            look_again83(answers)
+            return real_stop(rec, *args, **kwargs)
+
+        with portaudio_stops83() as stops:
+            a83.start_take()
+            feed83(a83, 4)
+            Recorder83.stop = rescanning
+            try:
+                stopped = a83.stop_take()
+            finally:
+                Recorder83.stop = real_stop
+            ok("while Stop runs on to the next quarter, the take's streams still open, Look again is refused",
+               stopped["ok"] and len(answers) == 1 and answers[0]
+               == {"ok": False, "error": "Not while a take is being saved. Look again once it is saved."}
+               and stops == [])
+            a83.discard_take(stopped["temp_dir"])
+            ok("  and once the take is saved it looks again", a83.rescan_devices()["ok"] and stops == ["stopped"])
 
     @scenario66("where the click cannot go")
     def _():
