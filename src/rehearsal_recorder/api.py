@@ -76,7 +76,7 @@ from rehearsal_recorder.audio.click import (
 )
 from rehearsal_recorder.audio.take_click import whole
 from rehearsal_recorder.audio.wavfile import read_acid
-from rehearsal_recorder.metronome import Metronome
+from rehearsal_recorder.metronome import ANOTHER_ASIO, Metronome
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
@@ -157,9 +157,6 @@ MIDI_THREADS = True
 # Part 11), looked at this often. The suites shorten both.
 TAP_QUIET_SEC = 2.0
 TAP_POLL_SEC = 0.1
-
-# Why the click cannot go to a card, as Settings › Metronome says it.
-ANOTHER_ASIO = "Another ASIO card can't play while one records."
 
 log = logging.getLogger(__name__)
 

@@ -58,7 +58,7 @@ import sounddevice as sd
 from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, SOUNDS, Voices, per_bar, tempo_range
 from rehearsal_recorder.audio.click_output import ClickOutput, SilentOutput
 from rehearsal_recorder.audio.click_source import ClickSource
-from rehearsal_recorder.audio.devices import STREAM_LOCK
+from rehearsal_recorder.audio.devices import STREAM_LOCK, _is_asio
 from rehearsal_recorder.audio.take_click import TakeClick, whole
 from rehearsal_recorder.store.names import UNNAMED_TAKE
 
@@ -80,6 +80,10 @@ UPCOMING_SEC = 1.5
 # How old the device list's word on the click's output may be when the screen
 # asks: the list is read again no more often than this from a poll.
 DEVICES_FRESH_SEC = 2.0
+
+# Why the click cannot go to a card, as Settings › Metronome says it, and why
+# a take's click there is not heard: PortAudio opens one ASIO stream at a time.
+ANOTHER_ASIO = "Another ASIO card can't play while one records."
 
 # The click between takes: its source, "player" or "own", the player or
 # output it plays in, whether the screen shows it (▶) or not (a bar played
@@ -140,6 +144,12 @@ def _name(index):
     except Exception:
         return ""
     return name if isinstance(name, str) else ""
+
+
+def _asio(index):
+    """Whether a device is reached through ASIO."""
+    with STREAM_LOCK:
+        return _is_asio(index)
 
 
 def _system_output():
@@ -442,7 +452,8 @@ class Metronome:
         The click for a take recorded from `device_index` at `samplerate`, or
         None for a take without one (no tempo, or the switch off). On the
         recording card it rides the take's stream; elsewhere it has its own,
-        or none when its device is not plugged in, and the take keeps its grid.
+        or none when its device is not plugged in or is a second ASIO card,
+        and the take keeps its grid.
         """
         tempo, signature, on = self.take_meter()
         if tempo is None or not on:
@@ -465,6 +476,10 @@ class Metronome:
                 output = SilentOutput(_name(here), "It has no outputs to click on.", int(samplerate))
             else:
                 route = tuple(c - 1 for c in channels)
+        elif here is not None and _asio(device_index) and _asio(here):
+            # The take's stream is the one ASIO stream PortAudio opens: the
+            # take records as it would, its click to no output, and says why.
+            output = SilentOutput(_name(here), ANOTHER_ASIO, int(samplerate))
         else:
             output = ClickOutput(device, channels or (1, 2))
         return TakeClick(tempo, signature, self._setting("count_in_bars"),

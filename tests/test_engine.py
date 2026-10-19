@@ -12678,6 +12678,82 @@ def main():
     m81.set_on(False)
     ok("the switch off: no click for the take", m81.take_click(0, SR) is None)
 
+    print("  Two ASIO cards")
+    # PortAudio opens one ASIO stream at a time: with the interface recording
+    # on ASIO, a click on another ASIO card has no stream of its own, and the
+    # take records all the same (spec Part 4).
+    from rehearsal_recorder.audio.click_output import SilentOutput as SilentOutput81
+
+    class OneAsio81(Streams81):
+        """A stream as PortAudio's ASIO opens it: one on a card in `asio` is
+        refused while another such stream is open, on that card or another."""
+
+        asio = set()
+        open_now = []
+
+        @staticmethod
+        def card(kw):
+            device = kw.get("device")
+            return device[0] if isinstance(device, tuple) else device
+
+        def __init__(self, **kw):
+            if self.card(kw) in OneAsio81.asio and any(s.card(s.kw) in OneAsio81.asio for s in OneAsio81.open_now):
+                raise RuntimeError("Error opening stream: Unanticipated host error [PaErrorCode -9999]")
+            super().__init__(**kw)
+            OneAsio81.open_now.append(self)
+
+        def close(self):
+            super().close()
+            if self in OneAsio81.open_now:
+                OneAsio81.open_now.remove(self)
+
+    kinds81 = (_sd.InputStream, _sd.OutputStream, _sd.Stream)
+    _sd.InputStream = _sd.OutputStream = _sd.Stream = OneAsio81
+    OneAsio81.asio = {0, 3}
+    try:
+        tc81b = TakeClick80(120, "4/4", 1, voices80, (0, 1), output=ClickOutput81(3, (1, 2)))
+        rec81b = Rec80(0, SR, two80, tmp80 / "two asio cards", click=tc81b)
+        try:
+            rec81b.start()
+            started81 = True
+        except Exception as e:
+            print(f"  (Record failed: {e})")
+            started81 = False
+        ok("the click's own output on a second ASIO card: the take's stream opens first, and records",
+           started81 and rec81b._stream is not None and rec81b._stream.kw["device"] == 0
+           and tc81b.problem() is not None)
+        if started81:
+            for i in range(4):
+                block80(rec81b, i)
+            rec81b.stop()
+    finally:
+        _sd.InputStream, _sd.OutputStream, _sd.Stream = kinds81
+        OneAsio81.open_now.clear()
+
+    another81 = "Another ASIO card can't play while one records."
+    hostapis81 = _sd.query_hostapis
+    _sd.query_hostapis = lambda: [{"name": "ASIO"}]  # every card on ASIO
+    try:
+        desk81 = Metronome81({"click_device": {"name": "Desk", "host_api": "ASIO"}, "click_device_index": 3,
+                              "click_channels": [1, 2]}, lambda: None, lambda: None, {"click_device": 3}.get, None)
+        desk81.set(128, "4/4")
+        on_desk81b = desk81.take_click(0, SR)
+        follows81 = Metronome81({}, lambda: None, lambda: None, {"output_device": 3}.get, None)
+        follows81.set(128, "4/4")
+        on_player81 = follows81.take_click(0, SR)
+        card81 = Metronome81({"click_device": {"name": "Interface", "host_api": "ASIO"}, "click_device_index": 0,
+                              "click_channels": [1, 2]}, lambda: None, lambda: None, {"click_device": 0}.get, None)
+        card81.set(128, "4/4")
+        on_card81b = card81.take_click(0, SR)
+    finally:
+        _sd.query_hostapis = hostapis81
+    ok("the click saved on another ASIO card: no stream of its own for the take, and it says why",
+       not on_desk81b.duplex and isinstance(on_desk81b.output, SilentOutput81)
+       and on_desk81b.output.name == "Desk" and on_desk81b.problem() == another81)
+    ok("  the same with none saved and the player on that card",
+       isinstance(on_player81.output, SilentOutput81) and on_player81.problem() == another81)
+    ok("  on the recording card itself it rides the take's stream, as before", on_card81b.duplex)
+
     print("\n[82] The click and the player")
     # Between takes the click shares the player's stream when the player holds
     # its device, and has one of its own when not. When a take plays back, its

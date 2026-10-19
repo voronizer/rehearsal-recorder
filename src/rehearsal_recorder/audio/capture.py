@@ -528,11 +528,13 @@ class AudioRecorder:
                     if self._clock is None:
                         self._clock = AudioClock(self.samplerate)
             if self._stream is None:
-                if click is not None:
-                    # The click's own stream first, so the take's first blocks
-                    # find it running and the count-in starts at once.
-                    click.start()
                 self._open_input(latency)
+                if click is not None:
+                    # The click's own stream after the take's: PortAudio opens
+                    # one ASIO stream at a time, and the take is the one that
+                    # must open. The take waits for the click's first block
+                    # before it chooses its first click (TakeClick.on_input).
+                    click.start()
         except BaseException:
             if click is not None:
                 click.stop()
