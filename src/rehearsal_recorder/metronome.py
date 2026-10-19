@@ -481,27 +481,31 @@ class Metronome:
 
     def _start(self, tempo, signature, shown, bars=None, sound=None, start_k=0):
         with self._sinks:
-            # Where it goes, its stream opened and kept in _free, in one hold
-            # of STREAM_LOCK: see the module's note on the locks.
-            with STREAM_LOCK:
-                self._stop_free()
-                kind, sink, route = self._sink()
-                source = ClickSource(tempo, signature, self._voices(sink.samplerate, sound), route,
-                                     bars=bars, start_k=start_k)
-                if kind == "player":
-                    sink.play_free_click(source)
-                else:
-                    try:
-                        sink.start(source)
-                    except Exception:
-                        # Counted by the computer's clock instead, at the rate
-                        # the source was made for, so the beat still flashes
-                        # on time and the screen says why nothing is heard.
-                        sink = SilentOutput(sink.name, sink.problem(), sink.samplerate)
-                        sink.start(source)
-                free = _Free(source, kind, sink, shown)
-                with self._lock:
-                    self._free = free
+            return self._start_held(tempo, signature, shown, bars, sound, start_k)
+
+    def _start_held(self, tempo, signature, shown, bars=None, sound=None, start_k=0):
+        """_start, with `_sinks` already held."""
+        # Where it goes, its stream opened and kept in _free, in one hold
+        # of STREAM_LOCK: see the module's note on the locks.
+        with STREAM_LOCK:
+            self._stop_free()
+            kind, sink, route = self._sink()
+            source = ClickSource(tempo, signature, self._voices(sink.samplerate, sound), route,
+                                 bars=bars, start_k=start_k)
+            if kind == "player":
+                sink.play_free_click(source)
+            else:
+                try:
+                    sink.start(source)
+                except Exception:
+                    # Counted by the computer's clock instead, at the rate
+                    # the source was made for, so the beat still flashes
+                    # on time and the screen says why nothing is heard.
+                    sink = SilentOutput(sink.name, sink.problem(), sink.samplerate)
+                    sink.start(source)
+            free = _Free(source, kind, sink, shown)
+            with self._lock:
+                self._free = free
         return free
 
     def stop(self):
@@ -555,22 +559,26 @@ class Metronome:
         """The player opened or closed: a ▶ click goes on in the stream that
         now has its device, in its place in the bar; a bar for a setting stops."""
         self.devices_changed()
-        free = self._free
-        if free is None:
-            return
-        if not free.shown:
-            self._reap(free)
-            return
-        kind, sink, route = self._sink()
-        # The same player still playing it, or a stream of its own on the
-        # same device: nothing to move. A player that closed and opened its
-        # output again has let go of it.
-        if kind == free.kind and route == free.source.route and (
-                sink is free.sink and sink.free_click is free.source if kind == "player"
-                else type(sink) is type(free.sink) and sink.device_index == free.sink.device_index):
-            return
-        source = free.source
-        self._start(source.tempo, source.signature, shown=True, start_k=source.next_in_bar)
+        # Looked at and moved in one hold of both locks, so a ■, a take or a
+        # rescan in between cannot be undone by bringing the click back.
+        with self._sinks, STREAM_LOCK:
+            with self._lock:
+                free, taking = self._free, self._take is not None
+            if free is None or taking:
+                return
+            if not free.shown:
+                self._stop_free()
+                return
+            kind, sink, route = self._sink()
+            # The same player still playing it, or a stream of its own on the
+            # same device: nothing to move. A player that closed and opened its
+            # output again has let go of it.
+            if kind == free.kind and route == free.source.route and (
+                    sink is free.sink and sink.free_click is free.source if kind == "player"
+                    else type(sink) is type(free.sink) and sink.device_index == free.sink.device_index):
+                return
+            source = free.source
+            self._start_held(source.tempo, source.signature, shown=True, start_k=source.next_in_bar)
 
     def close(self):
         """The app is closing."""

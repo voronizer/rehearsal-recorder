@@ -23,6 +23,8 @@ import random
 import struct
 import sys
 import tempfile
+import threading
+import time
 import types
 import wave
 from fractions import Fraction
@@ -817,6 +819,24 @@ def on_its_own():
     m.resink()
     ok("a player that closed and opened its output again gets the click back",
        isinstance(player.free, ClickSource) and player.free is not run and m.state()["phase"] == "preview")
+    # A ■ pressed while the click is being moved: the move cannot bring it back.
+    player.free = None
+    real_sink, moving = m._sink, threading.Event()
+
+    def slow_sink():
+        moving.set()
+        time.sleep(0.05)
+        return real_sink()
+
+    m._sink = slow_sink
+    mover = threading.Thread(target=m.resink)
+    mover.start()
+    moving.wait(1)
+    m.stop()
+    mover.join(1)
+    m._sink = real_sink
+    ok("a Stop while the click is being moved stays stopped",
+       not mover.is_alive() and player.free is None and m.state()["phase"] == "idle")
     m.stop()
 
     print("  Where the click goes, and the device list")
