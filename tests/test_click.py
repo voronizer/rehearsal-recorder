@@ -820,6 +820,15 @@ def on_its_own():
     ok("Stop stops it", player.free is None and m.state()["phase"] == "idle")
     m.play()
     run = player.free
+    ok("a sound picked while it plays: it goes on in that sound, and no bar takes its place",
+       m.set_setting("click_sound", "click")["ok"] and m.preview(sound="click")["ok"]
+       and player.free is run and run.voices.sound == "click" and m.state()["phase"] == "preview")
+    ok("  and the volume let go of likewise", m.set_setting("click_volume", 0.6)["ok"] and m.preview()["ok"]
+       and player.free is run and run.voices.volume == 0.6 and m.state()["phase"] == "preview")
+    m.set_setting("click_volume", 0.5)
+    m.stop()
+    m.play()
+    run = player.free
     # The player closed its output and opened it again (a rescan, or its card
     # coming back): closing let go of the click.
     player.free = None

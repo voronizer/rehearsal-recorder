@@ -511,7 +511,12 @@ class Metronome:
             tempo, signature = self._tempo, self._signature
         if tempo is None:
             tempo = PREVIEW_TEMPO
-        free = self._start(tempo, signature, shown=False, bars=bars, sound=sound)
+        with self._sinks:
+            if self._free is not None and self._free.shown:
+                # ▶ plays: that is the bar to hear, in the sound and at the
+                # volume set_setting has just given it. A bar here would stop it.
+                return {"ok": True}
+            free = self._start_held(tempo, signature, shown=False, bars=bars, sound=sound)
         timer = threading.Timer(bars * per_bar(signature) * 60 / tempo + PREVIEW_SLACK_SEC,
                                 self._reap, args=(free,))
         timer.daemon = True
