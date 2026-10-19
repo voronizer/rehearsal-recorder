@@ -3,7 +3,7 @@ Every Python suite, one command:
 
     python tests/run_all.py
 
-Fourteen of them, because they answer different questions and need different
+Fifteen of them, because they answer different questions and need different
 things to be true:
 
     test_control_api.py shared control API and JSON bridge without MIDI.
@@ -94,6 +94,14 @@ things to be true:
                        drift, a drums .mid before the WAV and the WAV before
                        the tracks mixed, silence and short takes giving none.
 
+    test_drift.py      where the band drifted: the beat tracker and each
+                       bar's tempo (audio/tempo.py, audio/drift.py) on
+                       synthetic takes with a known tempo in every bar
+                       (drums with bleed, a .mid, the mix, 3/4, 6/8, a
+                       ballad, a click take after its count-in, a stop),
+                       the sources by the band's icons, and Api.take_drift:
+                       the aim, 32 answers kept, Record stopping a count.
+
     test_click.py      the metronome's click: its tempos and accents, every
                        click of an hour on its frame, the three sounds and
                        clicks mixed into a stream's blocks, a WAV that
@@ -131,7 +139,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SUITES = ("test_control_api.py", "test_controller_browse.py", "test_controller_diagnostics.py", "test_controller_extensions.py", "test_controller_recovery.py", "test_controller.py", "test_transport.py", "test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
-          "test_midi.py", "test_click.py", "test_tempo.py")
+          "test_midi.py", "test_click.py", "test_tempo.py", "test_drift.py")
 
 # Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).
 LIMIT = 600

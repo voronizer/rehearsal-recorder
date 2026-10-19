@@ -66,7 +66,11 @@ from rehearsal_recorder.store.names import UNNAMED_TAKE
 log = logging.getLogger(__name__)
 
 DEFAULTS = {"click_sound": "click", "click_volume": 0.7, "count_in_bars": 1,
-            "tempo_in_wav": True, "metronome_on": True}
+            "tempo_in_wav": True, "metronome_on": True, "drift_tolerance": 0.02}
+
+# How far a bar's tempo may be from the take's before the drift line on Master
+# turns amber (drift spec Part 5): 1, 2, 3 or 5%.
+DRIFT_TOLERANCES = (0.01, 0.02, 0.03, 0.05)
 
 # The bar a setting plays when the row has no tempo.
 PREVIEW_TEMPO = 120
@@ -125,6 +129,10 @@ def _checked(key, value):
         return value
     if key == "click_channels":
         return _channels(value)
+    if key == "drift_tolerance":
+        if isinstance(value, bool) or value not in DRIFT_TOLERANCES:
+            raise ValueError("Drift is shown past 1%, 2%, 3% or 5%")
+        return float(value)
     raise ValueError(f"No metronome setting is called {key}")
 
 

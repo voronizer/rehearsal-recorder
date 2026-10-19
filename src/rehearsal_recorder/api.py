@@ -18,6 +18,7 @@ client or a network share cannot be trusted with that. Sharing takes is what
 the separate cloud folder is for — only the takes worth keeping go there.
 """
 
+import collections
 import functools
 import json
 import logging
@@ -70,6 +71,7 @@ from rehearsal_recorder.audio.devices import (
     rescan,
     saved_device,
 )
+from rehearsal_recorder.audio import drift as driftmod
 from rehearsal_recorder.audio import tempo as tempomod
 from rehearsal_recorder.audio.click import (
     SIGNATURE_RULE, SIGNATURES, clamp_tempo, click_frame, per_quarter, snap_region,
@@ -159,6 +161,10 @@ TAP_QUIET_SEC = 2.0
 TAP_POLL_SEC = 0.1
 
 log = logging.getLogger(__name__)
+
+# The drift lines kept in memory (take_drift): enough for the takes of an
+# evening opened again, and nothing on disk.
+DRIFTS_KEPT = 32
 
 # How much of each part of a problem the page sends (log_problem) is kept: a
 # few KB holds a whole stack, and the page decides what it sends.
@@ -873,6 +879,11 @@ class Api:
         # True from Record opening the take's streams until the recorder is
         # kept: a rescan in between would let go of streams the take holds.
         self._starting = False
+        # The drift lines counted lately, by their files and aim (take_drift),
+        # and a number Record moves on, which stops a count in progress.
+        self._drifts = collections.OrderedDict()
+        self._drifts_lock = threading.Lock()
+        self._drift_round = 0
         # The band's ports for Tap on a song's page, outside a rehearsal.
         self._tap = _TapPorts(self._midi, lambda: self._session is not None)
         # Whether a newer version is out — see updates.py. Asked only once the
@@ -2601,6 +2612,9 @@ class Api:
         # the one the old Stop then ends, with the old take's notes unmade.
         if self._stopping:
             return {"ok": False, "error": "Still saving the last take"}
+        # A drift line still being counted stops: its reading must not hold
+        # up the take's own (drift spec Part 4).
+        self._drift_round += 1
 
         s = self._session
         # Only the tracks that record sound reach the card: a MIDI track has no
@@ -4777,9 +4791,10 @@ class Api:
 
     def set_metronome_setting(self, key, value):
         """One of Settings › Metronome's: the sound, the volume, the count-in,
-        and whether a click take's WAVs carry its tempo. The click's output
-        and the switch have calls of their own."""
-        if key not in ("click_sound", "click_volume", "count_in_bars", "tempo_in_wav"):
+        whether a click take's WAVs carry its tempo, and how far off a bar of
+        the drift line turns amber. The click's output and the switch have
+        calls of their own."""
+        if key not in ("click_sound", "click_volume", "count_in_bars", "tempo_in_wav", "drift_tolerance"):
             return {"ok": False, "error": f"No metronome setting is called {key}"}
         saved = self._metronome.set_setting(key, value)
         if saved.get("ok") and key in ("click_sound", "click_volume"):
@@ -4877,6 +4892,92 @@ class Api:
         if found is None:
             return {"ok": False, "error": "This take is too short or too quiet to count a tempo from."}
         return {"ok": True, "tempo": clamp_tempo(found, signature)}
+
+    def take_drift(self, tracks, notes, meter):
+        """
+        The band's tempo through a take, bar by bar, for the drift line on
+        Master (drift spec Parts 1, 2 and 4). `tracks` and `notes` are the
+        take's audio and .mid files as the player has them, {"name", "file"};
+        `meter` is the take's own {"tempo", "signature", "click", "song"}.
+
+        The aim is the click's tempo on a click take, else the take's tempo,
+        else its song's tempo now, else the middle of its own bars. What it
+        listens to is found by the band's icons, as take_media finds a lane's:
+        the drums' .mid, else the drums' WAVs, else every WAV but a backing
+        track's.
+
+        {"ok": True, "source", "per_bar", "middle", "aim": {"tempo",
+        "signature", "from": "click" | "take" | "song" | "middle", "song"},
+        "bars"}, or {"ok": False, "why"}: "missing" (a file is not on disk),
+        "short", "no-beat", or "recording" when Record stopped it, which the
+        player asks again for once it opens. The last 32 answers are kept by
+        the files' paths, sizes and times and the aim, so a take opened again
+        is not counted again, and a cropped one is. Nothing is stored.
+        """
+        if self._recorder is not None:
+            return {"ok": False, "why": "recording"}
+        meter = meter if isinstance(meter, dict) else {}
+        icons = layouts.icons(self._config.get("tracks"))
+        wavs = [t for t in tracks or [] if isinstance(t, dict) and t.get("file")]
+        if not wavs or any(not Path(t["file"]).is_file() for t in wavs):
+            return {"ok": False, "why": "missing"}
+        tempo, signature, source, song = self._drift_aim(meter)
+        drums = [t["file"] for t in wavs if icons.get(t.get("name")) == "drums"]
+        hits = [n["file"] for n in notes or [] if isinstance(n, dict) and n.get("file")
+                and icons.get(n.get("name")) == "drums" and Path(n["file"]).is_file()]
+        mix = [t["file"] for t in wavs if icons.get(t.get("name")) != "backing"]
+        files = hits[:1] + drums + mix
+        try:
+            key = (tuple((f, os.stat(f).st_size, os.stat(f).st_mtime_ns) for f in files), tempo, signature, source, song)
+        except OSError:
+            return {"ok": False, "why": "missing"}
+        with self._drifts_lock:
+            if key in self._drifts:
+                self._drifts.move_to_end(key)
+                return self._drifts[key]
+        round_ = self._drift_round
+        stop = lambda: self._drift_round != round_ or self._recorder is not None
+        try:
+            found = driftmod.count(drums_mid=hits, drums=drums, mix=mix, tempo=tempo,
+                                   signature=signature or "4/4", click=source == "click", stop=stop)
+        except tempomod.Cancelled:
+            return {"ok": False, "why": "recording"}
+        except (OSError, EOFError, wave.Error, ValueError) as e:
+            log.warning("The drift of a take could not be counted: %s", e)
+            return {"ok": False, "why": "missing"}
+        if found["ok"]:
+            aim = tempo if tempo is not None else round(found["middle"])
+            found = {key_: found[key_] for key_ in ("ok", "source", "per_bar", "middle", "bars")}
+            found["aim"] = {"tempo": aim, "signature": signature or "4/4", "from": source, "song": song}
+        with self._drifts_lock:
+            self._drifts[key] = found
+            while len(self._drifts) > DRIFTS_KEPT:
+                self._drifts.popitem(last=False)
+        return found
+
+    def _drift_aim(self, meter):
+        """(tempo, signature, where it is from, the song's title) for a take's
+        drift line: its click's, its own, its song's now, or none (drift spec
+        Part 1). The title is the library's, for a tempo that is the song's."""
+        tempo, signature = meter.get("tempo"), meter.get("signature")
+        if signature not in SIGNATURES:
+            tempo = signature = None
+        if isinstance(tempo, bool) or not isinstance(tempo, (int, float)) or tempo <= 0:
+            tempo = None
+        if tempo is not None:
+            return tempo, signature, "click" if meter.get("click") is True else "take", None
+        song = meter.get("song")
+        if isinstance(song, str) and song:
+            try:
+                tempos = self._lib.song_tempos()
+            except Exception:
+                log.exception("The songs' tempos could not be read for a drift line")
+                tempos = {}
+            title = next((t for t in tempos if t.casefold() == song.casefold()), None)
+            own, sig = tempos.get(title, (None, None)) if title else (None, None)
+            if own is not None and sig in SIGNATURES:
+                return own, sig, "song", title
+        return None, None, "middle", None
 
     @_follows
     def set_song_tempo(self, song_id, tempo, signature):
