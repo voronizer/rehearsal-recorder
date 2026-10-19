@@ -5,6 +5,15 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## 0.12.1
+
+- **Victor Baikov's controller on Windows.** It has been tried on Windows as
+  well as on a Mac, and the guide now says how to pair it there: in the
+  Bluetooth settings of Windows, before you pick it in **Settings →
+  Controls**. His name is spelled as he spells it, and reha.stream says his
+  repository also has a case to print on a 3D printer. The app itself is the
+  same as in 0.12.0.
+
 ## 0.12.0
 
 - **A new look: cobalt, calmer type, rounder corners and lower track
