@@ -99,12 +99,12 @@ describe("the site's content", () => {
     )
   })
 
-  it("has nine questions, each with an answer, the name's first", () => {
-    expect(content.faq.questions).toHaveLength(9)
+  it("has ten questions, each with an answer, the name's first", () => {
+    expect(content.faq.questions).toHaveLength(10)
     expect(content.faq.questions[0].body).toContain("Belarusian for “echo”")
     // Sleep follows the laptop dying, the question it answers next.
-    expect(content.faq.questions[6].title).toBe("What if the laptop dies in the middle of a take?")
-    expect(content.faq.questions[7].title).toBe(
+    expect(content.faq.questions[7].title).toBe("What if the laptop dies in the middle of a take?")
+    expect(content.faq.questions[8].title).toBe(
       "Will the laptop fall asleep in the middle of a take?"
     )
     for (const q of content.faq.questions) expect(q.body).not.toBe("")
@@ -146,7 +146,8 @@ describe("metronome on the site", () => {
     expect(tile.title).toBe("A click for the drummer.")
     expect(tile.body.replace(/\s+/g, " ").trim()).toBe(
       "Each song keeps its tempo and time signature. The click can go to the drummer's " +
-        "headphones only, and during a take the edge of the screen lights on every click."
+        "headphones only, and during a take the edge of the screen lights on every click. " +
+        "After a take, the Master row shows where the band ran ahead or dragged."
     )
   })
 
@@ -161,6 +162,31 @@ describe("metronome on the site", () => {
         "every click. A take recorded to the click keeps its tempo, and its WAV and .mid " +
         "files carry it: set your DAW to that tempo, and the take's bars sit on the " +
         "project's bars."
+    )
+  })
+})
+
+// The tempo drift on reha.stream (drift spec, "On reha.stream"): the story's
+// last step, a question after the metronome's, and the metronome tile's last
+// sentence (above).
+describe("tempo drift on the site", () => {
+  it("says in the last step that Pałyn 5 ran ahead in the bridge and Pałyn 6 held it", () => {
+    const compare = content.story.steps.find((s) => s.id === "compare")!
+    expect(leadAndBeats(compare.body).beats.slice(0, 2)).toEqual([
+      "Open Pałyn 5 and loop its bridge: the Master row says it ran ahead, +7.",
+      "Step to Pałyn 6: the same bar, still looping, and the bridge held 128.",
+    ])
+  })
+
+  it("asks whether it shows where we sped up, after the metronome's question", () => {
+    const titles = content.faq.questions.map((q) => q.title)
+    const at = titles.indexOf("Does it show where we sped up?")
+    expect(titles[at - 1]).toBe("Is there a metronome?")
+    expect(content.faq.questions[at].body.replace(/\s+/g, " ").trim()).toBe(
+      "Yes. Under the tracks, the Master row draws the band's tempo bar by bar: against the " +
+        "click the take was recorded to, or the song's tempo, or, for a song without one, the " +
+        "take's own middle. Where the band ran ahead or dragged by more than 2% (you can change " +
+        "that in Settings), the line turns amber and says by how much."
     )
   })
 })

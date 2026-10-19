@@ -52,7 +52,16 @@ opening.
   metronome's icon after **Master** plays the click with the take, in time
   with its count-in. Beside Master, the take's bars and beats are drawn as
   stripes that follow the zoom. A take recorded without the click, as every
-  take from before this version was, says so there.
+  take from before this version was, has none.
+- **Where the band ran ahead or dragged.** After a take, Master's row in the
+  player draws the band's tempo bar by bar: against the click the take was
+  recorded to, or the song's tempo, or, with neither, the take's own middle.
+  Where the band was more than 2% off for two bars or more, the line turns
+  amber with a number such as “+7”, and pointing at a bar says its tempo.
+  The app listens to the drums, or to all the tracks when none has the
+  drums icon. Takes from before this version get the line too. **Drift
+  shown past**, in **Settings › Metronome**, sets how far off is off: 1%,
+  2%, 3% or 5%. reha.stream shows the line on the metronome's tile.
 - **Takes recorded to the click sit on the bars in a DAW.** Their files
   start on the first click of the count-in, so with the project at the
   song's tempo, a take put at bar 1 has its bars on the project's bars. A

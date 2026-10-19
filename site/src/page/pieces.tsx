@@ -3,6 +3,9 @@
 // are pictures here: still, and not for clicking.
 import { Fragment, type ReactNode } from "react"
 import { HealthLine } from "@/components/HealthLine"
+import { MasterControls } from "@/components/LaneControls"
+import { MasterClick } from "@/components/metronome/MasterClick"
+import { MasterClickLane } from "@/components/metronome/MasterClickLane"
 import { MetronomeRowView } from "@/components/metronome/MetronomeRow"
 import { NotesLane } from "@/components/midi/NotesLane"
 import { NotesPlate } from "@/components/midi/NotesPlate"
@@ -21,7 +24,9 @@ import {
   type RehearsalSummary,
   type SongChoices,
   type SongSummary,
+  type Take,
 } from "@/lib/api"
+import { DEFAULT_TOLERANCE, spokenDrift, stretches, type TakeDrift } from "@/lib/drift"
 import { formatTempo } from "@/lib/format"
 import { perBar, statusLine } from "@/lib/metronome"
 import { otherSongs } from "@/lib/setSongs"
@@ -39,7 +44,15 @@ export type PieceData = {
   notes: SiteNotes
   /** Pałyn as the library has it, with its tempo, for the metronome tile. */
   song: SongSummary | null
+  /** Pałyn 2 in the player, with the band's tempo through it, for the
+   *  metronome tile too. */
+  master: MasterData | null
 }
+
+/** A take as the player has it after a take, and its tempo bar by bar as
+ *  the player asks for it (take_drift); `at`, the playhead, and `to`, where
+ *  the view ends. */
+type MasterData = { take: Take; drift: TakeDrift; at: number; to: number }
 
 /** What the tiles show, asked of the bridge as the history screen and the
  *  rehearsal screen would. */
@@ -56,7 +69,35 @@ export async function loadPieces(): Promise<PieceData> {
   const [set] = await api().list_sets()
   const { songs } = await api().list_songs()
   const song = songs.find((s) => s.title === "Pałyn") ?? null
-  return { rehearsals, last, choices, set: set ?? null, notes: siteNotes(), song }
+  const master = await masterOf(rehearsals, "Pałyn 2")
+  return { rehearsals, last, choices, set: set ?? null, notes: siteNotes(), song, master }
+}
+
+/**
+ * The take of that name, the newest rehearsal's first, and the band's tempo
+ * through it, played up to the chorus before its bridge (window.__SONG__,
+ * band.js). Shown as the player zoomed in a little: up to four bars after
+ * the band's last, so the seconds the take rang on after the song do not
+ * take the lane's room, and the last bar's chip has room over it.
+ */
+async function masterOf(rehearsals: RehearsalSummary[], name: string): Promise<MasterData | null> {
+  for (const { folder } of rehearsals) {
+    const { takes } = await api().get_rehearsal(folder)
+    const take = takes.find((t) => t.name === name)
+    if (!take) continue
+    const drift = await api().take_drift(
+      take.tracks.map((t) => ({ name: t.name, file: t.file })),
+      (take.notes ?? []).map((n) => ({ name: n.name, file: n.file })),
+      { tempo: take.tempo ?? null, signature: take.signature ?? null, click: take.click === true, song: take.song ?? null }
+    )
+    const song = (window as unknown as { __SONG__?: { bridge: number; bar: number } }).__SONG__
+    const at = song ? song.bridge - 8 * song.bar : 0
+    const played = drift.ok ? drift.bars.filter((b) => b.tempo !== null) : []
+    const last = played[played.length - 1]
+    const to = last ? Math.min(take.duration_sec, last.end + 4 * (last.end - last.start)) : take.duration_sec
+    return { take, drift, at, to }
+  }
+  return null
 }
 
 const nothing = () => {}
@@ -115,6 +156,48 @@ function Goes({ last, song, only }: { last: RehearsalDetail; song: string; only?
       onOpenAt={nothing}
     />
   )
+}
+
+/**
+ * Master's row in the player, as the player lays it out (Timeline): its
+ * plate, and beside it the take's lane, the band's tempo along it bar by bar.
+ * Where there is no room for the plate beside the lane, as on a phone, the
+ * lane alone.
+ */
+function MasterRow({ master }: { master: MasterData }) {
+  return (
+    <div className="w-full">
+      <div className="grid h-14 grid-cols-1 gap-x-3 rounded-lg bg-card min-[600px]:grid-cols-[200px_minmax(0,1fr)]">
+        <div className="hidden min-h-0 min-[600px]:block">
+          <MasterControls
+            grouped
+            volume={1}
+            level={0}
+            onVolume={nothing}
+            onVolumeCommit={nothing}
+            click={<MasterClick take={master.take} />}
+          />
+        </div>
+        <div className="min-w-0 py-[3px] pr-[3px] min-[600px]:pr-0">
+          <MasterClickLane
+            from={0}
+            to={master.to}
+            position={master.at}
+            take={master.take}
+            drift={{ answer: master.drift, counting: false }}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** What Master's row says of a take's tempo, for those who cannot see it. */
+function masterLabel({ take, drift }: MasterData): string {
+  const said = drift.ok
+    ? spokenDrift(drift.bars, stretches(drift.bars, drift.aim.tempo, DEFAULT_TOLERANCE), drift.aim.signature)
+    : ""
+  return `Master's row in the player under ${take.name}'s tracks, with the band's tempo bar by bar. ${said}`.trim()
 }
 
 /** Gig on the 25th mid-set: Pałyn played four times, Viasna up now. */
@@ -189,7 +272,8 @@ function rowOf(song: SongSummary | null): MetronomeState | null {
   }
 }
 
-export type Shot = { pieces: ReactNode; left?: boolean }
+/** `under`: a piece the whole tile wide, under its words and its piece. */
+export type Shot = { pieces: ReactNode; left?: boolean; under?: ReactNode }
 
 /** Which piece goes beside which tile's words, by the tile's id. */
 export function shots({
@@ -199,6 +283,7 @@ export function shots({
   set,
   notes,
   song,
+  master,
 }: PieceData): Record<(typeof TILES)[number], Shot | null> {
   const kept = last.takes.find((t) => t.cloud && t.starred)
   const row = rowOf(song)
@@ -338,6 +423,13 @@ export function shots({
             settings={null}
             hold={false}
           />
+        </Piece>
+      ) : null,
+      // Master's row as wide as the tile: beside the words, its lane would
+      // be too short for the tag and the chips both.
+      under: master?.drift.ok ? (
+        <Piece label={masterLabel(master)}>
+          <MasterRow master={master} />
         </Piece>
       ) : null,
     },

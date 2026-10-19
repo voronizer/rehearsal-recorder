@@ -131,6 +131,69 @@ export function stretches(bars: DriftBar[], aim: number, tolerance: number): Str
   })
 }
 
+/** A chip's height, and the room kept between it and the line, in px. */
+const CHIP_PX = 16
+const CHIP_GAP_PX = 3
+/** Chips whose centres come closer than this would overlap: the smaller
+ *  difference's is hidden. */
+export const CHIP_ROOM_PX = 32
+
+/** How far a chip beside its peak stands from it, in px. */
+const CHIP_BESIDE_PX = 6
+
+export type Box = { width: number; height: number }
+
+/** Where a chip stands: `x` is its middle, start or end (`align`), in px. */
+export type ChipSpot = { x: number; top: number; align: "middle" | "start" | "end" }
+
+/**
+ * Where a stretch's chip goes, given its bars' points in px, the peak first
+ * and then the rest from the nearest: above a rise and below a dip, or on
+ * the line's other side where the lane's edge leaves no room; else beside
+ * the peak, on the side away from the lane's nearer end. Never past either
+ * end of the lane. Where the lane's tag (`clear`) is over the peak, the chip
+ * moves along its stretch to the nearest bar clear of it; a stretch the tag
+ * covers end to end has its chip over the tag, which the number matters more
+ * than. Null only for a lane too small for a chip. Its box is taken as
+ * CHIP_ROOM_PX wide.
+ */
+export function chipSpot(
+  sign: 1 | -1,
+  points: { x: number; y: number }[],
+  lane: Box,
+  clear: { right: number; bottom: number } | null
+): ChipSpot | null {
+  const w = CHIP_ROOM_PX
+  const free = (left: number, top: number) =>
+    left >= 0 &&
+    left + w <= lane.width &&
+    top >= 1 &&
+    top + CHIP_PX <= lane.height - 1 &&
+    !(clear && top < clear.bottom && left < clear.right)
+  const over = ({ x, y }: { x: number; y: number }): ChipSpot | null => {
+    const middle = Math.min(lane.width - w / 2, Math.max(w / 2, x))
+    const above = y - CHIP_GAP_PX - CHIP_PX
+    const below = y + CHIP_GAP_PX
+    for (const top of sign > 0 ? [above, below] : [below, above])
+      if (free(middle - w / 2, top)) return { x: middle, top, align: "middle" }
+    return null
+  }
+  const beside = ({ x, y }: { x: number; y: number }): ChipSpot | null => {
+    const top = Math.min(lane.height - 1 - CHIP_PX, Math.max(1, y - CHIP_PX / 2))
+    const at = Math.min(lane.width - w - CHIP_BESIDE_PX, Math.max(w + CHIP_BESIDE_PX, x))
+    if (at > lane.width / 2) return free(at - CHIP_BESIDE_PX - w, top) ? { x: at - CHIP_BESIDE_PX, top, align: "end" } : null
+    return free(at + CHIP_BESIDE_PX, top) ? { x: at + CHIP_BESIDE_PX, top, align: "start" } : null
+  }
+  const [peak, ...rest] = points
+  if (!peak) return null
+  for (const spot of [over(peak), beside(peak)]) if (spot) return spot
+  for (const p of rest) {
+    const spot = over(p)
+    if (spot) return spot
+  }
+  return clear ? chipSpot(sign, [peak], lane, null) : null
+}
+
 /**
  * The stretches whose chips can be shown, given where each would stand in
  * pixels: where two would come closer than `room`, the smaller difference's

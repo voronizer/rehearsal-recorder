@@ -171,7 +171,8 @@ const EARLIER = [
 ];
 // ---- The tempo through each take (take_drift) -------------------------
 // The band's tempo at a few times in a take, bar 1 being where the song
-// comes in. Pałyn 2 ran in the choruses and most in the bridge ("bridge —
+// comes in; where the song stopped (end) the take rings on, with no beat to
+// count. Pałyn 2 ran in the choruses and most in the bridge ("bridge —
 // try it slower"), and the outro sank; Viasna, to the click, dragged for a
 // stretch; Take 4, of no song, is measured against its own middle. On
 // Tuesday Pałyn 5 ran ahead in its bridge and Pałyn 6 held it: the site's
@@ -181,7 +182,7 @@ const DRIFT = {
   'Pałyn 2': {seed: 2, keys: [
     [0, 127.4], [AT(8), 127.8], [AT(22), 128.6], [AT(25), 132.6], [AT(31), 133.4], [AT(34), 129.6],
     [AT(46), 129.2], [AT(49), 131.8], [AT(55), 132.4], [AT(57), 134.6], [AT(62), 135.4], [AT(65), 131.4],
-    [AT(78), 130.6], [AT(80), 127.4], [AT(84), 122.6]]},
+    [AT(78), 130.6], [AT(80), 127.4], [AT(84), 121.6]]},
   'Viasna': {seed: 5, keys: [[0, 128], [62, 128.2], [72, 125.6], [82, 124.6], [90, 127.6], [100, 128], [137, 128.1]]},
   'Take 4': {seed: 4, middle: 126, keys: [
     [0, 121.4], [20, 122.6], [36, 125.8], [52, 130.4], [64, 131.2], [76, 127.2], [92, 125.6], [104, 123.4]]},
@@ -196,12 +197,13 @@ driftCurve = (file, aim) => {
   const name = NAMES[file];
   if (!name) return null;
   const own = DRIFT[name];
-  if (own) return {start: START, middle: own.middle ?? 128, ...own};
+  const end = KIND[file].end;
+  if (own) return {start: START, end, middle: own.middle ?? 128, ...own};
   // Any other go: a little ahead or behind in the choruses and the bridge.
   const seed = [...name].reduce((n, c) => n + c.charCodeAt(0), 0);
   const ref = aim ?? 124 + (seed % 7);
   const lean = k => (hash(seed + k) - 0.35) * 5;
-  return {start: START, seed, middle: ref, keys: [
+  return {start: START, end, seed, middle: ref, keys: [
     [0, ref - 0.4], [AT(22), ref + 0.6], [AT(26), ref + lean(1)], [AT(31), ref + lean(1)], [AT(35), ref + 0.4],
     [AT(50), ref + lean(2)], [AT(55), ref + lean(2)], [AT(58), ref + lean(3)], [AT(63), ref + lean(3)],
     [AT(66), ref + 0.6], [AT(84), ref - 1]]};

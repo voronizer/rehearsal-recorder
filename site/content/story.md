@@ -41,6 +41,6 @@ Every rehearsal, every mark and every song, in History.
 
 Loop the bridge, then hear it in the next take.
 
-- Open Pałyn 5 and loop its bridge.
-- Step to Pałyn 6: it starts at the same bar, still looping.
+- Open Pałyn 5 and loop its bridge: the Master row says it ran ahead, +7.
+- Step to Pałyn 6: the same bar, still looping, and the bridge held 128.
 - ↑ and ↓ do the same, through every rehearsal.

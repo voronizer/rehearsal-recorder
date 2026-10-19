@@ -800,10 +800,12 @@ function cutAt(meter, a, b, duration) {
 }
 // The tempo through a take, as take_drift counts it, from the take's first
 // track: steady on its aim, unless the band (band.js) says how the take went
-// through driftCurve(file, aim's tempo or null): {start, seed, middle, keys},
-// the band's tempo at a few times, [[seconds, bpm], ...], joined smoothly, with a little unevenness
-// from bar to bar on top. The aim is as Python finds it: the click's, the
-// take's own, the song's now, or the middle of the bars.
+// through driftCurve(file, aim's tempo or null): {start, end, seed, middle,
+// keys}, the band's tempo at a few times, [[seconds, bpm], ...], joined
+// smoothly, with a little unevenness from bar to bar on top. Past `end` the
+// band has stopped and the take rings on: no beat, so those bars have no
+// tempo. The aim is as Python finds it: the click's, the take's own, the
+// song's now, or the middle of the bars.
 let driftCurve = () => null;
 function driftKeyed(keys, t) {
   if (t <= keys[0][0]) return keys[0][1];
@@ -827,11 +829,12 @@ function fakeDrift(tracks, meter) {
   const start = curve ? curve.start : aim && aim.from === 'click' ? bar : 0;
   const bars = [];
   for (let n = 0, at = start; at + bar <= seconds + 0.01; n++, at += bar) {
+    const rang = curve && curve.end != null && at + bar / 2 > curve.end;
     const played = curve ? driftKeyed(curve.keys, at + bar / 2) + (driftHash(n * 7 + curve.seed * 31) - 0.5) * 0.9 : around;
-    bars.push({n: n + 1, start: at, end: at + bar, tempo: Math.round(played * 10) / 10});
+    bars.push({n: n + 1, start: at, end: at + bar, tempo: rang ? null : Math.round(played * 10) / 10});
   }
   if (!bars.length) return {ok:false, why:'short'};
-  const sorted = bars.map(b => b.tempo).sort((a, b) => a - b);
+  const sorted = bars.filter(b => b.tempo !== null).map(b => b.tempo).sort((a, b) => a - b);
   const middle = sorted[sorted.length >> 1];
   return {ok:true, source: tracks.some(t => isKit(t)) ? 'drums' : 'mix', per_bar: PER_BAR[sig], middle,
           aim: aim || {tempo: Math.round(middle), signature: '4/4', from: 'middle', song: null}, bars};

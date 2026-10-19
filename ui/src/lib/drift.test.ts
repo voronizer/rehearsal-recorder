@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  chipSpot,
   chipsShown,
   driftTag,
   signed,
@@ -81,6 +82,42 @@ const counted = (aim: Partial<Extract<TakeDrift, { ok: true }>["aim"]>, source: 
     aim: { tempo: 128, signature: "4/4", from: "click", song: null, ...aim },
     bars: [],
   }) as Extract<TakeDrift, { ok: true }>
+
+describe("chipSpot", () => {
+  const lane = { width: 400, height: 50 }
+  const tag = { right: 150, bottom: 20 }
+  const at = (x: number, y: number) => [{ x, y }]
+
+  it("stands above a rise and below a dip, the other side at the lane's edge", () => {
+    expect(chipSpot(1, at(200, 30), lane, null)).toEqual({ x: 200, top: 11, align: "middle" })
+    expect(chipSpot(-1, at(200, 20), lane, null)).toEqual({ x: 200, top: 23, align: "middle" })
+    expect(chipSpot(1, at(200, 10), lane, null)).toEqual({ x: 200, top: 13, align: "middle" })
+    expect(chipSpot(-1, at(200, 40), lane, null)).toEqual({ x: 200, top: 21, align: "middle" })
+  })
+
+  it("goes beside a peak with no room either side, away from the nearer end", () => {
+    const flat = { width: 400, height: 24 }
+    expect(chipSpot(1, at(300, 12), flat, null)).toEqual({ x: 294, top: 4, align: "end" })
+    expect(chipSpot(1, at(80, 12), flat, null)).toEqual({ x: 86, top: 4, align: "start" })
+    // Never past the lane's end.
+    expect(chipSpot(1, at(399, 30), lane, null)).toEqual({ x: 384, top: 11, align: "middle" })
+  })
+
+  it("keeps out from under the tag: below the line, or along its stretch, else over it", () => {
+    expect(chipSpot(1, at(100, 30), lane, tag)).toEqual({ x: 100, top: 33, align: "middle" })
+    expect(chipSpot(1, at(200, 30), lane, tag)).toEqual({ x: 200, top: 11, align: "middle" })
+    // The peak under the tag; the stretch's next bars are tried, the
+    // nearest first, and the first one clear of it takes the chip.
+    const stretch = [
+      { x: 100, y: 10 },
+      { x: 120, y: 12 },
+      { x: 175, y: 14 },
+      { x: 190, y: 16 },
+    ]
+    expect(chipSpot(1, stretch, lane, tag)).toEqual({ x: 175, top: 17, align: "middle" })
+    expect(chipSpot(1, stretch.slice(0, 2), lane, tag)).toEqual({ x: 100, top: 13, align: "middle" })
+  })
+})
 
 describe("the tag", () => {
   it("says what each take is measured against", () => {

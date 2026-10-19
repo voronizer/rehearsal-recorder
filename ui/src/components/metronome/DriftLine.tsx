@@ -1,16 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useLayoutEffect, useMemo, useRef, useState } from "react"
 import { NoteGlyph } from "@/components/metronome/NoteGlyph"
 import type { Signature } from "@/lib/api"
 import { unitTitle } from "@/lib/metronome"
-import { chipsShown, signed, stretches, yOf, type DriftBar, type Stretch } from "@/lib/drift"
+import {
+  CHIP_ROOM_PX,
+  chipSpot,
+  chipsShown,
+  signed,
+  stretches,
+  yOf,
+  type Box,
+  type ChipSpot,
+  type DriftBar,
+  type Stretch,
+} from "@/lib/drift"
 import { cn } from "@/lib/utils"
-
-/** A chip's height, and the room kept between it and the line, in px. */
-const CHIP_PX = 16
-const CHIP_GAP_PX = 3
-/** Chips whose centres come closer than this would overlap: the smaller
- *  difference's is hidden. */
-const CHIP_ROOM_PX = 32
 
 /** A tempo with what it counts: "135 bpm", or 6/8's drawn eighth. */
 function TempoWords({ tempo, signature }: { tempo: number; signature: Signature }) {
@@ -30,7 +34,7 @@ function TempoWords({ tempo, signature }: { tempo: number; signature: Signature 
  * middle. Two bars or more off the same way are amber, filled to the aim,
  * with a chip that says by how much. Hovering says a bar's tempo. Over the
  * seconds `from` to `to`, as the tracks' pictures are; a bar with no tempo
- * breaks the line.
+ * breaks the line. No chip goes under the lane's tag (`chipSpot`).
  */
 export function DriftLine({
   bars,
@@ -39,6 +43,7 @@ export function DriftLine({
   tolerance,
   from,
   to,
+  clear = null,
 }: {
   bars: DriftBar[]
   aim: number
@@ -46,11 +51,14 @@ export function DriftLine({
   tolerance: number
   from: number
   to: number
+  /** The tag's corner: its right and bottom edges, in px from the lane's
+   *  top left. */
+  clear?: { right: number; bottom: number } | null
 }) {
   const box = useRef<HTMLDivElement>(null)
-  const [size, setSize] = useState({ width: 0, height: 50 })
+  const [size, setSize] = useState<Box>({ width: 0, height: 50 })
   const [hover, setHover] = useState<DriftBar | null>(null)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = box.current
     if (!el) return
     const measure = () => setSize({ width: el.clientWidth, height: el.clientHeight })
@@ -65,8 +73,27 @@ export function DriftLine({
   const x = (t: number) => ((t - from) / span) * 100
   const mid = (b: DriftBar) => x((b.start + b.end) / 2)
   const point = (b: DriftBar) => `${mid(b)},${yOf(b.tempo as number, aim)}`
-  const px = (s: Stretch) => (mid(bars[s.peak]) / 100) * size.width
-  const shown = chipsShown(found, px, CHIP_ROOM_PX)
+  const pointOf = (b: DriftBar) => ({
+    x: (mid(b) / 100) * size.width,
+    y: (yOf(b.tempo as number, aim) / 100) * size.height,
+  })
+  // Each stretch's chip: over its peak, or the nearest bar of it the tag
+  // leaves clear. One out of view has none.
+  const spots = new Map<Stretch, ChipSpot | null>()
+  for (const s of found) {
+    const left = mid(bars[s.peak])
+    if (left < 0 || left > 100) {
+      spots.set(s, null)
+      continue
+    }
+    const nearest = bars
+      .slice(s.first, s.last + 1)
+      .filter((b) => b.tempo !== null && b !== bars[s.peak])
+      .sort((a, b) => Math.abs(a.n - bars[s.peak].n) - Math.abs(b.n - bars[s.peak].n))
+    spots.set(s, chipSpot(s.sign, [bars[s.peak], ...nearest].map(pointOf), size, clear))
+  }
+  const placed = found.filter((s) => spots.get(s))
+  const shown = chipsShown(placed, (s) => spots.get(s)!.x, CHIP_ROOM_PX)
 
   // The line, in pieces: a bar with no tempo ends one and the next begins
   // the next.
@@ -143,32 +170,19 @@ export function DriftLine({
           />
         ))}
       </svg>
-      {found.map((s) => {
+      {placed.map((s) => {
         if (!shown.has(s)) return null
-        const peak = bars[s.peak]
-        const left = mid(peak)
-        if (left < 0 || left > 100) return null
-        const y = (yOf(peak.tempo as number, aim) / 100) * size.height
-        // Above a rise and below a dip; beside it where the edge leaves no
-        // room, on the side away from the lane's nearer end. Never past
-        // either end of the lane.
-        const want = s.sign > 0 ? y - CHIP_GAP_PX - CHIP_PX : y + CHIP_GAP_PX
-        const fits = want >= 1 && want + CHIP_PX <= size.height - 1
-        const leftward = left > 50
+        const spot = spots.get(s)!
         return (
           <span
             key={`chip-${s.first}`}
             data-drift-chip
             className={cn(
               "pointer-events-none absolute rounded-sm bg-warn px-1 text-xs leading-4 font-medium whitespace-nowrap text-warn-foreground tabular-nums",
-              fits ? "-translate-x-1/2" : leftward ? "-translate-x-[calc(100%+0.375rem)] -translate-y-1/2" : "translate-x-1.5 -translate-y-1/2"
+              spot.align === "middle" && "-translate-x-1/2",
+              spot.align === "end" && "-translate-x-full"
             )}
-            style={{
-              left: fits
-                ? `clamp(${CHIP_ROOM_PX / 2}px, ${left}%, calc(100% - ${CHIP_ROOM_PX / 2}px))`
-                : `clamp(${CHIP_ROOM_PX + 6}px, ${left}%, calc(100% - ${CHIP_ROOM_PX + 6}px))`,
-              top: fits ? want : Math.min(size.height - CHIP_PX / 2, Math.max(CHIP_PX / 2, y)),
-            }}
+            style={{ left: spot.x, top: spot.top }}
           >
             {signed(s.chip)}
           </span>

@@ -145,7 +145,7 @@ KIT_ON_BOTH = """
 HEIGHT = {"unsaved-takes": 420, "setup": 930, "settings": 760, "marks": 420, "sets": 720,
           "rehearsal": 770, "metronome-row": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
-          "metronome-master": 1040,
+          "metronome-master": 1040, "drift-master": 1040,
           "history": 820, "history-songs": 1020, "history-marks": 820,
           "midi-card": 910, "midi-player": 1140}
 
@@ -313,6 +313,18 @@ def main():
         page.click("button[aria-label='Pause']")
         page.get_by_role("button", name="Clear").click()
         page.get_by_role("button", name="Repeat").click()
+        # Master's row on its own, the whole take: where the band drifted
+        # from Pałyn's 128, played without the click, and the bridge's
+        # chip's bar under the pointer, the playhead back at the start.
+        page.get_by_role("button", name="To start").click()
+        lane = page.locator("[data-master-lane]")
+        bridge_chip = lane.locator("[data-drift-chip]", has_text="+7")
+        bridge_chip.wait_for()
+        chip, row = bridge_chip.bounding_box(), lane.bounding_box()
+        page.mouse.move(chip["x"] + chip["width"] / 2, row["y"] + row["height"] - 6)
+        lane.locator("[data-drift-hover]").wait_for()
+        shoot(page, "drift-master", around([page.locator("[data-master-group]")]))
+
         zoom_to(page, chorus / length, 12)
         # A press that does not travel seeks: into the window, so what has
         # been played is drawn as played.
@@ -321,8 +333,16 @@ def main():
         page.wait_for_timeout(600)
         shoot(page, "zoom")
 
-        # The same few seconds with Master's click on: its bars and beats
-        # under the tracks. The pointer leaves the button, so no tip shows.
+        # Viasna, recorded to the click, a few seconds of it with Master's
+        # click on: its bars and beats under the tracks, the band's tempo
+        # over them. The pointer leaves the button, so no tip shows.
+        page.get_by_role("button", name="Songs", exact=True).click()
+        page.click("button[aria-label^='Take 5 Viasna']")
+        page.wait_for_selector("[data-click-tag]:has-text('Click 128')")
+        page.wait_for_timeout(800)
+        zoom_to(page, 0.3, 12)
+        box = page.get_by_role("group", name="Take timeline").bounding_box()
+        page.mouse.click(box["x"] + box["width"] * 0.66, box["y"] + box["height"] / 2)
         page.get_by_role("button", name="Click with the take").click()
         page.mouse.move(0, 0)
         shoot(page, "metronome-master",

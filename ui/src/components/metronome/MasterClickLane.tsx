@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react"
 import { DriftLine } from "@/components/metronome/DriftLine"
 import { MeterText, NoteGlyph } from "@/components/metronome/NoteGlyph"
 import { Spinner } from "@/components/ui/spinner"
@@ -57,7 +58,9 @@ function DriftTagText({ tag }: { tag: DriftTag }) {
  *
  * Over the stripes, the band's tempo through the take (drift spec Part 3,
  * `DriftLine`), and the tag says what it is measured against; the stripes
- * are dimmed to a third under it. While it is counted the tag waits its
+ * are dimmed to a third under it. The line is drawn over the tag, which
+ * then has no ground of its own, so a band that rushed its first bars is
+ * not hidden under the words; no chip goes there. While it is counted the tag waits its
  * second and then turns a spinner (B5); a take too short or with no steady
  * beat says so in the tag's place. With no line to draw (the take's files
  * are not there) the lane is the click's alone, and a take recorded
@@ -88,6 +91,17 @@ export function MasterClickLane({
   const tolerance = useDriftTolerance()
   const counting = Boolean(drift?.counting)
   const longWait = useAfter(counting, SAY_AFTER_MS)
+  const tagBox = useRef<HTMLSpanElement>(null)
+  const [clear, setClear] = useState<{ right: number; bottom: number } | null>(null)
+  useLayoutEffect(() => {
+    const el = tagBox.current
+    if (!el) return
+    const measure = () => setClear({ right: el.offsetLeft + el.offsetWidth, bottom: el.offsetTop + el.offsetHeight })
+    measure()
+    const watch = new ResizeObserver(measure)
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [])
   const span = Math.max(0.001, to - from)
   const pct = (t: number) => ((t - from) / span) * 100
   const lines = meter ? clickLines(meter.tempo, meter.signature, from, to) : []
@@ -137,27 +151,14 @@ export function MasterClickLane({
           style={{ left: `${pct(region.a)}%`, width: `${pct(region.b) - pct(region.a)}%` }}
         />
       )}
-      {counted && (
-        <DriftLine
-          bars={counted.bars}
-          aim={counted.aim.tempo}
-          signature={counted.aim.signature}
-          tolerance={tolerance}
-          from={from}
-          to={to}
-        />
-      )}
-      {position >= from && position <= to && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-y-0 w-0.5 bg-primary"
-          style={{ left: `${pct(position)}%` }}
-        />
-      )}
       <span
+        ref={tagBox}
         data-click-tag
         aria-hidden
-        className="pointer-events-none absolute top-1 left-1.5 max-w-[calc(100%-0.75rem)] truncate rounded-sm bg-well/90 px-1 text-xs text-muted-foreground"
+        className={cn(
+          "pointer-events-none absolute top-1 left-1.5 max-w-[calc(100%-0.75rem)] truncate rounded-sm px-1 text-xs text-muted-foreground",
+          !counted && "bg-well/90"
+        )}
       >
         {tag ? (
           <DriftTagText tag={tag} />
@@ -176,6 +177,24 @@ export function MasterClickLane({
           NO_CLICK
         )}
       </span>
+      {counted && (
+        <DriftLine
+          bars={counted.bars}
+          aim={counted.aim.tempo}
+          signature={counted.aim.signature}
+          tolerance={tolerance}
+          from={from}
+          to={to}
+          clear={clear}
+        />
+      )}
+      {position >= from && position <= to && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 w-0.5 bg-primary"
+          style={{ left: `${pct(position)}%` }}
+        />
+      )}
     </div>
   )
 }
