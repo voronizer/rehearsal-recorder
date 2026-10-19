@@ -1382,7 +1382,9 @@ test("a cropped click take says where it starts", async ({ page }) => {
   await dragRegion(page, 0.25, 0.75)
   await page.getByRole("button", { name: "Crop to the region" }).click()
   await expect.poll(() => callCount(page, "crop_take")).toBe(1)
-  await expect(said(page, "“Pałyn 2” is cropped from the bar at 0:01. The uncut take went to the Trash.")).toHaveCount(1)
+  await expect(
+    said(page, "“Pałyn 2” is cropped. It now starts on the bar at 0:01. The uncut take went to the Trash.")
+  ).toHaveCount(1)
   // The same notice for a take still on the review screen.
   await page.keyboard.press("Escape")
   await nameNext(page, "Pałyn")
@@ -1393,7 +1395,38 @@ test("a cropped click take says where it starts", async ({ page }) => {
   await dragRegion(page, 0.4, 0.9)
   await page.getByRole("button", { name: "Crop to the region" }).click()
   await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
-  await expect(said(page, "“Pałyn 5” is cropped from the bar at 0:01. The uncut take went to the Trash.")).toHaveCount(1)
+  await expect(
+    said(page, "“Pałyn 5” is cropped. It now starts on the bar at 0:01. The uncut take went to the Trash.")
+  ).toHaveCount(1)
+})
+
+test("review moves its marks by where the take was cut", async ({ page }) => {
+  // A click take at 128 in 4/4: a bar is 1.875 s, and the fake's draft is
+  // six seconds long.
+  await openEvening(page, "window.__CROP_ON_GRID__ = true;")
+  await nameNext(page, "Pałyn")
+  await page.getByRole("button", { name: /Record take 11/ }).click()
+  await page.getByRole("button", { name: /^Stop/ }).click()
+  await expect(page.locator("[data-take-summary]")).toBeVisible()
+  await settled(page)
+  // A mark at about 2 s: after the bar line at 1.875, before the region's
+  // start at 2.4.
+  const surface = (await page.getByRole("group", { name: "Take timeline" }).boundingBox())!
+  await page.mouse.click(surface.x + surface.width * (2 / 6), surface.y + surface.height / 2)
+  await page.keyboard.press("m")
+  await page.getByRole("button", { name: "Save", exact: true }).click()
+  const marks = () =>
+    page.locator("[data-marker-at]").evaluateAll((els) => els.map((e) => Number((e as HTMLElement).dataset.markerAt)))
+  await expect.poll(async () => (await marks()).length).toBe(1)
+  const [at] = await marks()
+  expect(at).toBeGreaterThan(1.875)
+  expect(at).toBeLessThan(2.4)
+  await dragRegion(page, 0.4, 0.9)
+  await page.getByRole("button", { name: "Crop to the region" }).click()
+  await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
+  // Cut from the bar line, the mark is kept and moved by that, not by the
+  // region's start, which would have left it out.
+  await expect.poll(marks).toEqual([Math.round((at - 1.875) * 100) / 100])
 })
 
 test("master lane lines up with the tracks at 960", async ({ page }) => {

@@ -1,6 +1,6 @@
 import { api, type CutAt, type PendingTake, type UndoResult } from "@/lib/api"
 import { reportPageError } from "@/lib/bridgeErrors"
-import { croppedText, croppedWhere, goneText, trashName } from "@/lib/deletion"
+import { croppedText, goneText, startsOnBar, trashName } from "@/lib/deletion"
 import { dismiss, getNotices, notify } from "@/lib/notices"
 
 /**
@@ -137,14 +137,12 @@ export function offerCropUndo(
   res: { undo?: string | null; error?: string } & CutAt,
   onUndone: (r: UndoResult) => unknown,
   key: string,
-  asked?: number
+  asked: number
 ) {
   // Moved by more than a rounding: a crop cut where it was asked says
   // nothing more.
   const from =
-    asked !== undefined && typeof res.start_sec === "number" && Math.abs(res.start_sec - asked) > 0.001
-      ? res.start_sec
-      : null
+    typeof res.start_sec === "number" && Math.abs(res.start_sec - asked) > 0.001 ? res.start_sec : null
   if (res.undo) {
     offerUndo({ text: croppedText(name, from), token: res.undo, onUndone })
     return
@@ -155,7 +153,10 @@ export function offerCropUndo(
     notify({
       key,
       kind: "warning",
-      text: `${croppedWhere(name, from)}, but the uncut take could not be moved out of the way, so the crop cannot be undone: ${res.error}.`,
+      text:
+        from === null
+          ? `“${name}” is cropped, but the uncut take could not be moved out of the way, so the crop cannot be undone: ${res.error}.`
+          : `“${name}” is cropped. ${startsOnBar(from)} The uncut take could not be moved out of the way, so the crop cannot be undone: ${res.error}.`,
     })
   }
 }

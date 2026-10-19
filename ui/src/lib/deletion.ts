@@ -61,15 +61,18 @@ export function goneText(): string {
     : `It has already gone to ${words().trash}.`
 }
 
-/** "“Palyn 3” is cropped", and, for a click take whose start the crop
- *  moved back to a bar line, where it now starts: "… is cropped from the
- *  bar at 0:01". `from` is in the take's seconds before the crop. */
-export function croppedWhere(name: string, from: number | null = null): string {
-  return from === null ? `“${name}” is cropped` : `“${name}” is cropped from the bar at ${formatClock(from)}`
+/** Where a click take now starts, its start moved back by a crop to the
+ *  bar line before the region: "It now starts on the bar at 0:01." `from`
+ *  is in the take's seconds before the crop. */
+export function startsOnBar(from: number): string {
+  return `It now starts on the bar at ${formatClock(from)}.`
 }
 
 /** The notice for a take that was cropped: the take as it was is what went,
- *  and where a click take now starts (croppedWhere). */
+ *  and before that, for a click take, where it now starts (startsOnBar):
+ *  "“Palyn 3” is cropped. It now starts on the bar at 0:01. The uncut take
+ *  went to the Trash." */
 export function croppedText(name: string, from: number | null = null): string {
-  return `${croppedWhere(name, from)}. The uncut take ${wentToEnd()}`
+  const starts = from === null ? "" : ` ${startsOnBar(from)}`
+  return `“${name}” is cropped.${starts} The uncut take ${wentToEnd()}`
 }
