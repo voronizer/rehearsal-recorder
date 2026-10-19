@@ -118,6 +118,9 @@ export type StatusLine = {
   warn?: boolean
 }
 
+/** How the row's line and the song page's begin for a song with no tempo yet. */
+const NO_TEMPO_YET = "No tempo yet: type or tap one"
+
 function missingOutput(device: string): StatusLine {
   return { text: `The click's output, ${device}, is not connected. The beat will only flash.`, warn: true }
 }
@@ -131,7 +134,10 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
   const hasTempo = state.tempo !== null
   if (state.phase === "count" || state.phase === "take") {
     if (!hasTempo) return { text: "No click: this take has no tempo." }
-    if (!state.on) return { text: "Click off. The tempo still goes into the take." }
+    // A take that began with the switch off has no count-in to measure from
+    // (`since_count_in_ms` is null), so switching it on mid-take starts no click.
+    const unclicked = state.phase === "take" && state.since_count_in_ms === null
+    if (!state.on || unclicked) return { text: "Click off. The tempo still goes into the take." }
     if (state.output_missing) return missingOutput(state.output_missing)
     if (state.phase === "take") return { text: "Clicking to Stop." }
     const { digit, of } = countDigit(state.count, state.per_bar)
@@ -169,10 +175,10 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
       }
       return state.last_take
         ? {
-            text: "No tempo yet: type or tap one, or",
+            text: `${NO_TEMPO_YET}, or`,
             link: { label: "count it from the last take", action: "count" },
           }
-        : { text: "No tempo yet: type or tap one." }
+        : { text: `${NO_TEMPO_YET}.` }
     case "free":
       return {
         text: hasTempo
@@ -206,7 +212,7 @@ export function songLine(title: string, tempo: number | null, counted: string | 
   if (tempo === null) {
     return {
       parts: [
-        "No tempo yet: type or tap one, or ",
+        `${NO_TEMPO_YET}, or `,
         { label: "count it from a take", action: "count" },
       ],
     }

@@ -120,9 +120,10 @@ function goOfName(name) {
 }
 // The goes someone marked as the one to keep are starred.
 const isTheTake = markers => markers.some(m => /the take|keep this/.test(m.note));
-// The band plays to the click at the song's 128 in 4/4, so its takes are click
-// takes at it; the soundcheck's are not.
-const CLICKED = {tempo: 128, signature: '4/4', click: true};
+// The band plays each song to the click at the song's own tempo (the fake's
+// meterOf), so its takes are click takes at it; a song with no tempo, and
+// the soundcheck's takes of no song, were recorded without.
+const clickedAt = name => meterOf(goOfName(name).song);
 function takeOf(n, name, length, end, markers) {
   const tracks = PARTS.map(p => ({name: p.name, file: `/rec/tue/${n}/${p.name}.wav`}));
   for (const tr of tracks) {
@@ -130,7 +131,7 @@ function takeOf(n, name, length, end, markers) {
     fileDurations[tr.file] = length;
   }
   return {take_number: n, name, ...goOfName(name), starred: isTheTake(markers),
-          duration_sec: length, tracks, markers, ...CLICKED};
+          duration_sec: length, tracks, markers, ...clickedAt(name)};
 }
 const SECTION = name => {
   let at = START;
@@ -281,7 +282,7 @@ const PAST = {
     ['Take 2', 165, [{at: 65, note: 'the riff we jammed while setting up', label_id: 1}]]]]};
 const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => ({
   take_number: i + 1, name, ...goOfName(name), starred: isTheTake(markers),
-  duration_sec: length, markers, ...(folder === '/rec/soundcheck' ? NO_METER : CLICKED),
+  duration_sec: length, markers, ...clickedAt(name),
   tracks: PARTS.map(p => ({name: p.name, file: `${folder}/${i + 1}/${p.name}.wav`}))}));
 // The set a rehearsal was played by, when the page gives one
 // (window.__PLAYED_BY__): its songs are all the band's, so none is new. Not

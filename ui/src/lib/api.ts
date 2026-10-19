@@ -23,7 +23,7 @@ export type OutputDevice = Device & {
   /** Why the metronome's click cannot play through it, in words, or null:
    *  another ASIO card cannot play while one records. Settings › Metronome
    *  does not offer such a device. */
-  click_unavailable?: string | null
+  click_unavailable: string | null
 }
 
 /** The four signatures, as Python keeps them. */

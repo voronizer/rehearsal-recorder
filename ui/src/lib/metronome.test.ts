@@ -275,8 +275,17 @@ describe("the status line", () => {
       text: "No click: this take has no tempo.",
     })
   })
+  it("says the click is off in a take that began without it, even if the switch is on again", () => {
+    // No count-in was heard, so there is nothing to measure the clicks from.
+    const began = state({ phase: "take", on: true, since_count_in_ms: null })
+    expect(statusLine(began, null)).toEqual({ text: "Click off. The tempo still goes into the take." })
+    expect(statusLine({ ...began, output_missing: "X18" }, null).warn).toBeUndefined()
+    expect(statusLine({ ...began, tempo: null, case: "free", song: null }, null)).toEqual({
+      text: "No click: this take has no tempo.",
+    })
+  })
   it("warns in a take whose click output has gone", () => {
-    const line = statusLine(state({ phase: "take", output_missing: "X18" }), null)
+    const line = statusLine(state({ phase: "take", since_count_in_ms: 1200, output_missing: "X18" }), null)
     expect(line.warn).toBe(true)
     expect(line.text).toBe("The click's output, X18, is not connected. The beat will only flash.")
   })
