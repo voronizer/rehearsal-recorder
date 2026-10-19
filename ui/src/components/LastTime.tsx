@@ -425,7 +425,7 @@ function EarlierRow({
             {r.name}
           </span>
           {r.missing ? (
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">Not on disk</span>
+            <span className="ml-auto shrink-0 text-xs text-destructive">Not found on disk</span>
           ) : (
             <Figures
               parts={parts}

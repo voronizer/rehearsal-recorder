@@ -1386,10 +1386,9 @@ test.describe("last time, on the setup screen", () => {
     const earlier = panel.getByRole("region", { name: "Earlier" })
     await expect(earlier).toContainText("Wednesday jam")
     await expect(earlier).toContainText("First rehearsal")
-    // One wording for a rehearsal whose folder is gone, in the quiet look.
+    // One wording for a rehearsal whose folder is gone, as History's own list.
     const missing = earlier.getByRole("button", { name: /Missing jam/ })
-    await expect(missing).toContainText("Not on disk")
-    await expect(missing).not.toContainText("not found")
+    await expect(missing).toContainText("Not found on disk")
     await expect(panel.getByRole("button", { name: /^History/ })).toContainText("4 rehearsals")
   })
 
