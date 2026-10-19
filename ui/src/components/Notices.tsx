@@ -80,7 +80,8 @@ export function Notices() {
   )
 }
 
-function NoticeItem({
+/** One notice as the corner draws it; the site draws one as a picture. */
+export function NoticeItem({
   notice,
   paused,
   onEnter,

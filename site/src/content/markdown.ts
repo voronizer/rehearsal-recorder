@@ -1,9 +1,12 @@
 // Just enough Markdown for site/content/: a title, an intro, sections under
-// `## ` headings with an optional `{#id}`, a story step's `- ` list, and
-// inline bold, emphasis, code and links. The page's words are short; a full Markdown library would be
-// most of what the page downloads.
+// `## ` headings with an optional `{#id}`, items under `### ` headings in a
+// section, a `- ` list, and inline bold, emphasis, code and links. The
+// page's words are short; a full Markdown library would be most of what the
+// page downloads.
 
-export type Section = { title: string; id: string | null; body: string }
+/** A `##` section: its words before its first `###`, and its `###` items,
+ *  each a section of its own (with no items). */
+export type Section = { title: string; id: string | null; body: string; items: Section[] }
 export type Doc = { title: string | null; intro: string; sections: Section[] }
 
 /** The text without its <!-- comments -->, however they nest. */
@@ -19,28 +22,33 @@ function withoutComments(text: string): string {
 export function parseDoc(md: string): Doc {
   let title: string | null = null
   const intro: string[] = []
-  const heads: Omit<Section, "body">[] = []
-  const bodies: string[][] = []
+  type Open = { title: string; id: string | null; lines: string[]; items: Open[] }
+  const sections: Open[] = []
   let lines = intro
   const text = withoutComments(md.replace(/\r\n/g, "\n"))
   for (const line of text.split("\n")) {
     const h1 = /^# (.+)$/.exec(line)
-    const h2 = /^## (.+?)(?:\s+\{#([\w-]+)\})?\s*$/.exec(line)
-    if (h1 && title === null && heads.length === 0) {
+    const h = /^(##|###) (.+?)(?:\s+\{#([\w-]+)\})?\s*$/.exec(line)
+    const section = sections[sections.length - 1]
+    if (h1 && title === null && sections.length === 0) {
       title = h1[1].trim()
-    } else if (h2) {
-      heads.push({ title: h2[1].trim(), id: h2[2] ?? null })
-      bodies.push((lines = []))
+    } else if (h && (h[1] === "##" || section)) {
+      const open: Open = { title: h[2].trim(), id: h[3] ?? null, lines: [], items: [] }
+      if (h[1] === "##") sections.push(open)
+      else section.items.push(open)
+      lines = open.lines
     } else {
       lines.push(line)
     }
   }
   const tidy = (ls: string[]) => ls.join("\n").replace(/\n{3,}/g, "\n\n").trim()
-  return {
+  const close = ({ title, id, lines, items }: Open): Section => ({
     title,
-    intro: tidy(intro),
-    sections: heads.map((h, i) => ({ ...h, body: tidy(bodies[i]) })),
-  }
+    id,
+    body: tidy(lines),
+    items: items.map(close),
+  })
+  return { title, intro: tidy(intro), sections: sections.map(close) }
 }
 
 const escape = (s: string) =>
@@ -99,16 +107,24 @@ const where = (file: string) => `site/content/${file}`
  * page puts a piece of the app beside each, by id, so a section misspelt or
  * moved fails the tests (index.test.ts), not a tile left blank.
  */
-export function sectionsByIds(file: string, doc: Doc, ids: string[]): Section[] {
-  const found = doc.sections.map((s) => s.id)
-  for (const id of ids)
-    if (!found.includes(id)) throw new Error(`${where(file)}: no section {#${id}}`)
+export function sectionsByIds(file: string, doc: Doc, ids: readonly string[]): Section[] {
+  return byIds(`${where(file)}:`, "section", doc.sections, ids)
+}
+
+/** The same for a section's `###` items. */
+export function itemsByIds(file: string, section: Section, ids: readonly string[]): Section[] {
+  return byIds(`${where(file)}, {#${section.id}}:`, "item", section.items, ids)
+}
+
+function byIds(at: string, what: string, sections: Section[], ids: readonly string[]): Section[] {
+  const found = sections.map((s) => s.id)
+  for (const id of ids) if (!found.includes(id)) throw new Error(`${at} no ${what} {#${id}}`)
   for (const id of found)
     if (id === null || !ids.includes(id))
-      throw new Error(`${where(file)}: section {#${id}} is not one of ${ids.join(", ")}`)
+      throw new Error(`${at} ${what} {#${id}} is not one of ${ids.join(", ")}`)
   if (found.join() !== ids.join())
-    throw new Error(`${where(file)}: sections go ${found.join(", ")}; they should go ${ids.join(", ")}`)
-  return doc.sections
+    throw new Error(`${at} ${what}s go ${found.join(", ")}; they should go ${ids.join(", ")}`)
+  return sections
 }
 
 /** The bodies of the sections with these titles, by title. */

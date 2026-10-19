@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { inline, leadAndBeats, parseDoc, sectionsByIds, sectionsByTitles } from "./markdown"
+import { inline, itemsByIds, leadAndBeats, parseDoc, sectionsByIds, sectionsByTitles } from "./markdown"
 
 describe("parseDoc", () => {
   it("splits a file into its title, intro and sections", () => {
@@ -7,8 +7,8 @@ describe("parseDoc", () => {
       title: "T",
       intro: "Intro.",
       sections: [
-        { title: "A", id: "a", body: "One." },
-        { title: "B", id: null, body: "Two." },
+        { title: "A", id: "a", body: "One.", items: [] },
+        { title: "B", id: null, body: "Two.", items: [] },
       ],
     })
   })
@@ -17,7 +17,7 @@ describe("parseDoc", () => {
     expect(parseDoc("# T\n\nIntro.\n\n<!-- Keep the ids.\n     In order. -->\n\n## A\nOne.")).toEqual({
       title: "T",
       intro: "Intro.",
-      sections: [{ title: "A", id: null, body: "One." }],
+      sections: [{ title: "A", id: null, body: "One.", items: [] }],
     })
   })
 
@@ -27,6 +27,20 @@ describe("parseDoc", () => {
 
   it("keeps a section's paragraphs", () => {
     expect(parseDoc("## Q\nOne.\n\nTwo.\n").sections[0].body).toBe("One.\n\nTwo.")
+  })
+
+  it("puts a step's ### items under it, with ids and bodies", () => {
+    const [a, c] = parseDoc("## A {#a}\nLead.\n\n### B {#b}\nOne\nline.\n\n### D\nTwo.\n\n## C\nThree.").sections
+    expect(a.body).toBe("Lead.")
+    expect(a.items).toEqual([
+      { title: "B", id: "b", body: "One\nline.", items: [] },
+      { title: "D", id: null, body: "Two.", items: [] },
+    ])
+    expect(c).toEqual({ title: "C", id: null, body: "Three.", items: [] })
+  })
+
+  it("keeps a ### line before any section as words", () => {
+    expect(parseDoc("### x\n\n## A").intro).toBe("### x")
   })
 })
 
@@ -84,6 +98,15 @@ describe("sections of a file", () => {
   it("names the file and the id when they are out of order", () => {
     expect(() => sectionsByIds("x.md", doc, ["b", "a"])).toThrow(
       "site/content/x.md: sections go a, b; they should go b, a"
+    )
+  })
+
+  it("checks a section's items the same way, naming the section", () => {
+    const [a] = parseDoc("## A {#a}\n### B {#b}\n### C {#c}").sections
+    expect(itemsByIds("x.md", a, ["b", "c"]).map((s) => s.id)).toEqual(["b", "c"])
+    expect(() => itemsByIds("x.md", a, ["b", "c", "d"])).toThrow("site/content/x.md, {#a}: no item {#d}")
+    expect(() => itemsByIds("x.md", a, ["c", "b"])).toThrow(
+      "site/content/x.md, {#a}: items go b, c; they should go c, b"
     )
   })
 

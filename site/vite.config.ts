@@ -72,10 +72,10 @@ function seo(): Plugin {
 // The website: a page (index.html) and the app in a frame (stage.html), both
 // drawn by the interface's own components. They are imported from ../ui/src
 // with the interface's `@/`, and run on the interface's own React, so there
-// is one copy of it; the site's package.json does not list it. og.html is
-// the link picture's page, which scripts/og.mjs photographs into og.png, and
-// 404.html what Vercel answers for an address that is no file (see
-// vercel-config.json).
+// is one copy of it, and draw its own icons; the site's package.json lists
+// neither. og.html is the link picture's page, which scripts/og.mjs
+// photographs into og.png, and 404.html what Vercel answers for an address
+// that is no file (see vercel-config.json).
 export default defineConfig({
   base: "/",
   // The app's icons: the favicon, and the logo its screens show.
@@ -86,6 +86,7 @@ export default defineConfig({
       "@": ui("src"),
       react: ui("node_modules/react"),
       "react-dom": ui("node_modules/react-dom"),
+      "lucide-react": ui("node_modules/lucide-react"),
     },
   },
   server: {

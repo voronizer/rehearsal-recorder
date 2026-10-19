@@ -9,8 +9,6 @@ const TAG = process.env.VITE_SITE_VERSION || latestVersion(CHANGELOG)
 const VERSION = displayVersion(TAG)
 // A release with nothing new in the app shows the news of the one before.
 const NEWS = latestNews(changelogHead(CHANGELOG, process.env.VITE_SITE_VERSION || undefined))
-const FEATURES = readFileSync(new URL("../content/features.md", import.meta.url), "utf-8")
-const TILE_HEADINGS = [...FEATURES.matchAll(/^## (.+?) \{#\w+\}$/gm)].map((m) => m[1])
 const RELEASES = "https://github.com/voronizer/rehearsal-recorder/releases"
 const MAC_ZIP = `${RELEASES}/latest/download/RehearsalRecorder-macos.zip`
 const WIN_ZIP = `${RELEASES}/latest/download/RehearsalRecorder-windows.zip`
@@ -25,6 +23,38 @@ const sceneIn = (page: Page, scene: string) =>
     .catch(() => null)
 const heldIn = (page: Page, scene: string) =>
   frame(page, scene).contentFrame().locator("html").getAttribute("data-held").catch(() => null)
+
+/** The story's frame on show (a fresh one may be starting under it), and
+ *  one of its marks: data-scene, the step it last ran through; data-moment,
+ *  the moment it keeps still at; data-held. */
+const storyFrame = (page: Page) => page.locator("#how iframe[data-shown='true']")
+const story = (page: Page, mark: "scene" | "moment" | "held") =>
+  storyFrame(page)
+    .contentFrame()
+    .locator("html")
+    .getAttribute(`data-${mark}`)
+    .catch(() => null)
+/** Each of the story's frames: its place, whether it is on show, and its
+ *  marks, so that a test waiting on them says where each frame got to. */
+const storyFrames = (page: Page) =>
+  page.locator("#how iframe").evaluateAll((els) =>
+    els.map((el) => {
+      const marks = (el as HTMLIFrameElement).contentDocument?.documentElement?.dataset
+      return {
+        place: el.getAttribute("src")?.split("#")[1],
+        shown: el.getAttribute("data-shown"),
+        scene: marks?.scene ?? null,
+        moment: marks?.moment ?? null,
+        held: marks?.held ?? null,
+      }
+    })
+  )
+/** A tile or card of the steps, by its title. */
+const item = (page: Page, title: string) => page.locator("#how").getByRole("button", { name: title, exact: true })
+const pressed = (page: Page) => page.locator("#how .items [aria-pressed='true']")
+/** Puts a step's top at the top of the screen, as the rail does. */
+const toStep = (page: Page, n: number) =>
+  page.locator("#how .step").nth(n).evaluate((el) => window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - 24))
 
 test("the page has its heading", async ({ page }) => {
   await page.goto("/")
@@ -81,12 +111,15 @@ test("the controller has a block of its own after the app, its photo beside its 
   const at = await page.evaluate(() => ({
     hero: document.querySelector(".hero")!.getBoundingClientRect().bottom,
     block: document.querySelector("#controller")!.getBoundingClientRect(),
-    features: document.querySelector("#features")!.getBoundingClientRect().top,
+    next: document.querySelector("#how")!.getBoundingClientRect().top,
     copy: document.querySelector("#controller .copy")!.getBoundingClientRect(),
     photo: document.querySelector("#controller img")!.getBoundingClientRect(),
   }))
   expect(at.block.top).toBeGreaterThanOrEqual(at.hero)
-  expect(at.block.bottom).toBeLessThanOrEqual(at.features)
+  expect(at.block.bottom).toBeLessThanOrEqual(at.next)
+  // Its four lines, the count-in last.
+  await expect(block.locator("ul li")).toHaveCount(4)
+  await expect(block.locator("ul li").last()).toHaveText(/^With the click on, REC counts the band in/)
   expect(at.copy.right).toBeLessThanOrEqual(at.photo.left)
   // The photo goes to the block's edges: top, right and bottom.
   expect(Math.abs(at.photo.top - at.block.top)).toBeLessThanOrEqual(1)
@@ -109,83 +142,238 @@ for (const width of [320, 390]) {
   })
 }
 
-test("the health piece is as wide as its words, with no room held for a longer sentence", async ({
+test("the steps follow the scroll, and the rail goes back", async ({ page }) => {
+  await page.goto("/")
+  const scenes = ["before", "during", "after", "later"]
+  for (let i = 0; i < scenes.length; i++) {
+    await toStep(page, i)
+    await expect(page.locator(".rail button").nth(i)).toHaveAttribute("aria-current", "step")
+    await expect.poll(() => story(page, "scene"), { timeout: 60_000 }).toBe(scenes[i])
+  }
+  await page.locator(".rail button").first().click()
+  await expect(page.locator(".rail button").first()).toHaveAttribute("aria-current", "step")
+  await expect.poll(() => story(page, "scene"), { timeout: 30_000 }).toBe("before")
+  await expect(page.locator("#how iframe")).toHaveCount(1)
+})
+
+test("a click on a tile shows its piece over the app, lights the tile, and holds the app", async ({ page }) => {
+  await page.goto("/")
+  await toStep(page, 0)
+  const set = item(page, "Rehearse the set, in order.")
+  await set.click()
+  await expect(set).toHaveAttribute("aria-pressed", "true")
+  await expect(pressed(page)).toHaveCount(1)
+  await expect(page.locator("#how .over").getByRole("img", { name: /Gig on the 25th/ })).toBeVisible()
+  await expect.poll(() => story(page, "held")).toBe("true")
+  // A card after it with a moment of the live app takes the piece away.
+  await item(page, "Hear where you left off.").click()
+  await expect(page.locator("#how .over")).toHaveCount(0)
+  await expect(set).toHaveAttribute("aria-pressed", "false")
+  await expect.poll(() => story(page, "held")).toBe("false")
+})
+
+test("a click on a card shows its moment of the live app", async ({ page }) => {
+  await page.goto("/")
+  await toStep(page, 0)
+  await item(page, "Hear where you left off.").click()
+  await expect.poll(() => story(page, "moment"), { timeout: 30_000 }).toBe("0.3")
+  const frame = storyFrame(page).contentFrame()
+  await expect(frame.locator("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']")).toBeVisible()
+})
+
+test("scrolling within a step keeps the window, and the next step clears it", async ({ page }) => {
+  await page.goto("/")
+  await toStep(page, 0)
+  await item(page, "Hear where you left off.").click()
+  await expect.poll(() => story(page, "moment"), { timeout: 30_000 }).toBe("0.3")
+  await page.mouse.wheel(0, 100)
+  await page.waitForTimeout(800)
+  expect(await story(page, "moment")).toBe("0.3")
+  await expect(item(page, "Hear where you left off.")).toHaveAttribute("aria-pressed", "true")
+
+  await toStep(page, 1)
+  await expect(pressed(page)).toHaveCount(0)
+  await expect.poll(() => story(page, "scene"), { timeout: 60_000 }).toBe("during")
+  await expect(page.locator("#how iframe")).toHaveCount(1)
+})
+
+// The review focus of the plan: things a visitor does that no step above
+// does on its own.
+test("two quick clicks on moments behind the app end on the second", async ({ page }) => {
+  await page.goto("/")
+  await toStep(page, 1)
+  await expect.poll(() => story(page, "scene"), { timeout: 60_000 }).toBe("during")
+  await item(page, "A count-in in big digits.").click()
+  await item(page, "How long it took last time.").click()
+  await expect
+    .poll(() => storyFrames(page), { timeout: 45_000 })
+    .toEqual([expect.objectContaining({ shown: "true", moment: "1.1" })])
+  await page.waitForTimeout(1_500)
+  expect(await story(page, "moment")).toBe("1.1")
+  await expect(page.locator("#how iframe")).toHaveCount(1)
+  await expect(item(page, "How long it took last time.")).toHaveAttribute("aria-pressed", "true")
+})
+
+test("a click before the app is up shows its moment once it is", async ({ page }) => {
+  // The app's frames get their page only after the click.
+  let open = () => {}
+  const clicked = new Promise<void>((done) => (open = done))
+  await page.route(/\/stage\.html/, async (route) => {
+    await clicked
+    await route.continue()
+  })
+  await page.goto("/", { waitUntil: "domcontentloaded" })
+  await toStep(page, 0)
+  await item(page, "Each interface knows its inputs.").click()
+  open()
+  await expect.poll(() => story(page, "moment"), { timeout: 30_000 }).toBe("0.1")
+})
+
+test("a card whose moment is in the next step keeps it while scrolling in its own", async ({ page }) => {
+  await page.goto("/")
+  await toStep(page, 2)
+  await item(page, "The same bar in the next take.").click()
+  await expect.poll(() => story(page, "moment"), { timeout: 90_000 }).toBe("3.4")
+  await page.mouse.wheel(0, 120)
+  await page.waitForTimeout(800)
+  expect(await story(page, "moment")).toBe("3.4")
+  await expect(page.locator(".rail button").nth(2)).toHaveAttribute("aria-current", "step")
+  await expect(page.locator("#how iframe")).toHaveCount(1)
+})
+
+test("a piece on show stays in the window when the window narrows to a phone's", async ({ page }) => {
+  await page.goto("/")
+  await toStep(page, 0)
+  await item(page, "Rehearse the set, in order.").click()
+  const over = page.locator("#how .over")
+  await expect(over.getByRole("img")).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(over.getByRole("img")).toBeVisible()
+  const found = await page.evaluate(() => {
+    const box = (s: string) => document.querySelector(s)!.getBoundingClientRect()
+    return { view: box("#how .view"), over: box("#how .over"), piece: box("#how .over .piece") }
+  })
+  expect(found.over).toEqual(found.view)
+  expect(found.piece.left).toBeGreaterThanOrEqual(found.over.left)
+  expect(found.piece.right).toBeLessThanOrEqual(found.over.right)
+  expect(found.piece.top).toBeGreaterThanOrEqual(found.over.top)
+  expect(found.piece.bottom).toBeLessThanOrEqual(found.over.bottom)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
+})
+
+test("Space on a card shows its moment and does not scroll the page", async ({ page }) => {
+  await page.goto("/")
+  await toStep(page, 0)
+  const card = item(page, "Hear where you left off.")
+  await card.focus()
+  const before = await page.evaluate(() => window.scrollY)
+  await page.keyboard.press("Space")
+  await expect(card).toHaveAttribute("aria-pressed", "true")
+  expect(await page.evaluate(() => window.scrollY)).toBe(before)
+  await expect.poll(() => story(page, "moment"), { timeout: 30_000 }).toBe("0.3")
+})
+
+test("a card brings the window near what it is about, and says more under it", async ({ page }) => {
+  await page.goto("/")
+  await toStep(page, 1)
+  const about = page.locator("#how .about")
+  await expect(about.locator("h4")).toHaveText("While you record.")
+  await item(page, "A count-in in big digits.").click()
+  await expect(about.locator("h4")).toHaveText("A count-in in big digits.")
+  await expect(about.locator("p")).toContainText("With the click on, Record take counts the band in")
+  await expect.poll(() => story(page, "moment"), { timeout: 60_000 }).toBe("1.0")
+  // The frame is drawn 1.7 times nearer than the whole screen in the window.
+  await expect
+    .poll(() =>
+      storyFrame(page).evaluate((el) => {
+        const near = new DOMMatrix(getComputedStyle(el).transform).a
+        return Math.round((near * 1180 * 100) / el.parentElement!.clientWidth) / 100
+      })
+    )
+    .toBe(1.7)
+  await toStep(page, 2)
+  await expect(about.locator("h4")).toHaveText("After the take.")
+})
+
+/** Shows the piece an item is drawn with over the app, and finds it. A click
+ *  as the button gets it: on a phone the window held at the top of the
+ *  screen may be over the button. */
+async function showPiece(page: Page, title: string) {
+  await item(page, title).dispatchEvent("click")
+  const piece = page.locator("#how .over .piece")
+  await expect(piece).toBeVisible()
+  return piece
+}
+
+/** The items drawn with a piece of their own, and what each piece is of. */
+const PIECES: [string, RegExp][] = [
+  ["Rehearse the set, in order.", /Gig on the 25th/],
+  ["Tap the tempo on a pad.", /^The metronome's row with Pałyn picked, just after the drummer tapped/],
+  ["A tempo from an old take.", /^Pałyn's tempo on its page in History, counted from Pałyn 4/],
+  ["The first take sets the tempo.", /^The metronome's row for a song with no tempo yet/],
+  ["Notes too, from an e-kit or a keyboard.", /TD-17.*Launchkey Mini MK3/],
+  ["The laptop stays awake.", /^A warning: “The laptop went to sleep at 21:14/],
+  ["An unplugged interface ends the take.", /^A warning: “Recording stopped: no sound/],
+  ["Disk space in hours.", /^Interface connected, room for about/],
+  ["Marks say what happened.", /^Four takes of the song Pałyn/],
+  ["Where the band ran ahead.", /^The Master row in the player under Pałyn 2's tracks/],
+  ["Undo, for 10 seconds.", /^A notice that Pałyn 5 went to the (Trash|Recycle Bin), with Undo$/],
+  ["Send takes to the band.", /^Settings › Folders at the cloud folder/],
+  ["The cloud copy keeps up.", /marked as the one to keep, in the cloud$/],
+  ["The tempo inside the WAVs.", /Write the tempo into WAV files ticked$/],
+]
+
+// Each piece is made smaller to fit the window where it is bigger than it,
+// as the live app is: none goes past the window, on a laptop or a phone.
+for (const width of [1280, 390]) {
+  test(`at ${width} px every piece is the one its item says, and fits the window`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width > 900 ? 860 : 844 })
+    await page.goto("/")
+    for (const [title, label] of PIECES) {
+      const piece = await showPiece(page, title)
+      await expect(piece).toHaveAttribute("aria-label", label)
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => {
+              const over = document.querySelector("#how .over")!.getBoundingClientRect()
+              const piece = document.querySelector("#how .over .piece")!.getBoundingClientRect()
+              return (
+                piece.left >= over.left - 0.5 &&
+                piece.right <= over.right + 0.5 &&
+                piece.top >= over.top - 0.5 &&
+                piece.bottom <= over.bottom + 0.5
+              )
+            }),
+          { message: title }
+        )
+        .toBe(true)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+    }
+  })
+}
+
+// What the window says of an item fits under it, never cut short.
+for (const width of [1280, 390]) {
+  test(`at ${width} px what the window says of every item fits under it`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width > 900 ? 860 : 844 })
+    await page.goto("/")
+    const titles = await page.locator("#how .items h4").allTextContents()
+    expect(titles).toHaveLength(29)
+    const about = page.locator("#how .about")
+    for (const title of titles) {
+      await item(page, title).dispatchEvent("click")
+      await expect(about.locator("h4")).toHaveText(title)
+      expect(await about.evaluate((el) => el.scrollHeight <= el.clientHeight), title).toBe(true)
+    }
+  })
+}
+
+test("the set's piece shows a rehearsal mid-set, the panel's line between the field and the set", async ({
   page,
 }) => {
-  // The app's line holds, unseen, the room of the longest thing it can say,
-  // so that it never moves during a take. A still picture has nothing to
-  // keep still for: its box ends where its words do. Where the tile is wide
-  // enough for the sentence on one line (800 px, two columns) the held room
-  // would show as empty card beside the words; where the tile is narrow, the
-  // words wrap and fill it either way.
-  for (const width of [390, 800, 1280]) {
-    await page.setViewportSize({ width, height: 900 })
-    await page.goto("/")
-    const health = page.locator("#features [data-health]")
-    await expect(health).toHaveCount(1)
-    const words = health.getByText("Interface connected · room for")
-    await expect(words).toBeVisible()
-    await health.scrollIntoViewIfNeeded()
-    // The line the words are on: the icon, the gap and the words.
-    const said = (await words.locator("..").boundingBox())!
-    const box = (await health.boundingBox())!
-    expect(box.width, `width at ${width} px`).toBeLessThanOrEqual(said.width + 2)
-    expect(box.height, `height at ${width} px`).toBeLessThanOrEqual(said.height + 2)
-    // Its words start at the left, as the tile's heading does, when they wrap.
-    await expect(health).toHaveCSS("text-align", "start")
-  }
-})
-
-test("the tiles show the app's own pieces", async ({ page }) => {
   await page.goto("/")
-  const tiles = page.locator("#features")
-  for (const heading of TILE_HEADINGS) await expect(tiles.getByRole("heading", { name: heading })).toBeVisible()
-  await expect(tiles.getByText("Interface connected · room for")).toBeVisible()
-  await expect(tiles.getByText("clipped 3×")).toBeVisible()
-  await expect(tiles.getByText("autosaved every 30 s")).toBeVisible()
-  await expect(tiles.getByText("Tuesday jam")).toHaveCount(2)
-  await expect(tiles.getByText("New songs")).toBeVisible()
-  await expect(tiles.getByText("Soundcheck")).toBeVisible()
-  await expect(tiles.getByText("Pałyn").first()).toBeVisible()
-  // The take kept in the cloud carries its row's cloud mark. The overview no
-  // longer says the evening's figures: in the app, the header has them.
-  await expect(tiles.getByRole("img", { name: /in the cloud/ }).locator("[data-in-cloud]")).toBeVisible()
-  // Palyn typed in the Next take field: it is Pałyn now, the one song
-  // under it, lit; as on the rehearsal screen, a list and no pills.
-  const names = tiles.getByRole("img", { name: /Palyn is Pałyn now/ })
-  await expect(names.locator("[data-take-go]")).toHaveText(/^ → Pałyn \d+$/)
-  const songs = names.locator("[data-song-list]")
-  await expect(songs.locator("h2")).toHaveText("Songs")
-  await expect(songs.locator("[data-song-row]")).toHaveCount(1)
-  await expect(songs.locator("[data-song-row='Pałyn']")).toHaveAttribute("aria-current", "true")
-  await expect(names.locator("[data-song-choice]")).toHaveCount(0)
-})
-
-test("the two recording tiles are on wells, as the app draws them", async ({ page }) => {
-  await page.goto("/")
-  const piece = page.locator("#features").getByRole("img", { name: /Bass and Guitar tiles/ })
-  await expect(piece.locator("[role=group]")).toHaveCount(2)
-  // Each on a well, the side panel's grey, as on the recording screen: on
-  // the page's white, a tile on a card's white would not show.
-  const found = await piece.evaluate((el) => {
-    const probe = document.createElement("div")
-    probe.style.backgroundColor = "var(--panel)"
-    el.append(probe)
-    const panel = getComputedStyle(probe).backgroundColor
-    probe.remove()
-    const fill = (e: Element) => getComputedStyle(e).backgroundColor
-    return { tiles: [...el.querySelectorAll("[role=group]")].map(fill), panel, ground: fill(el) }
-  })
-  expect(found.tiles).toEqual([found.panel, found.panel])
-  expect(found.ground).not.toBe(found.panel)
-})
-
-test("the sets tile shows a rehearsal mid-set", async ({ page }) => {
-  await page.goto("/")
-  const tile = page.locator("#features article").filter({
-    has: page.getByRole("heading", { name: "Rehearse the set, in order." }),
-  })
-  const piece = tile.getByRole("img", { name: /Gig on the 25th/ })
+  const piece = await showPiece(page, "Rehearse the set, in order.")
   await expect(piece.locator("textarea")).toHaveValue("Viasna")
   const card = piece.locator("[data-set-card]")
   await expect(card.locator("h2")).toHaveText("Gig on the 25th · 1 of 6 played")
@@ -198,31 +386,15 @@ test("the sets tile shows a rehearsal mid-set", async ({ page }) => {
     /^6Ptuška$/,
   ])
   await expect(card.locator("[data-set-song='Viasna']")).toHaveAttribute("aria-current", "true")
+  // The part the set sits in is the box the line is drawn on, as in the app.
+  await expect(card.locator("xpath=..")).toHaveCSS("border-top-width", "1px")
 })
 
-test("the Next take tiles draw the panel's line between the field and what is under it", async ({
+test("the MIDI piece shows two lanes of notes, each with its plate, the part heard in the accent", async ({
   page,
 }) => {
   await page.goto("/")
-  const tiles = page.locator("#features")
-  // The part a group sits in is the box the line is drawn on, as in the app.
-  const part = (label: RegExp, group: string) =>
-    tiles.getByRole("img", { name: label }).locator(group).locator("xpath=..")
-  await expect(part(/Gig on the 25th/, "[data-set-card]")).toHaveCSS("border-top-width", "1px")
-  await expect(part(/Palyn is Pałyn now/, "[data-song-list]")).toHaveCSS("border-top-width", "1px")
-})
-
-/** The MIDI tile, found by its heading. */
-const midiTile = (page: Page) =>
-  page.locator("#features article").filter({
-    has: page.getByRole("heading", { name: "Notes too, from an e-kit or a keyboard." }),
-  })
-
-test("the MIDI tile shows two lanes of notes, each with its plate", async ({ page }) => {
-  await page.goto("/")
-  const tile = midiTile(page)
-  await expect(tile.getByText("A track records its audio, its MIDI or both.")).toBeVisible()
-  const piece = tile.getByRole("img", { name: /TD-17.*Launchkey Mini MK3/ })
+  const piece = await showPiece(page, "Notes too, from an e-kit or a keyboard.")
   const drums = piece.locator("[data-notes-plate='Drums']")
   await expect(drums).toContainText("TD-17")
   await expect(drums).toContainText("Saved as .mid, not played here")
@@ -234,11 +406,6 @@ test("the MIDI tile shows two lanes of notes, each with its plate", async ({ pag
   await expect(piece.locator("[data-notes-lane='Drums']")).toContainText("Crash")
   await expect(piece.locator("[data-notes-lane='Drums']")).toContainText("Kick")
   await expect(piece.locator("[data-notes-lane='Keys']")).toContainText("C4")
-})
-
-test("in the MIDI tile the part already heard is in the accent and the rest grey", async ({ page }) => {
-  await page.goto("/")
-  const piece = midiTile(page).getByRole("img", { name: /TD-17/ })
   for (const name of ["Drums", "Keys"]) {
     const canvas = piece.locator(`[data-notes-lane='${name}'] canvas`)
     // Where the accent ends and the grey begins, as a share of the lane.
@@ -265,62 +432,22 @@ test("in the MIDI tile the part already heard is in the accent and the rest grey
     expect(grey).toBeGreaterThanOrEqual(accent - 0.01)
     expect(grey).toBeLessThan(1)
   }
-})
-
-test("the MIDI tile is a picture: nothing moves, nothing plays, nothing to click", async ({ page }) => {
-  await page.goto("/")
-  const tile = midiTile(page)
-  const piece = tile.getByRole("img", { name: /TD-17/ })
-  await expect(piece.locator("[inert]")).toHaveCount(1)
-  await expect(tile.locator("audio, video, button, a, input")).toHaveCount(0)
+  // Nothing moves: the notes are drawn once.
   const drawn = () =>
     piece.locator("canvas").evaluateAll((all) => all.map((c) => (c as HTMLCanvasElement).toDataURL()).join())
-  await expect.poll(async () => (await drawn()).length).toBeGreaterThan(1000)
   const before = await drawn()
-  await page.waitForTimeout(800)
+  await page.waitForTimeout(500)
   expect(await drawn()).toBe(before)
 })
 
-test("the MIDI tile is the whole width, right after the one on tracks, its words beside its notes", async ({
-  page,
-}) => {
-  await page.goto("/")
-  const found = await page.locator("#features .bento").evaluate((bento) => {
-    const box = (el: Element) => el.getBoundingClientRect()
-    const tiles = [...bento.children]
-    const at = tiles.findIndex((t) => t.querySelector("h3")?.textContent === "Notes too, from an e-kit or a keyboard.")
-    const midi = tiles[at]
-    return {
-      before: tiles[at - 1]?.querySelector("h3")?.textContent,
-      bento: box(bento),
-      midi: box(midi),
-      track: box(tiles[at - 1]),
-      copy: box(midi.querySelector(".copy")!),
-      piece: box(midi.querySelector(".piece")!),
-    }
-  })
-  expect(found.before).toBe("Every musician on their own track.")
-  expect(Math.abs(found.midi.left - found.bento.left)).toBeLessThanOrEqual(1)
-  expect(Math.abs(found.midi.right - found.bento.right)).toBeLessThanOrEqual(1)
-  expect(found.midi.top).toBeGreaterThanOrEqual(found.track.bottom)
-  expect(found.copy.right).toBeLessThanOrEqual(found.piece.left)
-  expect(found.copy.top).toBeLessThan(found.piece.bottom)
-  expect(found.piece.top).toBeLessThan(found.copy.bottom)
-})
-
-// The name on a plate is whole from the narrowest phone to a wide screen,
-// and at 1000 px, where the plate and the notes are tightest side by side:
-// none of its words is broken across lines or sticks out of it, and the notes
-// still have room beside it, or under it.
-for (const width of [320, 390, 960, 1000, 1440]) {
-  test(`at ${width} px the Launchkey Mini MK3 is whole on its plate, with room for its notes`, async ({
-    page,
-  }) => {
+// The name on a plate is whole from the narrowest phone to a wide screen:
+// none of its words is broken across lines or sticks out of it. The item's
+// title keeps e-kit whole too, rather than end a line on "e-".
+for (const width of [320, 390, 1280]) {
+  test(`at ${width} px the Launchkey Mini MK3 is whole on its plate, and e-kit in the title`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("/")
-    const piece = midiTile(page).getByRole("img", { name: /TD-17/ })
-    await expect(piece).toBeVisible()
-    await piece.scrollIntoViewIfNeeded()
+    const piece = await showPiece(page, "Notes too, from an e-kit or a keyboard.")
     const plate = piece.locator("[data-notes-plate='Keys']")
     await expect(plate).toContainText("Launchkey Mini MK3")
     const found = await plate.evaluate((el) => {
@@ -341,9 +468,7 @@ for (const width of [320, 390, 960, 1000, 1440]) {
       return { broken, outside, overflow: el.scrollWidth - el.clientWidth }
     })
     expect(found).toEqual({ broken: [], outside: [], overflow: 0 })
-    // The heading keeps e-kit whole too, rather than end a line on "e-".
-    const heading = midiTile(page).getByRole("heading")
-    const lines = await heading.evaluate((el) => {
+    const lines = await item(page, "Notes too, from an e-kit or a keyboard.").evaluate((el) => {
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         const at = node.textContent!.indexOf("e-kit")
@@ -356,281 +481,106 @@ for (const width of [320, 390, 960, 1000, 1440]) {
       return 0
     })
     expect(lines).toBe(1)
-    const lane = await piece.locator("[data-notes-lane='Keys']").boundingBox()
-    expect(lane!.width).toBeGreaterThanOrEqual(200)
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
   })
 }
 
-// Six columns from 1000 px: the section's seven rows are full on a laptop
-// and on a wide screen alike, and the Trash tile is the last of them, the
-// whole width.
-for (const width of [1000, 1280, 1440]) {
-  test(`every row of tiles is full at ${width} px, the Trash tile the whole width`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 900 })
-    await page.goto("/")
-    const found = await page.locator("#features .bento").evaluate((bento) => {
-      const { left, right } = bento.getBoundingClientRect()
-      const ends = new Map<number, number>()
-      for (const tile of bento.children) {
-        const box = tile.getBoundingClientRect()
-        const top = Math.round(box.top)
-        ends.set(top, Math.max(ends.get(top) ?? 0, box.right))
-      }
-      const trash = bento.lastElementChild!.getBoundingClientRect()
-      return {
-        rows: [...ends.values()].map((end) => Math.round(right - end)),
-        last: bento.lastElementChild!.querySelector("h3")?.textContent,
-        trash: [Math.round(trash.left - left), Math.round(right - trash.right)],
-      }
-    })
-    expect(found.rows.length).toBe(7)
-    for (const gap of found.rows) expect(gap).toBeLessThanOrEqual(1)
-    expect(found.last).toBe("Deleting goes to the Trash.")
-    for (const gap of found.trash) expect(Math.abs(gap)).toBeLessThanOrEqual(1)
-  })
-}
-
-test("on a middle-sized window too, no row of tiles has a hole", async ({ page }) => {
-  await page.setViewportSize({ width: 860, height: 900 })
+test("the tap's piece is the row just after a tap, and ends under its line", async ({ page }) => {
   await page.goto("/")
-  const gaps = await page.locator("#features .bento").evaluate((bento) => {
-    const right = bento.getBoundingClientRect().right
-    const ends = new Map<number, number>()
-    for (const tile of bento.children) {
-      const box = tile.getBoundingClientRect()
-      const top = Math.round(box.top)
-      ends.set(top, Math.max(ends.get(top) ?? 0, box.right))
-    }
-    return [...ends.values()].map((end) => Math.round(right - end))
-  })
-  for (const gap of gaps) expect(gap).toBeLessThanOrEqual(1)
-})
-
-/** The metronome's tile, found by its heading. */
-const metronomeTile = (page: Page) =>
-  page.locator("#features article").filter({
-    has: page.getByRole("heading", { name: "A click for the drummer." }),
-  })
-
-test.describe("metronome on the site", () => {
-  test("the tile shows the rehearsal screen's row: Palyn's 128 bpm in 4/4, the song's tempo", async ({
-    page,
-  }) => {
-    await page.goto("/")
-    const tile = metronomeTile(page)
-    await expect(tile.getByText("Each song keeps its tempo and time signature.")).toBeVisible()
-    const piece = tile.getByRole("img", { name: /Pałyn's 128 bpm in 4\/4/ })
-    const row = piece.locator("section[aria-label='Metronome']")
-    await expect(row).toBeVisible()
-    await expect(row.locator("input[aria-label='Tempo']")).toHaveValue("128")
-    await expect(row.getByText("bpm", { exact: true })).toBeVisible()
-    await expect(row.locator("[aria-label='Time signature']")).toHaveText("4/4")
-    await expect(row.locator("button", { hasText: "Tap" })).toBeVisible()
-    await expect(row.locator("button[aria-label='Play the click']")).toBeVisible()
-    await expect(row.locator("[data-beat-dots] [data-dot]")).toHaveCount(4)
-    await expect(row.locator("button[aria-label='Metronome settings']")).toBeVisible()
-    await expect(row.locator("[data-status-line]")).toHaveText("The song's tempo.")
-  })
-
-  test("the tile is a picture: nothing plays, nothing to press, and T taps nothing", async ({ page }) => {
-    await page.goto("/")
-    const tile = metronomeTile(page)
-    const piece = tile.getByRole("img", { name: /^The metronome's row/ })
-    await expect(piece.locator("section[aria-label='Metronome']")).toBeVisible()
-    await expect(piece.locator("[inert]")).toHaveCount(1)
-    await expect(tile.locator("audio, video")).toHaveCount(0)
-    // T is Tap's key in the app, anywhere outside a field. What the page
-    // asks of the fake bridge about the click is noted from here on.
-    await page.evaluate(() => {
-      type Bridge = Record<string, (...args: unknown[]) => unknown>
-      const w = window as unknown as { pywebview: { api: Bridge }; __asked: string[] }
-      w.__asked = []
-      const bridge = w.pywebview.api
-      for (const name of Object.keys(bridge).filter((n) => /metronome|click/.test(n))) {
-        const real = bridge[name]
-        bridge[name] = (...args) => {
-          w.__asked.push(name)
-          return real(...args)
-        }
-      }
-    })
-    await page.keyboard.press("t")
-    await page.waitForTimeout(500)
-    expect(await page.evaluate(() => (window as unknown as { __asked: string[] }).__asked)).toEqual([])
-  })
-
+  const piece = await showPiece(page, "Tap the tempo on a pad.")
+  const row = piece.locator("section[aria-label='Metronome']")
+  await expect(row.locator("input[aria-label='Tempo']")).toHaveValue("131")
+  await expect(row.locator("[aria-label='Time signature']")).toHaveText("4/4")
+  const line = row.locator("[data-status-line]")
+  await expect(line).toContainText("this holds until another song.")
+  await expect(line.getByRole("button", { name: "Save to song" })).toBeVisible()
   // The row's line keeps two lines' room in the app, so a longer one moves
   // nothing under it. A still picture has nothing to keep still for.
-  test("the piece ends under the row's line, with no room held for a longer one", async ({ page }) => {
-    await page.goto("/")
-    const line = metronomeTile(page).locator("[data-status-line]")
-    await expect(line).toHaveText("The song's tempo.")
-    const found = await line.evaluate((el) => {
-      const words = document.createRange()
-      words.selectNodeContents(el)
-      return { box: el.getBoundingClientRect().height, words: words.getBoundingClientRect().height }
-    })
-    expect(found.box).toBeLessThanOrEqual(found.words + 1)
+  const found = await line.evaluate((el) => {
+    const words = document.createRange()
+    words.selectNodeContents(el)
+    return { box: el.getBoundingClientRect().height, words: words.getBoundingClientRect().height }
   })
+  expect(found.box).toBeLessThanOrEqual(found.words + 1)
+})
 
-  test("on a phone the row shows its tempo and time signature, and the page does not scroll sideways", async ({
+test("a piece is a picture: nothing plays, nothing to press, and T taps nothing", async ({ page }) => {
+  await page.goto("/")
+  const piece = await showPiece(page, "Tap the tempo on a pad.")
+  await expect(piece.locator("[inert]")).toHaveCount(1)
+  await expect(page.locator("#how .over").locator("audio, video")).toHaveCount(0)
+  // T is Tap's key in the app, anywhere outside a field. What the page
+  // asks of the fake bridge about the click is noted from here on.
+  await page.evaluate(() => {
+    type Bridge = Record<string, (...args: unknown[]) => unknown>
+    const w = window as unknown as { pywebview: { api: Bridge }; __asked: string[] }
+    w.__asked = []
+    const bridge = w.pywebview.api
+    for (const name of Object.keys(bridge).filter((n) => /metronome|click/.test(n))) {
+      const real = bridge[name]
+      bridge[name] = (...args) => {
+        w.__asked.push(name)
+        return real(...args)
+      }
+    }
+  })
+  await page.keyboard.press("t")
+  await page.waitForTimeout(500)
+  expect(await page.evaluate(() => (window as unknown as { __asked: string[] }).__asked)).toEqual([])
+})
+
+// The Master row of Pałyn 2 (drift spec, "On reha.stream"): the band's tempo
+// bar by bar on its lane, its plate left out as the player leaves it out
+// where the lane would be too short for its tag and its chips.
+for (const width of [1280, 390]) {
+  test(`at ${width} px the drift's piece shows Master's lane of Palyn 2 with where the band drifted`, async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 390, height: 844 })
+    await page.setViewportSize({ width, height: 900 })
     await page.goto("/")
-    const piece = metronomeTile(page).getByRole("img", { name: /^The metronome's row/ })
-    await expect(piece.locator("section[aria-label='Metronome']")).toBeVisible()
-    await piece.scrollIntoViewIfNeeded()
+    const piece = await showPiece(page, "Where the band ran ahead.")
+    await expect(piece).toHaveAttribute(
+      "aria-label",
+      /Tempo: ahead 6 bpm, bars \d+ to \d+; ahead 7 bpm, bars \d+ to \d+; behind 5 bpm, bars \d+ to \d+\.$/
+    )
+    const lane = piece.locator("[data-master-lane]")
+    await expect(lane.locator("[data-click-tag]")).toHaveText("No click · 128 bpm · 4/4")
+    await expect(piece.locator("[data-master-plate]")).toHaveCount(0)
+    await expect(lane.locator("[data-drift-chip]")).toHaveText(["+6", "+7", "−5"])
+    await expect(lane.locator("[data-drift-stretch]")).toHaveCount(3)
     const found = await piece.evaluate((el) => {
-      const box = (selector: string) => el.querySelector(selector)!.getBoundingClientRect()
-      return {
-        piece: el.getBoundingClientRect(),
-        tempo: box("input[aria-label='Tempo']"),
-        signature: box("[aria-label='Time signature']"),
-      }
+      const box = (e: Element) => e.getBoundingClientRect()
+      return { lane: box(el.querySelector("[data-master-lane]")!), chips: [...el.querySelectorAll("[data-drift-chip]")].map(box) }
     })
-    expect(found.tempo.left).toBeGreaterThanOrEqual(found.piece.left)
-    expect(found.signature.right).toBeLessThanOrEqual(found.piece.right)
-    // The rest of the row, wider than the tile, is cut at the piece's edge
-    // rather than drawn past its ground.
-    await expect(piece).toHaveCSS("overflow-x", "hidden")
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
+    for (const c of found.chips) {
+      expect(c.left).toBeGreaterThanOrEqual(found.lane.left)
+      expect(c.right).toBeLessThanOrEqual(found.lane.right)
+      expect(c.top).toBeGreaterThanOrEqual(found.lane.top)
+      expect(c.bottom).toBeLessThanOrEqual(found.lane.bottom)
+    }
   })
+}
 
-  // Under the words and the row, the whole tile wide (drift spec, "On
-  // reha.stream"): Master's row of Pałyn 2, the band's tempo bar by bar on
-  // its lane, its plate beside it where there is room.
-  for (const [width, plate] of [
-    [1280, true],
-    [390, false],
-  ] as const) {
-    test(`at ${width} px the tile shows Master's row of Palyn 2 with where the band drifted`, async ({ page }) => {
-      await page.setViewportSize({ width, height: 900 })
-      await page.goto("/")
-      const tile = metronomeTile(page)
-      await expect(
-        tile.getByText("After a take, the Master row shows where the band ran ahead or dragged.", { exact: false })
-      ).toBeVisible()
-      const piece = tile.getByRole("img", { name: /^Master's row in the player under Pałyn 2's tracks/ })
-      await expect(piece).toHaveAttribute("aria-label", /Tempo: ahead 6 bpm, bars \d+ to \d+; ahead 7 bpm, bars \d+ to \d+; behind 5 bpm, bars \d+ to \d+\.$/)
-      const lane = piece.locator("[data-master-lane]")
-      await expect(lane.locator("[data-click-tag]")).toHaveText("No click · 128 bpm · 4/4")
-      await expect(piece.locator("[data-master-plate]")).toBeVisible({ visible: plate })
-      await expect(lane.locator("[data-drift-chip]")).toHaveText(["+6", "+7", "−5"])
-      await expect(lane.locator("[data-drift-stretch]")).toHaveCount(3)
-      const found = await piece.evaluate((el) => {
-        const box = (e: Element) => e.getBoundingClientRect()
-        const lane = box(el.querySelector("[data-master-lane]")!)
-        const chips = [...el.querySelectorAll("[data-drift-chip]")].map(box)
-        return { lane, chips, tile: box(el.closest("article")!) }
-      })
-      for (const c of found.chips) {
-        expect(c.left).toBeGreaterThanOrEqual(found.lane.left)
-        expect(c.right).toBeLessThanOrEqual(found.lane.right)
-        expect(c.top).toBeGreaterThanOrEqual(found.lane.top)
-        expect(c.bottom).toBeLessThanOrEqual(found.lane.bottom)
-      }
-      expect(found.lane.right).toBeLessThanOrEqual(found.tile.right)
-      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
-    })
-  }
-
-  // After the sets tile, whose songs bring their tempos with them: a row
-  // of its own at every width, its words beside the row from 1000 px, and
-  // the row whole, gear and all.
-  for (const width of [860, 1000, 1280, 1440]) {
-    test(`at ${width} px the tile is the whole width after the sets one, with the whole row`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 900 })
-      await page.goto("/")
-      const piece = metronomeTile(page).getByRole("img", { name: /^The metronome's row/ })
-      await expect(piece.locator("section[aria-label='Metronome']")).toBeVisible()
-      const found = await page.locator("#features .bento").evaluate((bento) => {
-        const box = (el: Element) => el.getBoundingClientRect()
-        const tiles = [...bento.children]
-        const at = tiles.findIndex((t) => t.querySelector("h3")?.textContent === "A click for the drummer.")
-        const tile = tiles[at]
-        const piece = tile.querySelector(".piece")!
-        return {
-          before: tiles[at - 1]?.querySelector("h3")?.textContent,
-          bento: box(bento),
-          tile: box(tile),
-          sets: box(tiles[at - 1]),
-          copy: box(tile.querySelector(".copy")!),
-          piece: box(piece),
-          gear: box(piece.querySelector("button[aria-label='Metronome settings']")!),
-          cut: piece.scrollWidth - piece.clientWidth,
-        }
-      })
-      expect(found.before).toBe("Rehearse the set, in order.")
-      expect(Math.abs(found.tile.left - found.bento.left)).toBeLessThanOrEqual(1)
-      expect(Math.abs(found.tile.right - found.bento.right)).toBeLessThanOrEqual(1)
-      expect(found.tile.top).toBeGreaterThanOrEqual(found.sets.bottom)
-      expect(found.cut).toBe(0)
-      expect(found.gear.right).toBeLessThanOrEqual(found.piece.right)
-      if (width >= 1000) {
-        expect(found.copy.right).toBeLessThanOrEqual(found.piece.left)
-        expect(found.copy.top).toBeLessThan(found.piece.bottom)
-        expect(found.piece.top).toBeLessThan(found.copy.bottom)
-      }
-    })
-  }
+// The app's line holds, unseen, the room of the longest thing it can say,
+// so that it never moves during a take. A still picture has nothing to keep
+// still for: its box ends where its words do.
+test("the disk's piece is as wide as its words, with no room held for a longer sentence", async ({ page }) => {
+  await page.goto("/")
+  const piece = await showPiece(page, "Disk space in hours.")
+  const health = piece.locator("[data-health]")
+  const words = health.getByText("Interface connected · room for")
+  await expect(words).toBeVisible()
+  const said = (await words.locator("..").boundingBox())!
+  const box = (await health.boundingBox())!
+  expect(box.width).toBeLessThanOrEqual(said.width + 2)
+  expect(box.height).toBeLessThanOrEqual(said.height + 2)
 })
 
-test("the story follows the scroll, and the rail goes back", async ({ page }) => {
+test("at 1920 px the page is 1440 px wide, in the middle", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
   await page.goto("/")
-  const steps = page.locator(".step")
-  const scenes = ["setup", "record", "keep", "history", "compare"]
-  for (let i = 0; i < scenes.length; i++) {
-    await steps.nth(i).evaluate((el) => el.scrollIntoView({ block: "center" }))
-    await expect.poll(() => sceneIn(page, "story"), { timeout: 20_000 }).toBe(scenes[i])
-  }
-  await page.locator(".rail button").first().click()
-  await expect.poll(() => sceneIn(page, "story"), { timeout: 20_000 }).toBe("setup")
-})
-
-test("the step on screen lights the line the app is on", async ({ page }) => {
-  await page.goto("/")
-  const steps = page.locator("#how .step")
-  const now = page.locator("#how .step.on .beats li.now")
-  const elsewhere = page.locator("#how .step:not(.on) .beats li.now")
-  await steps.nth(3).evaluate((el) => el.scrollIntoView({ block: "center" }))
-  await expect(now).toHaveText(/^Marks: every Went wrong, from every rehearsal\./, { timeout: 40_000 })
-  await expect(elsewhere).toHaveCount(0)
-  await expect(now).toHaveText(/^A click on Pałyn: /, { timeout: 20_000 })
-  await expect(elsewhere).toHaveCount(0)
-  await expect(now).toHaveAttribute("aria-current", "true")
-
-  await steps.nth(0).evaluate((el) => el.scrollIntoView({ block: "center" }))
-  await expect(now).toHaveCount(0)
-  await expect(now).toHaveText(/^Name the rehearsal, or keep the date\./, { timeout: 20_000 })
-  await expect(elsewhere).toHaveCount(0)
-})
-
-test("a step left and come back to is dark until the app gets to it again", async ({ page }) => {
-  await page.goto("/")
-  const steps = page.locator("#how .step")
-  const now = page.locator("#how .step.on .beats li.now")
-  await steps.nth(3).evaluate((el) => el.scrollIntoView({ block: "center" }))
-  await expect(now).toHaveText(/^A click on Pałyn: /, { timeout: 40_000 })
-
-  // Up to the first step starts the app again; it is slow to come back
-  // here, so it is still starting when the fourth step is back on screen.
-  await page.route(/\/stage\.html/, async (route) => {
-    await new Promise((r) => setTimeout(r, 1_500))
-    await route.continue()
-  })
-  await steps.nth(0).evaluate((el) => el.scrollIntoView({ block: "center" }))
-  await expect(steps.nth(0)).toHaveClass(/\bon\b/)
-  await steps.nth(3).evaluate((el) => el.scrollIntoView({ block: "center" }))
-  await expect(steps.nth(3)).toHaveClass(/\bon\b/)
-  expect(await now.count()).toBe(0)
-  await page.waitForTimeout(500)
-  expect(await now.count()).toBe(0)
-  await page.unrouteAll({ behavior: "wait" })
-  await expect(now).toHaveText(/^History opens on the newest rehearsal\./, { timeout: 40_000 })
+  const wrap = (await page.locator(".wrap").boundingBox())!
+  expect(wrap.width).toBe(1440)
+  expect(wrap.x).toBe(240)
 })
 
 test("a frame scrolled past holds still", async ({ page }) => {
@@ -693,5 +643,13 @@ test.describe("on a phone", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
     await expect(frame(page, "hero")).toHaveCSS("pointer-events", "none")
     await expect(page.getByText("Try it on a computer.")).toBeVisible()
+  })
+
+  test("the rail follows the steps, under the window", async ({ page }) => {
+    await page.goto("/")
+    for (let i = 0; i < 4; i++) {
+      await toStep(page, i)
+      await expect(page.locator(".rail button").nth(i)).toHaveAttribute("aria-current", "step")
+    }
   })
 })

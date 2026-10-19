@@ -46,7 +46,7 @@ body {
   user-select: auto;
   -webkit-user-select: auto;
 }
-.wrap { max-width: 1120px; margin-inline: auto; }
+.wrap { max-width: 1440px; margin-inline: auto; }
 .section { padding-block: clamp(72px, 11vw, 150px); }
 .head { display: grid; gap: 14px; justify-items: center; text-align: center; margin-bottom: clamp(36px, 5vw, 64px); }
 .h1, .h2, .copy h3, .step h3 { text-wrap: balance; margin: 0; }
@@ -88,6 +88,7 @@ body {
 .live { position: relative; overflow: hidden; background: var(--page-app); }
 .live iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; background: var(--page-app); }
 .live.passive iframe { pointer-events: none; }
+.live.settled iframe { transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
 .caption { text-align: center; color: var(--page-muted); font-size: 0.875rem; margin-top: 18px; }
 .caption b, .caption strong { color: var(--page-fg); font-weight: 600; }
 .caption.on-phone { display: none; }
@@ -111,65 +112,89 @@ body {
 .remote .more { white-space: normal; }
 .remote img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
-/* ---- What it does: a tile per point, each with a piece of the app ---- */
-/* Dense: on two columns, a half tile before a full-width one moves up beside
-   the half tile before it, rather than leave a hole. */
-.bento { display: grid; gap: 16px; grid-template-columns: 1fr; grid-auto-flow: row dense; }
-.s6 { grid-column: 1 / -1; }
-@media (min-width: 720px) { .bento { grid-template-columns: repeat(2, 1fr); } }
-@media (min-width: 1000px) { .bento { grid-template-columns: repeat(6, 1fr); } .s2 { grid-column: span 2; } .s4 { grid-column: span 4; } .s6d { grid-column: 1 / -1; } }
-@media (min-width: 720px) and (max-width: 999px) { .s4 { grid-column: span 2; } }
-.tile { background: var(--page-tile); border-radius: 28px; padding: clamp(26px, 3vw, 38px); display: grid; gap: 26px; grid-template-rows: auto 1fr; min-width: 0; overflow: hidden; }
+/* ---- Words beside a picture, as the controller's ---- */
 .copy { display: grid; gap: 8px; align-content: start; min-width: 0; }
 .whole { white-space: nowrap; }
 .copy h3 { font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; }
 .copy p { color: var(--page-muted); max-width: 30rem; margin: 0; }
-.shot { display: grid; gap: 12px; justify-items: center; align-content: end; min-width: 0; }
-.shot.left { justify-items: start; }
-/* A piece the whole tile wide, under its words and its piece. */
-.shot.under { justify-items: stretch; }
 /* A piece of the app sits on the app's own ground, with a margin of it, so
    its own borders never meet the edge. */
 .piece { background: var(--page-app); border-radius: 12px; padding: 12px; max-width: 100%; min-width: 0; box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.05), 0 14px 30px -20px rgba(16, 24, 40, 0.3); line-height: normal; font-size: 16px; }
-/* On a phone a wide piece keeps the app's size and shows its left part,
-   rather than shrinking past reading. */
-.piece.wide { width: 100%; overflow: hidden; }
+/* A wide piece keeps the app's size, and a piece that is one line of the
+   app, as the metronome's row, is as wide as the line: the window makes
+   either smaller to fit, rather than squeeze it past reading. */
+.piece.wide, .piece.line { max-width: none; }
 .piece.wide > * { min-width: 560px; }
-/* A piece that is one line of the app, as the metronome's row, is as wide
-   as the line; on a phone, where the line is wider than the tile, it shows
-   its left part. */
-.piece.line { overflow: hidden; }
-.split { display: grid; gap: 26px; }
-@media (min-width: 1000px) { .split { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: center; } }
-.tile.word { align-content: center; }
-.tile.word h3 { font-size: clamp(1.6rem, 2.6vw, 2.1rem); }
 
-/* ---- From soundcheck to the take you keep ---- */
+/* ---- From soundcheck to the take you keep: the evening's four steps,
+   each with its tiles and cards, beside the app's window ---- */
 .story { display: grid; gap: 24px; align-items: start; }
-.steps { list-style: none; margin: 0; padding: 0; display: grid; }
-.step { min-height: 70vh; display: grid; align-content: center; gap: 10px; padding-block: 24px; opacity: 0.28; transition: opacity 0.35s ease; }
-.step.on { opacity: 1; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: clamp(64px, 9vw, 120px); }
+.step { display: grid; align-content: start; gap: 10px; }
 .step .n { font-family: var(--page-mono); font-size: 0.875rem; color: var(--page-muted); }
 .step h3 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; }
-.step p { color: var(--page-muted); max-width: 26rem; margin: 0; }
-/* A step's three lines; the one the app is on is lit, with the same padding
-   lit or not, so nothing moves when it lights. */
-.beats { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; max-width: 27rem; counter-reset: b; font-size: 0.875rem; }
-.beats li { counter-increment: b; display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 8px 12px; margin-left: -12px; border-radius: 10px; color: var(--page-muted); transition: background-color 0.3s ease, color 0.3s ease; }
-.beats li::before { content: counter(b); font-family: var(--page-mono); font-size: 0.75rem; padding-top: 0.2em; }
-.beats li.now { background: var(--page-tile); color: var(--page-fg); }
+.step > p { color: var(--page-muted); max-width: 30rem; margin: 0; }
+/* A tile the whole width, cards two to a row. The whole of each is its
+   button: the title's, stretched over it. */
+.items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.item { position: relative; min-width: 0; display: grid; gap: 4px; align-content: start; border-radius: 16px; padding: 14px 16px; box-shadow: inset 0 0 0 1px var(--page-line); transition: background-color 0.25s ease, box-shadow 0.25s ease; }
+/* A card left alone on its row has the row. */
+.item.card:last-child:nth-child(odd of .card) { grid-column: 1 / -1; }
+.item.tile { grid-column: 1 / -1; gap: 6px; border-radius: 24px; padding: 22px 24px; background: var(--page-tile); box-shadow: none; }
+.item h4 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; text-wrap: balance; }
+.item.tile h4 { font-size: 1.25rem; letter-spacing: -0.02em; }
+.item p { margin: 0; color: var(--page-muted); font-size: 0.875rem; text-wrap: pretty; }
+.item.tile p { font-size: 1rem; max-width: 34rem; }
+.item button { all: unset; cursor: pointer; }
+.item button::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.item button:focus-visible { outline: none; }
+.item:has(button:focus-visible) { outline: 2px solid var(--page-accent); outline-offset: 3px; }
+/* The item the window shows: a shade darker, with the same padding lit or
+   not, so nothing moves when it lights. */
+.item:hover { background: color-mix(in srgb, var(--page-fg) 3%, transparent); }
+.item.tile:hover { background: color-mix(in srgb, var(--page-fg) 3%, var(--page-tile)); }
+.item.on, .item.on:hover { background: color-mix(in srgb, var(--page-fg) 8%, var(--page-bg)); box-shadow: none; }
+.item.tile.on, .item.tile.on:hover { background: color-mix(in srgb, var(--page-fg) 9%, var(--page-tile)); }
+@media (max-width: 559px) { .items { grid-template-columns: minmax(0, 1fr); } }
+
 .stage { position: sticky; top: 16px; z-index: 1; display: grid; gap: 14px; }
+.window { display: grid; gap: 14px; }
+.view { position: relative; }
+/* The words under the window, as tall for every item, so that nothing
+   under them moves from one to the next: five lines of the longest. */
+.about { display: grid; align-content: start; gap: 4px; height: calc(1.25rem + 5 * 1.45 * 0.9375rem + 4px); overflow: hidden; }
+.about h4 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; }
+.about p { margin: 0; color: var(--page-muted); font-size: 0.9375rem; line-height: 1.45; text-wrap: pretty; }
+/* A piece of the app over the live one, on a tile's grey, in its middle:
+   flex, so that a piece bigger than the window, before it is made smaller
+   to fit, goes past it evenly on every side. */
+.over { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; padding: clamp(12px, 3%, 32px); border-radius: 18px; background: var(--page-tile); overflow: hidden; }
+.over .fit { flex: none; max-width: 100%; display: flex; justify-content: center; }
+.over .fit > * { flex: none; }
 .rail { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
 .rail button { all: unset; cursor: pointer; display: grid; gap: 7px; font-size: 0.75rem; color: var(--page-muted); }
 .rail button i { display: block; height: 2px; border-radius: 2px; background: var(--page-line); overflow: hidden; }
 .rail button i::after { content: ""; display: block; height: 100%; background: var(--page-fg); transform: scaleX(var(--p, 0)); transform-origin: left; }
 .rail button.on { color: var(--page-fg); }
 @media (min-width: 900px) {
-  .story { grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr); gap: 64px; }
-  .stage { order: 2; top: calc(50vh - 18rem); }
-  .steps { order: 1; }
+  .story { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(40px, 5vw, 72px); }
+  /* In the middle of the screen, and never taller than it. */
+  .stage { order: 2; top: max(16px, calc(50vh - 26rem)); width: 100%; max-width: calc((100vh - 120px - 9rem) * 1180 / 960); justify-self: end; }
+  .steps { order: 1; padding-bottom: 20vh; }
 }
-@media (max-width: 899px) { .step { min-height: 56vh; } .stage { background: var(--page-bg); padding-block: 8px; } }
+@media (max-width: 899px) {
+  .stage { background: var(--page-bg); padding-block: 8px; gap: 10px; }
+  .window { gap: 10px; }
+  .about { height: calc(1.25rem + 7 * 1.4 * 0.8125rem + 4px); }
+  .about p { font-size: 0.8125rem; line-height: 1.4; }
+  .cloud-folder p { display: none; }
+}
+/* A phone on its side: the window no taller than half the screen, and its
+   words beside it, so the steps still have room under it. */
+@media (max-width: 899px) and (max-height: 560px) {
+  .window { grid-template-columns: min(100%, calc((50svh - 16px) * 1180 / 960)) minmax(0, 1fr); align-items: start; }
+  .about { height: auto; max-height: calc(50svh - 16px); }
+}
 
 /* ---- Questions ---- */
 .qa { max-width: 46rem; margin-inline: auto; border-top: 1px solid var(--page-line); }
@@ -203,4 +228,4 @@ body {
 .footer a { text-decoration: none; }
 .footer a:hover { color: var(--page-fg); }
 
-@media (prefers-reduced-motion: reduce) { .step, .beats li { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .item, .live.settled iframe { transition: none; } }
