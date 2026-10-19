@@ -24,7 +24,6 @@ import math
 import os
 import threading
 import time
-import wave
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +44,7 @@ from rehearsal_recorder.audio.format import (
     normalize_depth,
     pack24,
 )
+from rehearsal_recorder.audio.wavfile import WavWriter
 
 FLUSH_INTERVAL_SEC = 30
 
@@ -584,7 +584,7 @@ class AudioRecorder:
 
 
 def raw_to_wav(raw_path, wav_path, samplerate, bit_depth=16, channels=1,
-               progress=None):
+               progress=None, head_frames=0, frames=None, acid=None):
     """
     Wrap a raw PCM file into a .wav with a proper header.
 
@@ -592,25 +592,30 @@ def raw_to_wav(raw_path, wav_path, samplerate, bit_depth=16, channels=1,
     only adds the header — which is why a take interrupted by a crash can
     still be rescued, stereo or not. Copied a piece at a time: it used to be
     read whole, some 500 MB for an hour of one 24-bit track.
+
+    A click take's files start at its first click and end on a quarter
+    (metronome spec, Part 3), so only frames [head_frames, head_frames +
+    frames) are copied: from `head_frames` to the end when `frames` is None,
+    and no more than the raw file holds. `acid` (audio/wavfile.Acid) is the
+    take's tempo, for the file to carry.
     """
     width = bytes_per_sample(bit_depth) * channels
-    size = os.path.getsize(raw_path)
     # A take cut off mid-frame would otherwise produce a wav whose length does
     # not divide evenly, which some players refuse outright. A stereo file cut
     # between its two channels is the same problem, one sample further in.
-    usable = size - (size % width)
-    with open(raw_path, "rb") as rf, wave.open(str(wav_path), "wb") as wf:
-        wf.setnchannels(channels)
-        wf.setsampwidth(bytes_per_sample(bit_depth))
-        wf.setframerate(samplerate)
+    whole = os.path.getsize(raw_path) // width
+    first = min(head_frames, whole)
+    last = whole if frames is None else min(whole, first + frames)
+    usable = (last - first) * width
+    with open(raw_path, "rb") as rf, WavWriter(wav_path, samplerate, channels,
+                                               bytes_per_sample(bit_depth), acid) as wf:
+        rf.seek(first * width)
         left = usable
         while left > 0:
-            # Whole frames only: wave counts frames from what it is given.
-            want = min(left, COPY_BYTES - (COPY_BYTES % width))
-            piece = rf.read(want)
+            piece = rf.read(min(left, COPY_BYTES))
             if not piece:
                 break
-            wf.writeframes(piece)
+            wf.write(piece)
             left -= len(piece)
             if progress is not None:
                 progress((usable - left) / usable)

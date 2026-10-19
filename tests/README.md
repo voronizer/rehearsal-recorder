@@ -6,7 +6,7 @@ cd ui && npm test                    # the interface, what needs no browser
 cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
-The twelve Python suites cover audio, storage, platform behaviour, MIDI and
+The thirteen Python suites cover audio, storage, platform behaviour, MIDI and
 shared controls. Interface tests run as unit and browser suites.
 
 ## test_control_api.py - shared controls
@@ -60,6 +60,8 @@ the audio, a draft's too, with the originals of both kinds put aside together
 and put back together when a move fails, when the new `.mid` cannot take its
 name or when one cannot be read. An unconverted `.midraw`, with its clock and
 its record, goes aside with the originals, and the cropped take keeps none.
+A click take's WAVs are written from a stretch of each raw file, and carry the
+take's tempo through a crop and into the mix.
 
 No sound card and no browser: `sounddevice` is replaced by a stub before
 anything imports it, the renderer is called directly, and the samples that
@@ -182,6 +184,24 @@ non-zero, an unreadable `.mid`, a soundfile that will not import, and the output
 staying ASCII, names in Cyrillic told apart by their escapes. Later tasks add to it.
 Plain functions over plain dictionaries and files in a temporary folder: no
 port is opened, and the MIDI library is blocked as in the other suites.
+
+## test_click.py — the metronome's click
+
+The click's arithmetic and sounds (`audio/click.py`): the four signatures,
+their tempo ranges and accents, every click of an hour on its frame at a tempo
+whose click is no whole number of frames, the three sounds (a bar's first click
+brighter, 6/8's fourth between, the same length at 44.1 and 48 kHz), and clicks
+mixed into a stream's blocks the same however the blocks fall. The app's own WAV
+writer (`audio/wavfile.py`): without a tempo, byte for byte what `wave` writes;
+with one, an `acid` chunk that libsndfile reads back as the signature, the
+beats and the tempo, around audio `wave` reads unchanged. The clocks that place
+a click on another device than the recording card (`midi/clock.py`,
+`audio/click_timing.py`): a card 200 ppm fast and an output 150 ppm slow for an
+hour, the click still heard within a millisecond of its frame, and the line the
+click's stream reads refitted only as a mark is kept. And a crop of a click
+take snapped to its bars. The metronome's heavy arithmetic goes here rather
+than in `test_engine.py`, whose length bounds the whole run. Later tasks add to
+it.
 
 ## The interface — in ui/, in TypeScript
 

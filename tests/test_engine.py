@@ -12306,6 +12306,63 @@ def main():
     ok("and anything but false written by hand reads as on",
        keys78(odd78) == (True, True))
 
+    print("\n[79] Files that keep their tempo")
+    # A click take's WAVs start at its first click, and carry its tempo in an
+    # acid chunk through a crop and into the mix (metronome spec, Part 9). The
+    # chunk's own bytes are in test_click.py; here, the three writers.
+    from rehearsal_recorder.audio.capture import raw_to_wav as r2w79
+    from rehearsal_recorder.audio.crop import crop_wav as cw79
+    from rehearsal_recorder.audio.mixdown import mixdown as md79
+    from rehearsal_recorder.audio.wavfile import Acid, read_acid
+
+    def beats79(path):
+        """The beats an acid chunk says its file holds."""
+        raw = Path(path).read_bytes()
+        at = raw.index(b"acid")
+        return struct.unpack("<I", raw[at + 20:at + 24])[0]
+
+    tmp79 = Path(tempfile.mkdtemp())
+    numbered79 = (np.arange(2 * SR) % 30000).astype("<i2")  # each frame says which it is
+    (tmp79 / "Gtr.raw").write_bytes(numbered79.tobytes())
+    r2w79(tmp79 / "Gtr.raw", tmp79 / "Gtr.wav", SR, 16, head_frames=480, frames=48000)
+    with wave.open(str(tmp79 / "Gtr.wav"), "rb") as w:
+        kept79 = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+    ok("raw_to_wav from frame 480 for 48000 frames writes exactly those",
+       np.array_equal(kept79, numbered79[480:48480]))
+    r2w79(tmp79 / "Gtr.raw", tmp79 / "Tail.wav", SR, 16, head_frames=90000, frames=48000)
+    with wave.open(str(tmp79 / "Tail.wav"), "rb") as w:
+        tail79 = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+    ok("and asked for more than the raw file holds, what it holds",
+       np.array_equal(tail79, numbered79[90000:]))
+    ok("with no tempo given it writes none", read_acid(tmp79 / "Gtr.wav") is None)
+
+    # Two seconds at 128 in 4/4: 4 quarters and a quarter, which counts as 4.
+    r2w79(tmp79 / "Gtr.raw", tmp79 / "Click.wav", SR, 16, acid=Acid(128.0, 4, 4))
+    ok("given one, the take's WAV carries it, its beats counted from its length",
+       read_acid(tmp79 / "Click.wav") == Acid(128.0, 4, 4) and beats79(tmp79 / "Click.wav") == 4)
+    quarter79 = 60 / 128  # 0.46875 s, 22500 frames
+    cut79 = cw79(tmp79 / "Click.wav", tmp79 / "Click-cut.wav", quarter79, 3 * quarter79)
+    ok("a crop of it keeps the chunk, with beats for what is left: 2",
+       cut79["ok"] and cut79["frames"] == 45000
+       and read_acid(tmp79 / "Click-cut.wav") == Acid(128.0, 4, 4) and beats79(tmp79 / "Click-cut.wav") == 2)
+    with wave.open(str(tmp79 / "Click-cut.wav"), "rb") as w:
+        middle79 = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+    ok("  and the audio cut as before", np.array_equal(middle79[300:-300], numbered79[22800:67200]))
+    cw79(tmp79 / "Click.wav", tmp79 / "Click-bare.wav", quarter79, 3 * quarter79, acid=None)
+    ok("asked to, a crop leaves it out", read_acid(tmp79 / "Click-bare.wav") is None)
+    write_wav(tmp79 / "Plain.wav", 1000, seconds=2.0)
+    cw79(tmp79 / "Plain.wav", tmp79 / "Plain-cut.wav", 0.5, 1.5)
+    ok("a crop of a file with none adds none", read_acid(tmp79 / "Plain-cut.wav") is None)
+
+    tracks79 = [{"name": "Gtr", "file": str(tmp79 / "Click.wav")}, {"name": "Bass", "file": str(tmp79 / "Plain.wav")}]
+    mixed79 = md79(tracks79, tmp79 / "Mix.wav", acid=Acid(128.0, 4, 4))
+    ok("the mix carries the chunk it is given",
+       mixed79["ok"] and read_acid(tmp79 / "Mix.wav") == Acid(128.0, 4, 4) and beats79(tmp79 / "Mix.wav") == 4)
+    md79(tracks79, tmp79 / "Mix-plain.wav")
+    ok("and none when it is given none", read_acid(tmp79 / "Mix-plain.wav") is None)
+    with wave.open(str(tmp79 / "Mix.wav"), "rb") as a79, wave.open(str(tmp79 / "Mix-plain.wav"), "rb") as b79:
+        ok("  the audio the same either way", a79.readframes(a79.getnframes()) == b79.readframes(b79.getnframes()))
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

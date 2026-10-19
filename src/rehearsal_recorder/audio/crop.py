@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from rehearsal_recorder.audio.format import pack24, unpack24
+from rehearsal_recorder.audio.wavfile import WavWriter, read_acid
 
 # Frames per block. Big enough that the per-call overhead disappears, small
 # enough that memory does not grow with the length of a take.
@@ -52,10 +53,13 @@ def _faded(raw, ramp, sampwidth, channels):
 
 
 def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC,
-             progress=None):
+             progress=None, acid="keep"):
     """
     Writes frames [start, end) of src into dst, keeping the sample rate, bit
-    depth and channel count it found.
+    depth and channel count it found, and the tempo of a click take: with
+    `acid` "keep", src's acid chunk if it has one, its beats counted again
+    for what is left (audio/wavfile.py). None leaves it out, and an Acid
+    writes that one.
 
     A ramp is applied at each edge that is really a cut: a region starting at
     the beginning of the file keeps the original attack, and one ending at its
@@ -93,13 +97,11 @@ def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC,
             tail = min(fade, total - head) if end < frames else 0
             middle = total - head - tail
 
+            if acid == "keep":
+                acid = read_acid(src)
             fin.setpos(start)
             dst.parent.mkdir(parents=True, exist_ok=True)
-            with wave.open(str(dst), "wb") as fout:
-                fout.setnchannels(channels)
-                fout.setsampwidth(sampwidth)
-                fout.setframerate(rate)
-
+            with WavWriter(dst, rate, channels, sampwidth, acid) as fout:
                 def written(frames):
                     if progress is not None:
                         progress(min(1.0, frames / total))
@@ -107,7 +109,7 @@ def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC,
                 if head:
                     ramp = np.linspace(0.0, 1.0, head, endpoint=False,
                                        dtype=np.float32)
-                    fout.writeframes(
+                    fout.write(
                         _faded(fin.readframes(head), ramp, sampwidth, channels)
                     )
                     written(head)
@@ -118,14 +120,14 @@ def crop_wav(src, dst, start_sec, end_sec, fade_sec=DEFAULT_FADE_SEC,
                     block = fin.readframes(want)
                     if not block:
                         break
-                    fout.writeframes(block)
+                    fout.write(block)
                     left -= want
                     written(head + middle - left)
 
                 if tail:
                     ramp = np.linspace(1.0, 0.0, tail, endpoint=False,
                                        dtype=np.float32)
-                    fout.writeframes(
+                    fout.write(
                         _faded(fin.readframes(tail), ramp, sampwidth, channels)
                     )
     except (OSError, ValueError, wave.Error) as e:
