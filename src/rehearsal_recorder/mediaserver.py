@@ -53,6 +53,10 @@ POLLABLE = (
     # Not asked many times a second, but read-only and asked over and over
     # all the same, by every screen that can show a new version is out.
     "update_status",
+    # The metronome's row and count-in, many times a second; and the pads'
+    # hits while Tap listens, which reading hands over once.
+    "metronome_state",
+    "metronome_taps",
 )
 
 

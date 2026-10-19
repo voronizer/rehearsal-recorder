@@ -18,8 +18,8 @@ One track per musician, filled in from last time.
 The start screen lists last time's songs, each with ▶.
 
 - ▶ beside Pałyn on the start screen plays its ★ take from last week.
-- Start, and ↑ picks Pałyn under Next take.
-- Record: the take's name over a big clock, and a tile per track that turns red when it clips.
+- Start, and ↑ picks Pałyn under Next take, and its 128 bpm for the click.
+- Record: a bar of clicks to count in, then the take's name over a big clock, and a tile per track that turns red when it clips.
 
 ## Keep the good ones. {#keep}
 

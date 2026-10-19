@@ -31,6 +31,7 @@ import { rise } from "@/lib/motion"
 import { playLabel, SPINNER_AFTER_MS } from "@/lib/playLook"
 import { api, type Marker, type MissingNotes, type NotesFile, type TakeNotes } from "@/lib/api"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
+import type { TakeClick } from "@/lib/metronome"
 
 const SKIP_SECONDS = 10
 /** A region shorter than this is a slip of the mouse, not an intention. */
@@ -95,6 +96,7 @@ function useTakeNotes(notes?: NotesFile[], missing?: MissingNotes[]) {
  */
 export function TakePlayer({
   player,
+  take = null,
   notes,
   notesMissing,
   markers = [],
@@ -109,6 +111,9 @@ export function TakePlayer({
   rising = false,
 }: {
   player: MultitrackPlayer
+  /** The take's click: its tempo, its signature, and whether it was
+   *  recorded to the click, for Master's button and stripes. */
+  take?: TakeClick | null
   /** The take's .mid files, drawn under their audio or in lanes of their
    *  own; and the tracks that took notes and got none. A take from before
    *  MIDI has neither. */
@@ -175,6 +180,7 @@ export function TakePlayer({
       >
         <Timeline
           player={player}
+          take={take}
           markers={markers}
           notes={notes}
           notesMissing={notesMissing}

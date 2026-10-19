@@ -3,15 +3,21 @@ import { FooterRow } from "@/components/FooterRow"
 import { HealthLine } from "@/components/HealthLine"
 import { Shell } from "@/components/Shell"
 import { StopTake } from "@/components/StopTake"
+import { CountIn } from "@/components/metronome/CountIn"
+import { EdgeLight } from "@/components/metronome/EdgeLight"
+import { TakeRow } from "@/components/metronome/TakeRow"
 import { GoTitle } from "@/components/TakeTitle"
 import { TrackTile } from "@/components/TrackTile"
 import { Progress } from "@/components/ui/progress"
+import { useAfter } from "@/hooks/useAfter"
 import { useErrorNotice } from "@/hooks/useErrorNotice"
+import { useMetronome } from "@/hooks/useMetronome"
 import { useSpacebar } from "@/hooks/useSpacebar"
 import {
   api,
   poll as pollPython,
   type LastAttempt,
+  type MetronomeState,
   type MidiActivity,
   type PendingTake,
   type RecordingHealth,
@@ -19,15 +25,23 @@ import {
 } from "@/lib/api"
 import { formatClock, formatDate, formatMMSS } from "@/lib/format"
 import { fallBack, isSilent, watchStep, type TrackWatch } from "@/lib/levels"
+import { accentOf } from "@/lib/metronome"
 import { recordsAudio, recordsNotes } from "@/lib/midi"
 import { portBusyText, portGoneText } from "@/lib/midiPorts"
 import { useRunning, watching } from "@/lib/activity"
 import { dismiss, notify } from "@/lib/notices"
+import { cn } from "@/lib/utils"
 
 // The capture block is ~21 ms, so the meters can update often; Python returns
 // the peak accumulated since the last poll, so spikes are not lost.
 const LEVELS_POLL_MS = 70
-const TIMER_TICK_MS = 200
+// Often enough that the clock turns 0:01 within a tenth of a second of the
+// second, counted from the count-in's end.
+const TIMER_TICK_MS = 100
+// How long the clock waits for Python's first word on the metronome, at
+// most: with none by then (a bridge with no metronome) it counts from
+// Record, as with no click.
+const COUNT_IN_WAIT_MS = 1000
 // Disk space and stream health — every couple of seconds, not a hot path.
 const HEALTH_POLL_MS = 2000
 // The slot this screen's notice takes: why a take stopped by itself.
@@ -82,6 +96,11 @@ function noteStep(
   }
 }
 
+/** Whether Python's answer is the take's: counting in or recording. One
+ *  from before, idle or the click between takes, says nothing of it yet. */
+const ofTheTake = (s: MetronomeState | null): s is MetronomeState =>
+  s !== null && (s.phase === "count" || s.phase === "take")
+
 /**
  * The take while it records, laid out to be read from behind the kit: nobody
  * stands at the laptop while they play. Two groups and a footer, with no
@@ -89,8 +108,13 @@ function noteStep(
  * big clock, and how far into the song the band is against the last go at
  * it; then a tile per track that lights up with its level and turns red if
  * it clips. Recording, the take's number and the disk line are in the
- * footer's left, beside Stop. Running out of disk is said where the free
- * space always is.
+ * footer, just left of Stop, and the metronome's row at its far left, as on
+ * the rehearsal screen (q14, «Слева, как было»). Running out of disk is said
+ * where the free space always is.
+ *
+ * A take with the click counts in first: the bar's clicks, big, in the
+ * clock's place; the clock starts at the count-in's end, and the window's
+ * edge lights on every click from there to Stop.
  *
  * A track on Both has a column of notes beside its levels, and one on MIDI
  * alone a tile of its own. Their notes are polled with the levels.
@@ -130,7 +154,9 @@ export function Recording({
   const takesNotes = tracks.some(recordsNotes)
   const [stopping, setStopping] = useState(false)
   const [health, setHealth] = useState<RecordingHealth | null>(null)
-  const startedAt = useRef(Date.now())
+  // When Record was pressed, on the page's clock, as the metronome's times
+  // are: a take with no click counts from here.
+  const startedAt = useRef(performance.now())
   const stopRef = useRef<() => Promise<void>>(async () => {})
   // Turning every raw track into a .wav takes real seconds on a long take.
   const saving = useRunning("stop")
@@ -150,9 +176,42 @@ export function Recording({
     return () => document.documentElement.removeAttribute("data-recording")
   }, [])
 
+  // The click: the count-in in the clock's place, then the edge lit on
+  // every click, and its row at the footer's left. A take with the click is
+  // timed from the count-in's end, which is where its files' bars start, and
+  // one without from Record. Which of the two is settled once: by the take's
+  // first answer that says (a count-in time, or no tempo or the switch off),
+  // or by no answer of the take's in a second. A click take whose count-in
+  // time is not said yet waits for it. Until then the clock waits at 0:00
+  // (and is not shown before any answer), so it never runs from Record and
+  // then gives way to the count-in.
+  const metronome = useMetronome()
+  const beat = metronome.state
+  const waited = useAfter(true, COUNT_IN_WAIT_MS)
+  const [timedFrom, setTimedFrom] = useState<"count-in" | "record" | null>(null)
+  let settled = timedFrom
+  if (settled === null) {
+    if (metronome.countInEnd !== null) settled = "count-in"
+    else if (ofTheTake(beat) ? beat.tempo === null || !beat.on : waited) settled = "record"
+  }
+  if (settled !== timedFrom) setTimedFrom(settled)
+  const known = beat !== null || waited
+  const counting = settled === "count-in" && beat?.phase === "count"
+  // Where the clock counts from, on the page's clock; null while it waits.
+  const clockFrom = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    clockFrom.current =
+      settled === "count-in"
+        ? (metronome.countInEnd ?? clockFrom.current)
+        : settled === "record"
+          ? startedAt.current
+          : null
+  })
+
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setElapsed((Date.now() - startedAt.current) / 1000)
+      const from = clockFrom.current
+      setElapsed(from === null ? 0 : Math.max(0, (performance.now() - from) / 1000))
     }, TIMER_TICK_MS)
     return () => window.clearInterval(timer)
   }, [])
@@ -200,6 +259,12 @@ export function Recording({
       window.clearTimeout(timeout)
     }
   }, [takesNotes])
+
+  const switchClick = async (on: boolean) => {
+    const res = await api().metronome_set_on(on)
+    if (!res.ok) sayError(res.error || "Could not switch the click")
+    await metronome.refresh()
+  }
 
   const stop = async () => {
     if (stopping) return
@@ -356,10 +421,11 @@ export function Recording({
     </div>
   )
 
-  // The status row, at the footer's left beside Stop: Recording over the
-  // disk line.
+  // The status row, at the footer's right just left of Stop: Recording
+  // over the disk line. The metronome's row has the footer's far left, as
+  // on the rehearsal screen (q14, «Слева, как было»).
   const statusRow = (
-    <div data-status-row className="flex flex-col items-start gap-2">
+    <div data-status-row className="flex min-w-0 flex-col items-start gap-2">
       {recordingLine}
       <HealthLine health={health} />
     </div>
@@ -396,7 +462,21 @@ export function Recording({
       air
       className="px-8 [--screen-pad-y:2rem]"
       footer={
-        <FooterRow left={statusRow}>
+        <FooterRow
+          left={
+            // The two give way together in a narrow window, each by its
+            // own width, which nothing changes during a take: the row's
+            // line and the disk line wrap, and neither moves the other.
+            <div className="flex items-center gap-6">
+              <div className="min-w-0 flex-1 basis-[24rem]">
+                {beat && (
+                  <TakeRow state={beat} lit={metronome.lit} onSwitch={(on) => void switchClick(on)} />
+                )}
+              </div>
+              {statusRow}
+            </div>
+          }
+        >
           <StopTake onStop={stop} stopping={stopping} saving={saving} />
         </FooterRow>
       }
@@ -426,24 +506,34 @@ export function Recording({
                 keeps under it for "g" and "y" is trimmed. The two unseen
                 readings are drawn from an attribute, not written in the page:
                 the clock's words are its reading alone. */}
-            <div
-              role="timer"
-              aria-label="Take time"
-              className="relative leading-none font-semibold tracking-tight tnum [text-box:trim-end_cap_alphabetic]"
-              // design-ok(px-text): the recording clock is sized from the window's height (CLOCK_SIZE)
-              style={{ fontSize: CLOCK }}
-            >
-              <span aria-hidden data-text="0:00" className="invisible before:content-[attr(data-text)]" />
-              <span data-clock className="absolute top-0 right-0 whitespace-nowrap">
-                {formatClock(elapsed)}
-              </span>
-              {/* The widest it can read, unseen, for the fit above. */}
-              <span
-                aria-hidden
-                data-clock-widest
-                data-text={CLOCK_WIDEST}
-                className="pointer-events-none invisible absolute top-0 right-0 whitespace-nowrap before:content-[attr(data-text)]"
-              />
+            <div className="relative">
+              <div
+                role="timer"
+                aria-label="Take time"
+                className="relative leading-none font-semibold tracking-tight tnum [text-box:trim-end_cap_alphabetic]"
+                // design-ok(px-text): the recording clock is sized from the window's height (CLOCK_SIZE)
+                style={{ fontSize: CLOCK }}
+              >
+                <span aria-hidden data-text="0:00" className="invisible before:content-[attr(data-text)]" />
+                {/* Unseen while the count-in stands in its place, and not
+                    there until it is known whether the take counts in. */}
+                {known && (
+                  <span
+                    data-clock
+                    className={cn("absolute top-0 right-0 whitespace-nowrap", counting && "invisible")}
+                  >
+                    {formatClock(elapsed)}
+                  </span>
+                )}
+                {/* The widest it can read, unseen, for the fit above. */}
+                <span
+                  aria-hidden
+                  data-clock-widest
+                  data-text={CLOCK_WIDEST}
+                  className="pointer-events-none invisible absolute top-0 right-0 whitespace-nowrap before:content-[attr(data-text)]"
+                />
+              </div>
+              {counting && beat && <CountIn count={beat.count} signature={beat.signature} size={CLOCK} />}
             </div>
           </div>
           {against}
@@ -512,6 +602,13 @@ export function Recording({
           })}
         </div>
       </div>
+      <EdgeLight
+        accent={
+          beat?.phase === "take" && beat.on && metronome.lit !== null
+            ? accentOf(beat.signature, metronome.lit)
+            : null
+        }
+      />
     </Shell>
   )
 }

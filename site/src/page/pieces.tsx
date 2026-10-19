@@ -3,6 +3,7 @@
 // are pictures here: still, and not for clicking.
 import { Fragment, type ReactNode } from "react"
 import { HealthLine } from "@/components/HealthLine"
+import { MetronomeRowView } from "@/components/metronome/MetronomeRow"
 import { NotesLane } from "@/components/midi/NotesLane"
 import { NotesPlate } from "@/components/midi/NotesPlate"
 import { PanelParts, SetCard, SongRows } from "@/components/NextTakeSongs"
@@ -14,11 +15,15 @@ import { TakeNameField } from "@/components/TakeNameField"
 import { TrackTile } from "@/components/TrackTile"
 import {
   api,
+  type MetronomeState,
   type RehearsalDetail,
   type RehearsalSet,
   type RehearsalSummary,
   type SongChoices,
+  type SongSummary,
 } from "@/lib/api"
+import { formatTempo } from "@/lib/format"
+import { perBar, statusLine } from "@/lib/metronome"
 import { otherSongs } from "@/lib/setSongs"
 import type { TILES } from "../content"
 import { siteNotes, type SiteNotes } from "../stage/demo"
@@ -32,6 +37,8 @@ export type PieceData = {
   set: RehearsalSet | null
   /** The drums' and the keys' notes for the MIDI tile (stage/notes.js). */
   notes: SiteNotes
+  /** Pałyn as the library has it, with its tempo, for the metronome tile. */
+  song: SongSummary | null
 }
 
 /** What the tiles show, asked of the bridge as the history screen and the
@@ -47,15 +54,28 @@ export async function loadPieces(): Promise<PieceData> {
     Math.max(0, ...last.takes.filter((t) => t.song === song).map((t) => t.go ?? 0)) + 1
   const choices = { here: [], other: offered.other.map((c) => ({ ...c, go: next(c.song) })) }
   const [set] = await api().list_sets()
-  return { rehearsals, last, choices, set: set ?? null, notes: siteNotes() }
+  const { songs } = await api().list_songs()
+  const song = songs.find((s) => s.title === "Pałyn") ?? null
+  return { rehearsals, last, choices, set: set ?? null, notes: siteNotes(), song }
 }
 
 const nothing = () => {}
 
-/** A piece of the app on its own ground, described for those who cannot see it. */
-function Piece({ label, wide, children }: { label: string; wide?: boolean; children: ReactNode }) {
+/** A piece of the app on its own ground, described for those who cannot see
+ *  it. `wide` and `line` say how it fits a phone (page.css). */
+function Piece({
+  label,
+  wide,
+  line,
+  children,
+}: {
+  label: string
+  wide?: boolean
+  line?: boolean
+  children: ReactNode
+}) {
   return (
-    <div role="img" aria-label={label} className={wide ? "piece wide" : "piece"}>
+    <div role="img" aria-label={label} className={wide ? "piece wide" : line ? "piece line" : "piece"}>
       <div inert className="min-w-0 font-sans text-foreground">
         {children}
       </div>
@@ -144,6 +164,31 @@ function Notes({ notes }: { notes: SiteNotes }) {
   )
 }
 
+/**
+ * The metronome's row on the rehearsal screen between takes, with the song
+ * picked under Next take: its tempo and time signature, as Python says them
+ * (metronome_state). Null for a song with no tempo.
+ */
+function rowOf(song: SongSummary | null): MetronomeState | null {
+  if (!song?.tempo || !song.signature) return null
+  const { id, title, tempo, signature } = song
+  return {
+    phase: "idle",
+    tempo,
+    signature,
+    per_bar: perBar(signature),
+    on: true,
+    case: "song",
+    song: { id, title, tempo, signature },
+    held: false,
+    last_take: null,
+    upcoming: [],
+    count: 0,
+    since_count_in_ms: null,
+    output_missing: null,
+  }
+}
+
 export type Shot = { pieces: ReactNode; left?: boolean }
 
 /** Which piece goes beside which tile's words, by the tile's id. */
@@ -153,8 +198,10 @@ export function shots({
   choices,
   set,
   notes,
+  song,
 }: PieceData): Record<(typeof TILES)[number], Shot | null> {
   const kept = last.takes.find((t) => t.cloud && t.starred)
+  const row = rowOf(song)
   return {
     health: {
       pieces: (
@@ -271,6 +318,26 @@ export function shots({
             />
             <SetCard set={set} goes={MID_SET} current="Viasna" onPick={nothing} highlighted={null} />
           </Panel>
+        </Piece>
+      ) : null,
+    },
+    metronome: {
+      pieces: row?.song ? (
+        <Piece
+          line
+          label={`The metronome's row with ${row.song.title} picked for the next take: ${row.song.title}'s ${formatTempo(row.tempo!, row.signature)} in ${row.signature}, the song's tempo`}
+        >
+          <MetronomeRowView
+            state={row}
+            lit={null}
+            line={statusLine(row)}
+            onSwitch={nothing}
+            onTempo={nothing}
+            onPlay={nothing}
+            onLink={nothing}
+            settings={null}
+            hold={false}
+          />
         </Piece>
       ) : null,
     },

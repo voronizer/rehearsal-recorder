@@ -5,12 +5,16 @@ writing one, and reading one back (spec F2 and F4).
 It imports mido and never touches the MIDI library: it is given bytes and
 times, so it runs with nothing plugged in.
 
-The file is format 0, 960 ticks to the beat, at 120 bpm (D8), so a tick is a
-1920th of a second. A file written here is read back as exactly that. A file a
-DAW has saved again may have other ticks to the beat and tempo changes, and is
-read in its own seconds (read_events).
+The file is format 0, 960 ticks to the beat, at 120 bpm (D8) unless it is given
+a tempo, so a tick is a 1920th of a second at 120. A take recorded to the
+metronome is given its tempo and its time signature (`meter_of`, metronome spec
+Part 9), and its seconds are the same seconds at that tempo's ticks. A file
+written here is read back as exactly the seconds it was written with, to the
+tick. A file a DAW has saved again may have other ticks to the beat and tempo
+changes, and is read in its own seconds (read_events).
 
-Cropping a take cuts its notes with its audio (crop_mid, spec F4).
+Cropping a take cuts its notes with its audio (crop_mid, spec F4), and keeps its
+tempo and signature.
 
 A .mid holds channel messages, SysEx and its own meta events, and nothing else.
 mido does not stop all of what a port sends from being written (it refuses
@@ -26,13 +30,26 @@ from pathlib import Path
 
 import mido
 
+from rehearsal_recorder.audio.click import SIGNATURES, per_quarter
+
 from .state import PortState
 
 log = logging.getLogger(__name__)
 
 TICKS_PER_BEAT = 960
 TEMPO = 500_000  # microseconds to the beat: 120 bpm
-TICKS_PER_SEC = 1920  # 960 ticks to the beat, two beats a second
+TICKS_PER_SEC = 1920  # 960 ticks to the beat, two beats a second, at 120 bpm
+NO_METER = (TEMPO, None)  # what a take with no tempo and no signature is written with
+
+# The time signature meta of each signature the metronome has (audio/click.py):
+# the numerator, the denominator as a power of two, the MIDI clocks to a click
+# (24 to a quarter), and the 32nd notes to a quarter. x/4 clicks on the quarter,
+# 6/8 on the eighth: 4/4 is (4, 2, 24, 8) and 6/8 (6, 3, 12, 8).
+_METERS = {
+    s: (int(s.split("/")[0]), int(s.split("/")[1]).bit_length() - 1, 24 // per_quarter(s), 8)
+    for s in SIGNATURES
+}
+_MAX_TEMPO_US = 0xFFFFFF  # a tempo meta is three bytes
 
 # A delta in a .mid is at most four bytes of seven bits: 0x0FFFFFFF ticks, about
 # 38 hours. mido does not refuse a longer one, it writes five bytes, which is
@@ -114,27 +131,59 @@ def _text(name: str) -> str:
     return name.encode("utf-8", "replace").decode("utf-8")
 
 
+def meter_of(tempo, signature) -> tuple[int, tuple | None]:
+    """
+    What a take's .mid states of its tempo and signature (metronome spec Part
+    9): (microseconds to a quarter note, the time signature meta or None).
+
+    `tempo` counts clicks a minute, as the metronome does: quarters in 4/4, 3/4
+    and 2/4, and eighths in 6/8, where a quarter is two of them. So 128 in 4/4
+    is 468750 and 198 in 6/8, which is 99 quarters, is 606061. The meta is
+    (numerator, denominator as a power of two, clocks to a click, 32nds to a
+    quarter), the form `write_mid` takes: 4/4 is (4, 2, 24, 8) and 6/8, with a
+    click on every eighth, (6, 3, 12, 8).
+
+    A take with no tempo is at 120, as every .mid is without one, and a take
+    with no signature has no meta. What is neither a tempo nor a signature the
+    app has is taken for none: a take.json read after a crash is whatever the
+    disk kept, and its .mid is made all the same.
+    """
+    meta = _METERS.get(signature) if isinstance(signature, str) else None
+    tempo_us = TEMPO
+    if isinstance(tempo, (int, float)) and not isinstance(tempo, bool) and tempo > 0:
+        found = 60_000_000 * per_quarter(signature) / tempo
+        if 1 <= found < _MAX_TEMPO_US:  # a tempo the meta cannot hold is none
+            tempo_us = round(found)
+    return tempo_us, meta
+
+
 def write_mid(path, *, track_name: str, port_name: str, start: list[bytes],
-              events: list[tuple[float, bytes]]) -> int:
+              events: list[tuple[float, bytes]], tempo_us: int = TEMPO,
+              time_signature: tuple | None = None) -> int:
     """
     Writes the take's notes to `path` and returns how many events were left
     out, the start messages among them. An event the file cannot hold is
     skipped and the rest are written: it never costs the take its file.
 
-    At tick 0 come the track's name, the port's name as the device name and 120
-    bpm, then the `start` messages (the state the instrument was in when the
-    take began, F6), then the `events`, each a (seconds from the take's start,
+    At tick 0 come the track's name, the port's name as the device name, the
+    tempo (120 bpm unless `tempo_us` says otherwise: microseconds to a quarter
+    note) and the `time_signature` when there is one, as `meter_of` gives them;
+    then the `start` messages (the state the instrument was in when the take
+    began, F6), then the `events`, each a (seconds from the take's start,
     bytes) pair. Names are written in UTF-8, so "Pałyn" and "Барабаны" are
-    saved; a lone surrogate in one is written as "?".
+    saved; a lone surrogate in one is written as "?". A tempo or a signature
+    the file cannot hold is written as 120 bpm and with no signature: it costs
+    the take nothing either.
 
     `events` are in time order, seconds from the start and not before it. Each
-    event's tick is its own time times 1920, rounded; the delta is the
-    difference between two ticks, never the sum of rounded deltas, so a long
-    take does not drift. A caller that gets the order wrong still has its file:
-    an event is never put before the one before it, so a time before the start
-    is put at tick 0 and an event that comes late is put on the tick of the one
-    it follows (held), and the number held is logged once, as a warning. An
-    event more than 0x0FFFFFFF ticks (about 38 hours) after the last one
+    event's tick is its own time times the ticks to a second at the tempo,
+    rounded (960 ticks to a quarter note: 1920 a second at 120 bpm); the delta
+    is the difference between two ticks, never the sum of rounded deltas, so a
+    long take does not drift. A caller that gets the order wrong still has its
+    file: an event is never put before the one before it, so a time before the
+    start is put at tick 0 and an event that comes late is put on the tick of
+    the one it follows (held), and the number held is logged once, as a warning.
+    An event more than 0x0FFFFFFF ticks (about 38 hours) after the last one
     written has a delta a .mid cannot hold, and is skipped like a message that
     is not storable: a time that wild costs only itself. One less wild is
     written where it says, and drags every event after it that is earlier
@@ -142,10 +191,29 @@ def write_mid(path, *, track_name: str, port_name: str, start: list[bytes],
     skipped too. The bytes of an event are kept as they are, the channel
     included.
     """
+    if not (isinstance(tempo_us, int) and not isinstance(tempo_us, bool) and 0 < tempo_us <= _MAX_TEMPO_US):
+        log.warning("%s: a tempo of %r cannot be written, 120 bpm is", Path(path).name, tempo_us)
+        tempo_us = TEMPO
+    ticks_per_sec = TICKS_PER_BEAT * 1_000_000 / tempo_us
+
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("track_name", name=_text(track_name)))
     track.append(mido.MetaMessage("device_name", name=_text(port_name)))
-    track.append(mido.MetaMessage("set_tempo", tempo=TEMPO))
+    track.append(mido.MetaMessage("set_tempo", tempo=tempo_us))
+    if time_signature is not None:
+        # Four bytes, and mido does not look at them until the file is saved: one
+        # that is not a byte would cost the take its file there, not here.
+        try:
+            numerator, power, clocks, thirty_seconds = time_signature
+            if numerator < 1 or not all(
+                    isinstance(n, int) and not isinstance(n, bool) and 0 <= n <= 255 for n in time_signature):
+                raise ValueError(time_signature)
+            track.append(mido.MetaMessage(
+                "time_signature", numerator=numerator, denominator=1 << power,
+                clocks_per_click=clocks, notated_32nd_notes_per_beat=thirty_seconds))
+        except (TypeError, ValueError):
+            log.warning("%s: a time signature of %r cannot be written, none is",
+                        Path(path).name, time_signature)
 
     skipped = 0
     for data in start:
@@ -160,7 +228,7 @@ def write_mid(path, *, track_name: str, port_name: str, start: list[bytes],
     for seconds, data in events:
         msg = None
         try:
-            wanted = round(seconds * TICKS_PER_SEC)
+            wanted = round(seconds * ticks_per_sec)
             tick = max(previous, wanted)
             if tick - previous <= _MAX_DELTA:
                 msg = _message(data, tick - previous)
@@ -188,21 +256,27 @@ def write_mid(path, *, track_name: str, port_name: str, start: list[bytes],
 def read_events(path) -> tuple[dict, list[tuple[float, bytes]]]:
     """
     A .mid read back as (names, events). `names` is {"track_name": ...,
-    "device_name": ...}, "" for one the file lacks. `events` is every channel
-    and SysEx event as (seconds from the start, bytes) in time order, the start
-    messages first, across all the file's tracks. A SysEx comes back whole,
-    F0 ... F7. Anything else in the file is passed over.
+    "device_name": ...}, "" for one the file lacks, and for a file that has a
+    meter of its own two more: "tempo_us", the file's first tempo, when that is
+    not the 120 bpm every file begins at, and "time_signature", its first, in
+    the form `write_mid` takes. A file with neither has only the two names, as
+    a file always had. `events` is every channel and SysEx event as (seconds
+    from the start, bytes) in time order, the start messages first, across all
+    the file's tracks. A SysEx comes back whole, F0 ... F7. Anything else in
+    the file is passed over.
 
     The seconds are the file's own: its ticks to the beat and every tempo
     change it states (120 bpm until the first), so a file a DAW has saved again
     reads right. A file written by `write_mid` has 960 ticks to the beat and
-    120 bpm throughout, and its seconds are exactly the tick over 1920. A file
-    timed in frames, not beats, is read as if it had 960 ticks to the beat.
+    one tempo throughout, and its seconds are the tick over the ticks to a
+    second at that tempo (1920 at 120 bpm). A file timed in frames, not beats,
+    is read as if it had 960 ticks to the beat.
     """
     mid = _load(path)
     metas = {}
     found = []
     tempos = []
+    signatures = []
     for track in mid.tracks:
         tick = 0
         for msg in track:
@@ -212,6 +286,9 @@ def read_events(path) -> tuple[dict, list[tuple[float, bytes]]]:
                     metas.setdefault(msg.type, msg.name)
                 elif msg.type == "set_tempo":
                     tempos.append((tick, msg.tempo))
+                elif msg.type == "time_signature":
+                    signatures.append((tick, (msg.numerator, msg.denominator.bit_length() - 1,
+                                              msg.clocks_per_click, msg.notated_32nd_notes_per_beat)))
                 continue
             if msg.type == "sysex":
                 data = bytes([0xF0, *msg.data, 0xF7])
@@ -222,6 +299,7 @@ def read_events(path) -> tuple[dict, list[tuple[float, bytes]]]:
     # Stable, so what is on one tick keeps the order the file has it in.
     found.sort(key=lambda event: event[0])
     tempos.sort(key=lambda change: change[0])
+    signatures.sort(key=lambda change: change[0])
 
     # Seconds from ticks through the tempo map, kept as whole numbers until the
     # one division at the end: `segment_units` is the microseconds so far times
@@ -240,6 +318,10 @@ def read_events(path) -> tuple[dict, list[tuple[float, bytes]]]:
             next_change += 1
         events.append(((segment_units + (tick - segment_tick) * tempo) / per_second, data))
     names = {"track_name": metas.get("track_name", ""), "device_name": metas.get("device_name", "")}
+    if tempos and tempos[0][1] != _DEFAULT_TEMPO:
+        names["tempo_us"] = tempos[0][1]
+    if signatures:
+        names["time_signature"] = signatures[0][1]
     return names, events
 
 
@@ -263,9 +345,11 @@ def crop_mid(source, target, start_sec: float, end_sec: float) -> dict:
     down keeps a release for each strike. A key still held at the end is let go
     there, once for each strike not yet let go, in the order the keys were
     first pressed, and then a pedal still down (F7). The track's name and the
-    port's name are kept, and a SysEx inside the range whole. Each event's tick
-    is round(seconds * 1920) from the new start, as write_mid does it, so a
-    long take is not off by a tick.
+    port's name are kept, and so are the file's tempo and time signature (the
+    first it states, when a DAW has saved it with more), and a SysEx inside the
+    range whole. Each event's tick is its time from the new start at that
+    tempo, as write_mid does it (round(seconds * 1920) at 120 bpm), so a long
+    take is not off by a tick.
     """
     try:
         names, events = read_events(source)
@@ -305,7 +389,8 @@ def crop_mid(source, target, start_sec: float, end_sec: float) -> dict:
         # Then the pedals: the keys were just let go.
         shifted.extend((end, data) for data in after.releases() if data[0] & 0xF0 == 0xB0)
         write_mid(target, track_name=names["track_name"], port_name=names["device_name"],
-                  start=start, events=shifted)
+                  start=start, events=shifted, tempo_us=names.get("tempo_us", TEMPO),
+                  time_signature=names.get("time_signature"))
     except Exception as e:
         return {"ok": False, "error": str(e) or type(e).__name__}
     return {"ok": True}

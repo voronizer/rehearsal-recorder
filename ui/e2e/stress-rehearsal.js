@@ -30,14 +30,14 @@
   // it (rules.lane_after, rules.place_in), and the drums' .mid, under their
   // own audio.
   const midiNotes = (n, length) => {
-    const file = `/rec/tue/${n}/${MIDI_TRACK}.mid`, kit = `/rec/tue/${n}/Drums.mid`;
+    const file = `${TONIGHT}/${n}/${MIDI_TRACK}.mid`, kit = `${TONIGHT}/${n}/Drums.mid`;
     fileDurations[file] = length;
     fileDurations[kit] = length;
     return [{name: 'Drums', file: kit, port: 'TD-17', after: 'Drums', place: 0},
             {name: MIDI_TRACK, file, port: MIDI_PORT, after: LONG_TRACK, place: PARTS.findIndex(p => p.name === MIDI_TRACK)}];
   };
   takeOf = function (n, name, length, end, markers) {
-    const tracks = PARTS.filter(p => p.mode !== 'midi').map(p => ({name: p.name, file: `/rec/tue/${n}/${p.name}.wav`}));
+    const tracks = PARTS.filter(p => p.mode !== 'midi').map(p => ({name: p.name, file: `${TONIGHT}/${n}/${p.name}.wav`}));
     for (const tr of tracks) {
       KIND[tr.file] = {part: tr.name, seed: n, end};
       fileDurations[tr.file] = length;

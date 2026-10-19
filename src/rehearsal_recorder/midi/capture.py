@@ -30,6 +30,12 @@ held when the take ends, or its port goes, is let go at that moment, and what
 the port said while it was gone was not heard (F7). A key struck twice before
 it is let go is let go twice: it is the strikes that are counted, not the keys.
 
+A take recorded to the metronome has its tempo and time signature in its .mid,
+and time 0 of the file is the take's first click, not the take's first sample
+(`head_sec`, metronome spec Parts 3 and 9). A take that was never finished is made
+the same file: `take.json` says the tempo, the signature and the frame of the
+first click (`finish_draft`).
+
 A .mid is written under another name and moved into place, so a crash while it
 is written never leaves half a file where a whole one is looked for. Until it is
 whole its .midraw stays.
@@ -59,7 +65,7 @@ from pathlib import Path
 
 from rehearsal_recorder.audio.capture import TAKE_RECORD, AudioRecorder
 from rehearsal_recorder.midi.clock import MARK_EVERY_SEC, fit, load, save_line
-from rehearsal_recorder.midi.smf import read_events, write_mid
+from rehearsal_recorder.midi.smf import NO_METER, meter_of, read_events, write_mid
 from rehearsal_recorder.midi.state import PortState
 
 # The app's log keeps ERROR and above (app.py). What the spec says goes there is
@@ -352,12 +358,19 @@ class MidiRecorder:
         if error is not None:
             raise error
 
-    def stop(self, duration_sec):
+    def stop(self, duration_sec, head_sec=0.0, meter=NO_METER):
         """
         The take is over, `duration_sec` of audio long: every .midraw becomes
         its .mid, and the .midraw files and take.clock are removed. Returns
         [{"name", "file", "port"}] for each track whose port appeared, in the
         band's order.
+
+        `head_sec` is how far into the audio the take's first click came: time
+        0 of every .mid is there, so every event is that much earlier, and what
+        came before it is part of the state the file begins with, as what came
+        before the audio's first sample is. `duration_sec` is the length of the
+        audio from there. `meter` is (microseconds to a quarter, time signature
+        meta or None), as `smf.meter_of` gives it.
 
         It does not raise for a .mid it cannot make: that track is left out of
         the answer, said in the log, and its .midraw (and take.clock) stay
@@ -383,7 +396,7 @@ class MidiRecorder:
                 mid = self._dir / f"{track.stem}{MID_SUFFIX}"
                 try:
                     _make_mid(track.path, mid, track.name, track.port, marks,
-                              self._anchor.samplerate, duration_sec)
+                              self._anchor.samplerate, duration_sec, head_sec, meter)
                 except Exception as e:
                     log.error("%s: its notes could not be made into a .mid, and are kept as %s: %r",
                               track.name, track.path.name, e)
@@ -508,9 +521,17 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
     notes are placed by when the take began. A port take.json does not name is
     called what its file is, and so is a track inside its .mid.
 
-    `duration_sec` is the audio's length. A take with no audio frames, 0 or
-    None, keeps every event and lets go at the last of them, which is better
-    than a take with no notes: that audio file was lost with everything else.
+    A take recorded to the click has its `click` there too (spec Part 1): the
+    tempo and the signature go into every .mid, and time 0 is the frame of the
+    first click (`first_click_frame`, in the samplerate's frames), as `stop` is
+    given them. A take with no click is made as it always was; so is one whose
+    first click was never chosen, or whose frames cannot be told in seconds for
+    want of a samplerate.
+
+    `duration_sec` is the audio's length, from the first click when the audio
+    was cut there. A take with no audio frames, 0 or None, keeps every event and
+    lets go at the last of them, which is better than a take with no notes: that
+    audio file was lost with everything else.
     """
     take_dir = Path(take_dir)
     try:
@@ -530,6 +551,7 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
             if isinstance(entry.get("name"), str) and entry["name"]:
                 names.setdefault(entry["file"], entry["name"])
     marks = load(take_dir / CLOCK_FILE) if rate else []
+    head_sec, meter = _click_of(record.get("click"), rate)
 
     for leftover in take_dir.glob(f"*{MID_SUFFIX}{PART_SUFFIX}"):
         try:
@@ -543,7 +565,8 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
         port = ports.get(raw.stem) or raw.stem
         mid = raw.with_suffix(MID_SUFFIX)
         try:
-            _make_mid(raw, mid, names.get(raw.stem, raw.stem), port, marks, rate, duration_sec)
+            _make_mid(raw, mid, names.get(raw.stem, raw.stem), port, marks, rate, duration_sec,
+                      head_sec, meter)
         except Exception as e:
             log.error("%s: its notes could not be made into a .mid, and are kept: %r", raw.name, e)
             unfinished = True
@@ -558,6 +581,22 @@ def finish_draft(take_dir, duration_sec, samplerate=None):
     if not unfinished:
         _forget_clock(take_dir)
     return found
+
+
+def _click_of(click, rate):
+    """(head_sec, meter) for a draft, from the `click` of its take.json: how many
+    seconds into the audio the first click came, and what the .mid states of
+    the tempo and signature. A click that is not a record, or whose numbers are
+    not numbers, is passed over for the part that is wrong: it has no head, or
+    no meter (`smf.meter_of`)."""
+    if not isinstance(click, dict):
+        return 0.0, NO_METER
+    first = click.get("first_click_frame")
+    head_sec = 0.0
+    if (rate and isinstance(first, (int, float)) and not isinstance(first, bool)
+            and math.isfinite(first) and first > 0):
+        head_sec = first / rate
+    return head_sec, meter_of(click.get("tempo"), click.get("signature"))
 
 
 def _device_name(path):
@@ -576,14 +615,18 @@ def _forget_clock(folder):
         log.warning("%s could not be removed: %r", CLOCK_FILE, e)
 
 
-def _make_mid(raw_path, mid_path, track_name, port_name, marks, samplerate, duration_sec):
+def _make_mid(raw_path, mid_path, track_name, port_name, marks, samplerate, duration_sec,
+              head_sec=0.0, meter=NO_METER):
     """A .midraw as the .mid beside it, and the .midraw removed once the .mid is
     whole and on disk. Raises for what it cannot do; nothing then is left of the
-    .mid, and the .midraw is as it was."""
-    start, events = _place(_read(raw_path), marks, samplerate, duration_sec)
+    .mid, and the .midraw is as it was. `head_sec` and `meter` are as `stop`
+    has them."""
+    tempo_us, time_signature = meter
+    start, events = _place(_read(raw_path), marks, samplerate, duration_sec, head_sec)
     part = mid_path.with_name(mid_path.name + PART_SUFFIX)
     try:
-        write_mid(part, track_name=track_name, port_name=port_name, start=start, events=events)
+        write_mid(part, track_name=track_name, port_name=port_name, start=start, events=events,
+                  tempo_us=tempo_us, time_signature=time_signature)
         with open(part, "r+b") as f:
             os.fsync(f.fileno())
         os.replace(part, mid_path)
@@ -640,18 +683,19 @@ def _read(path):
     return started, start, items
 
 
-def _place(raw, marks, samplerate, duration_sec):
+def _place(raw, marks, samplerate, duration_sec, head_sec=0.0):
     """
     What `write_mid` is given for a read .midraw: (the start messages, the
     events as (seconds on the audio, bytes)).
 
     - Seconds are the clock's line through `marks` (clock.fit), or, with none,
-      from when the take began. A file with no first line is counted from its
-      first event.
-    - What the port said before the audio's first sample is not an event: it
-      goes into the state the file begins with (F6). A key struck then is not
-      written, nor is its release, nor that of any key the take did not strike
-      itself: held long before, or held through a gap.
+      from when the take began, less `head_sec`, the audio before the take's
+      first click (0 for a take with no click). A file with no first line is
+      counted from its first event.
+    - What the port said before the audio's first sample, or before the first
+      click, is not an event: it goes into the state the file begins with (F6).
+      A key struck then is not written, nor is its release, nor that of any key
+      the take did not strike itself: held long before, or held through a gap.
     - The rest, up to `duration_sec`, are kept. The strikes of each key are
       counted (a key struck again while down is let go once for each strike, as
       a DAW counts them), and a running state that starts where the file starts
@@ -669,8 +713,13 @@ def _place(raw, marks, samplerate, duration_sec):
     except (TypeError, ValueError):
         end = 0.0
     end = end if math.isfinite(end) and end > 0 else None
+    try:
+        head = float(head_sec)
+    except (TypeError, ValueError):
+        head = 0.0
+    head = head if math.isfinite(head) and head > 0 else 0.0
 
-    when = [seconds(ns) for ns, _ in items]
+    when = [seconds(ns) - head for ns, _ in items]
     state = PortState()
     for message in start_messages:
         state.feed(message)

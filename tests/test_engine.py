@@ -33,10 +33,12 @@ class _FakeStream:
 
     opened = 0
     closed = 0
+    last = None  # the newest one, for a check that asks what was opened
 
     def __init__(self, **kw):
         self.kw = kw
         _FakeStream.opened += 1
+        _FakeStream.last = self
         self.active = False
 
     def start(self):
@@ -93,6 +95,8 @@ _sd.check_output_settings = _check_output_settings
 _sd.check_input_settings = _check_input_settings
 _sd.OutputStream = _FakeStream
 _sd.InputStream = _FakeStream
+# A stream with inputs and outputs: a take whose click is on the recording card.
+_sd.Stream = _FakeStream
 sys.modules["sounddevice"] = _sd
 # No suite opens a real MIDI port. With None in sys.modules, importing the
 # library raises ImportError, which midi/ports.open_system() answers as "MIDI is
@@ -1755,9 +1759,9 @@ def main():
     plain_mixdown = apimod.mixdown
     asked = []
 
-    def watch_mixdown(tracks, out_path, volumes=None, progress=None):
+    def watch_mixdown(tracks, out_path, volumes=None, progress=None, acid=None):
         asked.append(Path(out_path))
-        return plain_mixdown(tracks, out_path, volumes, progress=progress)
+        return plain_mixdown(tracks, out_path, volumes, progress=progress, acid=acid)
 
     apimod.mixdown = watch_mixdown
     try:
@@ -1777,7 +1781,7 @@ def main():
     ok("with nothing half-written left behind",
        not list(target.rglob(apimod.WRITING_PREFIX + "*")))
 
-    def die_midway(tracks, out_path, volumes=None, progress=None):
+    def die_midway(tracks, out_path, volumes=None, progress=None, acid=None):
         # What being killed mid-mixdown leaves on disk: a real file, opened
         # and part written.
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
@@ -8923,9 +8927,9 @@ def main():
         a._recorder.stop = slow_stop
         real_end = a._midi.end_take
 
-        def slow_end(duration_sec):
+        def slow_end(duration_sec, *meter):
             asked["notes"] = ask()
-            return real_end(duration_sec)
+            return real_end(duration_sec, *meter)
 
         a._midi.end_take = slow_end
         try:
@@ -12305,6 +12309,1457 @@ def main():
     _, odd78 = fresh_api(tmp78)
     ok("and anything but false written by hand reads as on",
        keys78(odd78) == (True, True))
+
+    print("\n[79] Files that keep their tempo")
+    # A click take's WAVs start at its first click, and carry its tempo in an
+    # acid chunk through a crop and into the mix (metronome spec, Part 9). The
+    # chunk's own bytes are in test_click.py; here, the three writers.
+    from rehearsal_recorder.audio.capture import raw_to_wav as r2w79
+    from rehearsal_recorder.audio.crop import crop_wav as cw79
+    from rehearsal_recorder.audio.mixdown import mixdown as md79
+    from rehearsal_recorder.audio.wavfile import Acid, read_acid
+
+    def beats79(path):
+        """The beats an acid chunk says its file holds."""
+        raw = Path(path).read_bytes()
+        at = raw.index(b"acid")
+        return struct.unpack("<I", raw[at + 20:at + 24])[0]
+
+    tmp79 = Path(tempfile.mkdtemp())
+    numbered79 = (np.arange(2 * SR) % 30000).astype("<i2")  # each frame says which it is
+    (tmp79 / "Gtr.raw").write_bytes(numbered79.tobytes())
+    r2w79(tmp79 / "Gtr.raw", tmp79 / "Gtr.wav", SR, 16, head_frames=480, frames=48000)
+    with wave.open(str(tmp79 / "Gtr.wav"), "rb") as w:
+        kept79 = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+    ok("raw_to_wav from frame 480 for 48000 frames writes exactly those",
+       np.array_equal(kept79, numbered79[480:48480]))
+    r2w79(tmp79 / "Gtr.raw", tmp79 / "Tail.wav", SR, 16, head_frames=90000, frames=48000)
+    with wave.open(str(tmp79 / "Tail.wav"), "rb") as w:
+        tail79 = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+    ok("and asked for more than the raw file holds, what it holds",
+       np.array_equal(tail79, numbered79[90000:]))
+    ok("with no tempo given it writes none", read_acid(tmp79 / "Gtr.wav") is None)
+
+    # Two seconds at 128 in 4/4: 4 quarters and a quarter, which counts as 4.
+    r2w79(tmp79 / "Gtr.raw", tmp79 / "Click.wav", SR, 16, acid=Acid(128.0, 4, 4))
+    ok("given one, the take's WAV carries it, its beats counted from its length",
+       read_acid(tmp79 / "Click.wav") == Acid(128.0, 4, 4) and beats79(tmp79 / "Click.wav") == 4)
+    quarter79 = 60 / 128  # 0.46875 s, 22500 frames
+    cut79 = cw79(tmp79 / "Click.wav", tmp79 / "Click-cut.wav", quarter79, 3 * quarter79)
+    ok("a crop of it keeps the chunk, with beats for what is left: 2",
+       cut79["ok"] and cut79["frames"] == 45000
+       and read_acid(tmp79 / "Click-cut.wav") == Acid(128.0, 4, 4) and beats79(tmp79 / "Click-cut.wav") == 2)
+    with wave.open(str(tmp79 / "Click-cut.wav"), "rb") as w:
+        middle79 = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+    ok("  and the audio cut as before", np.array_equal(middle79[300:-300], numbered79[22800:67200]))
+    cw79(tmp79 / "Click.wav", tmp79 / "Click-bare.wav", quarter79, 3 * quarter79, acid=None)
+    ok("asked to, a crop leaves it out", read_acid(tmp79 / "Click-bare.wav") is None)
+    write_wav(tmp79 / "Plain.wav", 1000, seconds=2.0)
+    cw79(tmp79 / "Plain.wav", tmp79 / "Plain-cut.wav", 0.5, 1.5)
+    ok("a crop of a file with none adds none", read_acid(tmp79 / "Plain-cut.wav") is None)
+
+    tracks79 = [{"name": "Gtr", "file": str(tmp79 / "Click.wav")}, {"name": "Bass", "file": str(tmp79 / "Plain.wav")}]
+    mixed79 = md79(tracks79, tmp79 / "Mix.wav", acid=Acid(128.0, 4, 4))
+    ok("the mix carries the chunk it is given",
+       mixed79["ok"] and read_acid(tmp79 / "Mix.wav") == Acid(128.0, 4, 4) and beats79(tmp79 / "Mix.wav") == 4)
+    md79(tracks79, tmp79 / "Mix-plain.wav")
+    ok("and none when it is given none", read_acid(tmp79 / "Mix-plain.wav") is None)
+    with wave.open(str(tmp79 / "Mix.wav"), "rb") as a79, wave.open(str(tmp79 / "Mix-plain.wav"), "rb") as b79:
+        ok("  the audio the same either way", a79.readframes(a79.getnframes()) == b79.readframes(b79.getnframes()))
+
+    print("\n[80] Recording to the click")
+    # A click on the recording card rides the take's own stream, which has
+    # outputs as well as inputs (metronome spec, Part 3). The take's files start
+    # at its first click and end on a quarter, and a take the app did not live
+    # to finish is cut at the same frame. The arithmetic of the click itself is
+    # in test_click.py; here, the recorder and the drafts around it.
+    import threading as threading80
+
+    from rehearsal_recorder.audio.capture import AudioRecorder as Rec80
+    from rehearsal_recorder.audio.click import Voices as Voices80
+    from rehearsal_recorder.audio.click import click_frame as cf80
+    from rehearsal_recorder.audio.drafts import describe as describe80
+    from rehearsal_recorder.audio.drafts import finalize as finalize80
+    from rehearsal_recorder.audio.take_click import TakeClick as TakeClick80
+    from rehearsal_recorder.audio.wavfile import Acid as Acid80
+    from rehearsal_recorder.audio.wavfile import read_acid as read_acid80
+    from rehearsal_recorder.midi.capture import finish_draft as finish80
+    from rehearsal_recorder.midi.clock import save_line as save_line80
+    from rehearsal_recorder.midi.smf import read_events as read_events80
+
+    tmp80 = Path(tempfile.mkdtemp())
+    two80 = [{"name": "Gtr", "channel": 1}, {"name": "Voc", "channel": 2}]
+    voices80 = Voices80("click", SR, 0.7)
+
+    def numbered80(i):
+        """Block i of 1024, each sample saying which frame it is (mod 30000)."""
+        n = (np.arange(i * 1024, (i + 1) * 1024) % 30000).astype(np.int16)
+        return np.stack([n, n], axis=1)
+
+    def info80(i):
+        """The driver's word on block i: captured 5 ms ago, heard in 5 ms."""
+        now = 50.0 + i * 1024 / SR
+        return types.SimpleNamespace(currentTime=now, inputBufferAdcTime=now - 0.005,
+                                     outputBufferDacTime=now + 0.005)
+
+    def block80(rec, i):
+        if rec.click is not None and rec.click.duplex:
+            out = np.zeros((1024, 2), np.float32)
+            rec._duplex_callback(numbered80(i), out, 1024, info80(i), None)
+            return out
+        rec._callback(numbered80(i), 1024, info80(i), None)
+        return None
+
+    def stop80(rec, blocks_done):
+        """Stop, with the card going on from block `blocks_done` on a thread of
+        its own, as PortAudio's does, from when Stop has said where the take
+        ends; stopping the stream waits for it, as PortAudio's stop does."""
+        halt = threading80.Event()
+
+        def card():
+            i = blocks_done
+            while not halt.is_set():
+                if rec.click.end_frame is None:
+                    time.sleep(0.001)
+                    continue
+                block80(rec, i)
+                i += 1
+                time.sleep(0.0002)
+
+        feeder = threading80.Thread(target=card, daemon=True)
+        stream = rec._stream
+        stopping = stream.stop
+
+        def stop():
+            halt.set()
+            feeder.join()
+            stopping()
+
+        stream.stop = stop
+        feeder.start()
+        return rec.stop()
+
+    def record80(folder):
+        return json.loads((folder / "take.json").read_text(encoding="utf-8"))
+
+    def wav80(path):
+        with wave.open(str(path), "rb") as w:
+            return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+
+    def written80(folder, deadline=2.0):
+        """take.json once it has the first click, as the take's tick writes it."""
+        until = time.monotonic() + deadline
+        while time.monotonic() < until:
+            try:
+                found = record80(folder)["click"]
+                if found["first_click_frame"] is not None:
+                    return found
+            except (OSError, ValueError, KeyError):
+                pass
+            time.sleep(0.01)
+        return None
+
+    tc80 = TakeClick80(120, "4/4", 1, voices80, (0, 1))
+    duplex80 = tmp80 / "duplex"
+    rec80 = Rec80(0, SR, two80, duplex80, click=tc80)
+    rec80.start()
+    kw80 = rec80._stream.kw
+    ok("the click on the recording card: one stream with its inputs and its outputs",
+       kw80["device"] == (0, 0) and kw80["channels"] == (2, 2) and kw80["dtype"] == ("int16", "float32")
+       and kw80["callback"] == rec80._duplex_callback)
+    ok("take.json has the click from the start, its first click not chosen yet",
+       record80(duplex80)["click"] == {"tempo": 120, "signature": "4/4", "on": True, "wav_tempo": True,
+                                       "first_click_frame": None, "end_frame": None})
+    heard80 = np.concatenate([block80(rec80, i) for i in range(100)])
+    first80 = tc80.first_click_frame
+    ok("the first block chose the first click: 0.1 s on, and a 10 ms round trip after that", first80 == 4800 + 480)
+    ok("  the click written into the outputs a round trip early",
+       not heard80[:4800].any() and np.array_equal(heard80[4800:4800 + len(voices80.of(2)), 0], voices80.of(2)))
+    # The take's tick comes every 50 ms until take.json has it, not every second.
+    ok("  and take.json written again once it was chosen, within moments",
+       (written80(duplex80, deadline=0.5) or {}).get("first_click_frame") == first80)
+    ok("a click take's problem is still only the recording's", rec80.problem() is None)
+    result80 = stop80(rec80, 100)
+    # Stopped at frame 102400: the next quarter from the first click is its fifth,
+    # 2.5 s on.
+    end80 = first80 + cf80(5, 120, SR)
+    ok("Stop recorded on to the next quarter", tc80.end_frame == end80 and abs(result80["duration_sec"] - 2.5) < 1e-9)
+    gtr80 = wav80(duplex80 / "Gtr.wav")
+    ok("each WAV starts at the first click and ends there",
+       len(gtr80) == end80 - first80 and gtr80[0] == first80 % 30000 and gtr80[-1] == (end80 - 1) % 30000
+       and np.array_equal(wav80(duplex80 / "Voc.wav"), gtr80))
+    ok("  and carries the take's tempo: 120 in 4/4, five quarters", read_acid80(duplex80 / "Gtr.wav") == Acid80(120.0, 4, 4))
+    ok("take.json is kept for the take's grid, with where the files end",
+       record80(duplex80)["click"]["first_click_frame"] == first80 and record80(duplex80)["click"]["end_frame"] == end80)
+    ok("the click take's raw files are gone", not list(duplex80.glob("*.raw")))
+
+    plain80 = tmp80 / "no tempo in the wav"
+    rec80b = Rec80(0, SR, two80, plain80, click=TakeClick80(120, "4/4", 1, voices80, (0, 1), wav_tempo=False))
+    rec80b.start()
+    for i in range(30):
+        block80(rec80b, i)
+    stop80(rec80b, 30)
+    ok("with the setting off the WAVs carry no tempo, and still start at the first click",
+       read_acid80(plain80 / "Gtr.wav") is None and wav80(plain80 / "Gtr.wav")[0] == first80 % 30000)
+
+    # The app dies mid-take: the raw files, take.json, and the notes as the rig
+    # left them. Recovered, the take is cut where the live one would have been.
+    crash80 = tmp80 / "rehearsal" / "_drafts" / "take 1"
+    rec80c = Rec80(0, SR, two80, crash80, click=TakeClick80(120, "4/4", 1, voices80, (0, 1)))
+    rec80c.start()
+    for i in range(60):
+        block80(rec80c, i)
+    ok("a take that dies has its first click in take.json already", (written80(crash80) or {}).get("first_click_frame") == first80)
+    rec80c.abandon()
+    t80, ms80 = 9_000_000_000, 1_000_000
+    first_ns80 = t80 + first80 * 1_000_000_000 // SR
+    (crash80 / "Keys.midraw").write_bytes("".join([
+        f"t {t80}\n",
+        f"n {first_ns80 - 50 * ms80} 903c40\n",   # struck in the moment before the first click
+        f"n {first_ns80 + 500 * ms80} 904040\n",  # half a second after it
+        f"n {first_ns80 + 750 * ms80} 804000\n",
+    ]).encode("ascii"))
+    (crash80 / "take.clock").write_bytes("".join(
+        save_line80(m) for m in [(t80, 0), (t80 + 1_000_000_000, SR)]).encode("ascii"))
+    ok("the draft's length is counted from its first click", abs(describe80(crash80, SR)["duration_sec"] - (61440 - first80) / SR) < 1e-9)
+    done80 = finalize80(crash80, SR, 16)
+    gtr80c = wav80(crash80 / "Gtr.wav")
+    ok("recovered, each WAV is cut at the same first click",
+       len(gtr80c) == 61440 - first80 and gtr80c[0] == first80 % 30000
+       and abs(done80["duration_sec"] - (61440 - first80) / SR) < 1e-9)
+    ok("  and carries its tempo", read_acid80(crash80 / "Gtr.wav") == Acid80(120.0, 4, 4))
+    names80, events80 = read_events80(crash80 / "Keys.mid")
+    ok("its .mid starts at the first click too: the key half a second after it is at 0.5 s",
+       [(round(sec * 1920), data) for sec, data in events80] == [(960, b"\x90\x40\x40"), (1440, b"\x80\x40\x00")])
+
+    # Review Focus 5: Stop in the count-in.
+    early80 = tmp80 / "stopped in the count-in"
+    rec80d = Rec80(0, SR, two80, early80, click=TakeClick80(120, "4/4", 1, voices80, (0, 1)))
+    rec80d.start()
+    for i in range(20):  # 20480 frames: between the count-in's first click and its second
+        block80(rec80d, i)
+    result80d = stop80(rec80d, 20)
+    gtr80d = wav80(early80 / "Gtr.wav")
+    ok("Stop in the count-in ends on the next quarter: the count-in's second click",
+       len(gtr80d) == cf80(1, 120, SR) and abs(result80d["duration_sec"] - 0.5) < 1e-9)
+    ok("  its WAVs start at the first click", gtr80d[0] == first80 % 30000)
+    first_ns80d = t80 + first80 * 1_000_000_000 // SR
+    (early80 / "Keys.midraw").write_bytes("".join([
+        f"t {t80}\n", f"n {first_ns80d + 250 * ms80} 903c40\n", f"n {first_ns80d + 400 * ms80} 803c00\n"]).encode("ascii"))
+    (early80 / "take.clock").write_bytes("".join(
+        save_line80(m) for m in [(t80, 0), (t80 + 1_000_000_000, SR)]).encode("ascii"))
+    finish80(early80, result80d["duration_sec"])
+    _, events80 = read_events80(early80 / "Keys.mid")
+    ok("  and its .mid: a key a quarter second after the first click is at 0.25 s",
+       [(round(sec * 1920), data) for sec, data in events80] == [(480, b"\x90\x3c\x40"), (768, b"\x80\x3c\x00")])
+
+    # The card gone just after Record: Stop has fewer frames than lead up to
+    # the first click, so the take has no grid and keeps all it recorded,
+    # with no tempo in its WAVs, rather than WAVs with a tempo and no audio.
+    lost80 = tmp80 / "card lost"
+    tc80f = TakeClick80(120, "4/4", 1, voices80, (0, 1))
+    rec80f = Rec80(0, SR, two80, lost80, click=tc80f)
+    rec80f.start()
+    block80(rec80f, 0)
+    result80f = rec80f.stop()
+    ok("the card gone before the first click came: no grid, all 1024 frames kept, no tempo in the WAVs",
+       tc80f.first_click_frame is None and len(wav80(lost80 / "Gtr.wav")) == 1024
+       and read_acid80(lost80 / "Gtr.wav") is None and abs(result80f["duration_sec"] - 1024 / SR) < 1e-9
+       and record80(lost80)["click"]["first_click_frame"] is None)
+
+    # The card will not open its outputs with its inputs: Record still
+    # records, from the inputs alone, a click take on its grid, the beat still
+    # lit on the screen (spec Part 4).
+    from rehearsal_recorder.metronome import Metronome as Metronome80
+
+    class Refusing80:
+        def __init__(self, **kw):
+            raise RuntimeError("Invalid number of channels")
+
+    duplex_kind80 = _sd.Stream
+    _sd.Stream = Refusing80
+    refused80 = tmp80 / "outputs refused"
+    tc80e = TakeClick80(120, "4/4", 1, voices80, (0, 1))
+    rec80e = Rec80(0, SR, two80, refused80, click=tc80e)
+    try:
+        rec80e.start()
+    finally:
+        _sd.Stream = duplex_kind80
+    ok("a card whose outputs will not open with its inputs: the take records from its inputs alone",
+       rec80e._stream.kw["callback"] == rec80e._callback and rec80e._stream.kw["channels"] == 2
+       and not tc80e.duplex and tc80e.problem() == "Its outputs would not open with its inputs.")
+    m80 = Metronome80({}, lambda: None, lambda: None, lambda key: None, None)
+    m80.begin_take(120, "4/4", tc80e)
+    for i in range(10):
+        block80(rec80e, i)
+    state80 = m80.state()
+    ok("  its first click chosen at once, the screen told when each falls, and which card is mute",
+       tc80e.first_click_frame == 9600 and len(state80["upcoming"]) >= 2 and state80["output_missing"] == "Interface")
+    stop80(rec80e, 10)
+    m80.end_take()
+    gtr80e = wav80(refused80 / "Gtr.wav")
+    ok("  a click take all the same: its WAVs start at its first click and carry its tempo",
+       len(gtr80e) == cf80(1, 120, SR) and gtr80e[0] == 9600 and read_acid80(refused80 / "Gtr.wav") == Acid80(120.0, 4, 4)
+       and record80(refused80)["click"]["first_click_frame"] == 9600 and record80(refused80)["click"]["tempo"] == 120)
+
+    print("\n[81] The click elsewhere")
+    # The click on the desk while the interface records: the take's stream has
+    # inputs only, and the click a stream of its own, placed by both streams'
+    # clocks. Played here in made-up time, the streams taking turns as a
+    # machine's would.
+    from rehearsal_recorder.audio.click_output import ClickOutput as ClickOutput81
+    from rehearsal_recorder.metronome import Metronome as Metronome81
+    # The stub's streams, counted: main has a _FakeStream of its own, from [3].
+    Streams81 = _sd.OutputStream
+
+    out81 = ClickOutput81(3, (3, 4))
+    tc81 = TakeClick80(120, "4/4", 1, voices80, out81.route, output=out81)
+    elsewhere81 = tmp80 / "elsewhere"
+    rec81 = Rec80(0, SR, two80, elsewhere81, click=tc81)
+    opened81 = Streams81.opened
+    rec81.start()
+    ok("the take's stream has inputs only", rec81._stream.kw["channels"] == 2 and rec81._stream.kw["device"] == 0
+       and rec81._stream.kw["callback"] == rec81._callback)
+    ok("and the click a second stream, on the desk's outputs 3-4, at the desk's rate",
+       Streams81.opened == opened81 + 2 and out81._stream.kw["device"] == 3
+       and out81._stream.kw["channels"] == 4 and out81.samplerate == 48000 and not tc81.duplex)
+    real_ns81 = time.perf_counter_ns
+    T81 = 2_000_000_000_000
+    now81 = [T81]
+    time.perf_counter_ns = lambda: int(now81[0])
+    desk81 = []
+    try:
+        i81 = j81 = 0
+        # The interface's blocks arrive 3 ms after their last frame; the desk's
+        # callbacks run 15 ms before what they write is heard, its first frame
+        # heard 60 ms after the take began. Halfway, the desk goes, and its
+        # callbacks with it.
+        while i81 < 140:
+            due_in = T81 + (i81 + 1) * 1024 / SR * 1e9 + 3e6
+            due_out = T81 + 60e6 + j81 * 1024 / SR * 1e9 - 15e6
+            if due_in <= due_out or out81.problem() is not None:
+                now81[0] = due_in
+                rec81._callback(numbered80(i81), 1024, types.SimpleNamespace(
+                    currentTime=due_in / 1e9, inputBufferAdcTime=(T81 + i81 * 1024 / SR * 1e9) / 1e9), None)
+                i81 += 1
+                if i81 == 70:
+                    out81._finished()  # the headphone amp unplugged mid-take
+            else:
+                now81[0] = due_out
+                block = np.zeros((1024, 4), np.float32)
+                out81._callback(block, 1024, types.SimpleNamespace(
+                    currentTime=due_out / 1e9, outputBufferDacTime=(due_out + 15e6) / 1e9), None)
+                desk81.append(block)
+                j81 += 1
+    finally:
+        time.perf_counter_ns = real_ns81
+    first81 = tc81.first_click_frame
+    # The desk's first block ran at 45 ms, so the interface's block after it
+    # (block 1, in at 45.7 ms) chose the first click 0.2 s on.
+    ok("the first click chosen 0.2 s after the input block that followed the desk's first",
+       first81 == 1024 + 9600)
+    desk81 = np.concatenate(desk81)
+    # Each click's sound rises from silence: its first sample is 0.
+    heard81 = [int(f) - 1 for f in np.flatnonzero(desk81[:, 2]) if not desk81[max(0, f - 200):f, 2].any()]
+    want81 = [(first81 + cf80(k, 120, SR)) * 1e9 / SR - 60e6 for k in range(len(heard81))]
+    ok("the clicks on the desk's outputs 3-4 only, each heard on its frame of the take within 1 ms",
+       not desk81[:, :2].any() and np.array_equal(desk81[:, 2], desk81[:, 3]) and len(heard81) >= 2
+       and all(abs(h * 1e9 / SR - w) < 1e6 for h, w in zip(heard81, want81)))
+    ok("the desk gone mid-take: the click says so, the recording does not",
+       out81.problem() is not None and rec81.problem() is None and rec81.error is None)
+    ok("  and the recording went on", rec81._frames_written == 140 * 1024)
+    result81 = stop80(rec81, 140)
+    # Stopped at frame 143360, 132736 after the first click: the next quarter is the sixth.
+    ok("Stop works: the take ends on a quarter after its first click",
+       tc81.end_frame == first81 + cf80(6, 120, SR) and abs(result81["duration_sec"] - 3.0) < 1e-9)
+    ok("  and it is a click take: its WAVs start at the first click and carry the tempo",
+       wav80(elsewhere81 / "Gtr.wav")[0] == first81 % 30000 and read_acid80(elsewhere81 / "Gtr.wav") == Acid80(120.0, 4, 4)
+       and record80(elsewhere81)["click"]["first_click_frame"] == first81)
+    ok("the click's own stream is closed with the take", out81._stream is None)
+
+    # Which way the metronome sends a take's click.
+    cfg81 = {"click_device": {"name": "Interface", "host_api": "CoreAudio"}, "click_device_index": 0,
+             "click_channels": [1, 2]}
+    m81 = Metronome81(cfg81, lambda: None, lambda: None, lambda key: {"click_device": cfg81["click_device_index"]}.get(key), None)
+    m81.set(128, "4/4")
+    on_card81 = m81.take_click(0, SR)
+    ok("the click device is the recording card: one stream", on_card81.duplex and on_card81.route == (0, 1)
+       and on_card81.record()["tempo"] == 128 and on_card81.count_in_clicks == 4)
+    cfg81.update(click_device={"name": "Desk", "host_api": "CoreAudio"}, click_device_index=3, click_channels=[3, 4])
+    on_desk81 = m81.take_click(0, SR)
+    ok("another device: a stream of its own, on its outputs",
+       not on_desk81.duplex and on_desk81.output.device_index == 3 and on_desk81.output.channels == (3, 4))
+    m81.set_on(False)
+    ok("the switch off: no click for the take", m81.take_click(0, SR) is None)
+
+    print("  Two ASIO cards")
+    # PortAudio opens one ASIO stream at a time: with the interface recording
+    # on ASIO, a click on another ASIO card has no stream of its own, and the
+    # take records all the same (spec Part 4).
+    from rehearsal_recorder.audio.click_output import SilentOutput as SilentOutput81
+
+    class OneAsio81(Streams81):
+        """A stream as PortAudio's ASIO opens it: one on a card in `asio` is
+        refused while another such stream is open, on that card or another."""
+
+        asio = set()
+        open_now = []
+
+        @staticmethod
+        def card(kw):
+            device = kw.get("device")
+            return device[0] if isinstance(device, tuple) else device
+
+        def __init__(self, **kw):
+            if self.card(kw) in OneAsio81.asio and any(s.card(s.kw) in OneAsio81.asio for s in OneAsio81.open_now):
+                raise RuntimeError("Error opening stream: Unanticipated host error [PaErrorCode -9999]")
+            super().__init__(**kw)
+            OneAsio81.open_now.append(self)
+
+        def close(self):
+            super().close()
+            if self in OneAsio81.open_now:
+                OneAsio81.open_now.remove(self)
+
+    kinds81 = (_sd.InputStream, _sd.OutputStream, _sd.Stream)
+    _sd.InputStream = _sd.OutputStream = _sd.Stream = OneAsio81
+    OneAsio81.asio = {0, 3}
+    try:
+        tc81b = TakeClick80(120, "4/4", 1, voices80, (0, 1), output=ClickOutput81(3, (1, 2)))
+        rec81b = Rec80(0, SR, two80, tmp80 / "two asio cards", click=tc81b)
+        try:
+            rec81b.start()
+            started81 = True
+        except Exception as e:
+            print(f"  (Record failed: {e})")
+            started81 = False
+        ok("the click's own output on a second ASIO card: the take's stream opens first, and records",
+           started81 and rec81b._stream is not None and rec81b._stream.kw["device"] == 0
+           and tc81b.problem() is not None)
+        if started81:
+            for i in range(4):
+                block80(rec81b, i)
+            rec81b.stop()
+    finally:
+        _sd.InputStream, _sd.OutputStream, _sd.Stream = kinds81
+        OneAsio81.open_now.clear()
+
+    another81 = "Another ASIO card can't play while one records."
+    hostapis81 = _sd.query_hostapis
+    _sd.query_hostapis = lambda: [{"name": "ASIO"}]  # every card on ASIO
+    try:
+        desk81 = Metronome81({"click_device": {"name": "Desk", "host_api": "ASIO"}, "click_device_index": 3,
+                              "click_channels": [1, 2]}, lambda: None, lambda: None, {"click_device": 3}.get, None)
+        desk81.set(128, "4/4")
+        on_desk81b = desk81.take_click(0, SR)
+        follows81 = Metronome81({}, lambda: None, lambda: None, {"output_device": 3}.get, None)
+        follows81.set(128, "4/4")
+        on_player81 = follows81.take_click(0, SR)
+        card81 = Metronome81({"click_device": {"name": "Interface", "host_api": "ASIO"}, "click_device_index": 0,
+                              "click_channels": [1, 2]}, lambda: None, lambda: None, {"click_device": 0}.get, None)
+        card81.set(128, "4/4")
+        on_card81b = card81.take_click(0, SR)
+    finally:
+        _sd.query_hostapis = hostapis81
+    ok("the click saved on another ASIO card: no stream of its own for the take, and it says why",
+       not on_desk81b.duplex and isinstance(on_desk81b.output, SilentOutput81)
+       and on_desk81b.output.name == "Desk" and on_desk81b.problem() == another81)
+    ok("  the same with none saved and the player on that card",
+       isinstance(on_player81.output, SilentOutput81) and on_player81.problem() == another81)
+    ok("  on the recording card itself it rides the take's stream, as before", on_card81b.duplex)
+
+    print("\n[82] The click and the player")
+    # Between takes the click shares the player's stream when the player holds
+    # its device, and has one of its own when not. When a take plays back, its
+    # click is made again from its tempo (Part 8).
+    from rehearsal_recorder.audio.click_source import ClickSource as ClickSource82
+    from rehearsal_recorder.audio.click_output import ClickOutput as ClickOutput82
+
+    tmp82 = Path(tempfile.mkdtemp())
+    write_wav(tmp82 / "Quiet.wav", 0, seconds=20.0)
+    p82 = TakePlayer([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+    opened82 = Streams81.opened
+    p82.open_output(3, (1, 2), extra_channels=(3, 4))
+    ok("the player on the desk's outputs 1-2, the click on its 3-4: one stream of four",
+       Streams81.opened == opened82 + 1 and p82._stream.kw["channels"] == 4 and p82._stream.kw["device"] == 3)
+    cfg82 = {"click_device": {"name": "Desk", "host_api": "CoreAudio"}, "click_device_index": 3, "click_channels": [3, 4]}
+    holder82 = {"player": p82}
+    lookup82 = {"click_device": 3, "output_device": 3}
+    m82 = Metronome81(cfg82, lambda: None, lambda: holder82["player"], lookup82.get, None)
+    m82.set(120, "4/4")
+    ok("the click's outputs widen the player's stream on its device, and no other",
+       m82.extra_channels(3) == (3, 4) and m82.extra_channels(0) == ())
+    ok("the player holds the click's device: the click's sink is the player", m82.click_sink() == ("player", p82))
+    ok("play mixes into it and nothing else opens",
+       m82.play()["ok"] and isinstance(p82._free_click, ClickSource82) and Streams81.opened == opened82 + 1)
+    out82 = np.zeros((4096, 4), np.int16)
+    for b in range(4):
+        p82._callback(out82[b * 1024:(b + 1) * 1024], 1024, None, None)
+    ok("the click on 3 and 4, outside the take's own outputs, at the metronome's volume",
+       out82[:, 2].any() and np.array_equal(out82[:, 2], out82[:, 3]) and not out82[:, :2].any()
+       and abs(int(np.abs(out82[:, 2]).max()) - round(0.7 * 32767)) <= 2)
+    ok("  out of the player's meters", p82.state()["master_level"] == 0.0)
+    m82.stop()
+    ok("Stop takes it out of the player's stream", p82._free_click is None)
+    holder82["player"] = None
+    kind82, sink82 = m82.click_sink()
+    ok("with the player closed the click has a stream of its own",
+       kind82 == "own" and isinstance(sink82, ClickOutput82) and sink82.device_index == 3 and sink82.channels == (3, 4))
+    m82.play()
+    ok("  which play opens", Streams81.opened == opened82 + 2 and Streams81.last.kw["device"] == 3
+       and Streams81.last.kw["channels"] == 4 and Streams81.last.kw["dtype"] == "float32")
+    m82.stop()
+    ok("  and Stop closes", m82.state()["phase"] == "idle")
+
+    print("  The take's own click")
+    p82.set_take_click(120, "4/4", voices80)
+    p82.set_click_on(True)
+    ok("the player says its click is on", p82.state()["click"] is True)
+    p82.seek(10.0)
+    p82.play()
+    tick82 = voices80.of(2).astype(np.float64) * 32767
+    tock82 = voices80.of(0).astype(np.float64) * 32767
+
+    def expected82(length, places):
+        """The click as it should come out: each voice at its place."""
+        out = np.zeros(length)
+        for at, voice in places:
+            out[at:at + len(voice)] += voice[:max(0, length - at)]
+        return out
+
+    # Each block copied: _render hands back the same buffer every time.
+    heard82 = np.concatenate([p82._render(512).copy() for _ in range(100)])[:, 0].astype(np.float64)
+    # 10.0 s is click 20 exactly, the first of a bar; 21 is half a second on,
+    # and 22 a second.
+    ok("after a seek to 10.0 s, the click is at the take's own frames: 20 at 10.0 s, 21 at 10.5 s, 22 at 11.0 s",
+       np.allclose(heard82, expected82(51200, [(0, tick82), (24000, tock82), (48000, tock82)]), atol=1.0))
+    ok("  and out of the meters", p82.state()["levels"]["Quiet"] == [0.0] and p82.state()["master_level"] == 0.0)
+    p82.set_loop(10.25, 11.0)
+    looped82 = np.concatenate([p82._render(512).copy() for _ in range(200)])[:, 0].astype(np.float64)
+    # The loop is 492000 to 528000; click 21 at 504000 is 12000 into each pass.
+    ok("inside a loop it follows the take's frames round and round",
+       np.allclose(looped82, expected82(102400, [(12000, tock82), (48000, tock82), (84000, tock82)]), atol=1.0))
+    p82.set_loop(None, None)
+    p82.set_master(0.5)
+    settle(p82)
+    p82.seek(10.0)
+    half82 = np.concatenate([p82._render(512).copy() for _ in range(10)])[:, 0].astype(np.float64)
+    ok("under the master: half as loud at 0.5", np.allclose(half82, expected82(5120, [(0, tick82 * 0.5)]), atol=1.0))
+    p82.set_master_muted(True)
+    settle(p82)
+    p82.seek(10.0)
+    ok("  and silent while muted", not np.concatenate([p82._render(512).copy() for _ in range(10)]).any())
+    p82.set_master_muted(False)
+    p82.set_click_on(False)
+    settle(p82)
+    p82.seek(10.0)
+    ok("switched off, there is none", not np.concatenate([p82._render(512).copy() for _ in range(10)]).any()
+       and p82.state()["click"] is False)
+    p82.set_take_click(None, None, None)
+    p82.set_click_on(True)
+    settle(p82)
+    p82.seek(10.0)
+    ok("a take that was not recorded to the click has none", not np.concatenate([p82._render(512).copy() for _ in range(10)]).any())
+    p82.close()
+
+    print("  The settings, and where the click goes")
+    before82 = dict(cfg82)
+    ok("a volume of 2 and a count-in of 3 bars are refused, and nothing saved",
+       not m82.set_setting("click_volume", 2)["ok"] and not m82.set_setting("count_in_bars", 3)["ok"] and cfg82 == before82)
+    gone82 = {"click_device": {"name": "X18", "host_api": "CoreAudio"}, "click_device_index": 7}
+    opened82 = Streams81.opened
+    m82b = Metronome81(gone82, lambda: None, lambda: None, lambda key: None, None)
+    ok("a click device saved and not plugged in: its name is the problem",
+       m82b.output_problem() == "X18" and m82b.state()["output_missing"] == "X18")
+    m82b.set(120, "4/4")
+    ok("  play opens nothing, and the beat still flashes",
+       m82b.play()["ok"] and Streams81.opened == opened82 and m82b.state()["phase"] == "preview"
+       and len(m82b.state()["upcoming"]) >= 2)
+    m82b.stop()
+    ok("  and the take still clicks on its grid, to no output",
+       m82b.take_click(0, SR) is not None and m82b.take_click(0, SR).problem() is not None
+       and not m82b.take_click(0, SR).duplex)
+    p82c = TakePlayer([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+    p82c.open_output(3, (5, 6))
+    none82 = {"output_channels": [5, 6]}
+    m82c = Metronome81(none82, lambda: None, lambda: p82c, {"output_device": 3}.get, None)
+    m82c.set(120, "4/4")
+    ok("no click device saved: the click goes where the player plays", m82c.click_sink() == ("player", p82c)
+       and m82c.settings()["click_device_index"] is None and m82c.settings()["click_channels"] is None)
+    m82c.play()
+    ok("  on the player's own outputs", p82c._free_click is not None and p82c._free_click.route == (4, 5))
+    m82c.stop()
+    p82c.close()
+    kind82c, sink82c = m82c.click_sink()
+    ok("  and with the player closed, a stream of its own there",
+       kind82c == "own" and sink82c.device_index == 3 and sink82c.channels == (5, 6))
+
+    print("  Look again while the click starts")
+    # A rescan holds STREAM_LOCK while PortAudio is stopped and started again,
+    # and PortAudio stopped with a stream open frees it under the app, which
+    # crashes on its next call. So the rescan lets the click between takes go
+    # inside that lock, and a play on another thread opens its stream either
+    # before (and the rescan closes it) or after. Neither may wait for the
+    # other for ever: play holds the click's own lock while it waits for
+    # STREAM_LOCK.
+    import threading as threading82
+    from rehearsal_recorder.audio import devices as devices82
+
+    m82d = Metronome81({"click_device": {"name": "Desk", "host_api": "CoreAudio"}, "click_device_index": 3,
+                        "click_channels": [3, 4]}, lambda: None, lambda: None, {"click_device": 3}.get, None)
+    m82d.set(120, "4/4")
+    order82 = []
+    opening82, go82 = threading82.Event(), threading82.Event()
+
+    class Held82(Streams81):
+        """A stream that takes its time to open, until told to go on."""
+
+        def __init__(self, **kw):
+            opening82.set()
+            go82.wait(5)
+            super().__init__(**kw)
+            self.open_now = True
+            order82.append("opened")
+
+        @property
+        def latency(self):
+            # Asked once it is open, before the click is kept: a rescan let in
+            # here would find nothing to close.
+            time.sleep(0.1)
+            return 0.01
+
+        def close(self):
+            super().close()
+            self.open_now = False
+
+    held82 = []
+
+    def terminate82():
+        # What PortAudio would free: every click stream still open.
+        order82.append(("stopped", sum(1 for s in held82 if s.open_now)))
+        _sd._initialized -= 1
+
+    def initialize82():
+        _sd._initialized += 1
+
+    def look_again82(first=None):
+        """Api.rescan_devices' part: the click let go, then PortAudio stopped
+        and started, all in one hold of STREAM_LOCK."""
+        with devices82.STREAM_LOCK:
+            if first is not None:
+                first()
+            m82d.let_go_for_rescan()
+            devices82.rescan()
+
+    def kept82(**kw):
+        stream = Held82(**kw)
+        held82.append(stream)
+        return stream
+
+    saved82 = (_sd.OutputStream, getattr(_sd, "_terminate", None), getattr(_sd, "_initialize", None),
+               getattr(_sd, "_initialized", None))
+    _sd.OutputStream, _sd._terminate, _sd._initialize, _sd._initialized = kept82, terminate82, initialize82, 1
+    try:
+        played82 = []
+        player82 = threading82.Thread(target=lambda: played82.append(m82d.play()), daemon=True)
+        player82.start()
+        opening82.wait(5)
+        rescan82 = threading82.Thread(target=look_again82, daemon=True)
+        rescan82.start()
+        time.sleep(0.05)  # the rescan waiting for the lock play holds as it opens
+        go82.set()
+        player82.join(5)
+        rescan82.join(5)
+        ok("play opening as Look again starts: both finish",
+           not player82.is_alive() and not rescan82.is_alive() and played82 == [{"ok": True}])
+        ok("  the click's stream opened first and closed before PortAudio stopped",
+           order82 == ["opened", ("stopped", 0)] and len(held82) == 1 and not held82[0].open_now)
+        ok("  and the click is stopped, nothing playing", m82d.state()["phase"] == "idle" and m82d._free is None)
+
+        del order82[:]
+        waiting82 = threading82.Event()
+
+        def play_waits82():
+            """Play started while the rescan holds STREAM_LOCK, and let in
+            once it has the click's own lock and waits for that one."""
+            waiting82.set()
+            deadline = time.monotonic() + 5
+            while not m82d._sinks.locked() and time.monotonic() < deadline:
+                time.sleep(0.001)
+
+        player82 = threading82.Thread(target=lambda: (waiting82.wait(5), played82.append(m82d.play())), daemon=True)
+        player82.start()
+        rescan82 = threading82.Thread(target=look_again82, args=(play_waits82,), daemon=True)
+        rescan82.start()
+        rescan82.join(5)
+        player82.join(5)
+        ok("play waiting on Look again: both finish, neither waiting for the other",
+           not player82.is_alive() and not rescan82.is_alive() and played82 == [{"ok": True}] * 2)
+        ok("  PortAudio stopped with no click stream open, and the click's opened after",
+           order82 == [("stopped", 0), "opened"] and len(held82) == 2 and held82[1].open_now)
+        ok("  and it plays", m82d.state()["phase"] == "preview")
+        if not rescan82.is_alive():
+            m82d.stop()
+            ok("  until Stop closes it", not held82[1].open_now)
+    finally:
+        _sd.OutputStream = saved82[0]
+        for name82, value82 in zip(("_terminate", "_initialize", "_initialized"), saved82[1:]):
+            if value82 is None:
+                if hasattr(_sd, name82):
+                    delattr(_sd, name82)
+            else:
+                setattr(_sd, name82, value82)
+
+    print("  Play first, then the player opens on its device")
+    # Play with the player closed has a stream of its own where the player
+    # plays. A take opened there must not open a second stream on that card:
+    # ASIO refuses one, and the player would go to the system's output. The
+    # click lets go of its stream first and goes on in the player's, from its
+    # next click.
+    a82 = fresh_api(Path(tempfile.mkdtemp()))[1]
+    kinds82 = (_sd.OutputStream, _sd.InputStream, _sd.Stream)
+    _sd.OutputStream = _sd.InputStream = _sd.Stream = OneAsio81
+    OneAsio81.asio = {3}
+    try:
+        a82.set_output_device(3)
+        a82.metronome_set(120, "4/4")
+        played82 = a82.metronome_play()
+        own82 = a82._metronome._free
+        for b in range(30):  # 30720 frames at 120: clicks 0 and 1 played, click 2 next
+            own82.sink._callback(np.zeros((1024, 2), np.float32), 1024, None, None)
+        opened82b = a82.player_open([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+        moved82 = a82._metronome._free
+        ok("play first, the take opened after on the click's card: the player opens there, no warning",
+           played82["ok"] and own82.kind == "own" and opened82b["ok"] and "warning" not in opened82b
+           and a82._player.holds(3))
+        ok("  and the click goes on in the player's stream from the bar's third click",
+           moved82 is not None and moved82.kind == "player" and a82._player.free_click is moved82.source
+           and moved82.source.next_in_bar == 2 and own82.sink._stream is None)
+        a82.player_close()
+        ok("  closed, the click has its own stream again", a82._metronome._free is not None
+           and a82._metronome._free.kind == "own" and a82._metronome._free.sink._stream is not None)
+        a82.metronome_stop()
+        # The click's own output saved on the desk, the player on the
+        # interface; then the player is moved onto the desk.
+        a82.set_click_device(3)
+        a82.set_output_device(0)
+        a82.player_open([{"name": "Quiet", "file": str(tmp82 / "Quiet.wav")}])
+        a82.metronome_play()
+        own82 = a82._metronome._free
+        moved82b = a82.set_output_device(3)
+        ok("the player moved onto the card the click plays on: it opens there, and takes the click",
+           own82.kind == "own" and own82.sink.device_index == 3 and moved82b["ok"] and "warning" not in moved82b
+           and a82._player.holds(3) and a82._metronome._free.kind == "player")
+    finally:
+        _sd.OutputStream, _sd.InputStream, _sd.Stream = kinds82
+        OneAsio81.open_now.clear()
+        a82.shutdown()
+
+    print("\n[83] The metronome through the Api")
+    # Record takes its tempo, signature and click from the metronome's row,
+    # whoever presses it (spec Parts 2 to 4), and the take keeps them. The
+    # screen hears the count-in from metronome_state. Each part runs as [66]'s
+    # do: one that breaks says so, and the rest still run.
+    import contextlib as contextlib83
+    import threading as threading83
+
+    import rehearsal_recorder.api as apimod83
+    import rehearsal_recorder.audio.capture as capture83
+    from rehearsal_recorder.audio.wavfile import read_acid as read_acid83
+    from rehearsal_recorder.mediaserver import POLLABLE as POLLABLE83
+
+    Recorder83 = capture83.AudioRecorder
+    real_start83 = Recorder83.start
+    another83 = "Another ASIO card can't play while one records."
+    # Stop runs on to the next quarter while the card sends blocks. None come
+    # here after the last one a check feeds, so Stop does not wait long for them.
+    quiet83 = capture83.RUN_ON_QUIET_SEC
+    capture83.RUN_ON_QUIET_SEC = 0.02
+
+    def api83():
+        a = fresh_api(Path(tempfile.mkdtemp()))[1]
+        a.start_rehearsal("Evening", 0, SR, [{"name": "Gtr", "channel": 1}], 16)
+        return a
+
+    def feed83(a, blocks):
+        """`blocks` blocks of 1024 from the card, the driver saying nothing of when."""
+        rec = a._recorder
+        for _ in range(blocks):
+            indata = np.zeros((1024, 1), np.int16)
+            if rec.click is not None and rec.click.duplex:
+                rec._duplex_callback(indata, np.zeros((1024, rec.click.width), np.float32), 1024, None, None)
+            else:
+                rec._callback(indata, 1024, None, None)
+
+    def take83(a, keep=None, blocks=4):
+        """Record, a few blocks, Stop, and keep the take as `keep`, or throw it away."""
+        a.start_take()
+        feed83(a, blocks)
+        stopped = a.stop_take()
+        if keep is None:
+            a.discard_take(stopped["temp_dir"])
+            return stopped, None
+        return stopped, a.keep_take(stopped["take_number"], stopped["temp_dir"], keep,
+                                    stopped["duration_sec"], stopped["tracks"])
+
+    def state83(a, *keys):
+        found = a.metronome_state()
+        return tuple(found[k] for k in keys)
+
+    a83 = api83()
+
+    @scenario66("the settings and the polling")
+    def _():
+        settings = a83.get_settings()
+        ok("the settings carry the metronome's, with no device of its own to begin with",
+           settings["click_device_index"] is None and settings["click_channels"] is None
+           and settings["click_sound"] == "click" and settings["count_in_bars"] == 1
+           and settings["metronome_on"] is True and settings["tempo_in_wav"] is True
+           and a83.metronome_state()["output_missing"] is None)
+        ok("metronome_state and the taps are served for polling",
+           "metronome_state" in POLLABLE83 and "metronome_taps" in POLLABLE83)
+        ok("the click on the recording card's outputs 1-2", a83.set_click_device(0)["ok"]
+           and a83.get_settings()["click_device_index"] == 0 and a83.get_settings()["click_channels"] == [1, 2])
+
+    @scenario66("a song's first click take")
+    def _():
+        a83.set_next_take_name("Ahon")
+        stopped, kept = take83(a83, keep="Ahon")
+        ok("a take with no tempo has no click, and keeps no tempo",
+           stopped["tempo"] is None and stopped["click"] is False
+           and kept["take"]["tempo"] is None and kept["take"]["click"] is False)
+        ok("the next take is the same song's, which has no tempo",
+           state83(a83, "case", "tempo") == ("song_without", None) and a83.metronome_state()["song"]["title"] == "Ahon")
+        ok("128 typed in the row is held", a83.metronome_set(128, "4/4")["ok"] and state83(a83, "tempo", "held") == (128, True))
+        opened = _sd.Stream.opened
+        started = a83.start_take()
+        rec = a83._recorder
+        ok("the click on the recording card: one stream with its inputs and its outputs",
+           started["ok"] and _sd.Stream.opened == opened + 1 and rec.click is not None and rec.click.duplex
+           and rec._stream.kw["device"] == (0, 0))
+        ok("the moment Record returns, the screen hears a count-in whose first click is not chosen yet",
+           state83(a83, "phase", "count", "since_count_in_ms", "tempo") == ("count", 0, None, 128))
+        ok("take.json has the click at 128 in 4/4",
+           json.loads((Path(a83._recorder_temp_dir) / "take.json").read_text("utf-8"))["click"]["tempo"] == 128)
+
+        # The card's blocks in made-up time, each arriving as its last frame is
+        # captured. With nothing said by the driver the round trip is the
+        # stream's two latencies, 0.1 s, and the first click is chosen 0.1 s
+        # on and that much later: frame 9600, written at frame 4800, heard
+        # 50 ms after its block is in. So click k is heard 0.15 s + k x 60/128
+        # in, and the count-in's end, click 4, at 2.025 s.
+        real_ns = time.perf_counter_ns
+        start_ns = 3_000_000_000_000
+        now, fed = [start_ns], [0]
+
+        def at(sec):
+            while fed[0] * 1024 / SR <= sec:
+                now[0] = start_ns + fed[0] * 1024 * 1_000_000_000 // SR
+                feed83(a83, 1)
+                fed[0] += 1
+            now[0] = start_ns + round(sec * 1e9)
+            return a83.metronome_state()
+
+        time.perf_counter_ns = lambda: int(now[0])
+        try:
+            heard = [(s["phase"], s["count"]) for s in map(at, (0.1, 0.16, 0.63, 1.1, 1.57, 2.0))]
+            first = rec.click.first_click_frame
+            ended = at(2.0252)
+            later = at(2.525)
+        finally:
+            time.perf_counter_ns = real_ns
+        ok("the first click chosen from the first block: frame 9600", first == 9600)
+        ok("the count-in as it is heard: 1, 2, 3 and 4, each from its click",
+           heard == [("count", 0), ("count", 1), ("count", 2), ("count", 3), ("count", 4), ("count", 4)])
+        ok("then the take, from the count-in's end",
+           ended["phase"] == "take" and ended["count"] == 0 and abs(ended["since_count_in_ms"] - 0.2) < 0.5)
+        ok("  counting on from there", later["phase"] == "take" and abs(later["since_count_in_ms"] - 500) < 0.5)
+        ok("the switch off mid-take silences the click", a83.metronome_set_on(False)["ok"]
+           and rec.click.record()["on"] is False)
+        stopped = a83.stop_take()
+        a83.metronome_set_on(True)
+        ok("  and the take is a click take all the same: Stop says 128, 4/4, clicked",
+           (stopped["tempo"], stopped["signature"], stopped["click"]) == (128, "4/4", True))
+        a83.discard_take(stopped["temp_dir"])
+        ok("a click take thrown away, a false start, gives its song no tempo",
+           a83._lib.tempo_for("Ahon")["song"]["tempo"] is None)
+        ok("  and the row still holds 128", state83(a83, "tempo", "held") == (128, True))
+        # Twelve blocks, past the first click at frame 9600: a take whose card
+        # goes quiet before it is no click take ([80]).
+        stopped, kept = take83(a83, keep="Ahon", blocks=12)
+        song = a83._lib.tempo_for("Ahon")["song"]
+        ok("the first click take kept gives the song its tempo: 128 in 4/4",
+           (kept["take"]["tempo"], kept["take"]["signature"], kept["take"]["click"]) == (128, "4/4", True)
+           and (song["tempo"], song["signature"]) == (128, "4/4"))
+        ok("  and the row is the song's own now, nothing held", state83(a83, "tempo", "held") == (128, False))
+
+    @scenario66("the switch off")
+    def _():
+        a83.metronome_set_on(False)
+        opened = _sd.Stream.opened
+        a83.start_take()
+        ok("Record opens the card's inputs alone, with no click",
+           _sd.Stream.opened == opened + 1 and a83._recorder.click is None and a83._recorder._stream.kw["device"] == 0)
+        ok("  and the screen shows a take with no count-in, so its clock runs from Record",
+           state83(a83, "phase", "since_count_in_ms") == ("take", None))
+        feed83(a83, 4)
+        stopped = a83.stop_take()
+        kept = a83.keep_take(stopped["take_number"], stopped["temp_dir"], "Ahon",
+                             stopped["duration_sec"], stopped["tracks"])
+        ok("the take keeps its tempo, and is no click take",
+           (stopped["tempo"], stopped["click"]) == (128, False)
+           and (kept["take"]["tempo"], kept["take"]["signature"], kept["take"]["click"]) == (128, "4/4", False))
+        a83.metronome_set_on(True)
+
+    @scenario66("a change held in the row")
+    def _():
+        a83.set_next_take_name("Palyn")
+        ok("a name no song has yet: the row is empty", state83(a83, "tempo", "held") == (None, False))
+        take83(a83, keep="Palyn")
+        saved = a83.set_song_tempo(a83._lib.song_id("Palyn"), 120, "4/4")
+        ok("a tempo given on the song's page: the row shows it",
+           saved["ok"] and state83(a83, "tempo", "held") == (120, False))
+        a83.metronome_set(132, "4/4")
+        a83.set_next_take_name("Palyn 3")
+        ok("a change held in the row survives a keystroke in the same song's name",
+           state83(a83, "tempo", "held") == (132, True))
+        a83.set_next_take_name("Ahon")
+        ok("  and goes when the name leads to another song", state83(a83, "tempo", "held") == (128, False)
+           and a83.metronome_state()["song"]["title"] == "Ahon")
+        a83.set_next_take_name("Palyn")
+        ok("  for good: back on the first song, the row is its own", state83(a83, "tempo", "held") == (120, False))
+
+    @scenario66("the click elsewhere")
+    def _():
+        ok("the click on the desk's outputs", a83.set_click_device(3)["ok"]
+           and a83.get_settings()["click_device_index"] == 3 and a83.get_settings()["click_channels"] == [1, 2])
+        opened = _sd.Stream.opened
+        a83.start_take()
+        rec = a83._recorder
+        ok("Record: the take's inputs, and a stream of the click's own on the desk",
+           _sd.Stream.opened == opened + 2 and rec._stream.kw["device"] == 0
+           and not rec.click.duplex and rec.click.output.device_index == 3)
+        # The desk's stream never sends a block here, so the first click is
+        # never chosen: Stop keeps the take whole, a take with no click at the
+        # row's 120, as one stopped before a slow output starts.
+        feed83(a83, 4)
+        stopped = a83.stop_take()
+        gtr = Path(stopped["tracks"][0]["file"])
+        with wave.open(str(gtr), "rb") as w:
+            frames = w.getnframes()
+        ok("Stop before the first click keeps all the audio before it, with no tempo in its WAV",
+           frames == 4 * 1024 and stopped["duration_sec"] == 4 * 1024 / SR and read_acid83(gtr) is None)
+        a83._meters.clear()
+        ok("  and it is no click take, but keeps its tempo, now and after a restart",
+           (stopped["tempo"], stopped["signature"], stopped["click"]) == (120, "4/4", False)
+           and a83._meter_of_draft(stopped["temp_dir"]) == {"tempo": 120, "signature": "4/4", "click": False})
+        a83.discard_take(stopped["temp_dir"])
+        # A Stop that breaks says the same in memory as its take.json does.
+        a83.start_take()
+        rec = a83._recorder
+        feed83(a83, 4)
+
+        def broken_stop(*args, **kwargs):
+            rec.abandon()
+            raise OSError("Cannot finalise")
+
+        rec.stop = broken_stop
+        try:
+            a83.stop_take()
+        except OSError:
+            pass
+        draft = rec.out_dir
+        ok("a Stop that broke before the first click: no click take, as its take.json says",
+           rec.click.first_click_frame is None
+           and a83._meter_of_draft(draft) == {"tempo": 120, "signature": "4/4", "click": False})
+        a83._meters.clear()
+        ok("  and the same once the app has started again",
+           a83._meter_of_draft(draft) == {"tempo": 120, "signature": "4/4", "click": False})
+        a83.discard_take(str(draft))
+        ok("no click device: the click goes back to where the player plays", a83.set_click_device(None)["ok"]
+           and a83.get_settings()["click_device_index"] is None and a83.get_settings()["click_channels"] is None)
+
+    @scenario66("the click between takes and Record")
+    def _():
+        found = []
+
+        def watched(rec):
+            found.append(a83._metronome._free)
+            real_start83(rec)
+
+        ok("play between takes", a83.metronome_play()["ok"] and a83.metronome_state()["phase"] == "preview")
+        Recorder83.start = watched
+        try:
+            started = a83.control_command("start")
+        finally:
+            Recorder83.start = real_start83
+        ok("Record from the screen stops it before the recorder opens the card", started["ok"] and found == [None])
+        ok("Stop for the click between takes leaves the take's click alone",
+           a83.metronome_stop()["ok"] and a83._recorder.click is not None and a83.metronome_state()["phase"] == "count")
+        feed83(a83, 4)
+        a83.discard_take(a83.stop_take()["temp_dir"])
+
+    @contextlib83.contextmanager
+    def portaudio_stops83():
+        """Look again, with PortAudio's stop and start counted rather than
+        done: what it yields lists each stop, which would end every stream."""
+        stops = []
+        saved = {n: getattr(_sd, n, None) for n in ("_initialized", "_terminate", "_initialize")}
+        _sd._initialized = 1
+        _sd._terminate = lambda: stops.append("stopped")
+        _sd._initialize = lambda: None
+        try:
+            yield stops
+        finally:
+            for n, value in saved.items():
+                if value is None:
+                    if hasattr(_sd, n):
+                        delattr(_sd, n)
+                else:
+                    setattr(_sd, n, value)
+
+    def look_again83(answers):
+        """Look again from another thread, as the screen asks it, while this one waits."""
+        other = threading83.Thread(target=lambda: answers.append(a83.rescan_devices()), daemon=True)
+        other.start()
+        other.join(5)
+
+    @scenario66("Look again while Record opens the card")
+    def _():
+        answers = []
+
+        def rescanning(rec):
+            real_start83(rec)
+            look_again83(answers)
+
+        with portaudio_stops83() as stops:
+            Recorder83.start = rescanning
+            try:
+                started = a83.start_take()
+            finally:
+                Recorder83.start = real_start83
+            ok("between the take's streams opening and Record returning, Look again is refused",
+               started["ok"] and len(answers) == 1 and answers[0]["ok"] is False and stops == [])
+            feed83(a83, 4)
+            a83.discard_take(a83.stop_take()["temp_dir"])
+            ok("  and once the take is over it looks again", a83.rescan_devices()["ok"] and stops == ["stopped"])
+
+    @scenario66("Look again while Stop runs on")
+    def _():
+        answers = []
+        real_stop = Recorder83.stop
+
+        def rescanning(rec, *args, **kwargs):
+            look_again83(answers)
+            return real_stop(rec, *args, **kwargs)
+
+        with portaudio_stops83() as stops:
+            a83.start_take()
+            feed83(a83, 4)
+            Recorder83.stop = rescanning
+            try:
+                stopped = a83.stop_take()
+            finally:
+                Recorder83.stop = real_stop
+            ok("while Stop runs on to the next quarter, the take's streams still open, Look again is refused",
+               stopped["ok"] and len(answers) == 1 and answers[0]
+               == {"ok": False, "error": "Not while a take is being saved. Look again once it is saved."}
+               and stops == [])
+            a83.discard_take(stopped["temp_dir"])
+            ok("  and once the take is saved it looks again", a83.rescan_devices()["ok"] and stops == ["stopped"])
+
+    @scenario66("where the click cannot go")
+    def _():
+        ok("every output can take the click when no card is on ASIO",
+           all(d["click_unavailable"] is None for d in a83.list_output_devices()))
+        hostapis = _sd.query_hostapis
+        _sd.query_hostapis = lambda: [{"name": "ASIO"}]
+        try:
+            listed = {d["index"]: d["click_unavailable"] for d in a83.list_output_devices()}
+            refused = a83.set_click_device(3)
+        finally:
+            _sd.query_hostapis = hostapis
+        ok("the recording card on ASIO: another ASIO card cannot take the click",
+           listed == {0: None, 2: another83, 3: another83})
+        ok("  and is refused as its device, in those words", refused == {"ok": False, "error": another83})
+        ok("  the click's device left as it was", a83.get_settings()["click_device_index"] is None)
+
+    @scenario66("the click and the player")
+    def _():
+        takes = a83._session_takes()
+        clicked = next(t for t in takes if t["click"])
+        plain = next(t for t in takes if t["tempo"] is None)
+        ok("the player's click switched on", a83.player_set_click(True)["ok"])
+        a83.player_open(clicked["tracks"])
+        ok("on as set, for the take opened, at its own tempo",
+           a83._player.state()["click"] is True and a83._player._take_click[:2] == (128, "4/4"))
+        a83.player_close()
+        a83.player_open(plain["tracks"])
+        ok("  and still on for the next take opened, which has no click of its own",
+           a83._player.state()["click"] is True and a83._player._take_click is None)
+        a83.player_close()
+        a83.metronome_set(120, "4/4")
+        a83.metronome_play()
+        ok("play between takes with the player closed: a stream of its own", a83._metronome._free.kind == "own")
+        a83.player_open(clicked["tracks"])
+        ok("the player opened on the click's output takes it into its own stream",
+           a83._metronome._free.kind == "player" and a83._player.free_click is a83._metronome._free.source)
+        a83.player_close()
+        ok("  and closed, gives it back a stream of its own",
+           a83._metronome._free is not None and a83._metronome._free.kind == "own")
+        a83.metronome_stop()
+        fresh = fresh_api(Path(tempfile.mkdtemp()))[1]
+        fresh.player_open(clicked["tracks"])
+        ok("in an app just started the player's click is off", fresh._player.state()["click"] is False)
+        fresh.shutdown()
+
+    @scenario66("Play on a song's page")
+    def _():
+        # The next take is Palyn's, at 120; 132 is typed in the row and held.
+        a83.metronome_set(132, "4/4")
+        played = a83.metronome_play(96, "3/4")
+        state = a83.metronome_state()
+        ok("a song's page plays its own tempo through the Api, and the screen shows it",
+           played["ok"] and (state["phase"], state["tempo"], state["signature"], state["per_bar"])
+           == ("preview", 96, "3/4", 3) and state["held"] is True)
+        a83.metronome_stop()
+        ok("  and once it stops, the row's held change is still there",
+           state83(a83, "phase", "tempo", "signature", "held") == ("idle", 132, "4/4", True))
+        ok("a tempo out of its range, or a signature not one of the four, is refused as the row's is",
+           a83.metronome_play(20, "4/4") == {"ok": False, "error": "A tempo in 4/4 is a whole number from 30 to 300"}
+           and a83.metronome_play(96, "5/4")["ok"] is False and a83.metronome_state()["phase"] == "idle")
+        ok("with no tempo it plays the row's, as before",
+           a83.metronome_play()["ok"] and state83(a83, "phase", "tempo") == ("preview", 132))
+        a83.metronome_stop()
+        a83.start_take()
+        ok("during a take it is refused", a83.metronome_play(96, "3/4") == {"ok": False, "error": "The take has its own click"})
+        feed83(a83, 4)
+        a83.discard_take(a83.stop_take()["temp_dir"])
+        a83.metronome_set(120, "4/4")
+
+    @scenario66("a click device not plugged in")
+    def _():
+        a83._config["click_device"] = {"name": "X18", "host_api": "CoreAudio"}
+        a83._config["click_device_index"] = 7
+        a83._metronome.devices_changed()
+        ok("its index in the settings is none, and its name is in the state",
+           a83.get_settings()["click_device_index"] is None and a83.metronome_state()["output_missing"] == "X18")
+        ok("  the settings name it as the unplugged device, which no output that will not open is",
+           a83.get_settings().get("click_device_missing") == "X18")
+        a83._config["click_device"] = {"host_api": "CoreAudio"}
+        a83._metronome.devices_changed()
+        ok("  one saved with no name: an empty name, and the screen says it without one",
+           a83.metronome_state()["output_missing"] == "")
+        a83.set_click_device(None)
+        ok("  and none once the click goes back to the player's output", a83.metronome_state()["output_missing"] is None)
+
+    @scenario66("drafts rescued after a restart")
+    def _():
+        # Two takes stopped and never kept, one to the click and one with the
+        # switch off, both at the row's 120. The app then starts again: what
+        # Stop said is gone, and each take.json is what is left.
+        a83.set_click_device(0)
+        a83.start_take()
+        feed83(a83, 16)
+        clicked = a83.stop_take()
+        a83.metronome_set_on(False)
+        a83.start_take()
+        feed83(a83, 16)
+        plain = a83.stop_take()
+        a83.metronome_set_on(True)
+        a83._meters.clear()
+        ok("the take with the switch off, its take.json read back: its tempo, and no click",
+           a83._meter_of_draft(plain["temp_dir"]) == {"tempo": 120, "signature": "4/4", "click": False})
+        rescued = [a83.recover_draft(t["temp_dir"]) for t in (clicked, plain)]
+        meters = [(r["take"]["tempo"], r["take"]["signature"], r["take"]["click"]) if r["ok"] else r
+                  for r in rescued]
+        ok("rescued, the click take keeps its tempo and its click", meters[0] == (120, "4/4", True))
+        ok("  and the other its tempo, with no click", meters[1] == (120, "4/4", False))
+        a83.set_click_device(None)
+
+    a83.shutdown()
+    capture83.RUN_ON_QUIET_SEC = quiet83
+
+    print("\n[84] The grid after a crop")
+    # A click take's crop starts on the bar line at or before the region and
+    # ends on the next quarter, or at the take's end, so its files still start
+    # on a bar and hold whole quarters (spec Part 9). Its .mid is cut the same,
+    # and it stays a click take. The cloud's mix carries its tempo; WAV copies
+    # are its files.
+    from rehearsal_recorder.audio.take_click import acid_of as acid_of84
+    from rehearsal_recorder.audio.wavfile import Acid as Acid84
+    from rehearsal_recorder.audio.wavfile import WavWriter as WavWriter84
+    from rehearsal_recorder.audio.wavfile import read_acid as read_acid84
+    from rehearsal_recorder.midi.smf import meter_of as meter_of84
+    from rehearsal_recorder.midi.smf import read_events as read_events84
+    from rehearsal_recorder.midi.smf import write_mid as write_mid84
+
+    a84 = api83()
+    home84 = a84._session["folder"]
+    key84 = (b"\x90\x3c\x40", b"\x80\x3c\x00")
+
+    def draft84(number, tempo, wav_tempo=True, signature="4/4"):
+        """A take as Stop leaves it: 12 s of Gtr.wav from its first click, each
+        sample saying which frame it is, a .mid with a key at 4.25 s, and
+        take.json with the click (none for a take with no tempo)."""
+        d = home84 / "_drafts" / f"take {number}"
+        d.mkdir(parents=True)
+        acid = acid_of84(tempo, signature) if tempo and wav_tempo else None
+        with WavWriter84(d / "Gtr.wav", SR, 1, 2, acid=acid) as w:
+            w.write((np.arange(12 * SR) % 30000).astype("<i2").tobytes())
+        tempo_us, meta = meter_of84(tempo, signature) if tempo else (500000, None)
+        write_mid84(d / "Keys.mid", track_name="Keys", port_name="", start=[],
+                    events=[(4.25, key84[0]), (4.5, key84[1])], tempo_us=tempo_us, time_signature=meta)
+        record = {"samplerate": SR, "bit_depth": 16, "tracks": [{"file": "Gtr", "name": "Gtr", "channels": 1}],
+                  "notes": []}
+        if tempo:
+            record["click"] = {"tempo": tempo, "signature": signature, "on": True, "wav_tempo": wav_tempo,
+                               "first_click_frame": 9600, "end_frame": 9600 + 12 * SR}
+        (d / "take.json").write_text(json.dumps(record), encoding="utf-8")
+        a84._session["take_counter"] = number
+        return d, [{"name": "Gtr", "file": str(d / "Gtr.wav")}], [{"name": "Keys", "file": str(d / "Keys.mid")}]
+
+    def kept84(number, name, tempo, wav_tempo=True, markers=None, signature="4/4"):
+        d, tracks, notes = draft84(number, tempo, wav_tempo, signature)
+        return a84.keep_take(number, str(d), name, 12.0, tracks, markers=markers, notes=notes)["take"]
+
+    def frames84(path):
+        with wave.open(str(path), "rb") as w:
+            return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2")
+
+    def keys84(path):
+        """The .mid's key, as (ticks at 1920 to the second, bytes), and its meter."""
+        names, events = read_events84(path)
+        return [(round(sec * 1920), data) for sec, data in events], names.get("time_signature")
+
+    @scenario66("a saved click take")
+    def _():
+        take = kept84(1, "Palyn", 120, markers=[{"at": 2.5}, {"at": 3.0}])
+        ok("a stopped take with the click in its take.json is kept as a click take at 120",
+           (take["tempo"], take["signature"], take["click"]) == (120, "4/4", True))
+        cut = a84.crop_take(str(home84), 1, 3.3, 10.2)
+        gtr = frames84(cut["take"]["tracks"][0]["file"])
+        # The cut's edges fade over 5 ms, so its frames are read past that.
+        ok("3.3 to 10.2 s at 120 in 4/4 is cut 2.0 to 10.5 s, and says so",
+           cut["ok"] and (cut["start_sec"], cut["end_sec"]) == (2.0, 10.5)
+           and len(gtr) == round(8.5 * SR) and gtr[480] == (2 * SR + 480) % 30000)
+        ok("  still a click take at 120, 8.5 s long",
+           (cut["take"]["tempo"], cut["take"]["click"], cut["take"]["duration_sec"]) == (120, True, 8.5))
+        ok("  its WAV carries the tempo still, its beats counted again",
+           read_acid84(cut["take"]["tracks"][0]["file"]) == Acid84(120.0, 4, 4))
+        ok("  its .mid cut at the same 2.0 s, the key now at 2.25 s, its meter kept",
+           keys84(cut["take"]["notes"][0]["file"]) == ([(4320, key84[0]), (4800, key84[1])], (4, 2, 24, 8)))
+        ok("  and its marks moved by the cut as made: 2.5 and 3.0 s are at 0.5 and 1.0 s",
+           [m["at"] for m in cut["take"]["markers"]] == [0.5, 1.0] and cut["markers_dropped"] == 0)
+
+    @scenario66("click takes without a tempo in their WAVs, and takes with no tempo")
+    def _():
+        kept84(2, "Ahon", 120, wav_tempo=False)
+        cut = a84.crop_take(str(home84), 2, 3.3, 10.2)
+        ok("a click take whose WAVs carry no tempo is cut on its grid, and they carry none after",
+           (cut["start_sec"], cut["end_sec"]) == (2.0, 10.5) and read_acid84(cut["take"]["tracks"][0]["file"]) is None)
+        kept84(3, "Vesna", None)
+        cut = a84.crop_take(str(home84), 3, 3.3, 10.2)
+        gtr = frames84(cut["take"]["tracks"][0]["file"])
+        ok("a take with no tempo is cut where it was asked", cut["ok"] and (cut["start_sec"], cut["end_sec"]) == (3.3, 10.2)
+           and len(gtr) == round(6.9 * SR) and gtr[480] == (round(3.3 * SR) + 480) % 30000)
+
+    @scenario66("a draft")
+    def _():
+        d, tracks, notes = draft84(4, 120)
+        cut = a84.crop_draft(str(d), tracks, 3.3, 10.2, notes=notes)
+        ok("a stopped click take not yet kept is cut on its grid the same",
+           cut["ok"] and (cut["start_sec"], cut["end_sec"], cut["duration_sec"]) == (2.0, 10.5, 8.5)
+           and len(frames84(d / "Gtr.wav")) == round(8.5 * SR) and read_acid84(d / "Gtr.wav") == Acid84(120.0, 4, 4))
+        ok("  its .mid too", keys84(d / "Keys.mid")[0] == [(4320, key84[0]), (4800, key84[1])])
+        take = a84.keep_take(4, str(d), "Palyn", cut["duration_sec"], tracks, notes=notes)["take"]
+        ok("  and kept, it is a click take at 120", (take["tempo"], take["click"]) == (120, True))
+
+    @scenario66("a take in 6/8")
+    def _():
+        take = kept84(5, "Dym", 240, signature="6/8")
+        cut = a84.crop_take(str(home84), 5, 4.6, 10.6)
+        gtr = frames84(cut["take"]["tracks"][0]["file"])
+        # At 240 in 6/8 a bar is six eighths, 1.5 s, and a quarter two, 0.5 s.
+        # Read as 4/4, the same region would be cut 4.0 to 10.75 s.
+        ok("a take kept in 6/8 at 240 is cut on its own grid: 4.6 to 10.6 s is 4.5 to 11.0 s",
+           (take["tempo"], take["signature"], take["click"]) == (240, "6/8", True)
+           and cut["ok"] and (cut["start_sec"], cut["end_sec"]) == (4.5, 11.0)
+           and len(gtr) == round(6.5 * SR) and gtr[480] == (round(4.5 * SR) + 480) % 30000)
+        ok("  its WAV still saying 120 quarters a minute in 6/8",
+           read_acid84(cut["take"]["tracks"][0]["file"]) == Acid84(120.0, 6, 8))
+
+    @scenario66("a region to the take's end, and a draft whose take.json went aside")
+    def _():
+        d, tracks, notes = draft84(6, 225, signature="6/8")
+        # At 225 in 6/8 a bar is 1.6 s and a quarter 0.53 s: the take's 12 s
+        # end half way through a quarter, so a region to 11.9 s ends at 12.0 s.
+        cut = a84.crop_draft(str(d), tracks, 4.6, 11.9, notes=notes)
+        ok("a region ending in the take's last part of a quarter ends at the take's end: 3.2 to 12.0 s",
+           cut["ok"] and (cut["start_sec"], cut["end_sec"], cut["duration_sec"]) == (3.2, 12.0, 8.8)
+           and len(frames84(d / "Gtr.wav")) == round(8.8 * SR))
+        # A crop puts take.json aside with a notes file not yet made, and the
+        # app started again forgets what Stop said: the WAV's tempo is left.
+        (d / "take.json").unlink()
+        a84._meters.clear()
+        ok("a draft with no take.json is a click take by its WAV's tempo: 225 in 6/8",
+           a84._meter_of_draft(d) == {"tempo": 225, "signature": "6/8", "click": True})
+        take = a84.keep_take(6, str(d), "Dym", cut["duration_sec"], tracks, notes=notes)["take"]
+        ok("  and kept as one", (take["tempo"], take["signature"], take["click"]) == (225, "6/8", True))
+
+    @scenario66("the cloud")
+    def _():
+        a84._config["cloud_dir"] = str(Path(tempfile.mkdtemp()) / "cloud")
+        a84._config["cloud_format"] = "wav"
+        copied = a84._copy_to_cloud(home84, 1, "both")
+        take = a84._lib.take(home84, 1)
+        ok("the cloud's mix of a click take carries its tempo",
+           copied["ok"] and read_acid84(copied["cloud"]["mix"]) == Acid84(120.0, 4, 4))
+        ok("  and its WAV copies are the take's files, byte for byte",
+           (Path(copied["cloud"]["tracks"]) / "Gtr.wav").read_bytes() == Path(take["tracks"][0]["file"]).read_bytes())
+        copied = a84._copy_to_cloud(home84, 3, "mix")
+        ok("the mix of a take with no tempo carries none", copied["ok"] and read_acid84(copied["cloud"]["mix"]) is None)
+
+    @scenario66("renaming and merging")
+    def _():
+        renamed = a84.rename_take(str(home84), 1, "Zorka")
+        ok("a click take renamed to a new song gives it its tempo, and keeps its own",
+           renamed["ok"] and (a84._lib.tempo_for("Zorka")["song"]["tempo"], a84._lib.take(home84, 1)["tempo"]) == (120, 120))
+        merged = a84.merge_songs(a84._lib.song_id("Zorka"), a84._lib.song_id("Vesna"))
+        ok("merged into a song with no tempo, that song takes it",
+           merged["ok"] and a84._lib.tempo_for("Vesna")["song"]["tempo"] == 120)
+        a84.set_song_tempo(a84._lib.song_id("Ahon"), 96, "4/4")
+        merged = a84.merge_songs(a84._lib.song_id("Vesna"), a84._lib.song_id("Ahon"))
+        ok("  and a song with a tempo keeps its own", merged["ok"] and a84._lib.tempo_for("Ahon")["song"]["tempo"] == 96)
+
+    @scenario66("a WAV's rate")
+    def _():
+        path = Path(tempfile.mkdtemp()) / "rate.wav"
+        with WavWriter84(path, 48000.0, 1, 2) as w:
+            w.write(b"\x00\x00" * 10)
+        with wave.open(str(path), "rb") as r:
+            ok("a WAV written at a rate given as 48000.0 says 48000", r.getframerate() == 48000)
+
+    a84.shutdown()
+
+    print("\n[85] Counting and tapping through the Api")
+    # A song's tempo counted from one of its takes (spec Part 10) and set on its
+    # page; Tap's pad hits (Part 11), outside a rehearsal from the band's own
+    # ports, opened as the signal check opens them and given back after the pause.
+    from fake_midi import FakePortSystem as Fake85
+    from rehearsal_recorder.audio.click import Voices as Voices85
+    from rehearsal_recorder.audio.click import click_frame as cf85
+    from rehearsal_recorder.audio.click import mix_clicks as mix_clicks85
+    from rehearsal_recorder.midi.ports import PortInfo as Port85
+
+    a85 = api83()
+    home85 = a85._session["folder"]
+
+    def kept85(number, name, tempo):
+        """A take of 12 s of the woodblock at `tempo` in 4/4, or of silence for none."""
+        d = home85 / "_drafts" / f"take {number}"
+        d.mkdir(parents=True)
+        out = np.zeros((12 * SR, 1), np.float32)
+        if tempo:
+            starts = [(cf85(k, tempo, SR), 2 if k % 4 == 0 else 0) for k in range(tempo // 5)]
+            mix_clicks85(out, 0, [s for s in starts if s[0] < len(out)], Voices85("wood", SR, 0.7), (0,))
+        write = (out[:, 0] * 32767).astype("<i2")
+        with wave.open(str(d / "Gtr.wav"), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(SR)
+            w.writeframes(write.tobytes())
+        a85._session["take_counter"] = number
+        return a85.keep_take(number, str(d), name, 12.0, [{"name": "Gtr", "file": str(d / "Gtr.wav")}])["take"]
+
+    @scenario66("counting a take")
+    def _():
+        kept85(1, "Palyn", 120)
+        ok("count_tempo counts a take's tempo: 120", a85.count_tempo(str(home85), 1, "4/4") == {"ok": True, "tempo": 120})
+        ok("a signature that is none of the four is refused", a85.count_tempo(str(home85), 1, "5/4")["ok"] is False)
+        ok("and a take that is not there", a85.count_tempo(str(home85), 9, "4/4")["ok"] is False)
+        kept85(2, "Ahon", None)
+        quiet = a85.count_tempo(str(home85), 2, "4/4")
+        ok("a take of silence has none to give, and says so", quiet["ok"] is False and quiet["error"])
+        Path(a85._lib.take(home85, 1)["tracks"][0]["file"]).unlink()
+        missing = a85.count_tempo(str(home85), 1, "4/4")
+        ok("a take whose file is gone says which", missing["ok"] is False and "Gtr.wav" in missing["error"])
+
+    @scenario66("a song's tempo")
+    def _():
+        song = a85._lib.song_id("Palyn")
+        ok("a tempo out of its range is refused, in the library's words",
+           a85.set_song_tempo(song, 400, "4/4") == {"ok": False, "error": "A tempo in 4/4 is a whole number from 30 to 300"})
+        ok("  and a signature that is none of the four",
+           a85.set_song_tempo(song, 120, "5/4") == {"ok": False, "error": "The time signature is one of 4/4, 3/4, 2/4 and 6/8"})
+        ok("  and a song that is not there", a85.set_song_tempo(99999, 120, "4/4")["ok"] is False)
+        a85.set_next_take_name("Palyn")
+        saved = a85.set_song_tempo(song, 198, "6/8")
+        ok("a tempo saved is the song's, and the row's while the next take is the song",
+           saved["ok"] and (saved["tempo"], saved["signature"]) == (198, "6/8")
+           and state83(a85, "tempo", "signature", "held") == (198, "6/8", False))
+        here = a85.song_choices()["here"]
+        ok("  and the songs offered for a take's name carry it",
+           [(c["song"], c["tempo"], c["signature"]) for c in here] == [("Palyn", 198, "6/8"), ("Ahon", None, None)])
+        ok("none takes it away", a85.set_song_tempo(song, None, None)["ok"]
+           and a85._lib.tempo_for("Palyn")["song"]["tempo"] is None and a85.metronome_state()["tempo"] is None)
+
+    a85.shutdown()
+
+    @scenario66("tapping outside a rehearsal")
+    def _():
+        td17 = Port85("TD-17", "TD-17", "Roland")
+        fake = Fake85([td17])
+        real_open = apimod83.open_midi_system
+        timing = (getattr(apimod83, "TAP_QUIET_SEC", None), getattr(apimod83, "TAP_POLL_SEC", None))
+        apimod83.open_midi_system = lambda: (fake, None)
+        # A pause of 0.2 s, not 2, for the ports to be given back.
+        apimod83.TAP_QUIET_SEC, apimod83.TAP_POLL_SEC = 0.2, 0.01
+        try:
+            a = fresh_api(Path(tempfile.mkdtemp()))[1]
+            band = [{"name": "Gtr", "channel": 1}, {"name": "Drums", "channel": 2, "mode": "both",
+                                                     "midi_port": td17.saved()}]
+            a.save_default_tracks({"device_index": 0, "tracks": band})
+            ok("no port is open outside a rehearsal", not fake.open_ports)
+            real_use = a._midi.use
+
+            def half_open(tracks, check=False):
+                real_use(tracks, check)
+                raise OSError("the system refused")
+
+            a._midi.use = half_open
+            try:
+                refused = a.metronome_tap_listen()
+            finally:
+                a._midi.use = real_use
+            ok("ports that will not open: Tap is told why, and none is left open",
+               refused == {"ok": False, "error": "The band's MIDI ports could not be opened: the system refused"}
+               and not fake.open_ports and not a._midi.listening())
+            ok("Tap on a song's page opens the band's ports",
+               a.metronome_tap_listen()["ok"] and sorted(p.info.name for p in fake.open_ports) == ["TD-17"])
+            fake.send("TD-17", time.perf_counter_ns(), bytes([0x99, 38, 100]))
+            a._midi.drain()
+            taps = a.metronome_taps()["ms_ago"]
+            ok("a pad's hit is a tap, said as how long ago", len(taps) == 1 and 0 <= taps[0] < 1000)
+            ok("  and handed over once", a.metronome_taps() == {"ms_ago": []})
+            deadline = time.monotonic() + 3
+            while fake.open_ports and time.monotonic() < deadline:
+                time.sleep(0.01)
+            ok("after the pause the ports are given back", not fake.open_ports and not a._midi.listening())
+            a.start_rehearsal("Evening", 0, SR, band, 16)
+            a.metronome_tap_listen()
+            time.sleep(0.4)
+            ok("in a rehearsal they are the rehearsal's, and stay open after the pause",
+               sorted(p.info.name for p in fake.open_ports) == ["TD-17"])
+            a.shutdown()
+        finally:
+            apimod83.open_midi_system = real_open
+            for name, value in zip(("TAP_QUIET_SEC", "TAP_POLL_SEC"), timing):
+                if value is None:
+                    if hasattr(apimod83, name):
+                        delattr(apimod83, name)
+                else:
+                    setattr(apimod83, name, value)
 
     print("\n" + "=" * 60)
     if problems:

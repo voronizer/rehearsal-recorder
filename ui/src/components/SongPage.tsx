@@ -23,6 +23,7 @@ import { OldNames } from "@/components/OldNames"
 import { PaneHead } from "@/components/PaneHead"
 import { TakeRow } from "@/components/RehearsalOverview"
 import { SongLadder } from "@/components/SongLadder"
+import { SongTempoRow } from "@/components/metronome/SongTempoRow"
 import { TakeTitle } from "@/components/TakeTitle"
 
 /**
@@ -30,8 +31,8 @@ import { TakeTitle } from "@/components/TakeTitle"
  * from every rehearsal. Its head is the pane head the rehearsal's page has:
  * the ▶ that plays the take worth hearing first (the newest ★ one, or the
  * last) from a rehearsal on disk, the title with the pencil for Rename song,
- * how much it was played and when, what ▶ plays, and the names it is also
- * typed as, each to forget.
+ * how much it was played and when, what ▶ plays, the names it is also
+ * typed as, each to forget, and its tempo (SongTempoRow).
  *
  * Under the head, one group, its parts split by lines: the ★ takes on their
  * own, then what the band marked on the song last time, then every take as a
@@ -219,6 +220,19 @@ export function SongPage({
               )}
             </p>
             {!unnamed && <OldNames names={page.also ?? []} onForget={onForgetName} />}
+            {/* Its tempo, under what it is: changed here, saved at once. */}
+            {!unnamed && page.id != null && page.title != null && (
+              <SongTempoRow
+                key={page.id}
+                song={{
+                  id: page.id,
+                  title: page.title,
+                  tempo: page.tempo ?? null,
+                  signature: page.signature ?? null,
+                }}
+                takes={goes}
+              />
+            )}
           </>
         }
       />

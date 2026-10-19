@@ -9,13 +9,13 @@ Memory stays bounded — the tracks are read in chunks through the same memmap
 the player uses, so a twenty-minute take costs no more than a short one.
 """
 
-import wave
 from pathlib import Path
 
 import numpy as np
 
 from rehearsal_recorder.audio.format import unpack24
 from rehearsal_recorder.audio.player import _open_track
+from rehearsal_recorder.audio.wavfile import WavWriter
 
 CHUNK = 1 << 16
 
@@ -25,10 +25,11 @@ CHUNK = 1 << 16
 TARGET_PEAK = 0.97
 
 
-def mixdown(tracks, out_path, volumes=None, progress=None):
+def mixdown(tracks, out_path, volumes=None, progress=None, acid=None):
     """
     tracks:  [{"name":.., "file":..}] — the tracks of one take
     volumes: {name: 0..1}, the balance from the player; missing names get 1.0
+    acid:    a click take's tempo (audio/wavfile.Acid), for the mix to carry
 
     Returns {"ok", "file", "duration_sec", "gain"}. gain is what had to be
     applied to keep the mix from clipping: 1.0 means nothing was touched.
@@ -77,14 +78,11 @@ def mixdown(tracks, out_path, volumes=None, progress=None):
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with wave.open(str(out_path), "wb") as w:
-        w.setnchannels(2)
-        w.setsampwidth(2)
-        w.setframerate(samplerate)
+    with WavWriter(out_path, samplerate, 2, 2, acid) as w:
         for start in range(0, total, CHUNK):
             acc = _sum_chunk(opened, start, min(CHUNK, total - start)) * gain
             out = np.clip(np.rint(acc), -32768, 32767).astype("<i2")
-            w.writeframes(out.tobytes())
+            w.write(out.tobytes())
             if progress is not None:
                 progress(0.5 + 0.5 * min(start + CHUNK, total) / total)
 

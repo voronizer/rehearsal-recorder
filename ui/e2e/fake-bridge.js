@@ -18,6 +18,7 @@ const track = (name, fn) => async (...args) => {
 
 const clock = () => performance.now() / 1000;
 let P = null;                 // player state, mirroring audio/player.py
+let playerClick = false;       // player_set_click: off in a fresh app, kept from take to take
 let session = null;
 let controlSequence = 0;
 let controlEvents = [];
@@ -110,7 +111,7 @@ function playerState() {
   if (!P) return {open:false};
   return {open:true, ok:true, playing:P.playing, position:position(), duration:P.duration,
           loop:P.loop, muted:P.muted, soloed:P.soloed, volumes:P.volumes, master:P.master,
-          levels:levels(), master_level:masterLevel()};
+          levels:levels(), master_level:masterLevel(), click:playerClick};
 }
 function moveTo(t) { P.position = Math.max(0, Math.min(P.duration, t)); P.t0 = clock(); }
 
@@ -171,6 +172,7 @@ function keepMarks(folder, n, take) {
 async function cropPast(folder, n, a, b) {
   const take = await markedTake(folder, n);
   if (!take) return {ok:false, error:'Take not found'};
+  [a, b] = cutAt(take, a, b, take.duration_sec);
   const key = `${folder}#${n}`;
   const was = {crop: pastCrops[key], marks: pastMarks[key]};
   let dropped = 0;
@@ -190,7 +192,7 @@ async function cropPast(folder, n, a, b) {
     return {kind:'crop', folder, take_numbers:[n]};
   }, {folder, takes:[n], crop:true});
   return JSON.parse(JSON.stringify({ok:true, take:{...take, duration_sec: b - a, tracks, markers},
-    markers_dropped:dropped, undo, ended}));
+    markers_dropped:dropped, undo, ended, start_sec:a, end_sec:b}));
 }
 
 // The library's labels, in their order, as list_labels gives them: the four
@@ -324,6 +326,7 @@ function pastRehearsal(folder) {
 // First rehearsal after its two, 200 s each, read by this alone.
 function goneTakes() {
   const take = (n, name, song, go, length) => ({take_number:n, name, song, go,
+    ...meterOf(song),
     duration_sec:length, starred: stars.has(`/rec/gone#${n}`),
     markers: window.__MORE_MARKS__ && n === 1 ? [{at:60, note:'late again', label_id:3}] : [],
     tracks:[{name:'Guitar', file:`/rec/gone/t${n}.wav`}]});
@@ -337,9 +340,10 @@ function withExtraSongs(r) {
   const takes = [...r.takes];
   for (const name of window.__EXTRA_SONGS__ || []) {
     const n = takes.length + 1;
+    const named = resolved(name, takes, n);
     takes.push({take_number:n, duration_sec:200, markers:[],
       tracks:[{name:'Guitar', file:`${r.folder}/x${n}.wav`}],
-      ...resolved(name, takes, n), starred: stars.has(`${r.folder}#${n}`)});
+      ...meterOf(named.song), ...named, starred: stars.has(`${r.folder}#${n}`)});
   }
   return {...r, takes};
 }
@@ -525,6 +529,32 @@ const REPERTOIRE = ['Pałyn', 'Viasna', 'Ahoń', 'Sonca', 'Dym', 'Ptuška', 'Dar
 // to it (window.__MORE_SONGS__ = ['Opus', …]), played at other rehearsals.
 let repertoire = [...REPERTOIRE, ...(window.__MORE_SONGS__ || [])];
 
+// The tempo each song of the repertoire has and the signature it is counted
+// in, by title as the library keeps them with the song (a 6/8 song's tempo
+// counts eighths). Dym and Ptuška have none: their first take kept to the
+// click gives them one. A page can change them, a song to its tempo or to
+// null for none: window.__SONG_TEMPOS__ = {Dym: {tempo: 104, signature:
+// '4/4'}, Sonca: null}.
+const songTempos = new Map(Object.entries({
+  'Pałyn': {tempo: 128, signature: '4/4'}, 'Viasna': {tempo: 128, signature: '4/4'},
+  'Ahoń': {tempo: 198, signature: '6/8'}, 'Sonca': {tempo: 96, signature: '3/4'},
+  'Daroha': {tempo: 118, signature: '4/4'},
+  ...(window.__SONG_TEMPOS__ || {}),
+}).filter(([, own]) => own));
+// What a song page and a list carry of it.
+const tempoOf = (title) => {
+  const own = title ? songTempos.get(title) : null;
+  return {tempo: own ? own.tempo : null, signature: own ? own.signature : null};
+};
+// What the metronome gave a take in the fixtures: one of a song with a tempo
+// was recorded to the click at it, any other has none. A fixture says
+// otherwise with tempo, signature and click of its own.
+const NO_METER = {tempo: null, signature: null, click: false};
+const meterOf = (title) => {
+  const own = title ? songTempos.get(title) : null;
+  return own ? {tempo: own.tempo, signature: own.signature, click: true} : NO_METER;
+};
+
 // Python groups takes by the song each is a go at (api._songs_of) and hands
 // the result over; the mock does the same.
 function songsOf(takes) {
@@ -693,10 +723,13 @@ function resolved(text, takes, n) {
 // sends.
 function asSent(takes) {
   const out = [];
-  for (const t of takes) out.push({
-    ...t, ...resolved(t.name, out, t.take_number),
-    markers: (t.markers || []).map(m => ({...m, label_id: labelIdOf(m.label_id)})),
-  });
+  for (const t of takes) {
+    const named = resolved(t.name, out, t.take_number);
+    out.push({
+      ...meterOf(named.song), ...t, ...named,
+      markers: (t.markers || []).map(m => ({...m, label_id: labelIdOf(m.label_id)})),
+    });
+  }
   return out;
 }
 
@@ -716,6 +749,245 @@ const fieldText = (r) => r.song || r.name;
 // Mirrors api.suggest_take_name: n is the take being named, left out it means
 // the one that comes next.
 function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); }
+
+// ---- The metronome ------------------------------------------------------
+// The Python side of the metronome (spec Parts 2 to 5 and 11). The row's tempo
+// and signature live here, not in the screen: they follow the song the next
+// take is named for, a change made in the row is held until that name names
+// another song, and Record reads them (start_take takes none). A take counts
+// in and clicks by the clock; metronome_state says where it is and lists the
+// clicks heard in the next 1.5 s, which is all the screen lights. A page can
+// set up, before it loads (the songs' tempos are window.__SONG_TEMPOS__, above):
+//   window.__CLICK_MISSING__ = 'X18'      the click's output is not there
+//   window.__CLICK_UNAVAILABLE__ = {3: 'why'}  outputs the click cannot use, by
+//                                         index (by default, with __HOST_API__,
+//                                         the ASIO desk)
+//   window.__COUNT_ERROR__ = 'No files'   count_tempo fails with it
+//   window.__TAKE_LATE_MS__ = 500         for this long after Record, metronome_state
+//                                         still answers as between takes
+//   window.__COUNT_IN_LATE_MS__ = 1500    a click take's first click is chosen
+//                                         this long after Record, as on another
+//                                         device: till then it says `count`
+//                                         with no count-in time
+//   window.__PAD_TAP__()                  a hit on a pad: a tap, while the screen
+//                                         has asked to hear them
+//   window.__TAP_ERROR__ = 'X18 is busy'  the band's ports will not open for Tap
+//   window.__CROP_ON_GRID__ = true        a click take's crop is cut on its grid, as
+//                                         Python cuts one whose files it reads: the
+//                                         start back to the bar line, the end on to
+//                                         the next quarter. Without it the fake's
+//                                         takes are cut as asked, as Python cuts a
+//                                         take whose audio it cannot read.
+// and a test can change them while it runs.
+const PER_BAR = {'4/4': 4, '3/4': 3, '2/4': 2, '6/8': 6};
+const tempoBounds = (signature) => (signature === '6/8' ? [60, 600] : [30, 300]);
+const signatureRefusal = (signature) =>
+  PER_BAR[signature] ? null : 'Pick one of 4/4, 3/4, 2/4 or 6/8';
+const tempoRefusal = (tempo, signature) => {
+  const [low, high] = tempoBounds(signature);
+  return signatureRefusal(signature) || (Number.isInteger(tempo) && tempo >= low && tempo <= high
+    ? null : `A tempo in ${signature} is a whole number from ${low} to ${high}`);
+};
+const CLICK_SOUNDS = ['click', 'wood', 'hihat'];
+// Where a crop of a take with this meter cuts it (api._on_grid, snap_region):
+// a click take's region on its grid with __CROP_ON_GRID__, else as asked.
+function cutAt(meter, a, b, duration) {
+  if (!window.__CROP_ON_GRID__ || !meter || !meter.click || !meter.tempo) return [a, b];
+  const click = 60 / meter.tempo, bar = PER_BAR[meter.signature] * click;
+  const quarter = (meter.signature === '6/8' ? 2 : 1) * click;
+  const start = Math.floor(a / bar + 1e-9) * bar;
+  return [start, Math.min(duration, Math.ceil(b / quarter - 1e-9) * quarter)];
+}
+// What set_metronome_setting takes, and what each setting may be.
+const CLICK_SETTINGS = {
+  click_sound: (v) => CLICK_SOUNDS.includes(v),
+  click_volume: (v) => typeof v === 'number' && v >= 0 && v <= 1,
+  count_in_bars: (v) => [0, 1, 2].includes(v),
+  tempo_in_wav: (v) => typeof v === 'boolean',
+};
+// What a quarter counts at, by song, when counting a tempo from a take.
+const COUNTED = {'Dym': 104, 'Ptuška': 86};
+
+const metro = {
+  session: undefined,    // the rehearsal the row belongs to
+  followed: undefined,   // the song it follows, lower case; '' for a take that is no song's
+  tempo: null, signature: '4/4',
+  run: null,             // the click running between takes: {grid}
+  take: null,            // the take recording: {tempo, signature, click, said, grid, countEnd},
+                         // said: from when metronome_state tells of it
+  meters: {},            // each take's tempo, signature and click, by number, till it is kept
+  tapUntil: 0, taps: [],
+};
+const clickOn = () => readCfg().metronome_on !== false;
+
+// Clicks fall on a grid: click k is at t0 + k * period, and has index
+// (index + k) mod perBar in its bar.
+const gridOf = (tempo, signature, t0) =>
+  ({t0, index: 0, period: 60 / tempo, perBar: PER_BAR[signature]});
+const firstClick = (g, now) => Math.max(0, Math.ceil((now - g.t0) / g.period - 1e-9));
+// The clicks heard in the next 1.5 s: [ms from now, index in the bar].
+function clicksIn(g, now) {
+  const out = [];
+  for (let k = firstClick(g, now); ; k++) {
+    const ms = (g.t0 + k * g.period - now) * 1000;
+    if (ms > 1500) break;
+    out.push([ms, (g.index + k) % g.perBar]);
+  }
+  return out;
+}
+
+// The row is set; the click running between takes follows from its next
+// click, in the same bar unless the signature changes (it then restarts on
+// 1), and stops when the tempo goes.
+function metroApply(tempo, signature) {
+  // A song page's click plays its own tempo, whatever the row does.
+  if (metro.run && !metro.run.fixed) {
+    if (tempo === null) metro.run = null;
+    else {
+      const g = metro.run.grid, k = firstClick(g, clock());
+      metro.run.grid = {t0: g.t0 + k * g.period,
+        index: signature === metro.signature ? (g.index + k) % g.perBar : 0,
+        period: 60 / tempo, perBar: PER_BAR[signature]};
+    }
+  }
+  metro.tempo = tempo;
+  metro.signature = signature;
+}
+
+// Metronome.follow: each time the next take's name names another song, or
+// none, the row takes the tempo and signature that go with it; the same song
+// again (a keystroke in its name) leaves it, a held change included.
+function metroFollow() {
+  if (metro.session !== session) {
+    Object.assign(metro, {session, followed: undefined, run: null, take: null});
+  }
+  const song = nextTake().song;
+  const key = song ? song.toLowerCase() : '';
+  if (metro.followed === key) return;
+  metro.followed = key;
+  const own = song ? songTempos.get(song) : null;
+  metroApply(own ? own.tempo : null, own ? own.signature : '4/4');
+}
+
+// A song as the library has it, or null for a title it does not know yet:
+// one the library plays, the repertoire lists or a page gave a tempo.
+async function songRow(title) {
+  const all = await libraryNow();
+  const lower = title.toLowerCase();
+  const played = [...all.flatMap(r => r.takes), ...(session ? session.takes : [])]
+    .some(t => t.song === title);
+  const listed = [...repertoire, ...(window.__TAKELESS_SONGS__ || [])]
+    .some(s => s.toLowerCase() === lower);
+  songIds(all);
+  if (!played && !listed && !songTempos.has(title) && !knownIds.has(title)) return null;
+  if (!knownIds.has(title)) knownIds.set(title, Math.max(0, ...knownIds.values()) + 1);
+  return {id: knownIds.get(title), title, ...tempoOf(title)};
+}
+
+// Library.tempo_for's last take: the song's newest, on disk.
+async function lastTakeOf(title) {
+  const rehearsals = [...(session ? [{folder:session.folder, takes:session.takes}] : []),
+                      ...(await libraryNow()).filter(r => !r.missing)];
+  for (const r of rehearsals) {
+    const t = [...r.takes].reverse().find(x => x.song === title);
+    if (t) return {folder:r.folder, take_number:t.take_number, name:t.name};
+  }
+  return null;
+}
+
+async function metroState() {
+  metroFollow();
+  const now = clock(), song = nextTake().song;
+  const take = metro.take && now >= metro.take.said ? metro.take : null;
+  const own = song ? songTempos.get(song) : null;
+  const out = {phase:'idle', tempo:metro.tempo, signature:metro.signature, on:clickOn(),
+    case: !song ? 'free' : own ? 'song' : 'song_without', song:null, held:false, last_take:null,
+    upcoming:[], count:0, since_count_in_ms:null, output_missing:window.__CLICK_MISSING__ || null};
+  if (song) {
+    out.song = await songRow(song);
+    out.last_take = await lastTakeOf(song);
+  }
+  // As Metronome._held: a tempo of the row's own, for a song the library
+  // has. An emptied row, and a title no song has yet, hold nothing.
+  out.held = out.song !== null && out.tempo !== null
+    && (out.case === 'song' ? out.tempo !== own.tempo || out.signature !== own.signature
+      : out.case === 'song_without');
+  if (take) {
+    // The row cannot change under a take: what it shows is the take's.
+    Object.assign(out, {phase:'take', tempo:take.tempo, signature:take.signature});
+    if (take.click && now < take.grid.t0) {
+      // The first click is not chosen yet: no time, and nothing to hear.
+      out.phase = 'count';
+    } else if (take.click) {
+      out.since_count_in_ms = (now - take.countEnd) * 1000;
+      if (now < take.countEnd) {
+        out.phase = 'count';
+        out.count = Math.floor((now - take.grid.t0) / take.grid.period + 1e-9) + 1;
+      }
+      // The switch silences the clicks of a take that has them, and the
+      // count goes on.
+      if (out.on) out.upcoming = clicksIn(take.grid, now);
+    }
+  } else if (metro.run) {
+    out.phase = 'preview';
+    out.upcoming = clicksIn(metro.run.grid, now);
+    // A song page's ▶: the tempo heard, the row's left as it is.
+    if (metro.run.fixed) Object.assign(out, metro.run.fixed);
+  }
+  out.per_bar = PER_BAR[out.signature];
+  return out;
+}
+
+// Record: the free click stops, and the take counts in and clicks at the row's
+// tempo, unless the row is empty or the switch off (a take with a tempo and
+// no click keeps the tempo).
+function metroStartTake(number) {
+  metroFollow();
+  metro.run = null;
+  const {tempo, signature} = metro, click = tempo !== null && clickOn();
+  const bars = readCfg().count_in_bars ?? 1;
+  const t0 = clock() + (click ? (window.__COUNT_IN_LATE_MS__ || 0) / 1000 : 0);
+  metro.meters[number] = {tempo, signature: tempo === null ? null : signature, click};
+  metro.take = {tempo, signature, click, said: clock() + (window.__TAKE_LATE_MS__ || 0) / 1000,
+    grid: click ? gridOf(tempo, signature, t0) : null,
+    countEnd: click ? t0 + bars * PER_BAR[signature] * 60 / tempo : null};
+}
+// Stop: the click ends. What it leaves is what stop_take says of the take.
+function metroStop() {
+  metro.take = null;
+  return {...(metro.meters[takeCounter] || NO_METER)};
+}
+// A song with no tempo takes a take's: the first click take of it that is
+// kept (a false start thrown away gives nothing), and a take with a tempo that
+// is renamed for it.
+function metroGives(take) {
+  if (take.song && !songTempos.has(take.song))
+    songTempos.set(take.song, {tempo: take.tempo, signature: take.signature});
+}
+
+// The outputs there are: a Windows machine's with __HOST_API__, else a Mac's.
+const outputDevices = () => window.__HOST_API__ ? [
+  {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
+   max_output_channels:2, default_samplerate:48000},
+  {index:3, name:'X32 USB', host_api:'ASIO', max_input_channels:16,
+   max_output_channels:16, default_samplerate:48000}] : [
+  {index:0, name:'UA Monitors', host_api:'Core Audio', max_input_channels:0,
+   max_output_channels:2, default_samplerate:48000},
+  {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
+   max_output_channels:2, default_samplerate:48000}];
+
+// Why the click cannot play through an output, by device index.
+const clickReasons = () => window.__CLICK_UNAVAILABLE__
+  || (window.__HOST_API__ ? {3: "Another ASIO card can't play while one records."} : {});
+const withClickReason = (devices) =>
+  devices.map(d => ({...d, click_unavailable: clickReasons()[d.index] ?? null}));
+
+window.__PAD_TAP__ = () => {
+  if (clock() > metro.tapUntil) return;
+  metro.taps.push(clock());
+  metro.tapUntil = clock() + 2;
+};
+
 
 // ---- MIDI ---------------------------------------------------------------
 // The ports the fake system lists, and what the tracks on them are doing. A
@@ -977,15 +1249,7 @@ window.__MAKE_API__ = () => ({
     }
     return {ok:true, found:[], gone:[]};
   }),
-  list_output_devices: async () => (window.__HOST_API__ ? [
-    {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
-     max_output_channels:2, default_samplerate:48000},
-    {index:3, name:'X32 USB', host_api:'ASIO', max_input_channels:16,
-     max_output_channels:16, default_samplerate:48000}] : [
-    {index:0, name:'UA Monitors', host_api:'Core Audio', max_input_channels:0,
-     max_output_channels:2, default_samplerate:48000},
-    {index:1, name:'MacBook Speakers', host_api:'Core Audio', max_input_channels:0,
-     max_output_channels:2, default_samplerate:48000}]),
+  list_output_devices: async () => withClickReason(outputDevices()),
   set_output_device: track('set_output_device', async (idx) => {
     outputDevice = {index: idx, channels: [1, 2]};
     // What Python says when a take is open and the card refused it.
@@ -997,6 +1261,122 @@ window.__MAKE_API__ = () => ({
   }),
   set_output_channels: track('set_output_channels', async (channels) => {
     outputDevice = {...outputDevice, channels};
+    return {ok:true};
+  }),
+
+  // The click's own output and the metronome's settings, kept in the config.
+  set_click_device: track('set_click_device', async (idx) => {
+    if (idx !== null && idx !== undefined) {
+      const found = (await window.pywebview.api.list_output_devices()).find(d => d.index === idx);
+      if (!found) return {ok:false, error:'That output is not there'};
+      if (found.click_unavailable) return {ok:false, error:found.click_unavailable};
+    }
+    const none = idx === null || idx === undefined;
+    writeCfg({...readCfg(), click_device_index: none ? null : idx, click_channels: none ? null : [1, 2]});
+    return {ok:true};
+  }),
+  set_click_channels: track('set_click_channels', async (channels) => {
+    if (!Array.isArray(channels) || !channels.length
+        || !channels.every(c => Number.isInteger(c) && c >= 1))
+      return {ok:false, error:'Pick outputs, counted from 1'};
+    writeCfg({...readCfg(), click_channels: [...channels]});
+    return {ok:true};
+  }),
+  set_metronome_setting: track('set_metronome_setting', async (key, value) => {
+    const fits = CLICK_SETTINGS[key];
+    if (!fits) return {ok:false, error:'No such setting'};
+    if (!fits(value)) return {ok:false, error:`That is not a value for ${key}`};
+    writeCfg({...readCfg(), [key]: value});
+    return {ok:true};
+  }),
+  metronome_set: track('metronome_set', async (tempo, signature) => {
+    const refusal = tempo === null ? signatureRefusal(signature) : tempoRefusal(tempo, signature);
+    if (refusal) return {ok:false, error:refusal};
+    metroFollow();
+    metroApply(tempo, signature);
+    return {ok:true};
+  }),
+  metronome_save_to_song: track('metronome_save_to_song', async () => {
+    metroFollow();
+    const song = nextTake().song;
+    if (!song) return {ok:false, error:'This take is no song, so there is no song to save to'};
+    if (metro.tempo === null) return {ok:false, error:'There is no tempo to save'};
+    if (!(await songRow(song)))
+      return {ok:false, error:`${song} is not in the library yet: its first take played to the click keeps the tempo`};
+    songTempos.set(song, {tempo: metro.tempo, signature: metro.signature});
+    return {ok:true};
+  }),
+  metronome_set_on: track('metronome_set_on', async (on) => {
+    writeCfg({...readCfg(), metronome_on: Boolean(on)});
+    return {ok:true};
+  }),
+  // The click between takes: from now, at the row's tempo, until Stop, Record
+  // or the end of the rehearsal. With a tempo, a song page's ▶: that tempo,
+  // from its first beat, and the row left as it is.
+  metronome_play: track('metronome_play', async (tempo = null, signature = null) => {
+    metroFollow();
+    if (metro.take) return {ok:false, error:'The take has its own click'};
+    if (tempo !== null) {
+      const refusal = tempoRefusal(tempo, signature);
+      if (refusal) return {ok:false, error:refusal};
+      metro.run = {grid: gridOf(tempo, signature, clock()), fixed: {tempo, signature}};
+      return {ok:true};
+    }
+    if (metro.tempo === null) return {ok:false, error:'No tempo to play: type or tap one'};
+    if (!metro.run || metro.run.fixed) metro.run = {grid: gridOf(metro.tempo, metro.signature, clock())};
+    return {ok:true};
+  }),
+  metronome_stop: track('metronome_stop', async () => { metro.run = null; return {ok:true}; }),
+  // A bar of a sound is heard; nothing on screen changes.
+  metronome_preview: track('metronome_preview', async (sound) =>
+    sound === null || sound === undefined || CLICK_SOUNDS.includes(sound)
+      ? {ok:true} : {ok:false, error:'No such sound'}),
+  // Polled, like the levels, and so not logged in __CALLS__.
+  metronome_state: async () => JSON.parse(JSON.stringify(await metroState())),
+  // A tempo counted from a take's files, in quarters, whole: the Dym and
+  // Ptuška takes of the repertoire have the figures below, any other take
+  // the tempo it was recorded at, else 120. In 6/8 the number counts eighths.
+  count_tempo: track('count_tempo', async (folder, n, signature) => {
+    await held('count_tempo');
+    if (window.__COUNT_ERROR__) return {ok:false, error:window.__COUNT_ERROR__};
+    const takes = session && folder === session.folder ? session.takes
+      : (await libraryNow()).find(r => r.folder === folder && !r.missing)?.takes;
+    const take = (takes || []).find(t => t.take_number === n);
+    if (!take) return {ok:false, error:'Take not found'};
+    const recorded = take.tempo == null ? null : take.signature === '6/8' ? take.tempo / 2 : take.tempo;
+    const quarters = COUNTED[take.song] ?? recorded ?? 120;
+    const [low, high] = tempoBounds(signature);
+    return {ok:true, tempo: Math.min(high, Math.max(low, Math.round(signature === '6/8' ? quarters * 2 : quarters)))};
+  }),
+  set_song_tempo: track('set_song_tempo', async (id, tempo, signature) => {
+    songIds(await libraryNow());
+    const title = titleOfId(id);
+    if (title === undefined) return {ok:false, error:'Song not found'};
+    if (tempo === null || tempo === undefined) songTempos.delete(title);
+    else {
+      const refusal = tempoRefusal(tempo, signature);
+      if (refusal) return {ok:false, error:refusal};
+      songTempos.set(title, {tempo, signature});
+    }
+    return {ok:true, id, title, ...tempoOf(title)};
+  }),
+  // Hits on the pads count as taps from now until a pause of two seconds
+  // (window.__PAD_TAP__), and each is told once, as milliseconds ago.
+  metronome_tap_listen: track('metronome_tap_listen', async () => {
+    if (window.__TAP_ERROR__)
+      return {ok:false, error:`The band's MIDI ports could not be opened: ${window.__TAP_ERROR__}`};
+    metro.tapUntil = clock() + 2;
+    return {ok:true};
+  }),
+  metronome_taps: async () => {
+    const now = clock(), ms_ago = metro.taps.map(t => (now - t) * 1000);
+    metro.taps = [];
+    return {ms_ago};
+  },
+  // Whether the player plays the click with the take, kept for the session as
+  // Python keeps it: player_state says it.
+  player_set_click: track('player_set_click', async (on) => {
+    playerClick = Boolean(on);
     return {ok:true};
   }),
   load_default_tracks: track('load_default_tracks', async (band) => window.__PLUGGED_IN_LATE__ ? ({
@@ -1173,6 +1553,7 @@ window.__MAKE_API__ = () => ({
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
     session = null;
     midiTake = null;
+    metro.run = metro.take = null;
     return r;
   }),
 
@@ -1238,16 +1619,20 @@ window.__MAKE_API__ = () => ({
     return {ok:false, error:'Unknown transport action'};
   }),
 
+  // Record takes the row's tempo, signature and switch from the metronome: it
+  // is given none.
   start_take: track('start_take', async () => {
     takeCounter += 1;
     midiTake = {since: clock(), ended: null, read: {},
       heard: new Set((session ? session.tracks : []).filter(t => takesNotes(t) && midiPortState(t) === 'ok')
         .map(t => t.name))};
+    metroStartTake(takeCounter);
     return {ok:true, take_number:takeCounter};
   }),
   set_next_take_name: track('set_next_take_name', async (name) => {
     if (!session) return {ok:false, error:'No rehearsal in progress'};
     nextName = (name || '').trim() || null;
+    metroFollow();
     return {ok:true, next_take_name:suggestName(), next_take_go:nextTake().go};
   }),
   // api.song_choices: the songs of the rehearsal (the live one with no
@@ -1257,10 +1642,11 @@ window.__MAKE_API__ = () => ({
     const takes = !folder || (session && folder === session.folder)
       ? (session ? session.takes : []) : pastRehearsal(folder).takes;
     const here = songsOf(takes).map(s => ({song:s.name, go:goAt(s.name, takes, n),
-                                           also:alsoOf(s.name), last_take:Math.max(...s.take_numbers)}));
+                                           also:alsoOf(s.name), last_take:Math.max(...s.take_numbers),
+                                           ...tempoOf(s.name)}));
     const seen = new Set(here.map(c => c.song.toLowerCase()));
     const other = repertoire.filter(song => !seen.has(song.toLowerCase()))
-      .map(song => ({song, go:1, also:alsoOf(song)}));
+      .map(song => ({song, go:1, also:alsoOf(song), ...tempoOf(song)}));
     return {here, other};
   }),
   // One input pinned at the top and one silent, unless a test plays its own.
@@ -1278,7 +1664,8 @@ window.__MAKE_API__ = () => ({
     const band = session ? session.tracks : [];
     const take = {ok:true, take_number:takeCounter, temp_dir:'/tmp/draft',
       duration_sec:TAKE, suggested_name:suggestName(takeCounter), default_name:suggestName(takeCounter, false),
-      tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}]};
+      tracks:[{name:'Guitar', file:'/rec/g.wav'}, {name:'Vocals', file:'/rec/v.wav'}],
+      ...metroStop()};
     // A page can have the draft where Python keeps it, in the rehearsal's
     // _drafts folder, its files in it: a rename of the rehearsal moves them.
     if (window.__DRAFTS_IN_REHEARSAL__ && session) {
@@ -1297,7 +1684,10 @@ window.__MAKE_API__ = () => ({
     // A crop of the draft waiting for its Undo is over once it is kept.
     const ended = endHeld(dir, null, true);
     const take = {take_number:n, ...resolved(name, session.takes, n), duration_sec:dur, tracks,
+                  ...(metro.meters[n] || NO_METER),
                   markers: (markers || []).map(m => ({...m, label_id: labelIdOf(m.label_id)}))};
+    // The first click take kept of a song with no tempo gives it theirs.
+    if (take.click) metroGives(take);
     // The notes handed back are kept as they are; a track that took notes and
     // has none among them is missing.
     if (notes || session.tracks.some(takesNotes))
@@ -1305,6 +1695,7 @@ window.__MAKE_API__ = () => ({
         notes_missing: notesOfTake(session.tracks, tracks, (notes || []).map(x => x.name)).notes_missing});
     session.takes.push(take);
     if (n === takeCounter) nextName = null;
+    metroFollow();
     cloudQueue = {...cloudQueue, [n]: 'queued'};
     return {ok:true, take, ended};
   }),
@@ -1318,6 +1709,7 @@ window.__MAKE_API__ = () => ({
     if (!(session && folder === session.folder)) return cropPast(folder, n, a, b);
     const take = session.takes.find(t => t.take_number === n);
     if (!take) return {ok:false, error:'Take not found'};
+    [a, b] = cutAt(take, a, b, take.duration_sec);
     // The take as it was, for the crop's Undo.
     const was = JSON.parse(JSON.stringify(take));
     let dropped = 0;
@@ -1343,10 +1735,14 @@ window.__MAKE_API__ = () => ({
     }, {folder, takes:[n], crop:true});
     // Deep copy, same as rename_take — a live handle would let the interface
     // alias the mock's own state, which the real bridge never allows.
-    return JSON.parse(JSON.stringify({ok:true, take, markers_dropped:dropped, undo, ended}));
+    return JSON.parse(JSON.stringify({ok:true, take, markers_dropped:dropped, undo, ended,
+      start_sec:a, end_sec:b}));
   }),
   crop_draft: track('crop_draft', async (dir, tracks, a, b, notes) => {
     await held('crop_draft');
+    // The draft is the take last stopped, with the meter it was recorded at.
+    const length = tracks && tracks.length ? (fileDurations[tracks[0].file] ?? TAKE) : TAKE;
+    [a, b] = cutAt(metro.meters[takeCounter], a, b, length);
     const cut = (tracks || []).map(t => ({...t, file: t.file + '#' + Math.round(a * 100)}));
     for (const t of cut) fileDurations[t.file] = b - a;
     // The notes are cut with the audio, and come back when they were sent.
@@ -1359,7 +1755,8 @@ window.__MAKE_API__ = () => ({
       return {kind:'crop', temp_dir:dir};
     }, {folder:dir, crop:true});
     return JSON.parse(JSON.stringify(
-      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, undo, ended}));
+      {ok:true, tracks:cut, ...(notes ? {notes:cutNotes} : {}), duration_sec: b - a, undo, ended,
+       start_sec:a, end_sec:b}));
   }),
 
   take_media: track('take_media', async (tracks, _buckets, _from, _to) => tracks.map(t => {
@@ -1539,7 +1936,11 @@ window.__MAKE_API__ = () => ({
 
   rename_take: track('rename_take', async (folder, n, name) => {
     const take = (session ? session.takes : []).find(t => t.take_number === n);
-    if (take) Object.assign(take, resolved(name, session.takes, n));
+    if (take) {
+      Object.assign(take, resolved(name, session.takes, n));
+      // A take with a tempo, named for a song with none, gives it the tempo.
+      if (take.tempo != null) metroGives(take);
+    }
     // Deep copy, same as session_state/get_rehearsal — a live handle would
     // alias the mock's own state, which the real bridge's JSON round-trip
     // never allows.
@@ -1584,7 +1985,7 @@ window.__MAKE_API__ = () => ({
     if (fails === true || fails === dir)
       return {ok:false, error:'Could not recover the take: its folder is read-only', ended};
     drafts = drafts.filter(d => d.dir !== dir);
-    return {ok:true, ended, take:{take_number:1, song:'Recovered', go:1, name:'Recovered 1', duration_sec:5, tracks:[], markers:[]}};
+    return {ok:true, ended, take:{take_number:1, song:'Recovered', go:1, name:'Recovered 1', duration_sec:5, tracks:[], markers:[], ...NO_METER}};
   }),
   discard_draft: track('discard_draft', async (dir) => {
     const at = drafts.findIndex(d => d.dir === dir);
@@ -1735,7 +2136,7 @@ window.__MAKE_API__ = () => ({
       }
       const s = bySong.get(t.song) || {id:ids.get(t.song), title:t.song, goes:0,
         rehearsals:new Set(), first_played:r.created_at, last_played:r.created_at, starred:0,
-        also:alsoOf(t.song)};
+        also:alsoOf(t.song), ...tempoOf(t.song)};
       s.goes++; s.rehearsals.add(r.folder); s.starred += t.starred ? 1 : 0;
       if (r.created_at < s.first_played) s.first_played = r.created_at;
       if (r.created_at > s.last_played) s.last_played = r.created_at;
@@ -1761,7 +2162,7 @@ window.__MAKE_API__ = () => ({
       }
     await held('get_song');
     return JSON.parse(JSON.stringify({ok:true, id, title, also:title ? alsoOf(title) : [],
-                                      plays:songPlays(goes), goes}));
+                                      plays:songPlays(goes), goes, ...tempoOf(title)}));
   }),
   // A song renamed, or merged into another (api.rename_song,
   // api.merge_songs), and an old name forgotten (api.forget_song_name) or put
@@ -1796,6 +2197,7 @@ window.__MAKE_API__ = () => ({
     for (const v of oldNames.values()) if (v.song === from) v.song = t;
     knownIds.set(t, knownIds.get(from));
     knownIds.delete(from);
+    if (songTempos.has(from)) { songTempos.set(t, songTempos.get(from)); songTempos.delete(from); }
     repertoire = repertoire.map(s => (s === from ? t : s));
     namesDone(`Renaming ${from} to ${t}`, goes);
     return {ok:true, title:t, goes};
@@ -1824,6 +2226,8 @@ window.__MAKE_API__ = () => ({
     for (const v of oldNames.values()) if (v.song === from) v.song = into;
     oldNames.set(from.toLowerCase(), {name:from, song:into});
     knownIds.delete(from);
+    if (songTempos.has(from) && !songTempos.has(into)) songTempos.set(into, songTempos.get(from));
+    songTempos.delete(from);
     repertoire = repertoire.filter(s => s !== from);
     namesDone(`Merging ${from} into ${into}`, n);
     return counts;
@@ -2069,6 +2473,19 @@ window.__MAKE_API__ = () => ({
     theme: readCfg().theme, ui_scale: readCfg().ui_scale,
     // Settings › Keys, as api.get_settings: anything but false is on.
     space_keys: readCfg().space_keys !== false, player_keys: readCfg().player_keys !== false,
+    // The metronome's, as api.get_settings: none for the click's output until
+    // one is picked, and none for one saved that is not plugged in, which is
+    // named instead (window.__CLICK_MISSING__, metronome_state's
+    // output_missing too, as Python has it).
+    click_device_index: outputDevices().some(d => d.index === readCfg().click_device_index)
+      ? readCfg().click_device_index : null,
+    click_device_missing: readCfg().click_device_index != null
+      && !outputDevices().some(d => d.index === readCfg().click_device_index)
+      ? (window.__CLICK_MISSING__ || '') : null,
+    click_channels: readCfg().click_channels ?? null,
+    click_sound: readCfg().click_sound ?? 'click', click_volume: readCfg().click_volume ?? 0.7,
+    count_in_bars: readCfg().count_in_bars ?? 1, tempo_in_wav: readCfg().tempo_in_wav !== false,
+    metronome_on: clickOn(),
     cloud_dir: cloudDir,
     server_url:'http://127.0.0.1:1234/', config_path:'/Users/alex/.rehearsal-recorder/config.json',
     version:'0.2.0'}),

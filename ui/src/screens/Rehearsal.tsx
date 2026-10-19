@@ -3,6 +3,7 @@ import { Circle, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Kbd } from "@/components/ui/kbd"
 import { FooterRow } from "@/components/FooterRow"
+import { MetronomeRow } from "@/components/metronome/MetronomeRow"
 import { Shell } from "@/components/Shell"
 import { TakeStrip, liveTake } from "@/components/TakeStrip"
 import { EveningFacts } from "@/components/EveningFacts"
@@ -355,7 +356,7 @@ export function Rehearsal({
     }
     if (res.take) reselect(res.take)
     onChanged()
-    offerCropUndo(take.name, res, () => uncropped(take), "rehearsal")
+    offerCropUndo(take.name, res, () => uncropped(take), "rehearsal", from)
   }
 
   // A crop's Undo: the uncut take is under the same paths again, and only a
@@ -523,7 +524,7 @@ export function Rehearsal({
         </aside>
       }
       footer={
-        <FooterRow>
+        <FooterRow left={<MetronomeRow />}>
           <div className="flex items-center gap-3">
             {/* Escape finishes only with no take in hand; with one, it puts
                 the take away — see useEscape above. */}
@@ -600,6 +601,7 @@ export function Rehearsal({
         {selected ? (
           <TakePlayer
             player={player}
+            take={liveTake(session.takes, selected)}
             markers={liveTake(session.takes, selected)?.markers ?? []}
             notes={selected.notes} notesMissing={selected.notes_missing}
             onAddMarker={(sec) => addMarker(selected, sec)}

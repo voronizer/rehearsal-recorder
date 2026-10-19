@@ -11,9 +11,10 @@ const post = (page: Page, message: object) =>
   page.evaluate((m) => window.postMessage(m, "*"), message)
 const step = (page: Page, n: number) => post(page, { type: "rr-step", step: n })
 
-/** The player's clock, in seconds: "1:52 / 2:46" is 112. */
+/** The player's clock, in seconds: "1:52 / 2:43" is 112. The take's length
+ *  is the band's (ui/e2e/band.js), so it is not written here. */
 async function clock(page: Page): Promise<number> {
-  const text = await page.locator("span.tnum", { hasText: "/ 2:46" }).innerText()
+  const text = await page.locator("span.tnum", { hasText: /\/ \d+:\d\d/ }).innerText()
   const [m, s] = text.split("/")[0].trim().split(":").map(Number)
   return m * 60 + s
 }
@@ -58,7 +59,7 @@ test("the story goes through its five steps", async ({ page }) => {
   await step(page, 1)
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("record")
   await expect(page.locator("h1")).toContainText(/Pałyn\s*3/)
-  await expect(page.getByText("clipped 3×")).toBeVisible({ timeout: 6_000 })
+  await expect(page.getByText("clipped 3×")).toBeVisible({ timeout: 10_000 })
 
   // Stop, save, and back on the rehearsal screen the unnamed take is named
   // with one click; the false start is grey, the evening's buttons above.
@@ -123,7 +124,9 @@ test("the first step ends once the check has begun, however slow it is to open",
   await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
 })
 
-test("the second step plays last week's Pałyn, starts, and picks Pałyn with the arrow key", async ({
+// Metronome on the site: Pałyn's 128 bpm is in the row as ↑ picks it, and
+// Record counts in before the clock.
+test("the second step plays last week's Palyn, starts, picks Palyn and its 128 bpm with the arrow key, and counts in", async ({
   page,
 }) => {
   // What is on screen as each of the step's lines is told.
@@ -132,12 +135,16 @@ test("the second step plays last week's Pałyn, starts, and picks Pałyn with th
     w.__seen = []
     window.addEventListener("message", (e) => {
       if (e.data?.type !== "rr-beat" || e.data.step !== 1) return
+      const row = document.querySelector("section[aria-label='Metronome']")
       w.__seen.push({
         beat: e.data.beat,
         lastWeek: Boolean(
           document.querySelector("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']")
         ),
         field: document.querySelector<HTMLTextAreaElement>("#next-take-name")?.value ?? null,
+        tempo: row?.querySelector<HTMLInputElement>("input[aria-label='Tempo']")?.value ?? null,
+        signature: row?.querySelector("[aria-label='Time signature']")?.textContent ?? null,
+        countIn: Boolean(document.querySelector("[data-count-in]")),
         recording: Boolean(document.querySelector("h1")?.textContent?.match(/Pałyn\s*3/)),
       })
     })
@@ -147,10 +154,66 @@ test("the second step plays last week's Pałyn, starts, and picks Pałyn with th
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("record")
   const seen = await page.evaluate(() => (window as unknown as { __seen: object[] }).__seen)
   expect(seen).toEqual([
-    { beat: 0, lastWeek: true, field: null, recording: false },
-    { beat: 1, lastWeek: false, field: expect.stringMatching(/^Pałyn/), recording: false },
-    { beat: 2, lastWeek: false, field: null, recording: true },
+    { beat: 0, lastWeek: true, field: null, tempo: null, signature: null, countIn: false, recording: false },
+    {
+      beat: 1,
+      lastWeek: false,
+      field: expect.stringMatching(/^Pałyn/),
+      tempo: "128",
+      signature: "4/4",
+      countIn: false,
+      recording: false,
+    },
+    { beat: 2, lastWeek: false, field: null, tempo: null, signature: null, countIn: true, recording: true },
   ])
+})
+
+// The frames of the site share localStorage, where the fake keeps its
+// settings: the hero's switch, turned off by a visitor before the story's
+// frame opened or while it is open, is not the story's.
+test("the second step counts in whatever a visitor switched off in another frame", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("mock-python-config", JSON.stringify({ metronome_on: false }))
+    const w = window as unknown as { __countIn: boolean[] }
+    w.__countIn = []
+    window.addEventListener("message", (e) => {
+      if (e.data?.type === "rr-beat" && e.data.step === 1 && e.data.beat === 2)
+        w.__countIn.push(Boolean(document.querySelector("[data-count-in]")))
+    })
+  })
+  await page.goto("/stage.html#story")
+  await expect.poll(() => page.evaluate(() => "pywebview" in window)).toBe(true)
+  await page.evaluate(() =>
+    localStorage.setItem("mock-python-config", JSON.stringify({ metronome_on: false, count_in_bars: 0 }))
+  )
+  await step(page, 1)
+  await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("record")
+  expect(await page.evaluate(() => (window as unknown as { __countIn: boolean[] }).__countIn)).toEqual([true])
+})
+
+test("the second step gets to the take with no click to count it in", async ({ page }) => {
+  await page.goto("/stage.html#story")
+  await expect.poll(() => page.evaluate(() => "pywebview" in window)).toBe(true)
+  await page.evaluate(() =>
+    (window as unknown as { pywebview: { api: { metronome_set_on: (on: boolean) => Promise<unknown> } } })
+      .pywebview.api.metronome_set_on(false)
+  )
+  await step(page, 1)
+  await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("record")
+  await expect(page.locator("h1")).toContainText(/Pałyn\s*3/)
+})
+
+// The band comes in on the bar after the count-in, and the guitarist with it.
+test("the guitar clips only once the count-in is over", async ({ page }) => {
+  await page.goto("/stage.html#story")
+  await step(page, 1)
+  const countIn = page.locator("[data-count-in]")
+  await countIn.waitFor({ timeout: 30_000 })
+  while ((await countIn.count()) > 0) {
+    expect(await page.locator("[data-clipped]").count()).toBe(0)
+    await page.waitForTimeout(100)
+  }
+  await expect(page.getByText("clipped 3×")).toBeVisible({ timeout: 10_000 })
 })
 
 test("the story tells the page each line as it gets to it", async ({ page }) => {

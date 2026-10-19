@@ -9,8 +9,12 @@
 // chorus, bridge, a long last chorus and an outro. Every level here is a
 // function of time, so a zoomed-in window gets real detail, not a stretched
 // picture of the whole take.
+//
+// Played to the click: the take's first sample is the count-in's first
+// click, and the sticks count that bar in with it, so the song comes in on
+// the bar after it and every hit is on the grid Master's stripes draw.
 const BEAT = 60 / 128, BAR = 4 * BEAT;
-const START = 4 * BEAT + 2.8;
+const START = 4 * BEAT;
 const FORM = [['intro', 8], ['verse', 16], ['chorus', 8], ['verse', 16],
               ['chorus', 8], ['bridge', 8], ['chorus', 16], ['outro', 4]];
 const SONG_END = START + FORM.reduce((s, f) => s + f[1] * BAR, 0);
@@ -111,6 +115,9 @@ const PARTS = [{name: 'Drums', channel: 1, icon: 'drums'},
 // seed makes each take a little different; end is where the song stopped,
 // a take that broke down stopping early.
 const KIND = {};
+// Tonight's takes have a folder of their own, as each past rehearsal has
+// (PAST, below): a file is one take's, and plays as long as that take.
+const TONIGHT = '/rec/tonight';
 // What a take is a go at, from its name, as the library would say: "Pałyn 2"
 // is the second go at Pałyn, "Take 11" a go at nothing.
 function goOfName(name) {
@@ -120,25 +127,32 @@ function goOfName(name) {
 }
 // The goes someone marked as the one to keep are starred.
 const isTheTake = markers => markers.some(m => /the take|keep this/.test(m.note));
+// The band plays each song to the click at the song's own tempo (the fake's
+// meterOf), so its takes are click takes at it; a song with no tempo, and
+// the soundcheck's takes of no song, were recorded without.
+const clickedAt = name => meterOf(goOfName(name).song);
 function takeOf(n, name, length, end, markers) {
-  const tracks = PARTS.map(p => ({name: p.name, file: `/rec/tue/${n}/${p.name}.wav`}));
+  const tracks = PARTS.map(p => ({name: p.name, file: `${TONIGHT}/${n}/${p.name}.wav`}));
   for (const tr of tracks) {
     KIND[tr.file] = {part: tr.name, seed: n, end};
     fileDurations[tr.file] = length;
   }
   return {take_number: n, name, ...goOfName(name), starred: isTheTake(markers),
-          duration_sec: length, tracks, markers};
+          duration_sec: length, tracks, markers, ...clickedAt(name)};
 }
 const SECTION = name => {
   let at = START;
   for (const [kind, bars] of FORM) { if (kind === name) return at; at += bars * BAR; }
 };
+// The marks sit where the music changes: the first chorus starts at 46.9 s,
+// the bridge at 106.9 and the last chorus at 121.9. Pałyn 1 breaks down
+// just after the chorus comes in.
 const EARLIER = [
-  takeOf(1, 'Pałyn', 58, 51, [{at: 50, note: 'lost the count', label_id: 3}]),
+  takeOf(1, 'Pałyn', 58, 48.2, [{at: 47.2, note: 'lost the count', label_id: 3}]),
   takeOf(2, 'Pałyn 2', Math.round(SONG_END + 4), SONG_END, [
-    {at: 50.5, note: 'chorus came in early', label_id: 3},
-    {at: 112, note: 'bridge — try it slower', label_id: 4},
-    {at: 131, note: 'this one is the take', label_id: 2}]),
+    {at: 47.7, note: 'chorus came in early', label_id: 3},
+    {at: 109.2, note: 'bridge — try it slower', label_id: 4},
+    {at: 128.2, note: 'this one is the take', label_id: 2}]),
   // A count-in that went wrong, and a take nobody named: what sorting the
   // evening is for. Ahoń, so tonight's Pałyn and Viasna keep their goes, and
   // before Viasna, so Viasna is still the last song played and the Next
@@ -148,7 +162,7 @@ const EARLIER = [
   takeOf(5, 'Viasna', 141, 137, []),
 ];
 // For the script driving the page: where things are in the song.
-window.__SONG__ = {length: n => fileDurations[`/rec/tue/${n}/Drums.wav`],
+window.__SONG__ = {length: n => fileDurations[`${TONIGHT}/${n}/Drums.wav`],
                    bridge: SECTION('bridge'), bar: BAR};
 
 function peaksOf(file, buckets, from, to) {
@@ -181,11 +195,12 @@ api.list_input_devices = async () => [
    max_output_channels: 18, default_samplerate: 48000},
   {index: 5, name: 'Microphone Array (Realtek(R) Audio)', host_api: 'Windows WASAPI',
    max_input_channels: 2, max_output_channels: 0, default_samplerate: 48000}];
-api.list_output_devices = async () => [
+// What the click can play through is said of each, as the fake says it.
+api.list_output_devices = async () => withClickReason([
   {index: 1, name: 'Speakers (Realtek(R) Audio)', host_api: 'MME', max_input_channels: 0,
    max_output_channels: 2, default_samplerate: 48000},
   {index: 3, name: 'X18/XR18', host_api: 'ASIO', max_input_channels: 18,
-   max_output_channels: 18, default_samplerate: 48000}];
+   max_output_channels: 18, default_samplerate: 48000}]);
 api.recording_formats = async () => ({ok: true, formats: {'44100': [16, 24], '48000': [16, 24]}});
 api.load_default_tracks = async () => ({tracks: PARTS.map(p => ({...p, stereo: false}))});
 api.disk_estimate = async (count, rate, depth) => {
@@ -228,9 +243,9 @@ api.start_rehearsal = async (name, _device, _rate, _tracks, _depth, setId) => {
 };
 api.stop_take = async () => {
   const draft = takeOf(takeCounter, 'draft', 151, 147, []);
-  return {ok: true, take_number: takeCounter, temp_dir: '/rec/tue/_drafts',
+  return {ok: true, take_number: takeCounter, temp_dir: `${TONIGHT}/_drafts`,
           duration_sec: 151, suggested_name: suggestName(takeCounter),
-          default_name: suggestName(takeCounter), tracks: draft.tracks};
+          default_name: suggestName(takeCounter), tracks: draft.tracks, ...metroStop()};
 };
 api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
   const dur = fileDurations[t.file] ?? 6;
@@ -243,9 +258,10 @@ api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
 
 // ---- History ----------------------------------------------------------
 // The evenings before this one, take by take: [name, seconds, marks]. Few
-// marks, as in life. Their files are never played in the pictures. Goes are
-// numbered across them, oldest first, as Python numbers them: a song's page
-// lists Pałyn 1 to 7, not two Pałyn 2s.
+// marks, as in life. Their files have the band's song on them, as tonight's
+// do, each as long as its take: the site's story plays last Tuesday's Pałyn
+// 5 to 7. Goes are numbered across them, oldest first, as Python numbers
+// them: a song's page lists Pałyn 1 to 7, not two Pałyn 2s.
 const PAST = {
   '/rec/tue': ['Tuesday jam', '2026-09-22T19:00:00', 1560000000, [
     ['Pałyn 4', 185, [{at: 111, note: 'came in late after the break', label_id: 3}]],
@@ -276,10 +292,18 @@ const PAST = {
   '/rec/soundcheck': ['Soundcheck', '2026-09-12T18:30:00', 173000000, [
     ['Take 1', 140, []],
     ['Take 2', 165, [{at: 65, note: 'the riff we jammed while setting up', label_id: 1}]]]]};
-const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => ({
-  take_number: i + 1, name, ...goOfName(name), starred: isTheTake(markers),
-  duration_sec: length, markers,
-  tracks: PARTS.map(p => ({name: p.name, file: `${folder}/${i + 1}/${p.name}.wav`}))}));
+const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => {
+  // A take longer than the song rings on after it; a shorter one stopped.
+  const seed = 20 * (Object.keys(PAST).indexOf(folder) + 1) + i + 1;
+  const end = Math.min(SONG_END, length - 2);
+  const tracks = PARTS.map(p => ({name: p.name, file: `${folder}/${i + 1}/${p.name}.wav`}));
+  for (const tr of tracks) {
+    KIND[tr.file] = {part: tr.name, seed, end};
+    fileDurations[tr.file] = length;
+  }
+  return {take_number: i + 1, name, ...goOfName(name), starred: isTheTake(markers),
+          duration_sec: length, markers, ...clickedAt(name), tracks};
+});
 // The set a rehearsal was played by, when the page gives one
 // (window.__PLAYED_BY__): its songs are all the band's, so none is new. Not
 // the fake's setAsSent, which reads the library, and so this.

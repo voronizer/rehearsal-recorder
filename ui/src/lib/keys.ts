@@ -5,9 +5,9 @@ import { dismiss, notify } from "@/lib/notices"
 /**
  * Which of the app's single keys work, as Settings › Keys sets them:
  * Space and Esc ("space"), and the player's keys ("player"): the arrows,
- * Home, M, R and ?. Python keeps both with the other settings, and App reads
- * them when it starts. Until then, and for a setting Python does not have,
- * the keys are on.
+ * Home, M, R, ? and T, which taps a tempo. Python keeps both with the other
+ * settings, and App reads them when it starts. Until then, and for a
+ * setting Python does not have, the keys are on.
  *
  * Off, the hooks in hooks/useSpacebar.ts do nothing with those keys, and the
  * browser does what it does anywhere: Space presses the focused button, the

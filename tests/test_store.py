@@ -1751,6 +1751,292 @@ def main():
        and lib.rehearsal(night17)["name"] == "Someone else")
     lib.close()
 
+    print("\n[18] Tempos in the library (migration 0008)")
+    # A song keeps a tempo and a signature, and a take keeps the ones it was recorded at, with
+    # whether it was recorded to the click (metronome spec, Parts 1 and 2). Everything there was
+    # before has none.
+    rec18 = tmp / "Tempos"
+    rec18.mkdir()
+    db.open_engine(rec18, migrations_up_to(tmp, "0007")).dispose()
+    engine = db.make_engine(db.database_path(rec18))
+    with engine.begin() as c:
+        rid = c.execute(text(
+            "INSERT INTO rehearsal (folder, name, created_at, samplerate, bit_depth) "
+            "VALUES ('Jam', 'Jam', '2026-09-01T19:00:00', 48000, 24)")).lastrowid
+        sid = c.execute(text("INSERT INTO song (title, last_go) VALUES ('Polyn', 2)")).lastrowid
+        for number in (1, 2):
+            tid = c.execute(text(
+                "INSERT INTO take (rehearsal_id, take_number, song_id, go, duration_sec, cloud_skip, "
+                "cloud_send) VALUES (:r, :n, :s, :n, 4.0, 0, 0)"),
+                {"r": rid, "n": number, "s": sid}).lastrowid
+            c.execute(text("INSERT INTO take_file (take_id, position, name, file) "
+                           "VALUES (:t, 0, 'Gtr', :f)"),
+                      {"t": tid, "f": f"{number:02d} - Polyn {number}/Gtr.wav"})
+            c.execute(text("INSERT INTO marker (take_id, at, label_id, note) "
+                           "VALUES (:t, 1.5, 2, 'keep')"), {"t": tid})
+        c.execute(text("INSERT INTO cloud_copy (take_id, mix, source) "
+                       "VALUES (:t, 'Jam/01.wav', '{}')"), {"t": tid})
+    engine.dispose()
+
+    def rows18(sql):
+        e = db.make_engine(db.database_path(rec18))
+        with e.connect() as c:
+            out = [tuple(r) for r in c.execute(text(sql)).all()]
+        e.dispose()
+        return out
+
+    def counts18():
+        return rows18("SELECT (SELECT COUNT(*) FROM rehearsal), (SELECT COUNT(*) FROM song), "
+                      "(SELECT COUNT(*) FROM take), (SELECT COUNT(*) FROM take_file), "
+                      "(SELECT COUNT(*) FROM marker), (SELECT COUNT(*) FROM cloud_copy)")
+
+    print("  a library from before")
+    engine = db.open_engine(rec18)
+    ok("a database at 0007 is moved on to the newest migration", db.current_revision(engine) == HEAD)
+    ok("after it was copied aside", (rec18 / "library.sqlite.bak-0007").exists())
+    with engine.connect() as c:
+        drift18 = compare_metadata(MigrationContext.configure(c), Base.metadata)
+    engine.dispose()
+    ok("and it is then what models.py describes", drift18 == [])
+    ok("every song has no tempo and no signature",
+       rows18("SELECT tempo, signature FROM song") == [(None, None)])
+    ok("every take has none either, and was not recorded to the click",
+       rows18("SELECT tempo, signature, click FROM take ORDER BY take_number")
+       == [(None, None, 0), (None, None, 0)])
+    ok("the rehearsal, the song, both takes with their files and marks, and the cloud copy are all there",
+       counts18() == [(1, 1, 2, 2, 2, 1)])
+
+    engine = db.make_engine(db.database_path(rec18))
+    with engine.begin() as c:
+        command.downgrade(db.alembic_config(c), "0007")
+    engine.dispose()
+    ok("going back to 0007 takes the columns away and keeps every row",
+       rows18("SELECT name FROM pragma_table_info('take') WHERE name IN ('tempo', 'signature', 'click')") == []
+       and rows18("SELECT name FROM pragma_table_info('song') WHERE name IN ('tempo', 'signature')") == []
+       and counts18() == [(1, 1, 2, 2, 2, 1)])
+    db.open_engine(rec18).dispose()
+    ok("and coming back to the newest keeps them again, with no tempo in any",
+       counts18() == [(1, 1, 2, 2, 2, 1)]
+       and rows18("SELECT tempo, signature, click FROM take") == [(None, None, 0), (None, None, 0)])
+
+    lib = Library(rec18)
+    jam18 = rec18 / "Jam"
+    ok("the library gives an old song no tempo and no signature",
+       [(s["title"], s["tempo"], s["signature"]) for s in lib.songs()["songs"]] == [("Polyn", None, None)])
+    old18 = lib.take(jam18, 1)
+    ok("and an old take none, not recorded to the click",
+       (old18["tempo"], old18["signature"], old18["click"]) == (None, None, False))
+
+    print("  where a song's tempo comes from")
+    night18 = rec18 / "Night"
+    lib.create_rehearsal(night18, "Night", "2026-10-01T19:00:00", 48000, 24, [])
+
+    def add18(number, name, **more):
+        return lib.add_take(night18, {"take_number": number, "name": name, "tracks": [], **more})
+
+    def song18(title):
+        return next((s for s in lib.songs()["songs"] if s["title"] == title), None)
+
+    def meter18(title):
+        found = song18(title)
+        return None if found is None else (found["tempo"], found["signature"])
+
+    first18 = add18(1, "Palyn", tempo=128, signature="4/4", click=True)
+    ok("a take keeps the tempo, the signature and the click it was recorded with",
+       (first18["tempo"], first18["signature"], first18["click"]) == (128, "4/4", True)
+       and lib.take(night18, 1)["tempo"] == 128)
+    ok("the first click take of a new song gives the song its tempo and signature",
+       meter18("Palyn") == (128, "4/4"))
+    palyn18 = lib.song_id("Palyn")
+    lib.rename_song(palyn18, "Pałyn")
+    ok("a rename keeps the song's tempo", meter18("Pałyn") == (128, "4/4") and song18("Palyn") is None)
+    second18 = add18(2, "Pałyn", tempo=140, signature="3/4", click=True)
+    ok("a later click take at another tempo keeps its own and leaves the song's alone",
+       (second18["tempo"], second18["signature"]) == (140, "3/4") and meter18("Pałyn") == (128, "4/4"))
+    add18(3, "Polyn", tempo=96, signature="3/4", click=True)
+    ok("the first click take of a song that had no tempo gives it one", meter18("Polyn") == (96, "3/4"))
+
+    quiet18 = add18(4, "Viasna", tempo=120, signature="4/4", click=False)
+    ok("a take with a tempo and no click keeps its tempo and gives its song none",
+       (quiet18["tempo"], quiet18["signature"], quiet18["click"]) == (120, "4/4", False)
+       and meter18("Viasna") == (None, None))
+    bare18 = add18(5, "Viasna")
+    ok("a take with no tempo has none, and is not a click take",
+       (bare18["tempo"], bare18["signature"], bare18["click"]) == (None, None, False)
+       and meter18("Viasna") == (None, None))
+    free18 = add18(6, "", tempo=100, signature="4/4", click=True)
+    add18(7, "Take 7", tempo=150, signature="6/8", click=True)
+    add18(8, "Take 8", tempo=80, signature="2/4", click=True)
+    add18(9, "Take 9")
+    ok("a free take keeps its tempo with itself and makes no song",
+       (free18["name"], free18["song"], free18["tempo"], free18["click"]) == ("Take 6", None, 100, True)
+       and lib.song_id("Take 6") is None and lib.songs()["not_named"]["takes"] == 4)
+
+    lib.update_take(night18, 6, name="Viasna")
+    ok("a free take named as a song with no tempo gives the song its tempo",
+       meter18("Viasna") == (100, "4/4"))
+    lib.update_take(night18, 7, name="Pałyn")
+    ok("one named as a song that has a tempo leaves the song's alone", meter18("Pałyn") == (128, "4/4"))
+    lib.update_take(night18, 8, name="Dym")
+    ok("one named as a new song starts the song with its tempo", meter18("Dym") == (80, "2/4"))
+    lib.update_take(night18, 9, name="Sonca")
+    ok("a take with no tempo gives a song with none nothing", meter18("Sonca") == (None, None))
+    lib.update_take(night18, 4, name="Sonca")
+    ok("a take with a tempo, click or not, moved into a song with none gives it that tempo",
+       meter18("Sonca") == (120, "4/4"))
+    ok("the takes keep their own tempos after all that",
+       [(lib.take(night18, n)["tempo"], lib.take(night18, n)["signature"]) for n in (6, 7, 8, 9, 4)]
+       == [(100, "4/4"), (150, "6/8"), (80, "2/4"), (None, None), (120, "4/4")])
+
+    changed18 = lib.update_take(night18, 5, tempo=90, signature="4/4", click=True)
+    ok("update_take sets a take's tempo, signature and click, and leaves its song alone",
+       (changed18["tempo"], changed18["signature"], changed18["click"]) == (90, "4/4", True)
+       and meter18("Viasna") == (100, "4/4"))
+    kept18 = lib.update_take(night18, 5, duration_sec=9.0)
+    ok("and a change of something else leaves them as they are",
+       (kept18["tempo"], kept18["signature"], kept18["click"], kept18["duration_sec"]) == (90, "4/4", True, 9.0))
+    unclicked18 = lib.update_take(night18, 5, click=False)
+    ok("update_take with click=False keeps the tempo and makes it no click take",
+       (unclicked18["tempo"], unclicked18["signature"], unclicked18["click"]) == (90, "4/4", False))
+
+    # What the metronome could not have shown is kept as no tempo at all.
+    fast18 = add18(11, "Burza", tempo=301, signature="4/4", click=True)
+    ok("a take at 301 in 4/4, past the range, keeps no tempo, is no click take and gives its song none",
+       (fast18["tempo"], fast18["signature"], fast18["click"]) == (None, None, False) and meter18("Burza") == (None, None))
+    five18 = add18(12, "Burza", tempo=120, signature="5/4", click=True)
+    ok("a take in 5/4, a signature the metronome does not have, keeps no tempo either",
+       (five18["tempo"], five18["signature"], five18["click"]) == (None, None, False) and meter18("Burza") == (None, None))
+    bare_click18 = add18(13, "Burza", click=True)
+    ok("a take said to have clicked with no tempo is no click take",
+       (bare_click18["tempo"], bare_click18["click"]) == (None, False) and meter18("Burza") == (None, None))
+
+    print("  merging songs")
+    merges18 = rec18 / "Merges"
+    lib.create_rehearsal(merges18, "Merges", "2026-10-02T19:00:00", 48000, 24, [])
+    for number, (title, more) in enumerate([
+            ("Rowan", {"tempo": 110, "signature": "4/4", "click": True}), ("Rowan live", {}),
+            ("Zima", {"tempo": 70, "signature": "3/4", "click": True}),
+            ("Zima old", {"tempo": 88, "signature": "2/4", "click": True}),
+            ("Fog", {}), ("Haze", {})], start=1):
+        lib.add_take(merges18, {"take_number": number, "name": title, "tracks": [], **more})
+    ok("six songs, three with a tempo, as the takes made them",
+       [meter18(t) for t in ("Rowan", "Rowan live", "Zima", "Zima old", "Fog", "Haze")]
+       == [(110, "4/4"), (None, None), (70, "3/4"), (88, "2/4"), (None, None), (None, None)])
+    lib.merge_songs(lib.song_id("Rowan"), lib.song_id("Rowan live"), dry_run=True)
+    ok("a dry run of a merge changes no tempo", meter18("Rowan live") == (None, None) and meter18("Rowan") == (110, "4/4"))
+    lib.merge_songs(lib.song_id("Zima old"), lib.song_id("Zima"))
+    ok("a merge keeps the target's tempo", meter18("Zima") == (70, "3/4") and song18("Zima old") is None)
+    lib.merge_songs(lib.song_id("Rowan"), lib.song_id("Rowan live"))
+    ok("or takes the merged song's when the target has none",
+       meter18("Rowan live") == (110, "4/4") and song18("Rowan") is None)
+    lib.merge_songs(lib.song_id("Haze"), lib.song_id("Fog"))
+    ok("two songs with none have none after", meter18("Fog") == (None, None))
+
+    print("  in the song's page and the list")
+    add18(10, "Ahoń", tempo=198, signature="6/8", click=True)
+    ahon18 = song18("Ahoń")
+    ok("198 in 6/8 is in the list of songs", (ahon18["tempo"], ahon18["signature"]) == (198, "6/8"))
+    page18 = lib.goes_of(ahon18["id"])
+    ok("and in the song's page, with the take's own tempo, signature and click",
+       (page18["tempo"], page18["signature"]) == (198, "6/8")
+       and [(g["take"]["tempo"], g["take"]["signature"], g["take"]["click"]) for g in page18["goes"]]
+       == [(198, "6/8", True)])
+    ok("takes with no song have no tempo to show on their page",
+       (lib.goes_of(None)["tempo"], lib.goes_of(None)["signature"]) == (None, None))
+    ok("and a song with none says so", (lib.goes_of(lib.song_id("Fog"))["tempo"],
+                                        lib.goes_of(lib.song_id("Fog"))["signature"]) == (None, None))
+    ok("rehearsals carry each take's tempo, signature and click as the takes do",
+       [(t["tempo"], t["signature"], t["click"]) for t in lib.rehearsal(night18)["takes"] if t["take_number"] in (1, 10)]
+       == [(128, "4/4", True), (198, "6/8", True)])
+
+    print("  the tempo a name goes with")
+    older18 = rec18 / "Older"
+    lib.create_rehearsal(older18, "Older", "2026-09-15T19:00:00", 48000, 24, [])
+    lib.add_take(older18, {"take_number": 9, "name": "Pałyn", "tracks": []})
+    found18 = lib.tempo_for("Palyn 3")
+    ok("an old name with a number after it finds the song, with its tempo and signature",
+       found18["song"] == {"id": lib.song_id("Pałyn"), "title": "Pałyn", "tempo": 128, "signature": "4/4"})
+    ok("and the song's newest take: the newest rehearsal's, the highest number in it",
+       found18["last_take"] == {"folder": str(night18), "take_number": 7,
+                                "name": lib.take(night18, 7)["name"]})
+    ok("a title typed in another case is found as well",
+       lib.tempo_for("pałyn")["song"]["title"] == "Pałyn")
+    ok("Take N and an empty name are no song", lib.tempo_for("Take 4") == {"song": None, "last_take": None}
+       and lib.tempo_for("") == {"song": None, "last_take": None}
+       and lib.tempo_for(None) == {"song": None, "last_take": None})
+    ok("a title no song has is no song yet, and none is made for it",
+       lib.tempo_for("Nowhere") == {"song": None, "last_take": None} and song18("Nowhere") is None)
+    ok("a song with no tempo is found, with none", lib.tempo_for("Fog")["song"]["tempo"] is None
+       and lib.tempo_for("Fog")["song"]["signature"] is None and lib.tempo_for("Fog")["last_take"] is not None)
+    lib.delete_take(merges18, 5)
+    lib.delete_take(merges18, 6)
+    ok("a song with no takes is found, with no take to count from",
+       lib.tempo_for("Fog")["song"]["title"] == "Fog" and lib.tempo_for("Fog")["last_take"] is None)
+    songs_before18 = rows18("SELECT id, title, last_go, tempo, signature FROM song ORDER BY id")
+    takes_before18 = rows18("SELECT id, song_id, go, tempo, signature, click FROM take ORDER BY id")
+    for asked18 in ("Palyn 3", "Nowhere", "Take 4", "", "Fog", "Ahoń 2", "viasna"):
+        lib.tempo_for(asked18)
+    ok("asking writes nothing: no song made, no count moved on, no tempo changed, no take touched",
+       rows18("SELECT id, title, last_go, tempo, signature FROM song ORDER BY id") == songs_before18
+       and rows18("SELECT id, song_id, go, tempo, signature, click FROM take ORDER BY id") == takes_before18)
+
+    print("  setting a song's tempo")
+    viasna18 = lib.song_id("Viasna")
+
+    def refused18(*args):
+        try:
+            lib.set_song_tempo(*args)
+        except SongRefused as e:
+            return str(e)
+        return None
+
+    def others18():
+        return sorted((s["title"], s["tempo"], s["signature"]) for s in lib.songs()["songs"]
+                      if s["title"] != "Viasna")
+
+    others_before18 = others18()
+    ok("a song's tempo and signature are set, and the song comes back",
+       lib.set_song_tempo(viasna18, 96, "3/4") == {"id": viasna18, "title": "Viasna", "tempo": 96, "signature": "3/4"}
+       and meter18("Viasna") == (96, "3/4"))
+    ok("the edges are in: 30 and 300 in x/4, 60 and 600 in 6/8",
+       all(lib.set_song_tempo(viasna18, n, s)["tempo"] == n
+           for n, s in ((30, "4/4"), (300, "4/4"), (30, "3/4"), (300, "2/4"), (60, "6/8"), (600, "6/8"))))
+    lib.set_song_tempo(viasna18, 96, "3/4")
+    for label, args in (("29 in 4/4", (29, "4/4")), ("301 in 4/4", (301, "4/4")), ("59 in 6/8", (59, "6/8")),
+                        ("601 in 6/8", (601, "6/8")), ("301 in 2/4", (301, "2/4")), ("0", (0, "4/4")),
+                        ("128.5", (128.5, "4/4")), ("True", (True, "4/4")), ("'128' as text", ("128", "4/4"))):
+        said = refused18(viasna18, *args)
+        ok(f"a tempo of {label} is refused, saying why, and nothing changes",
+           bool(said) and meter18("Viasna") == (96, "3/4"))
+    for label, signature in (("5/4", "5/4"), ("an empty text", ""), ("none, given a tempo", None),
+                             ("6/8 with a space after it", "6/8 ")):
+        ok(f"{label} as the signature is refused, saying why, and nothing changes",
+           bool(refused18(viasna18, 128, signature)) and meter18("Viasna") == (96, "3/4"))
+    ok("a number that is whole but a float is a tempo", lib.set_song_tempo(viasna18, 128.0, "4/4")["tempo"] == 128)
+    ok("a song that is not there is None", lib.set_song_tempo(9999, 128, "4/4") is None)
+    ok("no tempo clears the tempo and the signature with it",
+       lib.set_song_tempo(viasna18, None, None) == {"id": viasna18, "title": "Viasna", "tempo": None, "signature": None}
+       and meter18("Viasna") == (None, None))
+    lib.update_take(night18, 6, name="Viasna")
+    ok("and a take named into the song again does not put its tempo back", meter18("Viasna") == (None, None))
+    ok("the other songs were not touched by any of it", others18() == others_before18)
+
+    print("  a removed take comes back with its tempo")
+    snap18 = lib.take(night18, 2)
+    record18 = lib.take_record(night18, 2)
+    ok("the record of a take carries its tempo, signature and click",
+       (record18["take"]["tempo"], record18["take"]["signature"], record18["take"]["click"]) == (140, "3/4", True))
+    lib.delete_take(night18, 2)
+    lib.restore_take(json.loads(json.dumps(record18)))
+    ok("put back, a take has the tempo, signature and click it had; all of it is as it was",
+       lib.take(night18, 2) == snap18 and (lib.take(night18, 2)["tempo"], lib.take(night18, 2)["click"]) == (140, True))
+    whole18 = lib.rehearsal(night18)
+    whole_record18 = lib.rehearsal_record(night18)
+    lib.forget_rehearsal(night18)
+    lib.restore_rehearsal(json.loads(json.dumps(whole_record18)))
+    ok("so does a whole rehearsal, every take's tempo among it", lib.rehearsal(night18) == whole18)
+    lib.close()
+
     print()
     if problems:
         print(f"{len(problems)} problem(s):")

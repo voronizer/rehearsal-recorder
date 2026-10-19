@@ -9,6 +9,7 @@ import {
   useMixLevel,
 } from "@/lib/listening"
 import { MIN_VIEW_SEC } from "@/lib/timeline"
+import { askingPlayerClick, heardPlayerClick } from "@/hooks/usePlayerClick"
 
 export type MultitrackPlayer = ReturnType<typeof useMultitrackPlayer>
 
@@ -119,7 +120,8 @@ export function useMultitrackPlayer(
       problem?: string | null
       reopened?: boolean
       warning?: string
-    }) => {
+      click?: boolean
+    }, asked: number) => {
       // The output went quiet under the take, and Python paused it. Said
       // where the other word about the output is said: the next play tries
       // the card again, and replaces this with how that went.
@@ -135,6 +137,7 @@ export function useMultitrackPlayer(
       if (s.soloed !== undefined) setSoloed(s.soloed)
       if (s.volumes) setVolumes(s.volumes)
       heard({ volume: s.master, level: s.master_level })
+      if (typeof s.click === "boolean") heardPlayerClick(s.click, asked)
       if (s.levels) setLevels(s.levels)
       if (s.loop !== undefined) setLooping(s.loop !== null)
     },
@@ -184,6 +187,7 @@ export function useMultitrackPlayer(
         if (broken) throw new Error(broken.error ?? `Missing file: ${broken.name}`)
         setMedia(info)
 
+        const openAsked = askingPlayerClick()
         const opened = await api().player_open(tracks, true)
         if (cancelled) return
         if (!opened.ok) throw new Error(opened.error ?? "Could not open the take")
@@ -191,7 +195,7 @@ export function useMultitrackPlayer(
         openedRef.current = true
         release = playerOpened((v) => void api().player_set_master(v))
         setOutputWarning(opened.warning ?? null)
-        applyState(opened)
+        applyState(opened, openAsked)
         setLoading(false)
         settle()
       } catch (e) {
@@ -206,8 +210,9 @@ export function useMultitrackPlayer(
       // player call's failure is, by api() in the problem bar, and the take
       // stays open, paused.
       if (!playNow || cancelled) return
+      const playAsked = askingPlayerClick()
       const s = await api().player_play()
-      if (!cancelled) applyState(s)
+      if (!cancelled) applyState(s, playAsked)
     })()
 
     return () => {
@@ -230,13 +235,14 @@ export function useMultitrackPlayer(
     const poll = async () => {
       if (!alive) return
       try {
+        const asked = askingPlayerClick()
         const s = await pollPython("player_state")
         if (!alive) return
         const matches = !s.tracks || (s.tracks.length === tracks.length &&
           s.tracks.every((track, index) => track.file === tracks[index].file && track.name === tracks[index].name))
         if (s.open && matches) {
           openedRef.current = true
-          applyState(s)
+          applyState(s, asked)
         } else {
           openedRef.current = false
           setPlaying(false)
@@ -311,8 +317,9 @@ export function useMultitrackPlayer(
   const call = useCallback(
     async (fn: () => Promise<Record<string, unknown>>) => {
       if (!openedRef.current) return
+      const asked = askingPlayerClick()
       const s = await fn()
-      applyState(s as Parameters<typeof applyState>[0])
+      applyState(s as Parameters<typeof applyState>[0], asked)
     },
     [applyState]
   )

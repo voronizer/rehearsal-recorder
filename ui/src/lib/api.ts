@@ -19,7 +19,18 @@ export type Device = {
   default_samplerate: number
 }
 
-export type OutputDevice = Device
+export type OutputDevice = Device & {
+  /** Why the metronome's click cannot play through it, in words, or null:
+   *  another ASIO card cannot play while one records. Settings › Metronome
+   *  does not offer such a device. */
+  click_unavailable: string | null
+}
+
+/** The four signatures, as Python keeps them. */
+export type Signature = "4/4" | "3/4" | "2/4" | "6/8"
+
+/** The three sounds the app makes for the click. */
+export type ClickSound = "click" | "wood" | "hihat"
 
 export type Track = {
   name: string
@@ -130,6 +141,14 @@ export type Take = {
   cloud?: CloudShare
   /** Why this take is not in the cloud folder, if something went wrong. */
   cloud_error?: string
+  /** What the metronome showed when Record was pressed, in its own count
+   *  (eighths a minute in 6/8); null when it showed none. A take from before
+   *  the metronome has none. */
+  tempo?: number | null
+  signature?: Signature | null
+  /** Recorded to the click: its bars start at the first sample of its
+   *  files. A take with a tempo and no click had the switch off. */
+  click?: boolean
 }
 
 /** A label's colour, by name. What it looks like is the theme's:
@@ -238,6 +257,12 @@ export type TransportResult = Ok<{
   transport?: TransportState
 }>
 
+/** Where a crop cut the take, in its seconds before the crop: for a click
+ *  take, its start back on the bar line at or before the region's and its
+ *  end on the next quarter, so the files still start on a bar; for any
+ *  other, the region as it was asked. */
+export type CutAt = { start_sec?: number; end_sec?: number }
+
 /** A take that was just stopped — still a draft, still unnamed. */
 export type PendingTake = {
   ok: true
@@ -253,6 +278,11 @@ export type PendingTake = {
   /** The name it would have had with none picked before recording: what ✕
    *  in the review screen's name field puts back. */
   default_name?: string
+  /** The take's tempo, signature and whether it clicked, as a kept take
+   *  has them. */
+  tempo?: number | null
+  signature?: Signature | null
+  click?: boolean
 }
 
 /** A take that was recorded but never saved (the app died mid-take). */
@@ -392,6 +422,9 @@ export type SongChoice = {
   /** Titles the song had, or songs merged into it: typed, they are this
    *  song too (Library._resolve). */
   also?: string[]
+  /** The song's tempo and signature, when it has them. */
+  tempo?: number | null
+  signature?: Signature | null
 }
 
 /** The songs a take can be named after (api.song_choices): what its own
@@ -452,6 +485,10 @@ export type SongSummary = {
   starred: number
   /** Its old names: titles it had, and songs merged into it. */
   also: string[]
+  /** What the metronome follows when the song is picked, in the song's own
+   *  count (eighths a minute in 6/8); null for a song with none. */
+  tempo?: number | null
+  signature?: Signature | null
 }
 
 /** The takes nobody named, as the last row of the Songs view. */
@@ -482,6 +519,10 @@ export type SongDetail = {
   also?: string[]
   plays?: SongPlays | null
   goes?: SongGo[]
+  /** The song's tempo and signature; null for a song with none, and for the
+   *  takes nobody named. */
+  tempo?: number | null
+  signature?: Signature | null
 }
 
 /** A song renamed (api.rename_song). Refused because the title is another
@@ -658,6 +699,9 @@ export type PlayerState = {
   /** 0..1 per channel of each track, as it came out of the mix a moment
    *  ago. A list even for a mono track, so one shape serves both. */
   levels?: Record<string, number[]>
+  /** Whether the click plays with the take, as player_set_click left it:
+   *  off in a fresh app, and kept from one take to the next. */
+  click?: boolean
   /** The chosen output could not be used and the system one was taken. */
   warning?: string
   /** Why playback stopped by itself: the output went quiet under it. Stays
@@ -823,7 +867,84 @@ export type InterfaceCheck = {
   checked_at?: string | null
 }
 
-export type Settings = {
+/** The metronome's settings, in `get_settings` beside the rest: where the
+ *  click is heard, its sound, the count-in, and whether Record clicks.
+ *  Settings › Metronome and the gear in the row show the same ones. */
+export type MetronomeSettings = {
+  /** The click's own output, as `output_device_index` is the player's; null
+   *  until one is picked, and the click then goes where the player plays. */
+  click_device_index: number | null
+  /** The click's own output by name when it is saved and not plugged in
+   *  ("" for one saved with no name), else null. An output that is there
+   *  and cannot play is only `metronome_state`'s `output_missing`. */
+  click_device_missing: string | null
+  /** Outputs of that card the click comes out of, from 1; null with no
+   *  device picked. */
+  click_channels: number[] | null
+  click_sound: ClickSound
+  /** 0..1 */
+  click_volume: number
+  /** Bars of clicks before the band plays. */
+  count_in_bars: 0 | 1 | 2
+  /** Whether a click take's WAVs carry its tempo and signature. */
+  tempo_in_wav: boolean
+  /** The row's switch: does Record click. */
+  metronome_on: boolean
+}
+
+/** The settings `set_metronome_setting` changes, with what each takes. The
+ *  click's output goes through `set_click_device` and `set_click_channels`,
+ *  and the switch through `metronome_set_on`. */
+export type MetronomeSettingKey = "click_sound" | "click_volume" | "count_in_bars" | "tempo_in_wav"
+
+/** Where the metronome is, for the row and the recording screen
+ *  (`metronome_state`, polled): idle, ▶ running between takes (`preview`),
+ *  the count-in of a take, or the take after it. */
+export type MetronomePhase = "idle" | "preview" | "count" | "take"
+
+/** Where its tempo comes from (spec Part 2), from the next take's name: a
+ *  song with a tempo, a song without one, or a take that is no song's. */
+export type MetronomeCase = "song" | "song_without" | "free"
+
+/**
+ * What the metronome is doing, asked many times a second. Python knows when
+ * each click is heard, so the screen lights the beat from `upcoming` and
+ * never keeps a clock of its own.
+ */
+export type MetronomeState = {
+  phase: MetronomePhase
+  /** The row's tempo, in its signature's count; null while it is empty. */
+  tempo: number | null
+  signature: Signature
+  /** Clicks to a bar: 4, 3, 2 or 6. */
+  per_bar: number
+  on: boolean
+  case: MetronomeCase
+  /** The song the next take is named for, as it is in the library. */
+  song: { id: number; title: string; tempo: number | null; signature: Signature | null } | null
+  /** The row differs from the song: Save to song. */
+  held: boolean
+  /** The song's newest take, for "count it from the last take". */
+  last_take: { folder: string; take_number: number; name: string } | null
+  /** The clicks heard in the next 1.5 s: [milliseconds from now, index in
+   *  the bar, counted from 0]. */
+  upcoming: [number, number][]
+  /** Which count-in click this is, from 1; 0 outside the count-in. In a
+   *  count-in of two bars it may run on past a bar or start again, which
+   *  `countDigit` (lib/metronome.ts) reads either way. */
+  count: number
+  /** Milliseconds since the count-in ended, negative before it; null with
+   *  no click. A take's clock starts at 0 here. */
+  since_count_in_ms: number | null
+  /** The name of the click's output when it cannot play. */
+  output_missing: string | null
+}
+
+/** The pads' hits since the last asking, as milliseconds ago, oldest first
+ *  (`metronome_taps`). */
+export type MetronomeTaps = { ms_ago: number[] }
+
+export type Settings = MetronomeSettings & {
   recordings_dir: string
   default_recordings_dir: string
   device_index: number | null
@@ -965,7 +1086,14 @@ type PyApi = {
     startSec: number,
     endSec: number
   ): Promise<
-    Ok<{ take?: Take; markers_dropped?: number; undo?: string | null; ended?: string[] }>
+    Ok<
+      {
+        take?: Take
+        markers_dropped?: number
+        undo?: string | null
+        ended?: string[]
+      } & CutAt
+    >
   >
   /** The same, for a take that is still on the review screen. */
   crop_draft(
@@ -983,7 +1111,7 @@ type PyApi = {
       duration_sec?: number
       undo?: string | null
       ended?: string[]
-    }>
+    } & CutAt>
   >
 
   list_rehearsals(): Promise<RehearsalSummary[]>
@@ -1195,6 +1323,50 @@ type PyApi = {
   set_output_device(deviceIndex: number | null): Promise<Ok<{ warning?: string }>>
   set_output_channels(channels: number[]): Promise<Ok<{ warning?: string }>>
 
+  /** The click's own output, as `set_output_device` is the player's; null
+   *  puts the click back on the player's. Refused for a device the click
+   *  cannot play through (`click_unavailable`). */
+  set_click_device(deviceIndex: number | null): Promise<Ok<{ warning?: string }>>
+  set_click_channels(channels: number[]): Promise<Ok<{ warning?: string }>>
+  set_metronome_setting<K extends MetronomeSettingKey>(
+    key: K,
+    value: MetronomeSettings[K]
+  ): Promise<Ok>
+  /** The row's tempo and signature; null empties the tempo. Held until the
+   *  next take's name names another song. */
+  metronome_set(tempo: number | null, signature: Signature): Promise<Ok>
+  /** The row becomes the song's, for the song the next take is named for. */
+  metronome_save_to_song(): Promise<Ok>
+  /** The switch, mid-take too. */
+  metronome_set_on(on: boolean): Promise<Ok>
+  /** Runs the click between takes; it stops at `metronome_stop` and at
+   *  Record, and is refused during a take. With no tempo, the row's, which
+   *  it follows while it runs; refused while the row has none. With one, a
+   *  song page's ▶: that tempo in `signature`, checked as the row's is, and
+   *  the row and a change held in it left as they are. `metronome_state`
+   *  says what it plays, in the phase `preview`. */
+  metronome_play(tempo?: number | null, signature?: Signature | null): Promise<Ok>
+  metronome_stop(): Promise<Ok>
+  /** Plays a bar of `sound`, or of the one set. */
+  metronome_preview(sound?: ClickSound | null): Promise<Ok>
+  metronome_state(): Promise<MetronomeState>
+  /** Counts a tempo from a take's files, in `signature`'s own count. */
+  count_tempo(folder: string, takeNumber: number, signature: Signature): Promise<Ok<{ tempo?: number }>>
+  /** A song's own tempo, from its page; null empties it. */
+  set_song_tempo(
+    songId: number,
+    tempo: number | null,
+    signature: Signature | null
+  ): Promise<
+    Ok<{ id?: number; title?: string; tempo?: number | null; signature?: Signature | null }>
+  >
+  /** Pad hits count as taps from now until a pause of about two seconds. */
+  metronome_tap_listen(): Promise<Ok>
+  metronome_taps(): Promise<MetronomeTaps>
+  /** Whether the player plays the click with the take. Off in a fresh app,
+   *  and kept as left from one take to the next. */
+  player_set_click(on: boolean): Promise<Ok>
+
   start_monitor(
     deviceIndex: number,
     samplerate: number,
@@ -1338,6 +1510,8 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "recording_health",
   "list_rehearsals",
   "list_songs",
+  "metronome_state",
+  "metronome_taps",
   "list_drafts",
   "list_labels",
   "list_sets",
@@ -1426,6 +1600,10 @@ type Pollable = {
   recording_health: RecordingHealth
   session_state: SessionState
   update_status: UpdateStatus
+  /** The click's phase and what is heard next, for the beat's light. */
+  metronome_state: MetronomeState
+  /** Pad hits since the last asking, after Tap is pressed. */
+  metronome_taps: MetronomeTaps
 }
 
 // Whether the http route works is decided once: either the interface is being

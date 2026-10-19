@@ -20,6 +20,7 @@ describe("the site's content", () => {
       "names",
       "cloud",
       "sets",
+      "metronome",
       "trash",
     ])
   })
@@ -65,13 +66,13 @@ describe("the site's content", () => {
     ])
   })
 
-  it("tells the second step as the app goes through it", () => {
+  it("tells the second step as the app goes through it, the click and the count-in with it", () => {
     const record = content.story.steps.find((s) => s.id === "record")!
     expect(record.title).toBe("Hear last week, then record.")
     expect(leadAndBeats(record.body).beats).toEqual([
       "▶ beside Pałyn on the start screen plays its ★ take from last week.",
-      "Start, and ↑ picks Pałyn under Next take.",
-      "Record: the take's name over a big clock, and a tile per track that turns red when it clips.",
+      "Start, and ↑ picks Pałyn under Next take, and its 128 bpm for the click.",
+      "Record: a bar of clicks to count in, then the take's name over a big clock, and a tile per track that turns red when it clips.",
     ])
   })
 
@@ -98,12 +99,12 @@ describe("the site's content", () => {
     )
   })
 
-  it("has eight questions, each with an answer, the name's first", () => {
-    expect(content.faq.questions).toHaveLength(8)
+  it("has nine questions, each with an answer, the name's first", () => {
+    expect(content.faq.questions).toHaveLength(9)
     expect(content.faq.questions[0].body).toContain("Belarusian for “echo”")
     // Sleep follows the laptop dying, the question it answers next.
-    expect(content.faq.questions[5].title).toBe("What if the laptop dies in the middle of a take?")
-    expect(content.faq.questions[6].title).toBe(
+    expect(content.faq.questions[6].title).toBe("What if the laptop dies in the middle of a take?")
+    expect(content.faq.questions[7].title).toBe(
       "Will the laptop fall asleep in the middle of a take?"
     )
     for (const q of content.faq.questions) expect(q.body).not.toBe("")
@@ -134,5 +135,32 @@ describe("the site's content", () => {
     expect(content.version).toBe("99.0.0")
     expect(content.news?.version).toBe(latestNews(head)?.version)
     expect(content.news?.tag).toBe(content.news?.version)
+  })
+})
+
+// The metronome on reha.stream (spec, "On reha.stream"): a tile of its own,
+// the second step's lines (above) and a question.
+describe("metronome on the site", () => {
+  it("has the metronome tile's words", () => {
+    const tile = content.features.tiles.find((t) => t.id === "metronome")!
+    expect(tile.title).toBe("A click for the drummer.")
+    expect(tile.body.replace(/\s+/g, " ").trim()).toBe(
+      "Each song keeps its tempo and time signature. The click can go to the drummer's " +
+        "headphones only, and during a take the edge of the screen lights on every click."
+    )
+  })
+
+  it("asks whether there is a metronome after the question on audio interfaces", () => {
+    const titles = content.faq.questions.map((q) => q.title)
+    const at = titles.indexOf("Is there a metronome?")
+    expect(titles[at - 1]).toBe("Which audio interfaces work?")
+    expect(content.faq.questions[at].body.replace(/\s+/g, " ").trim()).toBe(
+      "Yes. Each song keeps its tempo and time signature: typed, tapped, or counted from " +
+        "an old take. The click plays through the output you choose, so it can go to the " +
+        "drummer's headphones only, and during a take the edge of the screen lights on " +
+        "every click. A take recorded to the click keeps its tempo, and its WAV and .mid " +
+        "files carry it: set your DAW to that tempo, and the take's bars sit on the " +
+        "project's bars."
+    )
   })
 })
