@@ -74,10 +74,10 @@ input of that track. A track shows **signal** once sound has arrived on it;
 a stereo track needs sound on both sides. **Stop checking**, the same
 button, ends the check.
 
-The free disk space is shown under the tracks, as recording time: "Room for
-about 29 h 25 min of recording". It takes the number of tracks and the
+The free disk space is shown under the tracks, as recording time: “Room for
+about 29 h 25 min of recording”. It takes the number of tracks and the
 recording quality into account. When the disk is nearly full, the line
-gets an amber icon and says so: "Low disk space: room for about 12 min".
+gets an amber icon and says so: “Low disk space: room for about 12 min”.
 
 ### Last time
 
@@ -112,7 +112,7 @@ too.
 
 A band getting ready for a gig plays the same songs in the same order,
 rehearsal after rehearsal. A set is those songs, in that order, with a name:
-"Gig on the 25th". The rehearsal screen then lists them under the next
+“Gig on the 25th”. The rehearsal screen then lists them under the next
 take's name, and History says afterwards which of them were played.
 
 The button left of **Start rehearsal** says which set the rehearsal will
@@ -176,7 +176,7 @@ remembers which take was the good one. None of this has to be done:
   See [Sending takes to the cloud](#sending-takes-to-the-cloud).
 
 The two buttons sit at the head of the songs, beside the rehearsal's marks
-counted by label, each in its colour: "2 Keep this", "1 Went wrong". Each
+counted by label, each in its colour: “2 Keep this”, “1 Went wrong”. Each
 button shows how many takes it would act on. With none it is greyed, and
 pointing at it says why.
 
@@ -202,7 +202,7 @@ take is of the same song as the one before it, so the name stays until you
 move on to another song.
 
 When you play by a set, the set comes first in the panel, under the field:
-"Gig on the 25th · 3 of 6 played", then its songs in order. The song in the
+“Gig on the 25th · 3 of 6 played”, then its songs in order. The song in the
 field is lit, and the one after it says **next**. A song played tonight has
 ✓ and how many takes it got. The rehearsal's first take is the set's first
 song. A set with no songs in it yet says so, and that they are added in
@@ -236,15 +236,15 @@ the name you picked.
 The recording screen is big enough to read from where you play.
 
 - The take's name is over the clock, half its size, so you can see from
-  where you stand what you are recording. If it says "Take 3", nobody named
+  where you stand what you are recording. If it says “Take 3”, nobody named
   the take: name it after **Stop**. A take you named has its place in the
-  rehearsal, "Take 6", at the bottom left, after the red *Recording*.
+  rehearsal, “Take 6”, at the bottom left, after the red *Recording*.
 - The clock shows how long the take has been running.
 - The bar under the clock appears when this is another take of a song you
-  have already played in this rehearsal: "Took 2:21 last time". The
+  have already played in this rehearsal: “Took 2:21 last time”. The
   rehearsal's first take of a song played before is measured against the
   take ▶ plays for it in Last time: its newest ★ take, or the last take of
-  the last rehearsal that played it, "Took 3:20 on 22 Sep". The bar fills as
+  the last rehearsal that played it, “Took 3:20 on 22 Sep”. The bar fills as
   you play, so you can see how far into the song you are.
 - Each track has a tile that fills from the bottom with its level. The fill
   is in dB, like the meters on a mixer: −60 dB at the bottom, the loudest
@@ -255,19 +255,19 @@ The recording screen is big enough to read from where you play.
   it can be read. The track's icon is in the top left corner. A stereo track
   is split down the middle, left and right.
 - A tile that clipped (got more than the input can take, so the sound is
-  distorted) turns red and says how many times, "clipped 3×". It stays red
+  distorted) turns red and says how many times, “clipped 3×”. It stays red
   until the take ends, so you still see it when you look up if you were
   playing when it happened. A tile with nothing coming in, below −60 dB,
-  goes dim and says "silent", which is normal while someone is not
+  goes dim and says “silent”, which is normal while someone is not
   playing.
 
 At the bottom left, under the red *Recording*, a line says that the
 interface is connected and how much recording time the disk has left:
-"Interface connected · room for about 3 h 20 min of recording". When the
-disk is nearly full, the line gets an amber icon and says "Low disk space:
-room for about 12 min. Free some up or finish the rehearsal." It does the
-same when the laptop runs on its battery with 20% or less left: "Battery
-14%: plug the laptop in".
+“Interface connected · room for about 3 h 20 min of recording”. When the
+disk is nearly full, the line gets an amber icon and says “Low disk space:
+room for about 12 min. Free some up or finish the rehearsal.” It does the
+same when the laptop runs on its battery with 20% or less left: “Battery
+14%: plug the laptop in”.
 
 While a take records, the laptop does not go to sleep and its screen does
 not go dark or lock, whatever the system's own settings say. After Stop,
@@ -288,24 +288,24 @@ its marks and whether it goes to the cloud. See [Undo](#undo). If the take
 cannot be saved, a red notice says why and stays until you close it. The
 take is still here, so press **Save take** again.
 
-The take's name is at the top: the song and its number, "Viasna 2". A long
+The take's name is at the top: the song and its number, “Viasna 2”. A long
 name takes a second line, and one longer than that is cut with its number
 kept; point at it to read it whole. The small line over it gives the take's
-place in the rehearsal and the rehearsal's name, "Take 5 · Thursday"; a long
+place in the rehearsal and the rehearsal's name, “Take 5 · Thursday”; a long
 rehearsal name is cut, and shows whole when you point at it. A take nobody
-named says "Take 7", in grey. How long the take ran is in the player,
-"0:00 / 2:31".
+named says “Take 7”, in grey. How long the take ran is in the player,
+“0:00 / 2:31”.
 
 At the right of the name are the song's takes tonight as columns, the last
 ten of them. Each is as tall as that take ran, with the take's number under
 it. This take's column is in the colour of the text, the starred takes (★)
 are pale green and the others grey. Point at the columns to read them as
-times: "Viasna 1: 2:31, Viasna 2: 2:41". A song's first take tonight has no
+times: “Viasna 1: 2:31, Viasna 2: 2:41”. A song's first take tonight has no
 columns, and nor does a take nobody named. In a narrow window the columns go
 first, to leave the name its room; point at the name to read them then.
 
 Check the name before you save. It is filled in for you: after a take called
-"Pałyn", the next one is "Pałyn 2". The pencil right after the name opens
+“Pałyn”, the next one is “Pałyn 2”. The pencil right after the name opens
 **Rename take**. The songs you have played are listed under its field, this
 rehearsal's first, then the others, most recent first: click one, or type a
 name, and press Enter. The title and the columns follow. ✕ in the field puts
@@ -313,15 +313,15 @@ back the name the take would have had if none had been picked before
 recording. While **Rename take** is open, Space types and Esc closes it. See
 [Names and songs](#names-and-songs).
 
-The bottom left says whether this take goes to your cloud folder: "Send to
-the cloud: the mix, FLAC", with a box in front. The line names what would be
+The bottom left says whether this take goes to your cloud folder: “Send to
+the cloud: the mix, FLAC”, with a box in front. The line names what would be
 sent and in which format, as you set them (see [Sending takes to the
 cloud](#sending-takes-to-the-cloud)), and the box starts ticked when **Send
 saved takes automatically** is on. Tick it to send this take, or untick it
 to leave it on this computer; the setting stays as it is. The box lets go of
 the keyboard as soon as you change it, so Space still saves the take. With
-no cloud folder, the line says "Stays on this computer: no cloud folder is
-set".
+no cloud folder, the line says “Stays on this computer: no cloud folder is
+set”.
 
 You can listen, add marks and crop the take here, before you save it (see
 [Listening back](#listening-back)). The marks are saved with the take.
@@ -394,7 +394,7 @@ A few things about cropping:
   from the cropped take, as the mix, the tracks or both, whatever was there
   before. This happens whether automatic sending is on or not.
 - Once the notice has gone, the take as it was is in the Trash, as one
-  folder named after the take with "(before crop)" after it. To get the
+  folder named after the take with “(before crop)” after it. To get the
   audio back then, move its files back into the take's folder. The app
   still shows the shorter length, and the marks stay where the crop moved
   them.
@@ -434,7 +434,7 @@ or the ? key, lists all of this with the player's keys.
 
 Above the ruler is a map of the whole take. Zoomed in, the grey stretch on
 it is the part on screen, and the orange one is the selection, if there is
-one. At the closest zoom the map says "closest zoom". Drag the grey stretch
+one. At the closest zoom the map says “closest zoom”. Drag the grey stretch
 to move along the take, or click anywhere else on the map to go there.
 Zoomed in, **Whole take**, beside the map, zooms back out. The buttons
 beside the selection's times and **Crop** are only on screen with the
@@ -448,17 +448,17 @@ playhead comes back into view.
 ## Names and songs
 
 Each take belongs to a song. You name it with the song's title, and the app
-counts the song's takes: the number beside the name, "Pałyn 1", "Pałyn 2",
-goes on from one rehearsal to the next, so "Pałyn 17" is one take wherever
+counts the song's takes: the number beside the name, “Pałyn 1”, “Pałyn 2”,
+goes on from one rehearsal to the next, so “Pałyn 17” is one take wherever
 it was played. Deleting a take does not free its number. A new take is of
 the same song as the one before it, so you only name a take when the band
 moves on to another song.
 
-Type the title only; the number is the app's. Typing "Pałyn 5" names the
+Type the title only; the number is the app's. Typing “Pałyn 5” names the
 take Pałyn, at whatever number is next. A song is spelled one way everywhere:
-typing "pałyn" gives "Pałyn" when that song is there. A title can end in a
-number, like "Opus 5", as long as no song is called "Opus". A take nobody
-named is called by its number, "Take 4", and is not counted as a song. The
+typing “pałyn” gives “Pałyn” when that song is there. A title can end in a
+number, like “Opus 5”, as long as no song is called “Opus”. A take nobody
+named is called by its number, “Take 4”, and is not counted as a song. The
 same goes for a recovered take you did not name (see [The app closed during
 a take](#the-app-closed-during-a-take)). On the rehearsal screen and in
 History, the songs are listed under such a take, so one click names it.
@@ -490,10 +490,10 @@ Every take is renamed, with its folder on disk and its copies in the cloud
 folder; the files follow in the background, and the list of work in the
 background says so (see [Following the copies](#following-the-copies)). A
 title that differs only in capitals respells the song. Here a number at the
-end is part of the title: "Opus 5" is the whole of it. "Take 4" cannot be a
+end is part of the title: “Opus 5” is the whole of it. “Take 4” cannot be a
 song's title, since it is what a take with no song is called.
 
-The same song typed two ways, "Palyn" one night and "Pałyn" the next, is two
+The same song typed two ways, “Palyn” one night and “Pałyn” the next, is two
 songs until you merge them. Rename song lists the other songs under the
 title: click one, or type its title, and **Rename** becomes **Merge…**. The
 app asks first, saying how many takes from how many rehearsals are renamed
@@ -504,12 +504,12 @@ its takes one by one.
 
 A title a song leaves behind, renamed or merged away, is remembered: typed
 again in any name field, with or without a number, it is that song. The
-field says "Palyn → Pałyn 12", and under it, "Palyn is Pałyn now. Make
-Palyn a new song". The link forgets the old name at once, with no
+field says “Palyn → Pałyn 12”, and under it, “Palyn is Pałyn now. Make
+Palyn a new song”. The link forgets the old name at once, with no
 **Undo**, and the take is a new song, Palyn 1.
 
 A song's page lists its old names under the title, **Also typed as** Palyn,
-each with × to forget it. A notice then says "“Palyn” was forgotten.", and
+each with × to forget it. A notice then says *“Palyn” was forgotten.*, and
 its **Undo** gives the name back to the song. If Undo cannot, because the
 name is another song's by then, the notice says why.
 
@@ -531,7 +531,7 @@ how many songs you played and how many takes each one got.
 
 At the top of the window, beside the title, are how many rehearsals there
 are, how long you played in all and how much of the disk they use:
-"5 rehearsals · 2 h 24 min played · 5.0 GB". In a narrow window they give
+“5 rehearsals · 2 h 24 min played · 5.0 GB”. In a narrow window they give
 way one at a time, the size first, and pointing at them then shows them all.
 
 Click a rehearsal to show it, or go through them with ↑ and ↓. Its takes
@@ -562,7 +562,7 @@ pointing at it shows it whole.
 
 A rehearsal played by a set has the set's name under its date in the list,
 and beside the date on its page. Over its songs, a card says how much of the
-set was played, "Gig on the 25th · 4 of 6 played", and lists the set's songs
+set was played, “Gig on the 25th · 4 of 6 played”, and lists the set's songs
 in order, in two columns when there is room: each one played with ✓ and its
 takes, each other **not played**. Click a played song to go to its takes.
 The card shows the set as it was at that rehearsal, whatever has changed in
@@ -687,18 +687,18 @@ Your recordings on disk always stay WAV. Only the copies are converted.
 
 ### Following the copies
 
-Each take shows where its copy is: "Waiting for the cloud", "Copying to the
-cloud", a green cloud with a tick once it is there, or "Not in the cloud" if
+Each take shows where its copy is: “Waiting for the cloud”, “Copying to the
+cloud”, a green cloud with a tick once it is there, or “Not in the cloud” if
 something went wrong; pointing at it then says why.
 
 At the top right of the window, a button shows the work running in the
-background: "1 working · 64%" while a copy is made, then "Done", or
-"1 failed" in red. Click it to see what happened, and to **Retry** a copy
+background: “1 working · 64%” while a copy is made, then “Done”, or
+“1 failed” in red. Click it to see what happened, and to **Retry** a copy
 that failed. The same list shows takes being cropped, saved or recovered.
 
 Sending a take again replaces its earlier copy. It never replaces another
 take's: where a copy would land on one (two takes nobody named, in two
-rehearsals whose folders have the same name), it gets " (2)" after its name.
+rehearsals whose folders have the same name), it gets “ (2)” after its name.
 **Remove from the cloud**, in the dialog the cloud button opens, deletes the
 copies but not the recording.
 
@@ -762,7 +762,7 @@ Removing a track removes that musician on every interface.
 
 The app looks for interfaces when it starts. If you switch on the mixer
 after opening the app, it is not in the list yet. The start screen then says,
-for example, "“X18/XR18” is not connected", with a **Look again** button.
+for example, *“X18/XR18” is not connected*, with a **Look again** button.
 Press it once the mixer has started. Settings has the same button next to
 the list of interfaces.
 
@@ -773,7 +773,7 @@ it restarts every ASIO driver when it looks.
 
 A keyboard has two outputs, and so does a pair of overhead microphones. Press
 **Stereo** on a track to record its input and the next one together, as one
-stereo file. The input then shows a pair, for example "Inputs 9–10".
+stereo file. The input then shows a pair, for example “Inputs 9–10”.
 
 Both inputs have to be free. If the next input already belongs to another
 track, the stereo track waits for an input and the screen says so.
@@ -807,7 +807,7 @@ At the top right of every track is a switch.
 A MIDI port is the name a kit or keyboard has on the computer, such as
 TD-17. Pick it in the list on the track's MIDI line; a MIDI cable into the
 interface shows up there too. On a keyboard with two ports, the list puts
-the one you play first, and during **Check signal** says "✓ notes" beside
+the one you play first, and during **Check signal** says “✓ notes” beside
 the one that is played. Two identical devices are both listed, and the
 track's line says it is not connected until you pick one. The mode and the
 port stay with the musician, as the icon and **Stereo** do.
@@ -815,14 +815,14 @@ port stay with the musician, as the icon and **Stereo** do.
 **Start rehearsal** stays off, and the screen says why, when a track on
 **Both** or **MIDI** has no port yet, when two tracks take notes from one
 port, and when every track is on **MIDI**: the takes are heard from their
-audio. **Check signal** checks the ports too: a port's line says "no notes"
-until a note has arrived, and then "✓ notes".
+audio. **Check signal** checks the ports too: a port's line says “no notes”
+until a note has arrived, and then “✓ notes”.
 
 ### A port that is not plugged in
 
 A port that was picked and is not there does not stop the rehearsal. Its
-picker gets an amber edge, and the track says in its own line "Not
-connected. Records its notes from the moment it is plugged in." The track
+picker gets an amber edge, and the track says in its own line “Not
+connected. Records its notes from the moment it is plugged in.” The track
 waits, and its notes start when the port appears, even in the middle of a
 take; the list notices a port plugged in within a couple of seconds. A port
 pulled out during a take stops nothing, and if it comes back, its notes go
@@ -838,16 +838,16 @@ that is not connected gives the tile an amber edge, and says so where the
 tile is wide enough.
 
 In the player, a track's notes are a lane of their own. On **Both** they are
-the next lane under the track's audio, and share its dark background, under
-a thin line; on **MIDI** they are in the track's own place among the lanes,
-on a background of their own. On the left the lane says "Saved as .mid, not played
-here", and it has no **M**, **S** or fader, as there is nothing to hear. A
-kit is drawn in six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick;
-anything else, by pitch. A track with the drums icon is drawn as a kit, and
-so is one whose notes are all on MIDI channel 10. A track with no notes in a
-take says "No notes in this take". Notes that take more than a second to
-read show a spinner until they are there, and notes that cannot be read say
-"Could not read the notes".
+the next lane under the track's audio, and share its dark background, under a
+thin line; on **MIDI** they are in the track's own place among the lanes, on a
+background of their own. On the left the lane says “Saved as .mid, not played
+here”, and it has no **M**, **S** or fader, as there is nothing to hear. A kit
+is drawn in six rows, Crash, Ride, Hi-hat, Toms, Snare and Kick; anything
+else, by pitch. A track with the drums icon is drawn as a kit, and so is one
+whose notes are all on MIDI channel 10. A track with no notes in a take says
+“No notes in this take”. Notes that take more than a second to read show a
+spinner until they are there, and notes that cannot be read say “Could not
+read the notes”.
 
 ### Where the .mid files are
 
@@ -880,14 +880,14 @@ little late and loose against the sound. For a part that has to be tight,
 such as the kit, use a cable.
 
 **Settings › Under the hood** has a **MIDI** row, under **Audio engine**,
-that says which MIDI the app is using: on Windows, "Windows MIDI Services"
-or "Windows MIDI". **Copy details for a bug report** has it too. On
-"Windows MIDI" a Bluetooth MIDI device cannot be seen: if yours is not in
-the list, use a cable. "Windows MIDI" also lets only one program have a port
+that says which MIDI the app is using: on Windows, “Windows MIDI Services”
+or “Windows MIDI”. **Copy details for a bug report** has it too. On
+“Windows MIDI” a Bluetooth MIDI device cannot be seen: if yours is not in
+the list, use a cable. “Windows MIDI” also lets only one program have a port
 at a time. If a DAW or a drum-sound program has it, the track's line during
-**Check signal** says "In use by another app. Records its notes from the
-moment it is free." While you record, the tile reads "not connected", and
-pointing at it shows "“TD-17” is in use by another app." Close the other
+**Check signal** says “In use by another app. Records its notes from the
+moment it is free.” While you record, the tile reads “not connected”, and
+pointing at it shows *“TD-17” is in use by another app.* Close the other
 program. The app holds a port too, during **Check signal** and in a
 rehearsal.
 
@@ -957,7 +957,7 @@ To set it up, open **Settings › Controls** and pick the controller in the
 press **Pair Bluetooth MIDI controller** to open the Mac's own Bluetooth
 MIDI window, pair it there, and come back. On Windows, pair it in the
 Bluetooth settings of Windows. When the line under the list says
-"Controller ready", it works.
+“Controller ready”, it works.
 
 From the controller:
 
@@ -969,7 +969,7 @@ From the controller:
   move to the previous or next song or take, set the volume, and start and
   finish the rehearsal.
 - Removing a take from the controller works like deleting it in the app:
-  a notice says "Take removed", and its **Undo** brings the take back.
+  a notice says “Take removed”, and its **Undo** brings the take back.
 
 What the controller sends is never recorded into a track's notes. If the
 controller drops out during a take, the take keeps recording.
@@ -978,7 +978,7 @@ controller drops out during a take, the take keeps recording.
 
 Deleting a take or a rehearsal, clearing false starts, discarding a take
 and cropping one happen at once, without a question first. A notice in the
-corner says what went, for example "“Pałyn 5” went to the Trash.", with an
+corner says what went, for example *“Pałyn 5” went to the Trash.*, with an
 **Undo** button. For 10 seconds, **Undo** or ⌘Z on a Mac (Ctrl+Z
 elsewhere) puts it back where it was: a take with its star, marks and cloud
 copy, a rehearsal with all its takes, a cropped take as it was before the
@@ -986,11 +986,11 @@ crop, a discarded take on the screen after it with the name and marks it
 had. Holding the mouse over the notice keeps it up.
 
 Forgetting a song's old name on its page in History works the same way: the
-notice says "“Palyn” was forgotten.", and **Undo** gives the name back to
+notice says *“Palyn” was forgotten.*, and **Undo** gives the name back to
 its song. See [Names and songs](#names-and-songs).
 
 So does taking a song out of a set in **Settings › Sets**: the notice says
-"“Pałyn” was taken out of the set.", and **Undo** puts the song back where
+*“Pałyn” was taken out of the set.*, and **Undo** puts the song back where
 it was. See [Play by a set](#play-by-a-set).
 
 ⌘Z brings back the newest one first; an older notice keeps its own
@@ -1071,7 +1071,7 @@ computer's own output.
 
 Sometimes a driver does not recover after its interface disappears. The take
 is still saved, after about fifteen seconds, and until the driver responds
-again the app says "The audio driver has stopped answering". Unplug the
+again the app says “The audio driver has stopped answering”. Unplug the
 interface and plug it back in. If that does not help, restart the app.
 
 ### The laptop goes to sleep during a take
@@ -1081,8 +1081,8 @@ choosing Sleep, or a battery about to run out still put it to sleep: no app
 can stop that. The take then ends where the laptop went to sleep. Everything
 recorded until then is kept, and nothing from after waking is added to it.
 Once the laptop is awake, the take opens as usual, with a note saying why it
-stopped: "The laptop went to sleep at 21:14, so the take ends there.
-Everything up to that moment is saved." Record the next take as usual.
+stopped: “The laptop went to sleep at 21:14, so the take ends there.
+Everything up to that moment is saved.” Record the next take as usual.
 
 ### The app closed during a take
 
@@ -1198,14 +1198,14 @@ When a newer version is out, a dot appears on the gear on the start screen,
 and another on **Under the hood** in Settings. There, the group named
 **Updates** says which one is out, and **What's new** opens its page on
 GitHub. The dots stay until you run the new version. When there is nothing
-newer, the same place says "This is the latest version." once GitHub has
-answered, and "Not checked yet." until then.
+newer, the same place says “This is the latest version.” once GitHub has
+answered, and “Not checked yet.” until then.
 
 **Download** fetches it for your system into your Downloads folder, checks
 that it is the release's own and that nothing in it is damaged, and opens the
 folder with it picked out. Unpack it, close the app and open the new copy.
 The old copy is not touched, so you can keep it until you are sure. On
-Windows a zip the app downloads itself carries no "from the internet" flag,
+Windows a zip the app downloads itself carries no “from the internet” flag,
 so there is nothing to unblock. If the download is cut short or damaged,
 nothing is left behind and **Try again** fetches it again. A download that
 is already there and whole is not fetched twice.

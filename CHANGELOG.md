@@ -8,7 +8,7 @@ opening.
 ## Unreleased
 
 - **Plainer words in the app and the guide.** The player's row of marks is
-  called **Marks**, and a mark's dialog says "Mark at 1:24". The interface
+  called Marks, and a mark's dialog says “Mark at 1:24”. The interface
   check talks about your interface instead of a card. Messages are plain
   sentences without dashes: when the chosen output is gone, for example,
   the message says the take plays through the system output. The guide, the
