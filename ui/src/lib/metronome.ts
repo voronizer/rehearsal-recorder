@@ -223,9 +223,20 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
   }
   const line = caseLine(state)
   if (!hasTempo || state.output_missing === null) return line
-  // The click's output cannot play. A change held keeps its line and its
-  // link, so it can still be saved, with the warning's icon before it.
-  return state.held && line.link ? { ...line, warn: true } : missingOutput(state.output_missing)
+  // The click's output cannot play. A change held keeps its link, so it can
+  // still be saved, after the short form of the warning, which keeps the
+  // line to its two lines.
+  if (state.held && line.link) {
+    const device = state.output_missing
+    return {
+      text: device
+        ? `The click's output, ${device}, is not connected.`
+        : "The click's output is not connected.",
+      link: line.link,
+      warn: true,
+    }
+  }
+  return missingOutput(state.output_missing)
 }
 
 /** The status line between takes for where the row's tempo comes from

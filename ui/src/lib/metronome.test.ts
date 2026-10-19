@@ -260,14 +260,14 @@ describe("the status line", () => {
     })
     expect(statusLine(state({ output_missing: "X18", phase: "preview" }), null).warn).toBe(true)
   })
-  it("keeps a held change's line and its link while the click's output is missing, with the warning", () => {
+  it("says the click's output is missing and keeps a held change's link", () => {
     expect(statusLine(state({ tempo: 120, held: true, output_missing: "X18" }), null)).toEqual({
-      text: "The song has 128 · 4/4; this holds until another song.",
+      text: "The click's output, X18, is not connected.",
       link: { label: "Save to song", action: "save" },
       warn: true,
     })
-    expect(statusLine(state({ ...WITHOUT, tempo: 104, held: true, output_missing: "X18" }), null)).toEqual({
-      text: "No tempo in the song yet: the first take played to the click keeps this one.",
+    expect(statusLine(state({ ...WITHOUT, tempo: 104, held: true, output_missing: "" }), null)).toEqual({
+      text: "The click's output is not connected.",
       link: { label: "Save now", action: "save" },
       warn: true,
     })
