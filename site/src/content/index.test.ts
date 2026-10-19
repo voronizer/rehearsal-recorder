@@ -52,8 +52,8 @@ describe("the site's content", () => {
       "Hold SONG or TAKE and turn the knob to pick another one.",
     ])
     expect(controller.finePrint).toContain("Settings › Controls")
-    expect(controller.link).toBe("Viktor Baikov's controller on GitHub")
-    expect(controller.photo).toMatch(/^Viktor Baikov's controller: a red REC button/)
+    expect(controller.link).toBe("Victor Baikov's controller on GitHub")
+    expect(controller.photo).toMatch(/^Victor Baikov's controller: a red REC button/)
   })
 
   it("has the five steps, in order", () => {

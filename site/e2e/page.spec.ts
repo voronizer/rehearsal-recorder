@@ -71,11 +71,11 @@ test("the controller has a block of its own after the app, its photo beside its 
   await page.goto("/")
   const block = page.locator("#controller")
   await expect(block.getByRole("heading", { level: 2 })).toHaveText("Start a take without going to the laptop.")
-  await expect(block.getByRole("link", { name: "Viktor Baikov's controller on GitHub" })).toHaveAttribute(
+  await expect(block.getByRole("link", { name: "Victor Baikov's controller on GitHub" })).toHaveAttribute(
     "href",
     "https://github.com/viktor-baikov/reha-controller"
   )
-  const photo = block.getByRole("img", { name: /^Viktor Baikov's controller: a red REC button/ })
+  const photo = block.getByRole("img", { name: /^Victor Baikov's controller: a red REC button/ })
   await expect(photo).toBeVisible()
   await expect.poll(() => photo.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(1000)
   const at = await page.evaluate(() => ({
