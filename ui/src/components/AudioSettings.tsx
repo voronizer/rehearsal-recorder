@@ -9,7 +9,7 @@ import { DevicePicker } from "@/components/DevicePicker"
 import { OutputChannels } from "@/components/OutputChannels"
 import { useAfter } from "@/hooks/useAfter"
 import { useNoticesGoWithPage } from "@/hooks/useErrorNotice"
-import { countOf, describeRescan, notConnected } from "@/lib/format"
+import { countOf, describeRescan, inputsLabel, notConnected } from "@/lib/format"
 import { dismiss, notify } from "@/lib/notices"
 import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { api, type Device, type OutputDevice, type Settings } from "@/lib/api"
@@ -160,7 +160,7 @@ export function AudioSettings() {
                     ? notConnected(settings.missing_device, severalInputDrivers)
                     : "Pick an interface"
                 }
-                detail={(d) => ` · up to ${d.max_input_channels} ch`}
+                detail={(d) => ` · up to ${inputsLabel(d.max_input_channels)}`}
                 onChange={(index) =>
                   void applyRecording(
                     index,
@@ -212,7 +212,7 @@ export function AudioSettings() {
         {formatTrouble && (
           <Warning>
             This interface did not say which sample rates it takes, so the three below are the
-            usual ones rather than its own. Pick the one the card is set to; if a rehearsal will
+            usual ones rather than its own. Pick the one the interface is set to; if a rehearsal will
             not start at it, try another.
           </Warning>
         )}

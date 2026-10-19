@@ -9,7 +9,7 @@ export const SITE_URL = "https://reha.stream/"
 export const OG_IMAGE = `${SITE_URL}og.png`
 /** The page's <meta name="description">, word for word. */
 export const DESCRIPTION =
-  "A free app for macOS and Windows that records a band's rehearsal, one track per musician, and keeps every rehearsal you have ever had."
+  "A free app for macOS and Windows that records a band's rehearsal, one track per musician, and keeps every rehearsal you record."
 
 /** The app as schema.org describes software, for search engines. */
 export function softwareJsonLd(version: string): Record<string, unknown> {

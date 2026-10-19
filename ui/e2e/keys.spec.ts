@@ -451,7 +451,7 @@ test("with the player's keys off, the player's key list keeps only what still wo
     "aria-keyshortcuts",
     "Space"
   )
-  for (const name of ["To start", "Back 10 seconds", "Forward 10 seconds", "Repeat", "Add marker", "Player keys"]) {
+  for (const name of ["To start", "Back 10 seconds", "Forward 10 seconds", "Repeat", "Add mark", "Player keys"]) {
     await expect(transport.getByRole("button", { name, exact: true }), name).not.toHaveAttribute(
       "aria-keyshortcuts"
     )

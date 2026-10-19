@@ -288,8 +288,8 @@ export function problemBar(page: Page): Locator {
 export function notices(page: Page, kind?: string): Locator {
   return page.locator(
     kind
-      ? `section[aria-label='Notifications'] [data-notice='${kind}']`
-      : "section[aria-label='Notifications'] [data-notice]"
+      ? `section[aria-label='Notices'] [data-notice='${kind}']`
+      : "section[aria-label='Notices'] [data-notice]"
   )
 }
 

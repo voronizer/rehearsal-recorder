@@ -8,8 +8,8 @@ import type { Page } from "@playwright/test"
 const notices = (page: Page, kind?: string) =>
   page.locator(
     kind
-      ? `section[aria-label='Notifications'] [data-notice='${kind}']`
-      : "section[aria-label='Notifications'] [data-notice]"
+      ? `section[aria-label='Notices'] [data-notice='${kind}']`
+      : "section[aria-label='Notices'] [data-notice]"
   )
 
 const topOf = async (page: Page, selector: string) =>
@@ -39,7 +39,7 @@ test("a notice moves nothing, and a done one goes by itself", async ({ page }) =
   await expect(notices(page)).toHaveCount(0)
   expect(await topOf(page, "#input-device")).toBe(before)
   // The corner the notices sit in takes no clicks of its own.
-  await expect(page.locator("section[aria-label='Notifications']")).toHaveCSS(
+  await expect(page.locator("section[aria-label='Notices']")).toHaveCSS(
     "pointer-events",
     "none"
   )
@@ -167,7 +167,7 @@ test("a failure stays until it is closed, and is one notice however often it hap
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const n = document.querySelector("section[aria-label='Notifications'] [data-notice]")!
+        const n = document.querySelector("section[aria-label='Notices'] [data-notice]")!
         const f = document.querySelector("footer")!
         return n.getBoundingClientRect().bottom <= f.getBoundingClientRect().top
       })
@@ -188,7 +188,7 @@ test("an output that falls back says so, and a second one takes the first's plac
   await page.click("#output-device")
   await page.getByRole("option", { name: "UA Monitors" }).click()
   const warned = page.locator("[data-notice='warning']")
-  await expect(warned).toContainText("using the system output")
+  await expect(warned).toContainText("so the take plays through the system output")
   await expect(page.locator("[data-notice='error']")).toHaveCount(0)
   await page.click("#output-device")
   await page.getByRole("option", { name: "MacBook Speakers" }).click()
@@ -280,7 +280,7 @@ test("a notice stands above an open dialog, and closing it leaves the dialog ope
   expect(
     await page.evaluate(
       () =>
-        document.querySelector("section[aria-label='Notifications']")!.closest("[aria-hidden='true']") ===
+        document.querySelector("section[aria-label='Notices']")!.closest("[aria-hidden='true']") ===
         null
     )
   ).toBe(true)

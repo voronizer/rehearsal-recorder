@@ -1775,7 +1775,7 @@ test.describe("Last time and long names on the shared pieces", () => {
     await play.click()
     await expect(beside(page).getByRole("button", { name: /^Pause Pałyn 7/ })).toBeVisible()
     await beside(page).getByRole("button", { name: /^Pause Pałyn 7/ }).click()
-    await beside(page).getByRole("button", { name: /^Open .* in history$/ }).click()
+    await beside(page).getByRole("button", { name: /^Open .* in History$/ }).click()
     await expect(page.getByRole("navigation", { name: "Rehearsals" })).toBeVisible()
   })
 
@@ -1982,7 +1982,7 @@ test.describe("Last time and long names on the shared pieces", () => {
     const check = async (past: Locator, where: string) => {
       const name = past.locator("[data-card-name]")
       await expect(name, where).toHaveAttribute("data-cut")
-      const open = past.getByRole("button", { name: `Open ${TUESDAY} in history`, exact: true })
+      const open = past.getByRole("button", { name: `Open ${TUESDAY} in History`, exact: true })
       // A chevron: its word given up to the name.
       await expect(open, where).toHaveText("")
       // In the panel a click there puts focus on the panel, so Tab first
@@ -2016,7 +2016,7 @@ test.describe("Last time and long names on the shared pieces", () => {
       `,
     })
     const past = page.getByRole("complementary", { name: "Last time" })
-    const open = past.getByRole("button", { name: `Open ${name} in history`, exact: true })
+    const open = past.getByRole("button", { name: `Open ${name} in History`, exact: true })
     const check = async (at: string) => {
       await expect(open, at).toHaveText("")
       await expect(past.locator("[data-card-name]"), at).not.toHaveAttribute("data-cut")
@@ -2041,7 +2041,7 @@ test.describe("Last time and long names on the shared pieces", () => {
   test("a short rehearsal name keeps Open's word, and Open needs no tip", async ({ page }) => {
     await openApp(page)
     const past = page.getByRole("complementary", { name: "Last time" })
-    const open = past.getByRole("button", { name: "Open Tuesday jam in history", exact: true })
+    const open = past.getByRole("button", { name: "Open Tuesday jam in History", exact: true })
     await expect(open).toHaveText("Open")
     await open.hover()
     await page.waitForTimeout(700)

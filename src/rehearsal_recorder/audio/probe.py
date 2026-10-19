@@ -123,63 +123,63 @@ def attempts(samplerate, channels, bit_depth, driver_samplerate,
 
 _VERDICTS = {
     "none": (
-        "It works now: the card opens with the settings in force, and sound "
+        "It works now: the interface opens with the settings in force, and sound "
         "arrives.",
         "Whatever refused was not the settings. Almost always that means "
-        "something else had the card at that moment — a DAW, the card's own "
+        "something else had the interface at that moment: a DAW, the interface's own "
         "mixer, or a second copy of this app. Open the check again and it "
         "should work.",
     ),
     "driver": (
-        "The driver would not open the card at all.",
+        "The driver would not open the interface at all.",
         "No combination of settings got in, so this is not about the rate, "
-        "the depth or the channels. An ASIO card belongs to one program at a "
-        "time: close anything else that uses it — a DAW, the card's control "
-        "panel or mixer, a second copy of this app — and try again. If "
-        "nothing else is running, the card is unplugged or its driver needs "
+        "the depth or the channels. An ASIO interface belongs to one program at a "
+        "time: close anything else that uses it (a DAW, the interface's control "
+        "panel or mixer, a second copy of this app) and try again. If "
+        "nothing else is running, the interface is unplugged or its driver needs "
         "reinstalling.",
     ),
     "no_sound": (
-        "The card opens, but sends no sound.",
+        "The interface opens, but sends no sound.",
         "The driver takes the stream and then delivers little or nothing, "
-        "whatever the settings — the Realtek ASIO driver that comes with some "
-        "laptops does exactly this. Close the card's control panel and "
-        "anything else that uses it, unplug the card and plug it back in, and "
+        "whatever the settings. The Realtek ASIO driver that comes with some "
+        "laptops does exactly this. Close the interface's control panel and "
+        "anything else that uses it, unplug the interface and plug it back in, and "
         "check again. If it still sends nothing, its driver wants "
-        "reinstalling; until then, record through WASAPI, where the same card "
+        "reinstalling; until then, record through WASAPI, where the same interface "
         "is listed too.",
     ),
     "input_only": (
         "The driver hands over the inputs only when the outputs go with them.",
         "Several ASIO drivers work this way: an input-only stream is refused, "
         "the same stream with the outputs attached opens. Until the app opens "
-        "both together, record through WASAPI instead — the same card is "
+        "both together, record through WASAPI instead: the same interface is "
         "listed there as well, with fewer inputs but no such condition.",
     ),
     "channels": (
-        "The card opened with two channels but not with the number the tracks "
+        "The interface opened with two channels but not with the number the tracks "
         "ask for.",
         "The tracks are assigned to inputs this driver is not exposing. Check "
-        "what the card's own control panel has switched on, then set the "
+        "what the interface's own control panel has switched on, then set the "
         "tracks to channels within that.",
     ),
     "samplerate": (
-        "The card opened at the rate it was already running, but not at the "
+        "The interface opened at the rate it was already running, but not at the "
         "rate the app asked for.",
-        "An ASIO card changes rate only when nothing else is using it, and "
+        "An ASIO interface changes rate only when nothing else is using it, and "
         "will not change at all while locked to an external clock. Either set "
-        "the app to the rate the card is on, or change the card's rate in its "
+        "the app to the rate the interface is on, or change the interface's rate in its "
         "own control panel first.",
     ),
     "bit_depth": (
-        "The card opened at 16 bits but not at 24.",
-        "Unusual, and worth reporting. Record at 16 bits for now — the "
+        "The interface opened at 16 bits but not at 24.",
+        "Unusual, and worth reporting. Record at 16 bits for now: the "
         "rehearsal is worth more than the headroom.",
     ),
     "blocksize": (
-        "The card opened when the driver chose its own block size.",
+        "The interface opened when the driver chose its own block size.",
         "The driver will not take the block size the app asks for. This is a "
-        "bug in the app, not a setting you can change — please report it "
+        "bug in the app, not a setting you can change. Please report it "
         "with this report attached.",
     ),
     "unclear": (
@@ -259,8 +259,8 @@ def signal_line(peaks):
     loud = [i + 1 for i, p in enumerate(peaks) if p > SIGNAL_PEAK]
     if not loud:
         return (
-            "sound arrives, but every input is silent — play into them, or "
-            "look at what the card's own routing sends, and check again"
+            "sound arrives, but every input is silent: play into them, or "
+            "look at what the interface's own routing sends, and check again"
         )
     if len(loud) == len(peaks):
         return "signal on every input"
@@ -551,8 +551,8 @@ def run(device_index=None):
 
     asked = plan_for(sd, _saved_config(), device_index)
     if asked is None:
-        print("\nNo recording device is saved and none was named — "
-              "run it again with the index from the list above.")
+        print("\nNo recording device is saved and none was named. "
+              "Run it again with the index from the list above.")
         return 1
     device_index, plan = asked["device_index"], asked["plan"]
 

@@ -175,7 +175,7 @@ export const LastTime = memo(function LastTime({
           ))}
           {data.not_played.length > leftOut.length && (
             <p className="px-1 pt-1 text-xs text-muted-foreground">
-              and {data.not_played.length - leftOut.length} more in history
+              and {data.not_played.length - leftOut.length} more in History
             </p>
           )}
         </section>
@@ -602,7 +602,7 @@ function CardHead({
           variant="outline"
           size={iconOnly ? "icon-row" : "row"}
           onClick={onOpen}
-          aria-label={`Open ${name} in history`}
+          aria-label={`Open ${name} in History`}
           className="shrink-0"
         >
           {!iconOnly && "Open"}

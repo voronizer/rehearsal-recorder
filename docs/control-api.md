@@ -31,7 +31,7 @@ The older `transport_command` and `transport_state` remain compatibility methods
 - Rehearsal: `start_rehearsal`, `stop_rehearsal`.
 - Removal: `remove_take`.
 
-Laptop Stop sends `stop_review`, leaving a draft for Review, Keep or discard.
+Laptop Stop sends `stop_review`, leaving a draft on Review for Save take or Discard.
 The MIDI Record/Stop command sends `record_stop`, which stops and keeps an active
 take. Configuring MIDI does not change the laptop's Stop behaviour.
 

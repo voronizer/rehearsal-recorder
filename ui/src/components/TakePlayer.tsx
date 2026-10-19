@@ -201,7 +201,7 @@ export function TakePlayer({
 
         {markers.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">Markers</span>
+            <span className="text-xs text-muted-foreground">Marks</span>
             {markers.map((m) => (
               <MarkChip
                 key={m.at}
@@ -331,7 +331,7 @@ function MarkChip({
           variant="ghost"
           size="icon-tiny"
           onClick={() => onEdit(marker)}
-          aria-label={`Edit marker at ${formatMMSS(marker.at)}`}
+          aria-label={`Edit mark at ${formatMMSS(marker.at)}`}
           className="text-muted-foreground hover:text-foreground"
         >
           <Pencil />
@@ -343,7 +343,7 @@ function MarkChip({
           variant="ghost"
           size="icon-tiny"
           onClick={() => onRemove(marker.at)}
-          aria-label={`Remove marker at ${formatMMSS(marker.at)}`}
+          aria-label={`Remove mark at ${formatMMSS(marker.at)}`}
           className="rounded-full text-muted-foreground hover:text-destructive"
         >
           <X />
@@ -486,7 +486,7 @@ function Transport({
             size="row"
             onClick={mark}
             disabled={player.loading}
-            aria-label={nearby !== undefined ? "Edit marker" : "Add marker"}
+            aria-label={nearby !== undefined ? "Open mark" : "Add mark"}
             aria-keyshortcuts={key("M")}
           >
             <Flag />

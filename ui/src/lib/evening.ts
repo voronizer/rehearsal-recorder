@@ -1,5 +1,5 @@
 import type { Take } from "@/lib/api"
-import { formatDuration } from "@/lib/format"
+import { formatDuration, songsLabel } from "@/lib/format"
 
 /** What the header says about an evening, counted from its takes. */
 export type EveningFacts = { seconds: number; takes: number; songs: number; inCloud: number }
@@ -27,7 +27,7 @@ export function lengthLabel(seconds: number): string {
 /** "11, 4 songs": the takes, and how many songs they were. */
 export function takesLine(f: EveningFacts): string {
   if (f.songs === 0) return String(f.takes)
-  return `${f.takes}, ${f.songs} ${f.songs === 1 ? "song" : "songs"}`
+  return `${f.takes}, ${songsLabel(f.songs)}`
 }
 
 /** A false start: shorter than the limit set in Settings, with no ★ and no

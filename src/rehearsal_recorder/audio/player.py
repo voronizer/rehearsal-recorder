@@ -204,7 +204,7 @@ class TakePlayer:
             if max(channels) > info.get("max_output_channels", 2):
                 complaint = (
                     f"“{info.get('name', 'The chosen device')}” has no output "
-                    f"{channel_label(channels)} — playing through 1–2."
+                    f"{channel_label(channels)}, so it plays through 1–2."
                 )
                 channels = (1, 2)
 
@@ -273,7 +273,7 @@ class TakePlayer:
             )
             self.problem = (
                 f"Playback stopped: nothing has gone out through {where} for "
-                f"{heartbeat.SILENCE_SEC:.0f} seconds — it was unplugged, "
+                f"{heartbeat.SILENCE_SEC:.0f} seconds. It was unplugged, "
                 "switched off or stopped answering. Press play to try it again."
             )
             self._playing = False

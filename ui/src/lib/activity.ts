@@ -64,7 +64,7 @@ function announce(next: ActivityEntry[]) {
     const key = `cloud:${e.folder}:${e.take_number}`
     const name = e.title.replace(/ → cloud$/, "")
     if (e.state === "done") {
-      notify({ key, kind: "done", text: `${name} is in the cloud folder${e.detail ? ` — ${e.detail}` : ""}` })
+      notify({ key, kind: "done", text: `${name} is in the cloud folder${e.detail ? `: ${e.detail}` : ""}` })
     } else if (e.state === "failed") {
       notify({ key, kind: "error", text: `Could not copy ${name} to the cloud: ${e.error ?? "it failed"}` })
     }

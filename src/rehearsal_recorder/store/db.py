@@ -27,8 +27,8 @@ DB_NAME = "library.sqlite"
 MIGRATIONS = Path(__file__).resolve().parent / "migrations"
 
 NEWER_DATABASE = (
-    "This recordings folder was opened by a newer version of Rehearsal "
-    "Recorder — update the app to use it."
+    "This recordings folder was opened by a newer version of РЭХА. Update "
+    "the app to use it."
 )
 
 

@@ -16,8 +16,7 @@ The repository's rules beat the skills:
 - The app's wording: `docs/design-system.md` F7, P2, C3, B8 (curly quotes in a title).
 - Button names in bold in the guide and CHANGELOG; each CHANGELOG item starts bold, the site's news line reads it.
 - English, British spelling.
+- Double quotes curly “ ” in the guide, README, site and CHANGELOG; apostrophes straight. A quoted message that has quotes of its own goes in italics instead.
 - Test labels: cp1252 characters only.
-
-Texts written before these rules are not checked yet (#51), so don't copy their style.
 
 Skills in `.claude/skills/`, unchanged, MIT: humanizer from blader/humanizer@8c307f3, sokrati from iamursky/sokrati@6255b82.

@@ -195,7 +195,7 @@ function DialogDescription({
  * The buttons of a dialog, in the order of the system (P3): on the Mac the
  * action is rightmost, `Cancel, action`; on Windows it comes first,
  * `action, Cancel`. `aside` stands apart at the far left: what is done to
- * the thing itself (Delete marker, Remove from the cloud) rather than
+ * the thing itself (Delete mark, Remove from the cloud) rather than
  * answered.
  *
  * It also says which button Enter presses, by giving it the focus when the

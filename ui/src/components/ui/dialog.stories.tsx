@@ -100,8 +100,8 @@ export const IrreversibleNotRed: Story = {
         <DialogHeader>
           <DialogTitle>Finish this rehearsal?</DialogTitle>
           <DialogDescription>
-            2 takes are saved and stay where they are. You cannot add to this rehearsal afterwards
-            — a later one starts its own folder.
+            2 takes are saved and stay where they are. You cannot add to this rehearsal afterwards.
+            A later one starts its own folder.
           </DialogDescription>
         </DialogHeader>
         <DialogButtons irreversible action={<Button>Finish</Button>} />
@@ -116,7 +116,7 @@ export const WithAnAside: Story = {
     <Open>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Marker at 1:24</DialogTitle>
+          <DialogTitle>Mark at 1:24</DialogTitle>
           <DialogDescription>
             A word about this spot, so next week it still means something.
           </DialogDescription>
@@ -130,7 +130,7 @@ export const WithAnAside: Story = {
               className="text-muted-foreground hover:text-destructive"
             >
               <Trash2 />
-              Delete marker
+              Delete mark
             </Button>
           }
           action={<Button>Save</Button>}
@@ -222,7 +222,7 @@ export const BothSystems: Story = {
                 aside={
                   <Button variant="ghost" size="row" className="text-muted-foreground">
                     <Trash2 />
-                    Delete marker
+                    Delete mark
                   </Button>
                 }
                 action={<Button variant="destructive">Delete</Button>}

@@ -18,7 +18,7 @@ import type { Page } from "@playwright/test"
 
 const CLOUD = "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';"
 
-const MIX_HINT = "One stereo file with the balance you set here. This is what you send people."
+const MIX_HINT = "One stereo file with the balance from the player. This is what you send people."
 const TRACKS_HINT = "Every track as recorded, untouched, and the notes as .mid, to open in a DAW later."
 /** The three a take can go up as, each with its hint, in their order. */
 const OPTIONS = [

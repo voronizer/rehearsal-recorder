@@ -222,27 +222,27 @@ def main():
     # A MIDI track has no input, and says so only in the notes check.
     ok("the card check never names a MIDI track as having no input",
        channels_available(0, [{"name": "Bass", "channel": None}, keys]) ==
-       "Bass has no input yet. “Interface” has 8 inputs — give them one, or take them out of this rehearsal.")
+       "Bass has no input yet. “Interface” has 8 inputs: give them one, or take them out of this rehearsal.")
     ok("a MIDI track's stray input number is not counted against the card",
        channels_available(0, [gtr, {**keys, "channel": 1}]) is None
        and channels_available(0, [gtr, {**keys, "channel": 99}]) is None)
     ok("a Both track still uses its input",
        channels_available(0, [{**drums, "channel": 1}, gtr]) ==
-       "“Drums” and “Gtr” are both on input 1. Two tracks cannot share one — a stereo track "
+       "“Drums” and “Gtr” are both on input 1. Two tracks cannot share one, and a stereo track "
        "takes the input after its own as well.")
     ok("a Both track with no input is the one named",
        channels_available(0, [gtr, {**drums, "channel": None}]) ==
-       "Drums has no input yet. “Interface” has 8 inputs — give them one, or take them out of this rehearsal.")
+       "Drums has no input yet. “Interface” has 8 inputs: give them one, or take them out of this rehearsal.")
     ok("the tracks that record audio are checked for fit",
        channels_available(0, [{"name": "Far", "channel": 12}, keys]) ==
        "“Interface” has 8 inputs, but the tracks go up to 12. They were set up for another "
-       "interface — give them inputs this one has.")
+       "interface: give them inputs this one has.")
     ok("MIDI tracks do not count toward more tracks than inputs",
        channels_available(0, [{"name": f"T{n}", "channel": n + 1} for n in range(7)] +
                           [{"name": "Far", "channel": 9}] +
                           [{**keys, "name": f"K{n}", "midi_port": {"name": f"Port {n}"}} for n in range(5)]) ==
        "“Interface” has 8 inputs, but the tracks go up to 9. They were set up for another "
-       "interface — give them inputs this one has.")
+       "interface: give them inputs this one has.")
 
     # A saved port is found by its id, then its name, then its name without
     # what Windows adds to it, and two alike are never picked between. Then

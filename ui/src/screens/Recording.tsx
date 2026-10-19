@@ -208,7 +208,7 @@ export function Recording({
     const res = await watching(api().control_command("stop_review"))
     if (!res.ok) {
       setStopping(false)
-      const message = res.error || "Could not save the recording"
+      const message = res.error || "Could not save the take"
       if (res.transport?.state === "error" && onSaveFailed) await onSaveFailed(message, res.transport.pending_take)
       else sayError(message)
       return

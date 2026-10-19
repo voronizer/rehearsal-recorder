@@ -1,1 +1,1 @@
-# Made by a band, for bands. Open source.
+# Open source, under the MIT license.
