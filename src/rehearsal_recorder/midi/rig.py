@@ -384,12 +384,17 @@ class MidiRig:
                 # event that came before.
                 self._queue.put((None, "begin", take, None, now))
 
-    def end_take(self, duration_sec) -> list[dict]:
+    def end_take(self, duration_sec, head_sec=0.0, meter=(500_000, None)) -> list[dict]:
         """
         The take has stopped, `duration_sec` of audio long. Once the writer has
         written everything that arrived before now, each port's notes become its
         .mid: [{"name", "file", "port"}] (MidiRecorder.stop), or [] if that
         fails, which is said in the log. The ports stay open.
+
+        A take recorded to the click passes `head_sec`, how far into the audio
+        its first click came (time 0 of every .mid is there), and `meter`, the
+        tempo and signature the .mid states (smf.meter_of). Without them the
+        .mid starts with the audio, at 120 bpm.
         """
         take = self._end()
         if take is None:
@@ -398,7 +403,7 @@ class MidiRig:
             log.error("The take's notes were never begun: the MIDI writer did not reach its start")
             return []
         try:
-            return take.recorder.stop(duration_sec)
+            return take.recorder.stop(duration_sec, head_sec, meter)
         except Exception as e:
             log.error("The take's notes could not be finished: %r", e)
             return []
