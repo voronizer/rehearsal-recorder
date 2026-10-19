@@ -13268,9 +13268,11 @@ def main():
 
     print("\n[84] The grid after a crop")
     # A click take's crop starts on the bar line at or before the region and
-    # ends on the next quarter, so its files still start on a bar and hold
-    # whole quarters (spec Part 9). Its .mid is cut the same, and it stays a
-    # click take. The cloud's mix carries its tempo; WAV copies are its files.
+    # ends on the next quarter, or at the take's end, so its files still start
+    # on a bar and hold whole quarters (spec Part 9). Its .mid is cut the same,
+    # and it stays a click take. The cloud's mix carries its tempo; WAV copies
+    # are its files.
+    from rehearsal_recorder.audio.take_click import acid_of as acid_of84
     from rehearsal_recorder.audio.wavfile import Acid as Acid84
     from rehearsal_recorder.audio.wavfile import WavWriter as WavWriter84
     from rehearsal_recorder.audio.wavfile import read_acid as read_acid84
@@ -13282,29 +13284,29 @@ def main():
     home84 = a84._session["folder"]
     key84 = (b"\x90\x3c\x40", b"\x80\x3c\x00")
 
-    def draft84(number, tempo, wav_tempo=True):
+    def draft84(number, tempo, wav_tempo=True, signature="4/4"):
         """A take as Stop leaves it: 12 s of Gtr.wav from its first click, each
         sample saying which frame it is, a .mid with a key at 4.25 s, and
         take.json with the click (none for a take with no tempo)."""
         d = home84 / "_drafts" / f"take {number}"
         d.mkdir(parents=True)
-        acid = Acid84(float(tempo), 4, 4) if tempo and wav_tempo else None
+        acid = acid_of84(tempo, signature) if tempo and wav_tempo else None
         with WavWriter84(d / "Gtr.wav", SR, 1, 2, acid=acid) as w:
             w.write((np.arange(12 * SR) % 30000).astype("<i2").tobytes())
-        tempo_us, signature = meter_of84(tempo, "4/4") if tempo else (500000, None)
+        tempo_us, meta = meter_of84(tempo, signature) if tempo else (500000, None)
         write_mid84(d / "Keys.mid", track_name="Keys", port_name="", start=[],
-                    events=[(4.25, key84[0]), (4.5, key84[1])], tempo_us=tempo_us, time_signature=signature)
+                    events=[(4.25, key84[0]), (4.5, key84[1])], tempo_us=tempo_us, time_signature=meta)
         record = {"samplerate": SR, "bit_depth": 16, "tracks": [{"file": "Gtr", "name": "Gtr", "channels": 1}],
                   "notes": []}
         if tempo:
-            record["click"] = {"tempo": tempo, "signature": "4/4", "on": True, "wav_tempo": wav_tempo,
+            record["click"] = {"tempo": tempo, "signature": signature, "on": True, "wav_tempo": wav_tempo,
                                "first_click_frame": 9600, "end_frame": 9600 + 12 * SR}
         (d / "take.json").write_text(json.dumps(record), encoding="utf-8")
         a84._session["take_counter"] = number
         return d, [{"name": "Gtr", "file": str(d / "Gtr.wav")}], [{"name": "Keys", "file": str(d / "Keys.mid")}]
 
-    def kept84(number, name, tempo, wav_tempo=True, markers=None):
-        d, tracks, notes = draft84(number, tempo, wav_tempo)
+    def kept84(number, name, tempo, wav_tempo=True, markers=None, signature="4/4"):
+        d, tracks, notes = draft84(number, tempo, wav_tempo, signature)
         return a84.keep_take(number, str(d), name, 12.0, tracks, markers=markers, notes=notes)["take"]
 
     def frames84(path):
@@ -13358,6 +13360,33 @@ def main():
         ok("  its .mid too", keys84(d / "Keys.mid")[0] == [(4320, key84[0]), (4800, key84[1])])
         take = a84.keep_take(4, str(d), "Palyn", cut["duration_sec"], tracks, notes=notes)["take"]
         ok("  and kept, it is a click take at 120", (take["tempo"], take["click"]) == (120, True))
+
+    @scenario66("a take in 6/8")
+    def _():
+        take = kept84(5, "Dym", 240, signature="6/8")
+        cut = a84.crop_take(str(home84), 5, 4.6, 10.6)
+        gtr = frames84(cut["take"]["tracks"][0]["file"])
+        # At 240 in 6/8 a bar is six eighths, 1.5 s, and a quarter two, 0.5 s.
+        # Read as 4/4, the same region would be cut 4.0 to 10.75 s.
+        ok("a take kept in 6/8 at 240 is cut on its own grid: 4.6 to 10.6 s is 4.5 to 11.0 s",
+           (take["tempo"], take["signature"], take["click"]) == (240, "6/8", True)
+           and cut["ok"] and (cut["start_sec"], cut["end_sec"]) == (4.5, 11.0)
+           and len(gtr) == round(6.5 * SR) and gtr[480] == (round(4.5 * SR) + 480) % 30000)
+        ok("  its WAV still saying 120 quarters a minute in 6/8",
+           read_acid84(cut["take"]["tracks"][0]["file"]) == Acid84(120.0, 6, 8))
+
+    @scenario66("a region to the take's end")
+    def _():
+        d, tracks, notes = draft84(6, 225, signature="6/8")
+        # At 225 in 6/8 a bar is 1.6 s and a quarter 0.53 s: the take's 12 s
+        # end half way through a quarter, so a region to 11.9 s ends at 12.0 s.
+        cut = a84.crop_draft(str(d), tracks, 4.6, 11.9, notes=notes)
+        ok("a region ending in the take's last part of a quarter ends at the take's end: 3.2 to 12.0 s",
+           cut["ok"] and (cut["start_sec"], cut["end_sec"], cut["duration_sec"]) == (3.2, 12.0, 8.8)
+           and len(frames84(d / "Gtr.wav")) == round(8.8 * SR))
+        take = a84.keep_take(6, str(d), "Dym", cut["duration_sec"], tracks, notes=notes)["take"]
+        ok("  and kept, it is a click take at 225 in 6/8",
+           (take["tempo"], take["signature"], take["click"]) == (225, "6/8", True))
 
     @scenario66("the cloud")
     def _():
