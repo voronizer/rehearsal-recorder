@@ -627,6 +627,12 @@ class TakePlayer:
         takes it out."""
         self._free_click = source
 
+    @property
+    def free_click(self):
+        """The click between takes this stream plays, None for none: closing
+        the output lets go of it."""
+        return self._free_click
+
     def set_take_click(self, tempo, signature, voices):
         """The take's click (Part 8): its tempo and signature, and `voices`
         at this take's rate and the metronome's volume; None for a take that

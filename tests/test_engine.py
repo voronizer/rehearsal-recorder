@@ -12804,6 +12804,122 @@ def main():
     ok("  and with the player closed, a stream of its own there",
        kind82c == "own" and sink82c.device_index == 3 and sink82c.channels == (5, 6))
 
+    print("  Look again while the click starts")
+    # A rescan holds STREAM_LOCK while PortAudio is stopped and started again,
+    # and PortAudio stopped with a stream open frees it under the app, which
+    # crashes on its next call. So the rescan lets the click between takes go
+    # inside that lock, and a play on another thread opens its stream either
+    # before (and the rescan closes it) or after. Neither may wait for the
+    # other for ever: play holds the click's own lock while it waits for
+    # STREAM_LOCK.
+    import threading as threading82
+    from rehearsal_recorder.audio import devices as devices82
+
+    m82d = Metronome81({"click_device": {"name": "Desk", "host_api": "CoreAudio"}, "click_device_index": 3,
+                        "click_channels": [3, 4]}, lambda: None, lambda: None, {"click_device": 3}.get, None)
+    m82d.set(120, "4/4")
+    order82 = []
+    opening82, go82 = threading82.Event(), threading82.Event()
+
+    class Held82(Streams81):
+        """A stream that takes its time to open, until told to go on."""
+
+        def __init__(self, **kw):
+            opening82.set()
+            go82.wait(5)
+            super().__init__(**kw)
+            self.open_now = True
+            order82.append("opened")
+
+        @property
+        def latency(self):
+            # Asked once it is open, before the click is kept: a rescan let in
+            # here would find nothing to close.
+            time.sleep(0.1)
+            return 0.01
+
+        def close(self):
+            super().close()
+            self.open_now = False
+
+    held82 = []
+
+    def terminate82():
+        # What PortAudio would free: every click stream still open.
+        order82.append(("stopped", sum(1 for s in held82 if s.open_now)))
+        _sd._initialized -= 1
+
+    def initialize82():
+        _sd._initialized += 1
+
+    def look_again82(first=None):
+        """Api.rescan_devices' part: the click let go, then PortAudio stopped
+        and started, all in one hold of STREAM_LOCK."""
+        with devices82.STREAM_LOCK:
+            if first is not None:
+                first()
+            m82d.let_go_for_rescan()
+            devices82.rescan()
+
+    def kept82(**kw):
+        stream = Held82(**kw)
+        held82.append(stream)
+        return stream
+
+    saved82 = (_sd.OutputStream, getattr(_sd, "_terminate", None), getattr(_sd, "_initialize", None),
+               getattr(_sd, "_initialized", None))
+    _sd.OutputStream, _sd._terminate, _sd._initialize, _sd._initialized = kept82, terminate82, initialize82, 1
+    try:
+        played82 = []
+        player82 = threading82.Thread(target=lambda: played82.append(m82d.play()), daemon=True)
+        player82.start()
+        opening82.wait(5)
+        rescan82 = threading82.Thread(target=look_again82, daemon=True)
+        rescan82.start()
+        time.sleep(0.05)  # the rescan waiting for the lock play holds as it opens
+        go82.set()
+        player82.join(5)
+        rescan82.join(5)
+        ok("play opening as Look again starts: both finish",
+           not player82.is_alive() and not rescan82.is_alive() and played82 == [{"ok": True}])
+        ok("  the click's stream opened first and closed before PortAudio stopped",
+           order82 == ["opened", ("stopped", 0)] and len(held82) == 1 and not held82[0].open_now)
+        ok("  and the click is stopped, nothing playing", m82d.state()["phase"] == "idle" and m82d._free is None)
+
+        del order82[:]
+        waiting82 = threading82.Event()
+
+        def play_waits82():
+            """Play started while the rescan holds STREAM_LOCK, and let in
+            once it has the click's own lock and waits for that one."""
+            waiting82.set()
+            deadline = time.monotonic() + 5
+            while not m82d._sinks.locked() and time.monotonic() < deadline:
+                time.sleep(0.001)
+
+        player82 = threading82.Thread(target=lambda: (waiting82.wait(5), played82.append(m82d.play())), daemon=True)
+        player82.start()
+        rescan82 = threading82.Thread(target=look_again82, args=(play_waits82,), daemon=True)
+        rescan82.start()
+        rescan82.join(5)
+        player82.join(5)
+        ok("play waiting on Look again: both finish, neither waiting for the other",
+           not player82.is_alive() and not rescan82.is_alive() and played82 == [{"ok": True}] * 2)
+        ok("  PortAudio stopped with no click stream open, and the click's opened after",
+           order82 == [("stopped", 0), "opened"] and len(held82) == 2 and held82[1].open_now)
+        ok("  and it plays", m82d.state()["phase"] == "preview")
+        if not rescan82.is_alive():
+            m82d.stop()
+            ok("  until Stop closes it", not held82[1].open_now)
+    finally:
+        _sd.OutputStream = saved82[0]
+        for name82, value82 in zip(("_terminate", "_initialize", "_initialized"), saved82[1:]):
+            if value82 is None:
+                if hasattr(_sd, name82):
+                    delattr(_sd, name82)
+            else:
+                setattr(_sd, name82, value82)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

@@ -26,6 +26,21 @@ every DEVICES_FRESH_SEC there, or at once when the app asks for the click or
 tells it the devices changed. One lock keeps the row, held only for a few
 assignments; another keeps the click's streams, so ▶, Stop and a bar's end
 never open and close at once.
+
+The locks are taken in one order: `_sinks`, then the app's STREAM_LOCK, then
+`_lock`. The click's own stream is opened and kept in `_free`, and taken out
+of it and closed, in one hold of STREAM_LOCK, so a rescan (which holds
+STREAM_LOCK while PortAudio is torn down and started again) finds it there
+and lets it go (`let_go_for_rescan`), or comes before it is opened. Hence:
+
+- play, preview, stop, resink, begin_take, close, and set and follow (which
+  stop ▶ when the row empties) take `_sinks`: never call them with
+  STREAM_LOCK held, for a play() on another thread holds `_sinks` and waits
+  for STREAM_LOCK. let_go_for_rescan takes no `_sinks` and is the one to call
+  inside a rescan's locks; state never waits for either.
+- `device_lookup` and `player_getter` are called with STREAM_LOCK held, so
+  they must never take the Api's `_player_lock`, which rescan_devices takes
+  before STREAM_LOCK.
 """
 
 import collections
@@ -466,24 +481,27 @@ class Metronome:
 
     def _start(self, tempo, signature, shown, bars=None, sound=None, start_k=0):
         with self._sinks:
-            self._stop_free()
-            kind, sink, route = self._sink()
-            source = ClickSource(tempo, signature, self._voices(sink.samplerate, sound), route,
-                                 bars=bars, start_k=start_k)
-            if kind == "player":
-                sink.play_free_click(source)
-            else:
-                try:
-                    sink.start(source)
-                except Exception:
-                    # Counted by the computer's clock instead, at the rate the
-                    # source was made for, so the beat still flashes on time
-                    # and the screen says why nothing is heard.
-                    sink = SilentOutput(sink.name, sink.problem(), sink.samplerate)
-                    sink.start(source)
-            free = _Free(source, kind, sink, shown)
-            with self._lock:
-                self._free = free
+            # Where it goes, its stream opened and kept in _free, in one hold
+            # of STREAM_LOCK: see the module's note on the locks.
+            with STREAM_LOCK:
+                self._stop_free()
+                kind, sink, route = self._sink()
+                source = ClickSource(tempo, signature, self._voices(sink.samplerate, sound), route,
+                                     bars=bars, start_k=start_k)
+                if kind == "player":
+                    sink.play_free_click(source)
+                else:
+                    try:
+                        sink.start(source)
+                    except Exception:
+                        # Counted by the computer's clock instead, at the rate
+                        # the source was made for, so the beat still flashes
+                        # on time and the screen says why nothing is heard.
+                        sink = SilentOutput(sink.name, sink.problem(), sink.samplerate)
+                        sink.start(source)
+                free = _Free(source, kind, sink, shown)
+                with self._lock:
+                    self._free = free
         return free
 
     def stop(self):
@@ -492,27 +510,44 @@ class Metronome:
             self._stop_free()
         return {"ok": True}
 
+    def let_go_for_rescan(self):
+        """
+        For a rescan, called inside its locks (the Api's _player_lock and
+        STREAM_LOCK): the click between takes stops, its own stream closed
+        before PortAudio is torn down. It takes no `_sinks`, so a play() on
+        another thread, waiting for STREAM_LOCK, cannot hold it up; that
+        play() opens its stream once the rescan is over.
+        """
+        self._stop_free()
+
     def _stop_free(self):
-        """Lets go of the click between takes. With `_sinks` held."""
-        with self._lock:
-            free, self._free = self._free, None
-        if free is None:
-            return
-        if free.kind == "player":
-            free.sink.play_free_click(None)
-        else:
-            free.sink.stop()
+        """Lets go of the click between takes: taken out of _free and its
+        stream closed in one hold of STREAM_LOCK."""
+        with STREAM_LOCK:
+            with self._lock:
+                free, self._free = self._free, None
+            if free is None:
+                return
+            if free.kind == "player":
+                free.sink.play_free_click(None)
+            else:
+                free.sink.stop()
         if free.source.fault is not None:
             log.error("The click between takes failed and went quiet: %s", free.source.fault)
 
     def _reap(self, free, wait=True):
         """A bar played for a setting is over: let it go, unless something else
-        has taken its place."""
+        has taken its place. Without `wait`, not now if either lock is busy."""
         if not self._sinks.acquire(blocking=wait):
             return
         try:
-            if self._free is free:
-                self._stop_free()
+            if not STREAM_LOCK.acquire(blocking=wait):
+                return
+            try:
+                if self._free is free:
+                    self._stop_free()
+            finally:
+                STREAM_LOCK.release()
         finally:
             self._sinks.release()
 
@@ -527,8 +562,11 @@ class Metronome:
             self._reap(free)
             return
         kind, sink, route = self._sink()
+        # The same player still playing it, or a stream of its own on the
+        # same device: nothing to move. A player that closed and opened its
+        # output again has let go of it.
         if kind == free.kind and route == free.source.route and (
-                sink is free.sink if kind == "player"
+                sink is free.sink and sink.free_click is free.source if kind == "player"
                 else type(sink) is type(free.sink) and sink.device_index == free.sink.device_index):
             return
         source = free.source

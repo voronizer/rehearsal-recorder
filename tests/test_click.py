@@ -145,6 +145,10 @@ class FakePlayer:
     def play_free_click(self, source):
         self.free = source
 
+    @property
+    def free_click(self):
+        return self.free
+
 
 def ok(label, cond):
     # Labels stay in what a Windows console's code page (cp1252) can
@@ -805,6 +809,15 @@ def on_its_own():
     m.play()
     m.stop()
     ok("Stop stops it", player.free is None and m.state()["phase"] == "idle")
+    m.play()
+    run = player.free
+    # The player closed its output and opened it again (a rescan, or its card
+    # coming back): closing let go of the click.
+    player.free = None
+    m.resink()
+    ok("a player that closed and opened its output again gets the click back",
+       isinstance(player.free, ClickSource) and player.free is not run and m.state()["phase"] == "preview")
+    m.stop()
 
     print("  Where the click goes, and the device list")
     real_query = _sd.query_devices
