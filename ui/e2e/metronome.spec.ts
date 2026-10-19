@@ -279,7 +279,7 @@ test.describe("the row on the rehearsal screen", () => {
     expect(await calls(page, "count_tempo")).toHaveLength(2)
   })
 
-  test("a count is dropped when the next take names another song meanwhile", async ({ page }) => {
+  test("a count is dropped when the next take names another song, or a tempo is typed, meanwhile", async ({ page }) => {
     await dymToCount(page)
     await hold(page, "count_tempo")
     await status(page).getByRole("button", { name: "count it from the last take" }).click()
@@ -294,6 +294,19 @@ test.describe("the row on the rehearsal screen", () => {
     await expect(status(page)).toHaveText("The song's tempo.")
     await nameNext(page, "Dym")
     await expect(tempo(page)).toHaveValue("")
+
+    // A tempo typed while it counts is the band's: the count does not
+    // replace it.
+    await hold(page, "count_tempo")
+    await status(page).getByRole("button", { name: "count it from the last take" }).click()
+    await expect(status(page)).toHaveText("Counting the tempo from the last take…")
+    await tempo(page).fill("99")
+    await tempo(page).press("Enter")
+    await expect(tempo(page)).toHaveValue("99")
+    await letGo(page)
+    await page.waitForTimeout(500)
+    expect(await sent(page)).toEqual([[99, "4/4"]])
+    await expect(tempo(page)).toHaveValue("99")
   })
 
   test("quick presses hold, and a refused change goes back", async ({ page }) => {

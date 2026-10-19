@@ -242,14 +242,16 @@ export function MetronomeRow() {
   /**
    * Counts the tempo from `take` in `signature` and sets the row to it.
    * A count that comes back after the next take has named another song is
-   * dropped: it is not that song's tempo. "failed" when Python could not
-   * count, said in the row's notice.
+   * dropped, as it is not that song's tempo; so is one that comes back after
+   * a tempo was typed, tapped or stepped, which is the band's. "failed" when
+   * Python could not count, said in the row's notice.
    */
   const countFrom = async (
     take: Count["take"],
     forSong: string,
     signature: Signature
   ): Promise<"counted" | "dropped" | "failed"> => {
+    const since = changes.current.tempo
     setCountingFor(forSong)
     dismiss(SAID)
     let res: Answer & { tempo?: number }
@@ -261,7 +263,7 @@ export function MetronomeRow() {
     const now = await refresh()
     if (!alive.current) return "dropped"
     setCountingFor((f) => (f === forSong ? null : f))
-    if (now?.song?.title !== forSong) return "dropped"
+    if (now?.song?.title !== forSong || changes.current.tempo !== since) return "dropped"
     if (!res.ok || res.tempo == null) {
       sayError(res.error ?? "Could not count the tempo")
       return "failed"
