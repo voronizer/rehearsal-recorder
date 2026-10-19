@@ -246,13 +246,13 @@ const keysOf = (use: string) => {
   return words.slice(0, words.findIndex((w) => /^[a-z0-9]/.test(w)))
 }
 
-test("Keys is a tab between Appearance and Under the hood, two switches over their screens", async ({
+test("Keys is a tab between Appearance and Controls, two switches over their screens", async ({
   page,
 }) => {
   await openApp(page)
   await openKeys(page)
   const tabs = page.locator("nav[aria-label='Settings sections'] [data-tab]")
-  await expect(tabs).toHaveText(["Audio", "Folders", "Marks", "Sets", "Appearance", "Keys", "Under the hood"])
+  await expect(tabs).toHaveText(["Audio", "Folders", "Marks", "Sets", "Appearance", "Keys", "Controls", "Under the hood"])
   await expect(page.locator("[data-tab-head] p")).toHaveText(
     "Keys that work with one press, and when to turn them off"
   )
