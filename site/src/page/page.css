@@ -133,6 +133,10 @@ body {
    rather than shrinking past reading. */
 .piece.wide { width: 100%; overflow: hidden; }
 .piece.wide > * { min-width: 560px; }
+/* A piece that is one line of the app, as the metronome's row, is as wide
+   as the line; on a phone, where the line is wider than the tile, it shows
+   its left part. */
+.piece.line { overflow: hidden; }
 .split { display: grid; gap: 26px; }
 @media (min-width: 1000px) { .split { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: center; } }
 .tile.word { align-content: center; }

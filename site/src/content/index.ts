@@ -45,6 +45,7 @@ export const TILES = [
   "names",
   "cloud",
   "sets",
+  "metronome",
   "trash",
 ] as const
 export const STEPS = ["setup", "record", "keep", "history", "compare"] as const

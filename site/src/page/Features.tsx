@@ -17,13 +17,17 @@ const LAYOUT: Record<Id, string> = {
   cloud: "tile s2",
   // A row of its own, its words beside the panel as the health tile's are.
   sets: "tile s6",
+  // A row of its own after the sets tile, whose songs bring their tempos
+  // with them, its words beside the metronome's row: the row is one line,
+  // too long to share a row of tiles and stay whole.
+  metronome: "tile s6",
   // A row of its own on a desk; on two columns, beside the cloud tile, so
   // neither is left with a hole beside it.
   trash: "tile s6d word",
 }
 
 /** The tiles with their words beside the piece, not over it. */
-const SPLIT = new Set<Id>(["health", "midi", "sets"])
+const SPLIT = new Set<Id>(["health", "midi", "sets", "metronome"])
 
 /** A tile's title, its short hyphenated words kept whole (see titleParts). */
 function Title({ text }: { text: string }) {

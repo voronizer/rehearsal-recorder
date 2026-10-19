@@ -152,8 +152,9 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
     await waitFor(() => button("Stop checking"))
   },
   // Pałyn's ★ go from last week, from Last time on the start screen; then
-  // Start, and ↑ up the songs under Next take to Pałyn; a moment later,
-  // Record on it: the next take is Pałyn 3.
+  // Start, and ↑ up the songs under Next take to Pałyn, its 128 bpm in the
+  // metronome's row; a moment later, Record on it: the next take is Pałyn
+  // 3, and it counts in.
   async record({ beat, linger }) {
     button("Stop checking")?.click()
     ;(
@@ -197,6 +198,9 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
       lastAttempt: session.last_attempt ?? null,
     })
     await waitFor(() => button("Stop", true))
+    // The line says the count-in first: it is lit once the bar of clicks
+    // is counting on screen.
+    await waitFor(() => document.querySelector("[data-count-in]"))
     beat(2)
   },
   // Stop, save it, and back on the rehearsal screen the take nobody named

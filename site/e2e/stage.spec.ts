@@ -124,7 +124,9 @@ test("the first step ends once the check has begun, however slow it is to open",
   await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
 })
 
-test("the second step plays last week's Pałyn, starts, and picks Pałyn with the arrow key", async ({
+// Metronome on the site: Pałyn's 128 bpm is in the row as ↑ picks it, and
+// Record counts in before the clock.
+test("the second step plays last week's Palyn, starts, picks Palyn and its 128 bpm with the arrow key, and counts in", async ({
   page,
 }) => {
   // What is on screen as each of the step's lines is told.
@@ -133,12 +135,16 @@ test("the second step plays last week's Pałyn, starts, and picks Pałyn with th
     w.__seen = []
     window.addEventListener("message", (e) => {
       if (e.data?.type !== "rr-beat" || e.data.step !== 1) return
+      const row = document.querySelector("section[aria-label='Metronome']")
       w.__seen.push({
         beat: e.data.beat,
         lastWeek: Boolean(
           document.querySelector("[aria-label='Last time'] button[aria-label^='Pause Pałyn 7']")
         ),
         field: document.querySelector<HTMLTextAreaElement>("#next-take-name")?.value ?? null,
+        tempo: row?.querySelector<HTMLInputElement>("input[aria-label='Tempo']")?.value ?? null,
+        signature: row?.querySelector("[aria-label='Time signature']")?.textContent ?? null,
+        countIn: Boolean(document.querySelector("[data-count-in]")),
         recording: Boolean(document.querySelector("h1")?.textContent?.match(/Pałyn\s*3/)),
       })
     })
@@ -148,9 +154,17 @@ test("the second step plays last week's Pałyn, starts, and picks Pałyn with th
   await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("record")
   const seen = await page.evaluate(() => (window as unknown as { __seen: object[] }).__seen)
   expect(seen).toEqual([
-    { beat: 0, lastWeek: true, field: null, recording: false },
-    { beat: 1, lastWeek: false, field: expect.stringMatching(/^Pałyn/), recording: false },
-    { beat: 2, lastWeek: false, field: null, recording: true },
+    { beat: 0, lastWeek: true, field: null, tempo: null, signature: null, countIn: false, recording: false },
+    {
+      beat: 1,
+      lastWeek: false,
+      field: expect.stringMatching(/^Pałyn/),
+      tempo: "128",
+      signature: "4/4",
+      countIn: false,
+      recording: false,
+    },
+    { beat: 2, lastWeek: false, field: null, tempo: null, signature: null, countIn: true, recording: true },
   ])
 })
 

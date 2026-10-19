@@ -362,24 +362,32 @@ for (const width of [320, 390, 960, 1000, 1440]) {
   })
 }
 
-// Six columns from 1000 px: the section's six rows are full on a laptop and
-// on a wide screen alike.
+// Six columns from 1000 px: the section's seven rows are full on a laptop
+// and on a wide screen alike, and the Trash tile is the last of them, the
+// whole width.
 for (const width of [1000, 1280, 1440]) {
-  test(`every row of tiles is full at ${width} px`, async ({ page }) => {
+  test(`every row of tiles is full at ${width} px, the Trash tile the whole width`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("/")
-    const rows = await page.locator("#features .bento").evaluate((bento) => {
-      const right = bento.getBoundingClientRect().right
+    const found = await page.locator("#features .bento").evaluate((bento) => {
+      const { left, right } = bento.getBoundingClientRect()
       const ends = new Map<number, number>()
       for (const tile of bento.children) {
         const box = tile.getBoundingClientRect()
         const top = Math.round(box.top)
         ends.set(top, Math.max(ends.get(top) ?? 0, box.right))
       }
-      return [...ends.values()].map((end) => Math.round(right - end))
+      const trash = bento.lastElementChild!.getBoundingClientRect()
+      return {
+        rows: [...ends.values()].map((end) => Math.round(right - end)),
+        last: bento.lastElementChild!.querySelector("h3")?.textContent,
+        trash: [Math.round(trash.left - left), Math.round(right - trash.right)],
+      }
     })
-    expect(rows.length).toBe(6)
-    for (const gap of rows) expect(gap).toBeLessThanOrEqual(1)
+    expect(found.rows.length).toBe(7)
+    for (const gap of found.rows) expect(gap).toBeLessThanOrEqual(1)
+    expect(found.last).toBe("Deleting goes to the Trash.")
+    for (const gap of found.trash) expect(Math.abs(gap)).toBeLessThanOrEqual(1)
   })
 }
 
@@ -397,6 +405,140 @@ test("on a middle-sized window too, no row of tiles has a hole", async ({ page }
     return [...ends.values()].map((end) => Math.round(right - end))
   })
   for (const gap of gaps) expect(gap).toBeLessThanOrEqual(1)
+})
+
+/** The metronome's tile, found by its heading. */
+const metronomeTile = (page: Page) =>
+  page.locator("#features article").filter({
+    has: page.getByRole("heading", { name: "A click for the drummer." }),
+  })
+
+test.describe("metronome on the site", () => {
+  test("the tile shows the rehearsal screen's row: Palyn's 128 bpm in 4/4, the song's tempo", async ({
+    page,
+  }) => {
+    await page.goto("/")
+    const tile = metronomeTile(page)
+    await expect(tile.getByText("Each song keeps its tempo and time signature.")).toBeVisible()
+    const piece = tile.getByRole("img", { name: /Pałyn's 128 bpm in 4\/4/ })
+    const row = piece.locator("section[aria-label='Metronome']")
+    await expect(row).toBeVisible()
+    await expect(row.locator("input[aria-label='Tempo']")).toHaveValue("128")
+    await expect(row.getByText("bpm", { exact: true })).toBeVisible()
+    await expect(row.locator("[aria-label='Time signature']")).toHaveText("4/4")
+    await expect(row.locator("button", { hasText: "Tap" })).toBeVisible()
+    await expect(row.locator("button[aria-label='Play the click']")).toBeVisible()
+    await expect(row.locator("[data-beat-dots] [data-dot]")).toHaveCount(4)
+    await expect(row.locator("button[aria-label='Metronome settings']")).toBeVisible()
+    await expect(row.locator("[data-status-line]")).toHaveText("The song's tempo.")
+  })
+
+  test("the tile is a picture: nothing plays, nothing to press, and T taps nothing", async ({ page }) => {
+    await page.goto("/")
+    const tile = metronomeTile(page)
+    const piece = tile.getByRole("img", { name: /128 bpm/ })
+    await expect(piece.locator("section[aria-label='Metronome']")).toBeVisible()
+    await expect(piece.locator("[inert]")).toHaveCount(1)
+    await expect(tile.locator("audio, video")).toHaveCount(0)
+    // T is Tap's key in the app, anywhere outside a field. What the page
+    // asks of the fake bridge about the click is noted from here on.
+    await page.evaluate(() => {
+      type Bridge = Record<string, (...args: unknown[]) => unknown>
+      const w = window as unknown as { pywebview: { api: Bridge }; __asked: string[] }
+      w.__asked = []
+      const bridge = w.pywebview.api
+      for (const name of Object.keys(bridge).filter((n) => /metronome|click/.test(n))) {
+        const real = bridge[name]
+        bridge[name] = (...args) => {
+          w.__asked.push(name)
+          return real(...args)
+        }
+      }
+    })
+    await page.keyboard.press("t")
+    await page.waitForTimeout(500)
+    expect(await page.evaluate(() => (window as unknown as { __asked: string[] }).__asked)).toEqual([])
+  })
+
+  // The row's line keeps two lines' room in the app, so a longer one moves
+  // nothing under it. A still picture has nothing to keep still for.
+  test("the piece ends under the row's line, with no room held for a longer one", async ({ page }) => {
+    await page.goto("/")
+    const line = metronomeTile(page).locator("[data-status-line]")
+    await expect(line).toHaveText("The song's tempo.")
+    const found = await line.evaluate((el) => {
+      const words = document.createRange()
+      words.selectNodeContents(el)
+      return { box: el.getBoundingClientRect().height, words: words.getBoundingClientRect().height }
+    })
+    expect(found.box).toBeLessThanOrEqual(found.words + 1)
+  })
+
+  test("on a phone the row shows its tempo and time signature, and the page does not scroll sideways", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto("/")
+    const piece = metronomeTile(page).getByRole("img", { name: /128 bpm/ })
+    await expect(piece.locator("section[aria-label='Metronome']")).toBeVisible()
+    await piece.scrollIntoViewIfNeeded()
+    const found = await piece.evaluate((el) => {
+      const box = (selector: string) => el.querySelector(selector)!.getBoundingClientRect()
+      return {
+        piece: el.getBoundingClientRect(),
+        tempo: box("input[aria-label='Tempo']"),
+        signature: box("[aria-label='Time signature']"),
+      }
+    })
+    expect(found.tempo.left).toBeGreaterThanOrEqual(found.piece.left)
+    expect(found.signature.right).toBeLessThanOrEqual(found.piece.right)
+    // The rest of the row, wider than the tile, is cut at the piece's edge
+    // rather than drawn past its ground.
+    await expect(piece).toHaveCSS("overflow-x", "hidden")
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
+  })
+
+  // After the sets tile, whose songs bring their tempos with them: a row
+  // of its own at every width, its words beside the row from 1000 px, and
+  // the row whole, gear and all.
+  for (const width of [860, 1000, 1280, 1440]) {
+    test(`at ${width} px the tile is the whole width after the sets one, with the whole row`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto("/")
+      const piece = metronomeTile(page).getByRole("img", { name: /128 bpm/ })
+      await expect(piece.locator("section[aria-label='Metronome']")).toBeVisible()
+      const found = await page.locator("#features .bento").evaluate((bento) => {
+        const box = (el: Element) => el.getBoundingClientRect()
+        const tiles = [...bento.children]
+        const at = tiles.findIndex((t) => t.querySelector("h3")?.textContent === "A click for the drummer.")
+        const tile = tiles[at]
+        const piece = tile.querySelector(".piece")!
+        return {
+          before: tiles[at - 1]?.querySelector("h3")?.textContent,
+          bento: box(bento),
+          tile: box(tile),
+          sets: box(tiles[at - 1]),
+          copy: box(tile.querySelector(".copy")!),
+          piece: box(piece),
+          gear: box(piece.querySelector("button[aria-label='Metronome settings']")!),
+          cut: piece.scrollWidth - piece.clientWidth,
+        }
+      })
+      expect(found.before).toBe("Rehearse the set, in order.")
+      expect(Math.abs(found.tile.left - found.bento.left)).toBeLessThanOrEqual(1)
+      expect(Math.abs(found.tile.right - found.bento.right)).toBeLessThanOrEqual(1)
+      expect(found.tile.top).toBeGreaterThanOrEqual(found.sets.bottom)
+      expect(found.cut).toBe(0)
+      expect(found.gear.right).toBeLessThanOrEqual(found.piece.right)
+      if (width >= 1000) {
+        expect(found.copy.right).toBeLessThanOrEqual(found.piece.left)
+        expect(found.copy.top).toBeLessThan(found.piece.bottom)
+        expect(found.piece.top).toBeLessThan(found.copy.bottom)
+      }
+    })
+  }
 })
 
 test("the story follows the scroll, and the rail goes back", async ({ page }) => {

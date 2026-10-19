@@ -20,6 +20,14 @@ sends nothing else. Settings › Under the hood switches that off.
 Any your computer sees. On Windows choose ASIO if your interface has an ASIO
 driver: the other drivers often show only two inputs.
 
+## Is there a metronome?
+
+Yes. Each song keeps its tempo and time signature: typed, tapped, or counted
+from an old take. The click plays through the output you choose, so it can
+go to the drummer's headphones only, and the screen flashes on every beat. A
+take recorded to the click keeps its tempo, and its WAV and .mid files carry
+it, so the bars line up in your DAW.
+
 ## Where do the recordings go?
 
 Into RehearsalRecordings in your home folder: a folder for each rehearsal, a

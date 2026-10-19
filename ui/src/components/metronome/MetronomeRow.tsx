@@ -45,6 +45,7 @@ export function MetronomeRowView({
   onLink,
   onTapError,
   settings,
+  hold = true,
 }: {
   state: MetronomeState | null
   lit: number | null
@@ -60,6 +61,10 @@ export function MetronomeRowView({
   onTapError?: (text: string) => void
   /** What the gear opens on: the click's settings. */
   settings: ReactNode
+  /** Whether the line under the row keeps two lines' room, so that a
+   *  longer one moves nothing (B4). A still picture of the row, with
+   *  nothing to keep still for, ends under its words. */
+  hold?: boolean
 }) {
   const tempo = state?.tempo ?? null
   const signature = state?.signature ?? "4/4"
@@ -140,7 +145,7 @@ export function MetronomeRowView({
           </PopoverContent>
         </Popover>
       </div>
-      <StatusLine line={line} onLink={onLink} />
+      <StatusLine line={line} onLink={onLink} className={hold ? undefined : "min-h-0"} />
     </section>
   )
 }
