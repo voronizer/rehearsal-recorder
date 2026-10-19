@@ -99,6 +99,22 @@ body {
   .caption.on-phone { display: block; }
 }
 
+/* ---- Viktor Baikov's controller: its words beside its screen, or over it
+   on a phone. The screen is drawn as the controller's author draws it in
+   his own pages: pale green characters on a dark panel. It takes its size
+   from its column, so its 16 cells fit on the narrowest phone. ---- */
+.remote { background: var(--page-tile); border-radius: 28px; padding: clamp(26px, 4.5vw, 56px); display: grid; gap: 32px; align-items: center; }
+@media (min-width: 900px) { .remote { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; } }
+.remote h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; margin: 0 0 6px; }
+.remote ul { list-style: disc; margin: 0; padding-left: 1.1em; color: var(--page-muted); font-size: 0.875rem; display: grid; gap: 4px; max-width: 30rem; }
+.remote .fine p { color: var(--page-muted); font-size: 0.875rem; }
+/* On the narrowest phone the link is wider than the block. */
+.remote .more { white-space: normal; }
+.remote figure { margin: 0; display: grid; justify-items: center; min-width: 0; container-type: inline-size; }
+.lcd { --lcd-glass: #152d32; --lcd-ink: #d6ffcc; background: var(--lcd-glass); color: var(--lcd-ink); font-family: var(--page-mono); font-size: min(1.75rem, 6.2cqi); line-height: 1; padding: 0.7em 0.8em; border: 0.45em solid #24292f; border-radius: 14px; display: grid; gap: 0.18em; max-width: 100%; box-shadow: 0 30px 60px -36px rgba(16, 24, 40, 0.55); }
+.lcd div { display: flex; gap: 0.12em; }
+.lcd span { display: block; width: 0.66em; padding-block: 0.12em; text-align: center; background: rgba(214, 255, 204, 0.07); border-radius: 2px; }
+
 /* ---- What it does: a tile per point, each with a piece of the app ---- */
 /* Dense: on two columns, a half tile before a full-width one moves up beside
    the half tile before it, rather than leave a hole. */

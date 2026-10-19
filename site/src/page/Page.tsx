@@ -1,4 +1,5 @@
 import { Closing } from "./Closing"
+import { Controller } from "./Controller"
 import { Faq } from "./Faq"
 import { Features } from "./Features"
 import { Footer } from "./Footer"
@@ -18,6 +19,7 @@ export function Page({ pieces }: { pieces: PieceData }) {
         <Nav repo={REPO} />
         <main>
           <Hero windows={isWindows(navigator.platform, navigator.userAgent)} />
+          <Controller />
           <Features data={pieces} />
           <Story />
           <Faq />
