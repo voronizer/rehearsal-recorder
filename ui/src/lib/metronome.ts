@@ -180,6 +180,10 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
   const hasTempo = state.tempo !== null
   if (state.phase === "count" || state.phase === "take") {
     if (!hasTempo) return { text: "No click: this take has no tempo." }
+    // Python says "count" from Record and the time once it has chosen the
+    // first click: until then nothing is heard, so nothing is counted. The
+    // line keeps its room.
+    if (state.phase === "count" && state.on && state.since_count_in_ms === null) return { text: "" }
     // A take that began with the switch off has no count-in to measure from
     // (`since_count_in_ms` is null), so switching it on mid-take starts no click.
     const unclicked = state.phase === "take" && state.since_count_in_ms === null

@@ -96,11 +96,10 @@ function noteStep(
   }
 }
 
-/** Whether the take may still count in: Python's answer is the take's,
- *  with a tempo and the switch on, and it has not said yet when the
- *  count-in ends (Python chooses the first click once the stream runs). */
-const awaitsCountIn = (s: MetronomeState) =>
-  (s.phase === "count" || s.phase === "take") && s.tempo !== null && s.on
+/** Whether Python's answer is the take's: counting in or recording. One
+ *  from before, idle or the click between takes, says nothing of it yet. */
+const ofTheTake = (s: MetronomeState | null): s is MetronomeState =>
+  s !== null && (s.phase === "count" || s.phase === "take")
 
 /**
  * The take while it records, laid out to be read from behind the kit: nobody
@@ -180,10 +179,12 @@ export function Recording({
   // The click: the count-in in the clock's place, then the edge lit on
   // every click, and its row at the footer's left. A take with the click is
   // timed from the count-in's end, which is where its files' bars start, and
-  // one without from Record. Which of the two is settled once: by the first
-  // answer that says, or by no answer in a second. Until then the clock
-  // waits at 0:00 (and is not shown before any answer), so it never runs
-  // from Record and then gives way to the count-in.
+  // one without from Record. Which of the two is settled once: by the take's
+  // first answer that says (a count-in time, or no tempo or the switch off),
+  // or by no answer of the take's in a second. A click take whose count-in
+  // time is not said yet waits for it. Until then the clock waits at 0:00
+  // (and is not shown before any answer), so it never runs from Record and
+  // then gives way to the count-in.
   const metronome = useMetronome()
   const beat = metronome.state
   const waited = useAfter(true, COUNT_IN_WAIT_MS)
@@ -191,7 +192,7 @@ export function Recording({
   let settled = timedFrom
   if (settled === null) {
     if (metronome.countInEnd !== null) settled = "count-in"
-    else if (beat ? !awaitsCountIn(beat) : waited) settled = "record"
+    else if (ofTheTake(beat) ? beat.tempo === null || !beat.on : waited) settled = "record"
   }
   if (settled !== timedFrom) setTimedFrom(settled)
   const known = beat !== null || waited

@@ -86,6 +86,7 @@ const watchBeat = (page: Page) =>
       const clock = document.querySelector<HTMLElement>("[data-clock]")
       const edge = document.querySelector<HTMLElement>("[data-edge-light]")
       const lit = document.querySelectorAll("footer [data-beat-dots] [data-lit]").length
+      const line = document.querySelector<HTMLElement>("footer [data-status-line]")
       w.__BEAT__.push({
         t: performance.now(),
         digit: count?.textContent?.trim() || null,
@@ -94,6 +95,7 @@ const watchBeat = (page: Page) =>
         clockShown: clock ? getComputedStyle(clock).visibility === "visible" : false,
         edge: edge?.hasAttribute("data-lit") ? edge.getAttribute("data-accent") : null,
         dotLit: lit > 0,
+        line: line?.textContent ?? null,
       })
       requestAnimationFrame(look)
     }
@@ -107,6 +109,8 @@ type Frame = {
   clockShown: boolean
   edge: string | null
   dotLit: boolean
+  /** The metronome row's line. */
+  line: string | null
 }
 const beats = (page: Page) =>
   page.evaluate(() => {
@@ -736,10 +740,27 @@ test.describe("while a take records", () => {
     const before = frames.slice(0, first)
     expect(before.some((f) => f.clockShown), "the clock shown while it waits").toBe(true)
     expect(before.filter((f) => f.clockShown && f.clock !== "0:00")).toEqual([])
+    // Nor is a count-in said before its first click is chosen.
+    expect(before.filter((f) => f.line?.startsWith("Count-in"))).toEqual([])
     expect(digitsOf(frames)).toEqual(["1", "2", "3", "4"])
     // And from the count-in's end it counts from 0:00.
     const after = frames.slice(first).filter((f) => f.clockShown)
     expect(after[0].clock).toBe("0:00")
+  })
+
+  test("an answer from before the take leaves the clock waiting for it", async ({ page }) => {
+    // Python's first answers on the recording screen still say the row is
+    // between takes: they settle nothing, and the take's count-in, when it
+    // is said, has the clock's place. Its first click is chosen after
+    // those answers, so the whole count is seen.
+    await rehearse(page, "Pałyn", "window.__TAKE_LATE_MS__ = 500; window.__COUNT_IN_LATE_MS__ = 800;")
+    await watchBeat(page)
+    await record(page).click()
+    await expect(row(page).locator("[data-status-line]")).toHaveText("Clicking to Stop.", { timeout: 6_000 })
+    const frames = await beats(page)
+    expect(digitsOf(frames)).toEqual(["1", "2", "3", "4"])
+    const first = frames.findIndex((f) => f.digit !== null)
+    expect(frames.slice(0, first).filter((f) => f.clockShown && f.clock !== "0:00")).toEqual([])
   })
 
   test("the switch silences the click mid-take", async ({ page }) => {

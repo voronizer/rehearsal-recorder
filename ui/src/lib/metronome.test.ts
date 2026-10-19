@@ -253,11 +253,18 @@ describe("the status line", () => {
 
   it("counts the count-in", () => {
     const count = (n: number, extra: Partial<MetronomeState> = {}) =>
-      statusLine(state({ phase: "count", count: n, ...extra }), null)
+      statusLine(state({ phase: "count", count: n, since_count_in_ms: -1000, ...extra }), null)
     expect(count(2)).toEqual({ text: "Count-in: 2 of 4" })
     // Two bars count twice.
     expect(count(6)).toEqual({ text: "Count-in: 2 of 4" })
     expect(count(5, { signature: "6/8", per_bar: 6, tempo: 198 }).text).toBe("Count-in: 5 of 6")
+  })
+  it("says nothing of the count-in before its first click is chosen", () => {
+    // Python says "count" from Record, and the time only once it has chosen
+    // the first click: no "Count-in: 1 of 4" before a click is heard.
+    expect(statusLine(state({ phase: "count", count: 0, since_count_in_ms: null }), null)).toEqual({
+      text: "",
+    })
   })
   it("says the click runs to Stop", () => {
     expect(statusLine(state({ phase: "take", since_count_in_ms: 1200 }), null)).toEqual({

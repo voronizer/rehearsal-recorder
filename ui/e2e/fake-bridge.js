@@ -761,6 +761,8 @@ function suggestName(n, chosen = true) { return fieldText(nextTake(n, chosen)); 
 //                                         index (by default, with __HOST_API__,
 //                                         the ASIO desk)
 //   window.__COUNT_ERROR__ = 'No files'   count_tempo fails with it
+//   window.__TAKE_LATE_MS__ = 500         for this long after Record, metronome_state
+//                                         still answers as between takes
 //   window.__COUNT_IN_LATE_MS__ = 1500    a click take's first click is chosen
 //                                         this long after Record, as on another
 //                                         device: till then it says `count`
@@ -793,7 +795,8 @@ const metro = {
   followed: undefined,   // the song it follows, lower case; '' for a take that is no song's
   tempo: null, signature: '4/4',
   run: null,             // the click running between takes: {grid}
-  take: null,            // the take recording: {tempo, signature, click, grid, countEnd}
+  take: null,            // the take recording: {tempo, signature, click, said, grid, countEnd},
+                         // said: from when metronome_state tells of it
   meters: {},            // each take's tempo, signature and click, by number, till it is kept
   tapUntil: 0, taps: [],
 };
@@ -875,7 +878,8 @@ async function lastTakeOf(title) {
 
 async function metroState() {
   metroFollow();
-  const now = clock(), song = nextTake().song, take = metro.take;
+  const now = clock(), song = nextTake().song;
+  const take = metro.take && now >= metro.take.said ? metro.take : null;
   const own = song ? songTempos.get(song) : null;
   const out = {phase:'idle', tempo:metro.tempo, signature:metro.signature, on:clickOn(),
     case: !song ? 'free' : own ? 'song' : 'song_without', song:null, held:false, last_take:null,
@@ -920,7 +924,7 @@ function metroStartTake(number) {
   const bars = readCfg().count_in_bars ?? 1;
   const t0 = clock() + (click ? (window.__COUNT_IN_LATE_MS__ || 0) / 1000 : 0);
   metro.meters[number] = {tempo, signature: tempo === null ? null : signature, click};
-  metro.take = {tempo, signature, click,
+  metro.take = {tempo, signature, click, said: clock() + (window.__TAKE_LATE_MS__ || 0) / 1000,
     grid: click ? gridOf(tempo, signature, t0) : null,
     countEnd: click ? t0 + bars * PER_BAR[signature] * 60 / tempo : null};
 }
