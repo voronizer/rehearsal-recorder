@@ -686,9 +686,10 @@ def on_its_own():
     p120, p140 = 60 * SR / 120, 60 * SR / 140
 
     def blocks(source, count, start=0, size=512):
+        """`count` blocks of `source`, as wide as its outputs reach."""
         out = []
         for b in range(start, start + count):
-            block = np.zeros((size, 1), np.float32)
+            block = np.zeros((size, max(source.route) + 1), np.float32)
             source.render(block, b * size, 9_000_000_000 + b * size * 1_000_000_000 // SR, 0.01)
             out.append(block)
         return np.concatenate(out)
@@ -809,6 +810,8 @@ def on_its_own():
     heard = blocks(bar, 400)
     ok("it stops after one bar", len([f for f in np.flatnonzero(heard[:, 0])
                                       if f == 0 or not heard[max(0, f - 200):f, 0].any()]) == 4 and bar.done)
+    ok("  on both the player's outputs, nothing gone wrong", bar.fault is None
+       and heard.shape[1] == 2 and np.array_equal(heard[:, 0], heard[:, -1]))
     m.state()
     ok("  and then lets go of the player's stream", player.free is None)
     ok("the click between takes runs on the player's stream too", m.play()["ok"] and m.state()["phase"] == "preview")
