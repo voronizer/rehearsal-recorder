@@ -34,6 +34,21 @@ const story = (page: Page, mark: "scene" | "moment" | "held") =>
     .locator("html")
     .getAttribute(`data-${mark}`)
     .catch(() => null)
+/** Each of the story's frames: its place, whether it is on show, and its
+ *  marks, so that a test waiting on them says where each frame got to. */
+const storyFrames = (page: Page) =>
+  page.locator("#how iframe").evaluateAll((els) =>
+    els.map((el) => {
+      const marks = (el as HTMLIFrameElement).contentDocument?.documentElement?.dataset
+      return {
+        place: el.getAttribute("src")?.split("#")[1],
+        shown: el.getAttribute("data-shown"),
+        scene: marks?.scene ?? null,
+        moment: marks?.moment ?? null,
+        held: marks?.held ?? null,
+      }
+    })
+  )
 /** A tile or card of the steps, by its title. */
 const item = (page: Page, title: string) => page.locator("#how").getByRole("button", { name: title, exact: true })
 const pressed = (page: Page) => page.locator("#how .items [aria-pressed='true']")
@@ -190,7 +205,9 @@ test("two quick clicks on moments behind the app end on the second", async ({ pa
   await expect.poll(() => story(page, "scene"), { timeout: 60_000 }).toBe("during")
   await item(page, "A count-in in big digits.").click()
   await item(page, "How long it took last time.").click()
-  await expect.poll(() => story(page, "moment"), { timeout: 60_000 }).toBe("1.1")
+  await expect
+    .poll(() => storyFrames(page), { timeout: 45_000 })
+    .toEqual([expect.objectContaining({ shown: "true", moment: "1.1" })])
   await page.waitForTimeout(1_500)
   expect(await story(page, "moment")).toBe("1.1")
   await expect(page.locator("#how iframe")).toHaveCount(1)

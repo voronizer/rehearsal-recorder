@@ -403,7 +403,9 @@ export function startStory(from: Target | null): (target: Target) => void {
         root.dataset.scene = STORY[next]
       }
     } catch (e) {
-      console.warn(e)
+      // The app stops where it got to, and a fresh frame never gets there:
+      // an error, so that the page's tests fail on it, saying where.
+      console.error(`demo: the story stopped in ${STORY[step]}, line ${last}:`, e)
     } finally {
       running = false
     }
