@@ -907,8 +907,11 @@ async function metroState() {
     out.song = await songRow(song);
     out.last_take = await lastTakeOf(song);
   }
-  out.held = out.case === 'song' ? out.tempo !== own.tempo || out.signature !== own.signature
-    : out.case === 'song_without' ? out.tempo !== null : false;
+  // As Metronome._held: a tempo of the row's own, for a song the library
+  // has. An emptied row, and a title no song has yet, hold nothing.
+  out.held = out.song !== null && out.tempo !== null
+    && (out.case === 'song' ? out.tempo !== own.tempo || out.signature !== own.signature
+      : out.case === 'song_without');
   if (take) {
     // The row cannot change under a take: what it shows is the take's.
     Object.assign(out, {phase:'take', tempo:take.tempo, signature:take.signature});

@@ -181,7 +181,8 @@ function missingOutput(device: string): StatusLine {
 /**
  * The line under the metronome row, always one of Part 4's and, while a take
  * is on, one of Part 5's. Save to song and Save now are offered only while
- * the row is held; counting from the last take only when the song has a take.
+ * the row is held, and stay while the click's output cannot play; counting
+ * from the last take only when the song has a take.
  */
 export function statusLine(state: MetronomeState, counting: Counting = null): StatusLine {
   const hasTempo = state.tempo !== null
@@ -210,15 +211,27 @@ export function statusLine(state: MetronomeState, counting: Counting = null): St
       link: { label: "save it to the song", action: "save" },
     }
   }
-  if (hasTempo && state.output_missing !== null) return missingOutput(state.output_missing)
+  const line = caseLine(state)
+  if (!hasTempo || state.output_missing === null) return line
+  // The click's output cannot play. A change held keeps its line and its
+  // link, so it can still be saved, with the warning's icon before it.
+  return state.held && line.link ? { ...line, warn: true } : missingOutput(state.output_missing)
+}
 
+/** The status line between takes for where the row's tempo comes from
+ *  (Part 2's three cases). */
+function caseLine(state: MetronomeState): StatusLine {
+  const hasTempo = state.tempo !== null
   switch (state.case) {
     case "song": {
       const song = state.song
-      if (state.held && song && song.tempo !== null && song.signature !== null) {
+      // The row is not the song's: a tempo held, which the link saves, or
+      // the row emptied, which is not held (a song's tempo is taken away on
+      // its page in History).
+      if (song && song.tempo !== null && song.signature !== null && (state.held || !hasTempo)) {
         return {
           text: `The song has ${formatMeterShort(song.tempo, song.signature)}; this holds until another song.`,
-          link: { label: "Save to song", action: "save" },
+          link: state.held ? { label: "Save to song", action: "save" } : undefined,
         }
       }
       return { text: "The song's tempo." }

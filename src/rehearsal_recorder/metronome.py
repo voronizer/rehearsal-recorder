@@ -7,7 +7,9 @@ The row follows the next take's name (Part 2). A name that leads to a song
 puts the song's tempo in the row, or empties it for a song without one; an
 empty name or "Take N" empties it. A change made in the row is held until
 the name leads somewhere else: a keystroke in the same song's name keeps it.
-A row not held follows its song's tempo when the song is given one.
+A row not held follows its song's tempo when the song is given one. An
+emptied row is not held: there is nothing to save, and a song's tempo is taken
+away on its page.
 A free take and a title no song has yet are both "no song", so a tempo set
 for one holds through the other.
 
@@ -317,11 +319,12 @@ class Metronome:
         return tempo, signature, self._setting("metronome_on")
 
     def _held(self):
+        """Whether the row has a tempo of its own for the song: one that is
+        not the song's, which Save to song saves."""
         song = self._song
-        if song is None:
+        if song is None or self._tempo is None:
             return False
-        row = (self._tempo, None if self._tempo is None else self._signature)
-        return row != (song["tempo"], song["signature"])
+        return (self._tempo, self._signature) != (song["tempo"], song["signature"])
 
     def _case(self):
         if self._free_name:

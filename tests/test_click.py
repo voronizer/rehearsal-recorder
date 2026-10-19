@@ -755,6 +755,9 @@ def on_its_own():
     ok("a change in the row is held", m.set(132, "4/4")["ok"] and m.state()["held"] and m.take_meter()[0] == 132)
     m.follow("Palyn")
     ok("  through a keystroke in the same song's name", m.state()["tempo"] == 132 and m.state()["held"])
+    m.set(None, "4/4")
+    ok("an emptied row is not held, so there is nothing to save to the song: its page takes a tempo away",
+       m.state()["tempo"] is None and not m.state()["held"] and not m.save_to_song()["ok"] and library.saved == [])
     m.follow("Dym")
     state = m.state()
     ok("2. a song without a tempo: the row is empty, and the take records without a click",

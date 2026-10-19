@@ -227,6 +227,12 @@ describe("the status line", () => {
       link: { label: "save it to the song", action: "save" },
     })
   })
+  it("says what the song has when its row is emptied, with nothing to save", () => {
+    // Python holds no empty row: a song's tempo is taken away on its page.
+    expect(statusLine(state({ tempo: null, held: false }), null)).toEqual({
+      text: "The song has 128 · 4/4; this holds until another song.",
+    })
+  })
   it("goes back to the song's own line once the count is saved", () => {
     const saved = state({ case: "song", held: false })
     expect(statusLine(saved, { from: "Dym 5" })).toEqual({ text: "The song's tempo." })
@@ -247,6 +253,18 @@ describe("the status line", () => {
       warn: true,
     })
     expect(statusLine(state({ output_missing: "X18", phase: "preview" }), null).warn).toBe(true)
+  })
+  it("keeps a held change's line and its link while the click's output is missing, with the warning", () => {
+    expect(statusLine(state({ tempo: 120, held: true, output_missing: "X18" }), null)).toEqual({
+      text: "The song has 128 · 4/4; this holds until another song.",
+      link: { label: "Save to song", action: "save" },
+      warn: true,
+    })
+    expect(statusLine(state({ ...WITHOUT, tempo: 104, held: true, output_missing: "X18" }), null)).toEqual({
+      text: "No tempo in the song yet: the first take played to the click keeps this one.",
+      link: { label: "Save now", action: "save" },
+      warn: true,
+    })
   })
   it("has nothing to warn of without a tempo, and no warning otherwise", () => {
     expect(statusLine(state({ ...WITHOUT, output_missing: "X18" }), null).warn).toBeUndefined()

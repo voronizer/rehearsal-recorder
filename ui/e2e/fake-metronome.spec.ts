@@ -89,3 +89,17 @@ test("the first kept click take of a song with no tempo gives it the row's", asy
     last_take: { name: "Dym 1" },
   })
 })
+
+test("a change is held only for a song, and an emptied row is not held", async ({ page }) => {
+  await openApp(page)
+  // A title no song has yet: there is no song to save to, so nothing is
+  // held, as Python's _held says.
+  await rehearse(page, "Novaja")
+  await call(page, "metronome_set", 120, "4/4")
+  expect(await state(page)).toMatchObject({ case: "song_without", song: null, tempo: 120, held: false })
+  // An emptied row is not held either: a song's tempo is taken away on its
+  // page, not by Save to song.
+  await name(page, "Pałyn")
+  await call(page, "metronome_set", null, "4/4")
+  expect(await state(page)).toMatchObject({ case: "song", tempo: null, held: false })
+})
