@@ -130,7 +130,7 @@ export const WithAnAside: Story = {
               className="text-muted-foreground hover:text-destructive"
             >
               <Trash2 />
-              Delete marker
+              Delete mark
             </Button>
           }
           action={<Button>Save</Button>}
@@ -222,7 +222,7 @@ export const BothSystems: Story = {
                 aside={
                   <Button variant="ghost" size="row" className="text-muted-foreground">
                     <Trash2 />
-                    Delete marker
+                    Delete mark
                   </Button>
                 }
                 action={<Button variant="destructive">Delete</Button>}

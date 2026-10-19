@@ -120,10 +120,10 @@ test("on Windows the action comes first, and the arrows follow what is on screen
 // What is done to the thing itself stands apart at the far left, whatever
 // the system's order of the answers is.
 for (const [system, script, order] of [
-  ["a Mac", MAC, ["Delete marker", "Cancel", "Save"]],
-  ["Windows", WINDOWS, ["Delete marker", "Save", "Cancel"]],
+  ["a Mac", MAC, ["Delete mark", "Cancel", "Save"]],
+  ["Windows", WINDOWS, ["Delete mark", "Save", "Cancel"]],
 ] as const) {
-  test(`the marker's buttons on ${system} keep Delete marker apart, and Enter in the note saves`, async ({
+  test(`the mark's buttons on ${system} keep Delete mark apart, and Enter in the comment saves`, async ({
     page,
   }) => {
     await page.addInitScript(script)
@@ -132,7 +132,7 @@ for (const [system, script, order] of [
     await recordTake(page, 1)
     await page.getByRole("button", { name: "Add mark" }).click()
     const dialog = page.getByRole("dialog")
-    const names = ["Delete marker", "Cancel", "Save"]
+    const names = ["Delete mark", "Cancel", "Save"]
     const xs = await Promise.all(names.map((n) => left(dialog, n)))
     const across = names.map((n, i) => [n, xs[i]] as const).sort((a, b) => a[1] - b[1])
     expect(across.map(([n]) => n)).toEqual(order)

@@ -891,7 +891,7 @@ pointing at it shows *“TD-17” is in use by another app.* Close the other
 program. The app holds a port too, during **Check signal** and in a
 rehearsal.
 
-## Keyboard
+## Keys
 
 Space does the main thing on each screen: start the rehearsal, start a take,
 stop recording, save the take, or play and pause while listening. The button

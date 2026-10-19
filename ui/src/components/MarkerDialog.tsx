@@ -119,7 +119,7 @@ export function MarkerDialog({
               className="text-muted-foreground hover:text-destructive"
             >
               <Trash2 />
-              Delete marker
+              Delete mark
             </Button>
           }
           action={<Button onClick={save}>Save</Button>}
