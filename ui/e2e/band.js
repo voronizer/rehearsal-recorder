@@ -141,12 +141,15 @@ const SECTION = name => {
   let at = START;
   for (const [kind, bars] of FORM) { if (kind === name) return at; at += bars * BAR; }
 };
+// The marks sit where the music changes: the first chorus starts at 46.9 s,
+// the bridge at 106.9 and the last chorus at 121.9. Pałyn 1 breaks down
+// just after the chorus comes in.
 const EARLIER = [
-  takeOf(1, 'Pałyn', 58, 51, [{at: 50, note: 'lost the count', label_id: 3}]),
+  takeOf(1, 'Pałyn', 58, 48.2, [{at: 47.2, note: 'lost the count', label_id: 3}]),
   takeOf(2, 'Pałyn 2', Math.round(SONG_END + 4), SONG_END, [
-    {at: 50.5, note: 'chorus came in early', label_id: 3},
-    {at: 112, note: 'bridge — try it slower', label_id: 4},
-    {at: 131, note: 'this one is the take', label_id: 2}]),
+    {at: 47.7, note: 'chorus came in early', label_id: 3},
+    {at: 109.2, note: 'bridge — try it slower', label_id: 4},
+    {at: 128.2, note: 'this one is the take', label_id: 2}]),
   // A count-in that went wrong, and a take nobody named: what sorting the
   // evening is for. Ahoń, so tonight's Pałyn and Viasna keep their goes, and
   // before Viasna, so Viasna is still the last song played and the Next
