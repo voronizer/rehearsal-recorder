@@ -94,15 +94,17 @@ export function SongTempoRow({ song, takes }: { song: TempoSong; takes: SongGo[]
   const play = async (t: number | null, sig: Signature) => {
     dismiss(SAID)
     if (t === null) return
+    // Playing from the press, so a change made before Python answers
+    // retunes the click too.
+    setPlaying(true)
     try {
       const res = await api().metronome_play(t, sig)
       if (!res.ok) {
         sayError(res.error ?? "Could not play the click")
         setPlaying(false)
-        return
       }
-      setPlaying(true)
     } catch {
+      setPlaying(false)
       /* the bar across the top says why */
     }
   }
