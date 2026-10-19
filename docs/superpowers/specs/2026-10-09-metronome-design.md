@@ -55,7 +55,7 @@ built from the app (sources in `/mnt/project-files/metronome/q7` to `q13`).
   the row** (Q9, «A + C»): the same four settings in both places.
 - **M11. A song's tempo on its page in History** (Q10, «A»): a metronome row
   under the title, saved to the song at once; a song without a tempo can
-  count it from one of its goes. The song list stays as it is.
+  count it from one of its takes. The song list stays as it is.
 - **M12. Tap by mouse, by the key T, and by MIDI pads** («а + в»), on the
   ports already given to track cards («A»).
 - **M13. The click when a take plays back** (Q11, «да» to D): a metronome
@@ -69,6 +69,36 @@ built from the app (sources in `/mnt/project-files/metronome/q7` to `q13`).
   кажется это ты погорячился», then «ок» to the proposal). Takes recorded to
   the click get a tempo chunk, under a Settings checkbox that is on by
   default. Cropping such a take starts it on a bar line.
+
+## After the design system (19 Oct 2026)
+
+The design system (PRs #43 to #62) and the Bluetooth controller (PR #57)
+were merged after this spec was approved. Re-read against them:
+
+- **The row's tempo lives in Python.** Record is pressed on the screen, by
+  a key or on the controller, and all three reach `start_take` the same way
+  (`transport.py`), with nothing from the screen. So the metronome follows
+  the next take's name in Python, a change made in the row is held there,
+  and a take started from the controller clicks and counts in like one
+  started on the screen. The controller's display counts the take's time
+  from the count-in's end, as the screen's clock does.
+- **The recording screen's footer** now has the status row at its left
+  (the recording screen's ruling «Статус у Stop», 17 Oct). Where the
+  metronome's row goes during a take was asked again: see Part 5.
+- **The beat's light and F11.** F11 says nothing on the recording screen
+  moves but the meters and the clock. M9 is Alex's own pick, made a day
+  after that default was told, so it stands. The edge light and the lit
+  dots are readings, as the meters are: they switch on and off on the
+  click with no fade, and they keep doing so under Reduce motion, since
+  the band may count on them. F11 says so.
+- **The design system wins over the mockups** wherever they differ: the
+  switch is grey when on, Sound and Count-in are picked in `PickRow`s, the
+  volume is a shared slider, Master's button is the 20 px lane toggle so
+  the plate keeps its height, and "amber" is the warning icon with the
+  words in the text's colour.
+- **T is one of the player's keys** (Part 11).
+- **The crop's notice** says where a click take now starts in the one
+  shared notice, wherever a crop is made.
 
 Claude's own calls, told to Alex as the questions went and not objected to,
 are marked *(told)* where they come up. Calls first made in this spec are
@@ -336,8 +366,8 @@ and +, its unit, the signature, Tap and ▶. A change is saved to the song at
 once, as Settings are.
 
 - **A song with no tempo**: "No tempo yet: type or tap one, or **count it
-  from a take**". The link opens a list of the song's goes, starred first,
-  then the newest: "Count the tempo from a whole go of the song:".
+  from a take**". The link opens a list of the song's takes, starred first,
+  then the newest: "Count the tempo from a whole take of the song:".
 - **After counting**: "Counted from Dym 5; pick the time signature. If the
   click runs twice too fast or too slow: **halve** or **double**." *(told)*
 - **A song with a tempo**: "Picking Dym at a rehearsal puts this in the
@@ -443,7 +473,8 @@ a third of a second. `count_tempo(folder, take_number, signature)` returns
 
 - **The Tap button**, and **the key T** anywhere on the rehearsal screen
   and a song's page, except in a text field (`useSpacebar.ts` `useKey`; T is
-  free, the player uses M and R).
+  free). T is one of the player's keys: Settings › Keys lists it, and
+  turning the player's keys off turns it off too.
 - **The tempo** is the average of the last four gaps between taps; a pause
   of two seconds starts afresh. In 6/8 a tap is an eighth (M15).
 - **MIDI pads** (M12): after Tap or T is pressed, hits on the ports given to
