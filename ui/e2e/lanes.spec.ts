@@ -78,6 +78,9 @@ const masterBand = (page: Page) => page.locator("[data-master-band]")
 /** The master's plate in its band under the lanes: the playback volume's
  *  popover draws the same plate while it is open. */
 const masterPlate = (page: Page) => masterBand(page).locator("[data-master-plate]")
+/** The master's group in its band: its plate and its click's lane on the
+ *  card's fill, as a track's row is in the lanes group. */
+const masterGroup = (page: Page) => masterBand(page).locator("[data-master-group]")
 /** Whether the master's plate is anywhere in the lanes group. */
 const masterInLanes = (page: Page) => masterPlate(page).evaluate((e) => e.closest("[data-lanes]") !== null)
 const timeline = (page: Page) => page.getByRole("group", { name: "Take timeline" })
@@ -424,12 +427,17 @@ test.describe("track lanes", () => {
           "border-bottom-right-radius": "8px",
           "border-bottom-left-radius": "8px",
         })
-      // The master is not in it: a plate of its own, in the card's fill.
+      // The master is not in it: a group of its own on the card's fill, its
+      // plate in it with no fill of its own, as a track's plate is.
       await expect(masterPlate(page)).toHaveCount(1)
       expect(await masterInLanes(page)).toBe(false)
-      expect(await style(masterPlate(page), "border-top-width", "background-color")).toEqual({
+      expect(await style(masterGroup(page), "border-top-width", "background-color")).toEqual({
         "border-top-width": "0px",
         "background-color": card,
+      })
+      expect(await style(masterPlate(page), "border-top-width", "background-color")).toEqual({
+        "border-top-width": "0px",
+        "background-color": "rgba(0, 0, 0, 0)",
       })
     })
   }
@@ -690,8 +698,10 @@ test.describe("track lanes", () => {
     const b = await box(masterBand(page))
     expect(await masterInLanes(page)).toBe(false)
     expect(p.width).toBeCloseTo(200, 0)
+    // The card's fill and its 12 px corners are the group's, round the plate
+    // and the click's lane.
     expect(
-      await style(masterPlate(page), "background-color", "border-top-left-radius", "border-bottom-right-radius")
+      await style(masterGroup(page), "background-color", "border-top-left-radius", "border-bottom-right-radius")
     ).toEqual({
       "background-color": await colour(page, "--card"),
       "border-top-left-radius": "12px",
