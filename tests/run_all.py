@@ -99,8 +99,12 @@ things to be true:
                        clicks mixed into a stream's blocks, a WAV that
                        carries its tempo (read back by libsndfile), the
                        clocks that place a click on another device than the
-                       recording card over an hour of drift, and a crop
-                       snapped to a click take's bars. Later tasks add to it.
+                       recording card over an hour of drift, a crop snapped
+                       to a click take's bars, the click in the streams, and
+                       tools/click_alignment.py, the hand check of how far a
+                       take's recorded clicks are from their places, run on
+                       WAVs made here (2 ms late, 6/8, a take of two windows,
+                       a WAV that carries no tempo).
 
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.

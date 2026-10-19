@@ -8,7 +8,9 @@ clock and the output's own (Part 3); and a crop of a click take snapped to its
 bars (Part 9). Then the click in the streams: a take's click on the recording
 card, written into the take's own stream a round trip early; on another device,
 placed by two clocks that drift apart; the click between takes, retimed while it
-runs; and the metronome that follows the next take's name (Part 2).
+runs; and the metronome that follows the next take's name (Part 2). Last,
+tools/click_alignment.py, the hand check of how far a take's recorded clicks are
+from their places, run on WAVs made here.
 
 The heavy arithmetic of the metronome lives here and not in test_engine.py,
 whose length bounds the whole Python run: an hour of clicks, two clocks that
@@ -19,7 +21,11 @@ as in test_engine.py). The clocks are fed made-up blocks, and the sounds and
 files are inspected as numbers and bytes.
 """
 
+import contextlib
+import importlib.util
+import io
 import random
+import re
 import struct
 import sys
 import tempfile
@@ -455,6 +461,7 @@ def main():
     one_stream()
     another_device()
     on_its_own()
+    alignment_tool()
 
     print("\n" + "=" * 60)
     if problems:
@@ -924,6 +931,121 @@ def on_its_own():
         _sd.query_devices = real_query
     ok("the system output is the recording card: one stream, no second one on it",
        on_card is not None and on_card.duplex and on_card.route == (0, 1))
+
+
+def alignment_tool():
+    print("\n[8] The alignment tool")
+    # tools/click_alignment.py, the hand check of Part 3's aim: the click's
+    # output cabled into an input, a take recorded to the click, then
+    # `python tools/click_alignment.py "<take folder>"`. It says how far each
+    # recorded click is from its place on the take's grid, as
+    # tools/midi_alignment.py says it for notes. Loaded as test_midi.py loads
+    # that one, and run through its main() in this process. The takes are WAVs
+    # written by the app's own writer, so the tempo comes from their acid chunk
+    # as it does in a real take; a click is the sharp start of a 2 kHz burst
+    # that dies away in a few ms, on the very sample it is meant for.
+    tool = PROJECT / "tools" / "click_alignment.py"
+    ok("tools/click_alignment.py is there", tool.is_file())
+    if not tool.is_file():
+        return
+    spec = importlib.util.spec_from_file_location("click_alignment", tool)
+    alignment = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(alignment)
+
+    def run(*args):
+        """(exit code, what it printed, what it said as an error)."""
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                code = alignment.main([str(arg) for arg in args])
+            except SystemExit as stopped:  # argparse
+                code = stopped.code if isinstance(stopped.code, int) else 1
+        return code, out.getvalue(), err.getvalue()
+
+    def recorded(seconds, tempo, late_ms, rate=48000):
+        """One channel of clicks on the grid of `tempo`, each `late_ms` late
+        (a function of the click's time in seconds, or a number)."""
+        late = late_ms if callable(late_ms) else (lambda t: late_ms)
+        samples = np.zeros(round(seconds * rate))
+        t = np.arange(round(0.008 * rate)) / rate
+        burst = 0.8 * np.cos(2 * np.pi * 2000 * t) * np.exp(-t / 0.002)
+        k = 0
+        while True:
+            at = click_frame(k, tempo, rate)
+            at += round(late(at / rate) / 1000 * rate)
+            if at + len(burst) >= len(samples):
+                return samples
+            samples[at:at + len(burst)] += burst
+            k += 1
+
+    def write(path, samples, rate=48000, acid=None):
+        """16-bit mono, through the app's own writer, with `acid` or none."""
+        ints = np.round(np.clip(samples, -1.0, 1.0) * 32767).astype("<i2")
+        with WavWriter(path, rate, 1, 2, acid) as w:
+            w.write(ints.tobytes())
+
+    seen = re.compile(r"matched (\d+) of (\d+) clicks, median ([+-]\d+\.\d) ms, worst ([+-]\d+\.\d) ms")
+
+    with tempfile.TemporaryDirectory() as root:
+        root = Path(root)
+
+        # The plan's check, with a silent track beside the one the cable fed.
+        late = root / "late"
+        late.mkdir()
+        write(late / "Click.wav", recorded(20.0, 120, 2.0), acid=Acid(120.0, 4, 4))
+        write(late / "Vocals.wav", np.zeros(20 * 48000), acid=Acid(120.0, 4, 4))
+        code, out, err = run(late)
+        click_part = out.split("Vocals.wav")[0]
+        got = seen.findall(click_part)
+        ok("clicks 2 ms late on a 120 grid: it runs, and prints a median of +2.0 ms",
+           code == 0 and len(got) == 1 and got[0][2] == "+2.0")
+        ok("  all 40 clicks of 20 s matched, the worst +2.0 ms too", bool(got) and got[0][:2] == ("40", "40")
+           and got[0][3] == "+2.0")
+        ok("  the tempo read from the WAV, and said", "the click at 120 a minute" in click_part)
+        ok("  the silent track beside it measured too, with nothing matched",
+           "Vocals.wav" in out and "matched 0 of 40 clicks" in out)
+        code, out, err = run(late, "--wav", "Click")
+        ok("--wav measures that track alone", code == 0 and "Vocals.wav" not in out and len(seen.findall(out)) == 1)
+
+        # 6/8: the WAV says the quarter tempo, 99; the clicks are eighths, 198.
+        eighths = root / "eighths"
+        eighths.mkdir()
+        write(eighths / "Ahoń.wav", recorded(12.0, 198, 0.0), acid=Acid(99.0, 6, 8))
+        code, out, err = run(eighths)
+        got = seen.findall(out)
+        ok("6/8 at 99 a quarter is measured as 198 clicks a minute, on time",
+           code == 0 and "the click at 198 a minute" in out and len(got) == 1 and got[0][2] in ("+0.0", "-0.0"))
+        ok("  and a name in another script printed as plain ASCII",
+           "Aho\\u0144.wav" in out and all(ord(c) < 128 for c in out + err))
+
+        # Two windows, the clocks drifting: at 127 on 44.1 kHz, where a click
+        # is no whole number of frames, 2 ms late for the first half and 4 ms
+        # for the second.
+        drift = root / "drift"
+        drift.mkdir()
+        write(drift / "Click.wav", recorded(130.0, 127, lambda t: 2.0 if t < 65 else 4.0, rate=44100),
+              rate=44100, acid=Acid(127.0, 4, 4))
+        code, out, err = run(drift)
+        got = seen.findall(out)
+        ok("130 s at 127 on 44.1 kHz: the first minute's median +2.0 ms, the last minute's +4.0 ms",
+           code == 0 and [g[2] for g in got] == ["+2.0", "+4.0"]
+           and "first minute" in out and "last minute" in out)
+
+        # A take whose WAVs carry no tempo (the setting was off): --tempo.
+        plain = root / "plain"
+        plain.mkdir()
+        write(plain / "Click.wav", recorded(20.0, 120, 2.0))
+        code, out, err = run(plain)
+        ok("a WAV with no tempo, and none given: exit 1, asking for --tempo", code == 1 and "--tempo" in err)
+        code, out, err = run(plain, "--tempo", 120)
+        got = seen.findall(out)
+        ok("  given with --tempo 120: a median of +2.0 ms", code == 0 and len(got) == 1 and got[0][2] == "+2.0")
+
+        empty = root / "empty"
+        empty.mkdir()
+        code, out, err = run(empty)
+        ok("a folder with no WAV, and one that is not there: exit 1, saying so",
+           code == 1 and ".wav" in err and run(root / "nowhere")[0] == 1)
 
 
 if __name__ == "__main__":
