@@ -650,7 +650,8 @@ export function Timeline({
           The group is a row as a track's is (Q11 D): the plate, and right
           of it the click's lane, on the same columns and on a well 3 px in
           from the group's edges, so its stripes stand under the tracks'
-          pictures over the same seconds. */}
+          pictures over the same seconds. It follows the zoom and the region
+          as they do, and a drag across it sets the region (spec Part 8). */}
       {rows > 0 && (
         <div
           data-master-band
@@ -677,8 +678,21 @@ export function Timeline({
                 click={<MasterClick take={take} />}
               />
             </div>
-            <div className="min-w-0 py-[3px]">
-              <MasterClickLane from={from} to={to} position={displayPosition} take={take} />
+            {/* A press here is one on the tracks: the surface above takes
+                the pointer from it (onPointerDown captures it there), so a
+                drag sets the region and a click moves the playhead. */}
+            <div
+              className="min-w-0 cursor-crosshair py-[3px] select-none"
+              style={{ touchAction: "none" }}
+              onPointerDown={onPointerDown}
+            >
+              <MasterClickLane
+                from={from}
+                to={to}
+                position={displayPosition}
+                region={band}
+                take={take}
+              />
             </div>
           </div>
         </div>

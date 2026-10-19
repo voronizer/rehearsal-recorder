@@ -9,9 +9,10 @@ import { cn } from "@/lib/utils"
  * Q11 D): the take's click as stripes, a bar's taller and stronger than a
  * beat's, on a well as the tracks' pictures are, over the same seconds as
  * theirs, `from` to `to`. Dimmed to half while the click is off; the
- * playhead over it as over the tracks; the tempo in its corner. With many
- * clicks in view it draws the bars only, and with very many every fourth
- * bar (`clickLines`).
+ * playhead and the region over it as over the tracks; the tempo in its
+ * corner. With many clicks in view it draws the bars only, and with very
+ * many every fourth bar (`clickLines`). A drag across it sets the region as
+ * one across the tracks does: the Timeline takes the pointer.
  *
  * A take recorded without the click has no stripes, and says so.
  */
@@ -19,6 +20,7 @@ export function MasterClickLane({
   from,
   to,
   position,
+  region = null,
   take,
   className,
 }: {
@@ -26,6 +28,8 @@ export function MasterClickLane({
   to: number
   /** The playhead, in the take's seconds. */
   position: number
+  /** The region as the tracks show it, while it is dragged too. */
+  region?: { a: number; b: number } | null
   take: TakeClick | null
   className?: string
 }) {
@@ -56,6 +60,14 @@ export function MasterClickLane({
           />
         ))}
       </div>
+      {region && (
+        <span
+          data-master-region
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 border-x border-warn/60 bg-warn/10"
+          style={{ left: `${pct(region.a)}%`, width: `${pct(region.b) - pct(region.a)}%` }}
+        />
+      )}
       {position >= from && position <= to && (
         <span
           aria-hidden

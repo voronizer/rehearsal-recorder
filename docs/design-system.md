@@ -615,7 +615,8 @@ The metronome's pieces, in `components/metronome/` (spec Parts 4 to 8):
   stripes on a well over the same seconds as the tracks' pictures, a bar's
   stronger than a beat's, from `clickLines` (bars only past 120 clicks in
   view, every fourth bar past 480), at half strength while the click is
-  off, with the playhead and the tempo in its corner.
+  off, with the playhead, the region and the tempo in its corner. A drag
+  across it sets the region as one across the tracks does.
 
 `MetronomeSettings` (`components/MetronomeSettings.tsx`) is Settings ›
 Metronome: the gear's pieces from `ClickSettings.tsx` in `SettingsGroup`s,

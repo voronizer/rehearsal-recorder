@@ -1325,6 +1325,45 @@ test("master stripes follow zoom", async ({ page }) => {
   expect(bars.filter((b) => !b).length).toBeGreaterThanOrEqual(2)
 })
 
+test("master lane shows the region and takes a drag as the tracks do", async ({ page }) => {
+  await openEvening(page)
+  await openTake(page, "Take 1 Pałyn")
+  const lane = (await masterLane(page).boundingBox())!
+  const y = lane.y + lane.height / 2
+  const from = lane.x + lane.width * 0.2
+  const to = lane.x + lane.width * 0.6
+  await page.mouse.move(from, y)
+  await page.mouse.down()
+  await page.mouse.move(to, y, { steps: 10 })
+  await page.mouse.up()
+  // Set as on the tracks: their band, with its Clear and Crop.
+  const tracks = page.locator("[data-region]")
+  await expect(tracks).toBeVisible()
+  await expect(page.getByRole("button", { name: "Crop to the region" })).toBeVisible()
+  const t = (await tracks.boundingBox())!
+  expect(Math.abs(t.x - from), "from where the pointer went down").toBeLessThan(1)
+  expect(Math.abs(t.x + t.width - to), "to where it let go").toBeLessThan(1)
+  // And the same seconds across Master's lane.
+  const m = (await masterLane(page).locator("[data-master-region]").boundingBox())!
+  expect(Math.abs(m.x - t.x)).toBeLessThan(1)
+  expect(Math.abs(m.width - t.width)).toBeLessThan(1)
+  // Zoomed in, it follows as the tracks' band does.
+  const surface = (await page.getByRole("group", { name: "Take timeline" }).boundingBox())!
+  await page.mouse.move(surface.x + surface.width * 0.4, surface.y + surface.height / 2)
+  await page.keyboard.down("Control")
+  await page.mouse.wheel(0, -400)
+  await page.keyboard.up("Control")
+  await expect.poll(async () => (await tracks.boundingBox())!.width).toBeGreaterThan(t.width * 1.2)
+  const zt = (await tracks.boundingBox())!
+  const zm = (await masterLane(page).locator("[data-master-region]").boundingBox())!
+  expect(Math.abs(zm.x - zt.x)).toBeLessThan(1)
+  expect(Math.abs(zm.width - zt.width)).toBeLessThan(1)
+  // Cleared, it goes from both.
+  await page.getByRole("button", { name: "Clear the loop region" }).click()
+  await expect(tracks).toHaveCount(0)
+  await expect(masterLane(page).locator("[data-master-region]")).toHaveCount(0)
+})
+
 test("a take without the click", async ({ page }) => {
   await openEvening(page)
   await openTake(page, "Take 6")
