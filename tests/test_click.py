@@ -5,20 +5,26 @@ three sounds (Part 3 of the metronome spec); a WAV that carries its tempo in an
 `acid` chunk, read back by libsndfile and by `wave` (Part 9); where a click is
 heard when its output is not the recording card, placed by the recording's
 clock and the output's own (Part 3); and a crop of a click take snapped to its
-bars (Part 9). Later sections are added as the rest of it is built.
+bars (Part 9). Then the click in the streams: a take's click on the recording
+card, written into the take's own stream a round trip early; on another device,
+placed by two clocks that drift apart; the click between takes, retimed while it
+runs; and the metronome that follows the next take's name (Part 2).
 
 The heavy arithmetic of the metronome lives here and not in test_engine.py,
 whose length bounds the whole Python run: an hour of clicks, two clocks that
 drift apart for an hour.
 
-No sound card and no MIDI: nothing here opens a stream. The clocks are fed
-made-up blocks, and the sounds and files are inspected as numbers and bytes.
+No sound card and no MIDI: nothing here opens a stream (sounddevice is stubbed,
+as in test_engine.py). The clocks are fed made-up blocks, and the sounds and
+files are inspected as numbers and bytes.
 """
 
 import random
 import struct
 import sys
 import tempfile
+import threading
+import time
 import types
 import wave
 from fractions import Fraction
@@ -29,17 +35,121 @@ PROJECT = Path(__file__).resolve().parent.parent
 # repository root, as the other suites do.
 sys.path.insert(0, str(PROJECT / "src"))
 
+# No sound card: the click's own output imports sounddevice, and nothing here
+# opens it.
+_sd = types.ModuleType("sounddevice")
+_sd.query_devices = lambda index=None, kind=None: {"name": "Stub", "max_output_channels": 2,
+                                                   "default_samplerate": 48000}
+sys.modules["sounddevice"] = _sd
+
 import numpy as np  # noqa: E402
 import soundfile  # noqa: E402  (libsndfile, to read the acid chunk the way a DAW's library does)
 
 from rehearsal_recorder.audio.click import (  # noqa: E402
     SIGNATURES, SOUNDS, Voices, accent, clamp_tempo, click_frame, mix_clicks, per_bar, per_quarter,
     quarter_tempo, snap_region, tempo_range)
+from rehearsal_recorder.audio.click_source import ClickSource  # noqa: E402
 from rehearsal_recorder.audio.click_timing import OutputClock, lead_of, round_trip_frames  # noqa: E402
+from rehearsal_recorder.audio.take_click import TakeClick  # noqa: E402
 from rehearsal_recorder.audio.wavfile import Acid, WavWriter, read_acid  # noqa: E402
+from rehearsal_recorder.metronome import Metronome  # noqa: E402
 from rehearsal_recorder.midi.clock import AudioClock  # noqa: E402
 
 problems = []
+
+
+class Impulse:
+    """Voices for checking where clicks land: one sample, at the click's own
+    frame, whose value says its accent (1, 2 or 3 for accents 0, 1 and 2)."""
+
+    sound, volume = "click", 1.0
+
+    def __init__(self, samplerate):
+        self.samplerate = samplerate
+        self._voices = []
+        for level in (0, 1, 2):
+            voice = np.zeros(64, np.float32)
+            voice[0] = level + 1
+            self._voices.append(voice)
+
+    def of(self, accent):
+        return self._voices[accent]
+
+
+def onsets(audio, column=0):
+    """Where the impulses in a run of blocks are, as (frame, accent)."""
+    at = np.flatnonzero(audio[:, column])
+    return [(int(f), int(audio[f, column]) - 1) for f in at]
+
+
+class FakeOutput:
+    """The click's own output stream, as a take's click sees it: its rate,
+    whether it is there, and the source it was given. Its blocks are rendered
+    by hand."""
+
+    def __init__(self, samplerate, problem=None, name="Headphone amp"):
+        self.samplerate = samplerate
+        self.name = name
+        self.route = (0,)
+        self.source = None
+        self._problem = problem
+        self.stopped = False
+
+    def start(self, source):
+        self.source = source
+
+    def stop(self):
+        self.stopped = True
+
+    def problem(self):
+        return self._problem
+
+
+class FakeLibrary:
+    """Library.tempo_for and set_song_tempo, over three songs."""
+
+    def __init__(self):
+        self.songs = {"palyn": {"id": 1, "title": "Pałyn", "tempo": 128, "signature": "4/4"},
+                      "dym": {"id": 2, "title": "Dym", "tempo": None, "signature": None},
+                      "ahon": {"id": 3, "title": "Ahoń", "tempo": 198, "signature": "6/8"}}
+        self.saved = []
+
+    def tempo_for(self, name):
+        words = (name or "").strip().split()
+        if words and words[-1].isdigit():
+            words = words[:-1]
+        key = " ".join(words).casefold().replace("ł", "l").replace("ń", "n")
+        song = self.songs.get(key)
+        if song is None:
+            return {"song": None, "last_take": None}
+        return {"song": dict(song),
+                "last_take": {"folder": "/rec/2026-10-09", "take_number": 4, "name": f"{song['title']} 2"}}
+
+    def set_song_tempo(self, song_id, tempo, signature):
+        self.saved.append((song_id, tempo, signature))
+        for song in self.songs.values():
+            if song["id"] == song_id:
+                song["tempo"], song["signature"] = tempo, signature
+                return dict(song)
+        return None
+
+
+class FakePlayer:
+    """A take player holding a device: the free click it is given."""
+
+    def __init__(self, device, samplerate=48000, route=(0, 1)):
+        self.device, self.samplerate, self.route = device, samplerate, route
+        self.free = None
+
+    def holds(self, device_index):
+        return device_index == self.device
+
+    def play_free_click(self, source):
+        self.free = source
+
+    @property
+    def free_click(self):
+        return self.free
 
 
 def ok(label, cond):
@@ -342,6 +452,10 @@ def main():
     ok("at 127 in 3/4 and 44100, 2000 regions each start on the last bar line at or before them "
        "and end on the first quarter at or after them", wrong == [])
 
+    one_stream()
+    another_device()
+    on_its_own()
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")
@@ -350,6 +464,438 @@ def main():
         return 1
     print("The click: every check passes.")
     return 0
+
+
+def one_stream():
+    print("\n[5] A take's click, one stream")
+    # The click on the recording card: one stream with inputs and outputs, the
+    # click written into its output in the callback that reads its inputs. What
+    # is written comes back in a round trip later, here 9.5 ms (456 frames at
+    # 48000), so the click of input frame s is written at output frame s - 456.
+    SR, MS = 48000, 1_000_000
+    T = 3_000_000_000
+    voices = Voices("click", SR, 0.7)
+
+    def run(click, blocks, start=0):
+        """Blocks of 1024 into a stream whose output is heard 4.5 ms after its
+        callback runs, and whose input was captured 5 ms before it."""
+        heard = []
+        for i in range(start, start + blocks):
+            out = np.zeros((1024, 2), np.float32)
+            now = 100.0 + i * 1024 / SR
+            info = types.SimpleNamespace(currentTime=now, inputBufferAdcTime=now - 0.005,
+                                         outputBufferDacTime=now + 0.0045)
+            click.on_duplex_block(out, i * 1024, 1024, info, (0.004, 0.004), now_ns=T + i * 1024 * 1_000_000_000 // SR)
+            heard.append(out)
+        return np.concatenate(heard)
+
+    tc = TakeClick(120, "4/4", 1, voices, (0, 1))
+    ok("a click on the recording card rides the take's stream, its first click not yet chosen",
+       tc.duplex and tc.first_click_frame is None and tc.end_frame is None)
+    heard = run(tc, 150)
+    first = tc.first_click_frame
+    ok("the first block chooses it: 0.1 s on, and a round trip of 9.5 ms after that", first == 4800 + 456)
+    ok("so the first click is at output frame first_click_frame - 456",
+       not heard[:first - 456].any() and np.array_equal(heard[first - 456:first - 456 + len(voices.of(2)), 0], voices.of(2)))
+    ok("  on both of its outputs", np.array_equal(heard[:, 0], heard[:, 1]))
+    # 150 blocks, 3.2 s, hold seven clicks.
+    places = [first - 456 + click_frame(k, 120, SR) for k in range(7)]
+    levels = [next((a for a in (0, 1, 2) if np.array_equal(heard[p:p + len(voices.of(a)), 0], voices.of(a))), None)
+              for p in places[:6]]
+    ok("a bar of four count-in clicks, the first accented, then the take's first beat accented again",
+       tc.count_in_clicks == 4 and levels == [2, 0, 0, 0, 2, 0])
+    between = np.ones(len(heard), bool)
+    for p in places:
+        between[p:p + len(voices.of(0))] = False
+    ok("and nothing between them", not heard[between[:len(heard)]].any())
+
+    # When each is heard: block i ran at T + i blocks, 4.5 ms before its first
+    # frame was heard.
+    def at(k):
+        return T + 4_500_000 + (first - 456 + click_frame(k, 120, SR)) * 1_000_000_000 // SR
+
+    count, since = tc.count_state(at(0) - MS)
+    ok("before the first click, no count yet, and the count-in's end ahead",
+       count == 0 and abs(since - (at(0) - MS - at(4)) / 1e6) < 0.2)
+    ok("just after the second, the count-in's second click",
+       tc.count_state(at(1) + MS)[0] == 2 and tc.count_state(at(3) + MS)[0] == 4)
+    count, since = tc.count_state(at(4) + 2 * MS)
+    ok("the count-in ends on the take's first beat: since_count_in_ms near 0 then", count == 0 and abs(since - 2.0) < 0.2)
+    upcoming = tc.upcoming(at(1) + MS, 1.5)
+    ok("the clicks heard in the next 1.5 s, each with its place in the bar",
+       [i for _, i in upcoming] == [2, 3, 0] and abs(upcoming[0][0] - 499.0) < 0.2)
+    ok("its record for take.json",
+       tc.record() == {"tempo": 120, "signature": "4/4", "on": True, "wav_tempo": True,
+                       "first_click_frame": first, "end_frame": None})
+
+    quiet = TakeClick(120, "4/4", 1, voices, (0, 1), on=False)
+    silent = run(quiet, 60)
+    ok("switched off, it writes silence", not silent.any() and quiet.first_click_frame == first)
+    quiet.set_on(True)
+    back = run(quiet, 60, start=60)
+    k, place = next((k, p - 60 * 1024) for k, p in ((k, first - 456 + click_frame(k, 120, SR)) for k in range(12))
+                    if p >= 60 * 1024)
+    ok("and kept counting: switched on again, the next click is on its beat, in its place in the bar",
+       (k, place) == (3, 76800 - 61440) and not back[:place].any()
+       and np.array_equal(back[place:place + len(voices.of(0)), 0], voices.of(accent("4/4", k))))
+
+    # A driver that gives no times: the round trip is the stream's own
+    # latencies, which the recorder knows only once the stream is open (None
+    # until then). The ones it asked for are never taken for them.
+    blank = types.SimpleNamespace(currentTime=0.0, inputBufferAdcTime=0.0, outputBufferDacTime=0.0)
+    unsaid = TakeClick(120, "4/4", 1, voices, (0, 1))
+    out = np.zeros((1024, 2), np.float32)
+    unsaid.on_duplex_block(out, 0, 1024, blank, None, now_ns=T)
+    waited = unsaid.first_click_frame is None and not out.any()
+    unsaid.on_duplex_block(out, 1024, 1024, blank, (0.004, 0.006), now_ns=T + 21_333_333)
+    ok("a driver with no times: the first click waits for the stream's own latencies, 10 ms here",
+       waited and unsaid.first_click_frame == 1024 + 4800 + 480)
+
+    print("  Stop records on to the next quarter")
+    eight = TakeClick(180, "6/8", 1, voices, (0, 1))
+    run(eight, 1)
+    f8 = eight.first_click_frame
+    ok("6/8 at 180: Stop just after click 7 ends on click 8, an even click",
+       eight.stop_frame(f8 + click_frame(7, 180, SR) + 5) == f8 + click_frame(8, 180, SR)
+       and eight.end_frame == f8 + click_frame(8, 180, SR))
+    ok("  Stop on a quarter ends there", eight.stop_frame(f8 + click_frame(8, 180, SR)) == f8 + click_frame(8, 180, SR))
+    ok("  Stop before the first click still holds one quarter", eight.stop_frame(f8 - 100) == f8 + click_frame(2, 180, SR))
+    ok("4/4: Stop in the count-in ends on its next click",
+       tc.stop_frame(first + click_frame(1, 120, SR) + 1) == first + click_frame(2, 120, SR))
+    ok("the WAVs' tempo and the .mid's: 180 eighths in 6/8 are 90 quarters",
+       eight.acid() == Acid(90.0, 6, 8) and eight.meter() == (666667, (6, 3, 12, 8))
+       and tc.acid() == Acid(120.0, 4, 4) and tc.meter() == (500000, (4, 2, 24, 8)))
+    ok("none in the WAVs when the setting is off",
+       TakeClick(120, "4/4", 1, voices, (0, 1), wav_tempo=False).acid() is None)
+    early = TakeClick(120, "4/4", 2, voices, (0, 1))
+    ok("Stop before the first block: the files start there and hold a quarter",
+       early.stop_frame(0) == click_frame(1, 120, SR) and early.first_click_frame == 0)
+    ok("two bars of count-in are eight clicks", early.count_in_clicks == 8)
+
+
+def another_device():
+    print("\n[6] A take's click, another device")
+    # The click on the laptop's jack while the desk records: two clocks. The
+    # desk runs at 48000 and 200 ppm fast, the jack at 44100 and 100 ppm slow.
+    # Each stream's callback runs late by a few milliseconds of jitter, and the
+    # driver says how late (as PortAudio's time_info does), give or take a
+    # fifth of a millisecond. A click belongs on an input frame and should be
+    # heard as that frame is captured, so a beat played on it lands on it.
+    IN, OUT = 48000, 44100
+    in_rate, out_rate = IN * (1 + 200e-6), OUT * (1 - 100e-6)
+    T0 = 7_000_000_000
+
+    def take(seconds, late_sec, seed, lead_sec=0.02):
+        """`lead_sec`: how long before its frames are heard the jack's callback
+        runs, less up to 3 ms of jitter."""
+        rnd = random.Random(seed)
+        T1 = T0 + int((0.25 + late_sec) * 1e9)  # when the jack's first frame is heard
+        output = FakeOutput(OUT)
+        tc = TakeClick(120, "4/4", 1, Impulse(OUT), (0,), samplerate=IN, output=output)
+        tc.start()
+        rec = AudioClock(IN)
+        rec.latency_sec = 0.005
+        rec.started_ns = T0
+        out = np.zeros((1024, 1), np.float32)
+        clicks = []
+        i = j = 0
+
+        def input_due(i):
+            return T0 + (1024 * (i + 1)) / in_rate * 1e9 + 3e6 + rnd.random() * 3e6
+
+        def output_due(j):
+            return T1 + 1024 * j / out_rate * 1e9 - lead_sec * 1e9 - rnd.random() * 3e6
+
+        next_in, next_out = input_due(0), output_due(0)
+        end = T0 + seconds * 1e9
+        while min(next_in, next_out) < end:
+            if next_in <= next_out:
+                ran = int(next_in)
+                captured = T0 + 1024 * i / in_rate * 1e9 + rnd.uniform(-2e5, 2e5)
+                rec.mark(ran, 1024 * (i + 1), 1024, (ran - captured) / 1e9)
+                tc.on_input(1024 * i, rec)
+                i += 1
+                next_in = input_due(i)
+            else:
+                ran = int(next_out)
+                dac = T1 + 1024 * j / out_rate * 1e9 + rnd.uniform(-2e5, 2e5)
+                out.fill(0)
+                output.source.render(out, 1024 * j, ran, (dac - ran) / 1e9)
+                if out.any():
+                    clicks += [(1024 * j + f, a) for f, a in onsets(out)]
+                j += 1
+                next_out = output_due(j)
+        return tc, clicks, T1
+
+    def worst(tc, clicks, T1):
+        """The furthest any click is heard from its input frame's capture, in ms."""
+        first = tc.first_click_frame
+        return max(abs((T1 + m / out_rate * 1e9) - (T0 + (first + click_frame(k, 120, IN)) / in_rate * 1e9))
+                   for k, (m, _) in enumerate(clicks)) / 1e6
+
+    tc, clicks, T1 = take(3600, 0.0, 5)
+    ok("an hour of clicks on the jack, none missing", len(clicks) >= 2 * 3600 - 2)
+    miss = worst(tc, clicks, T1)
+    ok("every click of the hour heard within 1 ms of its input frame's capture", miss < 1.0)
+    print(f"         (the furthest: {miss:.3f} ms)")
+    ok("  the count-in's bar accented as a bar, and the take's", [a for _, a in clicks[:9]] == [2, 0, 0, 0, 2, 0, 0, 0, 2])
+    ok("the first click chosen 0.2 s after the input block that followed the jack's first",
+       0.2 * IN <= tc.first_click_frame <= (0.25 + 0.2) * IN + 1024)
+
+    tc, clicks, T1 = take(8, 2.0, 6)
+    ok("the jack starting 2 s late moves the first click after it", tc.first_click_frame > (2.0 + 0.2) * IN)
+    ok("and the count-in stays whole, each heard on its frame",
+       [a for _, a in clicks[:5]] == [2, 0, 0, 0, 2] and worst(tc, clicks, T1) < 1.0)
+
+    # Bluetooth headphones hear a block 0.3 s after it is written, so the
+    # first click comes late enough for the jack to have it in time.
+    tc, clicks, T1 = take(8, 0.0, 7, lead_sec=0.3)
+    ok("an output heard 0.3 s after it is written: the count-in whole, each click on its frame",
+       [a for _, a in clicks[:5]] == [2, 0, 0, 0, 2] and worst(tc, clicks, T1) < 1.0
+       and tc.first_click_frame > 0.3 * IN)
+
+    made = TakeClick(120, "4/4", 1, Voices("click", IN, 0.7), (0,), output=FakeOutput(OUT))
+    ok("the click is made at the jack's rate, 44100, not the desk's",
+       made.source.voices.samplerate == OUT and np.array_equal(made.source.voices.of(2), Voices("click", OUT, 0.7).of(2)))
+    ok("and the take's frames counted at the desk's", made.samplerate == IN and not made.duplex)
+
+    gone = TakeClick(120, "4/4", 1, Voices("click", IN, 0.7), (0,), output=FakeOutput(OUT, problem="Gone"))
+    gone.start()
+    gone_clock = AudioClock(IN)
+    gone_clock.started_ns = T0
+    gone_clock.mark(T0 + 30_000_000, 1024, 1024, None)
+    gone.on_input(0, gone_clock)
+    ok("an output that is not there: the first click is chosen at once, and the grid is kept",
+       gone.first_click_frame == round(0.2 * IN) and gone.problem() == "Gone")
+    ok("  and the screen still hears when its clicks fall", gone.count_state(T0 + 100_000_000)[1] is not None)
+
+
+def on_its_own():
+    print("\n[7] The click on its own")
+    # Between takes the click has an output of its own, or rides the player's.
+    # Changed while it runs, it goes on at the new tempo from its next click:
+    # no gap longer than the old click, none shorter than the new.
+    SR = 48000
+    p120, p140 = 60 * SR / 120, 60 * SR / 140
+
+    def blocks(source, count, start=0, size=512):
+        out = []
+        for b in range(start, start + count):
+            block = np.zeros((size, 1), np.float32)
+            source.render(block, b * size, 9_000_000_000 + b * size * 1_000_000_000 // SR, 0.01)
+            out.append(block)
+        return np.concatenate(out)
+
+    wrong = []
+    for after in range(90, 140, 3):  # retimed at 17 places, around the second bar's first clicks
+        src = ClickSource(120, "4/4", Impulse(SR), (0,))
+        before = blocks(src, after)
+        src.retime(140, "4/4")
+        heard = onsets(np.concatenate([before, blocks(src, 400, start=after)]))
+        gaps = [b[0] - a[0] for a, b in zip(heard, heard[1:])]
+        if not (min(gaps) >= p140 - 1 and max(gaps) <= p120 + 1
+                and [a for _, a in heard] == [accent("4/4", k) for k in range(len(heard))]):
+            wrong.append(after)
+    ok("120 retimed to 140 at 17 moments: no gap over 60/120 s, none under 60/140 s, the bar going on", wrong == [])
+    src = ClickSource(120, "4/4", Impulse(SR), (0,))
+    before = blocks(src, 100)  # 51200 frames: the third click (k = 2) at 48000 is the last
+    src.retime(140, "4/4")
+    heard = onsets(np.concatenate([before, blocks(src, 200, start=100)]))
+    ok("from its next click on the new period: 48000 then 48000 + 20571",
+       [f for f, _ in heard[2:5]] == [48000, 48000 + round(p140), 48000 + round(2 * p140)])
+
+    src = ClickSource(120, "4/4", Impulse(SR), (0,))
+    before = blocks(src, 100)
+    src.retime(120, "3/4")
+    heard = onsets(np.concatenate([before, blocks(src, 300, start=100)]))
+    ok("a new signature: its next click is the first of a bar, accented, and the bar is 3",
+       [a for _, a in heard[:8]] == [2, 0, 0, 2, 0, 0, 2, 0])
+
+    one = ClickSource(120, "4/4", Impulse(SR), (0,), bars=1)
+    heard = onsets(blocks(one, 400))
+    ok("a preview of one bar is four clicks and then nothing", [a for _, a in heard] == [2, 0, 0, 0] and one.done)
+    six = ClickSource(198, "6/8", Impulse(SR), (0,), bars=1)
+    ok("  six in 6/8", [a for _, a in onsets(blocks(six, 400))] == [2, 0, 0, 1, 0, 0] and six.done)
+    later = ClickSource(120, "4/4", Impulse(SR), (0,), start_k=2)
+    ok("one carried on from click 2 starts on the bar's third beat", [a for _, a in onsets(blocks(later, 200))][:3] == [0, 0, 2])
+
+    src = ClickSource(120, "4/4", Impulse(SR), (0,))
+    blocks(src, 10)
+    now = 9_000_000_000 + 10 * 512 * 1_000_000_000 // SR
+    soon = src.upcoming(now, 1.5)
+    ok("what the screen lights next: each click heard in the next 1.5 s and its place in the bar",
+       [i for _, i in soon] == [1, 2, 3] and all(0 <= ms <= 1500 for ms, _ in soon)
+       and abs(soon[0][0] - (10 + 500 - 10 * 512 / 48)) < 0.2)
+    src.set_on(False)
+    ok("switched off it renders nothing", not blocks(src, 200, start=10).any())
+
+    print("  The metronome follows the next take's name")
+    library = FakeLibrary()
+    config, written = {}, []
+    player = FakePlayer(None)
+    m = Metronome(config, lambda: written.append(dict(config)), lambda: player, lambda key: None, library)
+    state = m.state()
+    ok("before a name, a free take with an empty row",
+       state["case"] == "free" and state["tempo"] is None and state["phase"] == "idle" and state["per_bar"] == 4)
+    m.follow("Palyn 3")
+    state = m.state()
+    ok("1. a song with a tempo: the song's", state["case"] == "song" and (state["tempo"], state["signature"]) == (128, "4/4")
+       and state["song"]["title"] == "Pałyn" and not state["held"] and state["last_take"]["take_number"] == 4)
+    ok("  what Record takes", m.take_meter() == (128, "4/4", True))
+    ok("a tempo out of range or a signature not one of the four is refused",
+       not m.set(20, "4/4")["ok"] and not m.set(128, "5/4")["ok"] and not m.set(129.5, "4/4")["ok"]
+       and m.state()["tempo"] == 128)
+    ok("a change in the row is held", m.set(132, "4/4")["ok"] and m.state()["held"] and m.take_meter()[0] == 132)
+    m.follow("Palyn")
+    ok("  through a keystroke in the same song's name", m.state()["tempo"] == 132 and m.state()["held"])
+    m.follow("Dym")
+    state = m.state()
+    ok("2. a song without a tempo: the row is empty, and the take records without a click",
+       state["case"] == "song_without" and state["tempo"] is None and not state["held"]
+       and state["last_take"]["name"] == "Dym 2" and m.take_meter()[0] is None)
+    m.follow("Palyn 4")
+    ok("another song took the held change away", m.state()["tempo"] == 128 and not m.state()["held"])
+    m.follow("Dym")
+    m.set(104, "4/4")
+    ok("a tempo typed for a song without one is held, and saved to it by the button",
+       m.state()["held"] and m.save_to_song()["ok"] and library.saved == [(2, 104, "4/4")]
+       and not m.state()["held"] and m.state()["case"] == "song")
+    m.follow("")
+    state = m.state()
+    ok("3. a free take: an empty row, no song, nothing held", state["case"] == "free" and state["tempo"] is None
+       and state["song"] is None and not m.save_to_song()["ok"])
+    m.set(100, "3/4")
+    m.follow("Take 5")
+    ok("  a tempo set by hand holds through another free name", m.take_meter() == (100, "3/4", True))
+    m.follow("Novaja")
+    ok("  and a new title no song has yet; the case is a song without a tempo",
+       m.state()["case"] == "song_without" and m.state()["tempo"] == 100 and m.state()["song"] is None
+       and not m.save_to_song()["ok"])
+    m.follow("Ahon")
+    ok("until a song is picked: 198 in 6/8, six clicks a bar",
+       (m.state()["tempo"], m.state()["signature"], m.state()["per_bar"]) == (198, "6/8", 6))
+    m.set(198, "4/4")
+    ok("the signature changed keeps the number", m.state()["tempo"] == 198 and m.state()["signature"] == "4/4")
+
+    print("  Its settings, and a bar heard")
+    ok("the settings and their defaults",
+       m.settings() == {"click_device_index": None, "click_channels": None, "click_sound": "click",
+                        "click_volume": 0.7, "count_in_bars": 1, "tempo_in_wav": True, "metronome_on": True})
+    ok("each is checked and saved", m.set_setting("click_sound", "wood")["ok"] and written[-1]["click_sound"] == "wood"
+       and m.set_setting("count_in_bars", 2)["ok"] and m.set_setting("tempo_in_wav", False)["ok"]
+       and m.set_setting("click_volume", 0.5)["ok"] and config["click_volume"] == 0.5)
+    ok("an unknown key, or a value that is not one, is refused and nothing saved",
+       not m.set_setting("click_colour", "red")["ok"] and not m.set_setting("click_sound", "cowbell")["ok"]
+       and not m.set_setting("tempo_in_wav", 1)["ok"] and not m.set_setting("count_in_bars", True)["ok"]
+       and len(written) == 4)
+    ok("the switch is a setting too", m.set_on(False)["ok"] and config["metronome_on"] is False
+       and m.take_meter() == (198, "4/4", False) and m.state()["on"] is False)
+    m.set_on(True)
+    ok("a bar previewed rides the player that holds the click's output",
+       m.preview(bars=1, sound="hihat")["ok"] and isinstance(player.free, ClickSource))
+    bar = player.free
+    ok("  in the sound asked for, at the volume set", bar.voices.sound == "hihat" and bar.voices.volume == 0.5)
+    ok("  and the screen shows nothing of it", m.state()["phase"] == "idle" and m.state()["upcoming"] == [])
+    heard = blocks(bar, 400)
+    ok("it stops after one bar", len([f for f in np.flatnonzero(heard[:, 0])
+                                      if f == 0 or not heard[max(0, f - 200):f, 0].any()]) == 4 and bar.done)
+    m.state()
+    ok("  and then lets go of the player's stream", player.free is None)
+    ok("the click between takes runs on the player's stream too", m.play()["ok"] and m.state()["phase"] == "preview")
+    run = player.free
+    m.set(150, "4/4")
+    ok("  retimed when the row changes", run.tempo == 150 and run is player.free)
+    m.set(None, "4/4")
+    ok("  and stopped when it is emptied", player.free is None and m.state()["phase"] == "idle")
+    m.set(150, "4/4")
+    m.play()
+    m.stop()
+    ok("Stop stops it", player.free is None and m.state()["phase"] == "idle")
+    m.play()
+    run = player.free
+    # The player closed its output and opened it again (a rescan, or its card
+    # coming back): closing let go of the click.
+    player.free = None
+    m.resink()
+    ok("a player that closed and opened its output again gets the click back",
+       isinstance(player.free, ClickSource) and player.free is not run and m.state()["phase"] == "preview")
+    # A ■ pressed while the click is being moved: the move cannot bring it back.
+    player.free = None
+    real_sink, moving = m._sink, threading.Event()
+
+    def slow_sink():
+        moving.set()
+        time.sleep(0.05)
+        return real_sink()
+
+    m._sink = slow_sink
+    mover = threading.Thread(target=m.resink)
+    mover.start()
+    moving.wait(1)
+    m.stop()
+    mover.join(1)
+    m._sink = real_sink
+    ok("a Stop while the click is being moved stays stopped",
+       not mover.is_alive() and player.free is None and m.state()["phase"] == "idle")
+    m.stop()
+
+    print("  Where the click goes, and the device list")
+    real_query = _sd.query_devices
+
+    class Refusing:
+        def __init__(self, **kw):
+            raise RuntimeError("Device unavailable")
+
+    # A headphone amp at 44100 that will not open: the click is counted at
+    # its rate all the same, to no output.
+    _sd.query_devices = lambda index=None, kind=None: {"name": "Headphone amp", "max_output_channels": 2,
+                                                       "default_samplerate": 44100}
+    _sd.OutputStream = Refusing
+    try:
+        amp = Metronome({"click_device": {"name": "Headphone amp", "host_api": "CoreAudio"}, "click_device_index": 5},
+                        lambda: None, lambda: None, {"click_device": 5}.get, None)
+        amp.set(120, "4/4")
+        played = amp.play()["ok"]
+    finally:
+        _sd.query_devices = real_query
+        del _sd.OutputStream
+    state = amp.state()
+    gaps = [b[0] - a[0] for a, b in zip(state["upcoming"], state["upcoming"][1:])]
+    counted = amp._free.source
+    ok("a 44.1 kHz output that will not open: the beat still flashes every 500 ms at 120, and says which",
+       played and len(gaps) >= 1 and all(abs(g - 500) < 0.5 for g in gaps)
+       and state["output_missing"] == "Headphone amp")
+    ok("  counted at its rate, on its outputs, raising nothing", counted.fault is None and counted.samplerate == 44100)
+    amp.stop()
+
+    # The screen asks for the state many times a second; the device list is
+    # PortAudio's, which a rescan rebuilds under the app's stream lock.
+    asked = []
+    polled = Metronome({}, lambda: None, lambda: None, lambda key: asked.append(key), None)
+    polled.state()
+    once = list(asked)
+    queried = []
+    _sd.query_devices = lambda index=None, kind=None: queried.append(index) or real_query(index, kind)
+    try:
+        for _ in range(20):
+            polled.state()
+    finally:
+        _sd.query_devices = real_query
+    ok("the screen's polls ask where the click goes once, not each time, and never PortAudio",
+       once == ["click_device", "output_device"] and asked == once and queried == [])
+
+    # No click device saved, and the player on the system output, which is
+    # the recording card: the click rides the take's stream there.
+    _sd.query_devices = lambda index=None, kind=None: {"name": "Interface", "index": 0, "max_output_channels": 2,
+                                                       "default_samplerate": 48000}
+    try:
+        system = Metronome({}, lambda: None, lambda: None, lambda key: None, None)
+        system.set(120, "4/4")
+        on_card = system.take_click(0, 48000)
+    finally:
+        _sd.query_devices = real_query
+    ok("the system output is the recording card: one stream, no second one on it",
+       on_card is not None and on_card.duplex and on_card.route == (0, 1))
 
 
 if __name__ == "__main__":

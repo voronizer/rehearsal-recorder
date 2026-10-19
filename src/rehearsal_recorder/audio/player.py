@@ -14,9 +14,19 @@ take length and seeking is just an index change.
 
 Synchronisation comes for free: every track is mixed into one stream from the
 same position, so there is nothing to drift apart.
+
+The metronome's click rides this stream too (metronome spec, Parts 3 and 8). A
+click take plays back with its click, made again from its tempo at the take's
+own frames, so it follows a seek and a loop; it is under the master volume and
+out of the meters. Between takes, the metronome's own click (▶, or a bar
+played for a setting) is mixed in here when its output is this stream's
+device, on its own outputs, outside the take's mix: the app never opens a
+second stream on a device it already holds. The stream is opened wide enough
+for both.
 """
 
 import threading
+import time
 import wave
 from pathlib import Path
 
@@ -24,6 +34,8 @@ import numpy as np
 import sounddevice as sd
 
 from rehearsal_recorder.audio import heartbeat
+from rehearsal_recorder.audio.click import accent, click_frame, mix_clicks
+from rehearsal_recorder.audio.click_timing import lead_of
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
     close_stream,
@@ -166,6 +178,10 @@ class TakePlayer:
         self._stream_channels = 2
         self._route = (0, 1)
         self._stream = None
+        # The device the stream is open on (None: the system's), and how
+        # late what it writes is heard, for the click between takes.
+        self.output_device = None
+        self._latency = 0.0
         # Whether the output is still asking for sound, and what to call it
         # if it stops: see problem.
         self._heartbeat = heartbeat.Heartbeat()
@@ -185,7 +201,23 @@ class TakePlayer:
         # numbers, once per block.
         self._i32 = None
 
-    def open_output(self, device_index=None, channels=(1, 2)):
+        # The take's own click (Part 8): (tempo, signature, voices) for a click
+        # take, None for one without; whether it is heard; its block, at 0..1
+        # before the master; where in the take the last block ended, so a
+        # click begun there runs on and one cut by a seek is not heard half;
+        # and the clicks of one block, reused.
+        self._take_click = None
+        self._click_on = False
+        self._clicks = None
+        self._click_until = None
+        self._click_starts = []
+        # The click between takes (a ClickSource) when it rides this stream,
+        # its block as wide as the stream, and the stream's frames so far.
+        self._free_click = None
+        self._free = None
+        self._out_frames = 0
+
+    def open_output(self, device_index=None, channels=(1, 2), extra_channels=()):
         """
         Opens the output. Returns a complaint when the chosen device could not
         be used and the system one was taken instead — the take still plays,
@@ -195,9 +227,14 @@ class TakePlayer:
         way the card's own labels count: a pair such as (3, 4), or one output
         on its own, (5,). The system output is always 1–2 — which of its
         channels are which is the system's business, not ours.
+
+        `extra_channels`: the metronome's click's outputs, when its output is
+        this same device, so the stream reaches them too. Outputs the card
+        does not have are left out.
         """
         index, complaint = usable_output(device_index, self.samplerate)
         channels = tuple(channels) if index is not None else (1, 2)
+        extra = ()
 
         if index is not None:
             info = sd.query_devices(index)
@@ -207,11 +244,14 @@ class TakePlayer:
                     f"{channel_label(channels)}, so it plays through 1–2."
                 )
                 channels = (1, 2)
+            extra = tuple(c for c in extra_channels if c <= info.get("max_output_channels", 2))
+        elif device_index is None:
+            extra = tuple(c for c in extra_channels if c <= 2)
 
         with STREAM_LOCK:
             self.close_output()
             try:
-                self._start_output(index, channels)
+                self._start_output(index, channels, extra)
             except Exception as e:
                 # The chosen card refused at the moment of opening. An ASIO
                 # card is never asked beforehand — the asking costs a full
@@ -225,10 +265,13 @@ class TakePlayer:
                 self._start_output(None, (1, 2))
         return complaint
 
-    def _start_output(self, index, channels):
+    def _start_output(self, index, channels, extra=()):
         """The stream itself, once the device and the outputs are settled."""
         self._route = tuple(c - 1 for c in channels)
-        self._stream_channels = max(channels)
+        self._stream_channels = max((*channels, *extra))
+        self._free = np.zeros((BLOCK_FRAMES, self._stream_channels), dtype=np.float32)
+        self._out_frames = 0
+        self._latency = output_latency(sd, index)
         self._stream = open_stream(
             sd.OutputStream,
             device=index,
@@ -238,9 +281,13 @@ class TakePlayer:
             blocksize=BLOCK_FRAMES,
             # Without it, what is played can be heard seconds later — see
             # output_latency.
-            latency=output_latency(sd, index),
+            latency=self._latency,
             callback=self._callback,
         )
+        self.output_device = index
+        said = getattr(self._stream, "latency", None)
+        if isinstance(said, (int, float)) and 0 < said < 1:
+            self._latency = float(said)
         self._heartbeat.start()
         try:
             self._output_name = (
@@ -296,6 +343,33 @@ class TakePlayer:
         self._scratch = np.zeros((frames, 2), dtype=np.float32)
         self._out16 = np.zeros((frames, self._out_channels), dtype=np.int16)
         self._i32 = np.zeros(frames * 2, dtype=np.int32)
+        self._clicks = np.zeros((frames, self._out_channels), dtype=np.float32)
+
+    def _mix_take_click(self, click, at, n):
+        """
+        The take's click for the `n` frames of the take from the current
+        position, into its block from `at`: click k at the take's frame
+        click_frame(k), the first click of the count-in being its first frame.
+        A click begun before them sounds on only when the last block ended
+        where these begin; after a seek or round a loop it is not heard half.
+        """
+        tempo, signature, voices = click
+        pos, rate = self._pos, self.samplerate
+        length = len(voices.of(0))
+        begin = pos - length if pos == self._click_until else pos
+        starts = self._click_starts
+        starts.clear()
+        k = max(0, begin * tempo // (60 * rate))
+        while True:
+            frame = click_frame(k, tempo, rate)
+            if frame >= pos + n:
+                break
+            if frame >= begin:
+                starts.append((frame, accent(signature, k)))
+            k += 1
+        self._click_until = pos + n
+        if starts:
+            mix_clicks(self._clicks[at:at + n], pos, starts, voices, (0, 1))
 
     def _render(self, frames):
         """
@@ -318,7 +392,13 @@ class TakePlayer:
             # down from where it was over the first few blocks.
             self._master_gain = 0.0 if self.master_muted else self.master
             self.master_level = 0.0
+            self._click_until = None
             return result
+
+        click = self._take_click if self._click_on else None
+        if click is not None:
+            clicks = self._clicks[:frames]
+            clicks.fill(0.0)
 
         # Cleared once per block rather than per segment: one block can cross
         # a loop point and come back, and the meter wants the loudest of the
@@ -347,6 +427,8 @@ class TakePlayer:
                 break
 
             n = min(frames - written, available)
+            if click is not None:
+                self._mix_take_click(click, written, n)
 
             for track in self.tracks:
                 target = self._effective_gain(track)
@@ -393,6 +475,11 @@ class TakePlayer:
         if self._master_gain != 1.0:
             out *= self._master_gain
         self.master_level = max(float(out.max()), -float(out.min()))
+        if click is not None:
+            # After the meter, under the master: the take turned down turns
+            # its click down, and muted, it is silent.
+            clicks *= 32767.0 * self._master_gain
+            out += clicks
 
         np.clip(out, -32768, 32767, out=out)
         np.copyto(result, out, casting="unsafe")
@@ -404,28 +491,53 @@ class TakePlayer:
         # status is kept for whoever asks.
         self._heartbeat.enter()
         try:
-            self._fill(outdata, frames, status)
+            self._fill(outdata, frames, status, time_info)
         finally:
             self._heartbeat.leave()
 
-    def _fill(self, outdata, frames, status):
+    def _fill(self, outdata, frames, status, time_info=None):
         if status:
             self.last_status = str(status)
         with self._lock:
             mix = self._render(frames)
             if self._stream_channels == 2 and self._route == (0, 1):
                 outdata[:] = mix
-                return
-            outdata.fill(0)
-            if len(self._route) == 2:
-                outdata[:, self._route[0]] = mix[:, 0]
-                outdata[:, self._route[1]] = mix[:, 1]
             else:
-                # One output on its own takes the left side, which is the
-                # whole mix: every track goes to both sides equally, so left
-                # and right are the same samples. If tracks ever get a pan,
-                # this has to become the average of the two.
-                outdata[:, self._route[0]] = mix[:, 0]
+                outdata.fill(0)
+                if len(self._route) == 2:
+                    outdata[:, self._route[0]] = mix[:, 0]
+                    outdata[:, self._route[1]] = mix[:, 1]
+                else:
+                    # One output on its own takes the left side, which is the
+                    # whole mix: every track goes to both sides equally, so left
+                    # and right are the same samples. If tracks ever get a pan,
+                    # this has to become the average of the two.
+                    outdata[:, self._route[0]] = mix[:, 0]
+        free = self._free_click
+        if free is not None:
+            self._add_free_click(free, outdata, frames, time_info)
+        self._out_frames += frames
+
+    def _add_free_click(self, source, outdata, frames, time_info):
+        """
+        The click between takes, onto what the take put out: on its own
+        outputs, at its own volume, outside the master and the meters.
+        Outputs this stream does not reach are left out.
+        """
+        block = self._free
+        if block is None or block.shape[0] < frames or block.shape[1] != outdata.shape[1]:
+            # A driver that asks for more than a block, once.
+            block = self._free = np.zeros((frames, outdata.shape[1]), dtype=np.float32)
+        block = block[:frames]
+        block.fill(0.0)
+        source.render(block, self._out_frames, time.perf_counter_ns(), lead_of(time_info, self._latency))
+        for c in source.route:
+            if c < outdata.shape[1]:
+                column = block[:, c]
+                column *= 32767.0
+                column += outdata[:, c]
+                np.clip(column, -32768, 32767, out=column)
+                np.copyto(outdata[:, c], column, casting="unsafe")
 
     # ---------- transport ----------
 
@@ -498,6 +610,43 @@ class TakePlayer:
         with self._lock:
             self.master = float(min(1.0, max(0.0, volume)))
 
+    # ---------- the click ----------
+
+    @property
+    def route(self):
+        """The outputs the take comes out of, counted from 0."""
+        return self._route
+
+    def holds(self, device_index):
+        """Whether this player's stream is open on `device_index` (None: the
+        system's), so a click there rides it."""
+        return self._stream is not None and self.output_device == device_index
+
+    def play_free_click(self, source):
+        """The click between takes into this stream, on its route; None
+        takes it out."""
+        self._free_click = source
+
+    @property
+    def free_click(self):
+        """The click between takes this stream plays, None for none: closing
+        the output lets go of it."""
+        return self._free_click
+
+    def set_take_click(self, tempo, signature, voices):
+        """The take's click (Part 8): its tempo and signature, and `voices`
+        at this take's rate and the metronome's volume; None for a take that
+        was not recorded to the click."""
+        with self._lock:
+            self._take_click = None if voices is None or not tempo else (tempo, signature, voices)
+            self._click_until = None
+
+    def set_click_on(self, on):
+        """Master's metronome button: whether the take's click is heard."""
+        with self._lock:
+            self._click_on = bool(on)
+            self._click_until = None
+
     # ---------- state ----------
 
     def state(self):
@@ -542,6 +691,7 @@ class TakePlayer:
                 "volumes": {t.name: t.volume for t in self.tracks},
                 "master": self.master,
                 "master_muted": self.master_muted,
+                "click": self._click_on,
             }
 
     def close_output(self):
@@ -556,6 +706,7 @@ class TakePlayer:
         "'NoneType' object has no attribute 'close'" came from.
         """
         self._heartbeat.stop()
+        self._free_click = None
         with STREAM_LOCK:
             stream, self._stream = self._stream, None
             if stream is None:

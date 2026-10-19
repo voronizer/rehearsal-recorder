@@ -9,6 +9,10 @@ A take's notes are in the same case: a .midraw per track that takes notes
 (midi/capture.py), which only becomes a .mid when the take is stopped or
 recovered.
 
+A take recorded to the click is cut on its grid as Stop would have cut it: its
+files start at the first click of its count-in, which take.json says, and carry
+its tempo (metronome spec, Parts 1 and 3). Where it ends is where the app died.
+
 This module finds those leftovers and turns them back into normal takes.
 """
 
@@ -23,6 +27,7 @@ from rehearsal_recorder.audio.capture import (
 )
 from rehearsal_recorder.activity import Stages
 from rehearsal_recorder.audio.format import bytes_per_sample
+from rehearsal_recorder.audio.take_click import cut_of
 from rehearsal_recorder.midi.capture import MID_SUFFIX, MIDRAW_SUFFIX, finish_draft
 
 DRAFTS_DIR = "_drafts"
@@ -36,6 +41,22 @@ def _widths(take_dir):
         return {t["file"]: int(t.get("channels", 1)) for t in record["tracks"]}
     except Exception:
         return {}
+
+
+def _cut(take_dir):
+    """Where a draft's raw files are cut: (first frame, frames or None, Acid or
+    None), from the click in its take.json (take_click.cut_of)."""
+    try:
+        record = json.loads((Path(take_dir) / TAKE_RECORD).read_text("utf-8"))
+        return cut_of(record.get("click") if isinstance(record, dict) else None)
+    except Exception:
+        return 0, None, None
+
+
+def _kept(whole, head, frames):
+    """How many of a raw file's `whole` frames its .wav keeps."""
+    left = max(0, whole - head)
+    return left if frames is None else min(left, frames)
 
 
 def _names(take_dir, kind):
@@ -91,6 +112,7 @@ def describe(take_dir, samplerate, bit_depth=16):
     tracks = []
     unmade, made = set(), set()  # notes files not yet a .mid, and ones that are; a .mid.part is neither
     frames = 0
+    head, length, _ = _cut(take_dir)
 
     for path in sorted(take_dir.iterdir()):
         if path.suffix == MIDRAW_SUFFIX:
@@ -101,7 +123,7 @@ def describe(take_dir, samplerate, bit_depth=16):
             track_frames = path.stat().st_size // (
                 bytes_per_sample(bit_depth) * _widths(take_dir).get(path.stem, 1)
             )
-            frames = max(frames, track_frames)
+            frames = max(frames, _kept(track_frames, head, length))
             tracks.append(path.stem)
         elif path.suffix == ".wav":
             frames = max(frames, wav_frames(path))
@@ -131,6 +153,10 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     is tried again with it, and the draft's folder goes, with it, once the
     take is kept.
 
+    A click take's raw files are cut at its first click, as Stop cuts them,
+    and the length handed on to its notes is counted from there. A .wav that
+    Stop made is already cut.
+
     `progress(fraction, step)`, when given, hears how far along it is, the
     tracks weighed by their size.
     """
@@ -139,6 +165,7 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     frames = 0
 
     widths = _widths(take_dir)
+    head, length, acid = _cut(take_dir)
     track_names, note_names = _names(take_dir, "tracks"), _names(take_dir, "notes")
     raws = sorted(take_dir.glob(f"*{RAW_SUFFIX}"))
     stages = Stages(
@@ -151,10 +178,10 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
         channels = widths.get(raw_path.stem, 1)
         frames = max(
             frames,
-            raw_path.stat().st_size // (bytes_per_sample(bit_depth) * channels),
+            _kept(raw_path.stat().st_size // (bytes_per_sample(bit_depth) * channels), head, length),
         )
         raw_to_wav(raw_path, wav_path, samplerate, bit_depth, channels=channels,
-                   progress=stages.part(i))
+                   progress=stages.part(i), head_frames=head, frames=length, acid=acid)
         raw_path.unlink(missing_ok=True)
 
     for wav_path in sorted(take_dir.glob("*.wav")):

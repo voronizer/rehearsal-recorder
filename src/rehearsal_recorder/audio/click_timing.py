@@ -70,13 +70,14 @@ def round_trip_frames(time_info, fallback_sec, samplerate):
     cable: when the first frame written is heard, less when the first frame
     read was captured (outputBufferDacTime less inputBufferAdcTime).
     `fallback_sec`, the stream's input and output latencies together, when
-    the driver says nothing believable, as in lead_of.
+    the driver says nothing believable, as in lead_of; None then when it is
+    None, the stream's latencies not yet known.
     """
     try:
         captured = time_info.inputBufferAdcTime
         heard = time_info.outputBufferDacTime
     except AttributeError:
-        return round(fallback_sec * samplerate)
+        captured = heard = None
     if captured and heard and 0 < heard - captured < MAX_AGE_SEC:
         return round((heard - captured) * samplerate)
-    return round(fallback_sec * samplerate)
+    return None if fallback_sec is None else round(fallback_sec * samplerate)
