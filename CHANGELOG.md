@@ -33,22 +33,21 @@ opening.
   **Hi-hat**), its volume and the count-in (**None**, **1 bar** or **2
   bars**) are there too. **Record take** counts the band in with big digits
   where the clock is, and the clock starts when the band comes in. From
-  there to **Stop** the edge of the window lights on every beat. If the
+  there to **Stop** the edge of the window lights on every click. If the
   click's output is unplugged, the take still records with its tempo and
   the beat still flashes. **Record/Stop** on the controller counts in the
   same way. On the recording screen the metronome stays at the bottom left,
   so *Recording*, the take's number and the room left on the disk have
   moved beside **Stop**.
-- **A song's tempo tapped, or counted from an old take.** Tap the tempo
-  with **Tap** or the T key. After a tap, hits on an e-kit's pads or a
-  keyboard's keys count too, so the drummer can tap it on a pad. A song's
-  page in History has a tempo row of its own, saved as you change it. For a
-  song with no tempo, **count it from a take** there works the tempo out
-  from one of its takes by listening to the drums, and **halve** or
-  **double** mends a count that comes out twice too fast or too slow. On
-  the rehearsal screen, **count it from the last take** does the same from
-  the song's last take. T is one of the player's keys in **Settings ›
-  Keys**.
+- **A song's tempo tapped, or counted from an old take.** Tap the tempo with
+  **Tap** or the T key. After a tap, the drummer can carry on tapping on an
+  e-kit's pad, or anyone on a keyboard. A song's page in History has a tempo
+  row of its own, saved as you change it. For a song with no tempo, **count
+  it from a take** there works the tempo out from one of its takes,
+  listening to the drums first, and **halve** or **double** fixes a count
+  that comes out twice too fast or too slow. On the rehearsal screen,
+  **count it from the last take** does the same from the song's last take. T
+  is one of the player's keys in **Settings › Keys**.
 - **The click when you listen back.** In the player, a button with the
   metronome's icon after **Master** plays the click with the take, in time
   with its count-in. Beside Master, the take's bars and beats are drawn as
@@ -61,10 +60,11 @@ opening.
   at, and one recorded with no tempo is still written at 120 bpm. **Write
   the tempo into WAV files**, in **Settings › Metronome** and on until you
   turn it off, puts the tempo into the WAVs and the mix as well. Cubase, Pro
-  Tools, Studio One and FL Studio read it, so set the project to the song's
-  tempo first; Ableton Live and Logic ignore it. A song in 6/8 shows half
-  its number in a DAW, which counts quarter notes. Cropping such a take
-  starts it on a bar line, and the notice says where it now starts.
+  Tools, Studio One and FL Studio read it and fit the take to the project's
+  tempo, so set the project to the song's tempo first. Ableton Live and
+  Logic ignore it. A song in 6/8 shows half its number in a DAW, which
+  counts quarter notes. Cropping a take recorded to the click starts it on
+  a bar line, and the notice says where it now starts.
 
 ## 0.12.1
 
