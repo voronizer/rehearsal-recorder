@@ -72,6 +72,12 @@ class Song(Base):
     # so a number is never given twice, even after its take is deleted; and
     # a song is kept when its last take goes, so its count is kept too.
     last_go: Mapped[int] = mapped_column(Integer, default=0)
+    # The tempo the metronome has for the song, in its own count (eighths a
+    # minute in 6/8), and its signature: "4/4", "3/4", "2/4" or "6/8". Both or
+    # neither, None until a click take or the band gives the song one
+    # (migration 0008). Library.set_song_tempo says what they may be.
+    tempo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signature: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class SongName(Base):
@@ -150,6 +156,14 @@ class Take(Base):
     # own verdict on itself, so a song can have several and a take with no
     # song can have one. Added in place by migration 0003, like song_id.
     starred: Mapped[bool] = mapped_column(Boolean, default=False)
+    # What the metronome showed when Record was pressed (migration 0008): the
+    # tempo and signature, None when its row was empty. `click` is whether the
+    # take was recorded to the click, so its files start on a bar. A take can
+    # have a tempo and no click, when the switch was off: its .mid still
+    # states the tempo. Added in place, like starred.
+    tempo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    signature: Mapped[str | None] = mapped_column(String, nullable=True)
+    click: Mapped[bool] = mapped_column(Boolean, default=False)
 
     rehearsal: Mapped[Rehearsal] = relationship(back_populates="takes")
     song: Mapped["Song | None"] = relationship()

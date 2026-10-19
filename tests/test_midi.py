@@ -3441,6 +3441,224 @@ def main():
         ok("the tool reads the .mid through the app's own smf and imports neither mido nor the MIDI library",
            "rehearsal_recorder.midi.smf" in tool_imports and not tool_imports & {"pylibremidi", "mido"})
 
+    print("\n[11] The take's tempo in its .mid")
+    # A take recorded to the click states its tempo and its time signature in its .mid, and
+    # time 0 of the file is the first click (spec Part 9). The tempo counts clicks, so a 6/8
+    # take at 198 is 99 quarters a minute.
+    ok("4/4 at 128 is 468750 microseconds a quarter, with the signature 4/4",
+       smf.meter_of(128, "4/4") == (468750, (4, 2, 24, 8)))
+    ok("6/8 counts eighths: 198 of them is 99 quarters, and the signature has a click on every eighth",
+       smf.meter_of(198, "6/8") == (606061, (6, 3, 12, 8)))
+    ok("a take with no tempo and no signature is at 120, as every .mid is, and states no signature",
+       smf.meter_of(None, None) == (500000, None))
+    ok("3/4 and 2/4 count quarters as 4/4 does",
+       smf.meter_of(96, "3/4") == (625000, (3, 2, 24, 8)) and smf.meter_of(120, "2/4") == (500000, (2, 2, 24, 8)))
+    ok("a tempo with no signature is a tempo of quarters, and a signature with no tempo is at 120",
+       smf.meter_of(128, None) == (468750, None) and smf.meter_of(None, "6/8") == (500000, (6, 3, 12, 8)))
+    ok("what is not a tempo, or not a signature the app has, is left out and never raises",
+       all(smf.meter_of(bad, "4/4") == (500000, (4, 2, 24, 8))
+           for bad in (0, -5, True, "128", float("nan"), float("inf"), 1e-9))
+       and smf.meter_of(128, "5/4") == (468750, None) and smf.meter_of(128, 44) == (468750, None))
+
+    def tick11(seconds, tempo_us):
+        """Where a time falls in a file at this tempo: 960 ticks a quarter, from the start."""
+        return round(seconds * 960 * 1_000_000 / tempo_us)
+
+    meter11 = smf.meter_of(198, "6/8")
+    with tempfile.TemporaryDirectory() as tmp11:
+        tmp11 = Path(tmp11)
+
+        def fresh11(name):
+            folder = tmp11 / name
+            folder.mkdir()
+            return folder
+
+        beats11 = [(0.5, b"\x90\x3c\x40"), (1.0, b"\x80\x3c\x00"), (2.5, b"\x90\x3e\x40"),
+                   (3600.0005, b"\x80\x3e\x00")]
+        metered = tmp11 / "metered.mid"
+        skipped = write_mid(metered, track_name="Pałyn", port_name="TD-17", start=[b"\xb9\x04\x5a"],
+                            events=beats11, tempo_us=meter11[0], time_signature=meter11[1])
+        mid11, timed11 = read_back(metered)
+        ok("a .mid written at 6/8 and 198 says its names, the tempo and the signature, all at tick 0, "
+           "before the start messages",
+           skipped == 0 and [(tick, msg.type) for tick, msg in timed11[:5]]
+           == [(0, "track_name"), (0, "device_name"), (0, "set_tempo"), (0, "time_signature"),
+               (0, "control_change")])
+        ok("the tempo is 606061 and the signature 6/8 with a click on every eighth (FF 51 and FF 58 as DAWs read them)",
+           timed11[2][1].tempo == 606061
+           and (timed11[3][1].numerator, timed11[3][1].denominator, timed11[3][1].clocks_per_click,
+                timed11[3][1].notated_32nd_notes_per_beat) == (6, 8, 12, 8)
+           and mid11.ticks_per_beat == 960)
+        raw11 = metered.read_bytes()
+        ok("in the file's bytes: FF 51 03 and the microseconds, FF 58 04 06 03 0C 08",
+           b"\xff\x51\x03" + (606061).to_bytes(3, "big") in raw11 and b"\xff\x58\x04\x06\x03\x0c\x08" in raw11)
+        ok("each event is on the tick its time falls on at that tempo, counted from the start",
+           [tick for tick, _ in played(timed11)][1:] == [tick11(sec, 606061) for sec, _ in beats11])
+        four11 = tmp11 / "four.mid"
+        write_mid(four11, track_name="Keys", port_name="Launchkey", start=[], events=beats11[:2],
+                  tempo_us=468750, time_signature=(4, 2, 24, 8))
+        ok("4/4 at 128 in the bytes: FF 51 03 07 27 0E and FF 58 04 04 02 18 08",
+           b"\xff\x51\x03\x07\x27\x0e" in four11.read_bytes() and b"\xff\x58\x04\x04\x02\x18\x08" in four11.read_bytes())
+        long11 = [(k * 0.037, b"\x90\x3c\x40" if k % 2 == 0 else b"\x80\x3c\x00") for k in range(1, 5001)]
+        long_path = tmp11 / "long.mid"
+        write_mid(long_path, track_name="Keys", port_name="Launchkey", start=[], events=long11,
+                  tempo_us=468750, time_signature=(4, 2, 24, 8))
+        ok("a long take does not drift at another tempo: every tick is its own time's, never a sum",
+           [tick for tick, _ in played(read_back(long_path)[1])] == [tick11(sec, 468750) for sec, _ in long11])
+        plain11 = tmp11 / "plain.mid"
+        write_mid(plain11, track_name="Keys", port_name="Launchkey", start=[], events=beats11[:2])
+        ok("with no tempo given a file is at 120 as ever, 1920 ticks a second, and states no signature",
+           [tick for tick, _ in played(read_back(plain11)[1])] == [960, 1920]
+           and [msg.type for _, msg in read_back(plain11)[1]] == ["track_name", "device_name", "set_tempo",
+                                                                  "note_on", "note_off", "end_of_track"])
+        ok("a tempo no .mid can hold is written at 120 instead, and costs the take nothing",
+           write_mid(tmp11 / "wild.mid", track_name="K", port_name="P", start=[], events=beats11[:2],
+                     tempo_us=0) == 0
+           and read_back(tmp11 / "wild.mid")[1][2][1].tempo == 500000
+           and [tick for tick, _ in played(read_back(tmp11 / "wild.mid")[1])] == [960, 1920])
+        for n11, odd11 in enumerate(((4, 300, 24, 8), (0, 2, 24, 8), (4, 2, 24), (4, 2, 24, 8.5), "4/4", 4)):
+            odd_path = tmp11 / f"odd{n11}.mid"
+            ok(f"a signature no .mid can hold ({odd11!r}) is left out, and costs the take nothing",
+               write_mid(odd_path, track_name="K", port_name="P", start=[], events=beats11[:2],
+                         tempo_us=468750, time_signature=odd11) == 0
+               and "time_signature" not in [msg.type for _, msg in read_back(odd_path)[1]]
+               and read_back(odd_path)[1][2][1].tempo == 468750
+               and [tick for tick, _ in played(read_back(odd_path)[1])] == [tick11(0.5, 468750), tick11(1.0, 468750)])
+
+        meta11, back11 = read_events(metered)
+        ok("read_events gives the file's tempo and signature among its names, in the form write_mid takes",
+           meta11 == {"track_name": "Pałyn", "device_name": "TD-17", "tempo_us": 606061,
+                      "time_signature": (6, 3, 12, 8)})
+        ok("and the seconds it reads are the times written, within half a tick",
+           len(back11) == 5 and back11[0][0] == 0.0
+           and all(abs(got - want) <= 0.5 * 606061 / 960_000_000 + 1e-9
+                   for (got, _), (want, _) in zip(back11[1:], beats11)))
+        ok("a file at 120 with no signature has no more among its names than it had",
+           read_events(plain11)[0] == {"track_name": "Keys", "device_name": "Launchkey"})
+
+        # Cropping keeps the file's tempo and signature, and puts the events at that tempo.
+        cut11 = tmp11 / "cut.mid"
+        ok("crop_mid answers ok", smf.crop_mid(metered, cut11, 1.0, 3.0) == {"ok": True})
+        mid_cut, timed_cut = read_back(cut11)
+        ok("a cropped .mid keeps the tempo and the signature, at tick 0 before the start messages",
+           [(tick, msg.type) for tick, msg in timed_cut[:5]]
+           == [(0, "track_name"), (0, "device_name"), (0, "set_tempo"), (0, "time_signature"),
+               (0, "control_change")]
+           and timed_cut[2][1].tempo == 606061
+           and (timed_cut[3][1].numerator, timed_cut[3][1].denominator,
+                timed_cut[3][1].clocks_per_click) == (6, 8, 12))
+        ok("and puts the events on their ticks at that tempo, from the new start: the key struck at 2.5 s, "
+           "and let go at the end",
+           [tick for tick, _ in played(timed_cut)][1:] == [tick11(1.5, 606061), tick11(2.0, 606061)])
+        whole11 = tmp11 / "whole.mid"
+        smf.crop_mid(metered, whole11, 0.0, 10_000.0)
+        ok("cropped whole, a .mid with a tempo and a signature is what it was",
+           read_events(whole11) == read_events(metered))
+
+        # The first click is time 0: end_take is given how far into the audio it came.
+        fake11, rig11 = a_rig(td17)
+        rig11.use([gtr, drums])
+        T11 = now[0] = 800 * S
+        take11 = fresh11("take")
+        rig11.begin_take(take11, take_clock(T11))
+        fake11.send("TD-17", T11 + 100 * MS, b"\xb9\x04\x5a")      # the hi-hat pedal, 0.1 s in
+        fake11.send("TD-17", T11 + 200 * MS, b"\x99\x2a\x40")      # 42 struck before the first click
+        fake11.send("TD-17", T11 + 300 * MS, b"\x89\x2a\x00")      # and let go after it
+        fake11.send("TD-17", T11 + 1 * S, b"\x99\x26\x64")         # 38 on at 1.0 s
+        fake11.send("TD-17", T11 + 1200 * MS, b"\x89\x26\x00")
+        fake11.send("TD-17", T11 + 2 * S, b"\xb9\x04\x14")         # the pedal again
+        now[0] = T11 + 3 * S
+        made11 = rig11.end_take(3.0, head_sec=0.25, meter=meter11)
+        ok("end_take with the first click 0.25 s in makes the same list as ever",
+           made11 == [{"name": "Drums", "file": str(take11 / "Drums.mid"), "port": "TD-17"}])
+        ok("a note played at 1.0 s is at 0.75 s, and a pedal at 0.1 s is in the start state, at tick 0",
+           in_ticks(take11 / "Drums.mid")
+           == [(0, b"\xb9\x04\x5a"), (tick11(0.75, 606061), b"\x99\x26\x64"),
+               (tick11(0.95, 606061), b"\x89\x26\x00"), (tick11(1.75, 606061), b"\xb9\x04\x14")])
+        ok("a key struck before the first click is not in it, nor is its release after it (42)",
+           all(data[1] != 0x2a for _, data in in_ticks(take11 / "Drums.mid")[1:]))
+        ok("and the file states 198 in 6/8 as 606061 and 6/8",
+           (lambda timed: timed[2][1].tempo == 606061 and timed[3][1].type == "time_signature"
+            and timed[3][1].numerator == 6)(read_back(take11 / "Drums.mid")[1]))
+        T11b = now[0] = T11 + 10 * S
+        untouched11 = fresh11("untouched")
+        rig11.begin_take(untouched11, take_clock(T11b))
+        fake11.send("TD-17", T11b + 1 * S, b"\x99\x26\x64")
+        now[0] = T11b + 3 * S
+        rig11.end_take(3.0)
+        ok("end_take with nothing said about the click is as it was: 1.0 s is tick 1920, at 120 with no signature",
+           [(t, d) for t, d in in_ticks(untouched11 / "Drums.mid") if d[0] == 0x99] == [(1920, b"\x99\x26\x64")]
+           and read_back(untouched11 / "Drums.mid")[1][2][1].tempo == 500000
+           and "time_signature" not in [m.type for _, m in read_back(untouched11 / "Drums.mid")[1]])
+
+        # A take the app did not live to finish is made the same file from take.json's click.
+        notes11 = [{"file": "Drums", "port": "TD-17"}, {"file": "Keys", "port": "Launchkey Mini MK3"}]
+
+        def played11(folder):
+            rec = MidiRecorder(folder, clock_from(T0), band, {"Drums": kit_start})
+            play_kit(rec)
+            return rec
+
+        def stopped11(name, head, meter):
+            folder = fresh11(name)
+            played11(folder).stop(3.0, head, meter)
+            return folder
+
+        def crashed11(name, click, record=None):
+            folder = fresh11(name)
+            rec = played11(folder)
+            rec.flush()
+            rec.abandon()
+            (folder / CLOCK_FILE).unlink(missing_ok=True)
+            body = {"samplerate": SR, "bit_depth": 16, "tracks": [], "notes": notes11} if record is None else record
+            if click is not None:
+                body = {**body, "click": click}
+            (folder / "take.json").write_text(json.dumps(body), encoding="utf-8")
+            return folder
+
+        def same11(a, b):
+            return all((a / f).read_bytes() == (b / f).read_bytes() for f in ("Drums.mid", "Keys.mid"))
+
+        click11 = {"tempo": 198, "signature": "6/8", "on": True, "wav_tempo": True,
+                   "first_click_frame": 12000, "end_frame": None}
+        live11 = stopped11("live", 0.25, meter11)
+        draft11 = crashed11("draft", click11)
+        finish_draft(draft11, 3.0)
+        ok("a draft whose take.json has a click is made the file stop makes: the tempo, the signature and "
+           "time 0 at the first click, byte for byte",
+           same11(live11, draft11))
+        ok("with the first click 12000 frames in, at 48000 to the second, that is 0.25 s: the 38 is at 0.75 s",
+           [t for t, d in in_ticks(draft11 / "Drums.mid") if d[0] == 0x99 and d[1] == 0x26]
+           == [tick11(0.75, 606061)])
+        no_head = crashed11("no head", {**click11, "first_click_frame": None})
+        finish_draft(no_head, 3.0)
+        ok("a click with no first click chosen has the tempo and the signature and starts where the audio does",
+           same11(stopped11("live no head", 0.0, meter11), no_head))
+        also = crashed11("also", click11, {"bit_depth": 16, "tracks": [], "notes": notes11})
+        finish_draft(also, 3.0, samplerate=SR)
+        ok("take.json with no samplerate leaves the caller's to turn the frame into seconds",
+           same11(live11, also))
+        blind = crashed11("blind", click11, {"tracks": [], "notes": notes11})
+        finish_draft(blind, 3.0)
+        ok("with no samplerate anywhere there is no telling how long 12000 frames are: it starts where the "
+           "audio does, with the tempo",
+           same11(stopped11("live blind", 0.0, meter11), blind))
+        for label11, junk11 in (("a click that is not a record", "yes"),
+                                ("a first click that is a negative number",
+                                 {**click11, "first_click_frame": -480}),
+                                ("a first click that is not a number", {**click11, "first_click_frame": "soon"}),
+                                ("a first click that is a yes or no", {**click11, "first_click_frame": True})):
+            draft = crashed11(f"junk {label11}", junk11)
+            finish_draft(draft, 3.0)
+            want = (stopped11(f"live {label11}", 0.0, smf.NO_METER) if junk11 == "yes"
+                    else stopped11(f"live {label11}", 0.0, meter11))
+            ok(f"{label11} is passed over: no head, and the tempo if there is one", same11(want, draft))
+        no_click = crashed11("no click", None)
+        finish_draft(no_click, 3.0)
+        ok("and a draft with no click in take.json is the file it was: 120, no signature, from the take's start",
+           same11(stopped11("live plain", 0.0, smf.NO_METER), no_click)
+           and read_back(no_click / "Drums.mid")[1][2][1].tempo == 500000)
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

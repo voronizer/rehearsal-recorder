@@ -36,6 +36,11 @@ LABEL_NAME_MAX = 40
 REHEARSAL_GONE = "Its rehearsal is gone."
 TAKE_GONE = "Its take is gone."
 
+# The tempo a song or a take may have, by time signature: whole clicks a minute,
+# quarters in x/4 and eighths in 6/8 (the metronome spec, "Words"). audio/click.py
+# has the same four signatures and ranges for the click itself.
+TEMPO_RANGES = {"4/4": (30, 300), "3/4": (30, 300), "2/4": (30, 300), "6/8": (60, 600)}
+
 
 class LabelRefused(ValueError):
     """A change to the labels that cannot be made. The message says why, to
@@ -76,6 +81,30 @@ def as_marker(value):
     if isinstance(label_id, bool) or not isinstance(label_id, int):
         label_id = None
     return {"at": at, "label_id": label_id, "note": note}
+
+
+def _whole(tempo):
+    """`tempo` as a whole number, or None for what is not one: a yes or no, text,
+    a fraction, infinity."""
+    if isinstance(tempo, bool):
+        return None
+    if isinstance(tempo, int):
+        return tempo
+    if isinstance(tempo, float) and tempo.is_integer():
+        return int(tempo)
+    return None
+
+
+def as_tempo(tempo, signature):
+    """(tempo, signature) as a song or a take keeps them: a whole tempo in the
+    range of one of the four signatures, with that signature. (None, None) for
+    anything else, so that what a take.json or an old caller says never puts a
+    tempo in the library that the metronome could not have."""
+    tempo = _whole(tempo)
+    if tempo is None or not isinstance(signature, str) or signature not in TEMPO_RANGES:
+        return None, None
+    low, high = TEMPO_RANGES[signature]
+    return (tempo, signature) if low <= tempo <= high else (None, None)
 
 
 def _relative(path, root):
@@ -226,6 +255,9 @@ class Library:
             "song": title,
             "go": take.go if title is not None else None,
             "starred": take.starred,
+            "tempo": take.tempo,
+            "signature": take.signature,
+            "click": take.click,
             "duration_sec": take.duration_sec,
             "tracks": [{"name": f.name, "file": str(folder / Path(f.file))} for f in audio],
             "notes": [
@@ -468,6 +500,64 @@ class Library:
             song = self._songs_by_key(db).get((title or "").casefold())
             return None if song is None else song.id
 
+    def tempo_for(self, name):
+        """
+        What the metronome follows when the next take's name field holds
+        `name` (metronome spec, Part 2): {"song": {"id", "title", "tempo",
+        "signature"} or None, "last_take": {"folder", "take_number", "name"} or
+        None}. The song is the one the name leads to by the rule add_take
+        follows (_resolve, as resolve_name has it), tempo and signature None
+        when it has none; None for an empty name, "Take N" and a title no song
+        has. Nothing is written, not even the song a new title would make.
+        "last_take" is the song's newest take, for counting its tempo from:
+        the newest rehearsal's, the highest number in it; None for a song with
+        no takes left.
+        """
+        with self._session() as db:
+            song, _, _ = self._resolve(db, None, name, 0)
+            if song is None:
+                return {"song": None, "last_take": None}
+            found = db.execute(
+                select(Take, Rehearsal.folder)
+                .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+                .where(Take.song_id == song.id)
+                .order_by(Rehearsal.created_at.desc(), Rehearsal.id.desc(), Take.take_number.desc())
+                .limit(1)
+            ).first()
+            last = None if found is None else {
+                "folder": str(self._folder(found[1])), "take_number": found[0].take_number,
+                "name": take_name(song.title, found[0].go, found[0].take_number)}
+            return {"song": {"id": song.id, "title": song.title,
+                             "tempo": song.tempo, "signature": song.signature},
+                    "last_take": last}
+
+    def set_song_tempo(self, song_id, tempo, signature):
+        """
+        Gives a song a tempo and a signature, or none: `tempo` None takes both
+        away. A tempo counts clicks a minute in the signature, a whole number in
+        TEMPO_RANGES. Refused (SongRefused, saying why, nothing changed) for a
+        signature that is not one of the four or a tempo outside its range.
+        Returns {"id", "title", "tempo", "signature"}, or None for an id no song
+        has.
+        """
+        if tempo is None:
+            kept = (None, None)
+        else:
+            if not isinstance(signature, str) or signature not in TEMPO_RANGES:
+                raise SongRefused("The time signature is one of 4/4, 3/4, 2/4 and 6/8")
+            low, high = TEMPO_RANGES[signature]
+            whole = _whole(tempo)
+            if whole is None or not low <= whole <= high:
+                raise SongRefused(f"A tempo in {signature} is a whole number from {low} to {high}")
+            kept = (whole, signature)
+        with self._session.begin() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                return None
+            song.tempo, song.signature = kept
+            return {"id": song.id, "title": song.title, "tempo": song.tempo,
+                    "signature": song.signature}
+
     def next_goes(self):
         """{title: the go the next take of that song would be}, for every
         song: one past its count of goes given, as _resolve counts it. One
@@ -562,7 +652,9 @@ class Library:
         rehearsal first and in the order played within one: no name is given
         twice, and the target's own goes keep theirs. Stars stay on their
         takes (D4). The merged song's title and its old names become the
-        target's old names (D7), and its row goes. One transaction.
+        target's old names (D7), and its row goes. The target keeps its tempo
+        and signature, or takes the merged song's when it has none. One
+        transaction.
 
         Returns {"from", "into", "goes", "rehearsals", "first", "last",
         "takes"}: how many goes from how many rehearsals, the first and last
@@ -593,6 +685,8 @@ class Library:
                 take.go = first + i
             if count:
                 target.last_go = first + count - 1
+            if target.tempo is None and source.tempo is not None:
+                target.tempo, target.signature = source.tempo, source.signature
             for name in db.scalars(select(SongName).where(SongName.song_id == source.id)):
                 name.song_id = target.id
             db.add(SongName(song_id=target.id, name=source.title))
@@ -641,7 +735,8 @@ class Library:
         """
         Every song with a go, for History's Songs view, and the takes with no
         song as one more row: {"songs": [{"id", "title", "goes",
-        "rehearsals", "first_played", "last_played", "starred", "also"}],
+        "rehearsals", "first_played", "last_played", "starred", "also",
+        "tempo", "signature"}],
         "not_named": {"takes", "rehearsals", "last_played"} or None}.
 
         Two queries, the goes grouped by song and the songs' old names, and no
@@ -659,6 +754,8 @@ class Library:
                     func.min(Rehearsal.created_at),
                     func.max(Rehearsal.created_at),
                     func.sum(cast(Take.starred, Integer)),
+                    Song.tempo,
+                    Song.signature,
                 )
                 .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
                 .outerjoin(Song, Take.song_id == Song.id)
@@ -666,24 +763,26 @@ class Library:
             ).all()
             also = self._also(db)
         songs, not_named = [], None
-        for song_id, title, goes, rehearsals, first, last, starred in rows:
+        for song_id, title, goes, rehearsals, first, last, starred, tempo, signature in rows:
             if song_id is None:
                 not_named = {"takes": goes, "rehearsals": rehearsals, "last_played": last}
                 continue
             songs.append({"id": song_id, "title": title, "goes": goes,
                           "rehearsals": rehearsals, "first_played": first,
                           "last_played": last, "starred": starred or 0,
-                          "also": also.get(song_id, [])})
+                          "also": also.get(song_id, []),
+                          "tempo": tempo, "signature": signature})
         songs.sort(key=lambda s: (s["title"].casefold(), s["id"]))
         return {"songs": songs, "not_named": not_named}
 
     def goes_of(self, song_id):
         """
         A song's goes, from every rehearsal, for its page: {"id", "title",
-        "also", "goes": [{"folder", "rehearsal", "created_at", "missing",
-        "take"}]}, "also" being its old names,
+        "also", "tempo", "signature", "goes": [{"folder", "rehearsal",
+        "created_at", "missing", "take"}]}, "also" being its old names,
         the newest rehearsal first and the order played within one. None for
-        an id no song has. `song_id` None is the takes with no song.
+        an id no song has. `song_id` None is the takes with no song, which
+        have no tempo or signature.
 
         "missing" is the rehearsal's folder not being on disk; the go is
         still listed, and History greys it out.
@@ -693,6 +792,7 @@ class Library:
             if song_id is not None and song is None:
                 return None
             title = None if song is None else song.title
+            tempo, signature = (None, None) if song is None else (song.tempo, song.signature)
             also = [] if song is None else self._also(db).get(song.id, [])
             goes = self._goes(db, Take.song_id.is_(None) if song_id is None
                               else Take.song_id == song_id)
@@ -703,7 +803,8 @@ class Library:
             if go["folder"] not in there:
                 there[go["folder"]] = Path(go["folder"]).is_dir()
             go["missing"] = not there[go["folder"]]
-        return {"id": song_id, "title": title, "also": also, "goes": goes}
+        return {"id": song_id, "title": title, "also": also,
+                "tempo": tempo, "signature": signature, "goes": goes}
 
     def marks_of(self, label_id):
         """
@@ -944,8 +1045,11 @@ class Library:
         """
         take: {"take_number", "name" (what the name field held — see _resolve), "duration_sec", "tracks": [{"name",
         "file": absolute}], "notes"?: [{"name", "file": absolute}], "markers"?, "cloud_skip"?,
-        "cloud_send"?}. "tracks" are the audio files and "notes" the .mid files, kept
-        as rows of their own kinds.
+        "cloud_send"?, "tempo"?, "signature"?, "click"?}. "tracks" are the audio files and "notes"
+        the .mid files, kept as rows of their own kinds. "tempo" and "signature" are what the
+        metronome showed at Record (as_tempo: both, or neither), and "click" is whether it clicked,
+        which a take with no tempo cannot have. A take that clicked gives a song that has no tempo
+        its own, and a new song starts with it (metronome spec, Part 2).
         Returns the take as it is now kept, or None without the rehearsal.
         """
         folder = Path(folder)
@@ -955,6 +1059,8 @@ class Library:
                 return None
             number = int(take["take_number"])
             song, title, go = self._resolve(db, rehearsal.id, take.get("name"), number)
+            tempo, signature = as_tempo(take.get("tempo"), take.get("signature"))
+            click = bool(take.get("click")) and tempo is not None
             row = Take(
                 rehearsal_id=rehearsal.id,
                 take_number=number,
@@ -963,9 +1069,14 @@ class Library:
                 duration_sec=float(take.get("duration_sec") or 0.0),
                 cloud_skip=bool(take.get("cloud_skip")),
                 cloud_send=bool(take.get("cloud_send")),
+                tempo=tempo,
+                signature=signature,
+                click=click,
                 files=self._take_files(folder, take),
                 markers=[Marker(**m) for m in self._labelled(db, take.get("markers", []))],
             )
+            if click and row.song is not None and row.song.tempo is None:
+                row.song.tempo, row.song.signature = tempo, signature
             db.add(row)
             db.flush()
             db.refresh(row)
@@ -973,22 +1084,39 @@ class Library:
         return self._take_out(data, self._cloud_dir())
 
     def update_take(self, folder, take_number, *, name=None, duration_sec=None,
-                    tracks=None, notes=None, markers=None):
+                    tracks=None, notes=None, markers=None, tempo=None, signature=None,
+                    click=None):
         """Changes what is given and leaves the rest. name: what the name field
         held, made a song and a go as add_take makes it (_resolve), so the name
-        the take ends up with can differ. tracks: the take's audio files at
+        the take ends up with can differ; a take with a tempo moved into
+        another song that has none gives that song the tempo and signature
+        (metronome spec, Part 2). tracks: the take's audio files at
         their new absolute paths; notes: its .mid files likewise. Each replaces
         only its own kind, so moving the audio leaves the notes where they were.
-        Returns the take, or None."""
+        tempo, signature: the take's own (as_tempo: both, with the one it has
+        for whichever is not given; a pair that is not valid changes nothing);
+        click: whether it was recorded to the click, which a take with no tempo
+        was not. Returns the take, or None."""
         folder = Path(folder)
         with self._session.begin() as db:
             row = self._find_take(db, folder, take_number)
             if row is None:
                 return None
+            if tempo is not None or signature is not None:
+                kept = as_tempo(row.tempo if tempo is None else tempo,
+                                row.signature if signature is None else signature)
+                if kept[0] is not None:
+                    row.tempo, row.signature = kept
+            if click is not None:
+                row.click = bool(click) and row.tempo is not None
             if name is not None:
                 song, title, go = self._resolve(db, row.rehearsal_id, name, take_number)
+                previous = row.song
                 row.song = self._song_row(db, song, title, go)
                 row.go = go
+                if (row.song is not None and row.song is not previous and row.tempo is not None
+                        and row.song.tempo is None):
+                    row.song.tempo, row.song.signature = row.tempo, row.signature
             if duration_sec is not None:
                 row.duration_sec = float(duration_sec)
             if tracks is not None or notes is not None:
