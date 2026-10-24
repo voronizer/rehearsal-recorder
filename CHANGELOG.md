@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.14.0
 
 - **A backing track for each song.** A song can keep one audio file, mono
   or stereo, to play along with: pads, keys or a choir the band does not
