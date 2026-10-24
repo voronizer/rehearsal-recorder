@@ -227,6 +227,6 @@ jobs:
             echo "::error::Deploying needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID."
             exit 1
           fi
-          url=$(npx --yes vercel@62.4.0 deploy site --prod --token "$VERCEL_TOKEN")
+          url=$(npx --yes vercel@65.2.0 deploy site --prod --token "$VERCEL_TOKEN")
           echo "Deployed $TAG to $url"
           echo "The site for $TAG is at $url" >> "$GITHUB_STEP_SUMMARY"
