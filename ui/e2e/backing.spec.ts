@@ -44,12 +44,15 @@ const record = (page: Page) => page.getByRole("button", { name: /Record take/ })
 const args = async (page: Page, name: string) => (await calls(page, name)).map((c) => c.args)
 
 /** Names the next take, as typed and taken with Enter, and waits for the
- *  row to have followed it. */
+ *  row to have followed it: the row reads the state every 250 ms, so a ▶
+ *  pressed before then would play the song named before. The band's
+ *  backing files carry their song's name; a free take has none. */
 async function nameNext(page: Page, name: string) {
   const sent = (await calls(page, "set_next_take_name")).length
   await field(page).fill(name)
   await field(page).press("Enter")
   await expect.poll(async () => (await calls(page, "set_next_take_name")).length).toBe(sent + 1)
+  await expect(row(page)).toContainText(/^Take \d+$/.test(name) ? "Free take" : name)
 }
 
 /** The band's rehearsal started, its next take Viasna 2. `before` runs
