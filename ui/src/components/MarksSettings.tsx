@@ -190,11 +190,13 @@ function LabelRow({
         <GripVertical className="size-4" />
       </Button>
 
+      {/* The dot is small, its button as big as Delete: a near miss would
+          start a drag or open the name. */}
       <Popover open={palette} onOpenChange={setPalette}>
         <PopoverTrigger asChild>
           <Button
             variant="ghost"
-            size="icon-tiny"
+            size="icon-row"
             aria-label={`Colour of ${label.name}`}
             data-colour={label.colour}
           >

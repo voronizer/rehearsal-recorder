@@ -149,13 +149,15 @@ test("the labels are one group, each row on the shared pieces", async ({ page })
         const b = at.getByRole("button", { name: what, exact: true })
         expect(await b.evaluate((e) => e.tagName), what).toBe("BUTTON")
         await expect(b, what).toHaveAttribute("data-variant", "ghost")
-        await expect(b, what).toHaveAttribute("data-size", what.startsWith("Rename") ? "row" : "icon-tiny")
+        const size = what.startsWith("Rename") ? "row" : what.startsWith("Move") ? "icon-tiny" : "icon-row"
+        await expect(b, what).toHaveAttribute("data-size", size)
       }
-      // The grip and the dot 24 px; in the dot's, the shared 8 px dot, in the middle.
-      for (const what of [`Move ${name}`, `Colour of ${name}`]) {
+      // The grip 24 px, the dot's 32 px as Delete is (#17); in the dot's, the
+      // shared 8 px dot, in the middle.
+      for (const [what, px] of [[`Move ${name}`, 24], [`Colour of ${name}`, 32]] as const) {
         const b = await box(at.getByRole("button", { name: what, exact: true }))
-        expect(b.width, what).toBeCloseTo(24, 0)
-        expect(b.height, what).toBeCloseTo(24, 0)
+        expect(b.width, what).toBeCloseTo(px, 0)
+        expect(b.height, what).toBeCloseTo(px, 0)
       }
       const button = at.getByRole("button", { name: `Colour of ${name}`, exact: true })
       const dot = button.locator("[data-slot=label-dot]")

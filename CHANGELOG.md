@@ -5,6 +5,13 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **The colour dot in Settings → Marks is easier to click.** The dot looks
+  the same. The area around it that takes the click is now as big as the
+  **Delete** button in the row, so a near miss is less likely to start a
+  drag or open the name for renaming.
+
 ## 0.13.1
 
 - Nothing changed in the app. Its website, reha.stream, now goes through a
