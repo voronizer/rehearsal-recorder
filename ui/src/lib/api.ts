@@ -25,6 +25,9 @@ export type OutputDevice = Device & {
    *  another ASIO card cannot play while one records. Settings › Metronome
    *  does not offer such a device. */
   click_unavailable: string | null
+  /** The same for a song's backing track: Settings › Metronome does not
+   *  offer it as the backing track's output either. */
+  backing_unavailable: string | null
 }
 
 /** The four signatures, as Python keeps them. */
@@ -88,6 +91,10 @@ export type PlacedTrack = {
 export type TrackFile = {
   name: string
   file: string
+  /** The take's Backing track: what its song's backing track played, as
+   *  the band heard it (backing-track spec, Part 3). Every other track has
+   *  none. */
+  kind?: "backing"
 }
 
 /** A take's notes of one track: the .mid saved beside the audio. `port` is
@@ -150,6 +157,11 @@ export type Take = {
   /** Recorded to the click: its bars start at the first sample of its
    *  files. A take with a tempo and no click had the switch off. */
   click?: boolean
+  /** The song's id, for what the player sets on the song; null with none. */
+  song_id?: number | null
+  /** Whether its Backing track opens heard: its song's, as M in the player
+   *  last left it. */
+  backing_heard?: boolean
 }
 
 /** A label's colour, by name. What it looks like is the theme's:
@@ -284,6 +296,10 @@ export type PendingTake = {
   tempo?: number | null
   signature?: Signature | null
   click?: boolean
+  /** Its song, when the name picked before Record was one, and whether its
+   *  Backing track opens heard, as a kept take says. */
+  song_id?: number | null
+  backing_heard?: boolean
 }
 
 /** A take that was recorded but never saved (the app died mid-take). */
@@ -473,16 +489,32 @@ export type MarkHit = {
 /** A label's marks, newest rehearsal first, then the take, then the moment. */
 export type MarksAnswer = Ok<{ marks?: MarkHit[] }>
 
+/** A song's backing track as the library keeps it and its file says
+ *  (Library._backing_out and Backing.describe): its name as added, where
+ *  bar 1 is in seconds, the tempo it was counted at (null for pads), and its
+ *  length and channels, null for a copy that is missing or cannot be read. */
+export type SongBacking = {
+  name: string
+  seconds: number | null
+  channels: 1 | 2 | null
+  tempo: number | null
+  first_bar: number
+  /** The copy is not in the Backing tracks folder: deleted by hand. */
+  missing: boolean
+}
+
 /** A song in History's Songs view (api.list_songs): how many goes it got,
  *  at how many rehearsals, when, and how many of them have ★. Rehearsals
- *  whose folder is not on disk are counted too. */
+ *  whose folder is not on disk are counted too. A song made with New song,
+ *  or kept for its backing track, may have no goes yet: then its dates are
+ *  null. */
 export type SongSummary = {
   id: number
   title: string
   goes: number
   rehearsals: number
-  first_played: string
-  last_played: string
+  first_played: string | null
+  last_played: string | null
   starred: number
   /** Its old names: titles it had, and songs merged into it. */
   also: string[]
@@ -490,6 +522,8 @@ export type SongSummary = {
    *  count (eighths a minute in 6/8); null for a song with none. */
   tempo?: number | null
   signature?: Signature | null
+  /** Its backing track; null for a song with none. */
+  backing?: SongBacking | null
 }
 
 /** The takes nobody named, as the last row of the Songs view. */
@@ -524,6 +558,8 @@ export type SongDetail = {
    *  takes nobody named. */
   tempo?: number | null
   signature?: Signature | null
+  /** Its backing track; null for a song with none. */
+  backing?: SongBacking | null
 }
 
 /** A song renamed (api.rename_song). Refused because the title is another
@@ -606,6 +642,8 @@ export type TrackMedia = {
   duration_sec: number
   /** One row per channel: a stereo track has two. */
   peaks: number[][]
+  /** The take's Backing track, as its TrackFile says. */
+  kind?: "backing"
 }
 
 /**
@@ -896,6 +934,58 @@ export type MetronomeSettings = {
   drift_tolerance: DriftTolerance
 }
 
+/** A song's backing track's settings, in `get_settings` beside the
+ *  metronome's: where it is heard, how loud, and whether Record plays it. */
+export type BackingSettings = {
+  /** Its own output, as `click_device_index` is the click's; null until one
+   *  is picked, and it then plays where the player plays. */
+  backing_device_index: number | null
+  /** Its own output by name when it is saved and not plugged in ("" for one
+   *  saved with no name), else null. */
+  backing_device_missing: string | null
+  /** Outputs of that card it comes out of, from 1; null with no device
+   *  picked. */
+  backing_channels: number[] | null
+  /** 0..1 */
+  backing_volume: number
+  /** The row's switch: does Record play it. */
+  backing_on: boolean
+  /** Whether the row shows: from the first backing track added. */
+  backing_row: boolean
+}
+
+/** The settings `set_backing_setting` changes. Its output goes through
+ *  `set_backing_device` and `set_backing_channels`, and the row shows from
+ *  the first one added. */
+export type BackingSettingKey = "backing_volume" | "backing_on"
+
+/**
+ * The backing track's row (`metronome_state`'s `backing`, Backing.state):
+ * the next take's song's backing track, and what it does now.
+ */
+export type BackingState = {
+  /** The next take's song's backing track with the song's id and title;
+   *  null for a free take and a song without one. */
+  song: (SongBacking & { song_id: number; title: string }) | null
+  on: boolean
+  volume: number
+  /** Whether the row shows: from the first backing track added. */
+  row: boolean
+  /** Heard now: in a take, or from its ▶. Settings' two seconds are not
+   *  shown. */
+  playing: boolean
+  /** Where in the file, from its start. */
+  position_sec: number
+  /** How the row names its output when it cannot play there ("X18 5–6",
+   *  "" with no name), else null. */
+  output_missing: string | null
+  /** Its file is being made ready at the recording card's rate: until then
+   *  Record records without it. */
+  getting_ready: boolean
+  /** The next take is a free take. */
+  free: boolean
+}
+
 /** The settings `set_metronome_setting` changes, with what each takes. The
  *  click's output goes through `set_click_device` and `set_click_channels`,
  *  and the switch through `metronome_set_on`. */
@@ -942,13 +1032,15 @@ export type MetronomeState = {
   since_count_in_ms: number | null
   /** The name of the click's output when it cannot play. */
   output_missing: string | null
+  /** The backing track's row. */
+  backing: BackingState
 }
 
 /** The pads' hits since the last asking, as milliseconds ago, oldest first
  *  (`metronome_taps`). */
 export type MetronomeTaps = { ms_ago: number[] }
 
-export type Settings = MetronomeSettings & {
+export type Settings = MetronomeSettings & BackingSettings & {
   recordings_dir: string
   default_recordings_dir: string
   device_index: number | null
@@ -1370,6 +1462,49 @@ type PyApi = {
   /** Whether the player plays the click with the take. Off in a fresh app,
    *  and kept as left from one take to the next. */
   player_set_click(on: boolean): Promise<Ok>
+
+  /** The file picker for a song's backing track. Nothing is added until
+   *  `add_backing`, so the page can say the file's name while it counts. */
+  pick_backing_file(): Promise<Ok<{ path?: string; name?: string; cancelled?: boolean }>>
+  /** Gives a song the backing track at `path`, or another in place of its
+   *  own: copied, counted, and the song given the counted tempo when it had
+   *  none. The row shows from now on. */
+  add_backing(
+    songId: number,
+    path: string
+  ): Promise<
+    Ok<{ name?: string; seconds?: number; channels?: 1 | 2; tempo?: number | null; first_bar?: number }>
+  >
+  /** Takes a song's backing track away, its copy to the Trash. */
+  remove_backing(songId: number): Promise<Ok>
+  /** Where bar 1 is, in seconds from the file's start: kept to a hundredth,
+   *  from the start to the file's end. */
+  set_backing_first_bar(songId: number, seconds: number): Promise<Ok<{ first_bar?: number }>>
+  /** The tempo it was counted at, halved or doubled; with `toSong` the
+   *  song's tempo too. */
+  set_backing_tempo(songId: number, tempo: number, toSong: boolean): Promise<Ok<{ tempo?: number }>>
+  /** Whether a take of the song opens with its Backing track heard, as M in
+   *  the player left it. */
+  set_song_backing_heard(songId: number, heard: boolean): Promise<Ok<{ heard?: boolean }>>
+  /** New song: a song with no takes. Refused for a title in use, with
+   *  `into` the song it is. */
+  add_song(title: string): Promise<Ok<{ id?: number; title?: string; into?: { id: number; title: string } }>>
+  /** The start of a song's backing track drawn, from 0 to `endSec`: a row
+   *  of `buckets` peaks for each channel. */
+  song_backing_peaks(songId: number, endSec: number, buckets: number): Promise<Ok<{ peaks?: number[][] }>>
+  /** A song page's ▶: its backing track from the start, and with
+   *  `withClick` the click from bar 1 at the song's tempo. The metronome's
+   *  ▶ stops; refused during a take. */
+  backing_play(songId: number, withClick: boolean): Promise<Ok>
+  backing_stop(): Promise<Ok>
+  /** Two seconds from bar 1 where it is heard now, for Settings. */
+  backing_preview(): Promise<Ok>
+  /** Its own output, as `set_click_device` is the click's; null puts it
+   *  back where the player plays. Refused for a card it cannot play through
+   *  (`backing_unavailable`). */
+  set_backing_device(deviceIndex: number | null): Promise<Ok<{ warning?: string }>>
+  set_backing_channels(channels: number[]): Promise<Ok<{ warning?: string }>>
+  set_backing_setting<K extends BackingSettingKey>(key: K, value: BackingSettings[K]): Promise<Ok>
 
   start_monitor(
     deviceIndex: number,

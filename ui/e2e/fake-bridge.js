@@ -489,8 +489,8 @@ const knownIds = new Map();
 function songIds(all) {
   for (const r of [...all].reverse())
     for (const t of r.takes) if (t.song && !knownIds.has(t.song)) knownIds.set(t.song, knownIds.size + 1);
-  for (const title of window.__TAKELESS_SONGS__ || [])
-    if (!knownIds.has(title)) knownIds.set(title, knownIds.size + 1);
+  for (const title of [...(window.__TAKELESS_SONGS__ || []), ...newSongs])
+    if (!knownIds.has(title)) knownIds.set(title, Math.max(0, ...knownIds.values()) + 1);
   return knownIds;
 }
 const titleOfId = (id) => [...knownIds].find(([, i]) => i === id)?.[0];
@@ -909,6 +909,8 @@ function metroFollow() {
   const key = song ? song.toLowerCase() : '';
   if (metro.followed === key) return;
   metro.followed = key;
+  // Backing.follow: another song stops a backing track's ▶.
+  backingRun = null;
   const own = song ? songTempos.get(song) : null;
   metroApply(own ? own.tempo : null, own ? own.signature : '4/4');
 }
@@ -979,6 +981,7 @@ async function metroState() {
     if (metro.run.fixed) Object.assign(out, metro.run.fixed);
   }
   out.per_bar = PER_BAR[out.signature];
+  out.backing = await backingState(song);
   return out;
 }
 
@@ -1023,8 +1026,153 @@ const outputDevices = () => window.__HOST_API__ ? [
 // Why the click cannot play through an output, by device index.
 const clickReasons = () => window.__CLICK_UNAVAILABLE__
   || (window.__HOST_API__ ? {3: "Another ASIO card can't play while one records."} : {});
+// The backing track cannot go where the click cannot, for the same reason.
 const withClickReason = (devices) =>
-  devices.map(d => ({...d, click_unavailable: clickReasons()[d.index] ?? null}));
+  devices.map(d => ({...d, click_unavailable: clickReasons()[d.index] ?? null,
+                     backing_unavailable: clickReasons()[d.index] ?? null}));
+
+// ---- A song's backing track (backing.py) ---------------------------------
+// The audio file a song plays along with: kept with the song by title, as
+// the library keeps it, {name, seconds, channels, tempo, first_bar}: its
+// name as added, its length and channels, the tempo it was counted at (null
+// for pads) and where bar 1 is. None in a fresh library. A page can give
+// some (window.__BACKINGS__ = {'Pałyn': {name: 'Pałyn backing.wav', seconds:
+// 222, channels: 2, tempo: 128, first_bar: 0.8}}), have a copy deleted by
+// hand (window.__BACKING_MISSING__ = ['Pałyn']), its file still being got
+// ready (window.__BACKING_GETTING_READY__ = true), and its output named as not
+// plugged in (window.__BACKING_OUTPUT_MISSING__ = 'X18 5–6'). Whether each
+// song's Backing track opens heard in the player is window.__BACKING_HEARD__,
+// a list of titles.
+const backings = new Map(Object.entries(window.__BACKINGS__ || {}));
+const backingHeard = new Set(window.__BACKING_HEARD__ || []);
+const backingMissing = (title) => (window.__BACKING_MISSING__ || []).includes(title);
+// Python's words (backing.py, backing_file.py).
+const BACKING_NONE = 'That song has no backing track';
+const BACKING_DURING_TAKE = 'Not during a take';
+const backingMissingLine = (name) => `${name} is missing from the Backing tracks folder.`;
+const BACKING_UNREADABLE = "This file can't be read. Use WAV, AIFF, FLAC, MP3 or OGG; most players can export one.";
+// The files the picker can give, by name, and what each counts to; any other
+// counts as the song's COUNTED tempo, else 120, bar 1 at 0.62. A page can
+// add its own (window.__BACKING_FILES__).
+const BACKING_FILES = {
+  'Six channels.wav': {channels: 6},
+  'Notes.txt': {unreadable: true},
+  'Sonca pads.wav': {seconds: 300, channels: 1, tempo: null, first_bar: 0},
+  ...(window.__BACKING_FILES__ || {}),
+};
+// Songs made with New song (api.add_song), with no takes yet. They are
+// offered under Next take as the repertoire's are, and listed in History. A
+// page can give some (window.__NEW_SONGS__ = ['Hlyboka']).
+const newSongs = new Set(window.__NEW_SONGS__ || []);
+repertoire.push(...newSongs);
+// The ▶ of a song page between takes: {title, t0, until}, t0 being when the
+// file's start is heard and until its end; null when nothing plays.
+let backingRun = null;
+// What each take's backing track did, by take number: {song, song_id,
+// played, first_bar, t0, channels}, till stop_take says it.
+const takeBackings = {};
+// The takes' Backing track files that are stereo, as their song's file was:
+// take_media draws them in two rows.
+const backingStereo = new Set();
+
+const backingRow = () => readCfg().backing_row ?? backings.size > 0;
+const backingOn = () => readCfg().backing_on !== false;
+// A song's backing track as lists and pages show it (Library._backing_out
+// and Backing.describe), or null.
+function backingOf(title) {
+  const own = title ? backings.get(title) : null;
+  if (!own) return null;
+  const missing = backingMissing(title);
+  return {name: own.name, first_bar: own.first_bar ?? 0, tempo: own.tempo ?? null,
+          seconds: missing ? null : own.seconds ?? null, channels: missing ? null : own.channels ?? null,
+          missing};
+}
+// What Python's _take_data adds to every take: its song's id, and whether
+// its Backing track opens heard.
+const songFacts = (title) => ({song_id: title ? knownIds.get(title) ?? null : null,
+                               backing_heard: Boolean(title) && backingHeard.has(title)});
+// Its own output, saved and not plugged in, as the row names it: the
+// device and its outputs.
+function backingOutputMissing() {
+  if (window.__BACKING_OUTPUT_MISSING__ !== undefined) return window.__BACKING_OUTPUT_MISSING__;
+  const cfg = readCfg();
+  if (cfg.backing_device_index == null || outputDevices().some(d => d.index === cfg.backing_device_index))
+    return null;
+  return '';
+}
+// Backing.state: the row, for metronome_state.
+async function backingState(title) {
+  const own = title ? backingOf(title) : null;
+  const row = own ? await songRow(title) : null;
+  const now = clock();
+  let playing = false, position = 0;
+  const take = metro.take ? takeBackings[takeCounter] : null;
+  if (metro.take) {
+    if (take && take.played) {
+      playing = true;
+      // From the file's bar 1 on the first click after the count-in, or from
+      // its start at Record.
+      position = metro.take.click ? take.first_bar + (now - metro.take.countEnd) : now - take.t0;
+    }
+  } else if (backingRun && now < backingRun.until) {
+    playing = true;
+    position = now - backingRun.t0;
+  }
+  return {
+    song: own && row ? {...own, song_id: row.id, title: row.title} : null,
+    on: backingOn(), volume: readCfg().backing_volume ?? 0.8, row: backingRow(), playing,
+    position_sec: Math.max(0, Math.round(position * 100) / 100),
+    output_missing: backingOutputMissing(),
+    getting_ready: Boolean(window.__BACKING_GETTING_READY__) && Boolean(own) && !own.missing && !metro.take,
+    free: !title,
+  };
+}
+// Record: whether the take's song's backing track plays (Backing.take_backing):
+// not for a free take, with the switch off, a copy gone, a file still being
+// got ready or its output not plugged in.
+async function backingAtRecord(number, title) {
+  backingRun = null;
+  const own = title ? backingOf(title) : null;
+  const row = title ? await songRow(title) : null;
+  const played = Boolean(own) && backingOn() && !own.missing && !window.__BACKING_GETTING_READY__
+    && backingOutputMissing() === null;
+  takeBackings[number] = {song: row ? row.title : null, song_id: row ? row.id : null, played,
+                          first_bar: own ? own.first_bar : 0, t0: clock(), channels: own ? own.channels : null};
+}
+// What stop_take adds: the take's Backing track last, when it played, and
+// its song with whether that track opens heard.
+function backingAtStop(tracks, file) {
+  const take = takeBackings[takeCounter] || {song: null, song_id: null, played: false};
+  const name = tracks.some(t => t.name === 'Backing') ? 'Backing (2)' : 'Backing';
+  if (take.played && take.channels === 2) backingStereo.add(file);
+  return {
+    tracks: take.played ? [...tracks, {name, file, kind: 'backing'}] : tracks,
+    song_id: take.song_id,
+    backing_heard: Boolean(take.song) && backingHeard.has(take.song),
+  };
+}
+// The start of a file drawn (Backing.peaks): quiet before bar 1, then a hit
+// on every beat at its tempo, louder on the bar's first; pads swell slowly.
+// Silence past its end.
+function backingPeaks(own, signature, endSec, buckets) {
+  const rows = own.channels === 2 ? 2 : 1;
+  const beat = own.tempo ? 60 / own.tempo : null, perBar = PER_BAR[signature || '4/4'];
+  const row = Array.from({length: buckets}, (_, i) => {
+    const t = (i + 0.5) * endSec / buckets;
+    if (own.seconds != null && t > own.seconds) return 0;
+    if (t < own.first_bar) return 0.02;
+    if (!beat) return 0.25 + 0.15 * Math.sin(t * 1.3) ** 2;
+    const k = Math.floor((t - own.first_bar) / beat + 1e-9), p = t - own.first_bar - k * beat;
+    return 0.18 + (k % perBar === 0 ? 0.75 : 0.5) * Math.exp(-p / 0.06);
+  });
+  return Array.from({length: rows}, (_, c) => (c ? row.map(v => v * 0.85) : row));
+}
+// The song a backing call is about, by id, as the library has it.
+async function backingSong(id) {
+  songIds(await libraryNow());
+  const title = titleOfId(id);
+  return title === undefined ? null : {title, ...tempoOf(title)};
+}
 
 window.__PAD_TAP__ = () => {
   if (clock() > metro.tapUntil) return;
@@ -1360,6 +1508,8 @@ window.__MAKE_API__ = () => ({
   metronome_play: track('metronome_play', async (tempo = null, signature = null) => {
     metroFollow();
     if (metro.take) return {ok:false, error:'The take has its own click'};
+    // One plays at a time: a backing track's ▶ stops.
+    backingRun = null;
     if (tempo !== null) {
       const refusal = tempoRefusal(tempo, signature);
       if (refusal) return {ok:false, error:refusal};
@@ -1421,6 +1571,165 @@ window.__MAKE_API__ = () => ({
   // Python keeps it: player_state says it.
   player_set_click: track('player_set_click', async (on) => {
     playerClick = Boolean(on);
+    return {ok:true};
+  }),
+
+  // A song's backing track, as api.py answers for it (backing.py). The
+  // picker gives window.__BACKING_PICK__ ({path, name}), null for Cancel,
+  // and else a file named after nothing in particular.
+  pick_backing_file: track('pick_backing_file', async () => {
+    const picked = window.__BACKING_PICK__ === undefined
+      ? {path: '/Users/alex/Music/Backing.wav', name: 'Backing.wav'} : window.__BACKING_PICK__;
+    return picked ? {ok:true, ...picked} : {ok:false, cancelled:true};
+  }),
+  // Copied, counted in the song's signature, and the song given the counted
+  // tempo when it has none; the row shows from now on. A test can hold it
+  // while it counts (window.__HOLD__.add_backing), as a long file is.
+  add_backing: track('add_backing', async (id, path) => {
+    await held('add_backing');
+    if (metro.take) return {ok:false, error:BACKING_DURING_TAKE};
+    const song = await backingSong(id);
+    if (!song) return {ok:false, error:'Song not found'};
+    const name = String(path).split(/[\\/]/).pop();
+    const file = {seconds: 214, channels: 2, tempo: COUNTED[song.title] ?? 120, first_bar: 0.62,
+                  ...BACKING_FILES[name]};
+    if (file.unreadable) return {ok:false, error:BACKING_UNREADABLE};
+    if (file.channels > 2) return {ok:false, error:`This file has ${file.channels} channels. Use a mono or stereo file.`};
+    backingRun = null;
+    backings.set(song.title, {name, seconds: file.seconds, channels: file.channels, tempo: file.tempo,
+                              first_bar: file.first_bar});
+    if (song.tempo === null && file.tempo !== null)
+      songTempos.set(song.title, {tempo: file.tempo, signature: song.signature || '4/4'});
+    writeCfg({...readCfg(), backing_row: true});
+    return {ok:true, name, seconds: file.seconds, channels: file.channels, tempo: file.tempo,
+            first_bar: file.first_bar};
+  }),
+  remove_backing: track('remove_backing', async (id) => {
+    if (metro.take) return {ok:false, error:BACKING_DURING_TAKE};
+    const song = await backingSong(id);
+    if (!song || !backings.has(song.title)) return {ok:false, error:BACKING_NONE};
+    backingRun = null;
+    backings.delete(song.title);
+    return {ok:true};
+  }),
+  // Bar 1 to a hundredth, from the file's start to its last hundredth.
+  set_backing_first_bar: track('set_backing_first_bar', async (id, seconds) => {
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds))
+      return {ok:false, error:'Bar 1 is a number of seconds'};
+    const song = await backingSong(id);
+    const own = song ? backings.get(song.title) : null;
+    if (!own) return {ok:false, error:BACKING_NONE};
+    let value = Math.max(0, seconds);
+    if (own.seconds != null && !backingMissing(song.title))
+      value = Math.min(value, Math.floor(own.seconds * 100) / 100);
+    own.first_bar = Math.round(value * 100) / 100;
+    return {ok:true, first_bar: own.first_bar};
+  }),
+  // The counted tempo halved or doubled, and with toSong the song's too.
+  set_backing_tempo: track('set_backing_tempo', async (id, tempo, toSong) => {
+    const song = await backingSong(id);
+    const own = song ? backings.get(song.title) : null;
+    if (!own) return {ok:false, error:BACKING_NONE};
+    const signature = song.signature || '4/4';
+    const refusal = tempoRefusal(tempo, signature);
+    if (refusal) return {ok:false, error:refusal};
+    own.tempo = tempo;
+    if (toSong) songTempos.set(song.title, {tempo, signature});
+    return {ok:true, tempo};
+  }),
+  set_song_backing_heard: track('set_song_backing_heard', async (id, heard) => {
+    if (typeof heard !== 'boolean') return {ok:false, error:'Heard is on or off'};
+    const song = await backingSong(id);
+    if (!song) return {ok:false, error:'Song not found'};
+    if (heard) backingHeard.add(song.title); else backingHeard.delete(song.title);
+    return {ok:true, heard};
+  }),
+  // New song: refused for a title that is a song's, or one of its old names.
+  add_song: track('add_song', async (title) => {
+    songIds(await libraryNow());
+    const t = String(title || '').trim();
+    if (!t) return {ok:false, error:'A song needs a title'};
+    if (/^Take \d+$/.test(t)) return {ok:false, error:`${t} is what a take with no song is called`};
+    const lower = t.toLowerCase();
+    const same = [...knownIds.keys(), ...repertoire].find(s => s.toLowerCase() === lower)
+      ?? oldNames.get(lower)?.song;
+    if (same) {
+      await songRow(same);
+      return {ok:false, error:`${same} is already a song.`, into:{id:knownIds.get(same), title:same}};
+    }
+    newSongs.add(t);
+    repertoire.push(t);
+    knownIds.set(t, Math.max(0, ...knownIds.values()) + 1);
+    return {ok:true, id:knownIds.get(t), title:t};
+  }),
+  song_backing_peaks: track('song_backing_peaks', async (id, endSec, buckets) => {
+    if (typeof endSec !== 'number' || !(endSec > 0) || !Number.isInteger(buckets) || buckets <= 0)
+      return {ok:false, error:'A picture is of some seconds, in some buckets'};
+    const song = await backingSong(id);
+    const own = song ? backingOf(song.title) : null;
+    if (!own) return {ok:false, error:BACKING_NONE};
+    if (own.missing) return {ok:false, error:backingMissingLine(own.name)};
+    return {ok:true, peaks: backingPeaks(own, song.signature, endSec, buckets)};
+  }),
+  // A song page's ▶: from the file's start, the click from bar 1 beside it
+  // with withClick and a song tempo, until ■, Record, another song or its
+  // end. The metronome's ▶ stops.
+  backing_play: track('backing_play', async (id, withClick = false) => {
+    if (metro.take) return {ok:false, error:BACKING_DURING_TAKE};
+    const song = await backingSong(id);
+    const own = song ? backingOf(song.title) : null;
+    if (!own) return {ok:false, error:BACKING_NONE};
+    if (own.missing) return {ok:false, error:backingMissingLine(own.name)};
+    metro.run = null;
+    const lead = withClick && song.tempo !== null ? 0.2 : 0;
+    const t0 = clock() + lead;
+    backingRun = {title: song.title, t0, until: t0 + (own.seconds ?? 0)};
+    return {ok:true};
+  }),
+  backing_stop: track('backing_stop', async () => { backingRun = null; return {ok:true}; }),
+  // Two seconds from bar 1 for Settings, not shown in the row: the next
+  // take's song's, else any song's.
+  backing_preview: track('backing_preview', async () => {
+    if (metro.take) return {ok:false, error:BACKING_DURING_TAKE};
+    if (backingRun) return {ok:true};
+    metro.run = null;
+    const next = nextTake().song;
+    const any = (next && backingOf(next) && !backingMissing(next))
+      || [...backings.keys()].some(title => !backingMissing(title));
+    return any ? {ok:true} : {ok:false, error:'No song has a backing track yet'};
+  }),
+  // Its own output, as the click's: back to outputs 1-2 (1 on a card with
+  // one), and what plays of it stops.
+  set_backing_device: track('set_backing_device', async (idx) => {
+    const none = idx === null || idx === undefined;
+    let found = null;
+    if (!none) {
+      found = (await window.pywebview.api.list_output_devices()).find(d => d.index === idx);
+      if (!found) return {ok:false, error:'That device has no outputs to play the backing track on.'};
+      if (found.backing_unavailable) return {ok:false, error:found.backing_unavailable};
+    }
+    writeCfg({...readCfg(), backing_device_index: none ? null : idx,
+              backing_channels: none ? null : found.max_output_channels >= 2 ? [1, 2] : [1]});
+    backingRun = null;
+    return {ok:true};
+  }),
+  set_backing_channels: track('set_backing_channels', async (channels) => {
+    if (!Array.isArray(channels) || !channels.length
+        || !channels.every(c => Number.isInteger(c) && c >= 1))
+      return {ok:false, error:`Not a pair of outputs: ${JSON.stringify(channels)}`};
+    writeCfg({...readCfg(), backing_channels: [...channels]});
+    backingRun = null;
+    return {ok:true};
+  }),
+  // Its volume or its switch, mid-take too.
+  set_backing_setting: track('set_backing_setting', async (key, value) => {
+    if (key === 'backing_volume' && !(typeof value === 'number' && value >= 0 && value <= 1))
+      return {ok:false, error:'The volume is from 0 to 1'};
+    if (key === 'backing_on' && typeof value !== 'boolean')
+      return {ok:false, error:'This setting is on or off'};
+    if (key !== 'backing_volume' && key !== 'backing_on')
+      return {ok:false, error:`No backing track setting is called ${key}`};
+    writeCfg({...readCfg(), [key]: value});
     return {ok:true};
   }),
   load_default_tracks: track('load_default_tracks', async (band) => window.__PLUGGED_IN_LATE__ ? ({
@@ -1680,6 +1989,7 @@ window.__MAKE_API__ = () => ({
       heard: new Set((session ? session.tracks : []).filter(t => takesNotes(t) && midiPortState(t) === 'ok')
         .map(t => t.name))};
     metroStartTake(takeCounter);
+    await backingAtRecord(takeCounter, nextTake().song);
     return {ok:true, take_number:takeCounter};
   }),
   set_next_take_name: track('set_next_take_name', async (name) => {
@@ -1725,8 +2035,9 @@ window.__MAKE_API__ = () => ({
       take.temp_dir = `${session.folder}/_drafts/take ${takeCounter}`;
       take.tracks = take.tracks.map(t => ({...t, file:`${take.temp_dir}/${t.name}.wav`}));
     }
-    if (!band.some(takesNotes)) return take;
+    if (!band.some(takesNotes)) return {...take, ...backingAtStop(take.tracks, `${take.temp_dir}/Backing.wav`)};
     take.tracks = band.filter(takesSound).map(t => ({name:t.name, file:`/rec/${t.name}.wav`}));
+    Object.assign(take, backingAtStop(take.tracks, '/rec/Backing.wav'));
     // A port that was there at any point of the take has its notes; one gone
     // the whole take has none.
     const heard = band.filter(t => takesNotes(t)
@@ -1739,6 +2050,8 @@ window.__MAKE_API__ = () => ({
     const take = {take_number:n, ...resolved(name, session.takes, n), duration_sec:dur, tracks,
                   ...(metro.meters[n] || NO_METER),
                   markers: (markers || []).map(m => ({...m, label_id: labelIdOf(m.label_id)}))};
+    if (take.song) await songRow(take.song);
+    Object.assign(take, songFacts(take.song));
     // The first click take kept of a song with no tempo gives it theirs.
     if (take.click) metroGives(take);
     // The notes handed back are kept as they are; a track that took notes and
@@ -1820,10 +2133,14 @@ window.__MAKE_API__ = () => ({
               duration_sec:0, peaks:[]};
     const dur = fileDurations[t.file] ?? TAKE;
     const row = Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9);
-    const {icon} = withIcon({name: t.name});
-    return {name:t.name, ...(icon ? {icon} : {}), url:'about:blank', frames:48000*dur,
+    // The take's Backing track has the backing track's icon, whatever the
+    // band calls its tracks.
+    const {icon} = t.kind === 'backing' ? {icon: 'backing'} : withIcon({name: t.name});
+    return {name:t.name, ...(icon ? {icon} : {}), ...(t.kind === 'backing' ? {kind: 'backing'} : {}),
+      url:'about:blank', frames:48000*dur,
       samplerate:48000, duration_sec:dur,
-      peaks: stereo(t.name) ? [row, row.map(v => v / 2)] : [row]};
+      peaks: stereo(t.name) || (t.kind === 'backing' && backingStereo.has(t.file))
+        ? [row, row.map(v => v / 2)] : [row]};
   })),
 
   player_open: track('player_open', async (tracks, reuseExisting = false) => {
@@ -2087,7 +2404,9 @@ window.__MAKE_API__ = () => ({
     // First rehearsal has the songs a page added, as the library has them.
     const r = folder === '/rec/older' ? withExtraSongs(pastRehearsal(folder)) : pastRehearsal(folder);
     r.name = pastNames.get(folder) ?? r.name;
-    r.takes = r.takes.filter(t => !deleted.has(`${folder}#${t.take_number}`));
+    songIds(await libraryNow());
+    r.takes = r.takes.filter(t => !deleted.has(`${folder}#${t.take_number}`))
+      .map(t => ({...t, ...songFacts(t.song)}));
     for (const t of r.takes) fileDurations[t.tracks[0].file] = t.duration_sec;
     return JSON.parse(JSON.stringify({ok:true, ...r, songs:songsOf(r.takes),
                                       set: await setAsSent(playedBy(folder))}));
@@ -2189,12 +2508,18 @@ window.__MAKE_API__ = () => ({
       }
       const s = bySong.get(t.song) || {id:ids.get(t.song), title:t.song, goes:0,
         rehearsals:new Set(), first_played:r.created_at, last_played:r.created_at, starred:0,
-        also:alsoOf(t.song), ...tempoOf(t.song)};
+        also:alsoOf(t.song), ...tempoOf(t.song), backing:backingOf(t.song)};
       s.goes++; s.rehearsals.add(r.folder); s.starred += t.starred ? 1 : 0;
       if (r.created_at < s.first_played) s.first_played = r.created_at;
       if (r.created_at > s.last_played) s.last_played = r.created_at;
       bySong.set(t.song, s);
     }
+    // A song with no takes is listed when it never had one (New song) or
+    // holds a backing track.
+    for (const title of [...newSongs, ...(window.__TAKELESS_SONGS__ || [])])
+      if (!bySong.has(title) && ids.has(title) && (newSongs.has(title) || backings.has(title)))
+        bySong.set(title, {id:ids.get(title), title, goes:0, rehearsals:new Set(), first_played:null,
+          last_played:null, starred:0, also:alsoOf(title), ...tempoOf(title), backing:backingOf(title)});
     const songs = [...bySong.values()].map(s => ({...s, rehearsals:s.rehearsals.size}))
       .sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
     const answer = JSON.parse(JSON.stringify({songs,
@@ -2211,11 +2536,12 @@ window.__MAKE_API__ = () => ({
       if ((t.song || null) === title) {
         fileDurations[t.tracks[0].file] = t.duration_sec;
         goes.push({folder:r.folder, rehearsal:r.name, created_at:r.created_at,
-                   missing:r.missing, take:t});
+                   missing:r.missing, take:{...t, ...songFacts(t.song)}});
       }
     await held('get_song');
     return JSON.parse(JSON.stringify({ok:true, id, title, also:title ? alsoOf(title) : [],
-                                      plays:songPlays(goes), goes, ...tempoOf(title)}));
+                                      plays:songPlays(goes), goes, ...tempoOf(title),
+                                      backing:backingOf(title)}));
   }),
   // A song renamed, or merged into another (api.rename_song,
   // api.merge_songs), and an old name forgotten (api.forget_song_name) or put
@@ -2251,6 +2577,9 @@ window.__MAKE_API__ = () => ({
     knownIds.set(t, knownIds.get(from));
     knownIds.delete(from);
     if (songTempos.has(from)) { songTempos.set(t, songTempos.get(from)); songTempos.delete(from); }
+    if (backings.has(from)) { backings.set(t, backings.get(from)); backings.delete(from); }
+    if (backingHeard.delete(from)) backingHeard.add(t);
+    if (newSongs.delete(from)) newSongs.add(t);
     repertoire = repertoire.map(s => (s === from ? t : s));
     namesDone(`Renaming ${from} to ${t}`, goes);
     return {ok:true, title:t, goes};
@@ -2281,6 +2610,9 @@ window.__MAKE_API__ = () => ({
     knownIds.delete(from);
     if (songTempos.has(from) && !songTempos.has(into)) songTempos.set(into, songTempos.get(from));
     songTempos.delete(from);
+    if (backings.has(from) && !backings.has(into)) backings.set(into, backings.get(from));
+    backings.delete(from);
+    newSongs.delete(from);
     repertoire = repertoire.filter(s => s !== from);
     namesDone(`Merging ${from} into ${into}`, n);
     return counts;
@@ -2539,6 +2871,14 @@ window.__MAKE_API__ = () => ({
     click_sound: readCfg().click_sound ?? 'click', click_volume: readCfg().click_volume ?? 0.7,
     count_in_bars: readCfg().count_in_bars ?? 1, tempo_in_wav: readCfg().tempo_in_wav !== false,
     metronome_on: clickOn(), drift_tolerance: readCfg().drift_tolerance ?? 0.02,
+    // The backing track's, as Backing.settings: the same for its output.
+    backing_device_index: outputDevices().some(d => d.index === readCfg().backing_device_index)
+      ? readCfg().backing_device_index : null,
+    backing_device_missing: readCfg().backing_device_index != null
+      && !outputDevices().some(d => d.index === readCfg().backing_device_index)
+      ? (window.__BACKING_OUTPUT_MISSING__ || '') : null,
+    backing_channels: readCfg().backing_channels ?? null,
+    backing_volume: readCfg().backing_volume ?? 0.8, backing_on: backingOn(), backing_row: backingRow(),
     cloud_dir: cloudDir,
     server_url:'http://127.0.0.1:1234/', config_path:'/Users/alex/.rehearsal-recorder/config.json',
     version:'0.2.0'}),

@@ -17,6 +17,18 @@ const CLICKING: MetronomeState = {
   count: 0,
   since_count_in_ms: 12_000,
   output_missing: null,
+  // No song has a backing track yet: the row is not shown.
+  backing: {
+    song: null,
+    on: true,
+    volume: 0.8,
+    row: false,
+    playing: false,
+    position_sec: 0,
+    output_missing: null,
+    getting_ready: false,
+    free: false,
+  },
 }
 
 const meta = {

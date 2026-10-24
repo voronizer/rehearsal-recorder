@@ -105,7 +105,12 @@ function vocals(t, k) {
   const grain = 0.72 + 0.28 * wobble(t, 110, k.seed + 4);               // consonants, breath
   return Math.max(bleed, level * shape * syllables * grain);
 }
-const VOICE = {Drums: drums, Bass: bass, Guitar: guitar, Vocals: vocals};
+// A take's Backing track: the song's keys and bass from the backing track's
+// file, steady, as it was placed under the take.
+function backingTrack(t, k) {
+  return 0.01 + Math.max(0.55 * bass(t, k), 0.4 * guitar(t, k));
+}
+const VOICE = {Drums: drums, Bass: bass, Guitar: guitar, Vocals: vocals, Backing: backingTrack};
 const PARTS = [{name: 'Drums', channel: 1, icon: 'drums'},
                {name: 'Bass', channel: 2, icon: 'bass'},
                {name: 'Guitar', channel: 3, icon: 'guitar-electric'},
@@ -291,17 +296,26 @@ api.start_rehearsal = async (name, _device, _rate, _tracks, _depth, setId) => {
 };
 api.stop_take = async () => {
   const draft = takeOf(takeCounter, 'draft', 151, 147, []);
+  // The song's backing track, when it played, as the take's last track.
+  const backingFile = `${TONIGHT}/_drafts/Backing.wav`;
+  KIND[backingFile] = {part: 'Backing', seed: takeCounter, end: 147};
+  fileDurations[backingFile] = 151;
   return {ok: true, take_number: takeCounter, temp_dir: `${TONIGHT}/_drafts`,
           duration_sec: 151, suggested_name: suggestName(takeCounter),
-          default_name: suggestName(takeCounter), tracks: draft.tracks, ...metroStop()};
+          default_name: suggestName(takeCounter), ...metroStop(),
+          ...backingAtStop(draft.tracks, backingFile)};
 };
 api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
   const dur = fileDurations[t.file] ?? 6;
   const a = from ?? 0, b = to ?? dur;
-  // The band's icon, found by the name, as take_media does.
-  const icon = (PARTS.find(p => p.name === t.name) || {}).icon;
-  return {name: t.name, icon, url: 'about:blank', frames: 48000 * dur, samplerate: 48000,
-          duration_sec: dur, peaks: [peaksOf(t.file, buckets || 900, a, b)]};
+  // The band's icon, found by the name, as take_media does; the take's
+  // Backing track has the backing track's, and says what it is.
+  const own = t.kind === 'backing' ? {icon: 'backing', kind: 'backing'}
+    : {icon: (PARTS.find(p => p.name === t.name) || {}).icon};
+  // A stereo Backing track has two rows, the second a little quieter.
+  const row = peaksOf(t.file, buckets || 900, a, b);
+  return {name: t.name, ...own, url: 'about:blank', frames: 48000 * dur, samplerate: 48000,
+          duration_sec: dur, peaks: backingStereo.has(t.file) ? [row, row.map(v => v * 0.85)] : [row]};
 });
 
 // ---- History ----------------------------------------------------------
@@ -340,18 +354,26 @@ const PAST = {
   '/rec/soundcheck': ['Soundcheck', '2026-09-12T18:30:00', 173000000, [
     ['Take 1', 140, []],
     ['Take 2', 165, [{at: 65, note: 'the riff we jammed while setting up', label_id: 1}]]]]};
+// The takes that played their song's backing track, by folder and name:
+// each has a Backing track after the band's.
+const WITH_BACKING = new Set(['/rec/tue-before#Pałyn 3', '/rec/tue-before#Viasna']);
 const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => {
   // A take longer than the song rings on after it; a shorter one stopped.
   const seed = 20 * (Object.keys(PAST).indexOf(folder) + 1) + i + 1;
   const end = Math.min(SONG_END, length - 2);
   const tracks = PARTS.map(p => ({name: p.name, file: `${folder}/${i + 1}/${p.name}.wav`}));
+  if (WITH_BACKING.has(`${folder}#${name}`)) {
+    const file = `${folder}/${i + 1}/Backing.wav`;
+    tracks.push({name: 'Backing', file, kind: 'backing'});
+    if ((backings.get(goOfName(name).song) || {}).channels === 2) backingStereo.add(file);
+  }
   for (const tr of tracks) {
     KIND[tr.file] = {part: tr.name, seed, end};
     NAMES[tr.file] = name;
     fileDurations[tr.file] = length;
   }
   return {take_number: i + 1, name, ...goOfName(name), starred: isTheTake(markers),
-          duration_sec: length, markers, ...clickedAt(name), tracks};
+          duration_sec: length, markers, ...clickedAt(name), tracks, ...songFacts(goOfName(name).song)};
 });
 // The set a rehearsal was played by, when the page gives one
 // (window.__PLAYED_BY__): its songs are all the band's, so none is new. Not
@@ -403,6 +425,20 @@ library = async () => Promise.all(Object.keys(PAST).map(async folder => (
 // Pałyn was typed "Palyn" one night, and merged since: the old spelling
 // still leads to it (Library song_name).
 oldNames.set('palyn', {name: 'Palyn', song: 'Pałyn'});
+
+// The backing tracks the band plays along with: Pałyn's counted at the
+// song's 128, bar 1 after a 0.80 s lead-in; Sonca's pads with no steady beat,
+// so the song keeps the 96 typed for it; Viasna's counted at 126, the song
+// staying at 128. Dym has none. Hlyboka is a song made with New song, with no
+// takes yet.
+backings.set('Pałyn', {name: 'Pałyn backing.wav', seconds: 222, channels: 2, tempo: 128, first_bar: 0.8});
+backings.set('Sonca', {name: 'Sonca pads.wav', seconds: 300, channels: 1, tempo: null, first_bar: 0});
+backings.set('Viasna', {name: 'Viasna backing.wav', seconds: 268, channels: 2, tempo: 126, first_bar: 0.45});
+newSongs.add('Hlyboka');
+repertoire.push('Hlyboka');
+// The songs numbered as Python made them, the oldest played first, so each
+// take can carry its song's id from the start.
+songIds(Object.keys(PAST).map(folder => ({takes: PAST[folder][3].map(([name]) => goOfName(name))})));
 
 // The set the band plays its gigs by (Settings › Sets), for the site's sets
 // tile and the docs' pictures. A page that kept sets of its own has those.

@@ -87,7 +87,7 @@ function RenameSongForm({
   const [draft, setDraft] = useState<string | null>(null)
   const others = songs
     .filter((s) => s.id !== song.id)
-    .sort((a, b) => b.last_played.localeCompare(a.last_played))
+    .sort((a, b) => (b.last_played ?? "").localeCompare(a.last_played ?? ""))
   const choices: SongChoices = {
     here: [],
     other: others.map((s) => ({ song: s.title, go: s.goes + 1, also: s.also })),
