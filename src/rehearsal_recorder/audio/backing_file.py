@@ -195,14 +195,19 @@ def take_frames(opened, from_frame, length):
     return out
 
 
-def write_take_track(opened, from_frame, length, path, samplerate, sampwidth):
+def write_take_track(opened, from_frame, length, path, samplerate, sampwidth, progress=None):
     """A take's Backing track: `length` frames of the file from `from_frame`,
     as `take_frames` gives them, written as a 16- or 24-bit WAV (`sampwidth`
-    2 or 3), the take's own depth, so everything that opens a take opens it."""
+    2 or 3), the take's own depth, so everything that opens a take opens it.
+    `progress(fraction)`, when given, hears how far it has got."""
     with WavWriter(path, samplerate, opened[4], sampwidth) as out:
         for start in range(0, length, BLOCK_FRAMES):
             block = take_frames(opened, from_frame + start, min(BLOCK_FRAMES, length - start))
             out.write(_pcm_bytes(block, sampwidth))
+            if progress is not None:
+                progress(min(1.0, (start + BLOCK_FRAMES) / length))
+    if progress is not None:
+        progress(1.0)
 
 
 class _Decoder:

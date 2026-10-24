@@ -129,9 +129,10 @@ export function BackingVolume({
 
 /**
  * The file's name, cut to the room there is and whole in the shared tip,
- * and its length; while it is heard, how far it has got: "0:12 / 3:42". The
- * time keeps its own width, so the name gives way as it grows and nothing
- * after it moves. Dimmed while the switch is off.
+ * and its length; while it is heard, how far it has got: "0:12 / 3:42",
+ * which stops at its length while a take plays on past its end. The time
+ * keeps its own width, so the name gives way as it grows and nothing after
+ * it moves. Dimmed while the switch is off.
  */
 export function BackingFile({
   name,
@@ -154,7 +155,9 @@ export function BackingFile({
       <Whole data-backing-name text={name} className="min-w-0 truncate" />
       {seconds !== null && (
         <span data-backing-time className="tnum shrink-0 text-muted-foreground">
-          {position !== null ? `${formatMMSS(position)} / ${formatMMSS(seconds)}` : formatMMSS(seconds)}
+          {position !== null
+            ? `${formatMMSS(Math.min(position, seconds))} / ${formatMMSS(seconds)}`
+            : formatMMSS(seconds)}
         </span>
       )}
     </span>

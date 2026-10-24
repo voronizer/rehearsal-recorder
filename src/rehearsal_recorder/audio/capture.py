@@ -731,12 +731,15 @@ class AudioRecorder:
 
         raws = [self.out_dir / f"{self.safe_name(t['name'])}{RAW_SUFFIX}"
                 for t in self.tracks]
-        stages = Stages(
-            [(f"Track {i + 1} of {len(raws)}",
-              p.stat().st_size if p.exists() else 0)
-             for i, p in enumerate(raws)],
-            progress or (lambda fraction, step: None),
-        )
+        # The Backing track is written last, weighed by the bytes it will be.
+        heard = None
+        if click is not None and click.first_click_frame is not None:
+            heard = click.backing_record()
+        parts = [(f"Track {i + 1} of {len(raws)}", p.stat().st_size if p.exists() else 0)
+                 for i, p in enumerate(raws)]
+        if heard is not None:
+            parts.append(("Backing track", frames * click.backing.opened[4] * self._sample_bytes))
+        stages = Stages(parts, progress or (lambda fraction, step: None))
         finalized = []
         for i, track in enumerate(self.tracks):
             raw_path = raws[i]
@@ -753,8 +756,8 @@ class AudioRecorder:
             })
 
         backing = None
-        if click is not None and click.first_click_frame is not None:
-            backing = self._write_backing(click, frames)
+        if heard is not None:
+            backing = self._write_backing(heard, click, frames, stages.part(len(raws)))
 
         # The record has done its job: every wav now carries its own header.
         # Left behind it would ride along into the saved take. A take with
@@ -769,17 +772,14 @@ class AudioRecorder:
         self._result = {"duration_sec": duration, "tracks": finalized, "backing": backing}
         return self._result
 
-    def _write_backing(self, click, frames):
-        """The take's Backing track, as it was heard: {"name", "file"}, or None
-        for a take whose backing track was not heard, or a disk that would
-        not take it (the take's own tracks are written by then)."""
-        record = click.backing_record()
-        if record is None:
-            return None
+    def _write_backing(self, record, click, frames, progress):
+        """The take's Backing track, as it was heard (`record`, as
+        backing_record gives it): {"name", "file"}, or None for a disk that
+        would not take it (the take's own tracks are written by then)."""
         path = self.out_dir / f"{self.safe_name(record['name'])}.wav"
         try:
             write_take_track(click.backing.opened, record["from_frame"], frames, path,
-                             self.samplerate, self._sample_bytes)
+                             self.samplerate, self._sample_bytes, progress)
         except OSError as e:
             print(f"[audio] Backing track not written: {e}")
             path.unlink(missing_ok=True)

@@ -126,15 +126,20 @@ class Backing:
         self._take_click = None
         self._take = None
         # (song id, its song_backing or None) for the next take's song, read
-        # when it changes or the song's backing track does; and the song id
-        # follow last found, None for none.
+        # when it changes or the song's backing track does, each change
+        # counted so a read it came in the middle of is not kept; and the
+        # song id follow last found, None for none.
         self._next = None
+        self._changes = 0
         self._followed = None
         # Ready files: (copy, rate) waiting to be made or being made, and
-        # those that could not be, which are not tried again for the copy
-        # they were tried for. One maker at a time, here or on the thread.
+        # those that could not be, tried again only when their song is
+        # picked again or Record asks for it; and those the row found
+        # missing with nothing making them, asked for on a thread. One maker
+        # at a time, here or on the thread.
         self._queued = set()
         self._failed = set()
+        self._asked = set()
         self._making = threading.Lock()
         self._jobs = queue.Queue()
         self._worker = None
@@ -260,7 +265,8 @@ class Backing:
     def _make(self, copy, rate):
         """The copy's ready file at `rate`, made now unless it is there. One
         at a time: what the thread is making is waited for. BackingError or
-        OSError for one that cannot be made, which is not tried again."""
+        OSError for one that cannot be made, which the row then says nothing
+        of getting ready."""
         job = (Path(copy), rate)
         with self._making:
             try:
@@ -300,7 +306,9 @@ class Backing:
 
     def ready_for(self, song_id):
         """The song's file made ready on a thread of its own, at the rate the
-        next take records at and at its output's own, unless it is already."""
+        next take records at and at its output's own, unless it is already.
+        One that could not be made is tried again: a disk that was full may
+        have room now."""
         try:
             backing = self._library().song_backing(song_id)
         except Exception:
@@ -315,8 +323,9 @@ class Backing:
         with self._lock:
             for rate in self._rates():
                 job = (copy, rate)
-                if job in self._queued or job in self._failed:
+                if job in self._queued:
                     continue
+                self._failed.discard(job)
                 jobs.append(job)
         jobs = [job for job in jobs if self._ready(*job) is None]
         if not jobs:
@@ -327,6 +336,24 @@ class Backing:
                 self._worker = threading.Thread(target=self._work, name="backing track ready", daemon=True)
                 self._worker.start()
         self._jobs.put(jobs)
+
+    def _ask_ready(self, song_id, job):
+        """A ready file the row found missing that nothing is making (deleted
+        by hand): asked for on a thread, so the poll never waits, and so the
+        row's "getting ready" is true."""
+        with self._lock:
+            if job in self._asked:
+                return
+            self._asked.add(job)
+
+        def ask():
+            try:
+                self.ready_for(song_id)
+            finally:
+                with self._lock:
+                    self._asked.discard(job)
+
+        threading.Thread(target=ask, name="backing track asked ready", daemon=True).start()
 
     def _work(self):
         while True:
@@ -479,7 +506,8 @@ class Backing:
     def _next_backing(self, song_id):
         """The next take's song's song_backing, read once each time it
         changes (refresh)."""
-        cached = self._next
+        with self._lock:
+            cached, changes = self._next, self._changes
         if cached is not None and cached[0] == song_id:
             return cached[1]
         try:
@@ -487,12 +515,16 @@ class Backing:
         except Exception:
             log.exception("The next take's backing track could not be read")
             backing = None
-        self._next = (song_id, backing)
+        with self._lock:
+            if self._changes == changes:
+                self._next = (song_id, backing)
         return backing
 
     def refresh(self):
         """A song's backing track changed: the row reads it again."""
-        self._next = None
+        with self._lock:
+            self._next = None
+            self._changes += 1
 
     def follow(self):
         """The next take's name changed (the metronome followed it): ▶ stops
@@ -501,7 +533,7 @@ class Backing:
         song_id = None if free or song is None else song["id"]
         if song_id != self._followed:
             self._followed = song_id
-            self._next = None
+            self.refresh()
             playing = self._free
             if playing is not None and playing.shown:
                 self.stop()
@@ -810,9 +842,12 @@ class Backing:
                          **described, "song_id": song["id"], "title": song["title"]}
                 if not described["missing"] and not taking:
                     rate = int(self._rate())
+                    job = (Path(backing["file"]), rate)
                     with self._lock:
-                        failed = (Path(backing["file"]), rate) in self._failed
-                    getting_ready = not failed and self._ready(backing["file"], rate) is None
+                        failed, queued = job in self._failed, job in self._queued
+                    getting_ready = not failed and (queued or self._ready(backing["file"], rate) is None)
+                    if getting_ready and not queued:
+                        self._ask_ready(song["id"], job)
         playing, position = False, 0
         if taking:
             if take is not None:

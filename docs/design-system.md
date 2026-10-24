@@ -671,8 +671,10 @@ Parts 5 to 8):
   plays", and one output gets the line that a stereo file is played in
   mono. Picking an output plays two seconds of it.
 - **NewSongDialog**, `NewSongDialog.tsx`: New song, from the button over
-  History's song list: the shared `Dialog`, the title's field, and a line
-  under it that keeps its height and says why Create waits.
+  History's song list, or in History's Empty before the first rehearsal:
+  the shared `Dialog`, the title's field, and a line under it that keeps
+  its height and says why Create waits. A title that is a song's already
+  has Open it after the line, a link in its words, to that song's page.
 
 ## Writing components
 

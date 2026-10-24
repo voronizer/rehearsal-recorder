@@ -215,6 +215,26 @@ test("while a take records: the switch, the file playing and the volume, no play
   expect(tiles.filter((t) => t?.includes("Backing"))).toEqual([])
 })
 
+// The take plays on past the file's end, silent, until Stop.
+test("while a take records past the file's end, its time stops at its length", async ({ page }) => {
+  await bandRehearsal(page, "window.__BACKINGS__ = {Sonca: {name: 'Sonca pads.wav', seconds: 1, channels: 1, tempo: null, first_bar: 0}};")
+  await nameNext(page, "Sonca")
+  await record(page).click()
+  await expect(time(page)).toHaveText(/^0:0\d \/ 0:01$/)
+  // Python's own position runs on: 2.3 s in, the row still says 0:01.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(async () => {
+          const api = (window as unknown as { pywebview: { api: { metronome_state: () => Promise<{ backing: { position_sec: number } }> } } }).pywebview.api
+          return (await api.metronome_state()).backing.position_sec
+        }),
+      { timeout: 10_000 }
+    )
+    .toBeGreaterThan(2.3)
+  await expect(time(page)).toHaveText("0:01 / 0:01")
+})
+
 test("Settings: the tab is Click & backing track, with a Backing track group", async ({ page }) => {
   await openBandApp(page)
   await page.getByRole("button", { name: "Settings" }).click()

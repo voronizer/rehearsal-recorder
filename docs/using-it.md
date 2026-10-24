@@ -1241,9 +1241,11 @@ should land together. Every change is saved to the song at once.
 
 To give a song a backing track before the band has played it, press **New
 song** over the list of songs in History, type the title and press
-**Create**. The song's page opens. Until a take is kept under that title,
-the song says “No takes yet”, and **Next take** offers it with the other
-songs.
+**Create**. Before the first rehearsal, **New song** is in the middle of
+History instead. The song's page opens. Until a take is kept under that
+title, the song says “No takes yet”, and **Next take** offers it with the
+other songs. A title that is a song's already says so, and **Open it** goes
+to that song's page.
 
 ### On the rehearsal screen
 
@@ -1286,7 +1288,9 @@ The metronome's line goes on with what the backing track will do:
 While a take records, the row stays, and shows how far the file has got:
 “1:12 / 3:42”. The switch and the volume change what the band hears, not
 what the take keeps. The backing track plays on until **Stop**, silent
-once the file has ended. The disk line counts it as one more track.
+once the file has ended. The disk line counts it as one more track. If its
+output is unplugged during the take, the file is dimmed and the line says
+so in amber: “The backing track's output, X18 5–6, is not connected.”
 
 ### Where the backing track is heard
 

@@ -396,6 +396,37 @@ def through_the_api(tmp):
             backing_file.make_ready = real_ready
             gate.set()
         ok("  then it is ready at 48 kHz", ready() and backing_file.ready_path(copy, RATE).exists())
+        backing_file.ready_path(copy, RATE).unlink()
+        ok("  a ready file deleted by hand is made again while the row says so",
+           ready(5) and backing_file.ready_path(copy, RATE).exists())
+
+        # A song's backing track changed while the row was reading it: the
+        # read is not kept over the change.
+        library, reads = a._lib, []
+
+        def changed_meanwhile(song_id):
+            found = type(library).song_backing(library, song_id)
+            reads.append(song_id)
+            if len(reads) == 1:
+                a._backing.refresh()
+            return found
+
+        library.song_backing = changed_meanwhile
+        try:
+            a._backing.refresh()
+            a.metronome_state()
+            a.metronome_state()
+            ok("a read the song's change came in the middle of is read again", len(reads) == 2)
+        finally:
+            del library.song_backing
+        broken = a._backing.state
+        a._backing.state = lambda: 1 / 0
+        try:
+            state = a.metronome_state()
+            ok("a row that cannot say leaves the metronome's as it is, with no row",
+               state["tempo"] == 128 and state["backing"]["row"] is False and state["backing"]["song"] is None)
+        finally:
+            a._backing.state = broken
 
         row = a.metronome_state()["backing"]
         ok("the row before a click take: Palyn's file, on, at 0.8, not playing",
@@ -478,8 +509,27 @@ def through_the_api(tmp):
            and kept["take"]["tempo"] == 128)
         a.metronome_set_on(True)
 
-        a.set_next_take_name("Sonca")
-        ok("Sonca's file gets ready at 48 kHz", ready())
+        # The disk full the first time: picked again, it is tried again.
+        failing = [OSError("No space left on device")]
+
+        def fails_once(copy_, rate):
+            if failing:
+                raise failing.pop()
+            return real_ready(copy_, rate)
+
+        backing_file.make_ready = fails_once
+        try:
+            a.set_next_take_name("Sonca")
+            give_up = time.monotonic() + 10
+            while (failing or a._backing._queued) and time.monotonic() < give_up:
+                time.sleep(0.02)
+            ok("a file that could not be made ready says nothing of getting ready",
+               not failing and a.metronome_state()["backing"]["getting_ready"] is False)
+            a.set_next_take_name("Sonca")
+            ok("Sonca's file, its song picked again, gets ready at 48 kHz",
+               ready() and backing_file.ready_path(home / "Rec" / "Backing tracks" / "Sonca pads.wav", RATE).exists())
+        finally:
+            backing_file.make_ready = real_ready
         a.start_take()
         rec = a._recorder
         ok("a song with no tempo: the file from its start too",
@@ -959,10 +1009,10 @@ def main():
         else:
             rec._callback(block_in(i), 1024, info(i), None)
 
-    def stopped(rec, done, also=None):
+    def stopped(rec, done, also=None, progress=None):
         """Stop, the card going on from block `done` on a thread of its own once
         Stop has said where the take ends, as test_engine's [80] has it.
-        `also(i)` runs with each block."""
+        `also(i)` runs with each block; `progress` hears the saving."""
         halt = threading.Event()
 
         def card():
@@ -988,9 +1038,10 @@ def main():
 
         stream.stop = stop
         feeder.start()
-        return rec.stop()
+        return rec.stop(progress)
 
-    def take(name, tracks=(("Gtr", 1), ("Voc", 2)), blocks=300, during=None, also=None, **backing):
+    def take(name, tracks=(("Gtr", 1), ("Voc", 2)), blocks=300, during=None, also=None, progress=None,
+             **backing):
         backing = {"route": (2, 3), **backing}
         tc = TakeClick(120, "4/4", 1, voices, (0, 1), backing=TakeBacking(ready6, 2.5, **backing))
         rec = AudioRecorder(0, RATE, [{"name": n, "channel": c} for n, c in tracks], tmp / name, 24, click=tc)
@@ -1002,7 +1053,7 @@ def main():
                 also(i)
             if during is not None:
                 during(i, tc)
-        return tc, opened, stopped(rec, blocks, also)
+        return tc, opened, stopped(rec, blocks, also, progress)
 
     tc, opened, done = take("A")
     folder = tmp / "A"
@@ -1027,7 +1078,11 @@ def main():
         if i == 80:
             tc.set_backing_volume(0.3)
 
-    take("B", during=flip)
+    saving = []
+    take("B", during=flip, progress=lambda fraction, step: saving.append((fraction, step)))
+    ok("  saving it is part of saving the take, last",
+       saving[-1] == (1.0, "Backing track") and any(step == "Track 2 of 2" for _, step in saving)
+       and all(a <= b for (a, _), (b, _) in zip(saving, saving[1:])))
     ok("the switch and the volume during the take change what is heard, not the track",
        (tmp / "B" / "Backing.wav").read_bytes() == (folder / "Backing.wav").read_bytes())
 
@@ -1043,13 +1098,15 @@ def main():
         feed(crashed, i)
     time.sleep(0.2)
     crashed.abandon()
-    back = finalize(tmp / "D", RATE, 24)
+    saving = []
+    back = finalize(tmp / "D", RATE, 24, progress=lambda fraction, step: saving.append((fraction, step)))
     track, _ = read24(tmp / "D" / "Backing.wav")
     frames = round(back["duration_sec"] * RATE)
     ok("a take the app did not live to finish gets the same track from take.json",
        back.get("backing") == {"name": "Backing", "file": str(tmp / "D" / "Backing.wav")}
        and [t["name"] for t in back["tracks"]] == ["Gtr"]
        and np.array_equal(track, pcm24(backing_file.take_frames(backing_file.open_ready(ready6), 24000, frames))))
+    ok("  written as part of its saving, last", saving[-1] == (1.0, "Backing track"))
 
     _, _, done = take("E", blocks=60, route=None, output=SilentOutput("Laptop", "Not connected.", RATE))
     ok("its output not there at Record: the take records, with no Backing track",

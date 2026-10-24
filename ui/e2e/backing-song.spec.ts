@@ -10,6 +10,7 @@ import {
   setFake,
   settled,
   startRehearsal,
+  style,
   test,
   themed,
 } from "./app.ts"
@@ -316,6 +317,26 @@ test("replace and remove, from the backing track's menu", async ({ page }) => {
   await expect(drawing(page)).toHaveCount(0)
 })
 
+test("the file's name is in the body's weight, one of the two (F5)", async ({ page }) => {
+  await openSong(page, "Pałyn")
+  const name = file(page).getByText("Pałyn backing.wav", { exact: true })
+  expect(await style(name, "font-weight")).toEqual({ "font-weight": "400" })
+})
+
+// The drawing keeps its scale as bar 1 moves, so the marker stays where it
+// was let go; a bar 1 typed past the drawing's end widens it instead.
+test("a bar 1 typed past the drawn start widens the drawing to show it", async ({ page }) => {
+  await openSong(page, "Pałyn")
+  await expect(drawing(page)).toBeVisible()
+  await field(page).fill("0:12.00")
+  await field(page).press("Enter")
+  await expect.poll(() => callCount(page, "set_backing_first_bar")).toBe(1)
+  await expect(field(page)).toHaveValue("0:12.00")
+  const box = (await drawing(page).boundingBox())!
+  const m = (await marker(page).boundingBox())!
+  expect(m.x + m.width / 2).toBeLessThan(box.x + box.width)
+})
+
 test("a copy deleted from the folder by hand says so", async ({ page }) => {
   await openSong(page, "Pałyn", "window.__BACKING_MISSING__ = ['Pałyn']")
   await expect(line(page)).toHaveText("Pałyn backing.wav is missing from the Backing tracks folder.")
@@ -340,10 +361,10 @@ test("new song refuses a song's title or old name, and opens the new song's page
   await expect(create).toBeDisabled()
   // Pałyn was once typed "Palyn": the old name is the song.
   await title.fill("palyn")
-  await expect(says).toHaveText("Pałyn is already a song.")
+  await expect(says).toHaveText("Pałyn is already a song. Open it")
   await expect(create).toBeDisabled()
   await title.fill("Viasna")
-  await expect(says).toHaveText("Viasna is already a song.")
+  await expect(says).toHaveText("Viasna is already a song. Open it")
   await title.fill("Take 3")
   await expect(says).toHaveText("Take 3 is what a take with no song is called.")
   await expect(create).toBeDisabled()
@@ -359,6 +380,18 @@ test("new song refuses a song's title or old name, and opens the new song's page
   const row = page.getByRole("navigation", { name: "Songs" }).locator("[data-song='Ranak']")
   await expect(row).toContainText("No takes yet")
   await expect(row).toHaveAttribute("aria-current", /.+/)
+})
+
+test("new song with a song's title offers that song's page", async ({ page }) => {
+  await openSong(page, "Pałyn")
+  await page.getByRole("navigation", { name: "Songs" }).getByRole("button", { name: "New song" }).click()
+  const dialog = page.getByRole("dialog", { name: "New song" })
+  await dialog.getByRole("textbox", { name: "Song title" }).fill("viasna")
+  await expect(dialog.locator("[data-new-song-says]")).toHaveText("Viasna is already a song. Open it")
+  await dialog.getByRole("button", { name: "Open it" }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(head(page).getByRole("heading", { name: "Viasna", exact: true })).toBeVisible()
+  expect(await args(page, "add_song")).toEqual([])
 })
 
 test("a song with no takes is listed, and its page has no takes to play", async ({ page }) => {

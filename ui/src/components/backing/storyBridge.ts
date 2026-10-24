@@ -1,8 +1,9 @@
 /**
  * A bridge for the showcase, so a song's backing track has something to
  * answer it: a file picked and counted at 104, bar 1 and the tempo saved as
- * they are, peaks with a beat in them, and ▶ running on the page's clock.
- * Only the stories use it; the app's bridge is pywebview's.
+ * they are, peaks with a beat in them, ▶ running on the page's clock, and
+ * New song making any title it is given. Only the stories use it; the app's
+ * bridge is pywebview's.
  */
 export function stubBackingBridge() {
   let started: number | null = null
@@ -17,6 +18,7 @@ export function stubBackingBridge() {
         return { ok: true, name: "Dym minus.mp3", seconds: 208, channels: 2, tempo: 104, first_bar: 2.1 }
       },
       remove_backing: ok,
+      add_song: async (title: string) => ({ ok: true, id: 3, title }),
       set_backing_first_bar: async (_id: number, seconds: number) => ({ ok: true, first_bar: seconds }),
       set_backing_tempo: async (_id: number, tempo: number) => ({ ok: true, tempo }),
       set_song_tempo: async (id: number, tempo: number | null, signature: string | null) => ({

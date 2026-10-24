@@ -4969,8 +4969,15 @@ class Api:
     def metronome_state(self):
         """What the metronome is doing, for the row and the recording screen,
         and under "backing" the backing track's row (Backing.state): polled,
-        and never waits."""
-        return {**self._metronome.state(), "backing": self._backing.state()}
+        and never waits. A backing track's row that cannot say is left out,
+        and the metronome's stays."""
+        try:
+            backing = self._backing.state()
+        except Exception:
+            log.exception("The backing track's row could not be read")
+            backing = {"song": None, "on": False, "volume": 0.0, "row": False, "playing": False,
+                       "position_sec": 0, "output_missing": None, "getting_ready": False, "free": False}
+        return {**self._metronome.state(), "backing": backing}
 
     def _take_elapsed(self):
         """

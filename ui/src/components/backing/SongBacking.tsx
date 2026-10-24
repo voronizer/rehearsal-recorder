@@ -92,10 +92,11 @@ export function SongBacking({
   const play = usePlaying(song.id, sayError, onPlay, stopped)
 
   // The drawing's scale, worked out when the file, the tempo or the
-  // signature changes, and not as bar 1 moves.
+  // signature changes, and not as bar 1 moves, unless bar 1 goes past its
+  // end and would not be drawn.
   const scaleKey = own ? `${own.name}|${song.tempo}|${song.signature}` : null
   const [scale, setScale] = useState<{ key: string | null; end: number }>({ key: null, end: 8 })
-  if (scale.key !== scaleKey && own) {
+  if (own && (scale.key !== scaleKey || own.first_bar >= scale.end)) {
     setScale({ key: scaleKey, end: drawnRange(own.first_bar, song.tempo, song.signature).end })
   }
   const end = scale.end
@@ -242,11 +243,11 @@ export function SongBacking({
                 page cuts the name only so far and never lays the time over Bar
                 1 at. */}
             <span data-backing-file className="flex min-w-0 flex-[1_1_10rem] items-baseline gap-1.5 text-sm">
-              <span className="truncate font-medium">{counting ?? own?.name}</span>
+              <span className="truncate">{counting ?? own?.name}</span>
               {counting === null && own && !missing && own.seconds !== null && (
                 <span className="tnum shrink-0 text-xs text-muted-foreground">
                   {play.position !== null
-                    ? `${formatMMSS(play.position)} / ${formatMMSS(own.seconds)}`
+                    ? `${formatMMSS(Math.min(play.position, own.seconds))} / ${formatMMSS(own.seconds)}`
                     : formatMMSS(own.seconds)}{" "}
                   · {own.channels === 1 ? "mono" : "stereo"}
                 </span>

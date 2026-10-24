@@ -21,7 +21,9 @@ import { UNNAMED } from "@/lib/goes"
  * height, so the buttons do not move as it changes.
  *
  * Create makes the song (`add_song`) and hands it to `onMade`, which opens
- * its page; a refusal from Python shows in the same line.
+ * its page; a refusal from Python shows in the same line. A title that is a
+ * song's already offers that song's page, handed over the same way: the
+ * band was looking for it.
  */
 export function NewSongDialog({
   open,
@@ -73,8 +75,12 @@ function NewSongForm({
   onMade: (song: { id: number; title: string }) => void
 }) {
   const [title, setTitle] = useState("")
-  // Python's refusal, for the title it was about.
-  const [refused, setRefused] = useState<{ title: string; error: string } | null>(null)
+  // Python's refusal, for the title it was about, with the song it names.
+  const [refused, setRefused] = useState<{
+    title: string
+    error: string
+    into?: { id: number; title: string }
+  } | null>(null)
   const [making, setMaking] = useState(false)
   const typed = title.trim()
   const lower = typed.toLocaleLowerCase()
@@ -89,6 +95,7 @@ function NewSongForm({
         ? refused.error
         : ""
   const can = typed !== "" && says === "" && !making
+  const song = taken ?? (refused?.title === typed ? refused.into : undefined)
 
   const make = async () => {
     if (!can) return
@@ -96,7 +103,7 @@ function NewSongForm({
     try {
       const res = await api().add_song(typed)
       if (!res.ok || res.id === undefined) {
-        setRefused({ title: typed, error: res.error ?? "Could not make the song" })
+        setRefused({ title: typed, error: res.error ?? "Could not make the song", into: res.into })
         return
       }
       onMade({ id: res.id, title: res.title ?? typed })
@@ -127,6 +134,19 @@ function NewSongForm({
         />
         <p data-new-song-says className="min-h-5 text-xs break-words text-muted-foreground">
           {says}
+          {song && (
+            <>
+              {" "}
+              <Button
+                variant="link"
+                onClick={() => onMade({ id: song.id, title: song.title })}
+                // Words in the line, as the metronome's status line has its link.
+                className="inline h-auto rounded-sm p-0 text-xs whitespace-normal"
+              >
+                Open it
+              </Button>
+            </>
+          )}
         </p>
       </div>
       <DialogButtons

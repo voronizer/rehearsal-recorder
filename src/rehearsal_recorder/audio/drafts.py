@@ -185,7 +185,8 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     the band's tracks.
 
     `progress(fraction, step)`, when given, hears how far along it is, the
-    tracks weighed by their size.
+    tracks weighed by their size, and a Backing track still to write last,
+    weighed as the longest of them.
     """
     take_dir = Path(take_dir)
     tracks = []
@@ -195,11 +196,11 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     head, length, acid = _cut(take_dir)
     track_names, note_names = _names(take_dir, "tracks"), _names(take_dir, "notes")
     raws = sorted(take_dir.glob(f"*{RAW_SUFFIX}"))
-    stages = Stages(
-        [(f"Track {i + 1} of {len(raws)}", p.stat().st_size)
-         for i, p in enumerate(raws)],
-        progress or (lambda fraction, step: None),
-    )
+    backing = _backing(take_dir)
+    parts = [(f"Track {i + 1} of {len(raws)}", p.stat().st_size) for i, p in enumerate(raws)]
+    if backing is not None and not backing[1].exists():
+        parts.append(("Backing track", max((size for _, size in parts), default=0)))
+    stages = Stages(parts, progress or (lambda fraction, step: None))
     for i, raw_path in enumerate(raws):
         wav_path = raw_path.with_suffix(".wav")
         channels = widths.get(raw_path.stem, 1)
@@ -211,14 +212,13 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
                    progress=stages.part(i), head_frames=head, frames=length, acid=acid)
         raw_path.unlink(missing_ok=True)
 
-    backing = _backing(take_dir)
     for wav_path in sorted(take_dir.glob("*.wav")):
         if backing is not None and wav_path.name == backing[1].name:
             continue
         frames = max(frames, wav_frames(wav_path))
         tracks.append({"name": track_names.get(wav_path.stem, wav_path.stem), "file": str(wav_path)})
     if backing is not None:
-        backing = _write_backing(backing, frames, samplerate, bit_depth)
+        backing = _write_backing(backing, frames, samplerate, bit_depth, stages.part(len(raws)))
 
     duration = frames / samplerate if samplerate else 0
     notes = [{**n, "name": note_names.get(n["name"], n["name"])}
@@ -232,14 +232,14 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     }
 
 
-def _write_backing(backing, frames, samplerate, bit_depth):
+def _write_backing(backing, frames, samplerate, bit_depth, progress):
     """A recovered take's Backing track: {"name", "file"}, written unless Stop
     wrote it; None when it cannot be, its ready file gone or unreadable."""
     record, path = backing
     if not path.exists():
         try:
             write_take_track(open_ready(record["file"]), record["from_frame"], frames, path,
-                             samplerate, bytes_per_sample(bit_depth))
+                             samplerate, bytes_per_sample(bit_depth), progress)
         except (OSError, ValueError) as e:
             print(f"[drafts] Backing track not written: {e}")
             path.unlink(missing_ok=True)
