@@ -3,7 +3,7 @@ Every Python suite, one command:
 
     python tests/run_all.py
 
-Fifteen of them, because they answer different questions and need different
+Sixteen of them, because they answer different questions and need different
 things to be true:
 
     test_control_api.py shared control API and JSON bridge without MIDI.
@@ -114,6 +114,14 @@ things to be true:
                        WAVs made here (2 ms late, 6/8, a take of two windows,
                        a WAV that carries no tempo).
 
+    test_backing.py    a song's backing track: the file read in every format
+                       the app takes and refused in the others, copied into
+                       the library, made ready at the app's rate (a tone's
+                       pitch and level kept, nothing aliased), counted on
+                       synthetic drums (the tempo and bar 1 after a lead-in
+                       or a pickup, pads with no beat), and written into a
+                       take as its Backing track.
+
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.
 
@@ -139,7 +147,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SUITES = ("test_control_api.py", "test_controller_browse.py", "test_controller_diagnostics.py", "test_controller_extensions.py", "test_controller_recovery.py", "test_controller.py", "test_transport.py", "test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
-          "test_midi.py", "test_click.py", "test_tempo.py", "test_drift.py")
+          "test_midi.py", "test_click.py", "test_tempo.py", "test_drift.py", "test_backing.py")
 
 # Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).
 LIMIT = 600

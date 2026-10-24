@@ -246,6 +246,30 @@ def selftest():
 
         return f"{name}, libsndfile {soundfile.__libsndfile_version__}"
 
+    def backing_track():
+        # Makes a second of a backing track ready to play, through libsndfile
+        # and soxr as when the band adds one: soxr is compiled, and imported
+        # only then, so a build that lost it fails here, not at a rehearsal.
+        import tempfile
+        from pathlib import Path
+
+        import numpy as np
+        import soundfile
+        import soxr
+
+        from rehearsal_recorder.audio.backing_file import make_ready, open_ready
+
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / "Pałyn backing.flac"
+            tone = 0.5 * np.sin(2 * np.pi * 1000 * np.arange(44100) / 44100)
+            soundfile.write(copy, tone, 44100)
+            data, frames, rate, _, _ = open_ready(make_ready(copy, 48000))
+            peak = float(np.abs(data).max())
+            del data
+        if rate != 48000 or abs(frames - 48000) > 2 or abs(peak - 0.5) > 0.01:
+            raise RuntimeError(f"a second at 44.1 kHz came out {frames} frames at {rate} Hz, peak {peak:.3f}")
+        return f"soxr {soxr.__version__}, a second at 44.1 kHz made ready at 48 kHz"
+
     def interface():
         index = app_root() / "ui" / "dist" / "index.html"
         if not index.exists():
@@ -310,6 +334,7 @@ def selftest():
     check("MIDI files", midi_files)
     check("click and WAV tempo", click_and_wav_tempo)
     check("sample formats", encoder)
+    check("backing track", backing_track)
     check("numpy", numpy_works)
     check("history database", database)
     check("window toolkit", window_toolkit)

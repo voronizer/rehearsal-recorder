@@ -150,7 +150,9 @@ def _mix(opened, start, stop):
     """
     The samples `start` to `stop` of every track added into one mono block, 1.0
     being full scale; zero where a file does not reach, before it or after.
-    A stereo track is its two sides averaged.
+    A stereo track is its two sides averaged. A track is opened as
+    `player._open_track` opens a take's WAV, or as a backing track's ready
+    file is (`backing_file.open_ready`, 32-bit float).
     """
     out = np.zeros(stop - start, dtype=np.float32)
     for data, frames, _, sample_bytes, width in opened:
@@ -162,6 +164,8 @@ def _mix(opened, start, stop):
             whole = np.zeros((last - first) * width, dtype=np.int32)
             unpack24(np.ascontiguousarray(piece).reshape(-1, 3), whole)
             piece = whole.reshape(last - first, width).astype(np.float32) * np.float32(1 / 8388608)
+        elif sample_bytes == 4:
+            piece = np.asarray(piece, dtype=np.float32)
         else:
             piece = piece.astype(np.float32) * np.float32(1 / 32768)
         out[first - start:last - start] += piece.mean(axis=1)
@@ -180,7 +184,12 @@ def _audio_envelope(paths, hop=COUNT_HOP, stop=None):
     `stop`, when given, is asked before each block, and raises Cancelled
     when it says so.
     """
-    opened = [_open_track(path) for path in paths]
+    return _envelope([_open_track(path) for path in paths], hop, stop)
+
+
+def _envelope(opened, hop=COUNT_HOP, stop=None):
+    """`_audio_envelope` of tracks already opened, as `_mix` takes them: a
+    backing track's ready file counts through here."""
     sr = opened[0][2]
     total = max(frames for _, frames, _, _, _ in opened)
     hop = int(round(sr * hop / 22050))
