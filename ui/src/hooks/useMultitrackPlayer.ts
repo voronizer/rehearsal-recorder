@@ -25,6 +25,14 @@ const PEAKS_SETTLE_MS = 150
  *  is left of it past the go's end is no loop to listen to. */
 const MIN_KEPT_REGION_SEC = 0.5
 
+/** The take's song, for its Backing track: its id, and whether that track
+ *  opens heard, as the take was read with it. */
+export type TakeSong = { id: number | null; heard: boolean }
+
+/** M on a song's Backing track as last left since the app started, by the
+ *  song's id: newer than what a take read before the press says. */
+const heardBySong = new Map<number, boolean>()
+
 /**
  * Where a take was being listened to, in seconds from its start: what
  * another go at the same song opens at. Goes do not line up exactly, but
@@ -46,10 +54,16 @@ export type Spot = {
  * The position is polled ~8 times a second and advanced locally by the
  * browser clock in between, otherwise the cursor on the waveform would move
  * in visible steps.
+ *
+ * A take's Backing track opens muted the first time a take of its song
+ * opens, and after that as M on it was last left for that song, which is
+ * kept with the song (backing-track spec Part 7). `song` says which song
+ * and how it was left when the take was read.
  */
 export function useMultitrackPlayer(
   tracks: TrackFile[] | null,
-  fallbackDuration = 0
+  fallbackDuration = 0,
+  song: TakeSong | null = null
 ) {
   const [media, setMedia] = useState<TrackMedia[]>([])
   const [loading, setLoading] = useState(false)
@@ -104,6 +118,12 @@ export function useMultitrackPlayer(
   // as soon as it is open.
   const [attempt, setAttempt] = useState(0)
   const playOnOpen = useRef(false)
+  // The song of the take in hand, read when it opens and when M is pressed:
+  // a new answer for the same take does not open it again.
+  const songRef = useRef(song)
+  useEffect(() => {
+    songRef.current = song
+  })
 
   const applyState = useCallback(
     (s: {
@@ -196,6 +216,19 @@ export function useMultitrackPlayer(
         release = playerOpened((v) => void api().player_set_master(v))
         setOutputWarning(opened.warning ?? null)
         applyState(opened, openAsked)
+        // Its Backing track muted or heard as its song has it, before
+        // anything waiting for the open plays it.
+        const backing = tracks.find((t) => t.kind === "backing")
+        if (backing) {
+          const of = songRef.current
+          const heardNow = (of?.id != null ? heardBySong.get(of.id) : undefined) ?? of?.heard ?? false
+          if ((opened.muted ?? []).includes(backing.name) === heardNow) {
+            const muteAsked = askingPlayerClick()
+            const s = await api().player_set_muted(backing.name, !heardNow)
+            if (cancelled) return
+            applyState(s, muteAsked)
+          }
+        }
         setLoading(false)
         settle()
       } catch (e) {
@@ -477,8 +510,16 @@ export function useMultitrackPlayer(
     isMuted: (name: string) => muted.includes(name),
     isSoloed: (name: string) => soloed === name,
     hasSolo: soloed !== null,
-    toggleMute: (name: string) =>
-      void call(() => api().player_set_muted(name, !muted.includes(name))),
+    toggleMute: (name: string) => {
+      const heardNext = muted.includes(name)
+      void call(() => api().player_set_muted(name, !heardNext))
+      // M on the Backing track is kept with its song.
+      const id = songRef.current?.id
+      if (id != null && tracks?.some((t) => t.name === name && t.kind === "backing")) {
+        heardBySong.set(id, heardNext)
+        void api().set_song_backing_heard(id, heardNext)
+      }
+    },
     toggleSolo: (name: string) =>
       void call(() => api().player_set_solo(soloed === name ? null : name)),
     getVolume: (name: string) => volumes[name] ?? 1,

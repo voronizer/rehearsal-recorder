@@ -39,7 +39,7 @@ const group = (page: Page, name: string) =>
 /** The tabs, in the order the section list gives them. */
 const TAB_NAMES = [
   "Audio",
-  "Metronome",
+  "Click & backing track",
   "Folders",
   "Marks",
   "Sets",
@@ -63,7 +63,7 @@ const away = (page: Page) => page.mouse.move(0, 0, { steps: 8 })
 
 test("Settings has a way back on the keyboard too", async ({ page }) => {
   await openSettings(page)
-  await expect.poll(() => keyOn(page.getByRole("button", { name: "Back" }))).toBe("Esc")
+  await expect.poll(() => keyOn(page.getByRole("button", { name: "Back", exact: true }))).toBe("Esc")
   await page.keyboard.press("Escape")
   await expect(startButton(page)).toBeVisible()
   await expect(page.locator("#input-device")).toHaveCount(0)
@@ -187,7 +187,7 @@ test.describe("the frame and the section list", () => {
     await expect(tooltip(page)).toHaveCount(0)
 
     // Tab reaches them in their order, each saying its name in the tip.
-    await page.getByRole("button", { name: "Back" }).focus()
+    await page.getByRole("button", { name: "Back", exact: true }).focus()
     for (const [i, name] of TAB_NAMES.entries()) {
       await page.keyboard.press("Tab")
       await expect(icons.nth(i), name).toBeFocused()

@@ -3,9 +3,10 @@
  * read and save: two outputs, the settings as Python starts with them, and
  * every change kept for as long as the page is open; and a song's tempo
  * saved and counted, its click, and the click with a take, for the pieces
- * that ask. Only the stories use it; the app's bridge is pywebview's.
- * `saved` changes the settings it starts with, and `missing` names a click
- * output that is not plugged in.
+ * that ask; and the backing track's output and volume beside the click's,
+ * as Settings › Click & backing track shows them. Only the stories use it;
+ * the app's bridge is pywebview's. `saved` changes the settings it starts
+ * with, and `missing` names a click output that is not plugged in.
  */
 export function stubBridge(saved: Record<string, unknown> = {}, missing: string | null = null) {
   const settings: Record<string, unknown> = {
@@ -20,6 +21,12 @@ export function stubBridge(saved: Record<string, unknown> = {}, missing: string 
     drift_tolerance: 0.02,
     output_device_index: 3,
     output_channels: [1, 2],
+    backing_device_index: null,
+    backing_device_missing: null,
+    backing_channels: null,
+    backing_volume: 0.8,
+    backing_on: true,
+    backing_row: true,
     ...saved,
   }
   const ok = async () => ({ ok: true })
@@ -30,9 +37,9 @@ export function stubBridge(saved: Record<string, unknown> = {}, missing: string 
       get_settings: async () => ({ ...settings }),
       list_output_devices: async () => [
         { index: 1, name: "MacBook Pro Speakers", host_api: "Core Audio", max_input_channels: 0,
-          max_output_channels: 2, default_samplerate: 48000, click_unavailable: null },
+          max_output_channels: 2, default_samplerate: 48000, click_unavailable: null, backing_unavailable: null },
         { index: 3, name: "X18", host_api: "Core Audio", max_input_channels: 18,
-          max_output_channels: 6, default_samplerate: 48000, click_unavailable: null },
+          max_output_channels: 6, default_samplerate: 48000, click_unavailable: null, backing_unavailable: null },
       ],
       set_click_device: async (index: number | null) => {
         settings.click_device_index = index
@@ -48,6 +55,20 @@ export function stubBridge(saved: Record<string, unknown> = {}, missing: string 
         return { ok: true }
       },
       metronome_preview: ok,
+      set_backing_device: async (index: number | null) => {
+        settings.backing_device_index = index
+        settings.backing_channels = index === null ? null : [1, 2]
+        return { ok: true }
+      },
+      set_backing_channels: async (channels: number[]) => {
+        settings.backing_channels = channels
+        return { ok: true }
+      },
+      set_backing_setting: async (key: string, value: unknown) => {
+        settings[key] = value
+        return { ok: true }
+      },
+      backing_preview: ok,
       metronome_tap_listen: ok,
       metronome_taps: async () => ({ ms_ago: [] }),
       metronome_state: async () => ({

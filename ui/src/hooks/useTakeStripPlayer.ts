@@ -40,7 +40,8 @@ export function useTakeStripPlayer<T extends Take = Take>(
   const loaded = selected ?? cued
   const player = useMultitrackPlayer(
     loaded?.tracks ?? null,
-    loaded?.duration_sec ?? 0
+    loaded?.duration_sec ?? 0,
+    loaded ? { id: loaded.song_id ?? null, heard: loaded.backing_heard ?? false } : null
   )
 
   // What to do once the take being opened is open: seek to a note in it,

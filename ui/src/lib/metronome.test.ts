@@ -37,6 +37,17 @@ function state(over: Partial<MetronomeState> = {}): MetronomeState {
     count: 0,
     since_count_in_ms: null,
     output_missing: null,
+    backing: {
+      song: null,
+      on: true,
+      volume: 0.8,
+      row: false,
+      playing: false,
+      position_sec: 0,
+      output_missing: null,
+      getting_ready: false,
+      free: false,
+    },
     ...over,
   }
 }

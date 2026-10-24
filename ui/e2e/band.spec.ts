@@ -124,7 +124,7 @@ test("the band's click output offers its desk on ASIO", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click()
   await page
     .getByRole("navigation", { name: "Settings sections" })
-    .getByRole("button", { name: "Metronome", exact: true })
+    .getByRole("button", { name: "Click & backing track", exact: true })
     .click()
   const output = page.locator("[data-tab-body]").getByRole("region", { name: "Click output" })
   await output.getByRole("combobox", { name: "Driver" }).click()

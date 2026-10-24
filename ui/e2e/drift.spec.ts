@@ -189,10 +189,10 @@ test("a wider tolerance in Settings leaves fewer stretches amber", async ({ page
   await expect(chips(page)).toHaveText(["+7"])
 })
 
-test("the tolerance is picked in Settings > Metronome", async ({ page }) => {
+test("the tolerance is picked in Settings > Click & backing track", async ({ page }) => {
   await openApp(page)
   await page.getByRole("button", { name: "Settings" }).click()
-  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("button", { name: "Metronome", exact: true }).click()
+  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("button", { name: "Click & backing track", exact: true }).click()
   const group = page.locator("[data-tab-body]").getByRole("region", { name: "Tempo drift" })
   await expect(group).toContainText(
     "How far from the tempo a stretch of two bars turns amber on Master. 2% is about 2.5 bpm at 128."
@@ -205,7 +205,7 @@ test("the tolerance is picked in Settings > Metronome", async ({ page }) => {
     .poll(async () => (await calls(page, "set_metronome_setting")).map((c) => c.args))
     .toEqual([["drift_tolerance", 0.03]])
   await expect(page.locator("[data-tab-body]")).toContainText(
-    "The click's settings are also behind the gear in the metronome row, on the rehearsal screen."
+    "The click's and the backing track's settings are also behind the gear in the metronome row, on the rehearsal screen."
   )
 })
 

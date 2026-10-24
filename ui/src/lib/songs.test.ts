@@ -176,6 +176,10 @@ describe("the lines under a song", () => {
       songLine(song(1, "Dym", { last_played: "2026-09-28T19:00:00" }), NOW)
     ).toBe("1 take · 1 rehearsal · last 28 Sep")
   })
+  it("says a song made before its first take has none yet", () => {
+    const hlyboka = song(5, "Hlyboka", { goes: 0, rehearsals: 0, first_played: null, last_played: null })
+    expect(songLine(hlyboka, NOW)).toBe("No takes yet")
+  })
   it("says the year of a date before this one", () => {
     const goes = [go("/b", 1, "2026-01-08T19:00:00"), go("/a", 1, "2025-12-30T19:00:00")]
     expect(pageLine(goes, false, NOW)).toBe(
@@ -185,6 +189,11 @@ describe("the lines under a song", () => {
   it("says the year of Not named's last day before this one", () => {
     expect(pageLine([go("/a", 2, "2025-12-30T19:00:00")], true, NOW)).toBe(
       "1 take in 1 rehearsal · last Tue 30 Dec 2025"
+    )
+  })
+  it("says a song with no takes yet gets its first from a take kept under its title", () => {
+    expect(pageLine([], false, NOW)).toBe(
+      "No takes yet: its first comes with the first take kept under this title."
     )
   })
   it("says only the last day for Not named", () => {

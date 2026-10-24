@@ -9,7 +9,7 @@ import type { TakeClick } from "@/lib/metronome"
  * Settings redraws the line without counting the take again.
  */
 
-/** How far off a bar may be before it can turn amber: Settings › Metronome's
+/** How far off a bar may be before it can turn amber: Settings › Click & backing track's
  *  "Drift shown past". */
 export const TOLERANCES = [0.01, 0.02, 0.03, 0.05] as const
 export type DriftTolerance = (typeof TOLERANCES)[number]

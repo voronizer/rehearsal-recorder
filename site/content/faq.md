@@ -37,6 +37,15 @@ song without one, the take's own middle. Where the band ran ahead or dragged
 by more than 2% (you can change that in Settings), the line turns amber and
 says by how much.
 
+## Can it play a backing track?
+
+Yes. A song can keep one audio file, mono or stereo: a backing track, pads, a
+loop. Add it on the song's page in History: the app counts its tempo and
+finds bar 1, or you drag bar 1 to where you hear it. It comes in on bar 1,
+right after the count-in, through the output you choose: the speakers, say,
+while the click stays in the drummer's headphones. The take keeps it as a
+track of its own, so you can listen to the band without it.
+
 ## Where do the recordings go?
 
 Into RehearsalRecordings in your home folder: a folder for each rehearsal, a

@@ -36,7 +36,7 @@ const tap = (page: Page) => row(page).getByRole("button", { name: /^Tap/ })
 const play = (page: Page) => row(page).getByRole("button", { name: "Play the click" })
 const stopClick = (page: Page) => row(page).getByRole("button", { name: "Stop the click" })
 const onOff = (page: Page) => row(page).getByRole("button", { name: "Click in takes" })
-const gear = (page: Page) => row(page).getByRole("button", { name: "Metronome settings" })
+const gear = (page: Page) => row(page).getByRole("button", { name: "Click and backing track" })
 const dots = (page: Page) => row(page).locator("[data-beat-dots] [data-dot]")
 const status = (page: Page) => row(page).locator("[data-status-line]")
 const record = (page: Page) => page.getByRole("button", { name: /Record take/ })
@@ -858,7 +858,7 @@ test.describe("while a take records", () => {
       // No gear, no Tap, no tempo field during a take.
       await expect(take.getByRole("textbox")).toHaveCount(0)
       await expect(take.getByRole("button", { name: /^Tap/ })).toHaveCount(0)
-      await expect(take.getByRole("button", { name: "Metronome settings" })).toHaveCount(0)
+      await expect(take.getByRole("button", { name: "Click and backing track" })).toHaveCount(0)
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(960)
     })
   }
@@ -867,7 +867,7 @@ test.describe("while a take records", () => {
 test("the gear holds the four settings, and a sound picked plays a bar", async ({ page }) => {
   await rehearse(page, "Pałyn")
   await gear(page).click()
-  const pop = page.getByRole("dialog", { name: "Metronome settings" })
+  const pop = page.getByRole("dialog", { name: "Click and backing track" })
   await expect(pop).toBeVisible()
   await expect(pop.getByRole("combobox", { name: "Click output" })).toBeVisible()
   await expect(pop.getByRole("radiogroup", { name: "Sound" }).getByRole("radio")).toHaveText([
@@ -881,7 +881,7 @@ test("the gear holds the four settings, and a sound picked plays a bar", async (
     "2 bars",
   ])
   await expect(pop.getByRole("slider", { name: "Click volume" })).toHaveAttribute("aria-valuenow", "0.7")
-  await expect(pop).toContainText("The same settings are in Settings › Metronome.")
+  await expect(pop).toContainText("The same settings are in Settings › Click & backing track.")
   await pop.getByRole("radio", { name: "Woodblock" }).click()
   await expect.poll(async () => (await calls(page, "set_metronome_setting")).map((c) => c.args)).toEqual([
     ["click_sound", "wood"],
@@ -911,9 +911,12 @@ test("the gear holds the four settings, and a sound picked plays a bar", async (
 
 test.describe("the click's output", () => {
   const device = (page: Page) =>
-    page.getByRole("dialog", { name: "Metronome settings" }).getByRole("combobox", { name: "Click output" })
+    page.getByRole("dialog", { name: "Click and backing track" }).getByRole("combobox", { name: "Click output" })
   const outputs = (page: Page) =>
-    page.getByRole("dialog", { name: "Metronome settings" }).getByRole("combobox", { name: "Outputs" })
+    page
+      .getByRole("dialog", { name: "Click and backing track" })
+      .getByRole("group", { name: "Click output" })
+      .getByRole("combobox", { name: "Outputs" })
 
   test("the click goes where the player plays until its output is picked", async ({ page }) => {
     await rehearse(page, "Pałyn")
@@ -992,17 +995,17 @@ test.describe("the click's output", () => {
   })
 })
 
-// ---- Settings › Metronome, a song's page in History, and Master --------
+// ---- Settings › Click & backing track, a song's page, and Master ------
 // (spec Parts 6, 7 and 8): the same settings in the tab as behind the gear,
 // a song's tempo saved from its page at once, and the click on Master with
 // its stripes in the player.
 
-/** Settings, on its Metronome tab. */
+/** Settings, on its tab Click & backing track. */
 async function metronomeTab(page: Page, before = "") {
   await openApp(page, { before })
   await page.getByRole("button", { name: "Settings" }).click()
-  await sectionButton(page, "Metronome").click()
-  await expect(page.locator("[data-tab-head]")).toContainText("Where the click is heard, its sound, and the count-in")
+  await sectionButton(page, "Click & backing track").click()
+  await expect(page.locator("[data-tab-head]")).toContainText("Where the click and the backing track are heard, the click's sound, and the count-in")
 }
 const sectionButton = (page: Page, name: string) =>
   page.getByRole("navigation", { name: "Settings sections" }).getByRole("button", { name, exact: true })
@@ -1031,16 +1034,16 @@ test("the tab and the gear show the same settings", async ({ page }) => {
     "Clicked before every take that has the click. It is in the recording; the take's clock starts after it."
   )
   await expect(tab).toContainText(
-    "The click's settings are also behind the gear in the metronome row, on the rehearsal screen."
+    "The click's and the backing track's settings are also behind the gear in the metronome row, on the rehearsal screen."
   )
   // Changed in the tab, and the gear shows it: one setting underneath.
   await tab.getByRole("radio", { name: "Woodblock" }).click()
   await expect.poll(() => settingCalls(page)).toEqual([["click_sound", "wood"]])
-  await page.getByRole("button", { name: "Back" }).click()
+  await page.getByRole("button", { name: "Back", exact: true }).click()
   await startRehearsal(page)
   await nameNext(page, "Pałyn")
   await gear(page).click()
-  const pop = page.getByRole("dialog", { name: "Metronome settings" })
+  const pop = page.getByRole("dialog", { name: "Click and backing track" })
   await expect(pop.getByRole("combobox", { name: "Click output" })).toHaveText("Where the player plays")
   await expect(checkedIn(pop, "Sound")).toHaveText("Woodblock")
   await expect(checkedIn(pop, "Count-in")).toHaveText("2 bars")
@@ -1080,7 +1083,7 @@ test("the WAV checkbox is on by default and saves", async ({ page }) => {
   await expect(wav).not.toBeChecked()
   // Read back from the settings when the tab opens again.
   await sectionButton(page, "Audio").click()
-  await sectionButton(page, "Metronome").click()
+  await sectionButton(page, "Click & backing track").click()
   await expect(tabBody(page).getByRole("checkbox", { name: "Write the tempo into WAV files" })).not.toBeChecked()
   await tabBody(page).getByRole("checkbox", { name: "Write the tempo into WAV files" }).click()
   await expect.poll(async () => (await settingCalls(page)).at(-1)).toEqual(["tempo_in_wav", true])

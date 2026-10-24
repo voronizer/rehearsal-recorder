@@ -121,8 +121,10 @@ export function fromLastTime(goes: SongGo[]): { go: SongGo; marker: Marker }[] {
     )
 }
 
-/** "7 takes · 4 rehearsals · last 28 Sep", under a song in the list. */
+/** "7 takes · 4 rehearsals · last 28 Sep", under a song in the list; "No
+ *  takes yet" under one made with New song or kept for its backing track. */
 export function songLine(s: SongSummary, now: Date = new Date()): string {
+  if (s.last_played === null) return "No takes yet"
   return `${takesLabel(s.goes)} · ${rehearsalsLabel(s.rehearsals)} · last ${formatDate(s.last_played, now)}`
 }
 
@@ -133,10 +135,12 @@ export function notNamedLine(n: NotNamedSummary, now: Date = new Date()): string
 
 /** Under a song's title on its page: "12 takes in 5 rehearsals · first 2 Aug
  *  · last 30 Sep"; for the takes nobody named, "3 takes in 2 rehearsals ·
- *  last Tue 22 Sep". */
+ *  last Tue 22 Sep"; for a song with no takes yet, made with New song or
+ *  kept for its backing track, where its first comes from. */
 export function pageLine(goes: SongGo[], unnamed: boolean, now: Date = new Date()): string {
   const rungs = rungsOf(goes)
-  if (rungs.length === 0) return ""
+  if (rungs.length === 0)
+    return unnamed ? "" : "No takes yet: its first comes with the first take kept under this title."
   const newest = rungs[0].created_at
   const oldest = rungs[rungs.length - 1].created_at
   if (unnamed)

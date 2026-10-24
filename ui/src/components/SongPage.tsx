@@ -1,11 +1,11 @@
-import { useCallback, type ReactNode } from "react"
+import { useCallback, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { MarkLine } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
 import { useCut, WholeTip } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
 import { useKeysOn } from "@/lib/keys"
-import type { Label, Marker, SongDetail, SongGo } from "@/lib/api"
+import type { Label, Marker, Signature, SongDetail, SongGo } from "@/lib/api"
 import { formatDayIn } from "@/lib/format"
 import { labelOf, markText, useLabels } from "@/lib/labels"
 import { rise } from "@/lib/motion"
@@ -23,6 +23,7 @@ import { OldNames } from "@/components/OldNames"
 import { PaneHead } from "@/components/PaneHead"
 import { TakeRow } from "@/components/RehearsalOverview"
 import { SongLadder } from "@/components/SongLadder"
+import { SongBacking, type BackingSong } from "@/components/backing/SongBacking"
 import { SongTempoRow } from "@/components/metronome/SongTempoRow"
 import { TakeTitle } from "@/components/TakeTitle"
 
@@ -32,7 +33,10 @@ import { TakeTitle } from "@/components/TakeTitle"
  * the ▶ that plays the take worth hearing first (the newest ★ one, or the
  * last) from a rehearsal on disk, the title with the pencil for Rename song,
  * how much it was played and when, what ▶ plays, the names it is also
- * typed as, each to forget, and its tempo (SongTempoRow).
+ * typed as, each to forget, its tempo (SongTempoRow) and its backing track
+ * (SongBacking). A song with no takes yet, made with New song or kept for
+ * its backing track, says where its first comes from, and has nothing to
+ * play.
  *
  * Under the head, one group, its parts split by lines: the ★ takes on their
  * own, then what the band marked on the song last time, then every take as a
@@ -57,6 +61,7 @@ export function SongPage({
   onOpenRehearsal,
   onRenameSong,
   onForgetName,
+  onChanged,
 }: {
   page: SongDetail
   playback: PlacedPlayback | null
@@ -73,6 +78,9 @@ export function SongPage({
   onOpenRehearsal: (folder: string) => void
   onRenameSong: () => void
   onForgetName: (name: string) => void
+  /** The song was changed on its page: the list and the page are read
+   *  again. */
+  onChanged: () => void
 }) {
   const labels = useLabels()
   const goes = page.goes ?? []
@@ -205,6 +213,7 @@ export function SongPage({
         lines={
           <>
             <p className="text-sm text-muted-foreground">{pageLine(goes, unnamed)}</p>
+            {goes.length > 0 && (
             <p className="text-xs text-muted-foreground">
               {unnamed ? (
                 "Takes nobody named. Rename one to give it a song."
@@ -219,18 +228,22 @@ export function SongPage({
                 `▶ plays the last take, ${plays.take.name} · ${formatDayIn(plays.created_at)}`
               )}
             </p>
+            )}
             {!unnamed && <OldNames names={page.also ?? []} onForget={onForgetName} />}
-            {/* Its tempo, under what it is: changed here, saved at once. */}
+            {/* Its tempo and backing track, under what it is: changed here,
+                saved at once. */}
             {!unnamed && page.id != null && page.title != null && (
-              <SongTempoRow
+              <SongSetup
                 key={page.id}
                 song={{
                   id: page.id,
                   title: page.title,
                   tempo: page.tempo ?? null,
                   signature: page.signature ?? null,
+                  backing: page.backing ?? null,
                 }}
                 takes={goes}
+                onChanged={onChanged}
               />
             )}
           </>
@@ -256,6 +269,56 @@ export function SongPage({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * A song's tempo row and its backing track, which go by the same tempo: the
+ * one the tempo row has saved, or the backing track's once the song takes
+ * it, shown in both at once, before the page is read again. One ▶ plays at
+ * a time: each stops the other.
+ */
+function SongSetup({
+  song,
+  takes,
+  onChanged,
+}: {
+  song: BackingSong
+  takes: SongGo[]
+  onChanged: () => void
+}) {
+  const [meter, setMeter] = useState({ tempo: song.tempo, signature: song.signature })
+  // The song as the page reads it again: its tempo now.
+  const [read, setRead] = useState({ tempo: song.tempo, signature: song.signature })
+  if (read.tempo !== song.tempo || read.signature !== song.signature) {
+    setRead({ tempo: song.tempo, signature: song.signature })
+    setMeter({ tempo: song.tempo, signature: song.signature })
+  }
+  const onSaved = useCallback(
+    (tempo: number | null, signature: Signature) =>
+      setMeter((m) => (m.tempo === tempo && m.signature === signature ? m : { tempo, signature })),
+    []
+  )
+  // How many times each ▶ was stopped by the other's.
+  const [stops, setStops] = useState({ click: 0, backing: 0 })
+  const now = { ...song, tempo: meter.tempo, signature: meter.signature }
+  return (
+    <>
+      <SongTempoRow
+        song={now}
+        takes={takes}
+        onSaved={onSaved}
+        stopped={stops.click}
+        onPlay={() => setStops((s) => ({ ...s, backing: s.backing + 1 }))}
+      />
+      <SongBacking
+        song={now}
+        onTempo={(tempo) => setMeter((m) => ({ ...m, tempo }))}
+        onChanged={onChanged}
+        stopped={stops.backing}
+        onPlay={() => setStops((s) => ({ ...s, click: s.click + 1 }))}
+      />
+    </>
   )
 }
 

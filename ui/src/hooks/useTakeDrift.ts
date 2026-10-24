@@ -23,7 +23,9 @@ const AGAIN_MS = 2000
 export function useTakeDrift(take: DriftTake | null | undefined): DriftView {
   const key = take?.tracks?.length
     ? JSON.stringify({
-        tracks: take.tracks.map((t) => ({ name: t.name, file: t.file })),
+        // The kind goes too: Python leaves the Backing track out of the mix
+        // by it (backing-track spec Part 9).
+        tracks: take.tracks.map((t) => ({ name: t.name, file: t.file, ...(t.kind ? { kind: t.kind } : {}) })),
         notes: (take.notes ?? []).map((n) => ({ name: n.name, file: n.file })),
         meter: {
           tempo: take.tempo ?? null,
@@ -69,7 +71,7 @@ export function useTakeDrift(take: DriftTake | null | undefined): DriftView {
 }
 
 /**
- * Settings › Metronome's "Drift shown past", for every player at once: read
+ * Settings › Click & backing track's "Drift shown past", for every player at once: read
  * from the settings when a player first asks, and told of a change by the
  * settings that made it (`driftToleranceChanged`), so a line already drawn
  * turns amber in more or fewer places without counting again.

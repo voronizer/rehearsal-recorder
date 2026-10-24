@@ -4,6 +4,7 @@
 // here: still, and not for clicking.
 import { Fragment, type ReactNode } from "react"
 import { Metronome, Play } from "lucide-react"
+import { SongBacking } from "@/components/backing/SongBacking"
 import { HealthLine } from "@/components/HealthLine"
 import { NoticeItem } from "@/components/Notices"
 import { FoldersSettings } from "@/components/FoldersSettings"
@@ -34,7 +35,7 @@ import {
 } from "@/lib/api"
 import { trashName, wentTo } from "@/lib/deletion"
 import { DEFAULT_TOLERANCE, spokenDrift, stretches, type TakeDrift } from "@/lib/drift"
-import { formatTempo } from "@/lib/format"
+import { formatBarOne, formatMMSS, formatTempo } from "@/lib/format"
 import { perBar, songLine, statusLine, tapTempo } from "@/lib/metronome"
 import type { Notice } from "@/lib/notices"
 import { siteNotes, type SiteNotes } from "../stage/demo"
@@ -44,6 +45,7 @@ import { siteNotes, type SiteNotes } from "../stage/demo"
 export type PieceId =
   | "set"
   | "tap"
+  | "backing"
   | "counted"
   | "first-take"
   | "midi"
@@ -65,8 +67,9 @@ export type PieceData = {
   set: RehearsalSet | null
   /** The drums' and the keys' notes for the MIDI piece (stage/notes.js). */
   notes: SiteNotes
-  /** Pałyn as the library has it, with its tempo, for the metronome's row
-   *  after a tap and for its tempo counted on its page. */
+  /** Pałyn as the library has it, with its tempo and its backing track,
+   *  for the metronome's row after a tap, for its tempo counted on its page
+   *  and for its backing track there. */
   song: SongSummary | null
   /** A song the library has with no tempo yet, for the row that says the
    *  first take keeps the one typed in. */
@@ -299,6 +302,18 @@ function rowOf(song: SongSummary, typed: number | null = null): MetronomeState |
     count: 0,
     since_count_in_ms: null,
     output_missing: null,
+    // The backing track's row is left out: these pieces are of the tempo.
+    backing: {
+      song: null,
+      on: true,
+      volume: 0.8,
+      row: false,
+      playing: false,
+      position_sec: 0,
+      output_missing: null,
+      getting_ready: false,
+      free: false,
+    },
   }
 }
 
@@ -369,6 +384,32 @@ function CountedRow({ title, count }: { title: string; count: Counted }) {
   )
 }
 
+/**
+ * A song's backing track on its page in History (SongBacking), as Python has
+ * it: the file's name and length, Bar 1 at, the start of the file drawn with
+ * the song's bars over it, and the line under it. On a phone its first row
+ * wraps, as the page's does in a narrow window.
+ */
+function Backing({ song }: { song: SongSummary }) {
+  return (
+    <div className="w-[33rem] max-w-full">
+      <SongBacking
+        song={{
+          id: song.id,
+          title: song.title,
+          tempo: song.tempo ?? null,
+          signature: song.signature ?? null,
+          backing: song.backing ?? null,
+        }}
+        onTempo={nothing}
+        onChanged={nothing}
+        stopped={0}
+        onPlay={nothing}
+      />
+    </div>
+  )
+}
+
 /** A notice as the corner of the window draws it (Notices), kept on show:
  *  its time does not run. */
 function NoticeView({ notice }: { notice: Pick<Notice, "kind" | "text" | "action"> }) {
@@ -395,10 +436,10 @@ const STALLED =
 const GONE = "Pałyn 5"
 
 /**
- * The end of Settings › Metronome, as the tab lays it out: Write the tempo
- * into WAV files, on, as Python has it unless turned off (get_settings,
- * which the tab asks itself), and the line under it. The rest of the tab
- * is left out: all of it is twice as tall as the window.
+ * The end of Settings › Click & backing track, as the tab lays it out:
+ * Write the tempo into WAV files, on, as Python has it unless turned off
+ * (get_settings, which the tab asks itself), and the line under it. The
+ * rest of the tab is left out: all of it is twice as tall as the window.
  */
 function WavTempo() {
   return (
@@ -465,6 +506,13 @@ export function itemPieces({
         label={`The metronome's row with ${afterTap.song.title} picked, just after the drummer tapped on the pads: ${formatTempo(afterTap.tempo!, afterTap.signature)}, held until another song, with Save to song, since ${afterTap.song.title} has ${formatTempo(afterTap.song.tempo, afterTap.signature)}`}
       >
         <Row state={afterTap} />
+      </Piece>
+    ) : null,
+    backing: song?.backing ? (
+      <Piece
+        label={`${song.title}'s backing track on its page in History: ${song.backing.name}${song.backing.seconds !== null ? `, ${formatMMSS(song.backing.seconds)}` : ""}, the start of the file drawn with the song's bars over it, bar 1 at ${formatBarOne(song.backing.first_bar)}`}
+      >
+        <Backing song={song} />
       </Piece>
     ) : null,
     counted: song && counted ? (
@@ -536,7 +584,7 @@ export function itemPieces({
       </Piece>
     ) : null,
     "wav-tempo": (
-      <Piece label="Settings › Metronome at its end, with Write the tempo into WAV files ticked">
+      <Piece label="Settings › Click & backing track at its end, with Write the tempo into WAV files ticked">
         <WavTempo />
       </Piece>
     ),

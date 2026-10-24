@@ -14,7 +14,7 @@ see models.py for why.
 
 from pathlib import Path, PurePosixPath
 
-from sqlalchemy import Integer, cast, func, select, update
+from sqlalchemy import Integer, cast, exists, func, or_, select, update
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import object_session, selectinload, sessionmaker
 
@@ -22,7 +22,7 @@ from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, tempo_ran
 from rehearsal_recorder.midi import rules
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
-    AUDIO_FILE, NOTES_FILE, CloudCopy, Label, Marker, Rehearsal, Song, SongName, SongSet,
+    AUDIO_FILE, BACKING_FILE, NOTES_FILE, CloudCopy, Label, Marker, Rehearsal, Song, SongName, SongSet,
     Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
@@ -112,6 +112,15 @@ def _relative(path, root):
     """`path` relative to `root`, with forward slashes; ValueError when it is
     not inside."""
     return Path(path).resolve().relative_to(Path(root).resolve()).as_posix()
+
+
+# A song's backing track, as merge_songs moves it from one song to another.
+BACKING_COLUMNS = ("backing_file", "backing_name", "backing_first_bar", "backing_tempo", "backing_heard")
+
+
+def _hundredths(seconds):
+    """Seconds to a hundredth, never below 0: where bar 1 of a backing track is."""
+    return max(0.0, round(float(seconds or 0.0), 2))
 
 
 def paths_overlap(a, b):
@@ -254,13 +263,16 @@ class Library:
             # Not stored: it follows from the song and the go (D3).
             "name": take_name(title, take.go, take.take_number),
             "song": title,
+            # For what the player sets on the song (set_song_backing_heard).
+            "song_id": take.song_id,
             "go": take.go if title is not None else None,
             "starred": take.starred,
             "tempo": take.tempo,
             "signature": take.signature,
             "click": take.click,
             "duration_sec": take.duration_sec,
-            "tracks": [{"name": f.name, "file": str(folder / Path(f.file))} for f in audio],
+            "tracks": [{"name": f.name, "file": str(folder / Path(f.file)),
+                        **({"kind": BACKING_FILE} if f.kind == BACKING_FILE else {})} for f in audio],
             "notes": [
                 {"name": f.name, "file": str(folder / Path(f.file)),
                  "port": ports.get(f.name),
@@ -279,6 +291,9 @@ class Library:
             "cloud": self._copy_data(take.cloud_copy),
             "cloud_skip": take.cloud_skip,
             "cloud_send": take.cloud_send,
+            # Whether its Backing track opens heard: the song's, as the band
+            # last left it (backing track spec, B8).
+            "backing_heard": bool(take.song is not None and take.song.backing_heard),
         }
         if take.cloud_error:
             out["cloud_error"] = take.cloud_error
@@ -324,18 +339,25 @@ class Library:
     @staticmethod
     def _files(folder, files, kind, start=0):
         """[{"name", "file": absolute}] → rows of that kind (AUDIO_FILE or
-        NOTES_FILE) relative to the rehearsal, numbered from `start`."""
+        NOTES_FILE) relative to the rehearsal, numbered from `start`. An audio
+        file that says it is the Backing track ("kind": "backing", as the
+        take gave it) stays one, so a crop that hands the tracks back keeps
+        it."""
         return [
-            TakeFile(position=start + i, name=f["name"], kind=kind,
+            TakeFile(position=start + i, name=f["name"],
+                     kind=BACKING_FILE if kind == AUDIO_FILE and f.get("kind") == BACKING_FILE else kind,
                      file=_relative(f["file"], folder))
             for i, f in enumerate(files)
         ]
 
     @classmethod
     def _take_files(cls, folder, take):
-        """A new take's rows: its "tracks" as audio, then its "notes" as MIDI,
-        one sequence of positions."""
-        audio = cls._files(folder, take.get("tracks") or [], AUDIO_FILE)
+        """A new take's rows: its "tracks" as audio, then its "backing" (the
+        Backing track the app wrote, {"name", "file"}) after them, then its
+        "notes" as MIDI, one sequence of positions."""
+        backing = take.get("backing")
+        tracks = list(take.get("tracks") or []) + ([{**backing, "kind": BACKING_FILE}] if backing else [])
+        audio = cls._files(folder, tracks, AUDIO_FILE)
         return audio + cls._files(folder, take.get("notes") or [], NOTES_FILE, start=len(audio))
 
     @staticmethod
@@ -501,6 +523,17 @@ class Library:
             song = self._songs_by_key(db).get((title or "").casefold())
             return None if song is None else song.id
 
+    def song(self, song_id):
+        """{"id", "title", "tempo", "signature", "backing_heard"} of a song,
+        tempo and signature None for one with none; None for an id no song
+        has."""
+        with self._session() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                return None
+            return {"id": song.id, "title": song.title, "tempo": song.tempo, "signature": song.signature,
+                    "backing_heard": bool(song.backing_heard)}
+
     def song_tempos(self):
         """{title: (tempo, signature)} for every song, both None for one with
         none: what the songs offered under a take's name carry. One query."""
@@ -565,6 +598,135 @@ class Library:
             song.tempo, song.signature = kept
             return {"id": song.id, "title": song.title, "tempo": song.tempo,
                     "signature": song.signature}
+
+    def add_song(self, title):
+        """
+        A song with no takes yet (New song, backing track spec Part 6), so a
+        tempo and a backing track can be given to it before its first take:
+        its count of goes is 0, so that take is its first. Refused
+        (SongRefused) for an empty title, "Take N", and a title that is a
+        song's or one of a song's old names, saying which song. Returns
+        {"id", "title"}.
+        """
+        title = str(title or "").strip()
+        with self._session.begin() as db:
+            if not title:
+                raise SongRefused("A song needs a title")
+            if UNNAMED_TAKE.match(title):
+                raise SongRefused(f"{title} is what a take with no song is called")
+            try:
+                self._taken(db, title, None)
+            except SongRefused as e:
+                raise SongRefused(f"{e.into['title']} is already a song.", e.into) from None
+            song = Song(title=title, last_go=0)
+            db.add(song)
+            db.flush()
+            return {"id": song.id, "title": song.title}
+
+    @staticmethod
+    def _shown_without_takes():
+        """Which songs with no takes History and Next take offer: one that
+        never had a take, or that holds a backing track."""
+        return ~exists().where(Take.song_id == Song.id) & or_(
+            Song.last_go == 0, Song.backing_file.is_not(None))
+
+    def song_titles_without_takes(self):
+        """The titles of the songs with no takes that are offered under Next
+        take (_shown_without_takes), in case-blind order."""
+        with self._session() as db:
+            titles = db.scalars(select(Song.title).where(self._shown_without_takes())).all()
+        return sorted(titles, key=str.casefold)
+
+    @staticmethod
+    def _backing_out(name, first_bar, tempo):
+        """A song's backing track as lists and pages show it: {"name",
+        "first_bar", "tempo"}, or None for a song with none."""
+        if name is None:
+            return None
+        return {"name": name, "first_bar": first_bar or 0.0, "tempo": tempo}
+
+    def _backing_path(self, stored):
+        return self.recordings_dir / Path(stored)
+
+    def song_backing(self, song_id):
+        """A song's backing track for playing it: {"file": the copy's path,
+        "name", "first_bar", "tempo", "heard"}, or None for a song with none
+        or an id no song has."""
+        with self._session() as db:
+            song = db.get(Song, song_id)
+            if song is None or song.backing_file is None:
+                return None
+            return {"file": self._backing_path(song.backing_file), "name": song.backing_name,
+                    "first_bar": song.backing_first_bar or 0.0, "tempo": song.backing_tempo,
+                    "heard": song.backing_heard}
+
+    def backing_files(self):
+        """{song id: its backing track's copy} for every song that has one.
+        One query."""
+        with self._session() as db:
+            rows = db.execute(select(Song.id, Song.backing_file).where(Song.backing_file.is_not(None))).all()
+        return {song_id: self._backing_path(stored) for song_id, stored in rows}
+
+    def set_song_backing(self, song_id, file, name, first_bar, tempo):
+        """
+        Gives a song a backing track: `file` the app's copy, inside the
+        recordings folder; `name` the file's name as added; bar 1 and the
+        counted tempo (None for no steady beat). Returns the copy it had
+        before, for the Trash, or None. SongRefused for an id no song has.
+        """
+        stored = _relative(file, self.recordings_dir)
+        with self._session.begin() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                raise SongRefused("Song not found")
+            old = song.backing_file
+            song.backing_file, song.backing_name = stored, name
+            song.backing_first_bar = _hundredths(first_bar)
+            song.backing_tempo = _whole(tempo) if tempo is not None else None
+        return None if old is None or old == stored else self._backing_path(old)
+
+    def clear_song_backing(self, song_id):
+        """Takes a song's backing track away. Returns its copy, for the
+        Trash, or None when it had none. Whether a take's Backing track is
+        heard stays with the song."""
+        with self._session.begin() as db:
+            song = db.get(Song, song_id)
+            if song is None or song.backing_file is None:
+                return None
+            old = song.backing_file
+            song.backing_file = song.backing_name = song.backing_first_bar = song.backing_tempo = None
+        return self._backing_path(old)
+
+    def _set_backing(self, song_id, **values):
+        with self._session.begin() as db:
+            song = db.get(Song, song_id)
+            if song is None or song.backing_file is None:
+                return None
+            for column, value in values.items():
+                setattr(song, column, value)
+        return self.song_backing(song_id)
+
+    def set_backing_first_bar(self, song_id, seconds):
+        """Where bar 1 of a song's backing track is, to a hundredth of a
+        second and never before the file's start. Returns song_backing's
+        answer, None for a song with no backing track."""
+        return self._set_backing(song_id, backing_first_bar=_hundredths(seconds))
+
+    def set_backing_tempo(self, song_id, tempo):
+        """The tempo counted from a song's backing track, halved or doubled,
+        or None for none. Returns song_backing's answer."""
+        return self._set_backing(song_id, backing_tempo=None if tempo is None else _whole(tempo))
+
+    def set_backing_heard(self, song_id, heard):
+        """Whether a take's Backing track is heard when a take of the song
+        opens, as M in the player last left it (B8). Kept with the song even
+        without a backing track, as takes keep theirs."""
+        with self._session.begin() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                return None
+            song.backing_heard = bool(heard)
+            return song.backing_heard
 
     def next_goes(self):
         """{title: the go the next take of that song would be}, for every
@@ -661,13 +823,15 @@ class Library:
         twice, and the target's own goes keep theirs. Stars stay on their
         takes (D4). The merged song's title and its old names become the
         target's old names (D7), and its row goes. The target keeps its tempo
-        and signature, or takes the merged song's when it has none. One
-        transaction.
+        and signature, or takes the merged song's when it has none; the same
+        for its backing track, with whether it is heard (backing track spec,
+        Part 6). One transaction.
 
         Returns {"from", "into", "goes", "rehearsals", "first", "last",
-        "takes"}: how many goes from how many rehearsals, the first and last
-        go they get (None with none), and the takes as rename_song gives
-        them. dry_run: the same answer with nothing changed, for the question
+        "takes", "trash"}: how many goes from how many rehearsals, the first
+        and last go they get (None with none), the takes as rename_song gives
+        them, and the copy of a backing track nobody keeps now, for the
+        caller to send to the Trash. dry_run: the same answer with nothing changed, for the question
         asked first (R3, R6).
         """
         with self._session.begin() as db:
@@ -685,6 +849,8 @@ class Library:
                 "first": first if count else None,
                 "last": first + count - 1 if count else None,
                 "takes": self._named(rows, target.title, lambda i, _: first + i),
+                "trash": ([self._backing_path(source.backing_file)]
+                          if source.backing_file and target.backing_file else []),
             }
             if dry_run:
                 return answer
@@ -695,6 +861,9 @@ class Library:
                 target.last_go = first + count - 1
             if target.tempo is None and source.tempo is not None:
                 target.tempo, target.signature = source.tempo, source.signature
+            if target.backing_file is None and source.backing_file is not None:
+                for column in BACKING_COLUMNS:
+                    setattr(target, column, getattr(source, column))
             for name in db.scalars(select(SongName).where(SongName.song_id == source.id)):
                 name.song_id = target.id
             db.add(SongName(song_id=target.id, name=source.title))
@@ -744,13 +913,16 @@ class Library:
         Every song with a go, for History's Songs view, and the takes with no
         song as one more row: {"songs": [{"id", "title", "goes",
         "rehearsals", "first_played", "last_played", "starred", "also",
-        "tempo", "signature"}],
+        "tempo", "signature", "backing"}],
         "not_named": {"takes", "rehearsals", "last_played"} or None}.
+        "backing" is the song's backing track as _backing_out gives it.
 
-        Two queries, the goes grouped by song and the songs' old names, and no
-        folder looked at: a rehearsal on a drive that is not plugged in is
-        counted like any other. A song whose every go was deleted has no
-        takes to group, so it is not listed.
+        Three queries, the goes grouped by song, the songs with none and the
+        songs' old names, and no folder looked at: a rehearsal on a drive that
+        is not plugged in is counted like any other. A song with no takes is
+        listed when it never had one (New song) or holds a backing track; one
+        whose every go was deleted is not, otherwise (backing track spec,
+        Part 6).
         """
         with self._session() as db:
             rows = db.execute(
@@ -764,14 +936,23 @@ class Library:
                     func.sum(cast(Take.starred, Integer)),
                     Song.tempo,
                     Song.signature,
+                    Song.backing_name,
+                    Song.backing_first_bar,
+                    Song.backing_tempo,
                 )
                 .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
                 .outerjoin(Song, Take.song_id == Song.id)
                 .group_by(Take.song_id)
             ).all()
+            empty = db.execute(
+                select(Song.id, Song.title, Song.tempo, Song.signature,
+                       Song.backing_name, Song.backing_first_bar, Song.backing_tempo)
+                .where(self._shown_without_takes())
+            ).all()
             also = self._also(db)
         songs, not_named = [], None
-        for song_id, title, goes, rehearsals, first, last, starred, tempo, signature in rows:
+        for (song_id, title, goes, rehearsals, first, last, starred, tempo, signature,
+             name, first_bar, counted) in rows:
             if song_id is None:
                 not_named = {"takes": goes, "rehearsals": rehearsals, "last_played": last}
                 continue
@@ -779,15 +960,24 @@ class Library:
                           "rehearsals": rehearsals, "first_played": first,
                           "last_played": last, "starred": starred or 0,
                           "also": also.get(song_id, []),
-                          "tempo": tempo, "signature": signature})
+                          "tempo": tempo, "signature": signature,
+                          "backing": self._backing_out(name, first_bar, counted)})
+        for song_id, title, tempo, signature, name, first_bar, counted in empty:
+            songs.append({"id": song_id, "title": title, "goes": 0, "rehearsals": 0,
+                          "first_played": None, "last_played": None, "starred": 0,
+                          "also": also.get(song_id, []),
+                          "tempo": tempo, "signature": signature,
+                          "backing": self._backing_out(name, first_bar, counted)})
         songs.sort(key=lambda s: (s["title"].casefold(), s["id"]))
         return {"songs": songs, "not_named": not_named}
 
     def goes_of(self, song_id):
         """
         A song's goes, from every rehearsal, for its page: {"id", "title",
-        "also", "tempo", "signature", "goes": [{"folder", "rehearsal",
-        "created_at", "missing", "take"}]}, "also" being its old names,
+        "also", "tempo", "signature", "backing", "goes": [{"folder",
+        "rehearsal", "created_at", "missing", "take"}]}, "also" being its old
+        names, "backing" its backing track as _backing_out gives it (None for
+        the takes with no song), and the goes
         the newest rehearsal first and the order played within one. None for
         an id no song has. `song_id` None is the takes with no song, which
         have no tempo or signature.
@@ -802,6 +992,8 @@ class Library:
             title = None if song is None else song.title
             tempo, signature = (None, None) if song is None else (song.tempo, song.signature)
             also = [] if song is None else self._also(db).get(song.id, [])
+            backing = None if song is None else self._backing_out(
+                song.backing_name, song.backing_first_bar, song.backing_tempo)
             goes = self._goes(db, Take.song_id.is_(None) if song_id is None
                               else Take.song_id == song_id)
         cloud = self._cloud_dir()
@@ -812,7 +1004,7 @@ class Library:
                 there[go["folder"]] = Path(go["folder"]).is_dir()
             go["missing"] = not there[go["folder"]]
         return {"id": song_id, "title": title, "also": also,
-                "tempo": tempo, "signature": signature, "goes": goes}
+                "tempo": tempo, "signature": signature, "backing": backing, "goes": goes}
 
     def marks_of(self, label_id):
         """

@@ -15,7 +15,8 @@ written next to where pyinstaller is invoked, and the paths below are
 resolved from this file rather than from the working directory.
 
 Everything goes in: Python itself, numpy, PortAudio (through sounddevice),
-libsndfile (through soundfile), the webview toolkit and the built interface.
+libsndfile (through soundfile), soxr, the webview toolkit and the built
+interface.
 Nobody downloads anything at a rehearsal — a venue with no wifi is normal and
 an app that needs the internet to start recording is useless.
 
@@ -109,9 +110,10 @@ a = Analysis(
     # analysis above cannot see them used and misses them without help.
     # pylibremidi is a compiled module imported inside a function (so that
     # an app without MIDI still starts), which is the other thing the
-    # analysis does not follow.
+    # analysis does not follow. soxr is the same: imported only when a
+    # backing track is made ready, and compiled (soxr.soxr_ext).
     hiddenimports=["send2trash", "sqlalchemy.dialects.sqlite", "mako",
-                   "pylibremidi", *collect_submodules("alembic")],
+                   "pylibremidi", "soxr", "soxr.soxr_ext", *collect_submodules("alembic")],
     hookspath=[],
     excludes=[
         # Nothing here draws with these, and they are large.

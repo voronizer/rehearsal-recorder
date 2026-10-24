@@ -157,11 +157,11 @@ export function useClickSettings() {
       else void done()
     },
     setCountIn: (bars: MetronomeSettings["count_in_bars"]) => void save("count_in_bars", bars),
-    /** Whether a click take's WAVs carry its tempo; Settings › Metronome
+    /** Whether a click take's WAVs carry its tempo; Settings › Click & backing track
      *  only. */
     setTempoInWav: (on: boolean) => void save("tempo_in_wav", on),
     /** How far off two bars of the drift line on Master turn amber, said
-     *  to every player at once; Settings › Metronome only. */
+     *  to every player at once; Settings › Click & backing track only. */
     setDriftTolerance: async (tolerance: DriftTolerance) => {
       if (await save("drift_tolerance", tolerance)) driftToleranceChanged(tolerance)
     },

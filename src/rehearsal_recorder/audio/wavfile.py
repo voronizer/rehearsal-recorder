@@ -17,6 +17,8 @@ import struct
 from dataclasses import dataclass
 
 WAVE_FORMAT_PCM = 1
+# 32-bit float: a backing track's file made ready to play (audio/backing_file.py).
+WAVE_FORMAT_IEEE_FLOAT = 3
 
 # The acid chunk as a DAW reads it, header and all: its id and size, flags
 # (0x04: stretch to the project's tempo), the root note (60, middle C, meaning
@@ -40,9 +42,9 @@ class Acid:
 
 class WavWriter:
     """
-    A 16- or 24-bit PCM WAV, written a block of frames at a time and closed
-    with its sizes (and the acid chunk's beats) filled in. A context manager,
-    as `wave`'s writer is.
+    A 16- or 24-bit PCM WAV, or 32-bit float with a `sampwidth` of 4, written
+    a block of frames at a time and closed with its sizes (and the acid
+    chunk's beats) filled in. A context manager, as `wave`'s writer is.
     """
 
     def __init__(self, path, samplerate, channels, sampwidth, acid=None):
@@ -84,8 +86,9 @@ class WavWriter:
     def _header(self):
         """Everything before the audio, for the audio written so far."""
         block = self._channels * self._sampwidth
+        kind = WAVE_FORMAT_IEEE_FLOAT if self._sampwidth == 4 else WAVE_FORMAT_PCM
         fmt = struct.pack(
-            "<4sIHHIIHH", b"fmt ", 16, WAVE_FORMAT_PCM, self._channels,
+            "<4sIHHIIHH", b"fmt ", 16, kind, self._channels,
             self._samplerate, self._samplerate * block, block, self._sampwidth * 8,
         )
         acid = b""

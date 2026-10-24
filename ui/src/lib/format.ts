@@ -7,6 +7,15 @@ export function formatMMSS(totalSec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`
 }
 
+/** "0:00.80": bar 1's place in a backing track, in minutes and seconds to
+ *  a hundredth, as the song page writes and reads it (parseBarOne). */
+export function formatBarOne(seconds: number): string {
+  const hundredths = Math.round(Math.max(0, isFinite(seconds) ? seconds : 0) * 100)
+  const m = Math.floor(hundredths / 6000)
+  const rest = (hundredths % 6000) / 100
+  return `${m}:${rest.toFixed(2).padStart(5, "0")}`
+}
+
 export function formatHMS(totalSec: number): string {
   if (!isFinite(totalSec) || totalSec < 0) totalSec = 0
   const h = String(Math.floor(totalSec / 3600)).padStart(2, "0")

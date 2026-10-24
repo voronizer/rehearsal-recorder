@@ -8,6 +8,12 @@ numpy
 # Mac. Without it the app runs fine and cloud copies stay WAV.
 soundfile
 
+# soxr, for making a song's backing track ready to play at the rate the app
+# records at (audio/backing_file.py). It is the resampler librosa uses by
+# default. A prebuilt wheel on macOS (Intel and Apple), Windows and Linux,
+# and LGPL, as libsndfile is.
+soxr
+
 # The real Trash / Recycle Bin. Optional: without it nothing is destroyed
 # either, deleted takes just move to a _deleted folder instead. It earns its
 # place on Windows, where there is no trash folder a plain move can reach.

@@ -134,10 +134,15 @@ function MeteredFader({
  * The plate is a row of the player's lanes group (Timeline), on the group's
  * fill, with no box of its own. A track that records its notes too has its
  * notes' plate (midi/NotesPlate) on the row under it.
+ *
+ * The take's Backing track is the song's file, not one of the band's tracks
+ * (backing-track spec Part 7): its plate has a dashed frame, and after its
+ * name it says what the file is, "Stereo file" or "Mono file" (`file`).
  */
 export function LaneControls({
   name,
   icon,
+  file,
   paired = false,
   channels,
   muted,
@@ -153,6 +158,8 @@ export function LaneControls({
   name: string
   /** The band's icon for this name; none draws the neutral one. */
   icon?: string
+  /** A Backing track's words for its file; a band's track has none. */
+  file?: string
   /** The track records its notes too: its notes' row is under this one. */
   paired?: boolean
   /** In the file: 1, 2, or 0 when it could not be read. */
@@ -170,7 +177,13 @@ export function LaneControls({
   onVolumeCommit: () => void
 }) {
   return (
-    <LanePlate data-plate={name} data-paired={paired || undefined} grouped className="gap-1">
+    <LanePlate
+      data-plate={name}
+      data-paired={paired || undefined}
+      grouped
+      // The frame is 1 px inside the plate's 56: 7 px above and below.
+      className={cn("gap-1", file && "rounded-md border border-dashed border-muted-foreground/50 py-[7px]")}
+    >
       <div className="flex h-4 items-center gap-2">
         <InstrumentIcon icon={icon} className="size-4 shrink-0 text-muted-foreground" />
         <Whole
@@ -179,6 +192,11 @@ export function LaneControls({
           data-plate-name={name}
           className={cn("min-w-0 flex-1 truncate text-sm leading-4", dimmed && "text-muted-foreground")}
         />
+        {file && (
+          <span data-plate-file className="shrink-0 text-xs leading-4 text-muted-foreground">
+            {file}
+          </span>
+        )}
       </div>
       {/* 16 and 20 px, 4 apart: the plate's 56. On is grey, and the dimmed
           lane is what says the track is silent. */}

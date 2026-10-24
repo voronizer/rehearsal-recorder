@@ -24,8 +24,9 @@ describe("the site's content", () => {
   it("has each step's items, in order: its tiles, then its cards", () => {
     for (const [i, step] of content.story.steps.entries())
       expect(step.items.map((item) => item.id), step.id).toEqual([...ITEMS[STEPS[i]]])
-    // 31 picked: these 29, and the controller's block and its fourth line.
-    expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(29)
+    // 31 picked: these 29, and the controller's block and its fourth line;
+    // then the backing track's.
+    expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(30)
   })
 
   it("has a line for each step, and for each item a line and what the window says", () => {
@@ -38,7 +39,9 @@ describe("the site's content", () => {
       }
     }
     const before = content.story.steps[0]
-    expect(before.body).toBe("The tracks are filled in from last time, and each song brings its tempo.")
+    expect(before.body.replace(/\s+/g, " ")).toBe(
+      "The tracks are filled in from last time, and each song brings its tempo and its backing track."
+    )
   })
 
   it("has the tap card's words, and the tempo drift tile's “+7”", () => {
@@ -77,12 +80,12 @@ describe("the site's content", () => {
     )
   })
 
-  it("has ten questions, each with an answer, the name's first", () => {
-    expect(content.faq.questions).toHaveLength(10)
+  it("has eleven questions, each with an answer, the name's first", () => {
+    expect(content.faq.questions).toHaveLength(11)
     expect(content.faq.questions[0].body).toContain("Belarusian for “echo”")
     // Sleep follows the laptop dying, the question it answers next.
-    expect(content.faq.questions[7].title).toBe("What if the laptop dies in the middle of a take?")
-    expect(content.faq.questions[8].title).toBe(
+    expect(content.faq.questions[8].title).toBe("What if the laptop dies in the middle of a take?")
+    expect(content.faq.questions[9].title).toBe(
       "Will the laptop fall asleep in the middle of a take?"
     )
     for (const q of content.faq.questions) expect(q.body).not.toBe("")
@@ -145,6 +148,42 @@ describe("tempo drift on the site", () => {
         "click the take was recorded to, or the song's tempo, or, for a song without one, the " +
         "take's own middle. Where the band ran ahead or dragged by more than 2% (you can change " +
         "that in Settings), the line turns amber and says by how much."
+    )
+  })
+})
+
+// The backing track on reha.stream (backing-track spec, "On reha.stream"):
+// the step's line, an item after the song's tempo, and a question after
+// drift's.
+describe("backing track on the site", () => {
+  it("has the backing track's item right after the song's tempo, with its words", () => {
+    const before = content.story.steps[0]
+    const ids = before.items.map((i) => i.id)
+    expect(ids[ids.indexOf("tempo") + 1]).toBe("backing")
+    const backing = before.items.find((i) => i.id === "backing")!
+    expect(backing.title).toBe("A song brings its backing track.")
+    expect(backing.line.replace(/\s+/g, " ")).toBe(
+      "Add the file to the song once. It comes in on bar 1, after the count-in, through its " +
+        "own output, and the take keeps it as a track."
+    )
+    expect(backing.more.replace(/\s+/g, " ")).toBe(
+      "The app counts the file's tempo and finds bar 1. For pads with no beat, drag bar 1 to " +
+        "where you hear it. In the player the take's Backing track sits right above Master, " +
+        "muted the first time, so you hear the band without it."
+    )
+  })
+
+  it("asks whether it can play a backing track, after drift's question", () => {
+    const titles = content.faq.questions.map((q) => q.title)
+    const at = titles.indexOf("Can it play a backing track?")
+    expect(titles[at - 1]).toBe("Does it show where we sped up?")
+    expect(content.faq.questions[at].body.replace(/\s+/g, " ").trim()).toBe(
+      "Yes. A song can keep one audio file, mono or stereo: a backing track, pads, a loop. Add " +
+        "it on the song's page in History: the app counts its tempo and finds bar 1, or you " +
+        "drag bar 1 to where you hear it. It comes in on bar 1, right after the count-in, " +
+        "through the output you choose: the speakers, say, while the click stays in the " +
+        "drummer's headphones. The take keeps it as a track of its own, so you can listen to " +
+        "the band without it."
     )
   })
 })

@@ -143,10 +143,10 @@ KIT_ON_BOTH = """
 # where there is a player, and no taller than the screen needs elsewhere,
 # so a picture is not half empty.
 HEIGHT = {"unsaved-takes": 420, "setup": 930, "settings": 760, "marks": 420, "sets": 720,
-          "rehearsal": 770, "metronome-row": 770,
+          "rehearsal": 770, "metronome-row": 770, "backing-row": 770,
           "recording": 720, "review": 1040, "player": 1040, "zoom": 1040,
-          "metronome-master": 1040, "drift-master": 1040,
-          "history": 820, "history-songs": 1020, "history-marks": 820,
+          "metronome-master": 1040, "drift-master": 1040, "backing-lane": 1040,
+          "history": 820, "history-songs": 1020, "backing-song": 1020, "history-marks": 820,
           "midi-card": 910, "midi-player": 1140}
 
 
@@ -276,6 +276,10 @@ def main():
         # at its own 128 in 4/4.
         page.get_by_text("The song's tempo.").wait_for()
         shoot(page, "metronome-row", footer)
+        # Under it, Viasna's backing track, counted at the song's 128, and
+        # the line it goes on.
+        backing = page.locator("footer").get_by_role("region", name="Backing track")
+        shoot(page, "backing-row", around([backing, page.locator("footer [data-status-line]")]))
 
         # Viasna has a tempo, so the take counts in first: a bar of big
         # digits where the clock goes, and the clock runs from its end. Stop
@@ -293,6 +297,12 @@ def main():
         page.wait_for_selector("[data-take-summary]")
         page.wait_for_timeout(1200)
         shoot(page, "review")
+        # Viasna 2 was recorded with its backing track: its Backing track is
+        # the last lane, dashed, muted the first time a take of Viasna opens.
+        page.locator("[data-plate='Backing']").wait_for()
+        page.mouse.move(0, 0)
+        shoot(page, "backing-lane",
+              around([page.get_by_role("group", name="Take timeline"), page.locator("[data-master-group]")]))
         page.get_by_role("button", name="Save take").click()
         page.wait_for_selector("text=Record take 7")
 
@@ -362,6 +372,11 @@ def main():
         page.wait_for_selector('[data-rung][aria-expanded="true"]')
         page.wait_for_timeout(400)
         shoot(page, "history-songs")
+        # Pałyn's page at its head: the tempo row, and under it the backing
+        # track with the start of the file drawn.
+        page.locator("[data-song-head] [data-file-start] canvas").wait_for()
+        page.wait_for_timeout(400)
+        shoot(page, "backing-song", around([page.locator("[data-song-head]")]))
         page.get_by_role("radio", name="Marks", exact=True).click()
         labels = page.get_by_role("navigation", name="Labels")
         labels.locator("[data-label]", has_text="Went wrong").click()

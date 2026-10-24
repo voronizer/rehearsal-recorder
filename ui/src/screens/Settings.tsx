@@ -61,9 +61,9 @@ const TABS: {
   },
   {
     id: "metronome",
-    label: "Metronome",
+    label: "Click & backing track",
     icon: <Metronome className="size-4" />,
-    blurb: "Where the click is heard, its sound, and the count-in",
+    blurb: "Where the click and the backing track are heard, the click's sound, and the count-in",
   },
   {
     id: "folders",

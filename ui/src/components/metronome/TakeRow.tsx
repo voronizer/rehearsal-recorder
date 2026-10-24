@@ -1,8 +1,10 @@
+import type { ReactNode } from "react"
 import { BeatDots } from "@/components/metronome/BeatDots"
 import { ClickSwitch } from "@/components/metronome/ClickSwitch"
 import { TempoUnit } from "@/components/metronome/NoteGlyph"
 import { StatusLine } from "@/components/metronome/StatusLine"
 import type { MetronomeState } from "@/lib/api"
+import type { RowSentence } from "@/lib/backing"
 import { statusLine } from "@/lib/metronome"
 import { cn } from "@/lib/utils"
 
@@ -13,17 +15,23 @@ import { cn } from "@/lib/utils"
  * click is doing (spec Part 5). The tempo cannot change mid-take, so there
  * is no field, no Tap and no gear; the switch silences the click and the
  * tempo still goes into the take. A take with no click has nothing to
- * switch, and no beat.
+ * switch, and no beat. `below` is the backing track's row while the take
+ * records, over the line, as on the rehearsal screen, and `then` what the
+ * line goes on to say of it.
  */
 export function TakeRow({
   state,
   lit,
   onSwitch,
+  below,
+  then,
 }: {
   state: MetronomeState
   /** The click lit now, by its place in the bar, or null. */
   lit: number | null
   onSwitch: (on: boolean) => void
+  below?: ReactNode
+  then?: RowSentence | null
 }) {
   // A take that began with the switch off has no count-in to click from;
   // one whose first click Python has not chosen yet is counting in.
@@ -52,7 +60,8 @@ export function TakeRow({
           </>
         )}
       </div>
-      <StatusLine line={statusLine(state)} />
+      {below}
+      <StatusLine line={statusLine(state)} then={then} />
     </section>
   )
 }

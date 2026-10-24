@@ -27,8 +27,8 @@ is the same program before it is wrapped, with no Info.plist beside it, so
 its "version on the file" check fails though nothing else is wrong.
 
 The result is one folder you open, with everything inside: Python, numpy,
-PortAudio through sounddevice, libsndfile through soundfile, the window toolkit
-and the built interface. Nothing is downloaded at startup: a rehearsal room
+PortAudio through sounddevice, libsndfile through soundfile, soxr, the window
+toolkit and the built interface. Nothing is downloaded at startup: a rehearsal room
 with no wifi is normal, and an app that needs the internet before it can
 record is useless.
 
@@ -67,6 +67,7 @@ Only the built app knows, so it is asked:
       frozen: True
       ok   audio engine — PortAudio up, 18 devices, 3 with inputs
       ok   sample formats — soundfile, libsndfile 1.2.2
+      ok   backing track — soxr 1.1.0, a second at 44.1 kHz made ready at 48 kHz
       ok   numpy — numpy 2.4.4
       ok   window toolkit — pywebview 5.4
       ok   built interface — 1330 bytes of index.html

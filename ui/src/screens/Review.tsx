@@ -91,7 +91,10 @@ export function Review({
   const [busy, setBusy] = useState(false)
   // An error a button said is about this take, and goes with the screen.
   const sayError = useErrorNotice(ERROR)
-  const player = useMultitrackPlayer(take.tracks, take.duration_sec)
+  const player = useMultitrackPlayer(take.tracks, take.duration_sec, {
+    id: take.song_id ?? null,
+    heard: take.backing_heard ?? false,
+  })
   const cropping = useRunning("crop", (e) => e.folder === take.temp_dir)
 
   // Marks made here are held in memory until the take is saved: it has no

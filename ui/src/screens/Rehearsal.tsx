@@ -524,7 +524,7 @@ export function Rehearsal({
         </aside>
       }
       footer={
-        <FooterRow left={<MetronomeRow />}>
+        <FooterRow left={<MetronomeRow name={nextName} />}>
           <div className="flex items-center gap-3">
             {/* Escape finishes only with no take in hand; with one, it puts
                 the take away — see useEscape above. */}

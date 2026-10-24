@@ -51,12 +51,35 @@ const LINK = "inline h-auto rounded-sm p-0 text-xs whitespace-normal"
  * runs the click at the page's tempo, and a change while it runs plays the
  * new one. Python plays it without touching the rehearsal screen's row or
  * a change held in it (`metronome_play` with a tempo). It stops at ■ and
- * when the page goes.
+ * when the page goes. Only one ▶ of the page plays: this one says so
+ * through `onPlay`, and shows the click stopped when `stopped` changes,
+ * the backing track's ▶ having been pressed, which stops it in Python.
+ *
+ * What the song has saved goes to `onSaved`, for the backing track's line
+ * under the row.
  */
-export function SongTempoRow({ song, takes }: { song: TempoSong; takes: SongGo[] }) {
+export function SongTempoRow({
+  song,
+  takes,
+  onSaved,
+  stopped = 0,
+  onPlay,
+}: {
+  song: TempoSong
+  takes: SongGo[]
+  onSaved?: (tempo: number | null, signature: Signature) => void
+  stopped?: number
+  onPlay?: () => void
+}) {
   const sayError = useErrorNotice(SAID)
   const [saved, setSaved] = useState({ tempo: song.tempo, signature: song.signature ?? "4/4" })
   const [playing, setPlaying] = useState(false)
+  const [hushed, setHushed] = useState(stopped)
+  if (hushed !== stopped) {
+    setHushed(stopped)
+    setPlaying(false)
+  }
+  useEffect(() => onSaved?.(saved.tempo, saved.signature), [saved, onSaved])
   // Whether the click runs as the page goes, so it stops with it.
   const running = useRef(playing)
   useEffect(() => {
@@ -96,6 +119,7 @@ export function SongTempoRow({ song, takes }: { song: TempoSong; takes: SongGo[]
     if (t === null) return
     // Playing from the press, so a change made before Python answers
     // retunes the click too.
+    if (!playing) onPlay?.()
     setPlaying(true)
     try {
       const res = await api().metronome_play(t, sig)

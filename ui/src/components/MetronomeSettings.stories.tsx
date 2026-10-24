@@ -20,9 +20,10 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** Settings › Metronome: the click's output, then its volume, sound and
- *  count-in, the same settings as behind the gear in the metronome's row,
- *  and the tab's own, the tempo in WAV files, on by default. */
+/** Settings › Click & backing track: the click's output, then its volume,
+ *  sound and count-in, and the backing track's output and volume, the same
+ *  settings as behind the gear in the metronome's row; then tempo drift and
+ *  the tempo in WAV files, on by default. */
 export const Default: Story = {}
 
 /** The WAV setting turned off: takes recorded from now on carry no tempo. */

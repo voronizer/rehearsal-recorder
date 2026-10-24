@@ -26,11 +26,15 @@ function label(channels: number[]) {
  * was never shown anything to go looking for.
  */
 export function OutputChannels({
+  id = "output-channels",
   count,
   value,
   onChange,
   disabled = false,
 }: {
+  /** The list's id: a second picker on the same page, as the backing
+   *  track's beside the click's, needs its own. */
+  id?: string
   /** How many outputs the card has. */
   count: number
   value: number[]
@@ -50,7 +54,7 @@ export function OutputChannels({
         disabled={disabled}
       >
         <SelectTrigger
-          id="output-channels"
+          id={id}
           aria-label="Outputs"
           className="w-40"
         >

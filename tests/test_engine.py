@@ -6233,8 +6233,8 @@ def main():
     sa_event.listen(s56._lib._engine, "before_cursor_execute", count56)
     s56.list_songs()
     sa_event.remove(s56._lib._engine, "before_cursor_execute", count56)
-    ok("the list of songs is two queries, its songs and their old names, however many",
-       len(statements56) == 2)
+    ok("the list of songs is three queries, its songs, those with no takes and their old names, however many",
+       len(statements56) == 3)
 
     ok("History opens on its Rehearsals view until another is chosen",
        s56.get_settings()["history_view"] == "rehearsals")
@@ -13760,6 +13760,50 @@ def main():
                         delattr(apimod83, name)
                 else:
                     setattr(apimod83, name, value)
+
+    print("\n[86] A take's Backing track in the mix and crop")
+    # The Backing track is one of the take's WAVs to the mix and to a crop
+    # (backing-track spec, Part 4): by its fader, the player's mute not being
+    # applied to the mix, and cut with the others.
+    from rehearsal_recorder.audio.backing_file import open_ready as open_ready86
+    from rehearsal_recorder.audio.backing_file import write_take_track as wtt86
+    from rehearsal_recorder.audio.crop import crop_wav as cw86
+    from rehearsal_recorder.audio.mixdown import mixdown as md86
+    from rehearsal_recorder.audio.wavfile import WavWriter as WavWriter86
+
+    tmp86 = Path(tempfile.mkdtemp())
+    t86 = np.arange(2 * SR) / SR
+    file86 = np.stack([0.1 * np.sin(2 * np.pi * 220 * t86), 0.1 * np.sin(2 * np.pi * 330 * t86)], axis=1)
+    with WavWriter86(tmp86 / "ready.wav", SR, 2, 4) as w:
+        w.write(file86.astype("<f4").tobytes())
+    wtt86(open_ready86(tmp86 / "ready.wav"), 0, 2 * SR, tmp86 / "Backing.wav", SR, 3)
+    write_wav(tmp86 / "Gtr.wav", 1000, depth=24)
+
+    def frames86(path):
+        with wave.open(str(path), "rb") as w:
+            raw = np.frombuffer(w.readframes(w.getnframes()), dtype=np.uint8)
+            width, channels = w.getsampwidth(), w.getnchannels()
+        if width == 2:
+            return raw.view("<i2").reshape(-1, channels).astype(np.int64)
+        whole = raw.reshape(-1, 3).astype(np.int64)
+        values = whole[:, 0] | (whole[:, 1] << 8) | (whole[:, 2] << 16)
+        return np.where(values >= 1 << 23, values - (1 << 24), values).reshape(-1, channels)
+
+    tracks86 = [{"name": "Gtr", "file": str(tmp86 / "Gtr.wav")}, {"name": "Backing", "file": str(tmp86 / "Backing.wav")}]
+    half86 = md86(tracks86, tmp86 / "Half.wav", volumes={"Backing": 0.5})
+    want86 = 1000 + 0.5 * frames86(tmp86 / "Backing.wav") / 256
+    ok("the mix has the Backing track by its fader, its sides kept",
+       half86["ok"] and half86["gain"] == 1.0 and np.abs(frames86(tmp86 / "Half.wav") - want86).max() <= 1)
+    md86(tracks86, tmp86 / "Down.wav", volumes={"Backing": 0.0})
+    md86(tracks86[:1], tmp86 / "Alone.wav")
+    ok("  a muted one is in it all the same, and its fader down takes it out",
+       (tmp86 / "Down.wav").read_bytes() == (tmp86 / "Alone.wav").read_bytes())
+    for name86 in ("Gtr", "Backing"):
+        cw86(tmp86 / f"{name86}.wav", tmp86 / f"{name86} cut.wav", 0.5, 1.5)
+    cut86 = frames86(tmp86 / "Backing cut.wav")
+    ok("a crop cuts it with the band's tracks, to the same frames",
+       len(cut86) == len(frames86(tmp86 / "Gtr cut.wav")) == SR
+       and np.array_equal(cut86[600:-600], frames86(tmp86 / "Backing.wav")[SR // 2 + 600:SR * 3 // 2 - 600]))
 
     print("\n" + "=" * 60)
     if problems:

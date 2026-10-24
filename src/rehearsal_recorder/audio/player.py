@@ -212,8 +212,10 @@ class TakePlayer:
         self._click_until = None
         self._click_starts = []
         # The click between takes (a ClickSource) when it rides this stream,
-        # its block as wide as the stream, and the stream's frames so far.
+        # and a song's backing track (a BackingSource) the same; their block,
+        # as wide as the stream, and the stream's frames so far.
         self._free_click = None
+        self._free_backing = None
         self._free = None
         self._out_frames = 0
 
@@ -513,16 +515,16 @@ class TakePlayer:
                     # and right are the same samples. If tracks ever get a pan,
                     # this has to become the average of the two.
                     outdata[:, self._route[0]] = mix[:, 0]
-        free = self._free_click
-        if free is not None:
-            self._add_free_click(free, outdata, frames, time_info)
+        for free in (self._free_click, self._free_backing):
+            if free is not None:
+                self._add_free(free, outdata, frames, time_info)
         self._out_frames += frames
 
-    def _add_free_click(self, source, outdata, frames, time_info):
+    def _add_free(self, source, outdata, frames, time_info):
         """
-        The click between takes, onto what the take put out: on its own
-        outputs, at its own volume, outside the master and the meters.
-        Outputs this stream does not reach are left out.
+        The click or the backing track between takes, onto what the take put
+        out: on its own outputs, at its own volume, outside the master and the
+        meters. Outputs this stream does not reach are left out.
         """
         block = self._free
         if block is None or block.shape[0] < frames or block.shape[1] != outdata.shape[1]:
@@ -633,6 +635,17 @@ class TakePlayer:
         the output lets go of it."""
         return self._free_click
 
+    def play_free_backing(self, source):
+        """A song's backing track between takes (a BackingSource) into this
+        stream, on its route; None takes it out."""
+        self._free_backing = source
+
+    @property
+    def free_backing(self):
+        """The backing track this stream plays between takes, None for none:
+        closing the output lets go of it, as of the click."""
+        return self._free_backing
+
     def set_take_click(self, tempo, signature, voices):
         """The take's click (Part 8): its tempo and signature, and `voices`
         at this take's rate and the metronome's volume; None for a take that
@@ -707,6 +720,7 @@ class TakePlayer:
         """
         self._heartbeat.stop()
         self._free_click = None
+        self._free_backing = None
         with STREAM_LOCK:
             stream, self._stream = self._stream, None
             if stream is None:

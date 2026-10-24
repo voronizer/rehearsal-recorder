@@ -10,7 +10,8 @@
 
 ## Before you play. {#before}
 
-The tracks are filled in from last time, and each song brings its tempo.
+The tracks are filled in from last time, and each song brings its tempo and
+its backing track.
 
 ### Rehearse the set, in order. {#set}
 
@@ -30,6 +31,15 @@ the drummer's headphones alone.
 The row at the bottom left shows the song's tempo and time signature, and
 says “The song's tempo.” A change made there holds until you pick another
 song, and Save to song keeps it.
+
+### A song brings its backing track. {#backing}
+
+Add the file to the song once. It comes in on bar 1, after the count-in,
+through its own output, and the take keeps it as a track.
+
+The app counts the file's tempo and finds bar 1. For pads with no beat, drag
+bar 1 to where you hear it. In the player the take's Backing track sits right
+above Master, muted the first time, so you hear the band without it.
 
 ### Hear where you left off. {#left-off}
 
@@ -282,6 +292,6 @@ notes: 198 in the row is 99 there.
 
 Cubase, Pro Tools and Studio One read it and fit the take to the project.
 
-Write the tempo into WAV files is in Settings › Metronome, and on until you
-turn it off. Ableton Live and Logic ignore it. A take recorded without the
+Write the tempo into WAV files is in Settings › Click & backing track, and on
+until you turn it off. Ableton Live and Logic ignore it. A take recorded without the
 click never gets a tempo in its WAVs, so no DAW stretches it for nothing.

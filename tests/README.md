@@ -262,6 +262,26 @@ answer again, a rewritten file counted afresh, 32 kept; Record stopping a
 count in progress; the `drift_tolerance` setting. Run with
 `python tests/test_drift.py`.
 
+## test_backing.py: a song's backing track
+
+The file a band adds to a song (backing-track spec, Parts 1 and 2):
+`audio/backing_file.py` and `audio/backing_count.py`. The files are made with
+libsndfile as a player would export them: WAV at 16, 24 and 32-bit float, AIFF,
+FLAC, MP3 and OGG all read, mono and stereo; an M4A and a text file refused
+with the message that names the formats, a 6-channel file with the one that
+asks for mono or stereo; the copy byte for byte in Backing tracks, " (2)" for a
+name in use. Made ready at 48 kHz from 44.1 and 96 kHz: a 1 kHz tone's pitch
+within 0.1 Hz and its level within 0.05 dB, a 30 kHz tone gone under -90 dB, a
+file already at the rate kept sample for sample, an MP3 the same twice, the
+ready file made again only when the copy is newer and nothing half-made left,
+and without libsndfile a 16- or 24-bit WAV still taken. Counted on drums made
+on a grid, so every answer has a truth: 4/4 at 128 after a 0.80 s lead-in, 3/4
+at 96, 6/8 at 198 eighths with a pickup, a ballad at 72, each tempo within 1
+and bar 1 within 0.02 s and on its hit, not ahead of it; held chords with no
+beat; no signature counted as 4/4. Then the take's track: silence before the
+file and after it, 24- and 16-bit within a step of the file. Run with
+`python tests/test_backing.py`.
+
 ## The interface: in ui/, in TypeScript
 
 Beside the code it tests, in two kinds:
