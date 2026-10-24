@@ -173,6 +173,12 @@ class AudioClock(StreamClock):
             self._fitted = fitted
         return fitted[1](ns)
 
+    def frame_at(self, ns):
+        """The take's frame being captured at `ns`, not rounded: the line
+        through the kept marks read the other way from ns_at, for a backing
+        track on another device. None before the first mark."""
+        return self._frame_at(ns)
+
     def ns_at(self, frame):
         """
         When the take's frame `frame` is captured, by the computer's clock: the

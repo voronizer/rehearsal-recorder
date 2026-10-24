@@ -28,6 +28,12 @@ another device, the recorder only tells the click where the take is. Either way
 the click's troubles are its own: they never stop the take, nor show in
 `problem`. A card that will not open its outputs with its inputs records from
 its inputs alone, its click to no output and its grid kept.
+
+A song's backing track rides the take the same way (backing-track spec, Parts 3
+and 4), on the recording card or on another device, through the take's click
+(TakeClick.backing). At Stop it fades out, and the take keeps it as a track of
+its own, Backing.wav, written from the file as it was placed: the band's
+volume and switch change only what was heard.
 """
 
 import json
@@ -42,6 +48,7 @@ import sounddevice as sd
 
 from rehearsal_recorder.activity import Stages
 from rehearsal_recorder.audio import heartbeat
+from rehearsal_recorder.audio.backing_file import write_take_track
 from rehearsal_recorder.audio.devices import (
     STREAM_LOCK,
     DriverNotAnswering,
@@ -189,9 +196,11 @@ class AudioRecorder:
                this audio; written into the take's record, so that after a
                crash the notes can be told from the sound.
         click: a TakeClick (audio/take_click.py) for a take recorded to the
-               metronome. Duplex, the stream is opened with its outputs too;
-               otherwise the click has its own, placed by `clock`, which is
-               made here when the take has none for notes.
+               metronome, or with a backing track. Duplex, the stream is
+               opened with its outputs too; what is heard on another device
+               has its own, placed by `clock`, which is made here when the
+               take has none for notes. Its backing track is named here,
+               "Backing" unless a band track has that name.
         meter: (tempo, signature) of a take with a tempo and no click (the
                metronome's switch off). take.json keeps it as the take's
                click, never on and with no first click, so its .mid states
@@ -209,8 +218,10 @@ class AudioRecorder:
         self.tracks = tracks
         self.click = click
         self.meter = meter if click is None else None
-        if click is not None and not click.duplex and clock is None:
+        if click is not None and click.elsewhere and clock is None:
             clock = AudioClock(samplerate)
+        if click is not None and click.backing is not None:
+            click.backing.name = backing_name(tracks)
         self._clock = clock
         self._notes = [dict(n) for n in notes]
         self.out_dir = Path(out_dir)
@@ -289,12 +300,11 @@ class AudioRecorder:
         # whatever was recorded so far.
         self.error = None
         self._stopping = False
-        self._result = {"duration_sec": 0.0, "tracks": []}
+        self._result = {"duration_sec": 0.0, "tracks": [], "backing": None}
 
     @staticmethod
     def safe_name(name):
-        keep = "".join(c if c.isalnum() or c in " -_()" else "_" for c in name)
-        return keep.strip() or "track"
+        return safe_name(name)
 
     def _finished(self):
         """PortAudio calls this when the stream stops. If we did not ask for
@@ -369,8 +379,8 @@ class AudioRecorder:
         self._block(indata, None, frames, time_info, status)
 
     def _duplex_callback(self, indata, outdata, frames, time_info, status):
-        # The take's stream has outputs: they are the click's alone, silent
-        # but for it.
+        # The take's stream has outputs: they are the click's and the backing
+        # track's alone, silent but for them.
         outdata.fill(0)
         self._block(indata, outdata, frames, time_info, status)
 
@@ -410,9 +420,9 @@ class AudioRecorder:
                 except Exception as e:
                     if self.clock_fault is None:
                         self.clock_fault = repr(e)
-            if click is not None and outdata is None:
-                # A click on another device: where the take is, by the clock
-                # just marked.
+            if click is not None and click.elsewhere:
+                # A click or a backing track on another device: where the
+                # take is, by the clock just marked.
                 try:
                     click.on_input(self._frames_written, clock)
                 except Exception as e:
@@ -529,12 +539,12 @@ class AudioRecorder:
                         self._clock = AudioClock(self.samplerate)
             if self._stream is None:
                 self._open_input(latency)
-                if click is not None:
-                    # The click's own stream after the take's: PortAudio opens
-                    # one ASIO stream at a time, and the take is the one that
-                    # must open. The take waits for the click's first block
-                    # before it chooses its first click (TakeClick.on_input).
-                    click.start()
+            if click is not None:
+                # The streams on other devices after the take's: PortAudio
+                # opens one ASIO stream at a time, and the take is the one that
+                # must open. The take waits for their first blocks before it
+                # chooses its first click (TakeClick.on_input).
+                click.start()
         except BaseException:
             if click is not None:
                 click.stop()
@@ -651,8 +661,12 @@ class AudioRecorder:
             # The take's grid: its tempo, and where its files start and end
             # (spec Part 1). Written again as each is known, so it is written
             # beside the file and moved onto it: a crash mid-write leaves the
-            # one before.
+            # one before. With it, the backing track, once the take knows
+            # where it starts and that it was heard, for a draft recovered
+            # after a crash to write its Backing track.
             record["click"] = click.record()
+            if click.backing is not None:
+                record["backing"] = click.backing_record()
         elif self.meter is not None:
             tempo, signature = self.meter
             record["click"] = {"tempo": tempo, "signature": signature, "on": False, "wav_tempo": False,
@@ -738,6 +752,10 @@ class AudioRecorder:
                 **({"stereo": True} if self._width[track["name"]] == 2 else {}),
             })
 
+        backing = None
+        if click is not None and click.first_click_frame is not None:
+            backing = self._write_backing(click, frames)
+
         # The record has done its job: every wav now carries its own header.
         # Left behind it would ride along into the saved take. A take with
         # notes keeps it a little longer: the .mid files are made after this,
@@ -748,8 +766,25 @@ class AudioRecorder:
         if not self._notes and click is None and self.meter is None:
             (self.out_dir / TAKE_RECORD).unlink(missing_ok=True)
 
-        self._result = {"duration_sec": duration, "tracks": finalized}
+        self._result = {"duration_sec": duration, "tracks": finalized, "backing": backing}
         return self._result
+
+    def _write_backing(self, click, frames):
+        """The take's Backing track, as it was heard: {"name", "file"}, or None
+        for a take whose backing track was not heard, or a disk that would
+        not take it (the take's own tracks are written by then)."""
+        record = click.backing_record()
+        if record is None:
+            return None
+        path = self.out_dir / f"{self.safe_name(record['name'])}.wav"
+        try:
+            write_take_track(click.backing.opened, record["from_frame"], frames, path,
+                             self.samplerate, self._sample_bytes)
+        except OSError as e:
+            print(f"[audio] Backing track not written: {e}")
+            path.unlink(missing_ok=True)
+            return None
+        return {"name": record["name"], "file": str(path)}
 
     def abandon(self):
         """
@@ -775,19 +810,22 @@ class AudioRecorder:
         """The click has played its last: what went wrong in its rendering, if
         nothing went wrong here first, joins click_fault."""
         if self.click_fault is None:
-            self.click_fault = click.source.fault
+            self.click_fault = click.fault()
 
     def _run_on(self, click):
         """
         Stop on a click take: the take goes on to the next quarter, so its
         files hold whole quarters (spec Part 3), unless the card has gone or
-        the laptop slept, when it ends where it ends. Waits for the card's
-        blocks, at most RUN_ON_SEC.
+        the laptop slept, when it ends where it ends. Its backing track fades
+        out, and the stream stays open until the fade is heard, which moves
+        no end. Waits for the card's blocks, at most RUN_ON_SEC.
         """
+        click.fade_backing()
         target = click.stop_frame(self._frames_written)
         deadline = time.monotonic() + RUN_ON_SEC
         seen, quiet_since = self._frames_written, time.monotonic()
-        while self._frames_written < target and self.error is None and not self._asleep:
+        while ((self._frames_written < target or not click.backing_faded())
+               and self.error is None and not self._asleep):
             now = time.monotonic()
             if self._stream is None or now > deadline or now - quiet_since > RUN_ON_QUIET_SEC:
                 break
@@ -818,6 +856,23 @@ class AudioRecorder:
         self.flush()
         for f in self._raw_files.values():
             f.close()
+
+
+def safe_name(name):
+    """A track's name as its file's: what a file name cannot hold becomes _."""
+    keep = "".join(c if c.isalnum() or c in " -_()" else "_" for c in name)
+    return keep.strip() or "track"
+
+
+def backing_name(tracks):
+    """The take's Backing track's name: "Backing", or "Backing (2)" and on
+    when a band track's file would have that name, in any case, as Windows
+    and macOS compare file names."""
+    taken = {safe_name(t["name"]).casefold() for t in tracks}
+    name, n = "Backing", 2
+    while safe_name(name).casefold() in taken:
+        name, n = f"Backing ({n})", n + 1
+    return name
 
 
 def raw_to_wav(raw_path, wav_path, samplerate, bit_depth=16, channels=1,

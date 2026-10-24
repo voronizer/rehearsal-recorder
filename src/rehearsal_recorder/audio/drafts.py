@@ -12,6 +12,9 @@ recovered.
 A take recorded to the click is cut on its grid as Stop would have cut it: its
 files start at the first click of its count-in, which take.json says, and carry
 its tempo (metronome spec, Parts 1 and 3). Where it ends is where the app died.
+One with a backing track that was heard gets its Backing track from take.json
+too, written from the file as Stop would have written it (backing-track spec,
+Part 4).
 
 This module finds those leftovers and turns them back into normal takes.
 """
@@ -20,14 +23,16 @@ import json
 import wave
 from pathlib import Path
 
+from rehearsal_recorder.audio.backing_file import open_ready, write_take_track
 from rehearsal_recorder.audio.capture import (
     RAW_SUFFIX,
     TAKE_RECORD,
     raw_to_wav,
+    safe_name,
 )
 from rehearsal_recorder.activity import Stages
 from rehearsal_recorder.audio.format import bytes_per_sample
-from rehearsal_recorder.audio.take_click import cut_of
+from rehearsal_recorder.audio.take_click import cut_of, whole
 from rehearsal_recorder.midi.capture import MID_SUFFIX, MIDRAW_SUFFIX, finish_draft
 
 DRAFTS_DIR = "_drafts"
@@ -53,10 +58,27 @@ def _cut(take_dir):
         return 0, None, None
 
 
-def _kept(whole, head, frames):
-    """How many of a raw file's `whole` frames its .wav keeps."""
-    left = max(0, whole - head)
+def _kept(count, head, frames):
+    """How many of a raw file's `count` frames its .wav keeps."""
+    left = max(0, count - head)
     return left if frames is None else min(left, frames)
+
+
+def _backing(take_dir):
+    """The backing track take.json says the take heard: ({"file", "from_frame",
+    "name"}, its Backing track's path), or None. Only for a take cut on its
+    grid: without a first frame there is nothing to place it by."""
+    try:
+        record = json.loads((Path(take_dir) / TAKE_RECORD).read_text("utf-8"))
+        backing = record.get("backing")
+        first = record["click"]["first_click_frame"]
+        if (not isinstance(backing, dict) or not whole(first) or first < 0
+                or not whole(backing.get("from_frame")) or not isinstance(backing.get("name"), str)
+                or not isinstance(backing.get("file"), str)):
+            return None
+    except Exception:
+        return None
+    return backing, Path(take_dir) / f"{safe_name(backing['name'])}.wav"
 
 
 def _names(take_dir, kind):
@@ -157,6 +179,11 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
     and the length handed on to its notes is counted from there. A .wav that
     Stop made is already cut.
 
+    A take that heard a backing track gets its Backing track as Stop writes
+    it, from the ready file take.json names, if Stop did not write it and
+    that file is still there: "backing", {"name", "file"} or None, apart from
+    the band's tracks.
+
     `progress(fraction, step)`, when given, hears how far along it is, the
     tracks weighed by their size.
     """
@@ -184,9 +211,14 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
                    progress=stages.part(i), head_frames=head, frames=length, acid=acid)
         raw_path.unlink(missing_ok=True)
 
+    backing = _backing(take_dir)
     for wav_path in sorted(take_dir.glob("*.wav")):
+        if backing is not None and wav_path.name == backing[1].name:
+            continue
         frames = max(frames, wav_frames(wav_path))
         tracks.append({"name": track_names.get(wav_path.stem, wav_path.stem), "file": str(wav_path)})
+    if backing is not None:
+        backing = _write_backing(backing, frames, samplerate, bit_depth)
 
     duration = frames / samplerate if samplerate else 0
     notes = [{**n, "name": note_names.get(n["name"], n["name"])}
@@ -196,4 +228,20 @@ def finalize(take_dir, samplerate, bit_depth=16, progress=None):
         "tracks": tracks,
         "notes": notes,
         "duration_sec": duration,
+        "backing": backing,
     }
+
+
+def _write_backing(backing, frames, samplerate, bit_depth):
+    """A recovered take's Backing track: {"name", "file"}, written unless Stop
+    wrote it; None when it cannot be, its ready file gone or unreadable."""
+    record, path = backing
+    if not path.exists():
+        try:
+            write_take_track(open_ready(record["file"]), record["from_frame"], frames, path,
+                             samplerate, bytes_per_sample(bit_depth))
+        except (OSError, ValueError) as e:
+            print(f"[drafts] Backing track not written: {e}")
+            path.unlink(missing_ok=True)
+            return None
+    return {"name": record["name"], "file": str(path)}

@@ -11,10 +11,15 @@ counter is tried on the band's own files by hand (the spec's list).
 No sound card, no browser, no MIDI port: files in a temporary folder.
 """
 
+import json
 import os
+import random
 import shutil
 import sys
 import tempfile
+import threading
+import time
+import types
 import wave
 from pathlib import Path
 
@@ -26,7 +31,17 @@ from test_tempo import hit, write_wav
 import soundfile  # noqa: E402
 
 from rehearsal_recorder.audio import backing_count, backing_file  # noqa: E402
+from rehearsal_recorder.audio.backing_source import BackingSource, Sources  # noqa: E402
+from rehearsal_recorder.audio.capture import AudioRecorder  # noqa: E402
+from rehearsal_recorder.audio.click import Voices, click_frame  # noqa: E402
+from rehearsal_recorder.audio.click_output import SilentOutput  # noqa: E402
+from rehearsal_recorder.audio.click_source import ClickSource  # noqa: E402
+from rehearsal_recorder.audio.drafts import finalize  # noqa: E402
 from rehearsal_recorder.audio.format import unpack24  # noqa: E402
+from rehearsal_recorder.audio.player import TakePlayer  # noqa: E402
+from rehearsal_recorder.audio.take_click import TakeBacking, TakeClick  # noqa: E402
+from rehearsal_recorder.metronome import ANOTHER_ASIO  # noqa: E402
+from rehearsal_recorder.midi.clock import AudioClock  # noqa: E402
 
 problems = []
 
@@ -121,6 +136,78 @@ def pads(path, seconds=30.0):
             y += weight * sum(np.sin(2 * np.pi * f * t) for f in chord)
     y += 0.003 * rng.standard_normal(len(t))
     return write_wav(path, y * (0.5 / np.abs(y).max()))
+
+
+RATE = 48000
+T = 3_000_000_000
+# The duplex blocks below are heard 4.5 ms after their callback runs and were
+# captured 5 ms before it: a round trip of 9.5 ms, 456 frames at 48 kHz.
+TRIP = 456
+
+
+def duplex_run(tc, blocks, width, start=0):
+    """Blocks of 1024 into a take's stream with inputs and outputs, as
+    test_click's: what the take wrote into the outputs, all of them."""
+    heard = []
+    for i in range(start, start + blocks):
+        out = np.zeros((1024, width), np.float32)
+        now = 100.0 + i * 1024 / RATE
+        info = types.SimpleNamespace(currentTime=now, inputBufferAdcTime=now - 0.005,
+                                     outputBufferDacTime=now + 0.0045)
+        tc.on_duplex_block(out, i * 1024, 1024, info, (0.004, 0.004), now_ns=T + i * 1024 * 10 ** 9 // RATE)
+        heard.append(out)
+    return np.concatenate(heard)
+
+
+def placed(data, start, from_frame, length):
+    """What a backing track's outputs hold over `length` frames of a stream:
+    silence before frame `start`, where the take begins, then the file from
+    its frame `from_frame`, silent where that is before the file or past it."""
+    out = np.zeros((length, data.shape[1]), np.float32)
+    frames = np.arange(length)
+    f = from_frame + frames - start
+    inside = (frames >= start) & (f >= 0) & (f < len(data))
+    out[inside] = data[f[inside]]
+    return out
+
+
+def pcm24(x):
+    """Float frames as the 24-bit numbers a take's WAV holds."""
+    return np.clip(np.rint(x.astype(np.float64) * 8388607.0), -8388608, 8388607).astype(np.int64)
+
+
+def read24(path):
+    """A 24-bit WAV's frames as numbers, and (channels, sample width, rate)."""
+    with wave.open(str(path), "rb") as w:
+        shape = (w.getnchannels(), w.getsampwidth(), w.getframerate())
+        raw = np.frombuffer(w.readframes(w.getnframes()), dtype=np.uint8)
+    whole = np.zeros(len(raw) // 3, dtype=np.int32)
+    unpack24(raw.reshape(-1, 3), whole)
+    return whole.reshape(-1, shape[0]).astype(np.int64), shape
+
+
+class FakeOutput:
+    """Another device's output stream as a take sees it: its rate, whether it
+    is there (`trouble`, changed by hand), and the source it was given. Its
+    blocks are rendered by hand."""
+
+    def __init__(self, samplerate=RATE, trouble=None, name="Laptop", channels=(1, 2)):
+        self.samplerate = samplerate
+        self.name = name
+        self.channels = tuple(channels)
+        self.route = tuple(c - 1 for c in channels)
+        self.source = None
+        self.trouble = trouble
+        self.stopped = False
+
+    def start(self, source):
+        self.source = source
+
+    def stop(self):
+        self.stopped = True
+
+    def problem(self):
+        return self.trouble
 
 
 def main():
@@ -298,6 +385,309 @@ def main():
     with wave.open(str(tmp / "Backing 16.wav"), "rb") as w:
         back = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").reshape(-1, 2)
     ok("and at 16 bits", np.abs(back - y * 32767).max() <= 1)
+
+    print("\n[5] Placing it")
+    noise = rng.uniform(-0.9, 0.9, (6 * RATE, 2)).astype(np.float32)
+    soundfile.write(tmp / "noise.wav", noise, RATE, subtype="FLOAT")
+    ready6 = backing_file.make_ready(tmp / "noise.wav", RATE)
+    data6 = np.asarray(backing_file.open_ready(ready6)[0])
+    voices = Voices("click", RATE, 0.7)
+    bar = click_frame(4, 120, RATE)
+
+    def click_take(count_in, bar_one, route=(2, 3), file=ready6, **kw):
+        return TakeClick(120, "4/4", count_in, voices, (0, 1),
+                         backing=TakeBacking(file, bar_one, route=route, volume=1.0), **kw)
+
+    one = click_take(1, 2.5)
+    heard_one = duplex_run(one, 150, 4)
+    first = one.first_click_frame
+    ok("a bar of count-in at 120 before bar 1 at 2.50 s: the file starts at its frame 24000",
+       one.backing.from_frame == 24000)
+    ok("frame for frame: silent before the first click, then the file",
+       np.array_equal(heard_one[:, 2:4], placed(data6, first - TRIP, 24000, len(heard_one))))
+    ok("its bar 1 lands on the first click after the count-in",
+       np.array_equal(heard_one[first - TRIP + bar, 2:4], data6[120000]))
+
+    two = click_take(2, 4.2)
+    heard = duplex_run(two, 200, 4)
+    first = two.first_click_frame
+    ok("two bars of count-in: bar 1 on the first click after them",
+       two.backing.from_frame == 9600
+       and np.array_equal(heard[:, 2:4], placed(data6, first - TRIP, 9600, len(heard)))
+       and np.array_equal(heard[first - TRIP + 2 * bar, 2:4], data6[201600]))
+
+    long_in = click_take(1, 3.2)
+    heard = duplex_run(long_in, 60, 4)
+    first = long_in.first_click_frame
+    ok("a 3.2 s lead-in and a 2 s count-in: the first 1.2 s of the file are skipped",
+       long_in.backing.from_frame == 57600 and np.array_equal(heard[first - TRIP, 2:4], data6[57600]))
+
+    short_in = click_take(1, 1.0)
+    heard = duplex_run(short_in, 120, 4)
+    first = short_in.first_click_frame
+    ok("a 1 s lead-in and a 2 s count-in: a second of silence, then the file from its start",
+       short_in.backing.from_frame == -48000
+       and np.array_equal(heard[:, 2:4], placed(data6, first - TRIP, -48000, len(heard)))
+       and not heard[first - TRIP:first - TRIP + 48000, 2:4].any())
+
+    no_count = click_take(0, 2.5)
+    heard = duplex_run(no_count, 60, 4)
+    first = no_count.first_click_frame
+    ok("no count-in: the file starts at its bar 1, with the first click",
+       no_count.backing.from_frame == 120000 and np.array_equal(heard[first - TRIP, 2:4], data6[120000])
+       and np.array_equal(heard[first - TRIP:first - TRIP + len(voices.of(2)), 0], voices.of(2)))
+
+    alone = TakeClick(None, None, 0, None, (), clicks=False,
+                      backing=TakeBacking(ready6, 2.5, route=(0, 1), volume=1.0))
+    heard = duplex_run(alone, 60, 2)
+    first = alone.first_click_frame
+    ok("no click: the file from its start, nothing else in the outputs",
+       alone.backing.from_frame == 0 and first == 4800 + TRIP
+       and np.array_equal(heard, placed(data6, first - TRIP, 0, len(heard))))
+    ok("  the take's files start where its first sample comes back in",
+       alone.record()["first_click_frame"] == first and alone.count_in_clicks == 0)
+    ok("  Stop ends them where it comes, no quarter to run on to, no tempo in the WAVs",
+       alone.stop_frame(first + 12345) == first + 12345 and alone.end_frame == first + 12345
+       and alone.acid() is None)
+
+    print("\n[6] The streams")
+    click_only = TakeClick(120, "4/4", 1, voices, (0, 1))
+    ok("the click keeps its own outputs: the same as without a backing track",
+       np.array_equal(heard_one[:, 0:2], duplex_run(click_only, 150, 2)))
+    mono_noise = rng.uniform(-0.9, 0.9, 3 * RATE).astype(np.float32)
+    soundfile.write(tmp / "mono.wav", mono_noise, RATE, subtype="FLOAT")
+    mono = click_take(1, 1.5, file=backing_file.make_ready(tmp / "mono.wav", RATE))
+    heard = duplex_run(mono, 60, 4)
+    want = placed(mono_noise[:, None], mono.first_click_frame - TRIP, mono.backing.from_frame, len(heard))[:, 0]
+    ok("a mono file goes to both outputs of its pair", np.array_equal(heard[:, 2], want) and np.array_equal(heard[:, 3], want))
+    single = click_take(1, 2.5, route=(2,))
+    heard = duplex_run(single, 60, 3)
+    both_sides = (data6[:, :1] + data6[:, 1:]) * np.float32(0.5)
+    ok("a stereo file on one output: its two sides averaged",
+       np.allclose(heard[:, 2:3], placed(both_sides, single.first_click_frame - TRIP, 24000, len(heard)), atol=1e-6))
+
+    together = Sources(ClickSource(120, "4/4", voices, (0, 1)),
+                       BackingSource(backing_file.open_ready(ready6), (2, 3), 1.0))
+    block = np.zeros((1024, 4), np.float32)
+    together.render(block, 0, T, 0.01)
+    ok("one stream for both: the click on its outputs, the file on its own",
+       together.route == (0, 1, 2, 3) and np.array_equal(block[:, 2:4], data6[:1024])
+       and np.array_equal(block[:, 0], voices.of(2)[:1024]))
+    shared = FakeOutput(RATE, channels=(1, 2, 3, 4))
+    sharing = TakeClick(120, "4/4", 1, voices, (0, 1), output=shared, samplerate=RATE,
+                        backing=TakeBacking(ready6, 2.5, output=shared, route=(2, 3)))
+    sharing.start()
+    ok("  a take whose click and backing track go to the same device opens one stream there",
+       isinstance(shared.source, Sources) and shared.source.sources == (sharing.source, sharing.backing.source))
+
+    write_wav(tmp / "quiet.wav", np.zeros(RATE), sr=RATE)
+    player = TakePlayer([{"name": "Gtr", "file": str(tmp / "quiet.wav")}])
+    between = BackingSource(backing_file.open_ready(ready6), (0, 1), 1.0)
+    player.play_free_backing(between)
+    out = np.zeros((512, 2), np.int16)
+    player._fill(out, 512, None)
+    ok("between takes, mixed into the player's stream on its device",
+       player.free_backing is between and np.abs(out - np.trunc(data6[:512] * 32767)).max() <= 1)
+
+    elsewhere = FakeOutput(RATE)
+    asio = TakeClick(120, "4/4", 1, voices, (0, 1), output=elsewhere, samplerate=RATE,
+                     backing=TakeBacking(ready6, 2.5, output=SilentOutput("X18", ANOTHER_ASIO, RATE)))
+    asio.start()
+    elsewhere.source.render(np.zeros((1024, 2), np.float32), 0, T, 0.02)
+    clock = AudioClock(RATE)
+    clock.started_ns = T
+    clock.mark(T + 30_000_000, 1024, 1024, None)
+    asio.on_input(0, clock)
+    ok("a second ASIO card can't carry it, in the click's words, and the take records without it",
+       asio.first_click_frame is not None and asio.backing.problem() == ANOTHER_ASIO
+       and asio.backing_record() is None)
+
+    print("\n[7] Another device")
+    # The backing track on the laptop's output while the desk records: two
+    # clocks, the desk 200 ppm fast and the laptop 150 ppm slow, each
+    # callback late by a few ms of jitter, as in test_click's hour.
+    in_rate, out_rate = RATE * (1 + 200e-6), RATE * (1 - 150e-6)
+    T0 = 7_000_000_000
+    T1 = T0 + 250_000_000
+    rnd = random.Random(5)
+    laptop = FakeOutput(RATE)
+    away = TakeClick(None, None, 0, None, (), clicks=False, samplerate=RATE,
+                     backing=TakeBacking(ready6, 0.0, output=laptop, volume=1.0))
+    away.start()
+    desk = AudioClock(RATE)
+    desk.latency_sec = 0.005
+    desk.started_ns = T0
+    out = np.zeros((1024, 2), np.float32)
+    steps, last = [], None
+    i = j = 0
+
+    def input_due(i):
+        return T0 + (1024 * (i + 1)) / in_rate * 1e9 + 3e6 + rnd.random() * 3e6
+
+    def output_due(j):
+        return T1 + 1024 * j / out_rate * 1e9 - 0.02e9 - rnd.random() * 3e6
+
+    next_in, next_out = input_due(0), output_due(0)
+    while min(next_in, next_out) < T0 + 3600e9:
+        if next_in <= next_out:
+            ran = int(next_in)
+            captured = T0 + 1024 * i / in_rate * 1e9 + rnd.uniform(-2e5, 2e5)
+            desk.mark(ran, 1024 * (i + 1), 1024, (ran - captured) / 1e9)
+            away.on_input(1024 * i, desk)
+            i += 1
+            next_in = input_due(i)
+        else:
+            ran = int(next_out)
+            dac = T1 + 1024 * j / out_rate * 1e9 + rnd.uniform(-2e5, 2e5)
+            out.fill(0)
+            laptop.source.render(out, 1024 * j, ran, (dac - ran) / 1e9)
+            now = laptop.source.position_sec
+            if last is not None and now is not None:
+                steps.append((now - last) * RATE / 1024)
+            if now is not None:
+                last, last_block = now, j
+            j += 1
+            next_out = output_due(j)
+    heard_at = (T1 + 1024 * last_block / out_rate * 1e9 - T0) * in_rate / 1e9
+    off = last * RATE - (away.backing.from_frame + heard_at - away.first_click_frame)
+    ok(f"after an hour the file is heard within 10 ms of where its track has it ({off / RATE * 1000:+.2f} ms)",
+       abs(off) <= 480)
+    ok(f"its speed kept within 0.1% of the file's ({min(steps):.5f} to {max(steps):.5f})",
+       len(steps) > 160000 and 0.999 <= min(steps) and max(steps) <= 1.001)
+
+    print("\n[8] The take's Backing track")
+
+    def block_in(i):
+        n = (np.arange(i * 1024, (i + 1) * 1024) % 30000).astype(np.int32) << 8
+        return np.stack([n, n], axis=1)
+
+    def info(i):
+        now = 50.0 + i * 1024 / RATE
+        return types.SimpleNamespace(currentTime=now, inputBufferAdcTime=now - 0.005,
+                                     outputBufferDacTime=now + 0.005)
+
+    def feed(rec, i):
+        if rec.click.duplex:
+            rec._duplex_callback(block_in(i), np.zeros((1024, rec.click.width), np.float32), 1024, info(i), None)
+        else:
+            rec._callback(block_in(i), 1024, info(i), None)
+
+    def stopped(rec, done, also=None):
+        """Stop, the card going on from block `done` on a thread of its own once
+        Stop has said where the take ends, as test_engine's [80] has it.
+        `also(i)` runs with each block."""
+        halt = threading.Event()
+
+        def card():
+            i = done
+            while not halt.is_set():
+                if rec.click.end_frame is None:
+                    time.sleep(0.001)
+                    continue
+                feed(rec, i)
+                if also is not None:
+                    also(i)
+                i += 1
+                time.sleep(0.0002)
+
+        feeder = threading.Thread(target=card, daemon=True)
+        stream = rec._stream
+        stopping = stream.stop
+
+        def stop():
+            halt.set()
+            feeder.join()
+            stopping()
+
+        stream.stop = stop
+        feeder.start()
+        return rec.stop()
+
+    def take(name, tracks=(("Gtr", 1), ("Voc", 2)), blocks=300, during=None, also=None, **backing):
+        backing = {"route": (2, 3), **backing}
+        tc = TakeClick(120, "4/4", 1, voices, (0, 1), backing=TakeBacking(ready6, 2.5, **backing))
+        rec = AudioRecorder(0, RATE, [{"name": n, "channel": c} for n, c in tracks], tmp / name, 24, click=tc)
+        rec.start()
+        opened = rec._stream.kw
+        for i in range(blocks):
+            feed(rec, i)
+            if also is not None:
+                also(i)
+            if during is not None:
+                during(i, tc)
+        return tc, opened, stopped(rec, blocks, also)
+
+    tc, opened, done = take("A")
+    folder = tmp / "A"
+    track, shape = read24(folder / "Backing.wav")
+    frames = tc.end_frame - tc.first_click_frame
+    want = pcm24(backing_file.take_frames(backing_file.open_ready(ready6), 24000, frames))
+    ok("Stop writes the take's Backing track beside its tracks",
+       done.get("backing") == {"name": "Backing", "file": str(folder / "Backing.wav")}
+       and opened["channels"] == (2, 4))
+    ok("  stereo as the file, at the take's 24 bits and rate, its length",
+       shape == (2, 3, RATE) and len(track) == frames == read24(folder / "Gtr.wav")[0].shape[0])
+    ok("  the file sample for sample as it was placed, silent past its end",
+       np.array_equal(track, want) and not track[264000:].any() and track[:264000].any())
+    record = json.loads((folder / "take.json").read_text(encoding="utf-8"))
+    ok("take.json says which file and where it started",
+       record.get("backing") == {"file": str(ready6), "from_frame": 24000, "name": "Backing"})
+    ok("the fade at Stop was heard before the take's stream closed", tc.backing.source.done)
+
+    def flip(i, tc):
+        if i == 50:
+            tc.set_backing_on(False)
+        if i == 80:
+            tc.set_backing_volume(0.3)
+
+    take("B", during=flip)
+    ok("the switch and the volume during the take change what is heard, not the track",
+       (tmp / "B" / "Backing.wav").read_bytes() == (folder / "Backing.wav").read_bytes())
+
+    _, _, done = take("C", tracks=(("Backing", 1), ("Voc", 2)), blocks=60)
+    ok("a band track already called Backing: the backing track's is Backing (2)",
+       done["backing"] == {"name": "Backing (2)", "file": str(tmp / "C" / "Backing (2).wav")}
+       and any(t["name"] == "Backing" for t in done["tracks"]))
+
+    lost = TakeClick(120, "4/4", 1, voices, (0, 1), backing=TakeBacking(ready6, 2.5, route=(2, 3)))
+    crashed = AudioRecorder(0, RATE, [{"name": "Gtr", "channel": 1}], tmp / "D", 24, click=lost)
+    crashed.start()
+    for i in range(120):
+        feed(crashed, i)
+    time.sleep(0.2)
+    crashed.abandon()
+    back = finalize(tmp / "D", RATE, 24)
+    track, _ = read24(tmp / "D" / "Backing.wav")
+    frames = round(back["duration_sec"] * RATE)
+    ok("a take the app did not live to finish gets the same track from take.json",
+       back.get("backing") == {"name": "Backing", "file": str(tmp / "D" / "Backing.wav")}
+       and [t["name"] for t in back["tracks"]] == ["Gtr"]
+       and np.array_equal(track, pcm24(backing_file.take_frames(backing_file.open_ready(ready6), 24000, frames))))
+
+    _, _, done = take("E", blocks=60, route=None, output=SilentOutput("Laptop", "Not connected.", RATE))
+    ok("its output not there at Record: the take records, with no Backing track",
+       done["backing"] is None and not (tmp / "E" / "Backing.wav").exists() and len(done["tracks"]) == 2)
+
+    going = FakeOutput(RATE)
+
+    def laptop_block(i):
+        if going.source is not None:
+            going.source.render(np.zeros((1024, 2), np.float32), 1024 * i, T + i * 21_333_333, 0.02)
+        if i == 60:
+            going.trouble = "The click's output stopped answering."
+
+    _, _, done = take("F", blocks=120, route=None, output=going, also=laptop_block)
+    ok("its output gone during the take: the band heard it, so the track is written",
+       done["backing"] is not None and (tmp / "F" / "Backing.wav").exists())
+
+    fading = BackingSource(backing_file.open_ready(ready6), (0, 1), 1.0)
+    fading.render(np.zeros((1024, 2), np.float32), 0, T, 0.01)
+    fading.fade_out()
+    block = np.zeros((1024, 2), np.float32)
+    fading.render(block, 1024, T + 21_333_333, 0.01)
+    ramp = (1 - np.arange(1, 961) / 960)[:, None]
+    ok("at Stop what is heard fades out over 20 ms, then is silent",
+       np.allclose(block[:960], data6[1024:1984] * ramp, atol=1e-6) and not block[960:].any() and fading.done)
 
     shutil.rmtree(tmp, ignore_errors=True)
     print()
