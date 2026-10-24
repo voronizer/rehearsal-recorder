@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { FolderOpen, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -329,8 +329,10 @@ export function HistoryScreen({
       return pick && list.some((r) => r.folder === pick) ? pick : (list[0]?.folder ?? null)
     })
     // A rehearsal renamed, deleted or found again changes the songs too,
-    // and the marks.
-    if (songsShown.current) void loadSongs()
+    // and the marks. With no rehearsal, songs made with New song are all
+    // History has to show: a list that cannot be read shows none.
+    if (list.length === 0) loadSongs().catch(() => setSongIndex({ songs: [], not_named: null }))
+    else if (songsShown.current) void loadSongs()
     if (marksShown.current) loadMarks()
     return list
   }
@@ -342,7 +344,11 @@ export function HistoryScreen({
   // Which view History is on: the one used last, as Python kept it. Until
   // it has said, neither is drawn — the Rehearsals view flashing up before
   // the Songs view would be a screen that changes under the mouse.
-  const [view, setView] = useState<HistoryView | null>(null)
+  const [chosenView, setView] = useState<HistoryView | null>(null)
+  // No rehearsal yet, and songs made with New song: the Songs view alone, as
+  // the other two would have nothing in them.
+  const songsOnly = rehearsals?.length === 0 && !!songIndex?.songs.length
+  const view = chosenView === null ? null : songsOnly ? "songs" : chosenView
   // Read once, when History opens: what it was sent here for.
   const sentFor = useRef(initialSong)
   const sentForRehearsal = useRef(initialFolder !== undefined)
@@ -1044,7 +1050,7 @@ export function HistoryScreen({
   // Neither view is drawn until History knows which it is on. Reading the
   // list from disk is said with a spinner from its first second, and in
   // words from its tenth (B5).
-  const reading = rehearsals === null || view === null
+  const reading = rehearsals === null || view === null || (rehearsals.length === 0 && songIndex === null)
   const slow = useAfter(reading, 10_000)
 
   // A take open in the player: the whole window, the way it always had it.
@@ -1124,7 +1130,7 @@ export function HistoryScreen({
     )
   }
 
-  const empty = rehearsals?.length === 0
+  const empty = rehearsals?.length === 0 && songIndex !== null && !songsOnly
   const noSongs = songIndex !== null && songOrder.length === 0
   // The evening's figures, in the head of the page of a rehearsal that is on
   // disk: the overview under it does not say them, and the window's header
@@ -1173,13 +1179,20 @@ export function HistoryScreen({
           <EmptyHeader>
             <EmptyTitle>No past rehearsals yet</EmptyTitle>
             <EmptyDescription>
-              Every rehearsal where you saved at least one take shows up here.
+              Every rehearsal where you saved at least one take shows up here. A song can be made
+              before its first take, to give it a tempo and a backing track.
             </EmptyDescription>
           </EmptyHeader>
+          <EmptyContent>
+            <Button variant="outline" onClick={() => setMakingSong(true)}>
+              <Plus />
+              New song
+            </Button>
+          </EmptyContent>
         </Empty>
       )}
 
-      {rehearsals && rehearsals.length > 0 && view !== null && (
+      {rehearsals && (rehearsals.length > 0 || songsOnly) && view !== null && (
         <>
           {/* The list as a side panel on its grey. The switch stays above it,
               in view, while the list scrolls under it. */}
@@ -1189,7 +1202,7 @@ export function HistoryScreen({
           >
             <div className="flex min-h-0 flex-1 animate-rise flex-col" style={rise(0)}>
               <div className="flex shrink-0 flex-col gap-3 p-4 pb-3">
-                <HistorySwitch view={view} onChange={showView} />
+                {!songsOnly && <HistorySwitch view={view} onChange={showView} />}
                 {view === "songs" && (
                   <Button
                     variant="outline"

@@ -22,6 +22,7 @@ import threading
 import time
 import types
 import wave
+import weakref
 from pathlib import Path
 
 # The engine suite's stand-in for the sound card library, then the tempo
@@ -539,7 +540,10 @@ def through_the_api(tmp):
         ok("  another song picked stops it", a.metronome_state()["backing"]["playing"] is False)
         a.set_next_take_name("Pałyn")
         a.backing_play(palyn["id"], False)
+        mapped = weakref.ref(a._backing._free.source._data)
         ok("  Stop stops it", a.backing_stop()["ok"] and a.metronome_state()["backing"]["playing"] is False)
+        # Windows will not move a file to the Trash while it is mapped.
+        ok("  and lets go of its file at once, so Replace and Remove can trash it", mapped() is None)
         opened = _FakeStream.opened
         ok("with the click from bar 1: one stream for both on one device",
            a.backing_play(palyn["id"], True)["ok"] and _FakeStream.opened == opened + 1)
@@ -577,9 +581,16 @@ def through_the_api(tmp):
         ok("whether a song's Backing track is heard is kept",
            a.set_song_backing_heard(palyn["id"], True) == {"ok": True, "heard": True})
         a.shutdown()
+        # The recordings folder opened on another computer: its songs have
+        # backing tracks, and that computer's settings never saw one added.
+        settings = json.loads((home / "config.json").read_text(encoding="utf-8"))
+        settings.pop("backing_row", None)
+        (home / "config.json").write_text(json.dumps(settings), encoding="utf-8")
         _, b = fresh_api(home)
         try:
             ok("  across a restart", b._lib.take(folder, click_take["take_number"])["backing_heard"] is True)
+            ok("the row shows for a folder whose songs have one, and stays",
+               b.metronome_state()["backing"]["row"] is True and b.get_settings()["backing_row"] is True)
         finally:
             b.shutdown()
     finally:

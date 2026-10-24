@@ -196,6 +196,15 @@ test("while a take records: the switch, the file playing and the volume, no play
   await expect(time(page)).toHaveText(/^0:0\d \/ 3:42$/)
   await expect(volume(page)).toBeVisible()
   await expect(row(page).getByRole("button", { name: /Play|Stop/ })).toHaveCount(0)
+  // Its output gone mid-take: the line says so in amber, and the file dims.
+  await expect(file(page)).not.toHaveClass(/text-muted-foreground/)
+  await setFake(page, "__BACKING_OUTPUT_MISSING__", "X18 5–6")
+  await expect(status(page)).toContainText("The backing track's output, X18 5–6, is not connected.")
+  await expect(status(page).locator("svg")).toHaveCount(1)
+  await expect(file(page)).toHaveClass(/text-muted-foreground/)
+  await setFake(page, "__BACKING_OUTPUT_MISSING__", null)
+  await expect(status(page)).not.toContainText("backing track")
+  await expect(file(page)).not.toHaveClass(/text-muted-foreground/)
   // The switch changes what is heard; the take keeps the file.
   await onOff(page).click()
   await expect.poll(() => args(page, "set_backing_setting")).toEqual([["backing_on", false]])
@@ -322,6 +331,19 @@ test("the Backing lane is last, above Master, dashed and muted the first time; M
   // Another song's is its own: Pałyn's opens muted.
   await openOld(page, "Pałyn", "Take 3 Pałyn 3")
   await expect(mute(page)).toHaveAttribute("aria-pressed", "true")
+})
+
+// Drift leaves the Backing track out of "the mix" by its kind (spec Part 9):
+// the kind has to reach Python with the take's files.
+test("the drift line is asked with the Backing track named as one", async ({ page }) => {
+  await openBandApp(page)
+  await openHistory(page)
+  await page.getByRole("radio", { name: "Songs", exact: true }).click()
+  await openOld(page, "Viasna", "Take 4 Viasna")
+  await expect.poll(async () => (await args(page, "take_drift")).length).toBeGreaterThan(0)
+  const [tracks] = (await args(page, "take_drift")).at(-1) as [{ name: string; kind?: string }[]]
+  expect(tracks.find((t) => t.name === "Backing")?.kind).toBe("backing")
+  expect(tracks.find((t) => t.name === "Drums")?.kind).toBeUndefined()
 })
 
 test("Review right after a take shows the same lane, muted the first time", async ({ page }) => {

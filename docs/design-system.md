@@ -857,7 +857,8 @@ as the `cn` import.
   what will appear there and how it gets there: an empty set under Next take
   says "This set has no songs yet. Add them in Settings › Sets." On shadcn's
   Empty, as each screen is redone. History's four use it: no rehearsal
-  yet ("Every rehearsal where you saved at least one take shows up here."),
+  yet ("Every rehearsal where you saved at least one take shows up here.",
+  with New song for a song made before its first take),
   no song yet ("A take named after a song shows up here."), a rehearsal
   with no takes left, and a label with no marks, which says where they come
   from ("Marks given the label Fix in the player gather here, from every

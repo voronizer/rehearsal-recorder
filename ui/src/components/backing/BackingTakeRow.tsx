@@ -9,7 +9,7 @@ import { rowLine } from "@/lib/backing"
  * There is no ▶. The switch and the volume change what is heard; the take
  * keeps the file as it was placed. A take that records without it (the
  * switch off at Record, its output not there) has nothing to switch, and
- * its file is dimmed.
+ * its file is dimmed, as it is while its output has gone mid-take.
  */
 export function BackingTakeRow({
   state,
@@ -35,7 +35,7 @@ export function BackingTakeRow({
             name={song.name}
             seconds={song.seconds}
             position={b.playing ? b.position_sec : null}
-            dim={!b.playing || !b.on}
+            dim={!b.playing || !b.on || b.output_missing !== null}
           />
           <BackingVolume value={b.volume} onVolume={onVolume} className="w-24 shrink-0" />
         </>

@@ -29,6 +29,7 @@ let_go_for_rescan, called inside the player's and a rescan's locks, do not.
 
 import collections
 import glob
+import itertools
 import logging
 import math
 import queue
@@ -66,9 +67,10 @@ DURING_TAKE = "Not during a take"
 NONE = "That song has no backing track"
 
 # ▶ or two seconds for Settings: the backing track's source, whether the row
-# shows it (▶), the song's id, and the (kind, sink) it plays in: ("player",
-# the TakePlayer) or ("own", an output), one for each stream.
-_Free = collections.namedtuple("_Free", "source shown song_id sinks")
+# shows it (▶), the song's id, the (kind, sink) it plays in: ("player", the
+# TakePlayer) or ("own", an output), one for each stream; and its number,
+# which its timer goes by.
+_Free = collections.namedtuple("_Free", "source shown song_id sinks number")
 
 
 def _refused(error):
@@ -114,6 +116,10 @@ class Backing:
         self._lock = threading.Lock()
         self._sinks = threading.Lock()
         self._free = None
+        # ▶ and the two seconds, numbered for their timers: a timer holds the
+        # number, not the source, so a file stopped is let go of at once and
+        # Windows can move it to the Trash.
+        self._plays = itertools.count(1)
         # While a take records: True, and its TakeClick (None for a take with
         # neither click nor backing track) and TakeBacking (None for none).
         self._taking = False
@@ -134,6 +140,9 @@ class Backing:
         self._worker = None
         # (path, mtime, size) of a copy -> (seconds, channels).
         self._described = {}
+        # The library last looked at for songs with backing tracks while the
+        # row had never been shown.
+        self._row_looked = None
 
     # ---------- settings ----------
 
@@ -611,9 +620,9 @@ class Backing:
         with self._sinks:
             free = self._start_held(opened, start, shown, song_id, click)
         if shown:
-            timer = threading.Timer(seconds + END_SLACK_SEC, self._reap, args=(free,))
+            timer = threading.Timer(seconds + END_SLACK_SEC, self._reap, args=(free.number,))
         else:
-            timer = threading.Timer(PREVIEW_SEC, self._fade_and_reap, args=(free,))
+            timer = threading.Timer(PREVIEW_SEC, self._fade_and_reap, args=(free.number,))
         timer.daemon = True
         timer.start()
         return {"ok": True}
@@ -682,7 +691,7 @@ class Backing:
                         sink = SilentOutput(sink.name, sink.problem(), sink.samplerate)
                         sink.start(one)
                 played.append((kind, sink))
-            free = _Free(source, shown, song_id, tuple(played))
+            free = _Free(source, shown, song_id, tuple(played), next(self._plays))
             with self._lock:
                 self._free = free
         return free
@@ -730,18 +739,24 @@ class Backing:
         if free.source.fault is not None:
             log.error("The backing track between takes failed and went quiet: %s", free.source.fault)
 
-    def _reap(self, free):
-        """▶ played to the file's end, or Settings' two seconds are over: let
-        go of it, unless something else plays in its place."""
+    def _playing(self, number):
+        free = self._free
+        return free if free is not None and free.number == number else None
+
+    def _reap(self, number):
+        """▶ `number` played to the file's end, or Settings' two seconds are
+        over: let go of it, unless something else plays in its place."""
         with self._sinks, STREAM_LOCK:
-            if self._free is free:
+            if self._playing(number) is not None:
                 self._stop_free()
 
-    def _fade_and_reap(self, free):
-        if self._free is free:
+    def _fade_and_reap(self, number):
+        free = self._playing(number)
+        if free is not None:
             free.source.fade_out()
+            del free
             time.sleep(FADE_SEC + 0.05)
-        self._reap(free)
+        self._reap(number)
 
     def let_go_for_rescan(self):
         """For a rescan, inside its locks: what plays between takes stops."""
@@ -807,10 +822,31 @@ class Backing:
             playing = True
             position = free.source.position_sec or 0
         return {"song": shown, "on": self._setting("backing_on"), "volume": self._setting("backing_volume"),
-                "row": self._setting("backing_row"), "playing": playing,
+                "row": self._setting("backing_row") or self._row_from_library(), "playing": playing,
                 "position_sec": max(0, round(position, 2)),
                 "output_missing": self._output_problem(taking, take, free),
                 "getting_ready": getting_ready, "free": bool(free_name)}
+
+    def _row_from_library(self):
+        """Whether the row shows for a recordings folder whose songs already
+        have backing tracks, added on another computer: as if one had just
+        been added here, and from then on. Each folder is looked at once."""
+        try:
+            library = self._library()
+        except Exception:
+            return False
+        if library is self._row_looked:
+            return False
+        self._row_looked = library
+        try:
+            found = bool(library.backing_files())
+        except Exception:
+            log.exception("The songs' backing tracks could not be read")
+            return False
+        if found:
+            self._config["backing_row"] = True
+            self._write_config()
+        return found
 
     def _output_problem(self, taking, take, free):
         """How the row names its output when it cannot play there, else None."""

@@ -574,18 +574,49 @@ test("while the rehearsals are read, a spinner after a second and the words afte
   await expect(words).toHaveCount(0)
 })
 
+/** No rehearsal yet: no takes, so the only songs are those made with New
+ *  song, which have none. */
+const NO_REHEARSALS = `
+  window.pywebview.api.list_rehearsals = async () => [];
+  const songs = window.pywebview.api.list_songs;
+  window.pywebview.api.list_songs = async () => {
+    const index = await songs();
+    return { songs: index.songs.filter((s) => s.goes === 0), not_named: null };
+  };`
+
 test("with no rehearsal yet, History says how one gets here on the shared Empty", async ({
   page,
 }) => {
-  await openApp(page, { after: "window.pywebview.api.list_rehearsals = async () => [];" })
+  await openApp(page, { after: NO_REHEARSALS })
   await page.getByRole("button", { name: "History", exact: true }).click()
   const empty = page.locator("main [data-slot='empty']")
   await expect(empty.locator("[data-slot='empty-title']")).toHaveText("No past rehearsals yet")
   await expect(empty.locator("[data-slot='empty-description']")).toHaveText(
-    "Every rehearsal where you saved at least one take shows up here."
+    "Every rehearsal where you saved at least one take shows up here. A song can be made before its first take, to give it a tempo and a backing track."
   )
+  await expect(empty.getByRole("button", { name: "New song" })).toBeVisible()
   await expect(page.getByRole("navigation")).toHaveCount(0)
   await expect(page.getByRole("banner").locator("[data-figures]")).toHaveCount(0)
+})
+
+// A band getting ready for its first rehearsal gives its songs their backing
+// tracks before any take (backing-track spec Part 6).
+test("with no rehearsal yet, New song makes a song and History shows the Songs view alone", async ({
+  page,
+}) => {
+  await openApp(page, { after: NO_REHEARSALS })
+  await page.getByRole("button", { name: "History", exact: true }).click()
+  await page.locator("main [data-slot='empty']").getByRole("button", { name: "New song" }).click()
+  const dialog = page.getByRole("dialog", { name: "New song" })
+  await dialog.getByRole("textbox", { name: "Song title" }).fill("Ranak")
+  await dialog.getByRole("button", { name: "Create" }).click()
+  await expect(dialog).toHaveCount(0)
+  const list = page.getByRole("navigation", { name: "Songs" })
+  await expect(list.locator("[data-song='Ranak']")).toContainText("No takes yet")
+  await expect(page.locator("[data-song-head]").getByRole("heading", { name: "Ranak", exact: true })).toBeVisible()
+  // Rehearsals and Labels would have nothing in them.
+  await expect(page.getByRole("radio", { name: "Rehearsals", exact: true })).toHaveCount(0)
+  await expect(page.locator("main [data-slot='empty']")).toHaveCount(0)
 })
 
 test("a take open keeps its header, with 48 px between the strip and the player", async ({

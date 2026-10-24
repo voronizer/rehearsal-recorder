@@ -9,6 +9,7 @@ import {
   rowLine,
   rowSentence,
   stepBarOne,
+  takeSentence,
 } from "@/lib/backing"
 
 /** Palyn's backing track as the library has it: counted 128, bar 1 at 0.80,
@@ -133,6 +134,25 @@ describe("rowSentence", () => {
     expect(rowSentence(state({}, { row: false }))).toBeNull()
     expect(rowSentence(state({}, { song: null }))).toBeNull()
     expect(rowSentence(state({ case: "free", song: null }, { song: null, free: true }))).toBeNull()
+  })
+})
+
+describe("takeSentence", () => {
+  const taking = { phase: "take" as const, since_count_in_ms: 4000 }
+
+  it("its output gone mid-take, in amber, by its name", () => {
+    expect(takeSentence(state(taking, { playing: true, output_missing: "X18 5–6" }))).toEqual({
+      text: "The backing track's output, X18 5–6, is not connected.",
+      amber: true,
+    })
+    expect(takeSentence(state(taking, { playing: true, output_missing: "" }))?.text).toBe(
+      "The backing track's output is not connected."
+    )
+  })
+
+  it("nothing while it plays where it should, or the take has none", () => {
+    expect(takeSentence(state(taking, { playing: true }))).toBeNull()
+    expect(takeSentence(state(taking, { playing: false, output_missing: "X18 5–6" }))).toBeNull()
   })
 })
 

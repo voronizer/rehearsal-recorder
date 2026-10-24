@@ -24,6 +24,7 @@ import {
   type RecordingHealth,
   type PlacedTrack,
 } from "@/lib/api"
+import { takeSentence } from "@/lib/backing"
 import { formatClock, formatDate, formatMMSS } from "@/lib/format"
 import { fallBack, isSilent, watchStep, type TrackWatch } from "@/lib/levels"
 import { accentOf } from "@/lib/metronome"
@@ -483,6 +484,7 @@ export function Recording({
                     state={beat}
                     lit={metronome.lit}
                     onSwitch={(on) => void switchClick(on)}
+                    then={beat.backing.row ? takeSentence(beat) : null}
                     below={
                       beat.backing.row && (
                         <BackingTakeRow

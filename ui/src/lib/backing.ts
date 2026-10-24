@@ -56,6 +56,23 @@ export function rowSentence(state: MetronomeState): RowSentence | null {
 }
 
 /**
+ * What the status line goes on with while a take records: that the backing
+ * track's output went away, in amber, as the click's line says of its own.
+ * The row shows the rest itself; null while it plays where it should, and
+ * for a take without it.
+ */
+export function takeSentence(state: MetronomeState): RowSentence | null {
+  const b = state.backing
+  if (!b.playing || b.output_missing === null) return null
+  return {
+    text: b.output_missing
+      ? `The backing track's output, ${b.output_missing}, is not connected.`
+      : "The backing track's output is not connected.",
+    amber: true,
+  }
+}
+
+/**
  * What the row says in place of a file (Part 5): for a free take, and for a
  * song without a backing track, named as the library has it or else as
  * `name`, the next take's name as typed. Null when the row has a file to

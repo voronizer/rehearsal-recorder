@@ -23,7 +23,9 @@ const AGAIN_MS = 2000
 export function useTakeDrift(take: DriftTake | null | undefined): DriftView {
   const key = take?.tracks?.length
     ? JSON.stringify({
-        tracks: take.tracks.map((t) => ({ name: t.name, file: t.file })),
+        // The kind goes too: Python leaves the Backing track out of the mix
+        // by it (backing-track spec Part 9).
+        tracks: take.tracks.map((t) => ({ name: t.name, file: t.file, ...(t.kind ? { kind: t.kind } : {}) })),
         notes: (take.notes ?? []).map((n) => ({ name: n.name, file: n.file })),
         meter: {
           tempo: take.tempo ?? null,
