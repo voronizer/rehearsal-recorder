@@ -186,8 +186,9 @@ each with a story for every state (U5), except three that are shared but
 live outside it: the notices (`components/Notices.tsx` and
 `lib/notices.ts`), `ConfirmDialog` (`components/ConfirmDialog.tsx`) and
 `TakeTitle` (`components/TakeTitle.tsx`). The metronome's pieces live
-together in `components/metronome/`, each with its story beside it (the
-last lines below). A screen that still builds a piece of its own moves onto
+together in `components/metronome/`, and the backing track's in
+`components/backing/`, each with its story beside it (the last lines
+below). A screen that still builds a piece of its own moves onto
 the shared one when it is redone.
 
 - **C1. Button.** Every button is the shared `Button`: a hand-made
@@ -625,6 +626,30 @@ and the tab's own checkbox for the tempo in WAV files. `DevicePicker`'s
 reason under its name: the click's output says so of a second ASIO card.
 One already saved that cannot be picked now keeps its name alone in the
 box, on one line (B4), and the reason shows under the box.
+
+The backing track's pieces, in `components/backing/` (backing-track spec
+Parts 5 to 8):
+
+- **BarOneField**, `BarOneField.tsx`: where bar 1 is in the file,
+  "0:00.80" (`formatBarOne`), between − and + as TempoField has them, a
+  hundredth of a second a step. Typed as minutes and seconds or seconds
+  alone, taken on Enter or on leaving the field; not a time puts the last
+  one back. ↑ and ↓ in the field step it, a tenth with Shift.
+- **FileStart**, `FileStart.tsx`: the start of the file drawn with the
+  shared `Waveform`, from 0 to four bars past bar 1 and 8 s at least, a
+  scale kept while the page is open. The song's bars, numbered, and beats
+  are lines in the accent at half strength; bar 1 is a full line with its
+  marker, a slider dragged or moved with ← and →. The playhead is a line
+  in the text's colour, and the part played is in the accent, as a lane's.
+- **SongBacking**, `SongBacking.tsx`: a song's backing track on its page,
+  under SongTempoRow: the icon, the file's name and length, BarOneField,
+  ▶ (32 px and square, as the tempo row's) and ⋯, a `DropdownMenu` with
+  Replace… and Remove; FileStart under them, and the line from `pageLine`
+  in two lines' room, its links as the tempo row's. One ▶ of the page plays
+  at a time.
+- **NewSongDialog**, `NewSongDialog.tsx`: New song, from the button over
+  History's song list: the shared `Dialog`, the title's field, and a line
+  under it that keeps its height and says why Create waits.
 
 ## Writing components
 

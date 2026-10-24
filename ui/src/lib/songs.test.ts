@@ -191,6 +191,11 @@ describe("the lines under a song", () => {
       "1 take in 1 rehearsal · last Tue 30 Dec 2025"
     )
   })
+  it("says a song with no takes yet gets its first from a take kept under its title", () => {
+    expect(pageLine([], false, NOW)).toBe(
+      "No takes yet: its first comes with the first take kept under this title."
+    )
+  })
   it("says only the last day for Not named", () => {
     const goes = [go("/b", 4, "2026-09-22T19:00:00"), go("/a", 2, "2026-09-10T19:00:00")]
     expect(pageLine(goes, true, NOW)).toBe("2 takes in 2 rehearsals · last Tue 22 Sep")

@@ -1675,6 +1675,9 @@ window.__MAKE_API__ = () => ({
   // with withClick and a song tempo, until ■, Record, another song or its
   // end. The metronome's ▶ stops.
   backing_play: track('backing_play', async (id, withClick = false) => {
+    // The row has followed the next take's name already, as Python's has:
+    // only a song named after this stops the file.
+    metroFollow();
     if (metro.take) return {ok:false, error:BACKING_DURING_TAKE};
     const song = await backingSong(id);
     const own = song ? backingOf(song.title) : null;

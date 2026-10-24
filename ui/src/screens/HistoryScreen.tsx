@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { FolderOpen, Trash2 } from "lucide-react"
+import { FolderOpen, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
@@ -24,6 +24,7 @@ import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/ConfirmDialog"
 import { RenameSongDialog } from "@/components/RenameSongDialog"
+import { NewSongDialog } from "@/components/backing/NewSongDialog"
 import { ShareDialog } from "@/components/ShareDialog"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useAfter } from "@/hooks/useAfter"
@@ -286,6 +287,8 @@ export function HistoryScreen({
   // A song being renamed, from the pencil on its page, and a merge asked
   // about: the two songs and what the dry run counted.
   const [songToRename, setSongToRename] = useState<SongSummary | null>(null)
+  // New song, from the button over the song list.
+  const [makingSong, setMakingSong] = useState(false)
   const [mergeAsked, setMergeAsked] = useState<{
     from: SongName
     into: SongName
@@ -674,6 +677,13 @@ export function HistoryScreen({
     if (ref === chosenSong) return
     close()
     setSong(ref)
+  }
+
+  /** A song made with New song: its page, once the list has it. */
+  const songMade = async (id: number) => {
+    close()
+    await loadSongs()
+    setSong(id)
   }
 
   const step = (delta: number) => {
@@ -1178,8 +1188,19 @@ export function HistoryScreen({
             className="flex w-64 shrink-0 flex-col border-r bg-panel xl:w-80"
           >
             <div className="flex min-h-0 flex-1 animate-rise flex-col" style={rise(0)}>
-              <div className="shrink-0 p-4 pb-3">
+              <div className="flex shrink-0 flex-col gap-3 p-4 pb-3">
                 <HistorySwitch view={view} onChange={showView} />
+                {view === "songs" && (
+                  <Button
+                    variant="outline"
+                    size="row"
+                    className="self-start"
+                    onClick={() => setMakingSong(true)}
+                  >
+                    <Plus />
+                    New song
+                  </Button>
+                )}
               </div>
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4">
                 {view === "songs" ? (
@@ -1250,6 +1271,7 @@ export function HistoryScreen({
                     )
                   }
                   onForgetName={(name) => void forgetName(name)}
+                  onChanged={() => void loadSongs()}
                 />
               )}
             </section>
@@ -1455,6 +1477,13 @@ export function HistoryScreen({
       )}
 
       {takeDialogs}
+
+      <NewSongDialog
+        open={makingSong}
+        songs={songIndex?.songs ?? []}
+        onOpenChange={setMakingSong}
+        onMade={(made) => void songMade(made.id)}
+      />
 
       <RenameSongDialog
         song={songToRename}

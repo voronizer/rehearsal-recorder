@@ -5,6 +5,7 @@ import {
   daysAgo,
   describeRescan,
   diskLine,
+  formatBarOne,
   formatBytes,
   formatClock,
   formatDate,
@@ -34,6 +35,15 @@ describe("times", () => {
     expect(formatMMSS(125.9)).toBe("2:05")
     expect(formatMMSS(-3)).toBe("0:00")
     expect(formatMMSS(NaN)).toBe("0:00")
+  })
+  it("writes bar 1's place in a file to a hundredth of a second", () => {
+    expect(formatBarOne(0)).toBe("0:00.00")
+    expect(formatBarOne(0.8)).toBe("0:00.80")
+    expect(formatBarOne(1.27)).toBe("0:01.27")
+    expect(formatBarOne(62.5)).toBe("1:02.50")
+    // A hundredth that rounds up to the next minute carries into it.
+    expect(formatBarOne(59.999)).toBe("1:00.00")
+    expect(formatBarOne(-1)).toBe("0:00.00")
   })
   it("counts a take's clock in minutes, and hours once past the hour", () => {
     expect(formatClock(59)).toBe("0:59")
