@@ -25,6 +25,9 @@ class Base(DeclarativeBase):
 # change.
 AUDIO_FILE = "audio"
 NOTES_FILE = "midi"
+# The WAV the app wrote from the song's backing track (migration 0009): opened
+# as audio, as a track is, and drawn as the Backing track.
+BACKING_FILE = "backing"
 
 
 class Rehearsal(Base):
@@ -78,6 +81,18 @@ class Song(Base):
     # (migration 0008). Library.set_song_tempo says what they may be.
     tempo: Mapped[int | None] = mapped_column(Integer, nullable=True)
     signature: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Its backing track (migration 0009): the app's copy of the file, relative
+    # to the recordings folder, and the file's name as it was added, which
+    # screens show; both None for a song with none. Bar 1 is seconds into the
+    # file, to a hundredth; the tempo is what was counted from the file, in
+    # the song's own count, None for a file with no steady beat. `heard` is
+    # whether a take's Backing track is heard when a take of the song opens:
+    # muted the first time, then as the band last left it.
+    backing_file: Mapped[str | None] = mapped_column(String, nullable=True)
+    backing_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    backing_first_bar: Mapped[float | None] = mapped_column(Float, nullable=True)
+    backing_tempo: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    backing_heard: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class SongName(Base):
@@ -195,7 +210,8 @@ class TakeFile(Base):
     name: Mapped[str] = mapped_column(String)
     # Relative to the rehearsal folder: "01 - Verse riff/Guitar 1.wav".
     file: Mapped[str] = mapped_column(String)
-    # "audio" for a WAV, "midi" for a .mid (migration 0007). Kept apart so
+    # "audio" for a WAV, "midi" for a .mid (migration 0007), "backing" for the
+    # WAV the app wrote from the song's backing track (0009). Kept apart so
     # that nothing which opens a take's tracks as audio is handed a .mid.
     # Added in place, like song_id on `take`.
     kind: Mapped[str] = mapped_column(String, default=AUDIO_FILE, server_default=AUDIO_FILE)

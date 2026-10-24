@@ -65,6 +65,15 @@ def ok(label, cond):
         problems.append(label)
 
 
+def rows19(root, sql):
+    """The rows a query gives on the library in `root`, read past the Library."""
+    engine = db.make_engine(db.database_path(root))
+    with engine.connect() as c:
+        out = [tuple(r) for r in c.execute(text(sql)).all()]
+    engine.dispose()
+    return out
+
+
 def migrations_with(tmp, name, body):
     """The app's migrations plus one more, in a folder of their own."""
     folder = tmp / "migrations"
@@ -2035,6 +2044,145 @@ def main():
     lib.forget_rehearsal(night18)
     lib.restore_rehearsal(json.loads(json.dumps(whole_record18)))
     ok("so does a whole rehearsal, every take's tempo among it", lib.rehearsal(night18) == whole18)
+    lib.close()
+
+    print("\n[19] A song's backing track (migration 0009)")
+    # A song keeps one audio file the app plays from Record, its bar 1 and the tempo counted
+    # from it, and whether its take's Backing track is heard when a take opens (backing track
+    # spec, Part 1). A take keeps that track as a file of a kind of its own.
+    rec19 = tmp / "Backing"
+    rec19.mkdir()
+    db.open_engine(rec19, migrations_up_to(tmp, "0008")).dispose()
+    engine = db.make_engine(db.database_path(rec19))
+    with engine.begin() as c:
+        c.execute(text("INSERT INTO song (title, last_go, tempo, signature) VALUES ('Polyn', 0, 96, '3/4')"))
+    engine.dispose()
+    engine = db.open_engine(rec19)
+    ok("a database at 0008 is moved on to the newest migration", db.current_revision(engine) == HEAD)
+    with engine.connect() as c:
+        drift19 = compare_metadata(MigrationContext.configure(c), Base.metadata)
+        old19 = [tuple(r) for r in c.execute(text(
+            "SELECT backing_file, backing_name, backing_first_bar, backing_tempo, backing_heard FROM song")).all()]
+    engine.dispose()
+    ok("and it is then what models.py describes", drift19 == [])
+    ok("an old song has no backing track, and its Backing track is not heard",
+       old19 == [(None, None, None, None, 0)])
+
+    lib = Library(rec19)
+    night19 = rec19 / "Night"
+    lib.create_rehearsal(night19, "Night", "2026-10-01T19:00:00", 48000, 24, [])
+    copies19 = rec19 / "Backing tracks"
+    copies19.mkdir()
+
+    def song19(title):
+        return next((s for s in lib.songs()["songs"] if s["title"] == title), None)
+
+    print("  a take's Backing track")
+    take19 = lib.add_take(night19, {
+        "take_number": 1, "name": "Pałyn", "tracks": [{"name": "Gtr", "file": str(night19 / "01/Gtr.wav")}],
+        "notes": [{"name": "Kit", "file": str(night19 / "01/Kit.mid")}],
+        "backing": {"name": "Backing", "file": str(night19 / "01/Backing.wav")}})
+    ok("it comes back last among the tracks, marked as the Backing track",
+       take19["tracks"] == [{"name": "Gtr", "file": str(night19 / "01/Gtr.wav")},
+                            {"name": "Backing", "file": str(night19 / "01/Backing.wav"), "kind": "backing"}])
+    ok("and never among the notes", [n["name"] for n in take19["notes"]] == ["Kit"])
+    ok("it is kept as a file of the kind backing",
+       lib.take_record(night19, 1)["files"][1]["kind"] == "backing")
+    cropped19 = lib.update_take(night19, 1, tracks=take19["tracks"])
+    ok("tracks handed back as the take gave them (a crop) keep it the Backing track",
+       cropped19["tracks"][1].get("kind") == "backing" and cropped19["tracks"][0].get("kind") is None)
+    ok("a take says its song's Backing track is not heard yet", take19["backing_heard"] is False)
+
+    print("  New song")
+    palyn19 = lib.song_id("Pałyn")
+    lib.rename_song(palyn19, "Pałyn")
+    lib.remember_song_name(palyn19, "Palin")
+
+    def refused19(title):
+        try:
+            lib.add_song(title)
+        except SongRefused as e:
+            return str(e)
+        return None
+
+    ok("a title that is a song, in any case, is refused, naming the song",
+       refused19("PAŁYN") == "Pałyn is already a song.")
+    ok("so is a song's old name", refused19("Palin") == "Pałyn is already a song.")
+    ok("so are an empty title and Take N",
+       bool(refused19("  ")) and bool(refused19("Take 4")))
+    made19 = lib.add_song("  Hlyboka ")
+    ok("a new title makes a song with no takes, its count at 0",
+       made19 == {"id": lib.song_id("Hlyboka"), "title": "Hlyboka"}
+       and rows19(rec19, "SELECT last_go FROM song WHERE title = 'Hlyboka'") == [(0,)])
+    hl19 = song19("Hlyboka")
+    ok("History lists it with no takes and no rehearsals",
+       hl19 is not None and (hl19["goes"], hl19["rehearsals"], hl19["first_played"], hl19["backing"]) == (0, 0, None, None))
+    ok("Polyn, a song from before with no takes, is listed too", song19("Polyn") is not None)
+    ok("both are songs with no takes, for Next take", lib.song_titles_without_takes() == ["Hlyboka", "Polyn"])
+    page19 = lib.goes_of(made19["id"])
+    ok("its page has no takes and no backing track", page19["goes"] == [] and page19["backing"] is None)
+
+    print("  the backing track")
+    copy19 = copies19 / "Palyn backing.wav"
+    ok("a song's backing track is set, and nothing was there before",
+       lib.set_song_backing(palyn19, copy19, "Pałyn backing.wav", 0.8, 128) is None)
+    ok("History lists it with its name, bar 1 and counted tempo",
+       song19("Pałyn")["backing"] == {"name": "Pałyn backing.wav", "first_bar": 0.8, "tempo": 128})
+    ok("and the song gives where the copy is, kept relative to the recordings folder",
+       lib.song_backing(palyn19) == {"file": copy19, "name": "Pałyn backing.wav", "first_bar": 0.8,
+                                     "tempo": 128, "heard": False}
+       and rows19(rec19, f"SELECT backing_file FROM song WHERE id = {palyn19}") == [("Backing tracks/Palyn backing.wav",)])
+    ok("its page has it too", lib.goes_of(palyn19)["backing"] == {"name": "Pałyn backing.wav", "first_bar": 0.8, "tempo": 128})
+    lib.set_backing_first_bar(palyn19, 1.234)
+    ok("bar 1 is kept to a hundredth", lib.song_backing(palyn19)["first_bar"] == 1.23)
+    lib.set_backing_first_bar(palyn19, -0.5)
+    ok("and never before the file's start", lib.song_backing(palyn19)["first_bar"] == 0.0)
+    lib.set_backing_tempo(palyn19, 64)
+    ok("the counted tempo is set (halved)", lib.song_backing(palyn19)["tempo"] == 64)
+    lib.set_backing_tempo(palyn19, None)
+    ok("or cleared (no steady beat)", lib.song_backing(palyn19)["tempo"] is None)
+    other19 = copies19 / "Palyn backing (2).wav"
+    ok("replacing it gives back the old copy, for the Trash",
+       lib.set_song_backing(palyn19, other19, "Pałyn backing.wav", 0.0, 128) == copy19)
+    lib.rename_song(palyn19, "Pałyń")
+    ok("a rename keeps it", lib.song_backing(palyn19)["file"] == other19)
+    lib.rename_song(palyn19, "Pałyn")
+    ok("removing it gives back the copy and leaves the song with none",
+       lib.clear_song_backing(palyn19) == other19 and lib.song_backing(palyn19) is None
+       and song19("Pałyn")["backing"] is None)
+    ok("removing none gives back nothing", lib.clear_song_backing(palyn19) is None)
+
+    print("  songs whose takes were deleted")
+    lib.add_take(night19, {"take_number": 2, "name": "Dym", "tracks": []})
+    lib.add_take(night19, {"take_number": 3, "name": "Sonca", "tracks": []})
+    lib.delete_take(night19, 2)
+    lib.delete_take(night19, 3)
+    ok("a song whose takes were all deleted is not listed, nor offered", song19("Dym") is None
+       and "Dym" not in lib.song_titles_without_takes())
+    lib.set_song_backing(lib.song_id("Sonca"), copies19 / "Pads.wav", "Pads.wav", 0.0, None)
+    ok("unless it has a backing track", song19("Sonca") is not None and song19("Sonca")["goes"] == 0
+       and "Sonca" in lib.song_titles_without_takes())
+
+    print("  merging songs")
+    lib.set_song_backing(lib.song_id("Hlyboka"), copies19 / "Deep.wav", "Deep.wav", 2.0, 90)
+    plan19 = lib.merge_songs(lib.song_id("Sonca"), lib.song_id("Hlyboka"), dry_run=True)
+    ok("a dry run says which copy would go to the Trash and changes nothing",
+       plan19["trash"] == [copies19 / "Pads.wav"] and lib.song_backing(lib.song_id("Sonca")) is not None)
+    done19 = lib.merge_songs(lib.song_id("Sonca"), lib.song_id("Hlyboka"))
+    ok("a merge keeps the target's backing track and gives back the other copy",
+       lib.song_backing(lib.song_id("Hlyboka"))["name"] == "Deep.wav" and done19["trash"] == [copies19 / "Pads.wav"])
+    lib.set_song_backing(lib.song_id("Polyn"), copies19 / "Loop.wav", "Loop.wav", 0.5, 96)
+    done19 = lib.merge_songs(lib.song_id("Polyn"), palyn19)
+    ok("or takes the merged song's when the target has none, with nothing to throw away",
+       lib.song_backing(palyn19)["name"] == "Loop.wav" and done19["trash"] == [])
+
+    print("  heard or not")
+    lib.set_backing_heard(palyn19, True)
+    ok("whether the Backing track is heard is kept with the song",
+       lib.song_backing(palyn19)["heard"] is True and lib.take(night19, 1)["backing_heard"] is True)
+    lib.close()
+    lib = Library(rec19)
+    ok("and lasts across a restart", lib.song_backing(palyn19)["heard"] is True)
     lib.close()
 
     print()

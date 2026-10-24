@@ -6233,8 +6233,8 @@ def main():
     sa_event.listen(s56._lib._engine, "before_cursor_execute", count56)
     s56.list_songs()
     sa_event.remove(s56._lib._engine, "before_cursor_execute", count56)
-    ok("the list of songs is two queries, its songs and their old names, however many",
-       len(statements56) == 2)
+    ok("the list of songs is three queries, its songs, those with no takes and their old names, however many",
+       len(statements56) == 3)
 
     ok("History opens on its Rehearsals view until another is chosen",
        s56.get_settings()["history_view"] == "rehearsals")
