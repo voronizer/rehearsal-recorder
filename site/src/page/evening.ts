@@ -11,6 +11,7 @@ import type { PieceId } from "./pieces"
 export const KIND: Record<ItemId, "tile" | "card"> = {
   set: "tile",
   tempo: "tile",
+  backing: "tile",
   "left-off": "card",
   tap: "card",
   counted: "card",
@@ -66,6 +67,7 @@ const piece = (id: PieceId): Shows => ({ piece: id })
 export const SHOWS: Record<ItemId, Shows> = {
   set: piece("set"),
   tempo: at(0, 4, 360, 760),
+  backing: piece("backing"),
   "left-off": at(0, 3, 300, 330),
   tap: piece("tap"),
   counted: piece("counted"),

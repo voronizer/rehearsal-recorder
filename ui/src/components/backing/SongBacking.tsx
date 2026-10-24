@@ -238,7 +238,10 @@ export function SongBacking({
           </>
         ) : (
           <>
-            <span data-backing-file className="flex min-w-0 flex-1 items-baseline gap-1.5 text-sm">
+            {/* 10rem at least before what follows wraps under it, so a narrow
+                page cuts the name only so far and never lays the time over Bar
+                1 at. */}
+            <span data-backing-file className="flex min-w-0 flex-[1_1_10rem] items-baseline gap-1.5 text-sm">
               <span className="truncate font-medium">{counting ?? own?.name}</span>
               {counting === null && own && !missing && own.seconds !== null && (
                 <span className="tnum shrink-0 text-xs text-muted-foreground">

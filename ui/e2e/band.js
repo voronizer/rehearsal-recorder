@@ -431,12 +431,15 @@ oldNames.set('palyn', {name: 'Palyn', song: 'Pałyn'});
 
 // The backing tracks the band plays along with: Pałyn's counted at the
 // song's 128, bar 1 after a 0.80 s lead-in; Sonca's pads with no steady beat,
-// so the song keeps the 96 typed for it; Viasna's counted at 126, the song
-// staying at 128. Dym has none. Hlyboka is a song made with New song, with no
-// takes yet.
-backings.set('Pałyn', {name: 'Pałyn backing.wav', seconds: 222, channels: 2, tempo: 128, first_bar: 0.8});
-backings.set('Sonca', {name: 'Sonca pads.wav', seconds: 300, channels: 1, tempo: null, first_bar: 0});
-backings.set('Viasna', {name: 'Viasna backing.wav', seconds: 268, channels: 2, tempo: 126, first_bar: 0.45});
+// so the song keeps the 96 typed for it; Viasna's counted at the song's 128
+// too, as the site's first screen shows it. Dym has none. A song a test gave
+// a backing track of its own (window.__BACKINGS__) keeps that one. Hlyboka is
+// a song made with New song, with no takes yet.
+for (const [song, backing] of [
+  ['Pałyn', {name: 'Pałyn backing.wav', seconds: 222, channels: 2, tempo: 128, first_bar: 0.8}],
+  ['Sonca', {name: 'Sonca pads.wav', seconds: 300, channels: 1, tempo: null, first_bar: 0}],
+  ['Viasna', {name: 'Viasna backing.wav', seconds: 268, channels: 2, tempo: 128, first_bar: 0.45}],
+]) if (!backings.has(song)) backings.set(song, backing);
 newSongs.add('Hlyboka');
 repertoire.push('Hlyboka');
 // The songs numbered as Python made them, the oldest played first, so each

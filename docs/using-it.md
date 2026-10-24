@@ -909,7 +909,7 @@ rehearsal.
 
 ## The metronome
 
-![The metronome's row at the bottom left of the rehearsal screen, beside Finish and Record take: the switch, 128 bpm with − and +, 4/4, Tap, ▶, the beat's dots and the gear, over the line “The song's tempo.”](screenshots/metronome-row.png)
+![The metronome's row at the bottom left of the rehearsal screen, beside Finish and Record take: the switch, 128 bpm with − and +, 4/4, Tap, ▶, the beat's dots and the gear; under it the backing track's row, and the line “The song's tempo. The backing track comes in on bar 1, after the count-in.”](screenshots/metronome-row.png)
 
 The metronome clicks on every beat, higher on the first beat of a bar, so
 you hear where each bar starts. How fast it clicks is the tempo, counted in
@@ -1017,8 +1017,8 @@ gives no taps.
 
 ### Where the click is heard
 
-Choose where the click plays in **Settings › Metronome**, under **Click
-output**: an interface and its outputs, chosen the same way as the playback
+Choose where the click plays in **Settings › Click & backing track**,
+under **Click output**: an interface and its outputs, chosen the same way as the playback
 output (see [Choose your interface](#choose-your-interface)). Until you
 choose one, **Where the player plays** is picked, and the click plays
 through the playback output.
@@ -1044,7 +1044,7 @@ name.
 ### The click's settings
 
 The gear at the end of the row has the same settings as **Settings ›
-Metronome**, and a change in one shows in the other.
+Click & backing track**, and a change in one shows in the other.
 
 - **Click output**: where the click is heard, as above.
 - **Volume**: how loud the click is. A bar plays when you let go of the
@@ -1053,10 +1053,14 @@ Metronome**, and a change in one shows in the other.
   of it.
 - **Count-in**: **None**, **1 bar** or **2 bars**, before every take
   recorded to the click.
+- **Backing track output**: where a song's backing track is heard (see
+  [Where the backing track is heard](#where-the-backing-track-is-heard)).
 
-**Settings › Metronome** also has **Drift shown past** (see [Where the band
+**Settings › Click & backing track** also has the backing track's
+**Volume**, **Drift shown past** (see [Where the band
 drifted](#where-the-band-drifted)) and **Write the tempo into WAV files**
-(see [A take's tempo in a DAW](#a-takes-tempo-in-a-daw)).
+(see [A take's tempo in a DAW](#a-takes-tempo-in-a-daw)). The gear has
+none of these three.
 
 ### Recording to the click
 
@@ -1153,7 +1157,7 @@ A song has one tempo, so a change the song is meant to have, such as a
 slower bridge, shows as drift too.
 
 To turn more or fewer bars amber, change **Drift shown past** in **Settings
-› Metronome**: 1%, 2%, 3% or 5%.
+› Click & backing track**: 1%, 2%, 3% or 5%.
 
 ### A take's tempo in a DAW
 
@@ -1169,9 +1173,9 @@ in a DAW:
 A take's `.mid` files carry the tempo and the time signature, so a DAW that
 reads the tempo from a `.mid` can set the project for you.
 
-**Write the tempo into WAV files**, in **Settings › Metronome**, puts the
-tempo and the time signature into every WAV of a take recorded to the
-click, and is on until you turn it off. Cubase, Nuendo, Pro Tools and
+**Write the tempo into WAV files**, in **Settings › Click & backing track**,
+puts the tempo and the time signature into every WAV of a take recorded to
+the click, and is on until you turn it off. Cubase, Nuendo, Pro Tools and
 Studio One read it and fit the take to the project's tempo, and so does FL
 Studio when its own setting for that is on. At any other project tempo,
 they stretch the take. Ableton Live and Logic ignore it. To have every DAW
@@ -1182,6 +1186,143 @@ would stretch it for nothing.
 
 Copies sent to the cloud as WAV (**As recorded**) keep the tempo, the mix
 included. FLAC and MP3 copies do not.
+
+## The backing track
+
+![Pałyn's page in History: its tempo row, and under it the backing track Pałyn backing.wav, 3:42 · stereo, with Bar 1 at 0:00.80, ▶ and ⋯, then the start of the file drawn with the song's bars and beats over it](screenshots/backing-song.png)
+
+A backing track is an audio file the band plays along with: pads, keys or a
+choir the band does not have, or a whole arrangement without the part
+someone is learning. Each song can keep one. The app plays it from
+**Record take**: it comes in on bar 1, right after the count-in, through an
+output of its own, and the take keeps it as a track.
+
+To use one, open the song's page in History and press **Add backing
+track…**. Then, at the rehearsal, pick the song under **Next take** and
+record as usual.
+
+### Adding one to a song
+
+The file can be WAV, AIFF, FLAC, MP3 or OGG, mono or stereo. M4A and AAC
+files, which iTunes and Apple Music give, can't be read: export the song
+from your player in one of the other formats.
+
+The app keeps its own copy, in a `Backing tracks` folder inside the
+recordings folder, so moving or deleting the file you picked changes
+nothing. To use another file, press ⋯ and then **Replace…**; to take it
+away, **Remove**. The old copy goes to the Trash. Takes already recorded
+keep the backing track they were played with.
+
+### Bar 1
+
+Bar 1 is where the song's first bar starts in the file. Whatever comes
+before it, such as silence or a count, is the lead-in.
+
+When you add the file, the app counts its tempo and puts bar 1 on the first
+strong beat. The line under the file says what it found, and what you can do
+about it:
+
+- A song with no tempo takes the counted one. If the click then runs twice
+  too fast or too slow, press **halve** or **double**.
+- A song with a tempo keeps it when the count differs. Press **take the
+  backing track's tempo** to give the song the file's.
+- A pickup can put bar 1 a beat off. Press **earlier** or **later** to move
+  it by one beat.
+- In pads with no steady beat there is nothing to count, and the line says
+  so. Bar 1 stays at the file's start until you move it.
+
+Under the file its start is drawn, with the song's bars and beats over it as
+lines. To move bar 1, drag its marker, or use − and + beside **Bar 1 at**, a
+hundredth of a second each. ↑ and ↓ in the field do the same, and a tenth
+with Shift. Press ▶ to hear the file with the click from bar 1: the two
+should land together. Every change is saved to the song at once.
+
+### A song before its first take
+
+To give a song a backing track before the band has played it, press **New
+song** over the list of songs in History, type the title and press
+**Create**. The song's page opens. Until a take is kept under that title,
+the song says “No takes yet”, and **Next take** offers it with the other
+songs.
+
+### On the rehearsal screen
+
+![The backing track's row under the metronome's on the rehearsal screen: the switch, Viasna backing.wav, 4:28, the volume and ▶, over the line “The song's tempo. The backing track comes in on bar 1, after the count-in.”](screenshots/backing-row.png)
+
+Once any song has a backing track, a second row sits under the metronome's.
+From left to right:
+
+- The switch, the backing track's icon, turns the backing track in takes on
+  or off. Pointing at it says “Backing track in takes”. It is grey when on;
+  off, the file is dimmed.
+- The next take's file and its length.
+- The volume: how loud the band hears it, one level for every song. The
+  take records the file whatever the level.
+- ▶ plays the file from its start, on its own, so you can hear it and set
+  the volume, and ■ stops it. It also stops when you press **Record take**,
+  pick another song or leave the screen.
+
+For a song with no backing track, the row says so and where to add one. A
+free take has none.
+
+The metronome's line goes on with what the backing track will do:
+
+- “The backing track comes in on bar 1, after the count-in.” If the lead-in
+  is longer than the count-in, the part that fits plays during the count-in
+  and the rest is skipped.
+- “The backing track starts with Record: no click, so no count-in.” The song
+  has no tempo, or the metronome is off. The take's files then start where
+  the backing track starts.
+- “The backing track was counted at 126: it will not follow 128.” The file
+  always plays at its own speed, so a click at another tempo drifts away
+  from it.
+- “Backing track off: takes record without it.”
+- “Getting the backing track ready…”, for a second or two after you change
+  the recording quality, while the app makes the file ready to play at the
+  new sample rate. A take recorded before then has no backing track.
+- In amber, when its output is not connected: “The backing track's output,
+  X18 5–6, is not connected. Takes record without it.”
+
+While a take records, the row stays, and shows how far the file has got:
+“1:12 / 3:42”. The switch and the volume change what the band hears, not
+what the take keeps. The backing track plays on until **Stop**, silent
+once the file has ended. The disk line counts it as one more track.
+
+### Where the backing track is heard
+
+Choose its output in **Settings › Click & backing track**, under **Backing
+track output**, or behind the gear in the metronome's row. Until you choose
+one, **Where the player plays** is picked. Picking an output plays two
+seconds of the backing track there, so you hear where it went.
+
+Send it to the speakers the band plays to, or to the mix for in-ear
+monitors, and keep the click in the drummer's headphones (see [Where the
+click is heard](#where-the-click-is-heard)).
+
+A mono file plays on both outputs of a pair. On a single output a stereo
+file plays in mono. On Windows, while you record through ASIO, a second
+ASIO interface cannot play it, as it cannot play the click.
+
+The tab also has its **Volume**, the same level as the slider in the row.
+
+### In the player
+
+![A take of Viasna in the player: the four tracks, then Backing with a dashed border, “Stereo file” after its name and M on, right above Master](screenshots/backing-lane.png)
+
+A take recorded with the backing track has one more track, **Backing**, the
+last one, right above Master. The app writes it from the file, placed where
+the band heard it, so in a DAW it lands on the band. Its plate and its
+waveform have a dashed border, and “Stereo file” or “Mono file” follows its
+name, so you can tell it from the tracks the band played.
+
+The first time you open a take of a song, Backing is muted, so you hear the
+band on its own. Turn **M** off, and every take of that song opens with the
+backing track heard, until you turn **M** on again.
+
+Its fader works as any track's. The mix sent to the cloud follows the
+faders and ignores **M**, so to leave the backing track out of the mix, turn
+its fader down. When the original tracks are sent, `Backing.wav` goes with
+them.
 
 ## Keys
 
@@ -1437,6 +1578,10 @@ its own folder, and **Discard** moves it to the Trash.
 
 A track that records MIDI leaves a `.mid` beside the WAVs, with the same
 name. See [Where the .mid files are](#where-the-mid-files-are).
+
+A song's backing track is copied into a `Backing tracks` folder inside the
+recordings folder. A take recorded with it has a `Backing.wav` beside the
+band's tracks. See [The backing track](#the-backing-track).
 
 Deleted takes and rehearsals go to the Trash or the Recycle Bin. On a
 computer without one, they go to a `_deleted` folder inside the recordings

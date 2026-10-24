@@ -19,9 +19,14 @@ import type { Locator, Page } from "@playwright/test"
 // status line goes on with, the tab "Click & backing track" with its group,
 // and the take's Backing track as a dashed lane right above Master, muted
 // the first time a take of its song opens. The band's backing tracks are in
-// band.js: Pałyn's counted at the song's 128, 3:42 long; Viasna's counted at
-// 126 while the song keeps 128; Sonca's pads. Dym has none. Tonight starts
-// with five takes, and the next is Viasna's second.
+// band.js: Pałyn's counted at the song's 128, 3:42 long; Viasna's at the
+// song's 128 too, or at 126 with VIASNA_126; Sonca's pads. Dym has none.
+// Tonight starts with five takes, and the next is Viasna's second.
+
+/** Viasna's backing track counted at 126 while the song keeps 128, for the
+ *  line that says so (band.js counts it at 128). */
+const VIASNA_126 =
+  "window.__BACKINGS__ = {Viasna: {name: 'Viasna backing.wav', seconds: 268, channels: 2, tempo: 126, first_bar: 0.45}};"
 
 const field = (page: Page) => page.locator("#next-take-name")
 const metronome = (page: Page) => page.locator("footer").getByRole("region", { name: "Metronome" })
@@ -107,7 +112,7 @@ test("Palyn's row: the file, its length, the volume and play, and the line says 
 })
 
 test("Viasna's was counted at 126: the line says it will not follow 128", async ({ page }) => {
-  await bandRehearsal(page)
+  await bandRehearsal(page, VIASNA_126)
   await expect(field(page)).toHaveValue("Viasna")
   await expect(file(page)).toContainText("Viasna backing.wav")
   await expect(status(page)).toContainText("The backing track was counted at 126: it will not follow 128.")
@@ -337,7 +342,7 @@ test("Review right after a take shows the same lane, muted the first time", asyn
 for (const theme of ["dark", "light"] as const) {
   test(`the two rows, Finish and Record fit at 960 and nothing moves, in the ${theme} theme`, async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 680 })
-    await bandRehearsal(page, themed(theme))
+    await bandRehearsal(page, themed(theme) + VIASNA_126)
     await settled(page)
     const at = async () => {
       const [r, s] = await Promise.all([record(page).boundingBox(), status(page).boundingBox()])

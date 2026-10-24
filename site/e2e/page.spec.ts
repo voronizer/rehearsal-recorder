@@ -309,6 +309,7 @@ async function showPiece(page: Page, title: string) {
 const PIECES: [string, RegExp][] = [
   ["Rehearse the set, in order.", /Gig on the 25th/],
   ["Tap the tempo on a pad.", /^The metronome's row with Pałyn picked, just after the drummer tapped/],
+  ["A song brings its backing track.", /^Pałyn's backing track on its page in History: .*bar 1 at 0:00\.80$/],
   ["A tempo from an old take.", /^Pałyn's tempo on its page in History, counted from Pałyn 4/],
   ["The first take sets the tempo.", /^The metronome's row for a song with no tempo yet/],
   ["Notes too, from an e-kit or a keyboard.", /TD-17.*Launchkey Mini MK3/],
@@ -359,7 +360,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: width > 900 ? 860 : 844 })
     await page.goto("/")
     const titles = await page.locator("#how .items h4").allTextContents()
-    expect(titles).toHaveLength(29)
+    expect(titles).toHaveLength(30)
     const about = page.locator("#how .about")
     for (const title of titles) {
       await item(page, title).dispatchEvent("click")
@@ -501,6 +502,35 @@ test("the tap's piece is the row just after a tap, and ends under its line", asy
     return { box: el.getBoundingClientRect().height, words: words.getBoundingClientRect().height }
   })
   expect(found.box).toBeLessThanOrEqual(found.words + 1)
+})
+
+test("the backing track's piece is Palyn's page: the file, bar 1 at 0:00.80, the bars over the file's start", async ({
+  page,
+}) => {
+  await page.goto("/")
+  const piece = await showPiece(page, "A song brings its backing track.")
+  await expect(piece.locator("[data-backing-file]")).toContainText("Pałyn backing.wav")
+  await expect(piece.locator("input[aria-label='Bar 1 at']")).toHaveValue("0:00.80")
+  const start = piece.locator("[data-file-start]")
+  await expect(start.locator("canvas")).toHaveCount(1)
+  await expect(start.locator("[data-bar]").first()).toBeVisible()
+  await expect(piece.locator("[data-backing-line]")).not.toBeEmpty()
+})
+
+test("on a phone the backing track's piece wraps its first row: the name shows, nothing on top of it", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/")
+  const piece = await showPiece(page, "A song brings its backing track.")
+  const found = await piece.evaluate((el) => {
+    const file = el.querySelector("[data-backing-file]")!.getBoundingClientRect()
+    const name = el.querySelector("[data-backing-file] > span")!.getBoundingClientRect()
+    const field = el.querySelector("input[aria-label='Bar 1 at']")!.getBoundingClientRect()
+    return { name: name.width, fileRight: file.right, fileBottom: file.bottom, fieldLeft: field.left, fieldTop: field.top }
+  })
+  expect(found.name).toBeGreaterThan(40)
+  expect(found.fileBottom <= found.fieldTop || found.fileRight <= found.fieldLeft).toBe(true)
 })
 
 test("a piece is a picture: nothing plays, nothing to press, and T taps nothing", async ({ page }) => {

@@ -5,6 +5,35 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **A backing track for each song.** A song can keep one audio file, mono
+  or stereo, to play along with: pads, keys or a choir the band does not
+  have. Add it on the song's page in History with **Add backing track…**.
+  The app counts its tempo and puts bar 1 on the first strong beat, drawn
+  with the song's bars over the start of the file, and you can move bar 1
+  by a beat, drag it or type it. **Record take** then plays it from bar 1,
+  right after the count-in, through an output of its own, and the take
+  keeps it as a track called Backing, placed where the band heard it.
+- **The backing track's row on the rehearsal screen.** Under the
+  metronome's row: a switch, the file and its length, the volume, and ▶ to
+  hear it. The metronome's line says when the backing track comes in, and
+  says in amber when its output is not connected. During a take the row
+  stays, with how far the file has got.
+- **Settings › Metronome is now Settings › Click & backing track.** Choose
+  the backing track's output there or behind the metronome's gear: the
+  speakers, say, while the click stays in the drummer's headphones. Picking
+  one plays two seconds of it. Its volume is in the tab too.
+- **The Backing track in the player.** It is the last track, right above
+  Master, drawn dashed, with “Stereo file” or “Mono file” after its name.
+  The first time a take of the song opens it is muted, and after that
+  **M** stays as you left it for that song. Its fader sets it in the mix
+  sent to the cloud. Tempo drift and a tempo counted from a take leave it
+  out.
+- **New song.** A button over History's list of songs makes a song with no
+  takes yet, so it can have a tempo and a backing track before the band
+  plays it. Such a song says “No takes yet”, and **Next take** offers it.
+
 ## 0.13.1
 
 - Nothing changed in the app. Its website, reha.stream, now goes through a

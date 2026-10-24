@@ -21,8 +21,13 @@ import type { Page } from "@playwright/test"
 // with its playhead, Replace and Remove; and New song, with the songs that
 // have no takes yet. The band's backing tracks are in band.js: Pałyn's
 // counted at the song's 128, bar 1 at 0.80; Sonca's pads, no tempo counted;
-// Viasna's counted at 126 while the song keeps 128. Dym has none, and its
-// file counts to 104. Hlyboka was made with New song and has no takes.
+// Viasna's at the song's 128 too, or at 126 with VIASNA_126. Dym has none,
+// and its file counts to 104. Hlyboka was made with New song and has no takes.
+
+/** Viasna's backing track counted at 126 while the song keeps 128, for the
+ *  line that says so (band.js counts it at 128). */
+const VIASNA_126 =
+  "window.__BACKINGS__ = {Viasna: {name: 'Viasna backing.wav', seconds: 268, channels: 2, tempo: 126, first_bar: 0.45}};"
 
 const head = (page: Page) => page.locator("[data-song-head]")
 const section = (page: Page) => head(page).getByRole("region", { name: "Backing track" })
@@ -125,7 +130,7 @@ test("a backing track counted at the song's tempo moves bar 1 a beat either way"
 })
 
 test("a backing track counted at another tempo leaves the song's until it is taken", async ({ page }) => {
-  await openSong(page, "Viasna")
+  await openSong(page, "Viasna", VIASNA_126)
   const id = await idOf(page, "Viasna")
   await expect(file(page)).toHaveText(/Viasna backing\.wav\s*4:28 · stereo/)
   await expect(line(page)).toHaveText(
@@ -382,7 +387,7 @@ test("a song with no takes is offered under Next take for its first", async ({ p
 for (const theme of ["dark", "light"] as const) {
   test(`the backing track fits at 960 and nothing moves, in the ${theme} theme`, async ({ page }) => {
     await page.setViewportSize({ width: 960, height: 680 })
-    await openSong(page, "Viasna", themed(theme))
+    await openSong(page, "Viasna", themed(theme) + VIASNA_126)
     await settled(page)
     const fits = async (what: string) => {
       const parts = [file(page), field(page), play(page).or(stop(page)), more(page)]
