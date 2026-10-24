@@ -254,7 +254,7 @@ test("Keys is a tab between Appearance and Controls, two switches over their scr
   const tabs = page.locator("nav[aria-label='Settings sections'] [data-tab]")
   await expect(tabs).toHaveText([
     "Audio",
-    "Metronome",
+    "Click & backing track",
     "Folders",
     "Marks",
     "Sets",

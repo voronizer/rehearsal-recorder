@@ -543,6 +543,13 @@ class Backing:
             self._take_click = click
             self._take = None if click is None else click.backing
 
+    def take_channels(self):
+        """The channels the take's Backing track will write, 0 with none:
+        the disk line counts them as one more track's."""
+        with self._lock:
+            take = self._take if self._taking else None
+        return 0 if take is None else take.opened[4]
+
     def end_take(self):
         with self._lock:
             self._taking = False

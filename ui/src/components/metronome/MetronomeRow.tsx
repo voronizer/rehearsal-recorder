@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Play, Settings, Square } from "lucide-react"
+import { BackingRow } from "@/components/backing/BackingRow"
 import { BeatDots } from "@/components/metronome/BeatDots"
 import { ClickSettings } from "@/components/metronome/ClickSettings"
 import { ClickSwitch } from "@/components/metronome/ClickSwitch"
@@ -14,6 +15,7 @@ import { useErrorNotice } from "@/hooks/useErrorNotice"
 import { useMetronome } from "@/hooks/useMetronome"
 import { useTempoCount } from "@/hooks/useTempoCount"
 import { api, type MetronomeState, type Signature } from "@/lib/api"
+import { rowSentence, type RowSentence } from "@/lib/backing"
 import {
   clampTempo,
   statusLine,
@@ -27,6 +29,11 @@ const SAID = "metronome"
 
 type LinkAction = NonNullable<Line["link"]>["action"]
 
+/** What the gear in the row is called, and the settings it opens: the
+ *  click's, and where the backing track is heard (backing-track spec
+ *  Part 8). */
+const GEAR = "Click and backing track"
+
 /**
  * The metronome's row as it is drawn, from what it is given: the switch,
  * the tempo with − and + and its unit, the signature, Tap, ▶ or ■, the beat
@@ -34,11 +41,16 @@ type LinkAction = NonNullable<Line["link"]>["action"]
  * Q7 B). It calls nothing itself but Tap's pads, so a still picture of it
  * needs only its props. `state` is null until Python has answered; the row
  * keeps its room meanwhile, with nothing to press.
+ *
+ * `below` is the backing track's row, between this one and the status line,
+ * which then goes on with `then`, its sentence (backing-track spec Part 5).
  */
 export function MetronomeRowView({
   state,
   lit,
   line,
+  then,
+  below,
   onSwitch,
   onTempo,
   onPlay,
@@ -50,6 +62,10 @@ export function MetronomeRowView({
   state: MetronomeState | null
   lit: number | null
   line: Line
+  /** The backing track's sentence, after the line's own. */
+  then?: RowSentence | null
+  /** The backing track's row. */
+  below?: ReactNode
   onSwitch: (on: boolean) => void
   /** A new tempo or signature, the other as it was: a new signature
    *  comes with the number kept, brought into its range. */
@@ -120,7 +136,7 @@ export function MetronomeRowView({
                 <Button
                   variant="ghost"
                   size="icon-row"
-                  aria-label="Metronome settings"
+                  aria-label={GEAR}
                   onPointerDown={() => (byPointer.current = true)}
                   onKeyDown={() => (byPointer.current = false)}
                   className="text-muted-foreground hover:text-foreground"
@@ -130,12 +146,12 @@ export function MetronomeRowView({
               </PopoverTrigger>
             </TooltipTrigger>
             <TooltipContent>
-              <span aria-hidden>Metronome settings</span>
+              <span aria-hidden>{GEAR}</span>
             </TooltipContent>
           </Tooltip>
           <PopoverContent
             side="top"
-            aria-label="Metronome settings"
+            aria-label={GEAR}
             className="w-[23rem] p-4"
             onOpenAutoFocus={(e) => {
               if (byPointer.current) e.preventDefault()
@@ -145,7 +161,8 @@ export function MetronomeRowView({
           </PopoverContent>
         </Popover>
       </div>
-      <StatusLine line={line} onLink={onLink} className={hold ? undefined : "min-h-0"} />
+      {below}
+      <StatusLine line={line} onLink={onLink} then={then} className={hold ? undefined : "min-h-0"} />
     </section>
   )
 }
@@ -162,8 +179,14 @@ type Answer = { ok: boolean; error?: string }
  * "count it from the last take" counts as a song's page does
  * (useTempoCount): the count is kept while the row shows it, and a
  * signature picked then has Python count the same take again in it.
+ *
+ * Under it, once any song has a backing track, the backing track's row
+ * (backing-track spec Part 5): its switch and volume are sent as they
+ * change, and its ▶ plays the next take's song's file alone. That stops at
+ * ■, at Record, when another song is picked (Python sees to those three)
+ * and when the screen is left. `name` is the next take's name as typed.
  */
-export function MetronomeRow() {
+export function MetronomeRow({ name = "" }: { name?: string }) {
   const metronome = useMetronome()
   const { refresh } = metronome
   const sayError = useErrorNotice(SAID)
@@ -173,7 +196,8 @@ export function MetronomeRow() {
   // presses of + never show the first again.
   const [sent, setSent] = useState<{ tempo: number | null; signature: Signature } | null>(null)
   const [switched, setSwitched] = useState<boolean | null>(null)
-  const changes = useRef({ tempo: 0, on: 0 })
+  const [backingSwitched, setBackingSwitched] = useState<boolean | null>(null)
+  const changes = useRef({ tempo: 0, on: 0, backing: 0 })
 
   const answer = metronome.state
   const song = answer?.song?.title ?? null
@@ -193,19 +217,24 @@ export function MetronomeRow() {
     ...asSent,
     ...(count.held ?? {}),
     on: switched ?? asSent.on,
+    backing: { ...asSent.backing, on: backingSwitched ?? asSent.backing.on },
   }
   const counted: Counting =
     count.counting !== null ? "running" : count.shown ? { from: count.shown.take.name } : null
 
-  // The click run between takes stops with the screen. Record has stopped
-  // it already, in Python, when the take is what took the screen's place.
+  // The click run between takes stops with the screen, and so does the
+  // backing track's ▶. Record has stopped both already, in Python, when the
+  // take is what took the screen's place; ■ then stops nothing of the take.
   const phase = useRef(answer?.phase)
+  const backingPlays = useRef(false)
   useEffect(() => {
     phase.current = answer?.phase
+    backingPlays.current = answer?.backing.playing ?? false
   })
   useEffect(
     () => () => {
       if (phase.current === "preview") void api().metronome_stop()
+      if (backingPlays.current) void api().backing_stop()
     },
     []
   )
@@ -246,6 +275,25 @@ export function MetronomeRow() {
     }
   }
 
+  const switchBacking = async (on: boolean) => {
+    const n = ++changes.current.backing
+    setBackingSwitched(on)
+    try {
+      await send(() => api().set_backing_setting("backing_on", on), "Could not switch the backing track")
+    } finally {
+      if (changes.current.backing === n) setBackingSwitched(null)
+    }
+  }
+
+  const playBacking = () => {
+    const song = state?.backing.song
+    if (!song) return
+    void send(
+      () => (state.backing.playing ? api().backing_stop() : api().backing_play(song.song_id, false)),
+      "Could not play the backing track"
+    )
+  }
+
   const onLink = async (action: LinkAction) => {
     if (action === "save") {
       await send(() => api().metronome_save_to_song(), "Could not save the tempo to the song")
@@ -261,6 +309,20 @@ export function MetronomeRow() {
       state={state}
       lit={metronome.lit}
       line={state ? statusLine(state, counted) : { text: "" }}
+      then={state && rowSentence(state)}
+      below={
+        state?.backing.row && (
+          <BackingRow
+            state={state}
+            name={name}
+            onSwitch={(on) => void switchBacking(on)}
+            onVolume={(volume) =>
+              void send(() => api().set_backing_setting("backing_volume", volume), "Could not save the setting")
+            }
+            onPlay={playBacking}
+          />
+        )
+      }
       onSwitch={(on) => void switchClick(on)}
       onTempo={(tempo, signature) =>
         void (state && signature !== state.signature

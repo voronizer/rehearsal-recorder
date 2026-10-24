@@ -3,6 +3,7 @@ import { FooterRow } from "@/components/FooterRow"
 import { HealthLine } from "@/components/HealthLine"
 import { Shell } from "@/components/Shell"
 import { StopTake } from "@/components/StopTake"
+import { BackingTakeRow } from "@/components/backing/BackingTakeRow"
 import { CountIn } from "@/components/metronome/CountIn"
 import { EdgeLight } from "@/components/metronome/EdgeLight"
 import { TakeRow } from "@/components/metronome/TakeRow"
@@ -266,6 +267,14 @@ export function Recording({
     await metronome.refresh()
   }
 
+  // The backing track's switch and volume change what is heard of it, not
+  // the take's Backing track.
+  const setBacking = async (change: () => Promise<{ ok: boolean; error?: string }>) => {
+    const res = await change()
+    if (!res.ok) sayError(res.error || "Could not change the backing track")
+    await metronome.refresh()
+  }
+
   const stop = async () => {
     if (stopping) return
     setStopping(true)
@@ -470,7 +479,22 @@ export function Recording({
             <div className="flex items-center gap-6">
               <div className="min-w-0 flex-1 basis-[24rem]">
                 {beat && (
-                  <TakeRow state={beat} lit={metronome.lit} onSwitch={(on) => void switchClick(on)} />
+                  <TakeRow
+                    state={beat}
+                    lit={metronome.lit}
+                    onSwitch={(on) => void switchClick(on)}
+                    below={
+                      beat.backing.row && (
+                        <BackingTakeRow
+                          state={beat}
+                          onSwitch={(on) => void setBacking(() => api().set_backing_setting("backing_on", on))}
+                          onVolume={(volume) =>
+                            void setBacking(() => api().set_backing_setting("backing_volume", volume))
+                          }
+                        />
+                      )
+                    }
+                  />
                 )}
               </div>
               {statusRow}

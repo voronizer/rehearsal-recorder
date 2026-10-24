@@ -2124,7 +2124,8 @@ class Api:
             return {"recording": False}
 
         s = self._session
-        channel_count = _channels_of(s["tracks"]) if s else 1
+        # The take's Backing track is written at Stop: one more track.
+        channel_count = (_channels_of(s["tracks"]) if s else 1) + self._backing.take_channels()
         samplerate = s["samplerate"] if s else 48000
         estimate = self.disk_estimate(
             channel_count, samplerate, s.get("bit_depth", LEGACY_DEPTH) if s else LEGACY_DEPTH

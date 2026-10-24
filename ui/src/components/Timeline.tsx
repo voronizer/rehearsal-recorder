@@ -574,6 +574,8 @@ export function Timeline({
                 const muted = player.isMuted(m.name)
                 const soloed = player.isSoloed(m.name)
                 const dimmed = muted || (player.hasSolo && !soloed)
+                // The take's Backing track, made from the song's file: dashed.
+                const backing = m.kind === "backing"
                 return (
                   <div
                     key={m.name}
@@ -594,6 +596,7 @@ export function Timeline({
                       <LaneControls
                         name={m.name}
                         icon={m.icon}
+                        file={backing ? (m.peaks.length > 1 ? "Stereo file" : "Mono file") : undefined}
                         paired={paired}
                         channels={m.peaks.length}
                         muted={muted}
@@ -620,7 +623,12 @@ export function Timeline({
                         viewTo={to}
                         position={position}
                         dimmed={dimmed}
-                        className={cn("h-full", paired && "rounded-b-none", dimmed && "opacity-60")}
+                        className={cn(
+                          "h-full",
+                          paired && "rounded-b-none",
+                          dimmed && "opacity-60",
+                          backing && "border border-dashed border-muted-foreground/50"
+                        )}
                       />
                     </div>
                   </div>

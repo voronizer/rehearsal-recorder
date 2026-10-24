@@ -1,4 +1,5 @@
 import { useRef } from "react"
+import { BackingSettings } from "@/components/backing/BackingSettings"
 import { DevicePicker } from "@/components/DevicePicker"
 import { OutputChannels } from "@/components/OutputChannels"
 import { Label } from "@/components/ui/label"
@@ -116,21 +117,27 @@ export function CountInRow({ c }: { c: ClickSettingsValue }) {
 
 /**
  * The four settings together, as the gear in the metronome's row shows
- * them, with the line that says where else they are. Settings › Metronome
- * lays the same pieces out in its groups.
+ * them, then where the backing track is heard (backing-track spec Part 8),
+ * with the line that says where else they are. Settings › Click & backing
+ * track lays the same pieces out in its groups.
  */
 export function ClickSettings() {
   const c = useClickSettings()
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="click-device">Click output</Label>
+      <div role="group" aria-labelledby="click-device-label" className="flex flex-col gap-2">
+        <Label id="click-device-label" htmlFor="click-device">
+          Click output
+        </Label>
         <ClickOutputPickers c={c} />
       </div>
       <ClickVolumeRow c={c} />
       <ClickSoundRow c={c} />
       <CountInRow c={c} />
-      <p className="text-xs text-muted-foreground">The same settings are in Settings › Metronome.</p>
+      <BackingSettings compact />
+      <p className="text-xs text-muted-foreground">
+        The same settings are in Settings › Click &amp; backing track.
+      </p>
     </div>
   )
 }

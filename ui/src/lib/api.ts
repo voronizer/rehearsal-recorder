@@ -22,10 +22,10 @@ export type Device = {
 
 export type OutputDevice = Device & {
   /** Why the metronome's click cannot play through it, in words, or null:
-   *  another ASIO card cannot play while one records. Settings › Metronome
+   *  another ASIO card cannot play while one records. Settings › Click & backing track
    *  does not offer such a device. */
   click_unavailable: string | null
-  /** The same for a song's backing track: Settings › Metronome does not
+  /** The same for a song's backing track: Settings › Click & backing track does not
    *  offer it as the backing track's output either. */
   backing_unavailable: string | null
 }
@@ -908,7 +908,7 @@ export type InterfaceCheck = {
 
 /** The metronome's settings, in `get_settings` beside the rest: where the
  *  click is heard, its sound, the count-in, and whether Record clicks.
- *  Settings › Metronome and the gear in the row show the same ones. */
+ *  Settings › Click & backing track and the gear in the row show the same ones. */
 export type MetronomeSettings = {
   /** The click's own output, as `output_device_index` is the player's; null
    *  until one is picked, and the click then goes where the player plays. */

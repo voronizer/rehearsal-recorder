@@ -296,6 +296,10 @@ the shared one when it is redone.
   as the lanes, so that no part of a lane shows beside it: its plate and,
   right of it on the same columns as a track's row, the click's lane on a
   well (`MasterClickLane`).
+  A take's Backing track, the last lane above Master, has a dashed border
+  round its plate and its well, in the muted text's colour at half
+  strength, and "Stereo file" or "Mono file" after its name: a file played
+  into the take, not an input the band recorded.
 - **C7. Group**, `Card`: a panel set apart as F4 says, with 12 px
   corners, 16 px inside, and no border or shadow. A screen gives it more air
   with `className`. It takes the place of about 21 hand-made bordered boxes
@@ -581,18 +585,20 @@ The metronome's pieces, in `components/metronome/` (spec Parts 4 to 8):
   link after the words, a warning's icon in amber and its words in the
   text's colour. It keeps two lines' room.
 - **ClickSettings**, `ClickSettings.tsx`: the click's output, volume, sound
-  and count-in, behind the row's gear, and its pieces for Settings ›
-  Metronome, which read and save through `hooks/useClickSettings.ts`. The
-  output's first item is "Where the player plays", shown until the click
-  has an output of its own; one saved and not plugged in shows under its
-  own name, through `DevicePicker`'s `missing`.
+  and count-in, behind the row's gear ("Click and backing track", with the
+  backing track's output after them), and its pieces for Settings › Click
+  & backing track, which read and save through `hooks/useClickSettings.ts`.
+  The output's first item is "Where the player plays", shown until the
+  click has an output of its own; one saved and not plugged in shows under
+  its own name, through `DevicePicker`'s `missing`.
 - **MetronomeRow**, `MetronomeRow.tsx`: the row at the rehearsal screen's
-  footer, left of Finish and Record. `MetronomeRowView` draws it from its
-  props alone. Its count from the last take is `hooks/useTempoCount.ts`,
-  as a song's page counts.
+  footer, left of Finish and Record, with BackingRow under it once any
+  song has a backing track, and the backing track's sentence after the
+  line's link. `MetronomeRowView` draws it from its props alone. Its count
+  from the last take is `hooks/useTempoCount.ts`, as a song's page counts.
 - **TakeRow**, `TakeRow.tsx`: the row while a take records, at the
   footer's far left: the switch, the take's tempo and signature, the dots
-  and the line.
+  and the line, with BackingTakeRow under it.
 - **CountIn**, `CountIn.tsx`: the count-in's digit in the clock's place and
   at its size, the accented ones in the accent.
 - **EdgeLight**, `EdgeLight.tsx`: the window's edge lit in the accent on
@@ -620,8 +626,9 @@ The metronome's pieces, in `components/metronome/` (spec Parts 4 to 8):
   across it sets the region as one across the tracks does.
 
 `MetronomeSettings` (`components/MetronomeSettings.tsx`) is Settings ›
-Metronome: the gear's pieces from `ClickSettings.tsx` in `SettingsGroup`s,
-and the tab's own checkbox for the tempo in WAV files. `DevicePicker`'s
+Click & backing track: the gear's pieces from `ClickSettings.tsx` and
+BackingSettings in `SettingsGroup`s, tempo drift, and the tab's own
+checkbox for the tempo in WAV files. `DevicePicker`'s
 `unavailable` lists a device that cannot be picked there, greyed, with its
 reason under its name: the click's output says so of a second ASIO card.
 One already saved that cannot be picked now keeps its name alone in the
@@ -647,6 +654,22 @@ Parts 5 to 8):
   Replace… and Remove; FileStart under them, and the line from `pageLine`
   in two lines' room, its links as the tempo row's. One ▶ of the page plays
   at a time.
+- **BackingRow**, `BackingRow.tsx`: the row under the metronome's on the
+  rehearsal screen, 32 px like it: the backing track's icon as a `Toggle`,
+  grey when on (F2), the file's name cut to its room with its length kept
+  whole, the shared `Slider` for the volume, and ▶ (32 px and square). A
+  free take and a song with none say so in the file's place, in the status
+  line's size on up to two lines. The volume is sent when let go, or once
+  the arrow keys stop.
+- **BackingTakeRow**, `BackingTakeRow.tsx`: the same row while a take
+  records, with how far the file has got and no ▶; the switch is disabled
+  for a take recorded without it.
+- **BackingSettings**, `BackingSettings.tsx`: the backing track's output and
+  volume for Settings › Click & backing track, through
+  `hooks/useBackingSettings.ts`; `compact`, the output alone, behind the
+  metronome's gear. As the click's, its first item is "Where the player
+  plays", and one output gets the line that a stereo file is played in
+  mono. Picking an output plays two seconds of it.
 - **NewSongDialog**, `NewSongDialog.tsx`: New song, from the button over
   History's song list: the shared `Dialog`, the title's field, and a line
   under it that keeps its height and says why Create waits.

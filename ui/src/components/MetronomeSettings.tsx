@@ -1,3 +1,4 @@
+import { BackingSettings } from "@/components/backing/BackingSettings"
 import {
   ClickOutputPickers,
   ClickSoundRow,
@@ -13,13 +14,15 @@ import { TOLERANCES } from "@/lib/drift"
 import { rise } from "@/lib/motion"
 
 /**
- * Settings › Metronome (spec Part 6): where the click is heard, how loud,
- * its sound and the count-in, the same four settings as behind the gear in
- * the metronome's row and read and saved through the same hook, so a change
- * in one is what the other shows. Below them, in the tab only, how far off
- * the drift line on Master turns amber (drift spec Part 5) and whether a
- * click take's WAVs carry its tempo. Each is saved as it is changed, and a
- * refusal is said in the settings' notice (useClickSettings).
+ * Settings › Click & backing track (metronome spec Part 6, backing-track
+ * spec Part 8): where the click is heard, how loud, its sound and the
+ * count-in, the same four settings as behind the gear in the metronome's
+ * row and read and saved through the same hook, so a change in one is what
+ * the other shows. Then the group "Backing track": where a song's backing
+ * track is heard, as the gear has it too, and its volume. Below them, in the
+ * tab only, how far off the drift line on Master turns amber (drift spec
+ * Part 5) and whether a click take's WAVs carry its tempo. Each is saved as
+ * it is changed, and a refusal is said in the settings' notice.
  */
 export function MetronomeSettings() {
   const c = useClickSettings()
@@ -52,8 +55,12 @@ export function MetronomeSettings() {
         </div>
       </SettingsGroup>
 
+      <SettingsGroup rise={3} title="Backing track">
+        <BackingSettings />
+      </SettingsGroup>
+
       <SettingsGroup
-        rise={3}
+        rise={4}
         title="Tempo drift"
         hint="How far from the tempo a stretch of two bars turns amber on Master. 2% is about 2.5 bpm at 128."
       >
@@ -65,7 +72,7 @@ export function MetronomeSettings() {
         />
       </SettingsGroup>
 
-      <SettingsGroup rise={4}>
+      <SettingsGroup rise={5}>
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
             <Checkbox
@@ -84,8 +91,9 @@ export function MetronomeSettings() {
         </div>
       </SettingsGroup>
 
-      <p className="animate-rise text-xs text-muted-foreground" style={rise(5)}>
-        The click's settings are also behind the gear in the metronome row, on the rehearsal screen.
+      <p className="animate-rise text-xs text-muted-foreground" style={rise(6)}>
+        The click's and the backing track's settings are also behind the gear in the metronome row,
+        on the rehearsal screen.
       </p>
     </>
   )

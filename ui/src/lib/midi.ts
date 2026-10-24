@@ -119,9 +119,9 @@ export type Lane<T extends { name: string } = TrackFile> =
  * stay in the order they were given, the saved ones before the missing ones.
  * One that follows an audio lane this take does not have goes first, as
  * `null` does, which is where lane_after ends when nothing before it has
- * sound.
+ * sound. The take's Backing track is last of all.
  */
-export function laneOrder<T extends { name: string } = TrackFile>(
+export function laneOrder<T extends { name: string; kind?: "backing" } = TrackFile>(
   tracks: T[],
   notes: NotesFile[],
   missing: MissingNotes[]
@@ -153,7 +153,10 @@ export function laneOrder<T extends { name: string } = TrackFile>(
   }
 
   const lanes: Lane<T>[] = [...(following.get(null) ?? [])]
-  for (const track of tracks) {
+  // The take's Backing track, made from the song's file, is not one of the
+  // band's: it comes last, right above Master (backing-track spec Part 7).
+  const band = tracks.filter((t) => t.kind !== "backing")
+  for (const track of [...band, ...tracks.filter((t) => t.kind === "backing")]) {
     lanes.push({ kind: "audio", name: track.name, track }, ...(following.get(track.name) ?? []))
   }
   return lanes

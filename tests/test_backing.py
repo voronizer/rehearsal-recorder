@@ -454,6 +454,17 @@ def through_the_api(tmp):
         ok("the metronome off: no click, the file from its start at Record",
            rec.click is not None and not rec.click.clicks and rec.click.backing is not None
            and rec.click.backing.from_frame == 0)
+        file_channels = rec.click.backing.opened[4]
+        per_sec = ((apimod._channels_of(a._session["tracks"]) + file_channels) * a._session["samplerate"]
+                   * apimod.bytes_per_sample(a._session.get("bit_depth", apimod.LEGACY_DEPTH)))
+        real_usage = apimod.shutil.disk_usage
+        apimod.shutil.disk_usage = lambda path: types.SimpleNamespace(free=per_sec * 60 * 100)
+        try:
+            health = a.recording_health()
+        finally:
+            apimod.shutil.disk_usage = real_usage
+        ok("  the disk line counts the file's channels as one more track's",
+           file_channels > 0 and abs(health["minutes_left"] - 100) < 0.01)
         blocks(8)
         ok("  no count-in on the screen", a.metronome_state()["phase"] == "take")
         done = a.stop_take()

@@ -248,12 +248,14 @@ api.list_input_devices = async () => [
    max_output_channels: 18, default_samplerate: 48000},
   {index: 5, name: 'Microphone Array (Realtek(R) Audio)', host_api: 'Windows WASAPI',
    max_input_channels: 2, max_output_channels: 0, default_samplerate: 48000}];
-// What the click can play through is said of each, as the fake says it.
-api.list_output_devices = async () => withClickReason([
+// What the click can play through is said of each, as the fake says it. The
+// fake looks a saved output up in the same list.
+outputDevices = () => [
   {index: 1, name: 'Speakers (Realtek(R) Audio)', host_api: 'MME', max_input_channels: 0,
    max_output_channels: 2, default_samplerate: 48000},
   {index: 3, name: 'X18/XR18', host_api: 'ASIO', max_input_channels: 18,
-   max_output_channels: 18, default_samplerate: 48000}]);
+   max_output_channels: 18, default_samplerate: 48000}];
+api.list_output_devices = async () => withClickReason(outputDevices());
 api.recording_formats = async () => ({ok: true, formats: {'44100': [16, 24], '48000': [16, 24]}});
 api.load_default_tracks = async () => ({tracks: PARTS.map(p => ({...p, stereo: false}))});
 api.disk_estimate = async (count, rate, depth) => {
@@ -355,8 +357,9 @@ const PAST = {
     ['Take 1', 140, []],
     ['Take 2', 165, [{at: 65, note: 'the riff we jammed while setting up', label_id: 1}]]]]};
 // The takes that played their song's backing track, by folder and name:
-// each has a Backing track after the band's.
-const WITH_BACKING = new Set(['/rec/tue-before#Pałyn 3', '/rec/tue-before#Viasna']);
+// each has a Backing track after the band's. Viasna has two, so M in the
+// player is seen carried from one take of the song to the next.
+const WITH_BACKING = new Set(['/rec/tue-before#Pałyn 3', '/rec/tue-before#Viasna', '/rec/tue-before#Viasna 2']);
 const pastTakes = folder => PAST[folder][3].map(([name, length, markers], i) => {
   // A take longer than the song rings on after it; a shorter one stopped.
   const seed = 20 * (Object.keys(PAST).indexOf(folder) + 1) + i + 1;

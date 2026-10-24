@@ -69,7 +69,7 @@ export function useTakeDrift(take: DriftTake | null | undefined): DriftView {
 }
 
 /**
- * Settings › Metronome's "Drift shown past", for every player at once: read
+ * Settings › Click & backing track's "Drift shown past", for every player at once: read
  * from the settings when a player first asks, and told of a change by the
  * settings that made it (`driftToleranceChanged`), so a line already drawn
  * turns amber in more or fewer places without counting again.

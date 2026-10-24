@@ -1013,7 +1013,9 @@ function metroGives(take) {
 }
 
 // The outputs there are: a Windows machine's with __HOST_API__, else a Mac's.
-const outputDevices = () => window.__HOST_API__ ? [
+// A `let`, so a band laid over the fake (band.js) can give its own: what is
+// saved as the click's or the backing track's output is looked up in it.
+let outputDevices = () => window.__HOST_API__ ? [
   {index:1, name:'Speakers', host_api:'MME', max_input_channels:0,
    max_output_channels:2, default_samplerate:48000},
   {index:3, name:'X32 USB', host_api:'ASIO', max_input_channels:16,

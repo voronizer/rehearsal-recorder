@@ -169,6 +169,19 @@ describe("laneOrder: the lanes of a take, top to bottom", () => {
     expect(laneOrder([], [], [])).toEqual([])
   })
 
+  it("puts the take's Backing track last, after every notes lane, right above Master", () => {
+    const tracks: TrackFile[] = [
+      { name: "Backing", file: "/rec/Backing.wav", kind: "backing" },
+      ...audio("Gtr", "Keys"),
+    ]
+    expect(spell(laneOrder(tracks, [notes("Keys", "Keys", "Launchkey Mini MK3")], []))).toEqual([
+      "audio:Gtr",
+      "audio:Keys",
+      "notes:Keys",
+      "audio:Backing",
+    ])
+  })
+
   it("puts Drums' notes right after Drums", () => {
     expect(
       spell(laneOrder(audio("Gtr", "Drums", "Bass"), [notes("Drums", "Drums")], []))
