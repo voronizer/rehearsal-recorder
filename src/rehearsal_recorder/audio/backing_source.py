@@ -114,6 +114,12 @@ class BackingSource:
         """Faded out, or between takes played to the file's end."""
         return (self._fading and self._ramp_done >= self._fade and self._gain == 0.0) or self._past_end
 
+    @property
+    def origin(self):
+        """Between takes, the stream's frame that played the file's frame
+        `start`; None before the first block."""
+        return self._origin
+
     # ---------- the audio thread ----------
 
     def render(self, out, first_frame, arrival_ns, lead_sec):

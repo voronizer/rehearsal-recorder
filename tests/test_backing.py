@@ -12,6 +12,7 @@ No sound card, no browser, no MIDI port: files in a temporary folder.
 """
 
 import json
+import math
 import os
 import random
 import shutil
@@ -208,6 +209,370 @@ class FakeOutput:
 
     def problem(self):
         return self.trouble
+
+
+def through_the_api(tmp):
+    """
+    [9]: what a song's page, the row, Settings and Record ask of the app,
+    through the Api on the engine suite's pretend machine: the Interface
+    (device 0) records and plays, and the Desk (device 3) has eight outputs.
+    Uses the files [1] and [3] made in `tmp`. The Trash is a folder here.
+    """
+    import rehearsal_recorder.api as apimod
+    import test_engine
+    from test_engine import _FakeStream, _sd, fresh_api
+
+    print("\n[9] Through the Api")
+    trash = tmp / "Trash"
+    trash.mkdir()
+    trashed = []
+
+    def to_trash(path, fallback_root=None):
+        path = Path(path)
+        trashed.append(path.name)
+        shutil.move(str(path), str(trash / path.name))
+        return {"ok": True, "trashed": True, "location": None}
+
+    files = tmp / "Band files"
+    files.mkdir()
+    palyn_file = files / "Pałyn backing.wav"
+    shutil.copyfile(tmp / "128.wav", palyn_file)
+    viasna_file = backing(files / "Viasna backing.wav", 126, 4, 16, 0.40, snares=(1, 3), kicks=(0, 2))
+    sonca_file = files / "Sonca pads.wav"
+    shutil.copyfile(tmp / "pads.wav", sonca_file)
+
+    home = tmp / "Home"
+    home.mkdir()
+    was_trash, real_ready, real_query = apimod.move_to_trash, backing_file.make_ready, _sd.query_devices
+    apimod.move_to_trash = to_trash
+    _, a = fresh_api(home)
+
+    def kinds(tracks):
+        return [(t["name"], t.get("kind")) for t in tracks]
+
+    def ready(timeout=30):
+        """Whether the row stops saying the file is being got ready."""
+        give_up = time.monotonic() + timeout
+        while a.metronome_state()["backing"]["getting_ready"] and time.monotonic() < give_up:
+            time.sleep(0.05)
+        return not a.metronome_state()["backing"]["getting_ready"]
+
+    def info(i):
+        now = 80.0 + i * 1024 / RATE
+        return types.SimpleNamespace(currentTime=now, inputBufferAdcTime=now - 0.005,
+                                     outputBufferDacTime=now + 0.005)
+
+    def blocks(n):
+        """`n` blocks of silence from the card into the take recording."""
+        rec = a._recorder
+        for i in range(n):
+            indata = np.zeros((1024, 1), np.int16)
+            if rec.click is not None and rec.click.duplex:
+                rec._duplex_callback(indata, np.zeros((1024, rec.click.width), np.float32), 1024, info(i), None)
+            else:
+                rec._callback(indata, 1024, info(i), None)
+
+    try:
+        s = a.get_settings()
+        ok("before any song has one: where the player plays, at 0.8, on, no row",
+           s["backing_device_index"] is None and s["backing_device_missing"] is None
+           and s["backing_channels"] is None and s["backing_volume"] == 0.8
+           and s["backing_on"] is True and s["backing_row"] is False)
+        ok("a volume past 1 is refused", a.set_backing_setting("backing_volume", 1.5)["ok"] is False)
+        ok("and so is a setting it does not have", a.set_backing_setting("backing_row", True)["ok"] is False)
+        ok("every output says whether the backing track can go there",
+           all("backing_unavailable" in d for d in a.list_output_devices()))
+
+        palyn = a.add_song("Pałyn")
+        ok("New song makes a song with no takes", palyn.get("ok") and palyn["title"] == "Pałyn")
+        ok("  and refuses a title in use, in any case", a.add_song("PAŁYN").get("error") == "Pałyn is already a song.")
+        hlyboka = a.add_song("Hlyboka")
+        ok("  Next take offers a song with no takes",
+           any(c["song"] == "Hlyboka" and c["go"] == 1 for c in a.song_choices()["other"]))
+
+        was_webview = sys.modules.get("webview")
+        sys.modules["webview"] = types.SimpleNamespace(OPEN_DIALOG=10, FOLDER_DIALOG=20, SAVE_DIALOG=30)
+        asked = []
+        try:
+            a._window = types.SimpleNamespace(
+                create_file_dialog=lambda *args, **kw: asked.append(kw) or (str(palyn_file),))
+            ok("the picker gives the file and its name",
+               a.pick_backing_file() == {"ok": True, "path": str(palyn_file), "name": "Pałyn backing.wav"})
+            ok("  and offers the files the app reads", "*.mp3" in " ".join(asked[0].get("file_types") or ()))
+            a._window = types.SimpleNamespace(create_file_dialog=lambda *args, **kw: None)
+            ok("  cancelled, it says so", a.pick_backing_file() == {"ok": False, "cancelled": True})
+        finally:
+            a._window = None
+            if was_webview is None:
+                sys.modules.pop("webview", None)
+            else:
+                sys.modules["webview"] = was_webview
+
+        added = a.add_backing(palyn["id"], str(palyn_file))
+        copy = home / "Rec" / "Backing tracks" / "Pałyn backing.wav"
+        length = soundfile.info(str(palyn_file)).frames / SR
+        ok("Add counts it: 128, bar 1 on its first strong beat",
+           added.get("ok") is True and added["tempo"] == 128 and abs(added["first_bar"] - 0.80) <= 0.02)
+        ok("  and says its name, length and channels",
+           added["name"] == "Pałyn backing.wav" and abs(added["seconds"] - length) < 0.01 and added["channels"] == 1)
+        ok("  copied to Backing tracks, and ready at the app's rate",
+           copy.exists() and backing_file.ready_path(copy, 44100).exists())
+        page = a.get_song(palyn["id"])
+        ok("a song with no tempo takes the counted one", (page["tempo"], page["signature"]) == (128, "4/4"))
+        ok("  its page has the file, there",
+           page["backing"] == {"name": "Pałyn backing.wav", "first_bar": added["first_bar"], "tempo": 128,
+                               "seconds": added["seconds"], "channels": 1, "missing": False})
+        ok("  and so does History's list",
+           next(s for s in a.list_songs()["songs"] if s["id"] == palyn["id"])["backing"] == page["backing"])
+        ok("the row shows from now on", a.get_settings()["backing_row"] is True)
+        before = sorted(p.name for p in copy.parent.iterdir())
+        ok("a 6-channel file is refused in its words, and nothing is copied",
+           a.add_backing(palyn["id"], str(tmp / "surround.wav"))
+           == {"ok": False, "error": "This file has 6 channels. Use a mono or stereo file."}
+           and sorted(p.name for p in copy.parent.iterdir()) == before)
+        ok("  so is a song that is not there",
+           a.add_backing(99999, str(palyn_file))["ok"] is False
+           and sorted(p.name for p in copy.parent.iterdir()) == before)
+
+        viasna = a.add_song("Viasna")
+        a.set_song_tempo(viasna["id"], 128, "4/4")
+        counted = a.add_backing(viasna["id"], str(viasna_file))
+        ok("a song with a tempo keeps it: counted 126, the song stays at 128",
+           counted.get("tempo") == 126 and a.get_song(viasna["id"])["tempo"] == 128)
+        sonca = a.add_song("Sonca")
+        held = a.add_backing(sonca["id"], str(sonca_file))
+        ok("pads: no steady beat, bar 1 at the start, and the song has no tempo still",
+           held.get("ok") is True and held["tempo"] is None and held["first_bar"] == 0.0
+           and a.get_song(sonca["id"])["tempo"] is None)
+
+        long_ = a.get_song(viasna["id"])["backing"]["seconds"]
+        ok("bar 1 is kept to a hundredth", a.set_backing_first_bar(viasna["id"], 0.534) == {"ok": True, "first_bar": 0.53})
+        ok("  never past the file's end",
+           a.set_backing_first_bar(viasna["id"], 9999)["first_bar"] == math.floor(long_ * 100) / 100)
+        ok("  nor before its start", a.set_backing_first_bar(viasna["id"], -1)["first_bar"] == 0.0)
+        a.set_backing_first_bar(viasna["id"], 0.40)
+        halved = a.set_backing_tempo(palyn["id"], 64, True)
+        ok("halved: the backing track's tempo, and the song's that took it",
+           halved.get("ok") is True and a.get_song(palyn["id"])["tempo"] == 64
+           and a.get_song(palyn["id"])["backing"]["tempo"] == 64)
+        a.set_backing_tempo(palyn["id"], 128, True)
+        ok("the backing track's tempo taken for the song",
+           a.set_backing_tempo(viasna["id"], 126, True).get("ok") is True and a.get_song(viasna["id"])["tempo"] == 126
+           and a.set_backing_tempo(viasna["id"], 126, False).get("ok") is True)
+        a.set_song_tempo(viasna["id"], 128, "4/4")
+        ok("  a tempo the metronome cannot keep is refused", a.set_backing_tempo(palyn["id"], 999, True)["ok"] is False)
+        drawn = a.song_backing_peaks(palyn["id"], 8.0, 80)
+        ok("its start drawn: one row of 80 for its one channel, quiet before bar 1, loud on it",
+           drawn.get("ok") is True and len(drawn["peaks"]) == 1 and len(drawn["peaks"][0]) == 80
+           and max(drawn["peaks"][0][:7]) < 0.1 and max(drawn["peaks"][0][8:12]) > 0.3)
+
+        replaced = a.add_backing(viasna["id"], str(palyn_file))
+        ok("Replace: the new file in, the old copy and its ready file to the Trash",
+           replaced.get("ok") is True and "Viasna backing.wav" in trashed
+           and "Viasna backing.wav (ready 44.1 kHz).wav" in trashed
+           and not (copy.parent / "Viasna backing.wav").exists())
+        ok("  the new copy beside Palyn's under a name of its own", (copy.parent / "Pałyn backing (2).wav").exists())
+        a.add_backing(viasna["id"], str(viasna_file))
+
+        a.set_output_device(0)
+        gate = threading.Event()
+
+        def made_slowly(copy_, rate):
+            gate.wait(10)
+            return real_ready(copy_, rate)
+
+        backing_file.make_ready = made_slowly
+        try:
+            ok("a rehearsal begins at 48 kHz",
+               a.start_rehearsal("Evening", 0, RATE, [{"name": "Gtr", "channel": 1}], 16)["ok"])
+            a.set_next_take_name("Pałyn")
+            row = a.metronome_state()["backing"]
+            ok("the file is got ready at that rate, and the row says so",
+               row["getting_ready"] is True and row["song"]["title"] == "Pałyn")
+            ok("  Record meanwhile records without it", a.start_take()["ok"] and a._recorder.click.backing is None)
+            a.stop_take()
+        finally:
+            backing_file.make_ready = real_ready
+            gate.set()
+        ok("  then it is ready at 48 kHz", ready() and backing_file.ready_path(copy, RATE).exists())
+
+        row = a.metronome_state()["backing"]
+        ok("the row before a click take: Palyn's file, on, at 0.8, not playing",
+           row["song"] == {**a.get_song(palyn["id"])["backing"], "song_id": palyn["id"], "title": "Pałyn"}
+           and row["on"] is True and row["volume"] == 0.8 and row["row"] is True and row["playing"] is False
+           and row["position_sec"] == 0 and row["output_missing"] is None and row["free"] is False)
+        first_bar = a.get_song(palyn["id"])["backing"]["first_bar"]
+        a.start_take()
+        rec = a._recorder
+        tb = rec.click.backing
+        ok("a click take: its bar 1 on the first click after the count-in",
+           tb is not None and tb.from_frame == round(first_bar * RATE) - click_frame(4, 128, RATE)
+           and tb.file == backing_file.ready_path(copy, RATE))
+        ok("  on the recording card's outputs, mono to both", rec.click.duplex and tb.output is None and tb.route == (0, 1))
+        ok("  the row shows it playing", a.metronome_state()["backing"]["playing"] is True)
+        ok("Replace during a take is refused",
+           a.add_backing(palyn["id"], str(viasna_file)) == {"ok": False, "error": "Not during a take"})
+        ok("  and Remove", a.remove_backing(palyn["id"]) == {"ok": False, "error": "Not during a take"})
+        ok("  the take keeps the file it opened", copy.exists() and tb.file.exists())
+        a.set_backing_setting("backing_volume", 0.5)
+        ok("the volume during the take is what it plays", tb.volume == 0.5)
+        a.set_backing_setting("backing_volume", 0.8)
+        blocks(16)
+        done = a.stop_take()
+        ok("Stop: its tracks end with the Backing track",
+           kinds(done["tracks"]) == [("Gtr", None), ("Backing", "backing")] and Path(done["tracks"][-1]["file"]).is_file())
+        ok("  with its song, whose Backing track is not heard yet",
+           done["song_id"] == palyn["id"] and done["backing_heard"] is False)
+        kept = a.keep_take(done["take_number"], done["temp_dir"], done["suggested_name"], done["duration_sec"],
+                           done["tracks"])
+        click_take = kept["take"]
+        ok("Keep keeps it as the take's Backing track",
+           kinds(click_take["tracks"]) == [("Gtr", None), ("Backing", "backing")]
+           and click_take["song"] == "Pałyn" and click_take["song_id"] == palyn["id"])
+        media = a.take_media(click_take["tracks"])
+        ok("  the player gets it with the Backing track icon",
+           media[-1].get("icon") == "backing" and media[-1].get("kind") == "backing")
+        folder = Path(a._session["folder"])
+        a.set_cloud_dir(str(tmp / "Cloud"))
+        sent = a._copy_to_cloud(folder, click_take["take_number"], "tracks")
+        ok("sent to the cloud with its tracks, the Backing track goes too",
+           sent.get("ok") is True and any(p.name == "Backing.wav" for p in (tmp / "Cloud").rglob("*")))
+
+        band = backing(tmp / "band 120.wav", 120, 4, 16, 0.5, snares=(1, 3), kicks=(0, 2))
+        steady = backing(tmp / "steady 90.wav", 90, 4, 12, 0.2, snares=(1, 3), kicks=(0, 2))
+        y, rate = soundfile.read(str(band))
+        soundfile.write(click_take["tracks"][0]["file"], y * 0.2, rate, subtype="PCM_16")
+        shutil.copyfile(steady, click_take["tracks"][1]["file"])
+        ok("a take's tempo counted from its files leaves its steady Backing track out: the band's 120",
+           a.count_tempo(str(folder), click_take["take_number"], "4/4") == {"ok": True, "tempo": 120})
+        drift = a.take_drift(click_take["tracks"], [], {"tempo": None, "signature": "4/4"})
+        ok("  and so does its drift line", drift.get("ok") is True and round(drift["middle"]) == 120)
+
+        a.metronome_set_on(False)
+        a.start_take()
+        rec = a._recorder
+        ok("the metronome off: no click, the file from its start at Record",
+           rec.click is not None and not rec.click.clicks and rec.click.backing is not None
+           and rec.click.backing.from_frame == 0)
+        blocks(8)
+        ok("  no count-in on the screen", a.metronome_state()["phase"] == "take")
+        done = a.stop_take()
+        ok("  Stop keeps its Backing track; the take has its tempo and no click",
+           kinds(done["tracks"])[-1] == ("Backing", "backing") and done["click"] is False and done["tempo"] == 128)
+        a._meters.clear()
+        kept = a.keep_take(done["take_number"], done["temp_dir"], done["suggested_name"], done["duration_sec"],
+                           done["tracks"])
+        ok("  kept from its take.json, it is no click take", kept["take"]["click"] is False
+           and kept["take"]["tempo"] == 128)
+        a.metronome_set_on(True)
+
+        a.set_next_take_name("Sonca")
+        ok("Sonca's file gets ready at 48 kHz", ready())
+        a.start_take()
+        rec = a._recorder
+        ok("a song with no tempo: the file from its start too",
+           rec.click is not None and not rec.click.clicks and rec.click.backing is not None
+           and rec.click.backing.from_frame == 0)
+        a.stop_take()
+
+        a.set_next_take_name("Take 9")
+        row = a.metronome_state()["backing"]
+        ok("a free take: no backing track, and the row knows why", row["free"] is True and row["song"] is None)
+        a.start_take()
+        ok("  Record plays none", a._recorder.click is None)
+        a.stop_take()
+        a.add_song("Dym")
+        a.set_next_take_name("Dym")
+        row = a.metronome_state()["backing"]
+        ok("a song without one: none in the row", row["song"] is None and row["free"] is False)
+
+        a.set_next_take_name("Pałyn")
+        ok("the switch is a setting", a.set_backing_setting("backing_on", False)["ok"]
+           and a.get_settings()["backing_on"] is False and a.metronome_state()["backing"]["on"] is False)
+        a.start_take()
+        ok("  off: Record plays none", a._recorder.click.backing is None)
+        a.stop_take()
+        a.set_backing_setting("backing_on", True)
+
+        ok("the Desk's 5-6 for the backing track",
+           a.set_backing_device(3)["ok"] and a.set_backing_channels([5, 6])["ok"]
+           and a.get_settings()["backing_device_index"] == 3 and a.get_settings()["backing_channels"] == [5, 6])
+        gone = [d for d in test_engine._DEVICES if d["name"] != "Desk"]
+        _sd.query_devices = lambda index=None, kind=None: gone if index is None else gone[index]
+        try:
+            a._metronome.devices_changed()
+            ok("its output unplugged: the row names it, with its outputs",
+               a.metronome_state()["backing"]["output_missing"] == "Desk 5–6")
+            ok("  and so does Settings", a.get_settings()["backing_device_missing"] == "Desk")
+            a.start_take()
+            ok("  Record records without it", a._recorder.click.backing is None)
+            blocks(8)
+            done = a.stop_take()
+            ok("  and keeps no Backing track", all(t.get("kind") != "backing" for t in done["tracks"]))
+        finally:
+            _sd.query_devices = real_query
+            a._metronome.devices_changed()
+        ok("plugged in again, the row says nothing of it", a.metronome_state()["backing"]["output_missing"] is None)
+        a.set_backing_device(None)
+
+        opened = _FakeStream.opened
+        ok("its play button plays it", a.backing_play(palyn["id"], False)["ok"])
+        ok("  in a stream of its own on the interface, shown playing",
+           _FakeStream.opened == opened + 1 and _FakeStream.last.kw["device"] == 0
+           and a.metronome_state()["backing"]["playing"] is True)
+        ok("  the metronome's play button stops it",
+           a.metronome_play()["ok"] and a.metronome_state()["backing"]["playing"] is False)
+        ok("  and it stops the metronome's",
+           a.backing_play(palyn["id"], False)["ok"] and a.metronome_state()["phase"] == "idle")
+        a.set_next_take_name("Dym")
+        ok("  another song picked stops it", a.metronome_state()["backing"]["playing"] is False)
+        a.set_next_take_name("Pałyn")
+        a.backing_play(palyn["id"], False)
+        ok("  Stop stops it", a.backing_stop()["ok"] and a.metronome_state()["backing"]["playing"] is False)
+        opened = _FakeStream.opened
+        ok("with the click from bar 1: one stream for both on one device",
+           a.backing_play(palyn["id"], True)["ok"] and _FakeStream.opened == opened + 1)
+        a.start_take()
+        ok("  during a take it does not play", a.backing_play(palyn["id"], False)["ok"] is False)
+        a.stop_take()
+        ok("  Record stopped it", a.metronome_state()["backing"]["playing"] is False)
+        opened = _FakeStream.opened
+        ok("Settings plays two seconds of it, not shown in the row",
+           a.backing_preview()["ok"] and _FakeStream.opened == opened + 1
+           and a.metronome_state()["backing"]["playing"] is False)
+        a.backing_stop()
+
+        copy.unlink()
+        ok("the copy deleted by hand: its page says it is missing",
+           a.get_song(palyn["id"])["backing"]["missing"] is True)
+        row = a.metronome_state()["backing"]
+        ok("  so does the row, and nothing is got ready", row["song"]["missing"] is True and row["getting_ready"] is False)
+        a.start_take()
+        ok("  Record records without it", a._recorder.click.backing is None)
+        a.stop_take()
+        ok("  its play button says why",
+           a.backing_play(palyn["id"], False).get("error")
+           == "Pałyn backing.wav is missing from the Backing tracks folder.")
+        ok("  Remove takes it away", a.remove_backing(palyn["id"])["ok"] and a.get_song(palyn["id"])["backing"] is None)
+
+        trashed.clear()
+        ok("a merge into a song with none gives it the merged one's, nothing to the Trash",
+           a.merge_songs(viasna["id"], hlyboka["id"])["ok"]
+           and a.get_song(hlyboka["id"])["backing"]["name"] == "Viasna backing.wav" and trashed == [])
+        ok("one into a song with its own: the merged one's copy to the Trash, with its ready files",
+           a.merge_songs(sonca["id"], hlyboka["id"])["ok"] and "Sonca pads.wav" in trashed
+           and any(t.startswith("Sonca pads.wav (ready ") for t in trashed))
+
+        ok("whether a song's Backing track is heard is kept",
+           a.set_song_backing_heard(palyn["id"], True) == {"ok": True, "heard": True})
+        a.shutdown()
+        _, b = fresh_api(home)
+        try:
+            ok("  across a restart", b._lib.take(folder, click_take["take_number"])["backing_heard"] is True)
+        finally:
+            b.shutdown()
+    finally:
+        apimod.move_to_trash, backing_file.make_ready, _sd.query_devices = was_trash, real_ready, real_query
 
 
 def main():
@@ -688,6 +1053,8 @@ def main():
     ramp = (1 - np.arange(1, 961) / 960)[:, None]
     ok("at Stop what is heard fades out over 20 ms, then is silent",
        np.allclose(block[:960], data6[1024:1984] * ramp, atol=1e-6) and not block[960:].any() and fading.done)
+
+    through_the_api(tmp)
 
     shutil.rmtree(tmp, ignore_errors=True)
     print()

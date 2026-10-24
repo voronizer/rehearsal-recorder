@@ -930,7 +930,8 @@ def on_its_own():
     amp.stop()
 
     # The screen asks for the state many times a second; the device list is
-    # PortAudio's, which a rescan rebuilds under the app's stream lock.
+    # PortAudio's, which a rescan rebuilds under the app's stream lock. The
+    # backing track's device is read with the click's (backing.py).
     asked = []
     polled = Metronome({}, lambda: None, lambda: None, lambda key: asked.append(key), None)
     polled.state()
@@ -943,7 +944,7 @@ def on_its_own():
     finally:
         _sd.query_devices = real_query
     ok("the screen's polls ask where the click goes once, not each time, and never PortAudio",
-       once == ["click_device", "output_device"] and asked == once and queried == [])
+       once == ["click_device", "output_device", "backing_device"] and asked == once and queried == [])
 
     # No click device saved, and the player on the system output, which is
     # the recording card: the click rides the take's stream there.

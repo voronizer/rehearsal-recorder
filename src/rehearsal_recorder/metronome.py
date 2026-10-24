@@ -176,6 +176,56 @@ def _refused(error):
     return {"ok": False, "error": error}
 
 
+def output_target(config, key, index, output_index, channels):
+    """
+    Where a part saved under `key` ("click_device", "backing_device") is
+    heard: (the device, its outputs as the card counts them or None for none
+    of its own, the name of a saved device that is not plugged in ("" for one
+    saved with no name) or None). `index` is what the saved device's index is
+    now, None when it is not plugged in, and `channels` its outputs as saved.
+    With no device saved it goes where the player plays: `output_index`, on
+    the player's outputs.
+    """
+    if config.get(key) is None and config.get(f"{key}_index") is None:
+        try:
+            own = _channels(config.get("output_channels"))
+        except ValueError:
+            own = None
+        return output_index, own, None
+    if index is None:
+        identity = config.get(key)
+        name = identity.get("name") if isinstance(identity, dict) else None
+        return None, None, name if isinstance(name, str) else ""
+    return index, channels, None
+
+
+def take_output(device, channels, missing, here, device_index, samplerate, empty):
+    """
+    How a part of a take (the click, the backing track) is heard, from where
+    output_target says it goes, while `device_index` records at `samplerate`:
+    (None, its outputs on the recording card, counted from 0) when `here`, the
+    device it goes to, is the recording card, as it rides the take's stream;
+    else (its own output, None): a ClickOutput on another device, or a
+    SilentOutput saying why nothing is heard there, its device not plugged in,
+    with no outputs (`empty` says so), or a second ASIO card. The take records
+    as it would either way.
+    """
+    if missing is not None:
+        return SilentOutput(missing, samplerate=int(samplerate)), None
+    if here is not None and here == device_index:
+        outputs = _outputs(here)
+        channels = channels or [1, 2]
+        if max(channels) > outputs:
+            channels = [1, 2] if outputs >= 2 else [1]
+        if outputs < 1:
+            return SilentOutput(_name(here), empty, int(samplerate)), None
+        return None, tuple(c - 1 for c in channels)
+    if here is not None and _asio(device_index) and _asio(here):
+        # The take's stream is the one ASIO stream PortAudio opens.
+        return SilentOutput(_name(here), ANOTHER_ASIO, int(samplerate)), None
+    return ClickOutput(device, channels or (1, 2)), None
+
+
 def _refusal(tempo, signature):
     """Why the metronome cannot take `tempo` in `signature`, or None: a
     signature not one of the four, or a tempo that is not a whole number in
@@ -335,6 +385,13 @@ class Metronome:
                 self._song = saved
         return {"ok": True, "song": saved}
 
+    def next_song(self):
+        """(whether the next take's name is a free take's, the song it leads
+        to as `follow` found it, {"id", "title", "tempo", "signature"}, or
+        None): the backing track's row follows it too."""
+        with self._lock:
+            return self._free_name, self._song
+
     def take_meter(self):
         """What Record takes: (tempo or None, signature, whether it clicks)."""
         with self._lock:
@@ -373,7 +430,8 @@ class Metronome:
     def _devices(self, wait=True):
         """
         (the click device's index, the player's output device's, the system
-        output's), each None for none, as the device list says. Read under the
+        output's, the backing track's device's), each None for none, as the
+        device list says. Read under the
         lock a rescan holds while it rebuilds the list. With `wait`, read now;
         without, as last read, and read again when older than
         DEVICES_FRESH_SEC unless the lock is busy; None if never read.
@@ -384,11 +442,18 @@ class Metronome:
         if not STREAM_LOCK.acquire(blocking=wait):
             return None if found is None else found[1]
         try:
-            read = (self._lookup("click_device"), self._lookup("output_device"), _system_output())
+            read = (self._lookup("click_device"), self._lookup("output_device"), _system_output(),
+                    self._lookup("backing_device"))
         finally:
             STREAM_LOCK.release()
         self._found = (time.monotonic(), read)
         return read
+
+    def devices(self, wait=True):
+        """_devices, for the backing track (backing.py), whose device is read
+        with the click's: (the click device's index, the player's output
+        device's, the system output's, the backing track's device's)."""
+        return self._devices(wait)
 
     def devices_changed(self):
         """The device list was rebuilt (a rescan), or the click's device or
@@ -402,6 +467,9 @@ class Metronome:
         the player plays."""
         return self._config.get("click_device") is not None or self._config.get("click_device_index") is not None
 
+    def click_saved(self):
+        return self._saved()
+
     def _target(self, wait=True):
         """
         (the device the click goes to, its outputs as the card counts them or
@@ -413,19 +481,12 @@ class Metronome:
         found = self._devices(wait)
         if found is None:
             return None, None, None
-        index, output_index, _ = found
-        if not self._saved():
-            try:
-                channels = _channels(self._config.get("output_channels"))
-            except ValueError:
-                channels = None
-            return output_index, channels, None
-        if index is None:
-            # "" when it was saved with no name: the screen says it without one.
-            identity = self._config.get("click_device")
-            name = identity.get("name") if isinstance(identity, dict) else None
-            return None, None, name if isinstance(name, str) else ""
-        return index, self._click_channels(), None
+        return output_target(self._config, "click_device", found[0], found[1], self._click_channels())
+
+    def click_target(self):
+        """Where the click goes now, as _target has it: for a song page's ▶ of
+        its backing track, which plays the click beside it."""
+        return self._target()
 
     def extra_channels(self, device_index):
         """The click's outputs, when its device is `device_index`: the player
@@ -456,44 +517,39 @@ class Metronome:
         kind, sink, _ = self._sink()
         return kind, sink
 
-    def take_click(self, device_index, samplerate):
+    def take_click(self, device_index, samplerate, backing=None):
         """
         The click for a take recorded from `device_index` at `samplerate`, or
-        None for a take without one (no tempo, or the switch off). On the
-        recording card it rides the take's stream; elsewhere it has its own,
-        or none when its device is not plugged in or is a second ASIO card,
-        and the take keeps its grid.
+        None for a take without one (no tempo, or the switch off) and without
+        a backing track. `backing` is the take's TakeBacking (backing.py): a
+        take with no click still plays it, through a TakeClick whose `clicks`
+        is False. On the recording card the click rides the take's stream;
+        elsewhere it has its own, one stream with the backing track when that
+        goes to the same device, or none when its device is not plugged in or
+        is a second ASIO card, and the take keeps its grid.
         """
         tempo, signature, on = self.take_meter()
         if tempo is None or not on:
-            return None
+            if backing is None:
+                return None
+            return TakeClick(tempo, signature, 0, None, (), clicks=False, backing=backing, samplerate=samplerate)
         device, channels, missing = self._target()
         # The system output is a device too: when it is the recording card,
         # the click rides the take's stream there as well.
         here = device if device is not None else self._devices(wait=False)[2]
-        output, route = None, None
-        if missing is not None:
-            output = SilentOutput(missing, samplerate=int(samplerate))
-        elif here is not None and here == device_index:
-            outputs = _outputs(here)
-            channels = channels or [1, 2]
-            if max(channels) > outputs:
-                channels = [1, 2] if outputs >= 2 else [1]
-            if outputs < 1:
-                # A card that says it has none: the take records as it would,
-                # its click to no output, rather than not at all.
-                output = SilentOutput(_name(here), "It has no outputs to click on.", int(samplerate))
-            else:
-                route = tuple(c - 1 for c in channels)
-        elif here is not None and _asio(device_index) and _asio(here):
-            # The take's stream is the one ASIO stream PortAudio opens: the
-            # take records as it would, its click to no output, and says why.
-            output = SilentOutput(_name(here), ANOTHER_ASIO, int(samplerate))
-        else:
-            output = ClickOutput(device, channels or (1, 2))
+        output, route = take_output(device, channels, missing, here, device_index, samplerate,
+                                    "It has no outputs to click on.")
+        route = route or output.route
+        if (backing is not None and type(output) is ClickOutput and type(backing.output) is ClickOutput
+                and backing.output.device_index == output.device_index):
+            # Both on one other device: one stream there, as wide as both
+            # need, each on its own outputs.
+            output = backing.output = ClickOutput(output.device_index,
+                                                  sorted(set(output.channels) | set(backing.output.channels)))
         return TakeClick(tempo, signature, self._setting("count_in_bars"),
-                         self.voices(int(samplerate)), route or output.route,
-                         wav_tempo=self._setting("tempo_in_wav"), output=output, samplerate=samplerate)
+                         self.voices(int(samplerate)), route,
+                         wav_tempo=self._setting("tempo_in_wav"), output=output, samplerate=samplerate,
+                         backing=backing)
 
     # ---------- a take ----------
 
@@ -730,7 +786,7 @@ class Metronome:
         if take is not None:
             tempo, signature, click = take
             phase = "take"
-            if click is not None:
+            if click is not None and click.clicks:
                 count, since = click.count_state(now)
                 if since is None or since < 0:
                     phase = "count"

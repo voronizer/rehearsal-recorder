@@ -263,6 +263,8 @@ class Library:
             # Not stored: it follows from the song and the go (D3).
             "name": take_name(title, take.go, take.take_number),
             "song": title,
+            # For what the player sets on the song (set_song_backing_heard).
+            "song_id": take.song_id,
             "go": take.go if title is not None else None,
             "starred": take.starred,
             "tempo": take.tempo,
@@ -521,6 +523,17 @@ class Library:
             song = self._songs_by_key(db).get((title or "").casefold())
             return None if song is None else song.id
 
+    def song(self, song_id):
+        """{"id", "title", "tempo", "signature", "backing_heard"} of a song,
+        tempo and signature None for one with none; None for an id no song
+        has."""
+        with self._session() as db:
+            song = db.get(Song, song_id)
+            if song is None:
+                return None
+            return {"id": song.id, "title": song.title, "tempo": song.tempo, "signature": song.signature,
+                    "backing_heard": bool(song.backing_heard)}
+
     def song_tempos(self):
         """{title: (tempo, signature)} for every song, both None for one with
         none: what the songs offered under a take's name carry. One query."""
@@ -646,6 +659,13 @@ class Library:
             return {"file": self._backing_path(song.backing_file), "name": song.backing_name,
                     "first_bar": song.backing_first_bar or 0.0, "tempo": song.backing_tempo,
                     "heard": song.backing_heard}
+
+    def backing_files(self):
+        """{song id: its backing track's copy} for every song that has one.
+        One query."""
+        with self._session() as db:
+            rows = db.execute(select(Song.id, Song.backing_file).where(Song.backing_file.is_not(None))).all()
+        return {song_id: self._backing_path(stored) for song_id, stored in rows}
 
     def set_song_backing(self, song_id, file, name, first_bar, tempo):
         """
