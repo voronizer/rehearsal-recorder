@@ -177,6 +177,9 @@ const FORWARD: Record<(typeof STORY)[number], (tell: Telling) => Promise<void>> 
 
     await press("Start rehearsal")
     const field = await waitFor(() => document.querySelector<HTMLTextAreaElement>("#next-take-name"))
+    // ↑ goes through the songs beside the field, which come a moment after
+    // the screen does: pressed before they are there, it does nothing.
+    await waitFor(() => document.querySelector("[data-set-song='Pałyn'], [data-song-row='Pałyn']"))
     // Pałyn is above the song the field names, first of tonight's songs.
     for (let i = 0; i < 10 && !field.value.startsWith("Pałyn"); i++) {
       const was = field.value

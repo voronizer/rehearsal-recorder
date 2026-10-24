@@ -250,6 +250,28 @@ test("the second step gets to the take with no click to count it in", async ({ p
   await expect(page.locator("h1")).toContainText(/Pałyn\s*3/)
 })
 
+// The songs beside the next take's field come a moment after the screen; on
+// a busy machine, long after. The story waits for them before it presses ↑.
+test("the story waits for the songs beside the field before the arrow key", async ({ page }) => {
+  await page.addInitScript(() => {
+    type Api = { song_choices?: (...a: unknown[]) => Promise<unknown>; slowed?: boolean }
+    const slow = setInterval(() => {
+      const api = (window as unknown as { pywebview?: { api: Api } }).pywebview?.api
+      if (!api?.song_choices || api.slowed) return
+      const real = api.song_choices
+      api.song_choices = async (...a) => {
+        await new Promise((done) => setTimeout(done, 1500))
+        return real(...a)
+      }
+      api.slowed = true
+      clearInterval(slow)
+    }, 1)
+  })
+  await page.goto("/stage.html#story")
+  await step(page, 1)
+  await expect.poll(() => scene(page), { timeout: 30_000 }).toBe("during")
+})
+
 // The band comes in on the bar after the count-in, and the guitarist with it.
 test("the guitar clips only once the count-in is over", async ({ page }) => {
   await page.goto("/stage.html#story")
