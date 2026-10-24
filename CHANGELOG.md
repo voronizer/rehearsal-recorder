@@ -33,6 +33,10 @@ opening.
 - **New song.** A button over History's list of songs makes a song with no
   takes yet, so it can have a tempo and a backing track before the band
   plays it. Such a song says “No takes yet”, and **Next take** offers it.
+- **The colour dot in Settings › Marks is easier to click.** The dot looks
+  the same. The area around it that takes the click is now as big as the
+  **Delete** button in the row, so a near miss is less likely to start a
+  drag or open the name for renaming.
 
 ## 0.13.1
 
