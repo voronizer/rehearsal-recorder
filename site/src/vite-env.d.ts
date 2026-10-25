@@ -10,3 +10,9 @@ declare module "virtual:changelog" {
   const text: string
   export default text
 }
+
+/** What the main page's block shows of Alex's stories: see vite.config.ts. */
+declare module "virtual:stories-block" {
+  const block: import("./content/stories").StoriesBlockContent
+  export default block
+}

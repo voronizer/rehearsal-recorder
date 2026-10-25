@@ -53,7 +53,8 @@ export type ItemId = (typeof ITEMS)[Step][number]
 export type Item = { id: ItemId; title: string; line: string; more: string }
 export type StoryStep = { id: Step; title: string; body: string; items: Item[] }
 
-const files = import.meta.glob<string>("../../content/*.md", {
+// Alex's stories are read on their own: see src/stories/content.ts.
+const files = import.meta.glob<string>(["../../content/*.md", "!../../content/stories.md"], {
   query: "?raw",
   import: "default",
   eager: true,

@@ -16,6 +16,12 @@ opening.
   the new version asks for the microphone right after the restart, not at
   the first take. Where the app cannot write to its own folder, the line
   says where to move it, and **Download** works as before.
+- **Stories on reha.stream.** Alex, who plays bass and wrote РЭХА, tells
+  how his band records its rehearsals, in four stories: from a digital
+  mixer, where the band speeds up, a drummer who hates the click, and why a
+  DAW got in the way at a rehearsal. **Stories** in the site's menu opens
+  them, and the main page shows the band arguing in a chat right after the
+  app.
 
 ## 0.14.0
 

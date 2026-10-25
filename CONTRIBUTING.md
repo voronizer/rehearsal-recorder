@@ -58,16 +58,23 @@ catch it.
 
 ## The website
 
-reha.stream is `site/`: one page, built from the interface's own components
-running on the same fake Python side as the interface's tests. Its words are
-Markdown in `site/content/`; its version and the news line come from the
-release's tag and that version's section of `CHANGELOG.md`. A pull request
-that touches `site/`, `ui/` or `CHANGELOG.md` builds it and runs its tests,
-so a change to the interface can break it.
+reha.stream is `site/`: the main page, built from the interface's own
+components running on the same fake Python side as the interface's tests,
+and Alex's stories, a page each. Its words are Markdown in `site/content/`,
+the stories in `site/content/stories/`; its version and the news line come
+from the release's tag and that version's section of `CHANGELOG.md`. A pull
+request that touches `site/`, `ui/` or `CHANGELOG.md` builds it and runs its
+tests, so a change to the interface can break it.
+
+The stories' pages are written whole at build time, so `npm run dev` shows
+only the main page; build and preview to see a story. A new story also needs
+its name in the route in `site/vercel-config.json`, or reha.stream answers
+404 for it.
 
 ```bash
 cd ui && npm ci && cd ../site && npm ci
-npm run dev                                 # to work on it
+npm run dev                                 # to work on the main page
+npm run build && npm run preview            # to read the stories
 npm test && npm run build && npm run test:e2e
 ```
 

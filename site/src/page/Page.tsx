@@ -5,6 +5,7 @@ import { Footer } from "./Footer"
 import { Hero } from "./Hero"
 import { Nav } from "./Nav"
 import { Ribbon } from "./Ribbon"
+import { StoriesBlock } from "./StoriesBlock"
 import { Story } from "./Story"
 import { REPO } from "./links"
 import { isWindows } from "./os"
@@ -18,6 +19,7 @@ export function Page({ pieces }: { pieces: PieceData }) {
         <Nav repo={REPO} />
         <main>
           <Hero windows={isWindows(navigator.platform, navigator.userAgent)} />
+          <StoriesBlock />
           <Controller />
           <Story pieces={pieces} />
           <Faq />

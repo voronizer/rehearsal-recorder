@@ -11,6 +11,7 @@ For all prose: the app's words, README, `docs/`, `site/content/`, CHANGELOG, com
    - give the reason where the reader could go wrong;
    - one word per thing: take (never "go"), rehearsal, song, set, track, mark, label;
    - short sentences, everyday words.
+3. Site pages tell stories, with a little humour, so the reader sees the people behind РЭХА and its service. The stories come from Alex's band; details may be made up in their spirit, and Alex checks each one before it goes live. Facts about РЭХА and the gear are never made up.
 
 The repository's rules beat the skills:
 - The app's wording: `docs/design-system.md` F7, P2, C3, B8 (curly quotes in a title).

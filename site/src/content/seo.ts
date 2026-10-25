@@ -1,7 +1,8 @@
-// What the page tells those who read it without running it: search engines,
-// AI crawlers, and the chats that draw a card for a link. The page itself is
+// What the site tells those who read it without running it: search engines,
+// AI crawlers, and the chats that draw a card for a link. The main page is
 // drawn by script, so all of this is written into the HTML at build time
-// (see seo() in vite.config.ts).
+// (see seo() in vite.config.ts); the stories' pages are written whole then
+// (stories() there).
 import { MAC_ZIP, REPO, WINDOWS_ZIP } from "../page/links.ts"
 
 export const SITE_URL = "https://reha.stream/"
@@ -63,13 +64,91 @@ export function robotsTxt(): string {
   return `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}sitemap.xml\n`
 }
 
-/** The site is one page. */
-export function sitemapXml(): string {
+/** Every page of the site, by its path: the main page and the stories'. */
+export function sitemapXml(paths: string[]): string {
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`,
-    `<url><loc>${SITE_URL}</loc></url>`,
+    ...paths.map((path) => `<url><loc>${escape(pageUrl(path))}</loc></url>`),
     `</urlset>`,
     ``,
   ].join("\n")
+}
+
+/** A page's whole address: /stories is https://reha.stream/stories. */
+export function pageUrl(path: string): string {
+  return SITE_URL + path.replace(/^\//, "")
+}
+
+/** A page of the site that is written whole at build time: a story, or the
+ *  page of stories (the stories() plugin in vite.config.ts). */
+export type PageMeta = {
+  path: string
+  /** As the browser's tab and search results show it: “… · РЭХА”. */
+  title: string
+  description: string
+  kind: "website" | "article"
+  jsonLd: Record<string, unknown> | null
+}
+
+/** Such a page's head: what index.html has by hand, for its own address. The
+ *  link card's picture is the main page's. */
+export function pageHeadHtml(meta: PageMeta): string {
+  const url = escape(pageUrl(meta.path))
+  const title = escape(meta.title)
+  const description = escape(meta.description)
+  return [
+    `<title>${title}</title>`,
+    `<meta name="description" content="${description}" />`,
+    `<link rel="canonical" href="${url}" />`,
+    `<meta property="og:type" content="${meta.kind}" />`,
+    `<meta property="og:site_name" content="РЭХА" />`,
+    `<meta property="og:url" content="${url}" />`,
+    `<meta property="og:title" content="${title}" />`,
+    `<meta property="og:description" content="${description}" />`,
+    `<meta property="og:image" content="${OG_IMAGE}" />`,
+    `<meta property="og:image:width" content="1200" />`,
+    `<meta property="og:image:height" content="630" />`,
+    `<meta property="og:image:alt" content="РЭХА: the rehearsal screen, playing a take" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    ...(meta.jsonLd ? [`<script type="application/ld+json">${jsonLdText(meta.jsonLd)}</script>`] : []),
+  ].join("\n    ")
+}
+
+/** The built stories.html with a page's head and words in their places. A
+ *  function puts them in, so a “$” in the words stays as it is. */
+export function fillPage(template: string, head: string, body: string): string {
+  let page = template
+  for (const [place, text] of [
+    ["<!--head-->", head],
+    ["<!--body-->", body],
+  ]) {
+    const count = page.split(place).length - 1
+    if (count === 0) throw new Error(`stories.html has no ${place}`)
+    if (count > 1) throw new Error(`stories.html has ${place} twice`)
+    page = page.replace(place, () => text)
+  }
+  return page
+}
+
+/** A story as schema.org describes an article: Alex's, published by the app. */
+export function articleJsonLd(story: {
+  title: string
+  description: string
+  date: string
+  url: string
+}): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: story.title,
+    description: story.description,
+    datePublished: story.date,
+    url: story.url,
+    mainEntityOfPage: story.url,
+    image: OG_IMAGE,
+    inLanguage: "en",
+    author: { "@type": "Person", name: "Alex" },
+    publisher: { "@type": "Organization", name: "РЭХА", url: SITE_URL },
+  }
 }

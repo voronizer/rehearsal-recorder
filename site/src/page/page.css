@@ -70,7 +70,8 @@ body {
 .menu a:hover { color: var(--page-fg); }
 .menu .get { color: var(--page-accent-fg); background: var(--page-accent); padding: 5px 14px; border-radius: 999px; font-weight: 600; }
 .menu .get:hover { color: var(--page-accent-fg); filter: brightness(1.05); }
-@media (max-width: 680px) { .menu a:not(.get) { display: none; } }
+/* On a phone: Stories, as the main page has no way to them but the menu, and Download. */
+@media (max-width: 680px) { .menu { gap: 18px; } .menu a:not(.get, .stories) { display: none; } }
 
 /* ---- Hero ---- */
 .hero { padding-block: clamp(40px, 7vw, 96px) clamp(72px, 11vw, 150px); display: grid; gap: clamp(40px, 6vw, 72px); }
@@ -85,7 +86,10 @@ body {
 
 /* ---- The app, live, in a frame ---- */
 .screen { border-radius: 18px; overflow: hidden; background: var(--page-app); box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.06), 0 40px 80px -48px rgba(16, 24, 40, 0.45); }
-.live { position: relative; overflow: hidden; background: var(--page-app); }
+/* The app's shape, 1180 by 960 (LiveFrame.tsx), from the first moment: the
+   page under it, the stories' chat first, is where it will stay while the
+   frame loads. */
+.live { position: relative; overflow: hidden; background: var(--page-app); aspect-ratio: 1180 / 960; }
 .live iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; background: var(--page-app); }
 .live.passive iframe { pointer-events: none; }
 .live.settled iframe { transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
@@ -99,6 +103,23 @@ body {
   .caption.on-computer { display: none; }
   .caption.on-phone { display: block; }
 }
+
+/* ---- Stories, right after the first screen: the band's chat in a tile as
+   the controller's, its words on the left and the chat on the right, or
+   over it under 900 px ---- */
+.stories-block { background: var(--page-tile); border-radius: 28px; display: grid; gap: 28px; align-items: center; padding: clamp(26px, 4.5vw, 56px); margin-bottom: clamp(72px, 11vw, 150px); }
+@media (min-width: 900px) { .stories-block { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; } }
+.stories-block h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; margin: 0 0 6px; }
+/* .copy p would grey the red of the word over the heading. */
+.stories-block .copy .eyebrow { color: var(--page-rec); }
+.stories-block .links { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+.chat-side { display: grid; gap: 22px; width: 100%; max-width: 30rem; justify-self: end; }
+.chat-side .say p { background: var(--page-bg); }
+.chat-side .say.me p { background: var(--page-accent); }
+/* Each line waits, and comes in its turn (--i, see Chat.tsx). */
+.chat-side .say { opacity: 0; transform: translateY(8px); transition: opacity 0.35s ease, transform 0.35s ease; transition-delay: calc(0.1s + var(--i) * 0.55s); }
+.chat-side.shown .say { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .chat-side .say { opacity: 1; transform: none; transition: none; } }
 
 /* ---- Victor Baikov's controller: its words beside its photo, or over it
    on a phone. The photo goes to the block's edges, with no tile round it. ---- */
@@ -204,6 +225,69 @@ body {
 .qa summary::after { content: "+"; color: var(--page-muted); font-weight: 400; font-size: 1.25rem; line-height: 1; }
 .qa details[open] summary::after { content: "–"; }
 .qa p { color: var(--page-muted); margin: 10px 0 0; max-width: 40rem; }
+
+/* ---- The band arguing, as its chat: in a story and in the block that
+   leads to them. Alex tells the stories, so his lines are on the right, in
+   the site's blue, with no name over them. ---- */
+.chat { display: grid; gap: 4px; }
+.say { position: relative; display: grid; justify-items: start; gap: 3px; min-width: 0; }
+.say.me { justify-items: end; }
+.say .who { font-size: 0.75rem; color: var(--page-muted); padding-inline: 15px; margin-top: 8px; }
+/* Off the screen, though a screen reader still says who is talking. */
+.say.same .who, .say.me .who { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.say p { margin: 0; max-width: 26rem; padding: 9px 15px; border-radius: 20px 20px 20px 6px; background: var(--page-tile); font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; text-wrap: pretty; }
+.say.me p { background: var(--page-accent); color: var(--page-accent-fg); border-radius: 20px 20px 6px 20px; }
+
+/* ---- A story's page: its head in the middle, then the opening and the
+   chapters, far apart as the evening's steps; from 1000 px each chapter's
+   name on the left, held while its text goes by ---- */
+.tale-section { padding-top: clamp(40px, 7vw, 96px); }
+.tale-head { display: grid; gap: 14px; justify-items: center; text-align: center; margin-bottom: clamp(36px, 5vw, 64px); }
+.tale-head .h2, .tale-head p { margin: 0; }
+.tale { display: grid; gap: clamp(64px, 9vw, 120px); align-content: start; max-width: 40rem; margin-inline: auto; }
+.chap { display: grid; gap: 18px; align-items: start; scroll-margin-top: 24px; }
+.chap-head { display: grid; gap: 10px; align-content: start; }
+.chap-head .n { font-family: var(--page-mono); font-size: 0.875rem; color: var(--page-muted); }
+.chap-head h2 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; overflow-wrap: anywhere; }
+.chap-body { display: grid; gap: 20px; min-width: 0; }
+.chap-body > p { margin: 0; font-size: 1.25rem; line-height: 1.6; text-wrap: pretty; overflow-wrap: anywhere; }
+.chap-body a { color: var(--page-accent); }
+/* A joke, said big: a size under a chapter's name. */
+.chap-body > p.joke { font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; margin-block: 8px; max-width: 26ch; }
+.tale-get .cta { justify-content: flex-start; }
+@media (max-width: 719px) { .chap-body > p { font-size: 1rem; } }
+@media (min-width: 1000px) {
+  .tale { max-width: calc(15rem + 56px + 40rem); }
+  .chap { grid-template-columns: 15rem minmax(0, 40rem); gap: 56px; }
+  .chap-head { position: sticky; top: 24px; }
+  .chap.lead .chap-body { grid-column: 2; }
+  .tale-get { margin-left: calc(15rem + 56px); }
+}
+
+/* ---- The page of stories: a grey card each, two to a row ---- */
+.tales { display: grid; gap: 20px; }
+@media (min-width: 720px) { .tales { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tale-card { display: grid; gap: 12px; align-content: start; background: var(--page-tile); border-radius: 28px; padding: clamp(24px, 3vw, 36px); text-decoration: none; color: inherit; }
+.tale-card h2 { margin: 0; font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; }
+.card-copy { display: grid; gap: 12px; align-content: start; }
+.card-copy > p { margin: 0; color: var(--page-muted); line-height: 1.45; }
+.card-copy > p.eyebrow { color: var(--page-rec); }
+/* The band's first lines on the card, in bubbles of the page's own white. */
+.card-chat { padding-bottom: 8px; }
+.card-chat .say p { background: var(--page-bg); font-size: 0.9375rem; }
+.card-chat .say.me p { background: var(--page-accent); }
+.card-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 6px; }
+.tale-card:hover h2 { color: var(--page-accent); }
+/* At a story's end: the next story's card, its chat on the right from
+   900 px, and the others' names under it. */
+.tale-next { display: grid; gap: 24px; margin-bottom: clamp(72px, 11vw, 150px); }
+@media (min-width: 900px) {
+  .tale-card.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+  .tale-card.wide .card-chat { order: 2; padding: 0; }
+  .tale-card.wide h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); letter-spacing: -0.035em; line-height: 1.05; }
+}
+.tale-next .also { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; }
+.tale-next .also .more { white-space: normal; }
 
 /* ---- Open source, as one line ---- */
 .oss { text-align: center; display: grid; gap: 12px; justify-items: center; padding-block: 8px clamp(56px, 8vw, 96px); }
