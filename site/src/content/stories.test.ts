@@ -144,6 +144,10 @@ const INDEX = text([
   "## block link",
   "",
   "Read the story",
+  "",
+  "## block more",
+  "",
+  "More stories",
 ])
 const OTHER = text(["---", "date: 2026-10-26", "description: Another line.", "---", "", "# Other", "", "Words."])
 const FILES = { "a-story.md": text(STORY), "other.md": OTHER }
@@ -157,7 +161,7 @@ describe("readStories", () => {
       lede: "The lede.",
       description: "For search.",
       byline: "Alex",
-      block: { heading: "Heading.", line: "Line.", link: "Read the story" },
+      block: { heading: "Heading.", line: "Line.", link: "Read the story", more: "More stories" },
     })
     expect(stories.block.story.slug).toBe("a-story")
   })
@@ -168,6 +172,7 @@ describe("readStories", () => {
       heading: "Heading.",
       line: "Line.",
       link: "Read the story",
+      more: "More stories",
       chats: [
         [
           { who: "Guitarist", text: "One." },
@@ -245,6 +250,7 @@ describe("the site's stories", () => {
         heading: "We used to argue about which bar it was.",
         line: "Then we started recording. Alex, who plays bass and wrote РЭХА, tells how our band does it, and what went wrong on the way.",
         link: "Read the story",
+        more: "More stories",
       },
     })
     expect(stories.block.story.slug).toBe("digital-mixer")

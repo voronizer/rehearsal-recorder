@@ -40,19 +40,27 @@ export type StoriesContent = {
   byline: string
   /** In the order stories.md lists them. */
   list: StoryDoc[]
-  /** The block on the main page: the story whose chats it shows, and its words. */
-  block: { story: StoryDoc; heading: string; line: string; link: string }
+  /** The block on the main page: the story whose chats it shows, and its
+   *  words: the link to that story, and `more`, the link to every story. */
+  block: { story: StoryDoc; heading: string; line: string; link: string; more: string }
 }
 
 /** What the block on the main page shows: its words, the story it leads to,
  *  and that story's first two chats. The main page gets only this
  *  (virtual:stories-block in vite.config.ts), not the stories' whole text. */
-export type StoriesBlockContent = { slug: string; heading: string; line: string; link: string; chats: ChatLine[][] }
+export type StoriesBlockContent = {
+  slug: string
+  heading: string
+  line: string
+  link: string
+  more: string
+  chats: ChatLine[][]
+}
 
 export function blockOf(stories: StoriesContent): StoriesBlockContent {
-  const { story, heading, line, link } = stories.block
+  const { story, heading, line, link, more } = stories.block
   const chats = story.chapters[0].blocks.flatMap((b) => (b.kind === "chat" ? [b.lines] : [])).slice(0, 2)
-  return { slug: story.slug, heading, line, link, chats }
+  return { slug: story.slug, heading, line, link, more, chats }
 }
 
 /** A chapter's address in its story: “The gain” is #the-gain. */
@@ -180,6 +188,7 @@ export function readStories(files: Record<string, string>, index: string): Stori
     "block heading",
     "block line",
     "block link",
+    "block more",
   ])
   const order = parts.order
     .split("\n")
@@ -216,6 +225,7 @@ export function readStories(files: Record<string, string>, index: string): Stori
       heading: one(parts["block heading"]),
       line: one(parts["block line"]),
       link: one(parts["block link"]),
+      more: one(parts["block more"]),
     },
   }
 }

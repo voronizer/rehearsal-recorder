@@ -43,7 +43,7 @@ async function expectUnseenName(who: Locator, name: string) {
 test.describe("with Reduce motion", () => {
   test.use({ reducedMotion: "reduce" })
 
-  test("the block sits between the first screen and the controller, and opens its story", async ({ page }) => {
+  test("the block sits between the first screen and the controller, and opens its story or all of them", async ({ page }) => {
     await page.goto("/")
     const block = page.locator("#stories")
     await expect(block.locator(".eyebrow")).toHaveText("Stories")
@@ -76,6 +76,7 @@ test.describe("with Reduce motion", () => {
     const bubble = (await me.locator("p").boundingBox())!
     expect(Math.abs(bubble.x + bubble.width - (side.x + side.width))).toBeLessThanOrEqual(1)
     await expectUnseenName(me.locator(".who"), "Me")
+    await expect(block.getByRole("link", { name: "More stories" })).toHaveAttribute("href", "/stories")
     await block.getByRole("link", { name: "Read the story" }).click()
     await expect(page).toHaveURL(new RegExp(`${MIXER}$`))
   })

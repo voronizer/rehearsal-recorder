@@ -5,7 +5,8 @@
 
      The block on the main page right after the app (see
      site/src/page/StoriesBlock.tsx) shows the first two chats of the story
-     under ## block story, beside its heading, its line and its link. -->
+     under ## block story, beside its heading, its line, its link to that
+     story and ## block more, its link to this page. -->
 
 # How our band records its rehearsals
 
@@ -48,3 +49,7 @@ band does it, and what went wrong on the way.
 ## block link
 
 Read the story
+
+## block more
+
+More stories

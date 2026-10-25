@@ -4,12 +4,12 @@ import { Chat } from "../stories/Chat"
 
 /**
  * Right after the first screen: the band arguing, the first two chats of a
- * story, beside a few words and the way to the story. The lines come in one
- * at a time once the chat is in view, as messages do; with Reduce motion
- * they are all there (page.css).
+ * story, beside a few words, the way to that story and the way to them all.
+ * The lines come in one at a time once the chat is in view, as messages
+ * do; with Reduce motion they are all there (page.css).
  */
 export function StoriesBlock() {
-  const { slug, heading, line, link, chats } = block
+  const { slug, heading, line, link, more, chats } = block
   // Each chat's first line, counted through both: they come in that order.
   const starts = chats.map((_, i) => chats.slice(0, i).reduce((n, lines) => n + lines.length, 0))
   const side = useRef<HTMLDivElement>(null)
@@ -34,9 +34,12 @@ export function StoriesBlock() {
         <p className="eyebrow">Stories</p>
         <h2>{heading}</h2>
         <p>{line}</p>
-        <p>
+        <p className="links">
           <a className="more" href={`/stories/${slug}`}>
             {link}
+          </a>
+          <a className="more" href="/stories">
+            {more}
           </a>
         </p>
       </div>

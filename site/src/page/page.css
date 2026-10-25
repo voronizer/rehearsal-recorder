@@ -112,6 +112,7 @@ body {
 .stories-block h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; margin: 0 0 6px; }
 /* .copy p would grey the red of the word over the heading. */
 .stories-block .copy .eyebrow { color: var(--page-rec); }
+.stories-block .links { display: flex; flex-wrap: wrap; gap: 8px 28px; }
 .chat-side { display: grid; gap: 22px; width: 100%; max-width: 30rem; justify-self: end; }
 .chat-side .say p { background: var(--page-bg); }
 .chat-side .say.me p { background: var(--page-accent); }
