@@ -1651,17 +1651,62 @@ GitHub. The dots stay until you run the new version. When there is nothing
 newer, the same place says “This is the latest version.” once GitHub has
 answered, and “Not checked yet.” until then.
 
-**Download** fetches it for your system into your Downloads folder, checks
-that it is the release's own and that nothing in it is damaged, and opens the
-folder with it picked out. Unpack it, close the app and open the new copy.
-The old copy is not touched, so you can keep it until you are sure. On
-Windows a zip the app downloads itself carries no “from the internet” flag,
-so there is nothing to unblock. If the download is cut short or damaged,
-nothing is left behind and **Try again** fetches it again. A download that
-is already there and whole is not fetched twice.
+To update:
+
+1. Press **Update**. The app downloads the new version, unpacks it beside
+   this copy and checks that it starts. The line shows how far it has got.
+2. When the line says the new version is ready, press **Restart now**. The
+   app closes, the new version takes its place, and it opens again a few
+   seconds later. A notice in the corner says which version it is now.
+
+You can go on working before you press **Restart now**. If you close the
+app instead, the new version waits, and **Restart now** is there the next
+time you open it.
+
+The old copy stays beside the new one, named with its version, for example
+“Reha 0.14.0”, until the new one has opened. Then it goes to the Trash (the
+Recycle Bin on Windows). Your recordings, the history and the settings are
+kept in other folders, so an update does not touch them. On Windows a
+version the app downloads itself carries no “from the internet” flag, so
+there is nothing to unblock.
+
+**On a Mac, macOS asks for the microphone again after each update.** The
+app is not signed with a paid developer certificate, so macOS treats each
+version as a new app. The new version opens the microphone for a moment
+right after the restart, so the question comes then, and not at the first
+take with the band waiting. Allow it, as you did the first time.
+
+If something goes wrong, this copy stays as it was:
+
+- If getting the new version ready fails, the line says why, and **Try
+  again** starts again.
+- If the new version cannot be put in place, for example because another
+  program held one of the app's files, the old copy opens again. A notice
+  says so, the line in **Updates** says why, and **Try again** there
+  restarts again.
+
+### When the line says the copy can't replace itself
+
+Instead of **Update**, the line can say “This copy can't replace itself
+where it is.” The app cannot write to the folder it runs from. On a Mac this
+happens when you open the app straight from where it was unpacked, in
+Downloads for example: macOS then runs it from a hidden read-only copy. Move
+it to Applications in Finder and open it from there. On Windows it happens
+in a folder such as Program Files: move the app's folder to Documents in
+Explorer and open it from there. Then **Update** appears.
+
+Until then, **Download** fetches the new version into your Downloads folder,
+checks that it is the release's own and that nothing in it is damaged, and
+opens the folder with it picked out. Unpack it, close the app and open the
+new copy. If the download is cut short or damaged, nothing is left behind
+and **Try again** fetches it again. A download that is already there and
+whole is not fetched twice.
+
+### Asking GitHub
 
 To find out, the app asks GitHub which version is the latest when it starts,
-and once a day while it stays open. It sends nothing else, it downloads only
-when you press **Download**, and it never asks while a take is recording.
+and once a day while it stays open. It sends nothing else, it downloads a
+new version only when you press **Update** or **Download**, and it never
+asks while a take is recording.
 With no internet in the room it does not find out. To stop the asking,
 untick **Check for new versions** in **Settings › Under the hood**.

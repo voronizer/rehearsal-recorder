@@ -5,6 +5,18 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Update, then Restart now, puts a new version in place.** When a newer
+  version is out, **Update** in **Settings › Under the hood** downloads it,
+  unpacks it beside this copy and checks that it starts. **Restart now**
+  then closes the app and opens the new version a few seconds later, with
+  “Updated to” in the corner. The old copy goes to the Trash once the new
+  one has opened. Your recordings and settings are not touched. On a Mac
+  the new version asks for the microphone right after the restart, not at
+  the first take. Where the app cannot write to its own folder, the line
+  says where to move it, and **Download** works as before.
+
 ## 0.14.0
 
 - **A backing track for each song.** A song can keep one audio file, mono

@@ -30,11 +30,14 @@ developer certificate. After that it opens normally. macOS also asks for
 microphone permission the first time you record.
 
 When a newer version is out, a dot appears on the gear on the start
-screen. **Download** in **Settings › Under the hood** fetches it into your
-Downloads folder. On Windows a zip the app downloads itself carries no
-flag, so there is nothing to unblock. To find out, the app asks GitHub which
-version is the latest when it starts and once a day, and sends nothing
-else. **Check for new versions**, in the same place, switches that off.
+screen. Press **Update** in **Settings › Under the hood**, and when it says
+the new version is ready, press **Restart now**. The app closes and opens
+again as the new version a few seconds later. Your recordings and settings
+are kept in other folders, so an update does not touch them. On Windows a
+version the app downloads itself carries no flag, so there is nothing to
+unblock. To find out, the app asks GitHub which version is the latest when
+it starts and once a day, and sends nothing else. **Check for new
+versions**, in the same place, switches that off.
 
 No release yet, or you want to build it yourself? Double-click
 **`build.command`** on macOS or **`build.bat`** on Windows, at the top of
