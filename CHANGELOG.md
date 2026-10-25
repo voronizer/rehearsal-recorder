@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.15.0
 
 - **Update, then Restart now, puts a new version in place.** When a newer
   version is out, **Update** in **Settings › Under the hood** downloads it,
