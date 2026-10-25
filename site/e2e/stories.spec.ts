@@ -27,6 +27,84 @@ test("Stories in the menu opens the page of stories, and a card its story", asyn
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(STORIES[0][1])
 })
 
+// The block right after the main page's first screen: the band's chat
+// beside a few words, and the way to the story it comes from.
+const opacity = (page: Page, n: number) =>
+  page.locator("#stories .say").nth(n).evaluate((el) => Number(getComputedStyle(el).opacity))
+
+test.describe("with Reduce motion", () => {
+  test.use({ reducedMotion: "reduce" })
+
+  test("the block sits between the first screen and the controller, and opens its story", async ({ page }) => {
+    await page.goto("/")
+    const block = page.locator("#stories")
+    await expect(block.locator(".eyebrow")).toHaveText("Stories")
+    // In red, as over the main page's heading.
+    const red = await page.locator(".hero .eyebrow").evaluate((el) => getComputedStyle(el).color)
+    await expect(block.locator(".eyebrow")).toHaveCSS("color", red)
+    await expect(block.getByRole("heading", { level: 2 })).toHaveText("We used to argue about which bar it was.")
+    await expect(block.locator(".copy p").nth(1)).toHaveText(
+      "Then we started recording. Alex, who plays bass and wrote РЭХА, tells how our band does it, and what went wrong on the way."
+    )
+    const at = await page.evaluate(() => ({
+      hero: document.querySelector(".hero")!.getBoundingClientRect().bottom,
+      block: document.querySelector("#stories")!.getBoundingClientRect(),
+      controller: document.querySelector("#controller")!.getBoundingClientRect().top,
+    }))
+    expect(at.block.top).toBeGreaterThanOrEqual(at.hero)
+    expect(at.block.bottom).toBeLessThanOrEqual(at.controller)
+    // The first two arguments of the mixer story, all there at once.
+    await expect(block.locator(".say p")).toHaveText([
+      "You came in late in the second bar.",
+      "No, that was the third.",
+      "Bloody hell, you're all playing it wrong!",
+      "Let's change that bit in the chorus.",
+      "Which bit?",
+      "You know. That bit.",
+    ])
+    for (let n = 0; n < 6; n++) expect(await opacity(page, n)).toBe(1)
+    const side = (await block.locator(".chat-side").boundingBox())!
+    const me = block.locator(".say.me")
+    const bubble = (await me.locator("p").boundingBox())!
+    expect(Math.abs(bubble.x + bubble.width - (side.x + side.width))).toBeLessThanOrEqual(1)
+    await expect(me.locator(".who")).toBeHidden()
+    await block.getByRole("link", { name: "Read the story" }).click()
+    await expect(page).toHaveURL(new RegExp(`${MIXER}$`))
+  })
+})
+
+test.describe("with motion", () => {
+  test.use({ reducedMotion: "no-preference" })
+
+  test("the block's lines come one at a time once it is in view", async ({ page }) => {
+    await page.goto("/")
+    await expect(page.locator("#stories .say")).toHaveCount(6)
+    expect(await opacity(page, 0)).toBe(0)
+    await page.locator("#stories .chat-side").scrollIntoViewIfNeeded()
+    await expect.poll(() => opacity(page, 0)).toBe(1)
+    expect(await opacity(page, 5)).toBeLessThan(1)
+    await expect.poll(() => opacity(page, 5), { timeout: 10_000 }).toBe(1)
+  })
+
+  // 40% of the stacked block never fits on a phone on its side; its chat does.
+  test("on a phone on its side the block's lines still come", async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 })
+    await page.goto("/")
+    await page.locator("#stories .chat-side").scrollIntoViewIfNeeded()
+    await expect.poll(() => opacity(page, 5), { timeout: 10_000 }).toBe(1)
+  })
+})
+
+test("on the narrowest phone the block fits, its words over its chat", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  await page.goto("/")
+  await expect(page.locator("#stories .say")).toHaveCount(6)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320)
+  const copy = (await page.locator("#stories .copy").boundingBox())!
+  const chat = (await page.locator("#stories .chat-side").boundingBox())!
+  expect(copy.y + copy.height).toBeLessThanOrEqual(chat.y)
+})
+
 test("a link in a story opens the story it names", async ({ page }) => {
   await page.goto("/stories/tempo-drift")
   await page.getByRole("link", { name: "the mixer story" }).click()
