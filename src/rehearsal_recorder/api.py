@@ -906,6 +906,8 @@ class Api:
             __version__,
             enabled=lambda: bool(self._config.get("check_updates", True)),
             busy=lambda: self._recorder is not None,
+            state=CONFIG_PATH.with_name("update.json"),
+            tag=os.environ.get("REHA_UPDATE_TAG") or None,
         )
         self._recordings_dir = Path(
             self._config.get("recordings_dir") or RECORDINGS_ROOT
@@ -1359,11 +1361,31 @@ class Api:
         Only the built app asks. Run from source, the version is a
         development build's, and the person running it is the one making
         the releases.
+
+        First it reads what the last Restart now did (updates.after_start).
+        Just put in place on a Mac, it opens the input for half a second, so
+        that macOS asks for the microphone now, with nobody waiting, rather
+        than at the first take.
+
+        No parameters: pywebview hands its window to a handler that takes one.
         """
         if not getattr(sys, "frozen", False):
             return False
+        came = self._updates.after_start()
+        if came["microphone"]:
+            threading.Thread(target=self._ask_for_microphone, name="update-microphone",
+                             daemon=True).start()
         self._updates.start()
         return True
+
+    def _ask_for_microphone(self):
+        """The input chosen in Settings › Audio, or the system's default,
+        opened and closed again. Whatever goes wrong, the take will ask."""
+        try:
+            with sd.InputStream(device=saved_device(self._config, "device", True), channels=1):
+                time.sleep(0.5)
+        except Exception:  # noqa: BLE001 — the question comes at the first take instead
+            pass
 
     def update_status(self):
         """{"on": ..., "latest": {"version": ...} or None}, polled over the
@@ -1379,6 +1401,24 @@ class Api:
     def show_update(self):
         """Show in folder, once the newer version's zip is downloaded."""
         return self._updates.show_download()
+
+    def update_now(self):
+        """The Update button: gets the newer version ready beside this copy.
+        How far along it is comes back in update_status."""
+        return self._updates.start_update()
+
+    def restart_to_update(self):
+        """
+        Restart now: starts the swap, then closes the window as the close
+        button would, a moment later so that this answer reaches the
+        interface first. The app shuts down as it always does.
+        """
+        said = self._updates.restart()
+        if said.get("ok") and self._window is not None:
+            timer = threading.Timer(0.3, self._window.destroy)
+            timer.daemon = True
+            timer.start()
+        return said
 
     def set_check_updates(self, enabled):
         """The switch in Settings. Switched on, it asks soon rather than
