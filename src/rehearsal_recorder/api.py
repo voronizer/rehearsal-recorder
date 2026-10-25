@@ -909,6 +909,7 @@ class Api:
             state=CONFIG_PATH.with_name("update.json"),
             tag=os.environ.get("REHA_UPDATE_TAG") or None,
         )
+        self._microphone_asked = False
         self._recordings_dir = Path(
             self._config.get("recordings_dir") or RECORDINGS_ROOT
         )
@@ -1372,7 +1373,8 @@ class Api:
         if not getattr(sys, "frozen", False):
             return False
         came = self._updates.after_start()
-        if came["microphone"]:
+        if came["microphone"] and not self._microphone_asked:
+            self._microphone_asked = True
             threading.Thread(target=self._ask_for_microphone, name="update-microphone",
                              daemon=True).start()
         self._updates.start()
@@ -1389,7 +1391,14 @@ class Api:
 
     def update_status(self):
         """{"on": ..., "latest": {"version": ...} or None}, polled over the
-        local server like the meters — see mediaserver.POLLABLE."""
+        local server like the meters — see mediaserver.POLLABLE.
+
+        The interface asks as soon as it is drawn, which can be before the
+        window's loaded event reaches start_update_checks; so the built app
+        reads what the last Restart now did here as well (once a run), and
+        the first answer can already say "Updated to"."""
+        if getattr(sys, "frozen", False):
+            self._updates.after_start()
         return self._updates.status()
 
     def download_update(self):

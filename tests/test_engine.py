@@ -14084,6 +14084,11 @@ def main():
        not state87(where88).exists() and not staging87(where88).exists())
     ok("the Windows copy does not ask for the microphone", after88["microphone"] is False)
 
+    trashed87.clear()
+    again88 = new88.after_start()
+    ok("asked again in the same run, it says the same and does nothing twice",
+       again88 == after88 and trashed87 == [])
+
     where88, old88 = swapped88()
     refused88 = updater87(where88, current="0.9.0", check=False, trash_ok=False)
     refused88.after_start()
@@ -14168,8 +14173,21 @@ def main():
         del sys.frozen
         apimod88.sd.InputStream = stream_before
         U.asks_for_microphone_again = asks_before
+    # The interface asks for the status as soon as it is drawn, which can be
+    # before the window's loaded event has reached Python.
     where88, _ = swapped88()
     a88._updates = updater87(where88, current="0.9.0", check=False)
+    sys.frozen = True
+    try:
+        first88 = a88.update_status()
+    finally:
+        del sys.frozen
+    ok("the first status the interface asks for already says Updated to",
+       first88["updated"] == "0.9.0")
+    where88, _ = swapped88()
+    a88._updates = updater87(where88, current="0.9.0", check=False)
+    ok("run from source, the status reads nothing",
+       a88.update_status()["updated"] is None and state87(where88).exists())
     ok("run from source, nothing of this happens",
        a88.start_update_checks() is False and state87(where88).exists())
 

@@ -322,6 +322,9 @@ class UpdateChecker:
         # The version this run was put in place as, by Restart now.
         self._updated = None
         self._restarting = False
+        # What after_start found, once a run.
+        self._came = None
+        self._start_lock = threading.Lock()
         self._lock = threading.Lock()
         self._wake = threading.Event()
         self._stop = threading.Event()
@@ -541,8 +544,14 @@ class UpdateChecker:
 
         Returns {"updated", "failed", "microphone"}: microphone is whether to
         open the input for a moment, so that macOS asks for it now and not
-        at the first take.
+        at the first take. Once a run: asked again, it says what it said.
         """
+        with self._start_lock:
+            if self._came is None:
+                self._came = self._read_last_restart()
+            return dict(self._came)
+
+    def _read_last_restart(self):
         came = {"updated": False, "failed": False, "microphone": False}
         place = self._place()
         if place is None:
