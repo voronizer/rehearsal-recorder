@@ -1448,8 +1448,131 @@ test.describe("a newer version", () => {
     await expect(updates).toContainText("Version 0.3.0 is out")
   })
 
-  test("is fetched into Downloads when asked, and shown there", async ({ page }) => {
+  /** Settings › Under the hood, and its Updates group. */
+  async function updatesGroup(page: Page) {
+    await page.getByRole("button", { name: /^Settings/ }).click()
+    await page.getByRole("button", { name: /^Under the hood/ }).first().click()
+    return page.getByRole("region", { name: "Updates" })
+  }
+
+  test("Update gets it ready, then Restart now restarts into it", async ({ page }) => {
     await openApp(page, { before: "window.__LATEST__ = {version: '0.3.0'};" })
+    const updates = await updatesGroup(page)
+    await expect(updates).toContainText("Version 0.3.0 is out")
+    await expect(updates.getByRole("button", { name: "Download", exact: true })).toHaveCount(0)
+    expect(await callCount(page, "update_now")).toBe(0)
+    await updates.getByRole("button", { name: "Update", exact: true }).click()
+    await expect.poll(() => callCount(page, "update_now")).toBe(1)
+    await expect(updates).toContainText("Downloading 0.3.0…")
+    await expect(updates.getByRole("progressbar", { name: "Download" })).toHaveAttribute(
+      "aria-valuenow",
+      "45"
+    )
+    await expect(updates.getByRole("button", { name: "Update", exact: true })).toHaveCount(0)
+
+    await setFake(page, "__INSTALL__", { state: "preparing", version: "0.3.0" })
+    await expect(updates).toContainText("Getting 0.3.0 ready…")
+    await expect(updates).toContainText("Unpacking it beside this copy and checking that it starts")
+
+    await setFake(page, "__INSTALL__", { state: "ready", version: "0.3.0" })
+    await expect(updates).toContainText("0.3.0 is ready")
+    await expect(updates).toContainText(
+      "The app closes and opens again as 0.3.0, in a few seconds."
+    )
+    const restart = updates.getByRole("button", { name: "Restart now" })
+    await expect(restart).toHaveAttribute("data-variant", "default")
+    await restart.click()
+    await expect.poll(() => callCount(page, "restart_to_update")).toBe(1)
+    // The window closes; a second press before it does starts nothing.
+    await expect(restart).toBeDisabled()
+  })
+
+  test("a copy got ready earlier is offered at the next start, before any check", async ({
+    page,
+  }) => {
+    await openApp(page, {
+      before: "window.__BUILT__ = true; window.__INSTALL__ = {state: 'ready', version: '0.3.0'};",
+    })
+    const updates = await updatesGroup(page)
+    await expect(updates).toContainText("0.3.0 is ready")
+    await expect(updates.getByRole("button", { name: "Restart now" })).toHaveCount(1)
+  })
+
+  for (const [platform, words] of [
+    ["MacIntel", "Move the app to Applications in Finder, open it from there, and the Update button appears."],
+    ["Win32", "Move the app's folder to Documents in Explorer, open it from there, and the Update button appears."],
+  ]) {
+    test(`where it cannot replace itself, it says how to fix it, and Download stays: ${platform}`, async ({
+      page,
+    }) => {
+      await page.addInitScript(
+        `Object.defineProperty(navigator, 'platform', {get: () => '${platform}'});`
+      )
+      await openApp(page, {
+        before: "window.__LATEST__ = {version: '0.3.0'}; window.__REPLACE__ = false;",
+      })
+      const updates = await updatesGroup(page)
+      await expect(updates).toContainText("Version 0.3.0 is out")
+      await expect(updates.getByRole("button", { name: "Update", exact: true })).toHaveCount(0)
+      const download = updates.getByRole("button", { name: "Download", exact: true })
+      await expect(download).toHaveAttribute("data-variant", "outline")
+      await expect(updates.getByRole("status")).toHaveText(
+        `This copy can't replace itself where it is. ${words}`
+      )
+      await download.click()
+      await expect.poll(() => callCount(page, "download_update")).toBe(1)
+    })
+  }
+
+  test("says why getting it ready failed, and tries again", async ({ page }) => {
+    await openApp(page, {
+      before: `window.__LATEST__ = {version: '0.3.0'};
+        window.__INSTALL__ = {state: 'failed', version: '0.3.0',
+          error: 'The new copy did not start here'};`,
+    })
+    const updates = await updatesGroup(page)
+    await expect(updates).toContainText("Could not get 0.3.0 ready")
+    await expect(updates.getByText("The new copy did not start here")).toHaveClass(/text-destructive/)
+    await updates.getByRole("button", { name: "Try again" }).click()
+    await expect.poll(() => callCount(page, "update_now")).toBe(1)
+    await expect(updates).toContainText("Downloading 0.3.0…")
+  })
+
+  test("after a swap that failed, says why, and Try again restarts", async ({ page }) => {
+    await openApp(page, {
+      before: `window.__BUILT__ = true;
+        window.__INSTALL__ = {state: 'place_failed', version: '0.3.0',
+          error: "A file in the app's folder was in use"};`,
+    })
+    // Said at once, on the start screen, and it stays until closed.
+    await expect(notices(page, "warning")).toHaveText(/Could not put 0\.3\.0 in place/)
+    const updates = await updatesGroup(page)
+    await expect(updates).toContainText("Could not put 0.3.0 in place")
+    await expect(updates).toContainText("A file in the app's folder was in use")
+    await updates.getByRole("button", { name: "Try again" }).click()
+    await expect.poll(() => callCount(page, "restart_to_update")).toBe(1)
+    await expect(notices(page, "warning")).toHaveCount(1)
+  })
+
+  test("after an update the start screen says Updated to, once", async ({ page }) => {
+    await page.clock.install()
+    await openApp(page, { before: "window.__BUILT__ = true; window.__UPDATED__ = '0.3.0';" })
+    const said = notices(page, "done").filter({ hasText: "Updated to 0.3.0" })
+    await expect(said).toHaveCount(1)
+    await expect(startButton(page)).toBeVisible()
+    await page.clock.fastForward(6000)
+    await expect(said).toHaveCount(0)
+    await page.getByRole("button", { name: /^Settings/ }).click()
+    await page.getByRole("button", { name: /^Under the hood/ }).first().click()
+    await expect(page.getByRole("region", { name: "Updates" })).toBeVisible()
+    await expect.poll(() => callCount(page, "update_status")).toBeGreaterThan(1)
+    await expect(said).toHaveCount(0)
+  })
+
+  test("is fetched into Downloads when asked, and shown there", async ({ page }) => {
+    await openApp(page, {
+      before: "window.__LATEST__ = {version: '0.3.0'}; window.__REPLACE__ = false;",
+    })
     await page.getByRole("button", { name: /^Settings/ }).click()
     await page.getByRole("button", { name: /^Under the hood/ }).first().click()
     const updates = page.getByRole("region", { name: "Updates" })
@@ -1476,7 +1599,7 @@ test.describe("a newer version", () => {
     await expect.poll(() => callCount(page, "show_update")).toBe(1)
   })
 
-  test("with a new version out, Download is the one cobalt button, its bar the shared Progress", async ({
+  test("with a new version out, Update is the one cobalt button, its bar the shared Progress", async ({
     page,
   }) => {
     await openApp(page, { before: "window.__LATEST__ = {version: '0.3.0'};" })
@@ -1494,19 +1617,19 @@ test.describe("a newer version", () => {
             .map((e) => e.textContent),
         cobalt
       )
-    expect(await blue()).toEqual(["Download"])
+    expect(await blue()).toEqual(["Update"])
     await expect(updates.getByRole("button", { name: "What's new" })).toHaveAttribute("data-variant", "outline")
 
-    await updates.getByRole("button", { name: "Download", exact: true }).click()
+    await updates.getByRole("button", { name: "Update", exact: true }).click()
     const bar = updates.getByRole("progressbar", { name: "Download" })
     await expect(bar).toHaveAttribute("data-slot", "progress")
     await expect(bar).toHaveAttribute("aria-valuenow", "45")
-    await expect(updates.getByRole("button", { name: "Download", exact: true })).toHaveCount(0)
+    await expect(updates.getByRole("button", { name: "Update", exact: true })).toHaveCount(0)
   })
 
   test("says why a download failed, and tries again", async ({ page }) => {
     await openApp(page, {
-      before: `window.__LATEST__ = {version: '0.3.0'};
+      before: `window.__LATEST__ = {version: '0.3.0'}; window.__REPLACE__ = false;
         window.__DOWNLOAD__ = {state: 'failed', version: '0.3.0',
           error: 'The download does not match the release'};`,
     })

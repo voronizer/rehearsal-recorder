@@ -2775,12 +2775,24 @@ window.__MAKE_API__ = () => ({
   show_rehearsal_folder: track('show_rehearsal_folder', async () => ({ok:true})),
   open_releases: track('open_releases', async (_latest) => ({ok:true})),
   // What updates.py found: __LATEST__ is the newer release a test says is
-  // out, and nothing is said while checking is switched off.
+  // out, and nothing is said while checking is switched off. __REPLACE__
+  // false is a copy that cannot replace itself where it is; __INSTALL__ is
+  // Update's progress; __UPDATED__ the version Restart now put in place.
   update_status: track('update_status', async () => {
     const on = readCfg().check_updates ?? true;
     return {on, latest: on ? (window.__LATEST__ || null) : null,
-            download: window.__DOWNLOAD__ || null, checked: on && !!window.__CHECKED__};
+            download: window.__DOWNLOAD__ || null, checked: on && !!window.__CHECKED__,
+            replace: window.__REPLACE__ ?? true, install: window.__INSTALL__ || null,
+            updated: window.__UPDATED__ || null};
   }),
+  // Update as far as the test has scripted it in __INSTALL__: asking starts
+  // the download at 45%, and the test moves it on.
+  update_now: track('update_now', async () => {
+    const version = (window.__LATEST__ || window.__INSTALL__).version;
+    window.__INSTALL__ = {state: 'downloading', version, fraction: 0.45};
+    return {ok: true};
+  }),
+  restart_to_update: track('restart_to_update', async () => ({ok: true})),
   // A download as far as the test has scripted it in __DOWNLOAD__: asking
   // for one starts it at 45%, and the test moves it on.
   download_update: track('download_update', async () => {
