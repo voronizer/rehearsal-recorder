@@ -318,6 +318,6 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          url=$(npx --yes vercel@62.4.0 deploy site --token "$VERCEL_TOKEN")
+          url=$(npx --yes vercel@65.2.0 deploy site --token "$VERCEL_TOKEN")
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "This pull request's site is at $url" >> "$GITHUB_STEP_SUMMARY"
