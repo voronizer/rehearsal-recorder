@@ -874,6 +874,188 @@ def main():
         ok("this machine's answer is a charge or none",
            charge is None or (isinstance(charge, int) and 0 <= charge <= 100))
 
+    print("\n[update-place] Where the app is, and whether it can change itself there")
+    # Update swaps the app's own place for a new copy, so it has to know which
+    # folder that is and whether this person may write beside it.
+    import os
+    import stat
+    import subprocess
+    import time
+    import zipfile
+    apps = tmp / "Apps"
+    ok("a Mac build's place is its .app",
+       ps.app_place("darwin", str(apps / "Reha.app" / "Contents" / "MacOS" / "Reha"), True)
+       == apps / "Reha.app")
+    ok("a Windows build's place is its folder",
+       ps.app_place("win32", str(apps / "Reha" / "Reha.exe"), True) == apps / "Reha")
+    ok("run from source there is none",
+       ps.app_place("darwin", sys.executable, False) is None)
+    ok("on Linux there is none", ps.app_place("linux", "/opt/reha/Reha", True) is None)
+    apps.mkdir()
+    ok("a folder it may write to says yes", ps.can_write_beside(apps / "Reha") is True)
+    ok("and leaves nothing behind", list(apps.glob(".reha-write-test-*")) == [])
+    ok("a folder that is not there says no",
+       ps.can_write_beside(tmp / "missing" / "Reha") is False)
+    # Root writes anywhere, so a folder without write permission says nothing
+    # under root; the runners and the people using the app are not root.
+    if sys.platform != "win32" and os.geteuid() != 0:
+        locked = tmp / "Locked"
+        locked.mkdir()
+        locked.chmod(0o555)
+        try:
+            ok("a folder it may not write to says no",
+               ps.can_write_beside(locked / "Reha") is False)
+        finally:
+            locked.chmod(0o755)
+    ok("on a Mac the new copy waits in a hidden folder beside the app",
+       ps.staging_folder(apps / "Reha.app", "darwin") == apps / ".reha-update")
+    ok("on Windows in one beside the app's folder",
+       ps.staging_folder(apps / "Reha", "win32") == apps / "Reha-update")
+    if sys.platform == "win32":
+        hidden = apps / "Reha-update"
+        hidden.mkdir()
+        ps.hide_folder(hidden)
+        ok("and Windows hides it",
+           bool(os.stat(hidden).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN))
+    ok("only a Mac asks for the microphone again after an update",
+       ps.asks_for_microphone_again("darwin") is True
+       and ps.asks_for_microphone_again("win32") is False)
+    ok("the real Trash only: a path that is not there is refused",
+       ps.send_to_trash(tmp / "gone") is False)
+
+    print("\n[update-unpack] A new copy unpacked whole")
+    # The zip as release.yml makes it: Reha.app with zip -qry on a Mac, so the
+    # bundle's symlinks stay links; the folder Reha on Windows.
+    mac = sys.platform == "darwin"
+    built = tmp / "built"
+    if mac:
+        exe_rel = Path("Reha.app/Contents/MacOS/Reha")
+        (built / exe_rel).parent.mkdir(parents=True)
+        (built / exe_rel).write_text("#!/bin/sh\nexit 0\n")
+        (built / exe_rel).chmod(0o755)
+        (built / "Reha.app/Contents/Frameworks").mkdir()
+        (built / "Reha.app/Contents/Frameworks/Current").symlink_to("../MacOS")
+        archive = tmp / "RehearsalRecorder-macos.zip"
+        subprocess.run(["zip", "-qry", str(archive), "Reha.app"], cwd=built, check=True)
+    else:
+        exe_rel = Path("Reha/Reha.exe")
+        archive = tmp / "RehearsalRecorder-windows.zip"
+        with zipfile.ZipFile(archive, "w") as z:
+            z.writestr(exe_rel.as_posix(), b"MZ")
+            z.writestr("Reha/_internal/base_library.zip", b"PK")
+    into = tmp / "unpacked"
+    into.mkdir()
+    copy = ps.unpack_app(archive, into)
+    exe = into / exe_rel
+    ok("the new copy is where the zip put it",
+       copy == into / ("Reha.app" if mac else "Reha") and exe.is_file())
+    ok("on a Mac its executable can still run", (not mac) or os.access(exe, os.X_OK))
+    ok("on a Mac its symlink is still a link",
+       (not mac) or (copy / "Contents/Frameworks/Current").is_symlink())
+    empty_zip = tmp / "empty.zip"
+    with zipfile.ZipFile(empty_zip, "w") as z:
+        z.writestr("readme.txt", b"nothing here")
+    elsewhere = tmp / "unpacked-empty"
+    elsewhere.mkdir()
+    try:
+        ps.unpack_app(empty_zip, elsewhere)
+        refused = False
+    except FileNotFoundError:
+        refused = True
+    ok("a zip without the app in it is refused", refused)
+    if sys.platform == "win32":
+        # What Unblock clears: the mark a browser writes beside a download.
+        with open(str(exe) + ":Zone.Identifier", "w") as f:
+            f.write("[ZoneTransfer]\nZoneId=3\n")
+    ps.clear_download_marks(copy)
+    ok("a Windows mark on an unpacked file is cleared",
+       sys.platform != "win32" or not os.path.exists(str(exe) + ":Zone.Identifier"))
+    ok("the self-test is asked of the new copy's own program",
+       ps.selftest_command(Path("/x/Reha.app"), "darwin")
+       == [str(Path("/x/Reha.app/Contents/MacOS/Reha")), "--selftest"]
+       and ps.selftest_command(Path("/x/Reha"), "win32")
+       == [str(Path("/x/Reha/Reha.exe")), "--selftest"])
+
+    print("\n[update-swap] The swap, run for real on this system")
+    # A stand-in for the app's place, in a folder named with a space and in
+    # Cyrillic, as a user name or a music folder can be on either system.
+    music = tmp / "Моя музыка"
+    music.mkdir()
+    name, text = ps.swap_script()
+    ok("the script is plain ASCII", all(ord(c) < 128 for c in text))
+    ok("it waits at most 60 seconds for the app to close", "60" in text)
+    ok("the script is started by the system's own shell",
+       ps.script_command(Path("s.sh"), "darwin") == ["/bin/sh", "s.sh"]
+       and ps.script_command(Path("s.cmd"), "win32") == ["cmd.exe", "/d", "/c", "s.cmd"])
+    started = []
+    ps.run_detached(["x"], {"A": "1"}, "win32",
+                    popen=lambda argv, **kw: started.append(kw))
+    ok("on Windows it runs with no window and outlives the app",
+       started[0]["creationflags"] & 0x08000000  # CREATE_NO_WINDOW
+       and started[0]["creationflags"] & 0x00000200  # CREATE_NEW_PROCESS_GROUP
+       and started[0]["env"] == {"A": "1"})
+    ps.run_detached(["x"], {"A": "1"}, "darwin",
+                    popen=lambda argv, **kw: started.append(kw))
+    ok("on a Mac in a session of its own", started[1].get("start_new_session") is True)
+
+    def stand_in(where, holding):
+        where.mkdir()
+        (where / "v").write_text(holding)
+
+    def swap(label, hold=None):
+        place = music / f"Reha {label}"
+        staged = music / f"staged {label}"
+        stand_in(place, "old")
+        stand_in(staged, "new")
+        old = music / f"Reha {label} 0.8.0"
+        script = music / f"{label}-{name}"
+        script.write_text(text, encoding="ascii", newline="")
+        opened = tmp / f"opened-{label}"
+        if sys.platform == "win32":
+            opener = tmp / f"open-{label}.cmd"
+            opener.write_text(f'@echo opened> "{opened}"\r\n', encoding="utf-8")
+        else:
+            opener = tmp / f"open-{label}.sh"
+            opener.write_text(f'#!/bin/sh\necho opened > "{opened}"\n')
+            opener.chmod(0o755)
+        # A process that has already exited, standing in for the app. Its
+        # handle is let go, so Windows no longer lists it.
+        gone = subprocess.Popen([sys.executable, "-c", "pass"])
+        gone.wait()
+        pid = gone.pid
+        del gone
+        result = music / f"result {label}"
+        env = {**os.environ, "REHA_PID": str(pid), "REHA_PLACE": str(place),
+               "REHA_OLD": str(old), "REHA_NEW": str(staged),
+               "REHA_RESULT": str(result), "REHA_OPEN": str(opener)}
+        held = open(staged / "v") if hold else None
+        try:
+            ps.run_detached(ps.script_command(script), env)
+            deadline = time.monotonic() + 40
+            while time.monotonic() < deadline and not opened.exists():
+                time.sleep(0.2)
+        finally:
+            if held:
+                held.close()
+        return place, old, result, opened
+
+    place, old, result, opened = swap("clean")
+    ok("the new copy is in the place, under its name",
+       (place / "v").exists() and (place / "v").read_text() == "new")
+    ok("the old copy waits beside it",
+       (old / "v").exists() and (old / "v").read_text() == "old")
+    ok("it says it worked", result.exists() and result.read_text().strip() == "placed")
+    ok("and opens the app", opened.exists())
+    if sys.platform == "win32":
+        # A file in the new copy held open, as an antivirus can: the new copy
+        # cannot be moved in, so the old one goes back.
+        place, old, result, opened = swap("held", hold=True)
+        ok("a swap that cannot move a file puts the old copy back",
+           (place / "v").exists() and (place / "v").read_text() == "old"
+           and not old.exists())
+        ok("and says so", result.exists() and result.read_text().strip() == "not-moved")
+        ok("and opens the old copy", opened.exists())
+
     print("\n" + "=" * 60)
 
     if problems:

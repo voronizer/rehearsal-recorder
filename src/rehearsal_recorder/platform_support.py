@@ -250,6 +250,44 @@ def unique_path(path):
         n += 1
 
 
+def _to_system_trash(path):
+    """
+    The real Trash or Recycle Bin: send2trash, then a trash folder a plain
+    move reaches. Returns where it went (None when send2trash does not say),
+    or False when neither could take it.
+    """
+    fn = _send2trash()
+    if fn is not None:
+        try:
+            fn(str(path))
+            return None
+        except Exception as e:
+            print(f"[trash] send2trash: {e}")
+
+    system = _system_trash_dir()
+    if system is not None:
+        try:
+            dest = unique_path(system / path.name)
+            shutil.move(str(path), str(dest))
+            return str(dest)
+        except OSError as e:
+            print(f"[trash] system trash: {e}")
+    return False
+
+
+def send_to_trash(path):
+    """
+    The real Trash only, with no _deleted folder to fall back on. For the old
+    copy of the app after an update: that fallback would leave a whole copy
+    of the app in a folder beside it, in Applications. False means it stays
+    where it is, and the next start tries again.
+    """
+    path = Path(path)
+    if not path.exists():
+        return False
+    return _to_system_trash(path) is not False
+
+
 def move_to_trash(path, fallback_root=None):
     """
     Deleting is never destruction. A rehearsal recording cannot be made again,
@@ -266,22 +304,9 @@ def move_to_trash(path, fallback_root=None):
     if not path.exists():
         return {"ok": False, "error": "It is not there any more"}
 
-    fn = _send2trash()
-    if fn is not None:
-        try:
-            fn(str(path))
-            return {"ok": True, "trashed": True, "location": None}
-        except Exception as e:
-            print(f"[trash] send2trash: {e}")
-
-    system = _system_trash_dir()
-    if system is not None:
-        try:
-            dest = unique_path(system / path.name)
-            shutil.move(str(path), str(dest))
-            return {"ok": True, "trashed": True, "location": str(dest)}
-        except OSError as e:
-            print(f"[trash] system trash: {e}")
+    sent = _to_system_trash(path)
+    if sent is not False:
+        return {"ok": True, "trashed": True, "location": sent}
 
     root = Path(fallback_root) if fallback_root else path.parent
     keep = root / FALLBACK_TRASH
@@ -437,6 +462,260 @@ def open_in_file_manager(path, system=sys.platform, run=None, start=None):
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# What putting a new version in place needs from each system: where the
+# app's place is, unpacking the new copy whole, and a script that swaps it in
+# once the app has quit (docs/superpowers/specs/2026-10-25-self-update-design.md).
+
+
+def app_place(system=sys.platform, executable=None, frozen=None):
+    """
+    The app's place, which an update swaps for the new copy: on a Mac the
+    .app the app runs from (sys.executable is <place>/Contents/MacOS/Reha),
+    on Windows the folder Reha.exe is in. None run from source and on Linux,
+    where there is no build to replace.
+    """
+    if frozen is None:
+        frozen = bool(getattr(sys, "_MEIPASS", None))
+    if not frozen:
+        return None
+    executable = Path(executable or sys.executable)
+    if system == "darwin":
+        place = executable.parents[2]
+        return place if place.suffix == ".app" else None
+    if system == "win32":
+        return executable.parent
+    return None
+
+
+def can_write_beside(place):
+    """
+    Whether the app may swap its place: a small file made and deleted in the
+    folder that holds it. Apple offers no supported way to tell that an app
+    runs translocated, from a hidden read-only copy, and a folder like
+    Program Files refuses a person without rights; both fail here the same
+    way, and that is the only answer needed.
+    """
+    probe = Path(place).parent / f".reha-write-test-{os.getpid()}"
+    try:
+        probe.write_bytes(b"")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def staging_folder(place, system=sys.platform):
+    """Where the new copy is got ready: hidden, beside the app's place, on
+    the same disk so the swap is a rename and not a copy."""
+    place = Path(place)
+    return place.parent / (".reha-update" if system == "darwin" else "Reha-update")
+
+
+def hide_folder(path, system=sys.platform, kernel32=None):
+    """Windows shows a folder whatever its name; this sets its hidden
+    attribute, as a dot does on a Mac. A folder that stays visible is no
+    harm, so a failure is ignored."""
+    if system != "win32":
+        return
+    FILE_ATTRIBUTE_HIDDEN = 0x2
+    try:
+        (kernel32 or ctypes.windll.kernel32).SetFileAttributesW(str(path), FILE_ATTRIBUTE_HIDDEN)
+    except Exception:  # noqa: BLE001 — a visible folder still works
+        pass
+
+
+def unpack_app(archive, into, system=sys.platform, run=None):
+    """
+    Unpacks a release zip and returns the new copy in it: Reha.app on a Mac,
+    the folder Reha on Windows, as release.yml packs them.
+
+    A Mac uses ditto, which keeps the bundle's symlinks and the executable
+    bit; Python's zipfile writes a link as a small file and drops the bit, and
+    the app would not start. Raises FileNotFoundError when the zip held no app.
+    """
+    import subprocess
+    import zipfile
+
+    archive, into = Path(archive), Path(into)
+    if system == "darwin":
+        (run or subprocess.run)(["ditto", "-x", "-k", str(archive), str(into)],
+                                check=True, capture_output=True)
+        copy = into / "Reha.app"
+    else:
+        with zipfile.ZipFile(archive) as z:
+            z.extractall(into)
+        copy = into / "Reha"
+    if not copy.is_dir():
+        raise FileNotFoundError(f"{archive.name} holds no {copy.name}")
+    return copy
+
+
+def clear_download_marks(copy, system=sys.platform, run=None):
+    """
+    Clears a "from the internet" mark from a new copy, if it carries one. The
+    app's own download is expected to carry none, since a browser is what
+    writes it; this is for the case it does. Only called after the zip's
+    SHA-256 matched the release. Windows keeps the mark in a Zone.Identifier
+    stream beside each file, as Unblock removes it; a Mac in the quarantine
+    attribute.
+    """
+    import subprocess
+
+    copy = Path(copy)
+    if system == "darwin":
+        try:
+            (run or subprocess.run)(["xattr", "-dr", "com.apple.quarantine", str(copy)],
+                                    capture_output=True)
+        except Exception:  # noqa: BLE001 — nothing to clear, or xattr missing
+            pass
+    elif system == "win32":
+        for f in copy.rglob("*"):
+            if f.is_file():
+                try:
+                    os.remove(str(f) + ":Zone.Identifier")
+                except OSError:
+                    pass
+
+
+def selftest_command(copy, system=sys.platform):
+    """The new copy's own program, asked for its self-test (app.py)."""
+    copy = Path(copy)
+    program = copy / "Contents" / "MacOS" / "Reha" if system == "darwin" else copy / "Reha.exe"
+    return [str(program), "--selftest"]
+
+
+def asks_for_microphone_again(system=sys.platform):
+    """
+    Whether the system asks again for the microphone after an update. macOS
+    ties the answer to the app's signature, and a build without Apple's paid
+    one is a new app to it every version (Apple TN3127). Windows asks once
+    for all desktop apps.
+    """
+    return system == "darwin"
+
+
+#: What the swap script writes into REHA_RESULT.
+SWAP_RESULTS = {"placed", "not-closed", "not-moved"}
+
+# The swap, run once the app has quit: Windows does not let a running
+# program's files be moved. ASCII only, and every path comes in the
+# environment, because cmd reads a script in the console's code page and a
+# user name in Cyrillic would arrive broken. It waits at most 60 seconds for
+# the app to close, retries the moves for 10 seconds (an antivirus or the
+# search indexer can hold a new file for a moment), and puts the old copy
+# back if the new one cannot be moved in. REHA_OPEN is for the tests: a
+# program run in place of opening the app.
+_SWAP_SH = """#!/bin/sh
+# Puts a new copy of Reha in place once the running one has quit.
+waited=0
+while kill -0 "$REHA_PID" 2>/dev/null; do
+  if [ "$waited" -ge 60 ]; then
+    echo not-closed > "$REHA_RESULT"
+    exit 0
+  fi
+  sleep 1
+  waited=$((waited + 1))
+done
+result=not-moved
+tries=0
+while [ "$tries" -lt 10 ]; do
+  if mv "$REHA_PLACE" "$REHA_OLD" 2>/dev/null; then
+    if mv "$REHA_NEW" "$REHA_PLACE" 2>/dev/null; then
+      result=placed
+      break
+    fi
+    mv "$REHA_OLD" "$REHA_PLACE" 2>/dev/null
+  fi
+  tries=$((tries + 1))
+  sleep 1
+done
+if [ ! -e "$REHA_PLACE" ]; then
+  mv "$REHA_OLD" "$REHA_PLACE" 2>/dev/null
+fi
+echo "$result" > "$REHA_RESULT"
+if [ -n "$REHA_OPEN" ]; then
+  "$REHA_OPEN"
+else
+  open "$REHA_PLACE"
+fi
+"""
+
+_SWAP_CMD = """@echo off
+rem Puts a new copy of Reha in place once the running one has quit.
+setlocal
+set waited=0
+:wait
+tasklist /FI "PID eq %REHA_PID%" /NH 2>nul | find " %REHA_PID% " >nul
+if errorlevel 1 goto closed
+if %waited% geq 60 goto notclosed
+ping -n 2 127.0.0.1 >nul
+set /a waited+=1
+goto wait
+:notclosed
+> "%REHA_RESULT%" echo not-closed
+exit /b 0
+:closed
+set result=not-moved
+set tries=0
+:move
+move "%REHA_PLACE%" "%REHA_OLD%" >nul 2>&1
+if errorlevel 1 goto again
+move "%REHA_NEW%" "%REHA_PLACE%" >nul 2>&1
+if not errorlevel 1 goto placed
+move "%REHA_OLD%" "%REHA_PLACE%" >nul 2>&1
+:again
+set /a tries+=1
+if %tries% geq 10 goto done
+ping -n 2 127.0.0.1 >nul
+goto move
+:placed
+set result=placed
+:done
+if not exist "%REHA_PLACE%" move "%REHA_OLD%" "%REHA_PLACE%" >nul 2>&1
+> "%REHA_RESULT%" echo %result%
+if defined REHA_OPEN goto opener
+start "" "%REHA_PLACE%\\Reha.exe"
+exit /b 0
+:opener
+call "%REHA_OPEN%"
+""".replace("\n", "\r\n")
+
+
+def swap_script(system=sys.platform):
+    """The swap script's file name and text for this system."""
+    if system == "win32":
+        return "reha-swap.cmd", _SWAP_CMD
+    return "reha-swap.sh", _SWAP_SH
+
+
+def script_command(script, system=sys.platform):
+    """How the swap script is run: by the system's own shell, so it needs no
+    executable bit and no file association."""
+    if system == "win32":
+        return ["cmd.exe", "/d", "/c", str(script)]
+    return ["/bin/sh", str(script)]
+
+
+def run_detached(argv, env, system=sys.platform, popen=None):
+    """
+    Starts the swap script so that it outlives the app. On a Mac and Linux
+    in a session of its own. On Windows with a console that has no window:
+    the script's own commands (tasklist, ping, move) then share it, where a
+    detached cmd would open a window for each of them.
+    """
+    import subprocess
+
+    kwargs = {"env": env, "stdin": subprocess.DEVNULL,
+              "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if system == "win32":
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
+        CREATE_NO_WINDOW = 0x08000000
+        kwargs["creationflags"] = CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+    else:
+        kwargs["start_new_session"] = True
+    (popen or subprocess.Popen)(argv, **kwargs)
 
 
 # CoInitializeEx's mode for a single-threaded apartment, from objbase.h.
