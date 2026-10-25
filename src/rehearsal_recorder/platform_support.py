@@ -508,9 +508,12 @@ def can_write_beside(place):
 
 def staging_folder(place, system=sys.platform):
     """Where the new copy is got ready: hidden, beside the app's place, on
-    the same disk so the swap is a rename and not a copy."""
+    the same disk so the swap is a rename and not a copy. Named after the
+    place, so two copies side by side each have their own."""
     place = Path(place)
-    return place.parent / (".reha-update" if system == "darwin" else "Reha-update")
+    if system == "darwin":
+        return place.parent / f".{place.name}-update"
+    return place.parent / f"{place.name}-update"
 
 
 def hide_folder(path, system=sys.platform, kernel32=None):
@@ -644,13 +647,15 @@ fi
 
 _SWAP_CMD = """@echo off
 rem Puts a new copy of Reha in place once the running one has quit.
-setlocal
+rem The system's own commands by their full path: a Unix find from Git's
+rem tools can come first in PATH.
+setlocal DisableDelayedExpansion
 set waited=0
 :wait
-tasklist /FI "PID eq %REHA_PID%" /NH 2>nul | find " %REHA_PID% " >nul
+"%SystemRoot%\\System32\\tasklist.exe" /FI "PID eq %REHA_PID%" /NH 2>nul | "%SystemRoot%\\System32\\find.exe" " %REHA_PID% " >nul
 if errorlevel 1 goto closed
 if %waited% geq 60 goto notclosed
-ping -n 2 127.0.0.1 >nul
+"%SystemRoot%\\System32\\PING.EXE" -n 2 127.0.0.1 >nul
 set /a waited+=1
 goto wait
 :notclosed
@@ -668,7 +673,7 @@ move "%REHA_OLD%" "%REHA_PLACE%" >nul 2>&1
 :again
 set /a tries+=1
 if %tries% geq 10 goto done
-ping -n 2 127.0.0.1 >nul
+"%SystemRoot%\\System32\\PING.EXE" -n 2 127.0.0.1 >nul
 goto move
 :placed
 set result=placed
@@ -676,7 +681,7 @@ set result=placed
 if not exist "%REHA_PLACE%" move "%REHA_OLD%" "%REHA_PLACE%" >nul 2>&1
 > "%REHA_RESULT%" echo %result%
 if defined REHA_OPEN goto opener
-start "" "%REHA_PLACE%\\Reha.exe"
+start "" /D "%REHA_PLACE%" "%REHA_PLACE%\\Reha.exe"
 exit /b 0
 :opener
 call "%REHA_OPEN%"
@@ -691,23 +696,32 @@ def swap_script(system=sys.platform):
 
 
 def script_command(script, system=sys.platform):
-    """How the swap script is run: by the system's own shell, so it needs no
-    executable bit and no file association."""
+    """
+    How the swap script is run: by the system's own shell, so it needs no
+    executable bit and no file association. On Windows through `call`: cmd
+    drops the quotes round what follows /c when it starts with one and holds
+    a bracket, as "Reha (1)" does, and then cannot find the script.
+    """
     if system == "win32":
-        return ["cmd.exe", "/d", "/c", str(script)]
+        return ["cmd.exe", "/d", "/c", "call", str(script)]
     return ["/bin/sh", str(script)]
 
 
-def run_detached(argv, env, system=sys.platform, popen=None):
+def run_detached(argv, env, system=sys.platform, popen=None, cwd=None):
     """
     Starts the swap script so that it outlives the app. On a Mac and Linux
     in a session of its own. On Windows with a console that has no window:
     the script's own commands (tasklist, ping, move) then share it, where a
     detached cmd would open a window for each of them.
+
+    `cwd` is where it works from. Windows will not rename a folder that is
+    any process's working folder, and the app's is its own folder when it
+    was opened from Explorer, so the swap is started from the folder above.
     """
     import subprocess
 
-    kwargs = {"env": env, "stdin": subprocess.DEVNULL,
+    kwargs = {"env": env, "cwd": cwd,
+              "stdin": subprocess.DEVNULL,
               "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     if system == "win32":
         CREATE_NEW_PROCESS_GROUP = 0x00000200

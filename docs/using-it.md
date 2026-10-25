@@ -1681,8 +1681,9 @@ If something goes wrong, this copy stays as it was:
 - If getting the new version ready fails, the line says why, and **Try
   again** starts again.
 - If the new version cannot be put in place, for example because another
-  program held one of the app's files, the old copy opens again. A notice
-  says so, the line in **Updates** says why, and **Try again** there
+  program held one of the app's files, the old copy opens again. If the app
+  took too long to close, nothing opens: open it yourself. Either way a
+  notice says so, the line in **Updates** says why, and **Try again** there
   restarts again.
 
 ### When the line says the copy can't replace itself

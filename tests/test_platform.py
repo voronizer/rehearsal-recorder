@@ -908,9 +908,13 @@ def main():
         finally:
             locked.chmod(0o755)
     ok("on a Mac the new copy waits in a hidden folder beside the app",
-       ps.staging_folder(apps / "Reha.app", "darwin") == apps / ".reha-update")
+       ps.staging_folder(apps / "Reha.app", "darwin") == apps / ".Reha.app-update")
     ok("on Windows in one beside the app's folder",
        ps.staging_folder(apps / "Reha", "win32") == apps / "Reha-update")
+    # Two copies side by side must not share one, or one removes the other's.
+    ok("named after the copy it is for",
+       ps.staging_folder(apps / "Reha 2.app", "darwin") == apps / ".Reha 2.app-update"
+       and ps.staging_folder(apps / "Reha 2", "win32") == apps / "Reha 2-update")
     if sys.platform == "win32":
         hidden = apps / "Reha-update"
         hidden.mkdir()
@@ -977,23 +981,35 @@ def main():
        == [str(Path("/x/Reha/Reha.exe")), "--selftest"])
 
     print("\n[update-swap] The swap, run for real on this system")
-    # A stand-in for the app's place, in a folder named with a space and in
-    # Cyrillic, as a user name or a music folder can be on either system.
-    music = tmp / "Моя музыка"
+    # A stand-in for the app's place, in a folder named with a space, in
+    # Cyrillic and with "(1)", as Extract All names a second download: cmd
+    # drops the quotes round a path with a bracket in it unless told not to.
+    music = tmp / "Моя музыка (1)"
     music.mkdir()
     name, text = ps.swap_script()
     ok("the script is plain ASCII", all(ord(c) < 128 for c in text))
     ok("it waits at most 60 seconds for the app to close", "60" in text)
     ok("the script is started by the system's own shell",
        ps.script_command(Path("s.sh"), "darwin") == ["/bin/sh", "s.sh"]
-       and ps.script_command(Path("s.cmd"), "win32") == ["cmd.exe", "/d", "/c", "s.cmd"])
+       and ps.script_command(Path("s.cmd"), "win32") == ["cmd.exe", "/d", "/c", "call", "s.cmd"])
+    windows_text = ps.swap_script("win32")[1]
+    # A Unix find from Git's tools earlier in PATH, or delayed expansion
+    # switched on in the registry, would each break the script.
+    ok("on Windows it calls the system's own commands, by their full path",
+       r"%SystemRoot%\System32\find.exe" in windows_text
+       and r"%SystemRoot%\System32\tasklist.exe" in windows_text
+       and "setlocal DisableDelayedExpansion" in windows_text)
+    ok("and starts the new copy in its own folder", '/D "%REHA_PLACE%"' in windows_text)
     started = []
-    ps.run_detached(["x"], {"A": "1"}, "win32",
-                    popen=lambda argv, **kw: started.append(kw))
+    ps.run_detached(["x"], {"A": "1"}, "win32", popen=lambda argv, **kw: started.append(kw),
+                    cwd=apps)
     ok("on Windows it runs with no window and outlives the app",
        started[0]["creationflags"] & 0x08000000  # CREATE_NO_WINDOW
        and started[0]["creationflags"] & 0x00000200  # CREATE_NEW_PROCESS_GROUP
        and started[0]["env"] == {"A": "1"})
+    # Windows will not rename a folder that is any process's working folder,
+    # and the app's is its own folder when it is opened from Explorer.
+    ok("and works from the folder it is told, not the app's", started[0]["cwd"] == apps)
     ps.run_detached(["x"], {"A": "1"}, "darwin",
                     popen=lambda argv, **kw: started.append(kw))
     ok("on a Mac in a session of its own", started[1].get("start_new_session") is True)
@@ -1030,7 +1046,7 @@ def main():
                "REHA_RESULT": str(result), "REHA_OPEN": str(opener)}
         held = open(staged / "v") if hold else None
         try:
-            ps.run_detached(ps.script_command(script), env)
+            ps.run_detached(ps.script_command(script), env, cwd=music)
             deadline = time.monotonic() + 40
             while time.monotonic() < deadline and not opened.exists():
                 time.sleep(0.2)

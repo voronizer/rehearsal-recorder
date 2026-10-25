@@ -149,10 +149,19 @@ Reha.exe
 
 The app then treats that release as the newest, pre-release or not, and
 **Update** gets it ready. Without the variable nothing changes. Worth
-checking by hand on each system: that the update arrives with no
-quarantine (`xattr -l` on the new `Reha.app`) or Zone.Identifier, that
-macOS asks for the microphone right after the restart, and how long Windows
-Defender holds a freshly unpacked `Reha.exe` on a slow machine.
+checking by hand, because no test here can:
+
+- the update arrives with no quarantine (`xattr -l` on the new `Reha.app`)
+  or Zone.Identifier;
+- macOS asks for the microphone right after the restart;
+- macOS's App Management lets the swap rename the bundle and the old copy
+  go to the Trash;
+- on Windows the new window opens in front, and a taskbar pin still opens
+  the app;
+- how long Windows Defender holds a freshly unpacked `Reha.exe` on a slow
+  machine, and whether a Documents folder synced by OneDrive gets in the way;
+- the meters stay steady with an ASIO interface while the new copy's
+  self-test runs.
 
 ## Changing the history's schema
 

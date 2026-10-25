@@ -548,22 +548,28 @@ the news, its buttons and the switch read as one jumble with the version.
 that, or with no internet, it says it has not checked.
 
 - **It replaces itself, in two presses.** Update downloads the zip into a
-  hidden folder beside the app's place (`.reha-update` on a Mac,
-  `Reha-update` with the hidden attribute on Windows), checks it as below,
+  hidden folder beside the app's place, named after it (`.Reha.app-update`
+  on a Mac, `Reha-update` with the hidden attribute on Windows), checks it
+  as below,
   unpacks it and runs the new copy's `--selftest`, with two minutes for it.
   A Mac unpacks with `ditto`, which keeps the bundle's symlinks and
   executable bits that Python's `zipfile` loses. Only then does Restart now
   appear, so a copy that does not start here never replaces one that does.
   Restart now starts a small script that outlives the app, because Windows
   will not let a running program's files be moved, and closes the window.
-  The script waits for the app to exit, renames its place to "Reha 0.14.0",
+  The script is started from the folder above the place, since Windows
+  will not rename a folder that is any process's working folder, and cmd
+  runs it through `call`, which keeps the quotes round a path with a bracket
+  in it. It waits for the app to exit, renames its place to "Reha 0.14.0",
   moves the new copy in under the place's own name, retries for ten seconds
   (an antivirus can hold a new file for a moment), puts the old copy back if
   it still cannot, and opens the app. It is ASCII and gets every path
   through the environment: cmd reads a script in the console's code page,
   which cannot hold a Cyrillic user name. The new copy reads
   `~/.rehearsal-recorder/update.json` and the script's result: "Updated to",
-  and the old copy to the Trash, or a warning with Try again. Signing turned
+  and the old copy to the Trash, or a warning with Try again. The app puts
+  a note in the folder it makes and removes only a folder with that note: a
+  folder of the same name somebody made is theirs. Signing turned
   out not to be needed for this: the "from the internet" mark is put on by
   the program that downloads, such as a browser, and the app's own download
   carries none (#6). See `docs/superpowers/specs/2026-10-25-self-update-design.md`.

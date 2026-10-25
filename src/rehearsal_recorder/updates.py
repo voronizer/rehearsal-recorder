@@ -29,6 +29,7 @@ import errno
 import functools
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -86,6 +87,12 @@ SELFTEST_TIMEOUT_SEC = 120
 #: what the swap script said happened.
 READY_NOTE = "ready.json"
 SWAP_RESULT = "result"
+#: Put in the folder when the app makes it. Only a folder that carries it is
+#: ever removed: one of that name a person made is theirs, and removing it
+#: would not go through the Trash.
+STAGING_MARK = "reha-update.txt"
+
+log = logging.getLogger(__name__)
 
 
 def release_number(version):
@@ -242,6 +249,12 @@ def _words_for(e):
     return str(e) or type(e).__name__
 
 
+def _remove_ours(staging):
+    """Removes a folder the app made to get a copy ready, and no other."""
+    if (Path(staging) / STAGING_MARK).is_file():
+        shutil.rmtree(staging, ignore_errors=True)
+
+
 def _own_app_env():
     """
     The environment for starting a copy of the built app from this one, as
@@ -303,7 +316,7 @@ class UpdateChecker:
         self._reveal = reveal
         self._place = place
         self._state = Path(state)
-        self._run = run
+        self._program = run
         self._spawn = spawn
         self._trash = trash
         self._system = system
@@ -370,17 +383,19 @@ class UpdateChecker:
             found = self._fetch()
         except Exception:  # noqa: BLE001 — no network, no answer: nothing to say
             return True
-        place = self._place()
-        replace = place is not None and can_write_beside(place)
         with self._lock:
             self._checked = True
-            self._replace = replace
         if found is None:
             return True
-        offered = newer(self._current, found["version"]) or (
-            bool(self._tag) and found["version"] != self._current)
+        offered = self._offered(found["version"])
+        # The write test only when there is something to update to: a file
+        # made beside an app on the Desktop or in Documents can make macOS
+        # ask for that folder, and nothing may ask at launch for nothing.
+        place = self._place()
+        replace = offered and place is not None and can_write_beside(place)
         stale = False
         with self._lock:
+            self._replace = replace
             self._latest = found if offered else None
             # A download of a version that is no longer the newest is old news.
             if self._download and (
@@ -394,8 +409,14 @@ class UpdateChecker:
                 self._install = None
                 stale = install["state"] != "failed"
         if stale and place is not None:
-            shutil.rmtree(staging_folder(place, self._system), ignore_errors=True)
+            _remove_ours(staging_folder(place, self._system))
         return True
+
+    def _offered(self, version):
+        """Whether `version` is one to update to: a later release, or with
+        REHA_UPDATE_TAG any other, so pre-releases of one number can be
+        tried."""
+        return newer(self._current, version) or (bool(self._tag) and version != self._current)
 
     # ---------- Update and Restart now ----------
 
@@ -408,21 +429,24 @@ class UpdateChecker:
         """
         if self._busy():
             return {"ok": False, "error": "Not while a take is recording"}
+        # Looked at and taken in one step, so two presses start one.
         with self._lock:
             release = self._latest
-            install = self._install
-        if release is None or not release.get("asset"):
-            return {"ok": False, "error": "There is no newer version to download"}
-        if install and (install["state"] in ("downloading", "preparing")
-                        or (install["state"] == "ready"
-                            and install["version"] == release["version"])):
-            return {"ok": True}
+            before = self._install
+            if release is None or not release.get("asset"):
+                return {"ok": False, "error": "There is no newer version to download"}
+            if before and (before["state"] in ("downloading", "preparing")
+                           or (before["state"] == "ready"
+                               and before["version"] == release["version"])):
+                return {"ok": True}
+            self._install = {"state": "downloading", "version": release["version"],
+                             "fraction": 0.0}
         place = self._place()
         if place is None or not can_write_beside(place):
             with self._lock:
                 self._replace = False
+                self._install = before
             return {"ok": False, "error": "This copy can't replace itself where it is"}
-        self._set_install(release, "downloading", fraction=0.0)
         threading.Thread(target=self.prepare_now, name="update-prepare", daemon=True).start()
         return {"ok": True}
 
@@ -444,33 +468,48 @@ class UpdateChecker:
         staging = staging_folder(place, self._system)
         self._set_install(release, "downloading", fraction=0.0)
         try:
-            shutil.rmtree(staging, ignore_errors=True)
+            if staging.exists():
+                if not (staging / STAGING_MARK).is_file():
+                    raise PrepareProblem(f"A folder named {staging.name} is in the way beside the app")
+                shutil.rmtree(staging, ignore_errors=True)
+                if staging.exists():
+                    raise PrepareProblem(
+                        "Files from the last try are still in use. Try again in a minute")
             staging.mkdir(parents=True)
+            (staging / STAGING_MARK).write_text(
+                "Made by Reha while getting an update ready. It goes once the update is in"
+                " place.\n", encoding="utf-8")
             hide_folder(staging, self._system)
             archive = staging / saved_name(release)
             part = archive.with_name(archive.name + ".part")
-            self._fetch_into(release, part, lambda fraction: self._set_install(
-                release, "downloading", fraction=fraction))
+            try:
+                self._fetch_into(release, part, lambda fraction: self._set_install(
+                    release, "downloading", fraction=fraction))
+            except OSError as e:
+                if e.errno == errno.ENOSPC:
+                    raise
+                raise PrepareProblem(
+                    "The download stopped. Check the internet and try again") from e
             problem = verify(part, release["asset"])
             if problem:
                 raise DownloadProblem(problem)
             os.replace(part, archive)
             self._set_install(release, "preparing")
             try:
-                copy = unpack_app(archive, staging, self._system, run=self._run)
+                copy = unpack_app(archive, staging, self._system, run=self._program)
             except (zipfile.BadZipFile, subprocess.CalledProcessError, FileNotFoundError) as e:
                 if _words_for(e) == NO_ROOM:
                     raise
                 raise PrepareProblem("The download could not be unpacked") from e
             archive.unlink()
-            clear_download_marks(copy, self._system, run=self._run)
+            clear_download_marks(copy, self._system, run=self._program)
             # A second copy of the app's Python and libraries, which a take
             # does not need beside it.
             while self._busy():
                 if self._stop.wait(1):
                     return
             try:
-                done = self._run(selftest_command(copy, self._system),
+                done = self._program(selftest_command(copy, self._system),
                                  timeout=SELFTEST_TIMEOUT_SEC, capture_output=True,
                                  env=_own_app_env())
             except subprocess.TimeoutExpired as e:
@@ -485,7 +524,8 @@ class UpdateChecker:
                 json.dumps({"version": release["version"], "copy": copy.name}),
                 encoding="utf-8")
         except Exception as e:  # noqa: BLE001 — said on the line, with Try again
-            shutil.rmtree(staging, ignore_errors=True)
+            log.warning("Getting %s ready failed", release["version"], exc_info=True)
+            _remove_ours(staging)
             self._set_install(release, "failed", error=_words_for(e))
             return
         self._set_install(release, "ready")
@@ -511,6 +551,8 @@ class UpdateChecker:
             staging = staging_folder(place, self._system)
             note = json.loads((staging / READY_NOTE).read_text(encoding="utf-8"))
             new = staging / note["copy"]
+            if not new.is_dir():
+                raise FileNotFoundError(new)
             old = _old_name(place, self._current)
             self._state.parent.mkdir(parents=True, exist_ok=True)
             self._state.write_text(json.dumps(
@@ -525,8 +567,17 @@ class UpdateChecker:
             env.pop("REHA_OPEN", None)
             env.update(REHA_PID=str(self._pid), REHA_PLACE=str(place), REHA_OLD=str(old),
                        REHA_NEW=str(new), REHA_RESULT=str(result))
-            self._spawn(script_command(script, self._system), env)
+            self._spawn(script_command(script, self._system), env, cwd=place.parent)
+        except (FileNotFoundError, ValueError, KeyError):
+            # The ready copy has gone, or its note: Update gets another.
+            self._state.unlink(missing_ok=True)
+            with self._lock:
+                self._restarting = False
+                self._install = None
+            return {"ok": False, "error": "The new copy is not there any more"}
         except Exception as e:  # noqa: BLE001 — said on the line; this copy runs on
+            log.warning("Restart now could not start the swap", exc_info=True)
+            self._state.unlink(missing_ok=True)
             with self._lock:
                 self._restarting = False
             return {"ok": False, "error": str(e) or type(e).__name__}
@@ -576,31 +627,45 @@ class UpdateChecker:
                     came["updated"] = True
                     came["microphone"] = asks_for_microphone_again(self._system)
                     self._let_go_of(note.get("old"))
-                    shutil.rmtree(staging, ignore_errors=True)
+                    _remove_ours(staging)
                     return came
-                if said in ("not-moved", "not-closed"):
+                # No word at all: the script never ran, or stopped on the
+                # way. Taken as failed while the ready copy is still there.
+                silent = said is None and note.get("to") != self._current and self._ready_copy(
+                    staging, note.get("to"))
+                if said in ("not-moved", "not-closed") or silent:
                     self._state.unlink(missing_ok=True)
                     (staging / SWAP_RESULT).unlink(missing_ok=True)
                     with self._lock:
                         self._install = {
                             "state": "place_failed", "version": note.get("to"),
-                            "error": ("A file in the app's folder was in use" if said == "not-moved"
-                                      else "The app did not close in time")}
+                            "error": {"not-moved": "A file in the app's folder was in use",
+                                      "not-closed": "The app did not close in time",
+                                      None: "Putting it in place did not start"}[said]}
                     came["failed"] = True
                     return came
                 self._state.unlink(missing_ok=True)
-        if staging.exists():
-            try:
-                ready = json.loads((staging / READY_NOTE).read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                ready = None
-            if (isinstance(ready, dict) and newer(self._current, ready.get("version"))
-                    and (staging / str(ready.get("copy"))).is_dir()):
+        if (staging / STAGING_MARK).is_file():
+            version = self._ready_copy(staging)
+            if version and self._offered(version):
                 with self._lock:
-                    self._install = {"state": "ready", "version": ready["version"]}
+                    self._install = {"state": "ready", "version": version}
             else:
-                shutil.rmtree(staging, ignore_errors=True)
+                _remove_ours(staging)
         return came
+
+    def _ready_copy(self, staging, version=None):
+        """The version of the copy ready in `staging`, or None when there is
+        none whole there (or not of `version`, when that is given)."""
+        try:
+            ready = json.loads((staging / READY_NOTE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(ready, dict) or not (staging / str(ready.get("copy"))).is_dir():
+            return None
+        if version is not None and ready.get("version") != version:
+            return None
+        return ready.get("version")
 
     def _let_go_of(self, old):
         """The old copy to the Trash; kept in the state file for the next
