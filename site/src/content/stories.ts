@@ -38,6 +38,10 @@ export type StoriesContent = {
   description: string
   /** Under each story's title. */
   byline: string
+  /** At each story's end: over the next story's card, and before the
+   *  others' names. */
+  next: string
+  also: string
   /** In the order stories.md lists them. */
   list: StoryDoc[]
   /** The block on the main page: the story whose chats it shows, and its
@@ -61,6 +65,24 @@ export function blockOf(stories: StoriesContent): StoriesBlockContent {
   const { story, heading, line, link, more } = stories.block
   const chats = story.chapters[0].blocks.flatMap((b) => (b.kind === "chat" ? [b.lines] : [])).slice(0, 2)
   return { slug: story.slug, heading, line, link, more, chats }
+}
+
+/** What a story's card shows of it: its first chat, three lines at most,
+ *  or nothing for a story with no chat. */
+export function cardChat(story: StoryDoc): ChatLine[] {
+  const chat = story.chapters.flatMap((c) => c.blocks).find((b) => b.kind === "chat")
+  return chat?.kind === "chat" ? chat.lines.slice(0, 3) : []
+}
+
+/** How long a story takes to read, in minutes, at 200 words a minute. */
+export function readingMinutes(story: StoryDoc): number {
+  const words = story.chapters
+    .flatMap((c) => c.blocks)
+    .flatMap((b) => (b.kind === "chat" ? b.lines.map((l) => l.text) : [b.text]))
+    .join(" ")
+    .split(/\s+/)
+    .filter(Boolean).length
+  return Math.max(1, Math.round(words / 200))
 }
 
 /** A chapter's address in its story: “The gain” is #the-gain. */
@@ -183,6 +205,8 @@ export function readStories(files: Record<string, string>, index: string): Stori
   const parts = sectionsByTitles("stories.md", doc, [
     "description",
     "byline",
+    "next",
+    "also",
     "order",
     "block story",
     "block heading",
@@ -219,6 +243,8 @@ export function readStories(files: Record<string, string>, index: string): Stori
     lede: one(doc.intro),
     description: one(parts.description),
     byline: one(parts.byline),
+    next: one(parts.next),
+    also: one(parts.also),
     list,
     block: {
       story,

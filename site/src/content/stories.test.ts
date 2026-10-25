@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import block from "virtual:stories-block"
 import { stories } from "../stories/content"
-import { blockOf, chapterId, parseStory, readStories, type StoryDoc } from "./stories"
+import { blockOf, cardChat, chapterId, parseStory, readingMinutes, readStories, type StoryDoc } from "./stories"
 
 // A story as site/content/stories/ has them, small: the lines are numbered
 // for the errors below.
@@ -104,6 +104,26 @@ describe("parseStory", () => {
     expect(read(text([...STORY, "", "## Empty"]))).toThrow(at(22, "chapter “Empty” is empty"))
   })
 
+  it("gives a story's card its first chat, three lines at most", () => {
+    expect(cardChat(parseStory("a-story.md", text(STORY)))).toEqual([
+      { who: "Guitarist", text: "One." },
+      { who: "Me", text: "Two." },
+    ])
+    const long = text([...STORY.slice(0, 9), "> **Drummer:** A.\\", "> **Me:** B.\\", "> **Singer:** C.\\", "> **Me:** D."])
+    expect(cardChat(parseStory("a-story.md", long)).map((l) => l.text)).toEqual(["A.", "B.", "C."])
+    // A chat in a chapter, when the opening has none.
+    const later = text([...STORY.slice(0, 8), "", "## Later", "", "> **Singer:** Here."])
+    expect(cardChat(parseStory("a-story.md", later))).toEqual([{ who: "Singer", text: "Here." }])
+    expect(cardChat(parseStory("a-story.md", text(STORY.slice(0, 8))))).toEqual([])
+  })
+
+  it("reckons a story's reading time at 200 words a minute, one at least", () => {
+    const words = (n: number) => text([...STORY.slice(0, 7), Array(n).fill("word").join(" ")])
+    expect(readingMinutes(parseStory("a-story.md", words(3)))).toBe(1)
+    expect(readingMinutes(parseStory("a-story.md", words(500)))).toBe(3)
+    expect(readingMinutes(parseStory("a-story.md", words(1000)))).toBe(5)
+  })
+
   it("gives a chapter its address from its name", () => {
     expect(chapterId("The gain")).toBe("the-gain")
     expect(chapterId("A channel each")).toBe("a-channel-each")
@@ -123,6 +143,14 @@ const INDEX = text([
   "## byline",
   "",
   "Alex",
+  "",
+  "## next",
+  "",
+  "Next one",
+  "",
+  "## also",
+  "",
+  "Also:",
   "",
   "## order",
   "",
@@ -161,6 +189,8 @@ describe("readStories", () => {
       lede: "The lede.",
       description: "For search.",
       byline: "Alex",
+      next: "Next one",
+      also: "Also:",
       block: { heading: "Heading.", line: "Line.", link: "Read the story", more: "More stories" },
     })
     expect(stories.block.story.slug).toBe("a-story")
@@ -246,6 +276,8 @@ describe("the site's stories", () => {
       description:
         "How a band records its rehearsals with РЭХА, told by Alex, who plays bass in it and wrote the app.",
       byline: "Alex, who plays bass in the band and wrote РЭХА",
+      next: "Next story",
+      also: "Also:",
       block: {
         heading: "We used to argue about which bar it was.",
         line: "Then we started recording. Alex, who plays bass and wrote РЭХА, tells how our band does it, and what went wrong on the way.",

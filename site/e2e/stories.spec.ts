@@ -27,6 +27,26 @@ test("Stories in the menu opens the page of stories, and a card its story", asyn
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(STORIES[0][1])
 })
 
+test("each card on the page of stories opens with its band's chat", async ({ page }) => {
+  await page.goto("/stories")
+  const cards = page.locator(".tale-card")
+  await expect(cards.locator(".say:first-child p")).toHaveText([
+    "You came in late in the second bar.",
+    "Hear that? We're rushing.",
+    "Bloody hell.",
+    "Are we recording?",
+  ])
+  for (let n = 0; n < 4; n++) {
+    await expect(cards.nth(n).locator(".say")).toHaveCount(3)
+    await expect(cards.nth(n).locator(".card-foot .fine")).toHaveText(/^\d+ min read$/)
+  }
+  // The bubbles in the page's own colour, on the card's grey.
+  const bg = (el: Element) => getComputedStyle(el).backgroundColor
+  expect(await cards.first().locator(".say:not(.me) p").first().evaluate(bg)).toBe(
+    await page.locator("body").evaluate(bg)
+  )
+})
+
 // The block right after the main page's first screen: the band's chat
 // beside a few words, and the way to the story it comes from.
 const opacity = (page: Page, n: number) =>
@@ -149,6 +169,26 @@ test("a link in a story opens the story it names", async ({ page }) => {
   await page.goto("/stories/tempo-drift")
   await page.getByRole("link", { name: "the mixer story" }).click()
   await expect(page).toHaveURL(new RegExp(`${MIXER}$`))
+})
+
+test("the end of a story leads to the next one, and names the others", async ({ page }) => {
+  await page.goto("/stories/tempo-drift")
+  const end = page.locator(".tale-next")
+  const next = end.locator(".tale-card")
+  await expect(next.locator(".eyebrow")).toHaveText("Next story")
+  await expect(next.locator("h2")).toHaveText(STORIES[2][1])
+  await expect(next).toHaveAttribute("href", "/stories/metronome")
+  await expect(next.locator(".say").first()).toContainText("Bloody hell.")
+  await expect(end.locator(".also")).toContainText("Also:")
+  await expect(end.locator(".also a")).toHaveText([STORIES[0][1], STORIES[3][1]])
+  // After the downloads, and after the last story the first comes next.
+  const below = await page.evaluate(
+    () => document.querySelector(".tale-next")!.getBoundingClientRect().top - document.querySelector(".tale-get")!.getBoundingClientRect().bottom
+  )
+  expect(below).toBeGreaterThan(0)
+  await page.goto("/stories/record-rehearsal")
+  await expect(next).toHaveAttribute("href", "/stories/digital-mixer")
+  await expect(end.locator(".also a")).toHaveText([STORIES[1][1], STORIES[2][1]])
 })
 
 test("a chapter's address scrolls to its chapter", async ({ page }) => {

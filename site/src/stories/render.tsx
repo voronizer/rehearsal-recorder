@@ -30,7 +30,7 @@ export function storyPages(): { meta: PageMeta; body: string }[] {
           kind: "article" as const,
           jsonLd: articleJsonLd({ ...story, url: pageUrl(path) }),
         },
-        body: renderToStaticMarkup(<StoryPage story={story} byline={stories.byline} />),
+        body: renderToStaticMarkup(<StoryPage story={story} stories={stories} />),
       }
     }),
   ]

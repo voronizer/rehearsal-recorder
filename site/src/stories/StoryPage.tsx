@@ -1,4 +1,4 @@
-import type { StoryBlock, StoryDoc } from "../content/stories"
+import type { StoriesContent, StoryBlock, StoryDoc } from "../content/stories"
 import { Closing } from "../page/Closing"
 import { Downloads } from "../page/Downloads"
 import { Footer } from "../page/Footer"
@@ -6,6 +6,7 @@ import { Inline } from "../page/Md"
 import { Nav } from "../page/Nav"
 import { REPO } from "../page/links"
 import { Chat } from "./Chat"
+import { StoryCard } from "./StoryCard"
 
 function Blocks({ blocks }: { blocks: StoryBlock[] }) {
   return blocks.map((block, i) => {
@@ -20,10 +21,15 @@ function Blocks({ blocks }: { blocks: StoryBlock[] }) {
 
 /**
  * A story, whole: its head, the opening, the chapters, each with its name
- * beside it, and the downloads. Written at build time (render.tsx), so the
- * downloads are there for both systems, and main.ts shows the visitor's.
+ * beside it, the downloads, then the next story's card and the others'
+ * names. Written at build time (render.tsx), so the downloads are there
+ * for both systems, and main.ts shows the visitor's.
  */
-export function StoryPage({ story, byline }: { story: StoryDoc; byline: string }) {
+export function StoryPage({ story, stories }: { story: StoryDoc; stories: StoriesContent }) {
+  const { list, byline } = stories
+  // The one after it, and after the last the first; the rest by name.
+  const next = list[(list.indexOf(story) + 1) % list.length]
+  const others = list.filter((s) => s !== story && s !== next)
   return (
     <>
       <Nav repo={REPO} home="/" />
@@ -64,6 +70,21 @@ export function StoryPage({ story, byline }: { story: StoryDoc; byline: string }
             </div>
           </div>
         </article>
+        {next !== story && (
+          <section className="tale-next">
+            <StoryCard story={next} wide eyebrow={stories.next} />
+            {others.length > 0 && (
+              <p className="also">
+                <span className="fine">{stories.also}</span>
+                {others.map((s) => (
+                  <a key={s.slug} className="more" href={`/stories/${s.slug}`}>
+                    {s.title}
+                  </a>
+                ))}
+              </p>
+            )}
+          </section>
+        )}
       </main>
       <Closing />
       <Footer />

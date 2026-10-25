@@ -269,9 +269,25 @@ body {
 @media (min-width: 720px) { .tales { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .tale-card { display: grid; gap: 12px; align-content: start; background: var(--page-tile); border-radius: 28px; padding: clamp(24px, 3vw, 36px); text-decoration: none; color: inherit; }
 .tale-card h2 { margin: 0; font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; }
-.tale-card p { margin: 0; color: var(--page-muted); line-height: 1.45; }
-.tale-card .more { margin-top: 6px; }
+.card-copy { display: grid; gap: 12px; align-content: start; }
+.card-copy > p { margin: 0; color: var(--page-muted); line-height: 1.45; }
+.card-copy > p.eyebrow { color: var(--page-rec); }
+/* The band's first lines on the card, in bubbles of the page's own white. */
+.card-chat { padding-bottom: 8px; }
+.card-chat .say p { background: var(--page-bg); font-size: 0.9375rem; }
+.card-chat .say.me p { background: var(--page-accent); }
+.card-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 6px; }
 .tale-card:hover h2 { color: var(--page-accent); }
+/* At a story's end: the next story's card, its chat on the right from
+   900 px, and the others' names under it. */
+.tale-next { display: grid; gap: 24px; margin-bottom: clamp(72px, 11vw, 150px); }
+@media (min-width: 900px) {
+  .tale-card.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+  .tale-card.wide .card-chat { order: 2; padding: 0; }
+  .tale-card.wide h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); letter-spacing: -0.035em; line-height: 1.05; }
+}
+.tale-next .also { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; }
+.tale-next .also .more { white-space: normal; }
 
 /* ---- Open source, as one line ---- */
 .oss { text-align: center; display: grid; gap: 12px; justify-items: center; padding-block: 8px clamp(56px, 8vw, 96px); }

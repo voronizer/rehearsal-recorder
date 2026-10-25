@@ -1,7 +1,8 @@
 <!-- The page of stories, reha.stream/stories: its heading and line, then
      a card for each story in stories/, in the order under ## order. Its
      line for search results is ## description, and ## byline goes under
-     each story's title.
+     each story's title. At each story's end, ## next is over the card of
+     the story after it, and ## also before the names of the others.
 
      The block on the main page right after the app (see
      site/src/page/StoriesBlock.tsx) shows the first two chats of the story
@@ -21,6 +22,14 @@ it and wrote the app.
 ## byline
 
 Alex, who plays bass in the band and wrote РЭХА
+
+## next
+
+Next story
+
+## also
+
+Also:
 
 ## order
 

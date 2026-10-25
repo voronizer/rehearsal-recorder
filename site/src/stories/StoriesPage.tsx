@@ -3,8 +3,9 @@ import { Closing } from "../page/Closing"
 import { Footer } from "../page/Footer"
 import { Nav } from "../page/Nav"
 import { REPO } from "../page/links"
+import { StoryCard } from "./StoryCard"
 
-/** Every story, a card each, in the order they were written. */
+/** Every story, a card each, in the order they were written (StoryCard). */
 export function StoriesPage({ stories }: { stories: StoriesContent }) {
   return (
     <>
@@ -18,11 +19,7 @@ export function StoriesPage({ stories }: { stories: StoriesContent }) {
           </header>
           <div className="tales">
             {stories.list.map((story) => (
-              <a key={story.slug} className="tale-card" href={`/stories/${story.slug}`}>
-                <h2>{story.title}</h2>
-                <p>{story.description}</p>
-                <span className="more">Read</span>
-              </a>
+              <StoryCard key={story.slug} story={story} />
             ))}
           </div>
         </section>
