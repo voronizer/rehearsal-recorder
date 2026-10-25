@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import { isFromStage, type ToStage } from "../frame"
 import type { Focus } from "./evening"
 
-// A whole screen of the app, laid out as in its window and scaled to fit.
+// A whole screen of the app, laid out as in its window and scaled to fit;
+// page.css gives the window the same shape.
 const WIDTH = 1180
 const HEIGHT = 960
 
@@ -165,7 +166,6 @@ export function LiveFrame({
       <div
         ref={box}
         className={`live${interactive ? "" : " passive"}${settled ? " settled" : ""}`}
-        style={{ height: Math.round(HEIGHT * scale) || undefined }}
       >
         {frames.map((f, i) => (
           <iframe

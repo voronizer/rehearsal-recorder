@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { content } from "../content"
+import block from "virtual:stories-block"
 import { Chat } from "../stories/Chat"
 
 /**
@@ -9,18 +9,17 @@ import { Chat } from "../stories/Chat"
  * they are all there (page.css).
  */
 export function StoriesBlock() {
-  const { story, heading, line, link } = content.stories.block
-  const chats = story.chapters[0].blocks.flatMap((b) => (b.kind === "chat" ? [b.lines] : [])).slice(0, 2)
+  const { slug, heading, line, link, chats } = block
   // Each chat's first line, counted through both: they come in that order.
   const starts = chats.map((_, i) => chats.slice(0, i).reduce((n, lines) => n + lines.length, 0))
   const side = useRef<HTMLDivElement>(null)
   const [shown, setShown] = useState(false)
   useEffect(() => {
-    // The chat itself, not the whole block: on a phone on its side 40% of
-    // the stacked block never fits on the screen at once.
+    // Once a third of the chat is on the screen. The chat, as the whole
+    // block is taller than a phone on its side.
     const seen = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting) return
+        if (entry.intersectionRatio < 0.3) return
         setShown(true)
         seen.disconnect()
       },
@@ -36,7 +35,7 @@ export function StoriesBlock() {
         <h2>{heading}</h2>
         <p>{line}</p>
         <p>
-          <a className="more" href={`/stories/${story.slug}`}>
+          <a className="more" href={`/stories/${slug}`}>
             {link}
           </a>
         </p>

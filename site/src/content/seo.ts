@@ -115,6 +115,22 @@ export function pageHeadHtml(meta: PageMeta): string {
   ].join("\n    ")
 }
 
+/** The built stories.html with a page's head and words in their places. A
+ *  function puts them in, so a “$” in the words stays as it is. */
+export function fillPage(template: string, head: string, body: string): string {
+  let page = template
+  for (const [place, text] of [
+    ["<!--head-->", head],
+    ["<!--body-->", body],
+  ]) {
+    const count = page.split(place).length - 1
+    if (count === 0) throw new Error(`stories.html has no ${place}`)
+    if (count > 1) throw new Error(`stories.html has ${place} twice`)
+    page = page.replace(place, () => text)
+  }
+  return page
+}
+
 /** A story as schema.org describes an article: Alex's, published by the app. */
 export function articleJsonLd(story: {
   title: string

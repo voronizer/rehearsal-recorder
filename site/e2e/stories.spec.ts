@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 import { test, expect } from "./fixtures.ts"
 
 // Alex's stories: their page, each story, and the way to them. Each is
@@ -31,6 +31,14 @@ test("Stories in the menu opens the page of stories, and a card its story", asyn
 // beside a few words, and the way to the story it comes from.
 const opacity = (page: Page, n: number) =>
   page.locator("#stories .say").nth(n).evaluate((el) => Number(getComputedStyle(el).opacity))
+
+/** A name over a line that the screen leaves out (Alex's, or the same
+ *  person's again) but a screen reader still reads. */
+async function expectUnseenName(who: Locator, name: string) {
+  await expect(who).toHaveText(name)
+  const box = (await who.boundingBox())!
+  expect(box.width * box.height).toBeLessThanOrEqual(1)
+}
 
 test.describe("with Reduce motion", () => {
   test.use({ reducedMotion: "reduce" })
@@ -67,7 +75,7 @@ test.describe("with Reduce motion", () => {
     const me = block.locator(".say.me")
     const bubble = (await me.locator("p").boundingBox())!
     expect(Math.abs(bubble.x + bubble.width - (side.x + side.width))).toBeLessThanOrEqual(1)
-    await expect(me.locator(".who")).toBeHidden()
+    await expectUnseenName(me.locator(".who"), "Me")
     await block.getByRole("link", { name: "Read the story" }).click()
     await expect(page).toHaveURL(new RegExp(`${MIXER}$`))
   })
@@ -86,12 +94,25 @@ test.describe("with motion", () => {
     await expect.poll(() => opacity(page, 5), { timeout: 10_000 }).toBe(1)
   })
 
-  // 40% of the stacked block never fits on a phone on its side; its chat does.
+  // A phone on its side is lower than the block, though not than a third of
+  // its chat, which is what the lines wait for.
   test("on a phone on its side the block's lines still come", async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 })
     await page.goto("/")
     await page.locator("#stories .chat-side").scrollIntoViewIfNeeded()
     await expect.poll(() => opacity(page, 5), { timeout: 10_000 }).toBe(1)
+  })
+
+  // On a big screen the app's window fills the first screen, and the chat
+  // is below it: its lines wait there for the visitor.
+  test("on a big screen the block's lines wait until it is scrolled to", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await page.goto("/")
+    await expect(page.locator("#stories .say")).toHaveCount(6)
+    await page.waitForTimeout(1500)
+    expect(await opacity(page, 0)).toBe(0)
+    await page.locator("#stories .chat-side").scrollIntoViewIfNeeded()
+    await expect.poll(() => opacity(page, 0)).toBe(1)
   })
 })
 
@@ -103,6 +124,24 @@ test("on the narrowest phone the block fits, its words over its chat", async ({ 
   const copy = (await page.locator("#stories .copy").boundingBox())!
   const chat = (await page.locator("#stories .chat-side").boundingBox())!
   expect(copy.y + copy.height).toBeLessThanOrEqual(chat.y)
+})
+
+// The main page's scripts have the block's words and chats, not every story.
+test("the main page carries only what its block shows of the stories", async ({ page }) => {
+  const scripts: Promise<string>[] = []
+  page.on("response", (r) => {
+    if (r.url().endsWith(".js") && r.ok()) scripts.push(r.text())
+  })
+  await page.goto("/")
+  await expect(page.locator("#stories .say")).toHaveCount(6)
+  const code = (await Promise.all(scripts)).join("\n")
+  // As true or false: the scripts' whole text would fill the report.
+  for (const [words, carried] of [
+    ["You know. That bit.", true],
+    [STORIES[2][1], false],
+    ["In the first chorus the baby woke up.", false],
+  ] as const)
+    expect(code.includes(words), words).toBe(carried)
 })
 
 test("a link in a story opens the story it names", async ({ page }) => {
@@ -143,7 +182,7 @@ test("the story's chats and jokes are drawn as such", async ({ page }) => {
   // Alex's own lines on the right, with no name.
   const me = page.locator(".chat .say.me").first()
   await expect(me.locator("p")).toHaveText("No, that was the third.")
-  await expect(me.locator(".who")).toBeHidden()
+  await expectUnseenName(me.locator(".who"), "Me")
   const chat = (await page.locator(".chat").first().boundingBox())!
   const bubble = (await me.locator("p").boundingBox())!
   expect(Math.abs(bubble.x + bubble.width - (chat.x + chat.width))).toBeLessThanOrEqual(1)
@@ -249,14 +288,34 @@ test.describe("on a phone", () => {
     test(`at ${width} px a story and the page of stories fit`, async ({ page }) => {
       await page.setViewportSize({ width, height })
       for (const [path, title] of [
-        [MIXER, STORIES[0][1]],
-        ["/stories/record-rehearsal", STORIES[3][1]],
+        ...STORIES.map(([slug, title]) => [`/stories/${slug}`, title]),
         ["/stories", "How our band records its rehearsals"],
       ]) {
         await page.goto(path)
         await expect(page.getByRole("heading", { level: 1 })).toHaveText(title)
         expect(await page.evaluate(() => document.documentElement.scrollWidth), path).toBe(width)
       }
+    })
+
+    // A word longer than the screen, as a model's name or an address can be.
+    test(`at ${width} px a long word in a story still fits`, async ({ page }) => {
+      await page.setViewportSize({ width, height })
+      await page.goto(MIXER)
+      const long = "Lautsprecherbox".repeat(5)
+      await page.locator(".chap-body > p").first().evaluate((el, w) => el.append(` ${w}`), long)
+      await page.locator(".chap-head h2").first().evaluate((el, w) => el.append(` ${w}`), long)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width)
+    })
+
+    test(`at ${width} px the menu keeps Stories`, async ({ page }) => {
+      await page.setViewportSize({ width, height })
+      for (const path of ["/", MIXER]) {
+        await page.goto(path)
+        await expect(page.locator(".nav").getByRole("link", { name: "Stories", exact: true }), path).toBeVisible()
+        expect(await page.evaluate(() => document.documentElement.scrollWidth), path).toBe(width)
+      }
+      await page.locator(".nav").getByRole("link", { name: "Stories", exact: true }).click()
+      await expect(page).toHaveURL(/\/stories$/)
     })
   }
 })

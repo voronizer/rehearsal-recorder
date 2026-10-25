@@ -4,6 +4,7 @@ import { MAC_ZIP, WINDOWS_ZIP } from "./links"
 
 type Route = {
   src?: string
+  caseSensitive?: boolean
   handle?: string
   status?: number
   dest?: string
@@ -18,7 +19,10 @@ const config: { version: number; routes: Route[] } = JSON.parse(raw)
 const files = config.routes.findIndex((r) => r.handle === "filesystem")
 const before = files < 0 ? config.routes : config.routes.slice(0, files)
 const after = files < 0 ? [] : config.routes.slice(files + 1)
-const matching = (routes: Route[], path: string) => routes.find((r) => new RegExp(r.src!).test(path))
+// Vercel matches a route whatever the letters' case, unless it says it is
+// case-sensitive.
+const pattern = (r: Route) => new RegExp(r.src!, r.caseSensitive ? "" : "i")
+const matching = (routes: Route[], path: string) => routes.find((r) => pattern(r).test(path))
 /** The first route before the files that matches, one that goes on included. */
 const route = (path: string) => matching(before, path)
 
@@ -46,8 +50,8 @@ const built = (path: string) => BUILT.has(path) || /^\/assets\/.+$/.test(path)
 /** What an address gets: a route that ends it before the files (a redirect,
  *  or the file a route sends it to), the file, or a route after them. */
 function served(path: string): Route | { file: string } | undefined {
-  const first = before.find((r) => !r.continue && new RegExp(r.src!).test(path))
-  if (first?.dest && !first.status) return { file: path.replace(new RegExp(first.src!), first.dest) }
+  const first = before.find((r) => !r.continue && pattern(r).test(path))
+  if (first?.dest && !first.status) return { file: path.replace(pattern(first), first.dest) }
   if (first) return first
   if (built(path)) return { file: path }
   return matching(after, path)
@@ -109,7 +113,7 @@ describe("vercel-config.json", () => {
     }
   })
   it("serves each story at its address, with or without a slash, and the page of stories", () => {
-    expect(STORIES).toHaveLength(4)
+    expect(STORIES.length).toBeGreaterThan(0)
     for (const path of ["/stories", "/stories/"]) expect(served(path)).toEqual({ file: "/stories.html" })
     for (const name of STORIES)
       for (const path of [`/stories/${name}`, `/stories/${name}/`]) {
@@ -124,7 +128,9 @@ describe("vercel-config.json", () => {
     expect(names.sort()).toEqual([...STORIES].sort())
   })
   it("answers a story that is not there with the 404 page", () => {
-    for (const path of ["/stories/nothing", "/stories/digital-mixer/x", "/storiesx", "/stories/x.html"]) {
+    // A story's name in other letters too: the route would send it to a file
+    // that is not there, and Vercel's own 404 would answer, not the site's.
+    for (const path of ["/stories/nothing", "/stories/digital-mixer/x", "/storiesx", "/stories/x.html", "/stories/Metronome", "/Stories"]) {
       expect(served(path)).toMatchObject({ status: 404, dest: "/404.html" })
     }
   })

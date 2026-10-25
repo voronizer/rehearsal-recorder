@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { content } from "./index"
-import { chapterId, parseStory, readStories, type StoryDoc } from "./stories"
+import block from "virtual:stories-block"
+import { stories } from "../stories/content"
+import { blockOf, chapterId, parseStory, readStories, type StoryDoc } from "./stories"
 
 // A story as site/content/stories/ has them, small: the lines are numbered
 // for the errors below.
@@ -70,6 +71,10 @@ describe("parseStory", () => {
   it("reads a file saved on Windows the same", () => {
     const windows = STORY.map((l) => (l.endsWith("\\") ? `${l} ` : l)).join("\r\n")
     expect(parseStory("a-story.md", windows)).toEqual(parseStory("a-story.md", text(STORY)))
+  })
+
+  it("reads a file that starts with a byte order mark the same", () => {
+    expect(parseStory("a-story.md", `\uFEFF${text(STORY)}`)).toEqual(parseStory("a-story.md", text(STORY)))
   })
 
   it("keeps a comment's lines, so the lines after it keep their numbers", () => {
@@ -157,6 +162,22 @@ describe("readStories", () => {
     expect(stories.block.story.slug).toBe("a-story")
   })
 
+  it("gives the main page's block only what it shows: the first two chats and its words", () => {
+    expect(blockOf(readStories(FILES, INDEX))).toEqual({
+      slug: "a-story",
+      heading: "Heading.",
+      line: "Line.",
+      link: "Read the story",
+      chats: [
+        [
+          { who: "Guitarist", text: "One." },
+          { who: "Me", text: "Two." },
+        ],
+        [{ who: "Drummer", text: "Three." }],
+      ],
+    })
+  })
+
   it("names what does not add up", () => {
     const index = "site/content/stories.md"
     expect(() => readStories(FILES, INDEX.replace("- other", "- other\n- third"))).toThrow(
@@ -181,7 +202,6 @@ describe("readStories", () => {
 
 // The site's own stories, as the pages will show them.
 describe("the site's stories", () => {
-  const { stories } = content
   const all = stories.list.flatMap((s) => s.chapters.flatMap((c) => c.blocks))
   const words = all.flatMap((b) => (b.kind === "chat" ? b.lines.map((l) => l.text) : [b.text]))
 
@@ -228,6 +248,18 @@ describe("the site's stories", () => {
       },
     })
     expect(stories.block.story.slug).toBe("digital-mixer")
+  })
+
+  it("gives the main page's block what blockOf takes from them", () => {
+    expect(block).toEqual(blockOf(stories))
+    expect(block.chats.flat().map((l) => l.text)).toEqual([
+      "You came in late in the second bar.",
+      "No, that was the third.",
+      "Bloody hell, you're all playing it wrong!",
+      "Let's change that bit in the chorus.",
+      "Which bit?",
+      "You know. That bit.",
+    ])
   })
 
   it("opens each story with words, then numbered chapters with names", () => {

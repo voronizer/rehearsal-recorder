@@ -1,5 +1,5 @@
 /// <reference types="vitest/config" />
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -9,6 +9,7 @@ import tailwindcss from "@tailwindcss/vite"
 import { changelogHead, displayVersion, latestVersion } from "./src/content/changelog.ts"
 import { parseDoc } from "./src/content/markdown.ts"
 import {
+  fillPage,
   jsonLdText,
   notFoundNoscriptHtml,
   noscriptHtml,
@@ -18,6 +19,7 @@ import {
   softwareJsonLd,
   type PageMeta,
 } from "./src/content/seo.ts"
+import { blockOf, readStories } from "./src/content/stories.ts"
 
 const ui = (path: string) => fileURLToPath(new URL(`../ui/${path}`, import.meta.url))
 
@@ -37,6 +39,28 @@ function changelog(): Plugin {
       this.addWatchFile(file)
       const head = changelogHead(readFileSync(file, "utf-8"), process.env.VITE_SITE_VERSION || undefined)
       return `export default ${JSON.stringify(head)}`
+    },
+  }
+}
+
+/**
+ * `virtual:stories-block`: what the block on the main page shows of Alex's
+ * stories, its words and the first two chats of its story. The stories'
+ * whole text would be most of the main page's words.
+ */
+function storiesBlock(): Plugin {
+  const id = "\0virtual:stories-block"
+  const dir = fileURLToPath(new URL("./content/stories/", import.meta.url))
+  const index = fileURLToPath(new URL("./content/stories.md", import.meta.url))
+  return {
+    name: "site-stories-block",
+    resolveId: (source) => (source === "virtual:stories-block" ? id : null),
+    load(source) {
+      if (source !== id) return null
+      const names = readdirSync(dir).filter((name) => name.endsWith(".md"))
+      for (const file of [index, ...names.map((name) => join(dir, name))]) this.addWatchFile(file)
+      const files = Object.fromEntries(names.map((name) => [name, readFileSync(join(dir, name), "utf-8")]))
+      return `export default ${JSON.stringify(blockOf(readStories(files, readFileSync(index, "utf-8"))))}`
     },
   }
 }
@@ -130,9 +154,7 @@ function stories(): Plugin {
         if (template?.type !== "asset") throw new Error("stories.html is not in the build")
         const html = String(template.source)
         for (const { meta, body } of pages) {
-          const page = html.replace("<!--head-->", pageHeadHtml(meta)).replace("<!--body-->", body)
-          if (page.includes("<!--head-->") || page.includes("<!--body-->"))
-            throw new Error(`${meta.path}: stories.html has its <!--head--> or <!--body--> twice`)
+          const page = fillPage(html, pageHeadHtml(meta), body)
           if (meta.path === "/stories") template.source = page
           else this.emitFile({ type: "asset", fileName: `${meta.path.slice(1)}.html`, source: page })
         }
@@ -155,7 +177,7 @@ export default defineConfig({
   base: "/",
   // The app's icons: the favicon, and the logo its screens show.
   publicDir: ui("public"),
-  plugins: [react(), tailwindcss(), changelog(), seo(), stories()],
+  plugins: [react(), tailwindcss(), changelog(), storiesBlock(), seo(), stories()],
   resolve: {
     alias: {
       "@": ui("src"),

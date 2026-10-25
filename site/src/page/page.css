@@ -70,7 +70,8 @@ body {
 .menu a:hover { color: var(--page-fg); }
 .menu .get { color: var(--page-accent-fg); background: var(--page-accent); padding: 5px 14px; border-radius: 999px; font-weight: 600; }
 .menu .get:hover { color: var(--page-accent-fg); filter: brightness(1.05); }
-@media (max-width: 680px) { .menu a:not(.get) { display: none; } }
+/* On a phone: Stories, as the main page has no way to them but the menu, and Download. */
+@media (max-width: 680px) { .menu { gap: 18px; } .menu a:not(.get, .stories) { display: none; } }
 
 /* ---- Hero ---- */
 .hero { padding-block: clamp(40px, 7vw, 96px) clamp(72px, 11vw, 150px); display: grid; gap: clamp(40px, 6vw, 72px); }
@@ -85,7 +86,10 @@ body {
 
 /* ---- The app, live, in a frame ---- */
 .screen { border-radius: 18px; overflow: hidden; background: var(--page-app); box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.06), 0 40px 80px -48px rgba(16, 24, 40, 0.45); }
-.live { position: relative; overflow: hidden; background: var(--page-app); }
+/* The app's shape, 1180 by 960 (LiveFrame.tsx), from the first moment: the
+   page under it, the stories' chat first, is where it will stay while the
+   frame loads. */
+.live { position: relative; overflow: hidden; background: var(--page-app); aspect-ratio: 1180 / 960; }
 .live iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; background: var(--page-app); }
 .live.passive iframe { pointer-events: none; }
 .live.settled iframe { transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
@@ -225,10 +229,11 @@ body {
    leads to them. Alex tells the stories, so his lines are on the right, in
    the site's blue, with no name over them. ---- */
 .chat { display: grid; gap: 4px; }
-.say { display: grid; justify-items: start; gap: 3px; min-width: 0; }
+.say { position: relative; display: grid; justify-items: start; gap: 3px; min-width: 0; }
 .say.me { justify-items: end; }
 .say .who { font-size: 0.75rem; color: var(--page-muted); padding-inline: 15px; margin-top: 8px; }
-.say.same .who, .say.me .who { display: none; }
+/* Off the screen, though a screen reader still says who is talking. */
+.say.same .who, .say.me .who { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .say p { margin: 0; max-width: 26rem; padding: 9px 15px; border-radius: 20px 20px 20px 6px; background: var(--page-tile); font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; text-wrap: pretty; }
 .say.me p { background: var(--page-accent); color: var(--page-accent-fg); border-radius: 20px 20px 6px 20px; }
 
@@ -242,9 +247,9 @@ body {
 .chap { display: grid; gap: 18px; align-items: start; scroll-margin-top: 24px; }
 .chap-head { display: grid; gap: 10px; align-content: start; }
 .chap-head .n { font-family: var(--page-mono); font-size: 0.875rem; color: var(--page-muted); }
-.chap-head h2 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; }
+.chap-head h2 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; overflow-wrap: anywhere; }
 .chap-body { display: grid; gap: 20px; min-width: 0; }
-.chap-body > p { margin: 0; font-size: 1.25rem; line-height: 1.6; text-wrap: pretty; }
+.chap-body > p { margin: 0; font-size: 1.25rem; line-height: 1.6; text-wrap: pretty; overflow-wrap: anywhere; }
 .chap-body a { color: var(--page-accent); }
 /* A joke, said big: a size under a chapter's name. */
 .chap-body > p.joke { font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; margin-block: 8px; max-width: 26ch; }

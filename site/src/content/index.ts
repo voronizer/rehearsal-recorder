@@ -5,7 +5,6 @@
 import changelog from "virtual:changelog"
 import { displayVersion, latestNews, latestVersion } from "./changelog"
 import { itemsByIds, parseDoc, sectionsByIds, sectionsByTitles, type Doc, type Section } from "./markdown"
-import { readStories, type StoriesContent } from "./stories"
 
 export type { Section } from "./markdown"
 
@@ -35,8 +34,6 @@ export type SiteContent = {
   closing: { title: string }
   /** The 404 page's heading and line. */
   notFound: { title: string; lede: string }
-  /** Alex's stories, their page and the block that leads to them. */
-  stories: StoriesContent
 }
 
 export const STEPS = ["before", "during", "after", "later"] as const
@@ -56,26 +53,17 @@ export type ItemId = (typeof ITEMS)[Step][number]
 export type Item = { id: ItemId; title: string; line: string; more: string }
 export type StoryStep = { id: Step; title: string; body: string; items: Item[] }
 
-const files = import.meta.glob<string>("../../content/*.md", {
+// Alex's stories are read on their own: see src/stories/content.ts.
+const files = import.meta.glob<string>(["../../content/*.md", "!../../content/stories.md"], {
   query: "?raw",
   import: "default",
   eager: true,
 })
-
-const storyFiles = import.meta.glob<string>("../../content/stories/*.md", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-})
-
-function raw(name: string): string {
-  const text = files[`../../content/${name}`]
-  if (text === undefined) throw new Error(`site/content/${name} is missing`)
-  return text
-}
 
 function doc(name: string): Doc {
-  const parsed = parseDoc(raw(name))
+  const text = files[`../../content/${name}`]
+  if (text === undefined) throw new Error(`site/content/${name} is missing`)
+  const parsed = parseDoc(text)
   if (!parsed.title) throw new Error(`site/content/${name}: no # title`)
   return parsed
 }
@@ -131,10 +119,6 @@ export function readContent(tagFromRelease?: string): SiteContent {
     faq: { title: faq.title!, questions: faq.sections },
     closing: { title: doc("closing.md").title! },
     notFound: { title: notFound.title!, lede: notFound.intro },
-    stories: readStories(
-      Object.fromEntries(Object.entries(storyFiles).map(([path, text]) => [path.slice(path.lastIndexOf("/") + 1), text])),
-      raw("stories.md")
-    ),
   }
 }
 

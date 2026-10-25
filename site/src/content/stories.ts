@@ -3,7 +3,7 @@
 // main page. A story is plainer Markdown than the rest of the site's words,
 // and stricter: what the page cannot draw fails the tests, naming the file
 // and its line.
-import { parseDoc, sectionsByTitles } from "./markdown"
+import { parseDoc, sectionsByTitles } from "./markdown.ts"
 
 /** Who talks in a story's chats. "Me" is Alex, who tells it. */
 export const WHO = ["Singer", "Guitarist", "Drummer", "Me"] as const
@@ -44,6 +44,17 @@ export type StoriesContent = {
   block: { story: StoryDoc; heading: string; line: string; link: string }
 }
 
+/** What the block on the main page shows: its words, the story it leads to,
+ *  and that story's first two chats. The main page gets only this
+ *  (virtual:stories-block in vite.config.ts), not the stories' whole text. */
+export type StoriesBlockContent = { slug: string; heading: string; line: string; link: string; chats: ChatLine[][] }
+
+export function blockOf(stories: StoriesContent): StoriesBlockContent {
+  const { story, heading, line, link } = stories.block
+  const chats = story.chapters[0].blocks.flatMap((b) => (b.kind === "chat" ? [b.lines] : [])).slice(0, 2)
+  return { slug: story.slug, heading, line, link, chats }
+}
+
 /** A chapter's address in its story: “The gain” is #the-gain. */
 export const chapterId = (title: string) =>
   title
@@ -60,7 +71,10 @@ export function parseStory(file: string, md: string): StoryDoc {
     throw new Error(`site/content/stories/${file}:${line}: ${what}`)
   }
   // A comment's lines stay, blank, so every line keeps its number.
-  const text = md.replace(/\r\n/g, "\n").replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\n]/g, ""))
+  const text = md
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/<!--[\s\S]*?-->/g, (c) => c.replace(/[^\n]/g, ""))
   const lines = text.split("\n").map((l) => l.trimEnd())
   let at = 0
   const skipBlank = () => {

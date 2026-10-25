@@ -29,7 +29,9 @@ export function Nav({ repo, home = "" }: { repo: string; home?: string }) {
       <nav className="menu">
         <a href={`${home}#how`}>How it works</a>
         <a href={`${home}#faq`}>FAQ</a>
-        <a href="/stories">Stories</a>
+        <a className="stories" href="/stories">
+          Stories
+        </a>
         <a href={repo}>GitHub</a>
         <a className="get" href={`${home}#top`}>
           Download

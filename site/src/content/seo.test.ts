@@ -6,6 +6,7 @@ import {
   OG_IMAGE,
   SITE_URL,
   articleJsonLd,
+  fillPage,
   jsonLdText,
   notFoundNoscriptHtml,
   noscriptHtml,
@@ -161,5 +162,21 @@ describe("index.html", () => {
     expect(meta("property", "og:title")).toBe(title)
     expect(meta("name", "description")).toBe(DESCRIPTION)
     expect(meta("property", "og:description")).toBe(DESCRIPTION)
+  })
+})
+
+describe("fillPage", () => {
+  const template = "<head>\n<!--head-->\n</head><div><!--body--></div>"
+
+  it("puts a page's head and words into the template as they are", () => {
+    const body = "<p>$600, $$, $& and $' stay as written</p>"
+    expect(fillPage(template, "<title>T</title>", body)).toBe(
+      `<head>\n<title>T</title>\n</head><div>${body}</div>`
+    )
+  })
+
+  it("fails on a template without its places, or with one twice", () => {
+    expect(() => fillPage("<div><!--body--></div>", "", "")).toThrow("stories.html has no <!--head-->")
+    expect(() => fillPage(`${template}<!--body-->`, "", "")).toThrow("stories.html has <!--body--> twice")
   })
 })
