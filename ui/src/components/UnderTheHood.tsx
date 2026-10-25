@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react"
-import { Activity, Check, CircleCheck, Copy, TriangleAlert, X } from "lucide-react"
+import { Activity, Check, CircleCheck, Copy, Info, TriangleAlert, X } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,7 +27,7 @@ import { dismiss } from "@/lib/notices"
 import { SPINNER_AFTER_MS } from "@/lib/playLook"
 import { useSystem, words } from "@/lib/platform"
 import { cn } from "@/lib/utils"
-import { startDownload, switchUpdates, useUpdate } from "@/lib/update"
+import { restartNow, startDownload, startUpdate, switchUpdates, useUpdate } from "@/lib/update"
 
 // How often a running check is asked how far it has got.
 const CHECK_POLL_MS = 400
@@ -141,19 +141,94 @@ function Facts({ parts, afterName = false }: { parts: string[]; afterName?: bool
  * "This is the latest version" is said only once GitHub has answered: before
  * the first check, or in a room with no internet, nobody knows. The zip is
  * checked before it is called downloaded; see updates.py.
+ *
+ * Update gets the new version ready beside this copy, then Restart now puts
+ * it in place (docs/superpowers/specs/2026-10-25-self-update-design.md). A
+ * copy that cannot write beside itself says how to make Update appear, and
+ * keeps Download, which only puts the zip in Downloads.
  */
 function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
   const latest = update.latest
   const mine = latest && update.download?.version === latest.version ? update.download : null
+  const install = update.install ?? null
   const ours = hood.version.split("+")[0]
+  const fileManager = words(useSystem()).fileManager
+  // Pressed once, Restart now waits for the window to close.
+  const [restarting, setRestarting] = useState(false)
   const whatsNew = (
     <Button variant="outline" size="row" onClick={() => void api().open_releases(true)}>
       What's new
     </Button>
   )
+  const restart = async () => {
+    setRestarting(true)
+    const said = await restartNow()
+    if (!said.ok) setRestarting(false)
+  }
 
   let status
-  if (latest && mine?.state === "running") {
+  if (install?.state === "downloading") {
+    const pct = Math.round((install.fraction ?? 0) * 100)
+    status = (
+      <>
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="font-semibold">Downloading {install.version}…</div>
+          <Progress value={pct} aria-label="Download" className="max-w-80" />
+        </div>
+        <span className="tnum text-muted-foreground">{pct}%</span>
+      </>
+    )
+  } else if (install?.state === "preparing") {
+    status = (
+      <>
+        <Spinner />
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold">Getting {install.version} ready…</div>
+          <div className="text-xs text-muted-foreground">
+            Unpacking it beside this copy and checking that it starts
+          </div>
+        </div>
+      </>
+    )
+  } else if (install?.state === "ready") {
+    status = (
+      <>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold">{install.version} is ready</div>
+          <div className="text-xs text-muted-foreground">
+            The app closes and opens again as {install.version}, in a few seconds.
+          </div>
+        </div>
+        <Button size="row" disabled={restarting} onClick={() => void restart()}>
+          Restart now
+        </Button>
+        {whatsNew}
+      </>
+    )
+  } else if (install?.state === "failed" || install?.state === "place_failed") {
+    const ready = install.state === "failed"
+    status = (
+      <>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold">
+            {ready
+              ? `Could not get ${install.version} ready`
+              : `Could not put ${install.version} in place`}
+          </div>
+          <div className="text-xs text-destructive">{install.error}</div>
+        </div>
+        <Button
+          variant="outline"
+          size="row"
+          disabled={!ready && restarting}
+          onClick={() => void (ready ? startUpdate() : restart())}
+        >
+          Try again
+        </Button>
+        {whatsNew}
+      </>
+    )
+  } else if (latest && mine?.state === "running") {
     const pct = Math.round((mine.fraction ?? 0) * 100)
     status = (
       <>
@@ -191,6 +266,30 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
         {whatsNew}
       </>
     )
+  } else if (latest && update.replace === false) {
+    // Download stays, outlined: the way out is to move the app, said under it.
+    const fix =
+      fileManager === "Explorer"
+        ? "Move the app's folder to Documents in Explorer, open it from there, and the Update button appears."
+        : `Move the app to Applications in ${fileManager}, open it from there, and the Update button appears.`
+    status = (
+      <div className="flex w-full flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">Version {latest.version} is out</div>
+            <div className="text-xs text-muted-foreground">You have {ours}</div>
+          </div>
+          <Button variant="outline" size="row" onClick={() => void startDownload()}>
+            Download
+          </Button>
+          {whatsNew}
+        </div>
+        <Alert role="status">
+          <Info />
+          <AlertDescription>This copy can't replace itself where it is. {fix}</AlertDescription>
+        </Alert>
+      </div>
+    )
   } else if (latest) {
     // The one button in the accent on the page while a new version is out.
     status = (
@@ -199,8 +298,8 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
           <div className="font-semibold">Version {latest.version} is out</div>
           <div className="text-xs text-muted-foreground">You have {ours}</div>
         </div>
-        <Button size="row" onClick={() => void startDownload()}>
-          Download
+        <Button size="row" onClick={() => void startUpdate()}>
+          Update
         </Button>
         {whatsNew}
       </>
@@ -235,8 +334,7 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
         </div>
         <p className="pl-7 text-xs text-muted-foreground">
           When the app starts, and once a day while it stays open, it asks GitHub which version
-          is the latest. It sends nothing else, and downloads a new version only when you press
-          Download.
+          is the latest. It sends nothing else, and downloads a new version only when you ask.
         </p>
       </div>
     </SettingsGroup>

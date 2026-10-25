@@ -13,7 +13,8 @@ subscription.
 
 No. It records, plays and keeps its history with no internet in the room. It
 asks GitHub which version is the latest when it starts and once a day, and
-sends nothing else. Settings › Under the hood switches that off.
+sends nothing else. It downloads a new version only when you press Update.
+Settings › Under the hood switches the asking off.
 
 ## Which audio interfaces work?
 

@@ -1391,6 +1391,11 @@ type PyApi = {
   download_update(): Promise<Ok>
   /** The downloaded zip, picked out in its folder again. */
   show_update(): Promise<Ok>
+  /** Update: downloads the newer version beside this copy, unpacks it and
+   *  checks that it starts; how far along it is comes in update_status. */
+  update_now(): Promise<Ok>
+  /** Restart now: starts the swap and closes the window a moment later. */
+  restart_to_update(): Promise<Ok>
   start_interface_check(): Promise<Ok>
   interface_check(): Promise<InterfaceCheck>
   stop_interface_check(): Promise<Ok>
@@ -1722,6 +1727,21 @@ export type UpdateStatus = {
   /** Whether GitHub has answered since the app started: no newer version
    *  found before then says nothing. */
   checked?: boolean
+  /** Whether this copy can replace itself where it is: false where it may
+   *  not write beside itself, and Download is offered instead. */
+  replace?: boolean
+  /** Once somebody has pressed Update: how far getting it ready got. */
+  install?: UpdateInstall | null
+  /** The version this run was put in place as by Restart now, for the
+   *  notice that says so. */
+  updated?: string | null
+}
+
+export type UpdateInstall = {
+  state: "downloading" | "preparing" | "ready" | "failed" | "place_failed"
+  version: string
+  fraction?: number
+  error?: string
 }
 
 export type UpdateDownload = {

@@ -47,7 +47,8 @@ from rehearsal_recorder.midi import ports  # noqa: E402
 PROBE = "Reha probe"
 NOTES = 100
 GAP_SEC = 0.010
-# How far from the time Python read just before sending an event's time may be.
+# How far outside the two readings of Python's clock taken around its send
+# an event's time may be.
 TOLERANCE_NS = 5_000_000
 PATIENCE_SEC = 2.0
 
@@ -221,22 +222,32 @@ def macos():
     got = []
     rx = system.open(probe, lambda ns, data: got.append((ns, data)))
     ok("the open port says connected", rx.connected())
+    # Python's clock is read on both sides of each send. The library stamps
+    # the event inside send_message() with CoreMIDI's host time (libremidi
+    # 5.4.3, backends/coremidi/midi_out.hpp:111), so on the same clock that
+    # time falls between the two readings. A busy runner can pause this thread
+    # between a reading and the send: that widens the pair, and is not taken
+    # for a clock that is off (7.3 ms on the macOS runner, 25 Oct).
     sent = []
     for n in range(NOTES):
-        sent.append(time.perf_counter_ns())
+        before = time.perf_counter_ns()
         out.send_message([0x90, n, 100])
+        sent.append((before, time.perf_counter_ns()))
         time.sleep(GAP_SEC)
     wait_for(lambda: len(got) >= NOTES)
     ok(f"all {NOTES} arrive", len(got) == NOTES)
     ok("each is a note-on, in the order sent",
        [data for _, data in got] == [bytes([0x90, n, 100]) for n in range(NOTES)])
     if len(got) == NOTES:
-        late = [ns - before for (ns, _), before in zip(got, sent)]
-        worst = max(abs(x) for x in late)
+        late = [ns - before for (ns, _), (before, _) in zip(got, sent)]
+        outside = [max(before - ns, ns - after, 0)
+                   for (ns, _), (before, after) in zip(got, sent)]
         print(f"    time after the send, ms: smallest {min(late) / 1e6:.3f}, "
               f"largest {max(late) / 1e6:.3f}")
+        print(f"    longest send, ms: "
+              f"{max(after - before for before, after in sent) / 1e6:.3f}")
         ok(f"each time is within {TOLERANCE_NS // 1_000_000} ms of the send",
-           worst <= TOLERANCE_NS)
+           max(outside) <= TOLERANCE_NS)
     rx.resync()
     ok("still connected after resync()", rx.connected())
 

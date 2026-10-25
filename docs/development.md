@@ -127,6 +127,42 @@ They are in the repository root rather than in `packaging/` because they are
 meant to be double-clicked. The PyInstaller spec they drive lives in
 `packaging/`.
 
+### Trying Update and Restart now by hand
+
+Updating needs two releases, the one you run and a newer one. To try it
+before a real release, publish two pre-releases (say `0.15.0rc1` and
+`0.15.0rc2`). Download the first, put it in Applications (or Documents on
+Windows), open it once as usual, quit, and start it with `REHA_UPDATE_TAG`
+set to the second:
+
+```bash
+# macOS, in Terminal. `open` would not pass the variable on.
+REHA_UPDATE_TAG=0.15.0rc2 /Applications/Reha.app/Contents/MacOS/Reha
+```
+
+```bat
+rem Windows, in cmd, in the app's folder. Two lines: `set X=y && ...`
+rem would keep the space before && in the value.
+set REHA_UPDATE_TAG=0.15.0rc2
+Reha.exe
+```
+
+The app then treats that release as the newest, pre-release or not, and
+**Update** gets it ready. Without the variable nothing changes. Worth
+checking by hand, because no test here can:
+
+- the update arrives with no quarantine (`xattr -l` on the new `Reha.app`)
+  or Zone.Identifier;
+- macOS asks for the microphone right after the restart;
+- macOS's App Management lets the swap rename the bundle and the old copy
+  go to the Trash;
+- on Windows the new window opens in front, and a taskbar pin still opens
+  the app;
+- how long Windows Defender holds a freshly unpacked `Reha.exe` on a slow
+  machine, and whether a Documents folder synced by OneDrive gets in the way;
+- the meters stay steady with an ASIO interface while the new copy's
+  self-test runs.
+
 ## Changing the history's schema
 
 The rehearsal history (`library.sqlite`, in the recordings folder) is
@@ -209,6 +245,8 @@ src/rehearsal_recorder/     the Python application
   mediaserver.py            the local HTTP server (interface, audio, polling)
   platform_support.py       where macOS, Windows and Linux differ — all of it
   diagnostics.py            what Settings › Under the hood says, and its report
+  updates.py                whether a newer version is out; Update and
+                            Restart now, which put it in place
   metronome.py              the metronome: the row's tempo, which follows the
                             next take's name, the click between takes, its
                             settings, and what the screen is told

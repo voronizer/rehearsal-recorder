@@ -547,12 +547,39 @@ the news, its buttons and the switch read as one jumble with the version.
 "This is the latest version" is said only once GitHub has answered; before
 that, or with no internet, it says it has not checked.
 
-- **It fetches, and hands over; it does not replace.** Download puts the zip
-  in Downloads and opens the folder with it picked out; unpacking it and
-  opening the new copy are the person's. Swapping a running app for another
-  is per-platform, can leave somebody with no working app at all, and
-  without signing hands them the same unblocking and quarantine they met on
-  the first download. That waits for signing.
+- **It replaces itself, in two presses.** Update downloads the zip into a
+  hidden folder beside the app's place, named after it (`.Reha.app-update`
+  on a Mac, `Reha-update` with the hidden attribute on Windows), checks it
+  as below,
+  unpacks it and runs the new copy's `--selftest`, with two minutes for it.
+  A Mac unpacks with `ditto`, which keeps the bundle's symlinks and
+  executable bits that Python's `zipfile` loses. Only then does Restart now
+  appear, so a copy that does not start here never replaces one that does.
+  Restart now starts a small script that outlives the app, because Windows
+  will not let a running program's files be moved, and closes the window.
+  The script is started from the folder above the place, since Windows
+  will not rename a folder that is any process's working folder, and cmd
+  runs it through `call`, which keeps the quotes round a path with a bracket
+  in it. It waits for the app to exit, renames its place to "Reha 0.14.0",
+  moves the new copy in under the place's own name, retries for ten seconds
+  (an antivirus can hold a new file for a moment), puts the old copy back if
+  it still cannot, and opens the app. It is ASCII and gets every path
+  through the environment: cmd reads a script in the console's code page,
+  which cannot hold a Cyrillic user name. The new copy reads
+  `~/.rehearsal-recorder/update.json` and the script's result: "Updated to",
+  and the old copy to the Trash, or a warning with Try again. The app puts
+  a note in the folder it makes and removes only a folder with that note: a
+  folder of the same name somebody made is theirs. Signing turned
+  out not to be needed for this: the "from the internet" mark is put on by
+  the program that downloads, such as a browser, and the app's own download
+  carries none (#6). See `docs/superpowers/specs/2026-10-25-self-update-design.md`.
+- **Where it cannot write beside itself, it says how to fix that, and
+  Download stays.** A file made and deleted in the folder that holds the app
+  decides. Apple offers no supported way to tell that an app runs
+  translocated (from a hidden read-only copy, when it is opened where it was
+  unpacked), and a folder like Program Files refuses in the same way.
+  Download puts the zip in Downloads and opens the folder with it picked
+  out; unpacking it and opening the new copy are the person's.
 - **Only on a button.** Thirty megabytes is not the app's to spend on a
   phone's internet at the rehearsal space.
 - **What is in Downloads under the name is the release's, whole.** It
@@ -564,7 +591,8 @@ that, or with no internet, it says it has not checked.
   name, so it is not taken for a zip a browser saved earlier.
 - **It is not started while a take records.** Nor is it paused if one starts
   meanwhile: thirty megabytes take seconds, and Settings, where the button
-  is, is not reachable while recording.
+  is, is not reachable while recording. The new copy's self-test, a second
+  Python with all the app's libraries, waits until the take stops.
 - **Never in the way of a take.** The asking is on its own thread, a check
   falls due while a take records waits until it stops, and the answer is a
   line and a dot, never a dialog. A room with no internet is normal, so a

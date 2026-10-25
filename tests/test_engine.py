@@ -5485,7 +5485,8 @@ def main():
     chk = U.UpdateChecker("0.8.0", enabled=lambda: now["on"],
                           busy=lambda: now["busy"], fetch=fetch)
     ok("before any check there is nothing to say",
-       chk.status() == {"on": True, "latest": None, "download": None, "checked": False})
+       chk.status() == {"on": True, "latest": None, "download": None, "checked": False,
+                       "replace": False, "install": None, "updated": None})
     answers.append({"version": "0.8.1"})
     ok("a check that finds a newer release says which",
        chk.check_now() is True and chk.status()["latest"] == {"version": "0.8.1"})
@@ -5518,7 +5519,8 @@ def main():
     answers.append({"version": "9.9.9"})
     ok("switched off, nothing is asked", chk.check_now() is False and len(answers) == 1)
     ok("and nothing is said, even what was found before",
-       chk.status() == {"on": False, "latest": None, "download": None, "checked": False})
+       chk.status() == {"on": False, "latest": None, "download": None, "checked": False,
+                       "replace": False, "install": None, "updated": None})
     answers.clear()
 
     apimod49, a49 = fresh_api(Path(tempfile.mkdtemp()))
@@ -13804,6 +13806,496 @@ def main():
     ok("a crop cuts it with the band's tracks, to the same frames",
        len(cut86) == len(frames86(tmp86 / "Gtr cut.wav")) == SR
        and np.array_equal(cut86[600:-600], frames86(tmp86 / "Backing.wav")[SR // 2 + 600:SR * 3 // 2 - 600]))
+
+    print("\n[87] Getting a new copy ready")
+    # What fails is said on the line; the log's copy of it is not this suite's.
+    logging.getLogger("rehearsal_recorder.updates").addHandler(logging.NullHandler())
+    # Update downloads the new version beside the app, unpacks it there and
+    # runs its self-test, so that Restart now has only a swap left to do. The
+    # Windows build's layout, whatever this machine is, from [50]'s zip.
+    import errno
+    import subprocess
+    from rehearsal_recorder.platform_support import script_command
+
+    ran87 = []
+
+    def runner87(code=0, hang=False):
+        def run(argv, **kw):
+            ran87.append((list(argv), kw))
+            if hang:
+                raise subprocess.TimeoutExpired(argv, kw.get("timeout"))
+            return subprocess.CompletedProcess(argv, code, b"", b"")
+        return run
+
+    spawned87 = []
+    trashed87 = []
+
+    def place87(name="Reha"):
+        where = Path(tempfile.mkdtemp()) / "Apps" / name
+        where.mkdir(parents=True)
+        (where / "Reha.exe").write_bytes(b"MZ old")
+        return where
+
+    def staging87(where):
+        return where.parent / f"{where.name}-update"
+
+    def state87(where):
+        return where.parent.parent / "update.json"
+
+    def updater87(where, body=archive, run=None, busy=lambda: False, current="0.8.0",
+                  fetch=lambda: found, trash_ok=True, check=True, tag=None, opener=None):
+        downloads87 = where.parent.parent / "Downloads"
+        downloads87.mkdir(exist_ok=True)
+        c = U.UpdateChecker(
+            current, enabled=lambda: True, busy=busy, fetch=fetch,
+            opener=opener or serving(body), downloads=lambda: downloads87, reveal=shown.append,
+            place=lambda: where, state=state87(where),
+            run=run or runner87(),
+            spawn=lambda argv, env, cwd=None: spawned87.append((argv, env, cwd)),
+            trash=lambda p: trashed87.append(p) or trash_ok, system="win32", pid=4242,
+            tag=tag)
+        if check:
+            c.check_now()
+        return c
+
+    def settled87(c):
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            install = c.status()["install"]
+            if install and install["state"] not in ("downloading", "preparing"):
+                break
+            time.sleep(0.05)
+        return c.status()["install"]
+
+    def ready87(where, version="0.9.0"):
+        # A copy got ready by an earlier run, as prepare_now leaves it.
+        copy = staging87(where) / "Reha"
+        copy.mkdir(parents=True)
+        (copy / "Reha.exe").write_bytes(b"MZ new")
+        (staging87(where) / U.STAGING_MARK).write_text("made by the app", encoding="utf-8")
+        (staging87(where) / "ready.json").write_text(
+            json.dumps({"version": version, "copy": "Reha"}), encoding="utf-8")
+
+    asked87 = []
+    looping = U.UpdateChecker("0.8.0", enabled=lambda: True, busy=lambda: False,
+                              fetch=lambda: asked87.append(True))
+    looping.start()
+    deadline87 = time.monotonic() + 5
+    while time.monotonic() < deadline87 and not asked87:
+        time.sleep(0.05)
+    looping.stop()
+    ok("the daily check runs on its own thread and asks", asked87 == [True])
+
+    probes87 = []
+    probe_before = U.can_write_beside
+    U.can_write_beside = lambda where: probes87.append(where) or True
+    try:
+        updater87(place87(), fetch=lambda: None)
+        updater87(place87(), fetch=lambda: {"version": "0.8.0", "tag": "0.8.0", "asset": None})
+        quiet87 = len(probes87)
+        updater87(place87())
+    finally:
+        U.can_write_beside = probe_before
+    # A file made beside an app on the Desktop or in Documents can make macOS
+    # ask for that folder, and no dialog may come at launch.
+    ok("with nothing newer out, it does not try writing beside itself",
+       quiet87 == 0 and len(probes87) == 1)
+
+    place = place87()
+    staging = staging87(place)
+    c87 = updater87(place)
+    ok("a copy that may write beside itself says it can replace itself",
+       c87.status()["replace"] is True)
+    ok("before anybody asks, nothing is being got ready",
+       c87.status()["install"] is None and c87.status()["updated"] is None)
+    ok("Update starts getting it ready", c87.start_update()["ok"] is True)
+    ok("said to be ready once checked",
+       settled87(c87) == {"state": "ready", "version": "0.9.0"})
+    ok("downloaded, unpacked and checked beside the app, not in Downloads",
+       (staging / "ready.json").is_file() and (staging / "Reha" / "Reha.exe").is_file()
+       and not any((place.parent.parent / "Downloads").iterdir()))
+    ok("the zip is gone once unpacked",
+       not list(staging.glob("*.zip")) and not list(staging.glob("*.part")))
+    argv87, kw87 = ran87[-1]
+    ok("the new copy's own self-test was run",
+       argv87 == [str(staging / "Reha" / "Reha.exe"), "--selftest"])
+    ok("given two minutes at most", kw87.get("timeout") == 120 == U.SELFTEST_TIMEOUT_SEC)
+    # Started from the built app, the new copy would take PyInstaller's
+    # settings for its own and count as part of this one.
+    ok("as an app of its own, not as part of this one",
+       kw87.get("env", {}).get("PYINSTALLER_RESET_ENVIRONMENT") == "1")
+    ok("Update again while it is ready starts nothing",
+       c87.start_update()["ok"] is True and len(ran87) == 1)
+
+    slow_before = U.can_write_beside
+    U.can_write_beside = lambda where: time.sleep(0.3) or True
+    try:
+        twice87 = updater87(place87())
+        prepared87 = []
+        prepare87 = twice87.prepare_now
+        twice87.prepare_now = lambda: prepared87.append(True) or prepare87()
+        before87 = len(ran87)
+        presses87 = [threading.Thread(target=twice87.start_update) for _ in range(2)]
+        for press87 in presses87:
+            press87.start()
+        for press87 in presses87:
+            press87.join()
+    finally:
+        U.can_write_beside = slow_before
+    settled87(twice87)
+    ok("two presses at once get one copy ready, once",
+       prepared87 == [True] and len(ran87) == before87 + 1)
+
+    def failed87(c):
+        c.prepare_now()
+        install = c.status()["install"]
+        return install["error"] if install and install["state"] == "failed" else install
+
+    p87 = place87()
+    ok("a self-test that fails says why",
+       failed87(updater87(p87, run=runner87(1))) == "The new copy did not start here")
+    ok("and leaves nothing beside the app", not staging87(p87).exists())
+    ok("one that hangs is given up",
+       failed87(updater87(place87(), run=runner87(hang=True)))
+       == "The new copy took too long to start")
+
+    no_app = _io.BytesIO()
+    with zipfile.ZipFile(no_app, "w") as z:
+        z.writestr("readme.txt", b"not the app")
+    no_app = no_app.getvalue()
+    found_no_app = {"version": "0.9.0", "tag": "0.9.0",
+                    "asset": {"name": "RehearsalRecorder-windows.zip", "size": len(no_app),
+                              "sha256": hashlib.sha256(no_app).hexdigest()}}
+    p87 = place87()
+    ok("a zip that will not unpack says so",
+       failed87(updater87(p87, body=no_app, fetch=lambda: found_no_app))
+       == "The download could not be unpacked")
+    ok("and leaves nothing either", not staging87(p87).exists())
+
+    def no_room(*args, **kwargs):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    unpack_before = U.unpack_app
+    U.unpack_app = no_room
+    try:
+        said87 = failed87(updater87(place87()))
+    finally:
+        U.unpack_app = unpack_before
+    ok("a full disk says so", said87 == "There is no room for it on the disk")
+    ok("a download that does not match says so, as Download does",
+       "does not match" in failed87(updater87(place87(), body=archive[:-4] + b"oops")))
+
+    def offline87(request, timeout, context):
+        raise OSError("no route to host")
+
+    ok("with no internet it says so in words",
+       failed87(updater87(place87(), opener=offline87))
+       == "The download stopped. Check the internet and try again")
+
+    p87 = place87()
+    staging87(p87).mkdir()
+    (staging87(p87) / U.STAGING_MARK).write_text("made by the app", encoding="utf-8")
+    rmtree_before = U.shutil.rmtree
+    U.shutil.rmtree = lambda *args, **kwargs: None
+    try:
+        held87 = failed87(updater87(p87))
+    finally:
+        U.shutil.rmtree = rmtree_before
+    ok("files of a last try still held say so in words",
+       held87 == "Files from the last try are still in use. Try again in a minute")
+
+    theirs = place87()
+    staging87(theirs).mkdir()
+    (staging87(theirs) / "my zips.txt").write_text("mine", encoding="utf-8")
+    updater87(theirs, check=False).after_start()
+    ok("a folder of that name the app did not make is left alone at the start",
+       (staging87(theirs) / "my zips.txt").is_file())
+    ok("and Update says it is in the way rather than removing it",
+       failed87(updater87(theirs)) == "A folder named Reha-update is in the way beside the app"
+       and (staging87(theirs) / "my zips.txt").is_file())
+
+    ok("refused while a take records",
+       updater87(place87(), busy=lambda: True).start_update()
+       == {"ok": False, "error": "Not while a take is recording"})
+    stuck = updater87(Path(tempfile.mkdtemp()) / "missing" / "Reha")
+    ok("a copy that cannot write beside itself says so",
+       stuck.status()["replace"] is False)
+    ok("and Update is refused there",
+       stuck.start_update() == {"ok": False, "error": "This copy can't replace itself where it is"})
+    ok("with nothing newer, nothing to update to",
+       updater87(place87(), fetch=lambda: None).start_update()["error"]
+       == "There is no newer version to download")
+
+    # A take started while it downloads: the download is held until the take
+    # has started, then let through.
+    take87 = {"on": False}
+    gate87 = threading.Event()
+
+    def gated87(request, timeout, context):
+        gate87.wait(10)
+        return _Answer(archive)
+
+    waiting = updater87(place87(), busy=lambda: take87["on"], opener=gated87)
+    waiting.start_update()
+    take87["on"] = True
+    before87 = len(ran87)
+    gate87.set()
+    deadline87 = time.monotonic() + 5
+    while time.monotonic() < deadline87 and waiting.status()["install"]["state"] == "downloading":
+        time.sleep(0.05)
+    time.sleep(0.5)
+    ok("a take started while it downloads holds the self-test back",
+       len(ran87) == before87 and waiting.status()["install"]["state"] == "preparing")
+    take87["on"] = False
+    ok("until the take stops", settled87(waiting)["state"] == "ready")
+
+    p87 = place87()
+    staging87(p87).mkdir()
+    (staging87(p87) / U.STAGING_MARK).write_text("made by the app", encoding="utf-8")
+    (staging87(p87) / "RehearsalRecorder-0.9.0-windows.zip.part").write_bytes(b"half")
+    updater87(p87, check=False).after_start()
+    ok("a half-made copy left by a closed app is removed at the next start",
+       not staging87(p87).exists())
+
+    p87 = place87()
+    ready87(p87, "0.8.5")
+    waited87 = updater87(p87, check=False)
+    waited87.after_start()
+    ok("a ready copy left waiting is offered again at the next start",
+       waited87.status()["install"] == {"state": "ready", "version": "0.8.5"})
+    waited87.check_now()
+    ok("until a newer release is out: then it is removed",
+       not staging87(p87).exists() and waited87.status()["install"] is None
+       and waited87.status()["latest"] == {"version": "0.9.0"})
+    p87 = place87()
+    ready87(p87, "0.8.0")
+    same87 = updater87(p87, check=False)
+    same87.after_start()
+    ok("a ready copy no newer than this one is removed",
+       not staging87(p87).exists() and same87.status()["install"] is None)
+
+    tagged_release = {"tag_name": "0.9.0rc2", "prerelease": True,
+                      "assets": release["assets"]}
+    tag_asked = []
+
+    def tag_github(request, timeout, context):
+        tag_asked.append(request.full_url)
+        return _Answer(json.dumps(tagged_release).encode())
+
+    tagged_fetch = lambda: U.fetch_latest(tag_github, system="win32", tag="0.9.0rc2")  # noqa: E731
+    tagged = updater87(place87(), current="0.9.0rc1", fetch=tagged_fetch, tag="0.9.0rc2")
+    ok("REHA_UPDATE_TAG asks for that release by its tag",
+       tag_asked[-1].endswith("/repos/voronizer/rehearsal-recorder/releases/tags/0.9.0rc2"))
+    ok("and offers it, pre-release or not, whatever its number",
+       tagged.status()["latest"] == {"version": "0.9.0rc2"})
+    ok("but not to the copy that is that release already",
+       updater87(place87(), current="0.9.0rc2", fetch=tagged_fetch,
+                 tag="0.9.0rc2").status()["latest"] is None)
+    p87 = place87()
+    ready87(p87, "0.9.0rc2")
+    tag_ready = updater87(p87, current="0.9.0rc1", fetch=tagged_fetch, tag="0.9.0rc2",
+                          check=False)
+    tag_ready.after_start()
+    ok("a pre-release got ready under REHA_UPDATE_TAG waits for the next start too",
+       tag_ready.status()["install"] == {"state": "ready", "version": "0.9.0rc2"})
+    ok("a tag that is not one is never asked for",
+       U.fetch_latest(tag_github, system="win32", tag="../latest") is None
+       and len(tag_asked) == 2)
+
+    print("\n[88] Restart now and the first start")
+    # c87's copy is ready beside `place`.
+    ok("Restart now starts the swap script", c87.restart() == {"ok": True})
+    argv88, env88, cwd88 = spawned87[0]
+    ok("with the system's own shell, from beside the app",
+       argv88 == script_command(staging / "reha-swap.cmd", "win32")
+       and (staging / "reha-swap.cmd").is_file())
+    ok("and the paths in its environment",
+       env88["REHA_PLACE"] == str(place) and env88["REHA_PID"] == "4242"
+       and env88["REHA_NEW"] == str(staging / "Reha")
+       and env88["REHA_RESULT"] == str(staging / "result"))
+    ok("the script works from the folder that holds the app, not from inside it",
+       cwd88 == place.parent)
+    ok("the old copy will be named after its version, beside the new one",
+       Path(env88["REHA_OLD"]) == place.parent / "Reha 0.8.0")
+    ok("the app the script opens is an app of its own",
+       env88.get("PYINSTALLER_RESET_ENVIRONMENT") == "1" and "REHA_OPEN" not in env88)
+    ok("what is happening is written down for the next start",
+       json.loads(state87(place).read_text(encoding="utf-8"))
+       == {"from": "0.8.0", "to": "0.9.0", "old": str(place.parent / "Reha 0.8.0")})
+    ok("a second press starts no second script",
+       c87.restart() == {"ok": False, "error": "Already restarting"} and len(spawned87) == 1)
+    ok("nothing ready, nothing to restart into",
+       updater87(place87()).restart()["ok"] is False and len(spawned87) == 1)
+    gone88 = place87()
+    ready87(gone88)
+    gone_c = updater87(gone88, check=False)
+    gone_c.after_start()
+    import shutil as shutil88
+    shutil88.rmtree(staging87(gone88) / "Reha")
+    spawned_before = len(spawned87)
+    ok("a ready copy that has gone is not restarted into",
+       gone_c.restart() == {"ok": False, "error": "The new copy is not there any more"}
+       and len(spawned87) == spawned_before)
+    ok("and Update is offered again", gone_c.status()["install"] is None)
+    ok("and not while a take records",
+       updater87(place87(), busy=lambda: True).restart()
+       == {"ok": False, "error": "Not while a take is recording"})
+
+    cyr = place87("Музыка Reha")
+    ready87(cyr)
+    cyr_c = updater87(cyr, check=False)
+    cyr_c.after_start()
+    cyr_c.restart()
+    ok("a name with spaces and Cyrillic keeps its own name",
+       Path(spawned87[-1][1]["REHA_OLD"]).name == "Музыка Reha 0.8.0"
+       and spawned87[-1][1]["REHA_PLACE"] == str(cyr))
+    p88 = place87()
+    (p88.parent / "Reha 0.8.0").mkdir()
+    ready87(p88)
+    taken88 = updater87(p88, check=False)
+    taken88.after_start()
+    taken88.restart()
+    ok("an old copy's name already taken gets a number",
+       Path(spawned87[-1][1]["REHA_OLD"]).name == "Reha 0.8.0 (2)")
+
+    def swapped88(outcome="placed"):
+        # What the script leaves: the old copy beside, the new one in place.
+        where = place87()
+        ready87(where)
+        before = updater87(where, check=False)
+        before.after_start()
+        before.restart()
+        old = Path(spawned87[-1][1]["REHA_OLD"])
+        if outcome == "placed":
+            where.rename(old)
+            (staging87(where) / "Reha").rename(where)
+        if outcome:
+            (staging87(where) / "result").write_text(outcome + "\n", encoding="ascii")
+        return where, old
+
+    where88, old88 = swapped88()
+    new88 = updater87(where88, current="0.9.0", check=False)
+    after88 = new88.after_start()
+    ok("the new copy reads that it was put in place",
+       after88["updated"] is True and new88.status()["updated"] == "0.9.0")
+    ok("and puts the old copy in the Trash", trashed87[-1] == old88)
+    ok("and clears up after itself",
+       not state87(where88).exists() and not staging87(where88).exists())
+    ok("the Windows copy does not ask for the microphone", after88["microphone"] is False)
+
+    trashed87.clear()
+    again88 = new88.after_start()
+    ok("asked again in the same run, it says the same and does nothing twice",
+       again88 == after88 and trashed87 == [])
+
+    where88, old88 = swapped88()
+    refused88 = updater87(where88, current="0.9.0", check=False, trash_ok=False)
+    refused88.after_start()
+    ok("a Trash that refuses keeps the old copy for the next start",
+       json.loads(state87(where88).read_text(encoding="utf-8")) == {"old": str(old88)}
+       and refused88.status()["updated"] == "0.9.0")
+    trashed87.clear()
+    updater87(where88, current="0.9.0", check=False).after_start()
+    ok("which tries again", trashed87 == [old88] and not state87(where88).exists())
+
+    where88, _ = swapped88("not-moved")
+    failed88 = updater87(where88, check=False)
+    came88 = failed88.after_start()
+    ok("a swap that failed says why, and keeps the ready copy",
+       came88["failed"] is True
+       and failed88.status()["install"] == {"state": "place_failed", "version": "0.9.0",
+                                            "error": "A file in the app's folder was in use"}
+       and (staging87(where88) / "Reha" / "Reha.exe").is_file()
+       and not state87(where88).exists())
+    ok("and Try again restarts again", failed88.restart() == {"ok": True})
+    where88, _ = swapped88("not-closed")
+    late88 = updater87(where88, check=False)
+    late88.after_start()
+    ok("one where the app did not close says that",
+       late88.status()["install"]["error"] == "The app did not close in time")
+    where88, _ = swapped88(None)
+    silent88 = updater87(where88, check=False)
+    came88 = silent88.after_start()
+    ok("a swap that never said what happened is taken as failed, with words",
+       came88["failed"] is True
+       and silent88.status()["install"] == {"state": "place_failed", "version": "0.9.0",
+                                            "error": "Putting it in place did not start"})
+
+    import rehearsal_recorder.api as apimod88
+    from rehearsal_recorder.audio.devices import saved_device as saved88
+    _, a88 = fresh_api(Path(tempfile.mkdtemp()))
+    p88 = place87()
+    ready87(p88)
+    a88._updates = updater87(p88, check=False)
+    a88._updates.after_start()
+    destroyed88 = []
+    a88._window = types.SimpleNamespace(destroy=lambda: destroyed88.append(True))
+    ok("the Api's Restart now says it started", a88.restart_to_update() == {"ok": True})
+    deadline88 = time.monotonic() + 3
+    while time.monotonic() < deadline88 and not destroyed88:
+        time.sleep(0.05)
+    ok("and closes the window once the script is started", destroyed88 == [True])
+    ok("its Update is the checker's",
+       a88.update_now() == {"ok": False, "error": "There is no newer version to download"})
+
+    opened88 = []
+
+    class Mic88:
+        def __init__(self, device=None, channels=None, **kw):
+            opened88.append(device)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    # An interface picked in Settings › Audio; off Windows a bare index counts.
+    a88._config["device_index"] = 2
+    # The copies here are Windows-shaped whatever this machine is, so the
+    # system's answer to whether it asks again (platform_support, tested
+    # there) stands in for a Mac's and for Windows'.
+    stream_before = apimod88.sd.InputStream
+    asks_before = U.asks_for_microphone_again
+    apimod88.sd.InputStream = Mic88
+    sys.frozen = True
+    try:
+        for system88 in ("darwin", "win32"):
+            where88, _ = swapped88()
+            a88._updates = updater87(where88, current="0.9.0", check=False)
+            U.asks_for_microphone_again = lambda system, mac=system88 == "darwin": mac
+            a88._updates.start = lambda: None
+            started88 = a88.start_update_checks()
+            deadline88 = time.monotonic() + 3
+            while system88 == "darwin" and time.monotonic() < deadline88 and not opened88:
+                time.sleep(0.05)
+            if system88 == "darwin":
+                ok("on a Mac the new copy opens the input for a moment",
+                   started88 is True and opened88 == [saved88(a88._config, "device", True)])
+            else:
+                time.sleep(0.7)
+                ok("and on Windows it does not", started88 is True and len(opened88) == 1)
+    finally:
+        del sys.frozen
+        apimod88.sd.InputStream = stream_before
+        U.asks_for_microphone_again = asks_before
+    # The interface asks for the status as soon as it is drawn, which can be
+    # before the window's loaded event has reached Python.
+    where88, _ = swapped88()
+    a88._updates = updater87(where88, current="0.9.0", check=False)
+    sys.frozen = True
+    try:
+        first88 = a88.update_status()
+    finally:
+        del sys.frozen
+    ok("the first status the interface asks for already says Updated to",
+       first88["updated"] == "0.9.0")
+    where88, _ = swapped88()
+    a88._updates = updater87(where88, current="0.9.0", check=False)
+    ok("run from source, the status reads nothing",
+       a88.update_status()["updated"] is None and state87(where88).exists())
+    ok("run from source, nothing of this happens",
+       a88.start_update_checks() is False and state87(where88).exists())
 
     print("\n" + "=" * 60)
     if problems:
