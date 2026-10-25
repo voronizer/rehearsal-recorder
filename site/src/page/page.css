@@ -205,6 +205,52 @@ body {
 .qa details[open] summary::after { content: "–"; }
 .qa p { color: var(--page-muted); margin: 10px 0 0; max-width: 40rem; }
 
+/* ---- The band arguing, as its chat: in a story and in the block that
+   leads to them. Alex tells the stories, so his lines are on the right, in
+   the site's blue, with no name over them. ---- */
+.chat { display: grid; gap: 4px; }
+.say { display: grid; justify-items: start; gap: 3px; min-width: 0; }
+.say.me { justify-items: end; }
+.say .who { font-size: 0.75rem; color: var(--page-muted); padding-inline: 15px; margin-top: 8px; }
+.say.same .who, .say.me .who { display: none; }
+.say p { margin: 0; max-width: 26rem; padding: 9px 15px; border-radius: 20px 20px 20px 6px; background: var(--page-tile); font-size: 1rem; line-height: 1.35; overflow-wrap: anywhere; text-wrap: pretty; }
+.say.me p { background: var(--page-accent); color: var(--page-accent-fg); border-radius: 20px 20px 6px 20px; }
+
+/* ---- A story's page: its head in the middle, then the opening and the
+   chapters, far apart as the evening's steps; from 1000 px each chapter's
+   name on the left, held while its text goes by ---- */
+.tale-section { padding-top: clamp(40px, 7vw, 96px); }
+.tale-head { display: grid; gap: 14px; justify-items: center; text-align: center; margin-bottom: clamp(36px, 5vw, 64px); }
+.tale-head .h2, .tale-head p { margin: 0; }
+.tale { display: grid; gap: clamp(64px, 9vw, 120px); align-content: start; max-width: 40rem; margin-inline: auto; }
+.chap { display: grid; gap: 18px; align-items: start; scroll-margin-top: 24px; }
+.chap-head { display: grid; gap: 10px; align-content: start; }
+.chap-head .n { font-family: var(--page-mono); font-size: 0.875rem; color: var(--page-muted); }
+.chap-head h2 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; }
+.chap-body { display: grid; gap: 20px; min-width: 0; }
+.chap-body > p { margin: 0; font-size: 1.25rem; line-height: 1.6; text-wrap: pretty; }
+.chap-body a { color: var(--page-accent); }
+/* A joke, said big: a size under a chapter's name. */
+.chap-body > p.joke { font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; margin-block: 8px; max-width: 26ch; }
+.tale-get .cta { justify-content: flex-start; }
+@media (max-width: 719px) { .chap-body > p { font-size: 1rem; } }
+@media (min-width: 1000px) {
+  .tale { max-width: calc(15rem + 56px + 40rem); }
+  .chap { grid-template-columns: 15rem minmax(0, 40rem); gap: 56px; }
+  .chap-head { position: sticky; top: 24px; }
+  .chap.lead .chap-body { grid-column: 2; }
+  .tale-get { margin-left: calc(15rem + 56px); }
+}
+
+/* ---- The page of stories: a grey card each, two to a row ---- */
+.tales { display: grid; gap: 20px; }
+@media (min-width: 720px) { .tales { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tale-card { display: grid; gap: 12px; align-content: start; background: var(--page-tile); border-radius: 28px; padding: clamp(24px, 3vw, 36px); text-decoration: none; color: inherit; }
+.tale-card h2 { margin: 0; font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; }
+.tale-card p { margin: 0; color: var(--page-muted); line-height: 1.45; }
+.tale-card .more { margin-top: 6px; }
+.tale-card:hover h2 { color: var(--page-accent); }
+
 /* ---- Open source, as one line ---- */
 .oss { text-align: center; display: grid; gap: 12px; justify-items: center; padding-block: 8px clamp(56px, 8vw, 96px); }
 .oss p { font-size: clamp(1.2rem, 2vw, 1.5rem); font-weight: 600; letter-spacing: -0.02em; margin: 0; }

@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest"
 import html from "../../index.html?raw"
 import { MAC_ZIP, REPO, WINDOWS_ZIP } from "../page/links"
-import { DESCRIPTION, OG_IMAGE, SITE_URL, jsonLdText, notFoundNoscriptHtml, noscriptHtml, robotsTxt, sitemapXml, softwareJsonLd } from "./seo"
+import {
+  DESCRIPTION,
+  OG_IMAGE,
+  SITE_URL,
+  articleJsonLd,
+  jsonLdText,
+  notFoundNoscriptHtml,
+  noscriptHtml,
+  pageHeadHtml,
+  pageUrl,
+  robotsTxt,
+  sitemapXml,
+  softwareJsonLd,
+} from "./seo"
 
 describe("softwareJsonLd", () => {
   it("describes the app at the build's version", () => {
@@ -49,10 +62,90 @@ describe("notFoundNoscriptHtml", () => {
 })
 
 describe("robots and sitemap", () => {
-  it("let every crawler in and name the one page", () => {
+  it("let every crawler in", () => {
     expect(robotsTxt()).toBe("User-agent: *\nAllow: /\n\nSitemap: https://reha.stream/sitemap.xml\n")
-    expect(sitemapXml()).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>/)
-    expect(sitemapXml()).toContain("<url><loc>https://reha.stream/</loc></url>")
+  })
+
+  it("lists the main page, the page of stories and the four stories", () => {
+    const xml = sitemapXml(["/", "/stories", "/stories/digital-mixer"])
+    expect(xml).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>/)
+    expect([...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1])).toEqual([
+      "https://reha.stream/",
+      "https://reha.stream/stories",
+      "https://reha.stream/stories/digital-mixer",
+    ])
+  })
+})
+
+describe("pageUrl", () => {
+  it("gives a page's whole address, with no slash at the end but the main page's", () => {
+    expect(pageUrl("/")).toBe(SITE_URL)
+    expect(pageUrl("/stories")).toBe("https://reha.stream/stories")
+    expect(pageUrl("/stories/metronome")).toBe("https://reha.stream/stories/metronome")
+  })
+})
+
+describe("pageHeadHtml", () => {
+  const story = {
+    path: "/stories/metronome",
+    title: "When your drummer hates the metronome · РЭХА",
+    description: "Our drummer hates the click.",
+    kind: "article" as const,
+    jsonLd: { "@type": "Article" },
+  }
+  const tag = (html: string, attr: string, name: string) =>
+    html.match(new RegExp(`<meta ${attr}="${name}" content="([^"]*)"`))?.[1]
+
+  it("writes a page's head for search engines and chats", () => {
+    const html = pageHeadHtml(story)
+    expect(html).toContain("<title>When your drummer hates the metronome · РЭХА</title>")
+    expect(tag(html, "name", "description")).toBe("Our drummer hates the click.")
+    expect(html).toContain('<link rel="canonical" href="https://reha.stream/stories/metronome" />')
+    expect(tag(html, "property", "og:type")).toBe("article")
+    expect(tag(html, "property", "og:site_name")).toBe("РЭХА")
+    expect(tag(html, "property", "og:url")).toBe("https://reha.stream/stories/metronome")
+    expect(tag(html, "property", "og:title")).toBe(story.title)
+    expect(tag(html, "property", "og:description")).toBe(story.description)
+    expect(tag(html, "property", "og:image")).toBe(OG_IMAGE)
+    expect(tag(html, "property", "og:image:width")).toBe("1200")
+    expect(tag(html, "property", "og:image:height")).toBe("630")
+    expect(tag(html, "property", "og:image:alt")).toBe("РЭХА: the rehearsal screen, playing a take")
+    expect(tag(html, "name", "twitter:card")).toBe("summary_large_image")
+    expect(html.match(/<script type="application\/ld\+json">/g)).toHaveLength(1)
+    expect(pageHeadHtml({ ...story, kind: "website", jsonLd: null })).not.toContain("ld+json")
+  })
+
+  it("escapes what a page's words could break", () => {
+    const html = pageHeadHtml({
+      ...story,
+      title: "R&B <live>",
+      description: 'the “bridge” and "outro"',
+      jsonLd: { headline: "</script><b>" },
+    })
+    expect(html).toContain("<title>R&amp;B &lt;live&gt;</title>")
+    expect(tag(html, "name", "description")).toBe("the “bridge” and &quot;outro&quot;")
+    expect(html).not.toContain("</script><b>")
+  })
+})
+
+describe("articleJsonLd", () => {
+  it("says a story is an Article by Alex, published by the app", () => {
+    const url = "https://reha.stream/stories/metronome"
+    expect(
+      articleJsonLd({ title: "When your drummer hates the metronome", description: "Our drummer.", date: "2026-10-25", url })
+    ).toEqual({
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: "When your drummer hates the metronome",
+      description: "Our drummer.",
+      datePublished: "2026-10-25",
+      url,
+      mainEntityOfPage: url,
+      image: OG_IMAGE,
+      inLanguage: "en",
+      author: { "@type": "Person", name: "Alex" },
+      publisher: { "@type": "Organization", name: "РЭХА", url: SITE_URL },
+    })
   })
 })
 

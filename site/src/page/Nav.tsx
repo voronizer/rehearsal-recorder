@@ -18,7 +18,7 @@ export function Logo() {
 }
 
 /** The menu: on the page itself `home` is "", and on another page (the 404
- *  one) it is "/", so the links go to the page's parts from there. */
+ *  one, a story) it is "/", so the links go to the page's parts from there. */
 export function Nav({ repo, home = "" }: { repo: string; home?: string }) {
   return (
     <header className="nav">
@@ -29,6 +29,7 @@ export function Nav({ repo, home = "" }: { repo: string; home?: string }) {
       <nav className="menu">
         <a href={`${home}#how`}>How it works</a>
         <a href={`${home}#faq`}>FAQ</a>
+        <a href="/stories">Stories</a>
         <a href={repo}>GitHub</a>
         <a className="get" href={`${home}#top`}>
           Download

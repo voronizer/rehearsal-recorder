@@ -8,6 +8,7 @@ test("the 404 page says nothing was recorded here, and goes back", async ({ page
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Nothing was recorded here")
   await expect(page.getByRole("link", { name: "Go to the main page" })).toHaveAttribute("href", "/")
   await expect(page.getByRole("link", { name: "How it works" })).toHaveAttribute("href", "/#how")
+  await expect(page.getByRole("link", { name: "Stories" })).toHaveAttribute("href", "/stories")
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex")
 })
 

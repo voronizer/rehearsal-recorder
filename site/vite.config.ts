@@ -1,12 +1,23 @@
 /// <reference types="vitest/config" />
-import { readFileSync } from "node:fs"
-import { fileURLToPath } from "node:url"
-import { defineConfig, type Plugin } from "vite"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import { build, defineConfig, type Plugin } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { changelogHead, displayVersion, latestVersion } from "./src/content/changelog.ts"
 import { parseDoc } from "./src/content/markdown.ts"
-import { jsonLdText, notFoundNoscriptHtml, noscriptHtml, robotsTxt, sitemapXml, softwareJsonLd } from "./src/content/seo.ts"
+import {
+  jsonLdText,
+  notFoundNoscriptHtml,
+  noscriptHtml,
+  pageHeadHtml,
+  robotsTxt,
+  sitemapXml,
+  softwareJsonLd,
+  type PageMeta,
+} from "./src/content/seo.ts"
 
 const ui = (path: string) => fileURLToPath(new URL(`../ui/${path}`, import.meta.url))
 
@@ -33,16 +44,20 @@ function changelog(): Plugin {
 /**
  * What the page says to readers that run no script, written into the HTML:
  * the app as JSON-LD and a <noscript> text with the downloads, in index.html;
- * the 404 page's words and a link back in 404.html; robots.txt and
- * sitemap.xml beside them. The version is the one the page shows (see
- * changelog() above and src/content/index.ts).
+ * the 404 page's words and a link back in 404.html; robots.txt beside them.
+ * The version is the one the page shows (see changelog() above and
+ * src/content/index.ts).
  */
 function seo(): Plugin {
   const changes = fileURLToPath(new URL("../CHANGELOG.md", import.meta.url))
   const heroFile = fileURLToPath(new URL("./content/hero.md", import.meta.url))
   const notFoundFile = fileURLToPath(new URL("./content/notfound.md", import.meta.url))
+  let ssr = false
   return {
     name: "site-seo",
+    configResolved(config) {
+      ssr = !!config.build.ssr
+    },
     transformIndexHtml(_html, ctx) {
       if (ctx.path === "/404.html") {
         const notFound = parseDoc(readFileSync(notFoundFile, "utf-8"))
@@ -63,8 +78,67 @@ function seo(): Plugin {
       ]
     },
     generateBundle() {
+      if (ssr) return
       this.emitFile({ type: "asset", fileName: "robots.txt", source: robotsTxt() })
-      this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemapXml() })
+    },
+  }
+}
+
+/**
+ * Alex's stories, each a page written whole at build time, words and all,
+ * so a crawler that runs no script reads every one: stories.html, the page
+ * of stories, and stories/<name>.html for each story, both from the
+ * stories.html built here, with its head and words put in. sitemap.xml
+ * lists them after the main page.
+ *
+ * The pages are drawn by the site's own components (src/stories/render.tsx).
+ * Vite cannot run those in Node as they are, since the interface's React is
+ * CommonJS and reached through an alias, so they are bundled for Node first,
+ * React and all, and the bundle is run here.
+ */
+function stories(): Plugin {
+  const render = fileURLToPath(new URL("./src/stories/render.tsx", import.meta.url))
+  let pages: { meta: PageMeta; body: string }[] = []
+  let ssr = false
+  return {
+    name: "site-stories",
+    apply: "build",
+    configResolved(config) {
+      ssr = !!config.build.ssr
+    },
+    async buildStart() {
+      // The bundle below is a build with this config too.
+      if (ssr) return
+      const out = mkdtempSync(join(tmpdir(), "reha-stories-"))
+      try {
+        await build({
+          configFile: fileURLToPath(import.meta.url),
+          logLevel: "warn",
+          ssr: { noExternal: true },
+          build: { ssr: render, outDir: out, emptyOutDir: true, copyPublicDir: false },
+        })
+        pages = (await import(pathToFileURL(join(out, "render.js")).href)).storyPages()
+      } finally {
+        rmSync(out, { recursive: true, force: true })
+      }
+    },
+    generateBundle: {
+      order: "post",
+      handler(_options, bundle) {
+        if (ssr) return
+        const template = bundle["stories.html"]
+        if (template?.type !== "asset") throw new Error("stories.html is not in the build")
+        const html = String(template.source)
+        for (const { meta, body } of pages) {
+          const page = html.replace("<!--head-->", pageHeadHtml(meta)).replace("<!--body-->", body)
+          if (page.includes("<!--head-->") || page.includes("<!--body-->"))
+            throw new Error(`${meta.path}: stories.html has its <!--head--> or <!--body--> twice`)
+          if (meta.path === "/stories") template.source = page
+          else this.emitFile({ type: "asset", fileName: `${meta.path.slice(1)}.html`, source: page })
+        }
+        const paths = ["/", ...pages.map((p) => p.meta.path)]
+        this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemapXml(paths) })
+      },
     },
   }
 }
@@ -75,12 +149,13 @@ function seo(): Plugin {
 // is one copy of it, and draw its own icons; the site's package.json lists
 // neither. og.html is the link picture's page, which scripts/og.mjs
 // photographs into og.png, and 404.html what Vercel answers for an address
-// that is no file (see vercel-config.json).
+// that is no file (see vercel-config.json). stories.html is the page of
+// Alex's stories and the frame of each story's page (see stories() above).
 export default defineConfig({
   base: "/",
   // The app's icons: the favicon, and the logo its screens show.
   publicDir: ui("public"),
-  plugins: [react(), tailwindcss(), changelog(), seo()],
+  plugins: [react(), tailwindcss(), changelog(), seo(), stories()],
   resolve: {
     alias: {
       "@": ui("src"),
@@ -102,6 +177,7 @@ export default defineConfig({
         stage: fileURLToPath(new URL("./stage.html", import.meta.url)),
         og: fileURLToPath(new URL("./og.html", import.meta.url)),
         notfound: fileURLToPath(new URL("./404.html", import.meta.url)),
+        stories: fileURLToPath(new URL("./stories.html", import.meta.url)),
       },
     },
   },
