@@ -5,6 +5,13 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **Less on the left of the start screen.** **Not played last time** and
+  the **History** button under **Earlier** are gone. **History** at the top
+  of the window opens History as before, and its **Songs** view lists every
+  song with the day it was last played.
+
 ## 0.15.0
 
 - **Update, then Restart now, puts a new version in place.** When a newer

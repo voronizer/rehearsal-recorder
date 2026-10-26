@@ -1409,18 +1409,16 @@ test.describe("last time, on the setup screen", () => {
     await expect(panel.locator("[data-song='Viasna'] [data-note]")).toContainText("guitar drifts here")
     await expect(panel.locator("[data-song='Not named'] [data-note]")).toContainText("Note")
     await expect(panel.locator("[data-note]")).toHaveCount(3)
-    // What was not played last time, from before it.
-    const leftOut = panel.getByRole("region", { name: "Not played last time" })
-    await expect(leftOut).toContainText("Daroha")
-    await expect(leftOut).toContainText(/Tue 25 Aug.* · 2 takes/)
-    // And the rest of history.
+    // Then the rest of history.
     const earlier = panel.getByRole("region", { name: "Earlier" })
     await expect(earlier).toContainText("Wednesday jam")
     await expect(earlier).toContainText("First rehearsal")
     // One wording for a rehearsal whose folder is gone, as History's own list.
     const missing = earlier.getByRole("button", { name: /Missing jam/ })
     await expect(missing).toContainText("Not found on disk")
-    await expect(panel.getByRole("button", { name: /^History/ })).toContainText("4 rehearsals")
+    // Nothing else: no songs left out last time, and History is the header's.
+    await expect(panel.getByRole("region", { name: "Not played last time" })).toHaveCount(0)
+    await expect(panel.getByRole("button", { name: /^History/ })).toHaveCount(0)
   })
 
   test("a song's button plays its last go, and has Space and Escape while it plays", async ({
@@ -1442,15 +1440,6 @@ test.describe("last time, on the setup screen", () => {
     await expect(page.getByRole("button", { name: /Record take/ })).toHaveCount(0)
     await page.keyboard.press("Space")
     await expect(panel.getByRole("button", { name: "Pause Pałyn 2, the last take of Pałyn" })).toBeVisible()
-
-    // Take 2 of another rehearsal is another take, not this one again.
-    const opens = await callCount(page, "player_open")
-    await panel.getByRole("button", { name: "Play Daroha 2, the last take of Daroha" }).click()
-    await expect(panel.getByRole("button", { name: "Pause Daroha 2, the last take of Daroha" })).toBeVisible()
-    expect(await callCount(page, "player_open")).toBe(opens + 1)
-    expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
-      { name: "Guitar", file: "/rec/older/d2.wav" },
-    ])
 
     // Escape stops it, and Start has Space back.
     await page.keyboard.press("Escape")
@@ -1479,10 +1468,6 @@ test.describe("last time, on the setup screen", () => {
     await expect(page.getByRole("heading", { name: "First rehearsal" })).toBeVisible()
     const list = page.getByRole("navigation", { name: "Rehearsals" })
     await expect(list.locator("[aria-current='true']")).toContainText("First rehearsal")
-    await page.keyboard.press("Escape")
-
-    await lastTime(page).getByRole("button", { name: /^History/ }).click()
-    await expect(page.getByRole("heading", { name: "Tuesday jam" })).toBeVisible()
   })
 
   test("with no rehearsal before, the setup has the screen to itself", async ({ page }) => {

@@ -740,7 +740,6 @@ export function Setup({
     playInOverview(take)
   })
   const openRehearsal = useSteady((folder: string) => onOpenRehearsal(folder))
-  const openHistory = useSteady(() => onOpenHistory())
   const openSong = useSteady((title: string | null) => onOpenSong?.(title))
   const pastPlayback = useMemo(
     () =>
@@ -1070,7 +1069,6 @@ export function Setup({
       problem={cued ? player.loadError : null}
       onPlay={playLastTime}
       onOpen={openRehearsal}
-      onAll={openHistory}
       onOpenSong={onOpenSong ? openSong : undefined}
     />
   ) : null
@@ -1233,7 +1231,7 @@ export function Setup({
           >
             <SheetTitle className="sr-only">Last time</SheetTitle>
             <SheetDescription className="sr-only">
-              The last rehearsal, the songs not played in it, and earlier ones.
+              The last rehearsal song by song, and earlier ones.
             </SheetDescription>
             <div className="min-h-0 flex-1 overflow-y-auto px-8 pt-1 pb-8">{pastPart}</div>
           </SheetContent>

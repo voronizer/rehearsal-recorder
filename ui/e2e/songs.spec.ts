@@ -784,15 +784,6 @@ test.describe("Songs in History", () => {
     await expect(startButton(page)).toBeVisible()
   })
 
-  test("a not-played song on the setup screen opens its page", async ({ page }) => {
-    await openApp(page, { before: "window.__FULL_EVENING__ = true;" })
-    await lastTime(page)
-      .getByRole("region", { name: "Not played last time" })
-      .getByRole("button", { name: "Open the song Daroha" })
-      .click()
-    await expect(head(page).getByRole("heading", { name: "Daroha" })).toBeVisible()
-  })
-
   test("a song heading in a rehearsal's overview opens its page, and the rehearsal stays chosen", async ({
     page,
   }) => {

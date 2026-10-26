@@ -403,22 +403,13 @@ api.get_rehearsal = async folder => {
 };
 api.last_time = async () => {
   const last = await api.get_rehearsal('/rec/tue');
-  const sat = pastTakes('/rec/sat');
   const all = await api.list_rehearsals();
   return {
     last: {...last, runs: runsOf(last.takes), in_cloud: 3,
            songs: last.songs.map(s => ({...s, plays: playsOf(s.name, last,
              last.takes.filter(t => s.take_numbers.includes(t.take_number)), [last])}))},
-    not_played: [
-      {name: 'Dym', folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00',
-       goes: 4, take: sat[3],
-       plays: {folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00', take: sat[3]}},
-      {name: 'Ptuška', folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00',
-       goes: 3, take: sat[6],
-       plays: {folder: '/rec/sat', rehearsal: 'New songs', created_at: '2026-09-19T15:00:00', take: sat[6]}}],
     earlier: all.slice(1).map(r => ({folder: r.folder, name: r.name, created_at: r.created_at,
-      take_count: r.take_count, total_duration_sec: r.total_duration_sec, missing: false})),
-    count: all.length};
+      take_count: r.take_count, total_duration_sec: r.total_duration_sec, missing: false}))};
 };
 
 // History's Songs view reads the same evenings.

@@ -2417,10 +2417,10 @@ window.__MAKE_API__ = () => ({
                                       set: await setAsSent(playedBy(folder))}));
   }),
   // The setup screen's last time (api.last_time): Tuesday jam song by song,
-  // Daroha from the rehearsal before it, and the others in history's order.
+  // and the others in history's order.
   // A page with window.__NO_HISTORY__ has none of it.
   last_time: track('last_time', async () => {
-    if (window.__NO_HISTORY__) return {last:null, not_played:[], earlier:[], count:0};
+    if (window.__NO_HISTORY__) return {last:null, earlier:[]};
     const last = pastRehearsal('/rec/old');
     const older = pastRehearsal('/rec/older');
     for (const r of [last, older])
@@ -2439,11 +2439,7 @@ window.__MAKE_API__ = () => ({
         missing:true}] : [])];
     return JSON.parse(JSON.stringify({
       last: {...last, songs, runs:runsOf(last.takes), in_cloud:inCloud},
-      not_played: [{name:'Daroha', folder:'/rec/older', rehearsal:'First rehearsal',
-                    created_at:'2026-08-25T19:00:00', goes:2, take:older.takes[1],
-                    plays: playsOf('Daroha', older, older.takes, both)}],
-      earlier,
-      count: earlier.length + 1}));
+      earlier}));
   }),
   // Out of the live rehearsal too, as Python takes it out of the library.
   delete_take: track('delete_take', async (folder, n) => {

@@ -3573,7 +3573,7 @@ class Api:
     def last_time(self):
         """
         What the setup screen says about the rehearsals before this one: the
-        last one song by song, the songs it left out, and the few before it.
+        last one song by song, and the few before it.
 
         "last" is the newest rehearsal on disk with a named take in it, with
         its takes as get_rehearsal gives them, so any of them can be played
@@ -3581,20 +3581,14 @@ class Api:
         has nothing to say song by song. With no named take anywhere it is
         the newest rehearsal with takes, and None when there is none.
 
-        "not_played" is every song of an older rehearsal that "last" did not
-        play, the latest time it was played first, with how many goes it got
-        then and the last of them as "take". Only rehearsals on disk: a song
-        whose takes cannot be played is no use here.
-
         "earlier" is the three rehearsals after "last" in the list, as
-        history lists them, and "count" how many there are in all.
+        history lists them.
 
-        Every song, in "last"'s "songs" and in "not_played", says what its
-        ▶ plays, as "plays": its newest ★ go in a rehearsal on disk, from
-        whichever rehearsal it was played at, or with none, its last go at
-        the rehearsal it is listed under. "Newest" is the rehearsal's date,
-        then the later take in the evening, never the go number, which a take
-        renamed into the song gets afresh.
+        Every song in "last"'s "songs" says what its ▶ plays, as "plays": its
+        newest ★ go in a rehearsal on disk, from whichever rehearsal it was
+        played at, or with none, its last go in "last". "Newest" is the
+        rehearsal's date, then the later take in the evening, never the go
+        number, which a take renamed into the song gets afresh.
 
         Read from the database alone. Nothing here walks a folder for its
         size, which is what makes history's list slow to fill.
@@ -3623,28 +3617,6 @@ class Api:
                 goes = [t for t in last["takes"] if t["take_number"] in song["take_numbers"]]
                 songs.append({**song, "plays": plays(song["name"], last, goes)})
 
-        played = set()
-        not_played = []
-        if last is not None:
-            played = {s["name"].casefold() for s in _songs_of(last["takes"])}
-            # Newest first, so what comes after it in the list is older.
-            for r in on_disk[on_disk.index(last) + 1:]:
-                for song in _songs_of(r["takes"]):
-                    key = song["name"].casefold()
-                    if key in played:
-                        continue
-                    played.add(key)
-                    goes = [t for t in r["takes"] if t["take_number"] in song["take_numbers"]]
-                    not_played.append({
-                        "name": song["name"],
-                        "folder": r["folder"],
-                        "rehearsal": r["name"],
-                        "created_at": r["created_at"],
-                        "goes": len(goes),
-                        "take": goes[-1],
-                        "plays": plays(song["name"], r, goes),
-                    })
-
         earlier = [r for r in rehearsals if r is not last][:3]
         return {
             "last": None if last is None else {
@@ -3656,7 +3628,6 @@ class Api:
                 "runs": _runs_of(last["takes"]),
                 "in_cloud": sum(1 for t in last["takes"] if _shape_of(t.get("cloud"))),
             },
-            "not_played": not_played,
             "earlier": [{
                 "folder": r["folder"],
                 "name": r["name"],
@@ -3665,7 +3636,6 @@ class Api:
                 "total_duration_sec": sum(t["duration_sec"] for t in r["takes"]),
                 "missing": r["missing"],
             } for r in earlier],
-            "count": len(rehearsals),
         }
 
     def list_songs(self):
