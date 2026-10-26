@@ -9,13 +9,14 @@ modules nor the audio files.
 
 import faulthandler
 import html
+import json
 import logging
 import signal
 import sys
 import threading
 from datetime import datetime
 
-from rehearsal_recorder.platform_support import CRASH_LOG
+from rehearsal_recorder.platform_support import CONFIG_PATH, CRASH_LOG
 
 
 def _arm_crash_log():
@@ -185,6 +186,43 @@ def selftest():
         finally:
             system.close()
 
+    def controller_midi():
+        # The controller's ports on Windows go through pywinrt and not the
+        # MIDI library (midi/winrt_ports.py): a build that lost it, or the
+        # tables beside its modules, fails here. Its ports are listed, and a
+        # port that is not there is asked for, which Windows must refuse at
+        # once: the open of a real controller, short of the controller. On a
+        # thread of its own, as the controller's are: this one may be in the
+        # apartment PortAudio chose for it.
+        import time
+
+        from rehearsal_recorder.midi.ports import PortBusy, PortInfo
+        from rehearsal_recorder.midi.winrt_ports import NOT_ANSWERING, WinRTSystem
+
+        system = WinRTSystem()
+        try:
+            found = f"{len(system.inputs())} inputs, {len(system.outputs())} outputs"
+            said = []
+
+            def ask():
+                try:
+                    system._wait_open(system._midi.MidiInPort, PortInfo("Not there", id="not-there"))
+                    said.append(None)
+                except PortBusy as e:
+                    said.append(str(e))
+
+            began = time.monotonic()
+            asking = threading.Thread(target=ask, name="selftest-winrt")
+            asking.start()
+            asking.join()
+            if said == [None]:
+                raise RuntimeError("a port that is not there was opened")
+            if said == [NOT_ANSWERING]:
+                raise RuntimeError("asked for a port that is not there, it gave no answer")
+            return f"{found}, a missing port refused in {(time.monotonic() - began) * 1000:.0f} ms"
+        finally:
+            system.close()
+
     def midi_files():
         # Writes a two-note .mid under a name Latin-1 cannot hold and reads it
         # back: a build that lost mido, or whose text handling differs, fails
@@ -331,6 +369,8 @@ def selftest():
     if sys.platform == "win32":
         check("ASIO", asio)
     check("MIDI", midi_up)
+    if sys.platform == "win32":
+        check("controller MIDI", controller_midi)
     check("MIDI files", midi_files)
     check("click and WAV tempo", click_and_wav_tempo)
     check("sample formats", encoder)
@@ -354,6 +394,52 @@ def selftest():
 # and /media, and a config file cannot guess a random number.
 DEV_SERVER_PORT = 17817
 DEV_UI_URL = "http://localhost:5173"
+
+# The page the window opens on while the app is made behind it, in the same
+# shape and colours as the interface's own loading screen (App.tsx), so the
+# one gives way to the other without a jump. `step` is the part of starting
+# under way (main's say). THEME is the class the interface's index.html would
+# give its page: dark, light, or system, which follows the computer's.
+STARTUP_HTML = """<!doctype html>
+<html class="THEME"><head><meta charset="utf-8"><style>
+:root{--background:oklch(1 0 0);--muted:oklch(0.47 0.014 285.9);--border:oklch(0.87 0.004 286.3)}
+.dark{--background:oklch(0.18 0.006 285.9);--muted:oklch(0.68 0.011 286.3);--border:oklch(0.3 0.009 286.3)}
+@media (prefers-color-scheme:dark){.system{--background:oklch(0.18 0.006 285.9);
+--muted:oklch(0.68 0.011 286.3);--border:oklch(0.3 0.009 286.3)}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;
+background:var(--background);color:var(--muted);font:14px system-ui,-apple-system,"Segoe UI",sans-serif}
+main{display:flex;flex-direction:column;align-items:center;gap:20px;text-align:center}
+.logo{width:64px;height:64px}.status{display:flex;align-items:center;gap:12px}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:oklch(0.56 0.24 266);
+border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style></head><body><main>
+<svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true">
+<rect x="24" y="24" width="208" height="208" rx="48" fill="#1b1b21"/>
+<circle cx="128" cy="128" r="78" fill="#e5484d"/>
+<rect x="69" y="115" width="10" height="26" rx="5" fill="#fff"/>
+<rect x="87" y="100" width="10" height="56" rx="5" fill="#fff"/>
+<rect x="105" y="82" width="10" height="92" rx="5" fill="#fff"/>
+<rect x="123" y="96" width="10" height="64" rx="5" fill="#fff"/>
+<rect x="141" y="78" width="10" height="100" rx="5" fill="#fff"/>
+<rect x="159" y="104" width="10" height="48" rx="5" fill="#fff"/>
+<rect x="177" y="117" width="10" height="22" rx="5" fill="#fff"/>
+</svg>
+<div class="status"><span class="spinner"></span><span id="step" role="status">Starting…</span></div>
+</main></body></html>"""
+
+
+def _startup_theme():
+    """
+    The theme the interface will open in, read from its config ahead of the
+    app, so that a band on the dark theme does not get a white screen first.
+    Anything unreadable is the interface's own default, dark.
+    """
+    try:
+        theme = json.loads(CONFIG_PATH.read_text(encoding="utf-8")).get("theme")
+    except Exception:  # noqa: BLE001 - no config yet, or one being written
+        theme = None
+    return theme if theme in ("light", "dark", "system") else "dark"
 
 
 def main():
@@ -394,181 +480,115 @@ def main():
     # starts.
     claim_taskbar_identity()
 
-    if sys.platform == "win32":
-        # The first MIDI backend can take several seconds to answer on Windows.
-        # Show the same loading screen as the UI so startup never looks like a
-        # dead process or a second, unrelated splash.
-        startup_html = """<!doctype html>
-<html><head><meta charset="utf-8"><style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;
-background:#fff;color:#17191d;font:14px system-ui,-apple-system,"Segoe UI",sans-serif}
-main{display:flex;flex-direction:column;align-items:center;gap:20px;text-align:center}
-.logo{width:64px;height:64px}.status{display:flex;align-items:center;gap:12px;color:#71717a}
-.spinner{width:20px;height:20px;border:2px solid #d9dce3;border-top-color:#465ee8;
-border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-</style></head><body><main>
-<svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true">
-<rect x="24" y="24" width="208" height="208" rx="48" fill="#1b1b21"/>
-<circle cx="128" cy="128" r="78" fill="#e5484d"/>
-<rect x="69" y="115" width="10" height="26" rx="5" fill="#fff"/>
-<rect x="87" y="100" width="10" height="56" rx="5" fill="#fff"/>
-<rect x="105" y="82" width="10" height="92" rx="5" fill="#fff"/>
-<rect x="123" y="96" width="10" height="64" rx="5" fill="#fff"/>
-<rect x="141" y="78" width="10" height="100" rx="5" fill="#fff"/>
-<rect x="159" y="104" width="10" height="48" rx="5" fill="#fff"/>
-<rect x="177" y="117" width="10" height="22" rx="5" fill="#fff"/>
-</svg>
-<div class="status"><span class="spinner"></span><span>Connecting to the audio engine…</span></div>
-</main></body></html>"""
-        startup_done = threading.Event()
-        startup_started = threading.Event()
-        app_state = {"api": None}
+    log = logging.getLogger("rehearsal_recorder")
+    startup_done = threading.Event()
+    startup_started = threading.Event()
+    app_state = {"api": None, "failed": False}
 
-        window = webview.create_window(
-            APP_NAME + (" (dev)" if dev else ""),
-            html=startup_html,
-            width=1180,
-            height=820,
-            min_size=(960, 680),
-        )
-        # Don't let a stray close click strand the startup worker without a
-        # GUI loop. Once startup finishes, closing the error page is allowed.
-        window.events.closing += lambda: startup_done.is_set()
-
-        def start_windows_app():
-            startup_started.set()
-            api = None
-            try:
-                if not window.events.shown.wait(15):
-                    raise RuntimeError("The startup window did not appear")
-                if not window.events.loaded.wait(15):
-                    raise RuntimeError("The startup screen did not load")
-
-                logging.getLogger("rehearsal_recorder").info("Creating application API")
-                from rehearsal_recorder.api import Api
-                from rehearsal_recorder.midi.diagnostics import configure_trace
-
-                try:
-                    configure_trace()
-                except Exception:
-                    logging.getLogger("rehearsal_recorder").exception(
-                        "Controller tracing could not be enabled"
-                    )
-
-                api = Api(server_port=DEV_SERVER_PORT if dev else 0)
-                app_state["api"] = api
-                logging.getLogger("rehearsal_recorder").info("Application API ready")
-
-                if dev:
-                    url = DEV_UI_URL
-                    print(
-                        f"Development mode.\n"
-                        f"  interface: {url} (start it with: cd ui && npm run dev)\n"
-                        f"  python:    {api.ui_url}\n"
-                    )
-                else:
-                    url = api.ui_url
-                    if not api.ui_available:
-                        raise RuntimeError(
-                            "The interface is not built: ui/dist/index.html is missing. "
-                            "Run `cd ui && npm ci && npm run build`."
-                        )
-
-                api.attach_window(window)
-                # pywebview exposes the API again on each navigation. Install
-                # it before replacing the startup page with the real UI.
-                window._js_api = api
-                logging.getLogger("rehearsal_recorder").info(
-                    "Loading application UI in startup window: %s", url
-                )
-                window.load_url(url)
-                window.events.loaded.wait(15)
-                api.start_update_checks()
-            except Exception as exc:
-                logging.getLogger("rehearsal_recorder").exception(
-                    "Application startup failed"
-                )
-                details = html.escape(f"{type(exc).__name__}: {exc}")
-                log_path = html.escape(str(CRASH_LOG))
-                window.load_html(
-                    "<!doctype html><html><head><meta charset=\"utf-8\"><style>"
-                    "body{font:15px system-ui,'Segoe UI',sans-serif;color:#20232a;"
-                    "padding:26px;line-height:1.5}h1{font-size:20px}code{word-break:break-all}"
-                    "</style></head><body><h1>Could not start Reha</h1>"
-                    f"<p>{details}</p><p>Startup log: <code>{log_path}</code></p>"
-                    "</body></html>"
-                )
-            finally:
-                startup_done.set()
-
-        try:
-            # pywebview runs this callback on a worker while the splash window
-            # and its message loop stay responsive.
-            webview.start(func=start_windows_app, icon=window_icon())
-        finally:
-            if startup_started.is_set():
-                startup_done.wait()
-            api = app_state["api"]
-            if api is not None:
-                logging.getLogger("rehearsal_recorder").info(
-                    "Window closed; shutting down"
-                )
-                api.shutdown()
-        return 0
-
-    from rehearsal_recorder.api import Api
-
-    from rehearsal_recorder.midi.diagnostics import configure_trace
-    try:
-        configure_trace()
-    except Exception:
-        logging.getLogger("rehearsal_recorder").exception(
-            "Controller tracing could not be enabled"
-        )
-
-    logging.getLogger("rehearsal_recorder").info("Creating application API")
-    api = Api(server_port=DEV_SERVER_PORT if dev else 0)
-    logging.getLogger("rehearsal_recorder").info("Application API ready")
-
-    if dev:
-        url = DEV_UI_URL
-        print(
-            f"Development mode.\n"
-            f"  interface: {url} (start it with: cd ui && npm run dev)\n"
-            f"  python:    {api.ui_url}\n"
-        )
-    else:
-        url = api.ui_url
-        if not api.ui_available:
-            print(
-                "The interface is not built: ui/dist/index.html is missing.\n"
-                "Build it:\n"
-                "    cd ui && npm ci && npm run build\n"
-                "or run with --dev to use Vite's dev server instead.\n",
-                file=sys.stderr,
-            )
-            return 1
-
+    # The window opens at once on a page of its own, which names each part of
+    # starting as it begins, and the app is made behind it. A part that takes
+    # long, or never ends, is then on the screen and in the crash log, not a
+    # window that never came or a dead one.
     window = webview.create_window(
         APP_NAME + (" (dev)" if dev else ""),
-        url,
-        js_api=api,
+        html=STARTUP_HTML.replace("THEME", _startup_theme()),
         width=1180,
         height=820,
         min_size=(960, 680),
     )
-    logging.getLogger("rehearsal_recorder").info(
-        "Window created; starting pywebview with URL %s", url
-    )
-    api.attach_window(window)
-    window.events.loaded += api.start_update_checks
+    # Don't let a stray close click strand the startup worker without a
+    # GUI loop. Once startup finishes, closing the error page is allowed.
+    window.events.closing += lambda: startup_done.is_set()
+
+    def say(step):
+        log.info("Startup: %s", step)
+        try:
+            window.run_js(f"document.getElementById('step').textContent = {json.dumps(step)}")
+        except Exception:  # noqa: BLE001 - the words are a courtesy
+            log.exception("The startup screen could not show %r", step)
+
+    def start_app():
+        startup_started.set()
+        api = None
+        try:
+            if not window.events.shown.wait(15):
+                raise RuntimeError("The startup window did not appear")
+            if not window.events.loaded.wait(15):
+                raise RuntimeError("The startup screen did not load")
+
+            # Importing the Api starts PortAudio, which asks every sound card
+            # and driver what it is.
+            say("Starting the audio engine…")
+            from rehearsal_recorder.api import Api
+            from rehearsal_recorder.midi.diagnostics import configure_trace
+
+            try:
+                configure_trace()
+            except Exception:
+                log.exception("Controller tracing could not be enabled")
+
+            log.info("Creating application API")
+            api = Api(server_port=DEV_SERVER_PORT if dev else 0, on_step=say)
+            app_state["api"] = api
+            log.info("Application API ready")
+
+            if dev:
+                url = DEV_UI_URL
+                print(
+                    f"Development mode.\n"
+                    f"  interface: {url} (start it with: cd ui && npm run dev)\n"
+                    f"  python:    {api.ui_url}\n"
+                )
+            else:
+                url = api.ui_url
+                if not api.ui_available:
+                    raise RuntimeError(
+                        "The interface is not built: ui/dist/index.html is missing. "
+                        "Run `cd ui && npm ci && npm run build`, "
+                        "or run with --dev to use Vite's dev server instead."
+                    )
+
+            api.attach_window(window)
+            # pywebview exposes the API again on each navigation. Install
+            # it before replacing the startup page with the real UI.
+            window._js_api = api
+            say("Loading the screens…")
+            log.info("Loading application UI in startup window: %s", url)
+            window.load_url(url)
+            window.events.loaded.wait(15)
+            api.start_update_checks()
+        except Exception as exc:
+            log.exception("Application startup failed")
+            app_state["failed"] = True
+            # Run from a terminal, the reason is there too: an interface not
+            # built yet is said in the window and here.
+            if sys.stderr is not None:
+                print(f"Could not start: {exc}", file=sys.stderr)
+            details = html.escape(f"{type(exc).__name__}: {exc}")
+            log_path = html.escape(str(CRASH_LOG))
+            window.load_html(
+                "<!doctype html><html><head><meta charset=\"utf-8\"><style>"
+                "body{font:15px system-ui,-apple-system,'Segoe UI',sans-serif;color:#20232a;"
+                "padding:26px;line-height:1.5}h1{font-size:20px}code{word-break:break-all}"
+                f"</style></head><body><h1>Could not start {html.escape(APP_NAME)}</h1>"
+                f"<p>{details}</p><p>Startup log: <code>{log_path}</code></p>"
+                "</body></html>"
+            )
+        finally:
+            startup_done.set()
+
     try:
-        webview.start(icon=window_icon())
+        # pywebview runs this callback on a worker while the startup window
+        # and its message loop stay responsive.
+        webview.start(func=start_app, icon=window_icon())
     finally:
-        logging.getLogger("rehearsal_recorder").info("Window closed; shutting down")
-        api.shutdown()
-    return 0
+        if startup_started.is_set():
+            startup_done.wait()
+        api = app_state["api"]
+        if api is not None:
+            log.info("Window closed; shutting down")
+            api.shutdown()
+    return 1 if app_state["failed"] else 0
 
 
 if __name__ == "__main__":

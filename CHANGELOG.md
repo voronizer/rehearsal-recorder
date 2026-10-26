@@ -17,6 +17,16 @@ opening.
   the **History** button under **Earlier** are gone. **History** at the top
   of the window opens History as before, and its **Songs** view lists every
   song with the day it was last played.
+- **РЭХА starts when the controller is off.** On Windows, a Bluetooth
+  controller that was switched off or too far away kept РЭХА on its startup
+  window. Now РЭХА starts as usual, and **Settings › Controls** says that the
+  controller does not answer. Switch the controller on, and РЭХА connects to
+  it by itself. If the controller does not connect after the update, choose
+  it once more in **Settings › Controls**.
+- **The startup window says what РЭХА is doing.** While РЭХА starts, the
+  window names each step: the audio engine, MIDI, your rehearsals, the
+  screens. If one takes long, you can see which. On a Mac the window is new:
+  before, no window showed until РЭХА was ready.
 
 ## 0.15.0
 

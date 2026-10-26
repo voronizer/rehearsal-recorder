@@ -74,17 +74,33 @@ class Controller:
             thread.start()
 
     def configure(self, selected):
-        with self._lock:
+        # The tick holds the lock while it opens a port, and on Windows an
+        # open of a controller that is off waits up to 10 s (winrt_ports.py).
+        # Such a system can let the open go, so a change in Controls does not
+        # wait for it, and tries the new choice at once.
+        interrupt = getattr(self.system, "interrupt", None)
+        while True:
+            if interrupt is not None:
+                interrupt()
+            if self._lock.acquire(timeout=0.1):
+                break
+        try:
             self._disconnect()
             self.selected = selected
             self.error = None
+        finally:
+            self._lock.release()
         self.start()
 
     def _disconnect(self):
-        # Clearing may have to wait for a save's gate; the action worker retries.
-        self._clear_mute = True
+        # A controller that is off fails to open on every tick. With nothing
+        # open there is no mute to clear, so the whole transport state is not
+        # read for it, and no trace line goes to the crash log.
+        if self.input or self.output:
+            # Clearing may have to wait for a save's gate; the action worker retries.
+            self._clear_mute = True
+            trace("disconnect", epoch=self.epoch)
         self._release_mute()
-        trace("disconnect", epoch=self.epoch)
         self.link += 1
         self.epoch += 1
         self.handshake = False

@@ -31,8 +31,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import fake_libremidi  # noqa: E402
 import fake_midi  # noqa: E402
+import fake_winrt  # noqa: E402
 
-from rehearsal_recorder.midi import ports  # noqa: E402
+from rehearsal_recorder.midi import ports, winrt_ports  # noqa: E402
 
 problems = []
 
@@ -71,10 +72,11 @@ class Logged(logging.Handler):
         self.records.append(record)
 
 
-log = logging.getLogger(ports.__name__)
 logged = Logged()
-log.addHandler(logged)
-log.propagate = False
+for name in (ports.__name__, winrt_ports.__name__):
+    log = logging.getLogger(name)
+    log.addHandler(logged)
+    log.propagate = False
 
 systems = []
 
@@ -236,23 +238,33 @@ def main():
     print("\n[3b] Controller backend is separate from instrument MIDI")
     from unittest.mock import patch
     world = fake_libremidi.install()
-    world.present_apis.add("WINDOWS_UWP")
     primary = ports.PortSystem("WINDOWS_MM")
     systems.append(primary)
+    services = ports.PortSystem("WINDOWS_MIDI_SERVICES")
+    systems.append(services)
+    fake_winrt.install()
     with patch.object(ports, 'WINDOWS', True):
         controls = ports.open_controller_system(primary)
-    systems.append(controls)
-    ok("WinMM instrument MIDI is unchanged", primary.api.name == "WINDOWS_MM")
-    ok("controller gets a separate WinRT system", controls is not primary and controls.api.name == "WINDOWS_UWP")
+        systems.append(controls)
+        ok("WinMM instrument MIDI is unchanged", primary.api.name == "WINDOWS_MM")
+        ok("the controller gets WinRT through pywinrt, not through the library",
+           isinstance(controls, winrt_ports.WinRTSystem) and controls.name == "Windows MIDI (WinRT)")
+        beside = ports.open_controller_system(services)
+        systems.append(beside)
+        ok("and so it does when the instruments are on MIDI Services",
+           isinstance(beside, winrt_ports.WinRTSystem))
     with patch.object(ports, 'WINDOWS', False):
         ok("other platforms share their existing system", ports.open_controller_system(primary) is primary)
     finish()
     world = fake_libremidi.install()
     primary = ports.PortSystem("WINDOWS_MM")
     systems.append(primary)
+    # pywinrt not there, as in a copy run from source without it.
+    sys.modules.update({name: None for name in fake_winrt.NAMES})
     with patch.object(ports, 'WINDOWS', True):
         ok("wired controls still work without WinRT", ports.open_controller_system(primary) is primary)
         ok("disabled MIDI does not open an unrequested system", ports.open_controller_system(None) is None)
+    fake_winrt.remove()
     finish()
 
     print("\n[4] Which MIDI system a machine gets")
@@ -829,6 +841,259 @@ def main():
                list(inspect.signature(getattr(real, name)).parameters)
                == list(inspect.signature(getattr(stand_in, name)).parameters))
     ok("it has the attribute the live check prints", fake.observer_notices == 0)
+
+    print("\n[15] The controller's ports on Windows, through pywinrt")
+    # winrt_ports.py against fake_winrt.py: the GIL cannot be seen from here,
+    # but what is waited for, and for how long, can.
+    from rehearsal_recorder.midi.controller import Controller
+
+    winrt_ports.OPEN_PATIENCE_SEC, winrt_ports.RETRY_SEC = 0.4, 0.6
+    winrt_ports.WATCH_LOOK_SEC = 0.05
+    world = fake_winrt.World()
+    world.ports["in"]["ctl-in"] = "Controller (Bluetooth MIDI IN)"
+    world.ports["out"]["ctl-out"] = "Controller (Bluetooth MIDI OUT)"
+    system = winrt_ports.WinRTSystem(load=lambda: fake_winrt.modules(world))
+    inp = ports.PortInfo("Controller (Bluetooth MIDI IN)", id="ctl-in")
+    out = ports.PortInfo("Controller (Bluetooth MIDI OUT)", id="ctl-out")
+    ok("ports are listed as the library listed WinRT's: its name, its id, nothing else",
+       system.inputs() == [inp] and system.outputs() == [out])
+    ok("each watcher is told of updates, or it is not told of later ports",
+       all(w.updated_handled for w in world.watchers))
+    heard = []
+    port = system.open(inp, lambda ns, data: heard.append(data))
+    world.play("ctl-in", b"\xbf\x75\x01")
+    ok("a message from the controller reaches on_event as its bytes", heard == [b"\xbf\x75\x01"])
+    feedback = system.open_output(out)
+    feedback.send(bytes((0xBF, 119, 5)))
+    ok("feedback goes out through send_buffer", world.sent == [("ctl-out", b"\xbf\x77\x05")])
+    world.send_fails = True
+    try:
+        feedback.send(b"\x01")
+        ok("a send WinRT refuses raises PortBusy", False)
+    except ports.PortBusy:
+        ok("a send WinRT refuses raises PortBusy", True)
+    world.send_fails = False
+    ok("an open port is connected", port.connected() and feedback.connected())
+    world.pull("in", "ctl-in")
+    ok("a port that goes is not connected", wait_for(lambda: not port.connected()))
+    world.plug("in", "ctl-in", "Controller (Bluetooth MIDI IN)")
+    wait_for(lambda: system.inputs() == [inp])
+    ok("and stays so when it comes back: the controller opens it again",
+       system.inputs() == [inp] and not port.connected())
+    port.close()
+    ok("closing a port takes its handler off and closes it",
+       "ctl-in" in world.closed and world.handlers_left == 0)
+    port.close()
+    ok("and closing it twice does nothing more", world.closed.count("ctl-in") == 1)
+    refused = fake_winrt.MidiInPort.add_message_received
+
+    def no_handler(self, handler):
+        raise OSError(-2147024891, "Access is denied.")
+
+    fake_winrt.MidiInPort.add_message_received = no_handler
+    try:
+        system.open(inp, lambda ns, data: None)
+        ok("a port whose messages WinRT will not hand over raises PortBusy", False)
+    except ports.PortBusy:
+        ok("a port whose messages WinRT will not hand over raises PortBusy, and is closed",
+           world.closed.count("ctl-in") == 2)
+    fake_winrt.MidiInPort.add_message_received = refused
+
+    port = system.open(inp, lambda ns, data: None)
+    world.abort("in")
+    world.ports["in"].pop("ctl-in")  # gone while nobody was listening
+    world.ports["in"]["ctl-in2"] = "Controller 2 (Bluetooth MIDI IN)"
+    ok("a watcher Windows stops is started again, and lists what there is now",
+       wait_for(lambda: [p.id for p in system.inputs()] == ["ctl-in2"])
+       and [w.starts for w in world.watchers if w.kind == "in"] == [2])
+    ok("a port open meanwhile is gone, for the controller to open again", not port.connected())
+    port.close()
+    world.pull("in", "ctl-in2")
+    world.plug("in", "ctl-in", "Controller (Bluetooth MIDI IN)")
+    wait_for(lambda: system.inputs() == [inp])
+
+    # A controller that is off: Windows never answers.
+    world.hang.add("ctl-out")
+    feedback.close()
+    began = time.perf_counter()
+    try:
+        system.open_output(out)
+        ok("an open Windows does not answer is given up", False)
+    except ports.PortBusy as e:
+        took = time.perf_counter() - began
+        ok("an open Windows does not answer is given up, saying so for Controls",
+           str(e) == winrt_ports.NOT_ANSWERING)
+        ok("after OPEN_PATIENCE_SEC", 0.35 < took < 1.5)
+    ok("and the open is cancelled", world.cancelled == 1)
+    asked = len(world.asked)
+    began = time.perf_counter()
+    try:
+        system.open_output(out)
+    except ports.PortBusy as e:
+        ok("asked again at once, it says the same without asking Windows",
+           str(e) == winrt_ports.NOT_ANSWERING and len(world.asked) == asked
+           and time.perf_counter() - began < 0.1)
+    time.sleep(winrt_ports.RETRY_SEC)
+    try:
+        system.open_output(out)
+    except ports.PortBusy:
+        pass
+    ok("after RETRY_SEC Windows is asked again", len(world.asked) == asked + 1)
+    ok("and the crash log is told once, not every time",
+       len([r for r in logged.records if "did not open" in r.getMessage()]) == 1)
+    logged.records.clear()
+
+    # Windows opens it after all, once the app gave up: nobody holds that port.
+    world.ignore_cancel = True
+    time.sleep(winrt_ports.RETRY_SEC)
+    try:
+        system.open_output(out)
+    except ports.PortBusy:
+        pass
+    closed = len(world.closed)
+    world.answer_late()
+    ok("a port Windows opens after the app gave up on it is closed",
+       wait_for(lambda: len(world.closed) > closed))
+    world.ignore_cancel = False
+    world.hang.clear()
+    logged.records.clear()
+    time.sleep(winrt_ports.RETRY_SEC)
+
+    # Windows saying no is not the same as not answering.
+    world.refuse.add("ctl-in")
+    try:
+        system.open(inp, lambda ns, data: None)
+        ok("a port Windows will not open raises PortBusy", False)
+    except ports.PortBusy as e:
+        ok("a port Windows will not open raises PortBusy, and not 'does not answer'",
+           str(e) != winrt_ports.NOT_ANSWERING)
+    world.refuse.clear()
+    world.fail.add("ctl-in")
+    try:
+        system.open(inp, lambda ns, data: None)
+        ok("an open that fails raises PortBusy", False)
+    except ports.PortBusy as e:
+        ok("an open that fails raises PortBusy with Windows' words", "not found" in str(e))
+    world.fail.clear()
+    try:
+        system.open(ports.PortInfo("Other", id="other"), lambda ns, data: None)
+        ok("a port not in the list is not asked for", False)
+    except ports.PortBusy:
+        ok("a port not in the list is not asked for", ("in", "other") not in world.asked)
+
+    # The controller itself, on a system whose output does not answer.
+    reads = []
+
+    class Transport:
+        def snapshot(self):
+            reads.append(time.perf_counter())
+            return {"state": "ready", "playback_muted": False}
+
+        def flush_settings(self):
+            pass
+
+    world.hang.add("ctl-out")
+    controller = Controller(system, Transport(), threads=False)
+    controller.configure({"input": inp.saved(), "output": out.saved()})
+    time.sleep(winrt_ports.RETRY_SEC)
+    began = time.perf_counter()
+    controller.tick()
+    ok("the controller's tick gives up with the open, and says why",
+       time.perf_counter() - began < 1.5 and controller.error == winrt_ports.NOT_ANSWERING
+       and not controller.status()["port_open"])
+    read, quiet = len(reads), len(world.asked)
+    for _ in range(5):
+        controller.tick()
+    ok("ticks while it does not answer neither ask Windows nor read the transport",
+       controller.error == winrt_ports.NOT_ANSWERING and len(reads) == read
+       and len(world.asked) == quiet)
+    world.hang = {"ctl-in"}
+    time.sleep(winrt_ports.RETRY_SEC)
+    controller.tick()
+    opened = world.closed.count("ctl-out")
+    quiet = len(world.asked)
+    for _ in range(5):
+        controller.tick()
+    ok("an output that opens and an input that does not: the output is not "
+       "opened and closed on every tick",
+       controller.error == winrt_ports.NOT_ANSWERING and len(world.asked) == quiet
+       and world.closed.count("ctl-out") == opened)
+    world.hang.clear()
+    time.sleep(winrt_ports.RETRY_SEC)
+    controller.tick()
+    ok("and opens the controller once it answers", controller.status()["port_open"]
+       and controller.error is None)
+
+    # Changing the controller in Controls while an open waits for one that is off.
+    world.hang.add("ctl-out")
+    controller.configure(None)
+    controller.configure({"input": inp.saved(), "output": out.saved()})
+    winrt_ports.OPEN_PATIENCE_SEC = 30
+    ticking = threading.Thread(target=controller.tick)
+    before = len(world.asked)
+    ticking.start()
+    wait_for(lambda: len(world.asked) > before)
+    began = time.perf_counter()
+    controller.configure(None)
+    ticking.join(timeout=5)
+    ok("a change in Controls does not wait for an open of a controller that is off",
+       time.perf_counter() - began < 1.5 and not ticking.is_alive()
+       and controller.error is None and not controller.status()["enabled"])
+    winrt_ports.OPEN_PATIENCE_SEC = 0.4
+    began = time.perf_counter()
+    try:
+        system.open_output(out)
+    except ports.PortBusy as e:
+        ok("and the next open is tried at once",
+           str(e) == winrt_ports.NOT_ANSWERING and len(world.asked) == before + 2)
+
+    # Closing the window while an open waits.
+    winrt_ports.OPEN_PATIENCE_SEC = 30
+    time.sleep(winrt_ports.RETRY_SEC)
+    outcome = []
+
+    def waits():
+        try:
+            system.open_output(out)
+        except ports.PortBusy as e:
+            outcome.append(str(e))
+
+    before = len(world.asked)
+    waiting = threading.Thread(target=waits)
+    waiting.start()
+    wait_for(lambda: len(world.asked) > before)
+    began = time.perf_counter()
+    system.close()
+    waiting.join(timeout=5)
+    ok("closing the system ends an open that waits, at once",
+       not waiting.is_alive() and time.perf_counter() - began < 1.5
+       and outcome == ["the MIDI system was closed"])
+    ok("and stops both watchers", world.stopped_watchers == 2)
+    ok("a closed system lists nothing", system.inputs() == [] and system.outputs() == [])
+
+    def broken():
+        raise ImportError("No module named 'winrt'")
+
+    try:
+        winrt_ports.WinRTSystem(load=broken)
+        ok("without pywinrt the system does not start", False)
+    except RuntimeError as e:
+        ok("without pywinrt the system does not start, and says why", "winrt" in str(e))
+
+    world = fake_winrt.World()
+    selector = fake_winrt.MidiOutPort.get_device_selector
+
+    def no_selector():
+        raise OSError(-2147221164, "Class not registered")
+
+    fake_winrt.MidiOutPort.get_device_selector = staticmethod(no_selector)
+    try:
+        winrt_ports.WinRTSystem(load=lambda: fake_winrt.modules(world))
+        ok("a system whose second watcher fails does not start", False)
+    except RuntimeError:
+        ok("a system whose second watcher fails does not start, and stops the first",
+           len(world.watchers) == 1 and world.stopped_watchers == 1)
+    fake_winrt.MidiOutPort.get_device_selector = selector
 
     print("\n" + "=" * 60)
     sys.platform = REAL_PLATFORM
