@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.16.0
 
 - **Lineups.** The band can keep several lineups, each with its own name:
   Full band, Trio, With keys. The title over the tracks on the start screen
