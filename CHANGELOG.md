@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.16.0
 
 - **Lineups.** The band can keep several lineups, each with its own name:
   Full band, Trio, With keys. The title over the tracks on the start screen
@@ -27,6 +27,11 @@ opening.
   window names each step: the audio engine, MIDI, your rehearsals, the
   screens. If one takes long, you can see which. On a Mac the window is new:
   before, no window showed until РЭХА was ready.
+- **A rehearsal's folder opens from beside its name.** On a rehearsal's page
+  in History, the long path under the name is gone. The folder button now
+  comes right after the pencil: click it to open the folder, or point at it
+  to see where the folder is. It is called **Show in Finder** (**Show in
+  Explorer** on Windows).
 
 ## 0.15.0
 

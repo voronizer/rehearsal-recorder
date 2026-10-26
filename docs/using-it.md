@@ -589,21 +589,20 @@ shows a red warning sign in place of its ▶, here, on a song's page and in
 Marks; press it to try again.
 
 The rehearsal's name is at the top of its page, with the pencil after its
-last word (**Rename rehearsal**) and the bin at the right (**Delete
-rehearsal**). A long name takes two lines, here and in the list, and is then
-cut: point at it to read it whole. Beside the name are the rehearsal's
+last word (**Rename rehearsal**), the folder after the pencil and the bin at
+the right (**Delete rehearsal**). A long name takes two lines, here and in
+the list, and is then cut: point at it to read it whole. Beside the name are the rehearsal's
 figures, as at the top of the rehearsal screen: how long its takes run, how
 many takes there are and of how many songs, how many are in the cloud and
 how much of the disk it uses. They give way before the name takes a second
 line, the size on disk first, and once one has gone, pointing at them shows
 them all.
 
-Under the name are the day it was played, its set if it was played by one,
-and the path of its folder: where the folder is on your computer, written
-out, such as `C:\Users\alex\RehearsalRecordings\Tuesday jam - 2026-09-18 19-00`.
-Click the path to open the folder; pointing at it says **Show in Finder**
-(**Show in Explorer** on Windows). A long path is cut at its end, and
-pointing at it shows it whole.
+Click the folder to open the rehearsal's folder on your computer. Pointing
+at it says **Show in Finder** (**Show in Explorer** on Windows) and where the
+folder is, such as `C:\Users\alex\RehearsalRecordings\Tuesday jam - 2026-09-18 19-00`.
+Under the name are the day it was played and its set, if it was played by
+one.
 
 A rehearsal played by a set has the set's name under its date in the list,
 and beside the date on its page. Over its songs, a card says how much of the

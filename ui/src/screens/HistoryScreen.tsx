@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { FolderOpen, Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
 import { Kbd } from "@/components/ui/kbd"
 import { Spinner } from "@/components/ui/spinner"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Figures, Whole, useCut, type FigurePart } from "@/components/ui/whole"
+import { Figures, type FigurePart } from "@/components/ui/whole"
 import { Shell } from "@/components/Shell"
 import { PaneHead } from "@/components/PaneHead"
 import { RehearsalList } from "@/components/RehearsalList"
@@ -55,9 +55,7 @@ import {
   rehearsalsLabel,
 } from "@/lib/format"
 import { wentTo } from "@/lib/deletion"
-import { showFolder } from "@/lib/folder"
 import { rise } from "@/lib/motion"
-import { useSystem, words } from "@/lib/platform"
 import { useKeysOn } from "@/lib/keys"
 import { endedByPython, offerCropUndo, offerUndo } from "@/lib/trash"
 import {
@@ -103,50 +101,6 @@ function totalsOf(rehearsals: RehearsalSummary[]): FigurePart[] {
     ...(seconds >= 30 ? [{ text: `${formatDuration(seconds / 60)} played`, keep: 1 }] : []),
     { text: formatBytes(bytes), keep: 0 },
   ]
-}
-
-/**
- * The rehearsal's folder as the last of the line under its name: the path,
- * cut at its end where the line runs out, is the button that opens it. Its
- * name and its tip say what it does in the system's words, "Show in Finder";
- * the tip has the path whole under them while it is cut.
- */
-function FolderPath({ folder }: { folder: string }) {
-  const { folderButton } = words(useSystem())
-  const [ref, cut] = useCut<HTMLSpanElement>()
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {/* A link's words in the line: no padding beside the icon. It has
-            what the date and the set leave, and no more than its path, so the
-            set keeps its room and the path is cut at the line's end. Its
-            icon and the gap after it stay: on a line too short for them, the
-            set gives way first. */}
-        <Button
-          variant="link"
-          onClick={() => void showFolder(folder)}
-          className="h-auto max-w-fit min-w-5 flex-1 gap-1.5 rounded-sm p-0 text-xs has-[>svg]:p-0"
-        >
-          <FolderOpen className="size-3.5" />
-          <span className="sr-only">{folderButton} </span>
-          <span ref={ref} data-cut={cut || undefined} className="min-w-0 truncate font-mono">
-            {folder}
-          </span>
-        </Button>
-      </TooltipTrigger>
-      {/* For the eyes: the button's name says it all already. */}
-      <TooltipContent className="break-words">
-        <span aria-hidden className="block">
-          {folderButton}
-        </span>
-        {cut && (
-          <span aria-hidden className="block font-mono">
-            {folder}
-          </span>
-        )}
-      </TooltipContent>
-    </Tooltip>
-  )
 }
 
 // What an action here said — one slot, so each says over the last.
@@ -1137,7 +1091,7 @@ export function HistoryScreen({
   // has them only once a take is open. Their place is there from the first
   // frame, with no figure until the takes are read, so that the name is laid
   // out once, and not again when they arrive or at each switch from one
-  // rehearsal to another. The folder opens from the path under the name.
+  // rehearsal to another. The folder opens from the button after the pencil.
   const facts =
     summary && readable ? (
       <EveningFacts
@@ -1332,11 +1286,12 @@ export function HistoryScreen({
               className="flex min-w-0 flex-1 flex-col gap-8 overflow-y-auto p-8"
             >
               {/* The name on up to two lines, then cut and whole in the tip,
-                  and the facts beside it giving way to it first, as in the
-                  rehearsal screen's header; Delete at the right. Under them,
-                  across the whole head, the date, the set and the path: the
-                  date is whole, the set cut only to half the line at most,
-                  and the path has what they leave, cut at its end. */}
+                  the pencil and the folder after it, and the facts beside it
+                  giving way to it first, as in the rehearsal screen's
+                  header; Delete at the right. Under them, across the whole
+                  head, the date and the set: the date is whole, the set cut
+                  only to half the line at most. The path is not shown
+                  (Alex, 2026-10-26): the folder's tip has it. */}
               {summary && (
                 <PaneHead
                   title={summary.name}
@@ -1349,6 +1304,7 @@ export function HistoryScreen({
                           onClick: () => setRehearsalToRename(summary),
                         }
                   }
+                  folder={summary.missing ? undefined : summary.folder}
                   actions={
                     !summary.missing && (
                       <>
@@ -1381,20 +1337,11 @@ export function HistoryScreen({
                         {formatDay(summary.created_at).split(" ")[0]}{" "}
                         {formatDateHuman(summary.created_at)}
                       </span>
-                      <span aria-hidden>·</span>
                       {summary.set_name && (
                         <>
-                          <SetName name={summary.set_name} whole className="max-w-1/2" />
                           <span aria-hidden>·</span>
+                          <SetName name={summary.set_name} whole className="max-w-1/2" />
                         </>
-                      )}
-                      {summary.missing ? (
-                        // Where it was, to read: there is no folder to open,
-                        // so no folder icon either, which would make it look
-                        // like the button it is not.
-                        <Whole text={summary.folder} className="min-w-0 flex-1 truncate font-mono" />
-                      ) : (
-                        <FolderPath folder={summary.folder} />
                       )}
                     </div>
                   }
