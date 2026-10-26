@@ -41,6 +41,14 @@ The app counts the file's tempo and finds bar 1. For pads with no beat, drag
 bar 1 to where you hear it. In the player the take's Backing track sits right
 above Master, muted the first time, so you hear the band without it.
 
+### A lineup for each evening. {#lineups}
+
+Full band, Trio, With keys: pick one in the title over the tracks, and
+everyone is back on their own input.
+
+Take the drums off for one evening, and Full band stays as it was. Update
+keeps a change for good, and Save as new makes another lineup.
+
 ### Hear where you left off. {#left-off}
 
 Before you start, ▶ beside a song plays its newest ★ take.

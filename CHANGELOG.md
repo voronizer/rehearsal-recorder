@@ -7,6 +7,12 @@ opening.
 
 ## Unreleased
 
+- **Lineups.** The band can keep several lineups, each with its own name:
+  Full band, Trio, With keys. The title over the tracks on the start screen
+  is now a menu that picks one, and its tracks, icons and inputs come back.
+  Taking a track off for one evening leaves the lineup as it was: **Update**
+  keeps a change, and **Save as new…** makes another lineup. **Save as
+  template** is gone. Old takes keep the icons they were recorded with.
 - **Less on the left of the start screen.** **Not played last time** and
   the **History** button under **Earlier** are gone. **History** at the top
   of the window opens History as before, and its **Songs** view lists every

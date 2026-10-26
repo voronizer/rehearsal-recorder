@@ -1803,7 +1803,6 @@ window.__MAKE_API__ = () => ({
           'rates it takes. The driver said: Unanticipated host error ' +
           '[PaErrorCode -9999]'}
       : {ok:true, formats:{'44100':[16,24], '48000':[16,24], '96000':[24]}})),
-  save_default_tracks: track('save_default_tracks', async () => ({ok:true})),
   update_lineup: track('update_lineup', async (name, _dev, tracksIn) => {
     const {lineups} = lineupsNow();
     if (!lineups.some(l => l.name === name)) return {ok:false, error:`No lineup is called ${name}`};

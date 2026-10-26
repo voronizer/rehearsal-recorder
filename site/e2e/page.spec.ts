@@ -295,6 +295,35 @@ test("a card brings the window near what it is about, and says more under it", a
   await expect(about.locator("h4")).toHaveText("After the take.")
 })
 
+// Lineups (lineups spec, section 4): a fourth tile in Before you play, whose
+// moment is the band's tracks with the window near the lineup's title.
+test("the lineups' tile is Before you play's fourth, and brings the window near Full band", async ({
+  page,
+}) => {
+  await page.goto("/")
+  await toStep(page, 0)
+  await expect(page.locator("#how .step").first().locator("article.item.tile h4")).toHaveText([
+    "Rehearse the set, in order.",
+    "Every song keeps its tempo.",
+    "A song brings its backing track.",
+    "A lineup for each evening.",
+  ])
+  await item(page, "A lineup for each evening.").click()
+  const about = page.locator("#how .about")
+  await expect(about.locator("h4")).toHaveText("A lineup for each evening.")
+  await expect(about.locator("p")).toContainText("Update keeps a change for good")
+  await expect.poll(() => story(page, "moment"), { timeout: 30_000 }).toBe("0.1")
+  // The title over the tracks, Full band of the band's three, in the window.
+  const title = storyFrame(page).contentFrame().locator("[data-lineup]")
+  await expect(title).toHaveAccessibleName("Full band")
+  const seen = (await title.boundingBox())!
+  const window = (await storyFrame(page).locator("..").boundingBox())!
+  expect(seen.x).toBeGreaterThanOrEqual(window.x)
+  expect(seen.y).toBeGreaterThanOrEqual(window.y)
+  expect(seen.x + seen.width).toBeLessThanOrEqual(window.x + window.width)
+  expect(seen.y + seen.height).toBeLessThanOrEqual(window.y + window.height)
+})
+
 /** Shows the piece an item is drawn with over the app, and finds it. A click
  *  as the button gets it: on a phone the window held at the top of the
  *  screen may be over the button. */
@@ -360,7 +389,7 @@ for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: width > 900 ? 860 : 844 })
     await page.goto("/")
     const titles = await page.locator("#how .items h4").allTextContents()
-    expect(titles).toHaveLength(30)
+    expect(titles).toHaveLength(31)
     const about = page.locator("#how .about")
     for (const title of titles) {
       await item(page, title).dispatchEvent("click")

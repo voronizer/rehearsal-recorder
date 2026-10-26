@@ -1111,7 +1111,6 @@ type PyApi = {
   rescan_devices(): Promise<
     Ok<{ found?: string[]; gone?: string[]; warning?: string }>
   >
-  save_default_tracks(config: TrackTemplate): Promise<Ok>
   /** Update: the tracks on screen over that lineup, and last time too. */
   update_lineup(
     name: string,

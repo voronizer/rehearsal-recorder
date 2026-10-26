@@ -25,8 +25,8 @@ describe("the site's content", () => {
     for (const [i, step] of content.story.steps.entries())
       expect(step.items.map((item) => item.id), step.id).toEqual([...ITEMS[STEPS[i]]])
     // 31 picked: these 29, and the controller's block and its fourth line;
-    // then the backing track's.
-    expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(30)
+    // then the backing track's and the lineups'.
+    expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(31)
   })
 
   it("has a line for each step, and for each item a line and what the window says", () => {
@@ -148,6 +148,26 @@ describe("tempo drift on the site", () => {
         "click the take was recorded to, or the song's tempo, or, for a song without one, the " +
         "take's own middle. Where the band ran ahead or dragged by more than 2% (you can change " +
         "that in Settings), the line turns amber and says by how much."
+    )
+  })
+})
+
+// Lineups on reha.stream (lineups spec, section 4): a tile after the backing
+// track's.
+describe("lineups on the site", () => {
+  it("has the lineups' tile right after the backing track's, with its words", () => {
+    const before = content.story.steps[0]
+    const ids = before.items.map((i) => i.id)
+    expect(ids[ids.indexOf("backing") + 1]).toBe("lineups")
+    const lineups = before.items.find((i) => i.id === "lineups")!
+    expect(lineups.title).toBe("A lineup for each evening.")
+    expect(lineups.line.replace(/\s+/g, " ")).toBe(
+      "Full band, Trio, With keys: pick one in the title over the tracks, and everyone is " +
+        "back on their own input."
+    )
+    expect(lineups.more.replace(/\s+/g, " ")).toBe(
+      "Take the drums off for one evening, and Full band stays as it was. Update keeps a " +
+        "change for good, and Save as new makes another lineup."
     )
   })
 })

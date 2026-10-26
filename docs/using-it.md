@@ -35,7 +35,7 @@ computer's own sound settings choose, always plays through 1–2.
 
 ### Set up the tracks
 
-![The start screen: Last time on the left, and on the right four tracks during the signal check, with the set Gig on the 25th picked beside Start rehearsal](screenshots/setup.png)
+![The start screen: Last time on the left, and on the right the lineup Full band, its four tracks during the signal check, with the set Gig on the 25th picked beside Start rehearsal](screenshots/setup.png)
 
 The start screen, the one the app opens on, has one track per musician. A
 track is one musician's part of each take. It is recorded from an input: the
@@ -62,9 +62,42 @@ has and the recording quality. Click it to open Settings.
   alone, for an electronic kit or a keyboard. See [Recording
   MIDI](#recording-midi).
 
-The tracks, their icons and their inputs are saved when you start the
-rehearsal, and they are filled in for you next time. **Save as template**
-saves them without starting.
+The tracks, their icons and their inputs are remembered when you start the
+rehearsal, and the start screen opens with them next time.
+
+### Lineups
+
+A lineup is the band's tracks kept under a name: who plays, their icons,
+and the input each of them uses on each interface. A band often needs more
+than one, for the week the drummer cannot make it or the night a friend
+brings a keyboard. The tracks you had before lineups came in are the first
+one, called “Band”.
+
+The title over the tracks is the lineup on screen, for example **Full
+band**. Click it to choose another one: its tracks take the place of the
+ones on screen at once, each on its own input. The same menu has **Save as
+new lineup…**, and **Rename** and **Delete** for the lineup on screen.
+Delete asks first, and the tracks on screen stay.
+
+Take a track off or change an input, and the title says “Full band ·
+changed”. Two buttons then stand beside **Check signal**:
+
+- **Update** keeps the change in the lineup.
+- **Save as new…** asks for a name and keeps the tracks on screen as
+  another lineup.
+
+For one evening you need neither. Say the drummer is away: take the drums
+off and start the rehearsal. Next time the start screen opens the same way,
+as “Full band · changed”. When the drummer is back, choose **Full band**
+and all four are there, the drums on their own input. If the bass player
+has gone stereo for good, make that change once and press **Update**.
+
+Choosing a lineup when the tracks on screen are changed puts the lineup's
+tracks up all the same. A notice says “Your changes to Full band were not
+kept.”, and for 10 seconds **Undo** brings them back.
+
+A take keeps the icons it was recorded with, whichever lineup you choose
+later.
 
 ### Check the signal
 
@@ -766,7 +799,9 @@ If there are more musicians than inputs, the ones who do not fit are shown
 without an input, and the rehearsal cannot start until every track has one.
 Decide who sits out and remove their tracks.
 
-Removing a track removes that musician on every interface.
+Taking a track off changes only what is on screen. The lineup changes when
+you press **Update**, and then the musician is gone from it on every
+interface.
 
 ### An interface switched on after the app
 
