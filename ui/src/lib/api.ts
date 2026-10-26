@@ -1124,8 +1124,14 @@ type PyApi = {
     deviceIndex: number | null,
     tracks: Track[]
   ): Promise<LineupsAnswer>
-  rename_lineup(name: string, newName: string): Promise<LineupsAnswer>
-  delete_lineup(name: string): Promise<LineupsAnswer>
+  /** Each answers the lineups laid out on `deviceIndex`, the card on
+   *  screen, as Update and Save as new do. */
+  rename_lineup(
+    name: string,
+    newName: string,
+    deviceIndex: number | null
+  ): Promise<LineupsAnswer>
+  delete_lineup(name: string, deviceIndex: number | null): Promise<LineupsAnswer>
   media_url(absPath: string): Promise<string | null>
   /** A track's address, length and waveform. A range narrows the waveform to
    *  the part on screen; the lengths returned are always the whole file's. */

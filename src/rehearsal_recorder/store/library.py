@@ -161,10 +161,12 @@ class Library:
         runs.
 
         icons: the band's icon for each name, given to the takes of a database
-        from before takes kept their own (migration 0010).
+        from before takes kept their own (migration 0010), and to those of an
+        old session.json brought in later (import_rehearsal).
         """
         self.recordings_dir = Path(recordings_dir)
         self._cloud_dir = cloud_dir
+        self._icons = dict(icons or {})
         self._engine = open_engine(self.recordings_dir, migrations, icons)
         self._session = sessionmaker(self._engine, expire_on_commit=False)
 
@@ -1161,8 +1163,15 @@ class Library:
         (names.legacy_song); cloud: {take_number: shared} as for
         set_cloud_copy, relative to cloud_dir; cloud_errors: {take_number:
         message}.
+
+        Its takes are from before takes kept their icons, so each file gets
+        the band's icon by name, as migration 0010 gave the takes it found.
         """
         folder = Path(folder)
+        takes = [{**t, **{kind: [{**f, "icon": f.get("icon") or self._icons.get(f["name"])}
+                                 for f in t.get(kind) or []]
+                          for kind in ("tracks", "notes")}}
+                 for t in takes]
         with self._session.begin() as db:
             songs = self._songs_by_key(db)
             # An old name is the song it leads to, as when typed.

@@ -2244,6 +2244,24 @@ def main():
        and cropped20["notes"][0].get("icon") == "keys")
     lib.close()
 
+    # An old session.json is brought in after the upgrade, so its takes are
+    # given the band's icons the same way, by name.
+    lib = Library(rec20, icons={"Drums": "drums", "Keys": "keys"})
+    imp20 = rec20 / "Old night"
+    lib.import_rehearsal(
+        imp20, name="Old night", created_at="2026-08-01T19:00:00", samplerate=48000, bit_depth=24,
+        tracks=[{"name": "Drums", "channel": 1}, {"name": "Bass", "channel": 2}],
+        takes=[{"take_number": 1, "name": "Take 1",
+                "tracks": [{"name": "Drums", "file": str(imp20 / "01" / "Drums.wav")},
+                           {"name": "Bass", "file": str(imp20 / "01" / "Bass.wav")}],
+                "notes": [{"name": "Keys", "file": str(imp20 / "01" / "Keys.mid")}]}],
+        cloud={}, cloud_errors={}, cloud_dir=None)
+    brought20 = lib.take(imp20, 1)
+    ok("an imported rehearsal's takes get the band's icons by name, its notes too",
+       [t.get("icon") for t in brought20["tracks"]] == ["drums", None]
+       and brought20["notes"][0].get("icon") == "keys")
+    lib.close()
+
     print()
     if problems:
         print(f"{len(problems)} problem(s):")

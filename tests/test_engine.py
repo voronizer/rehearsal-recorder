@@ -8194,9 +8194,9 @@ def main():
            len(spy) == 1 and spy[0][0] == temp and spy[0][1] is rec._clock
            and rec._clock is not None and rec._clock.started_ns is not None)
         record = json.loads((temp / "take.json").read_text(encoding="utf-8"))
-        ok("take.json names each notes track's file, track and port, the one that is not plugged in too",
-           record["notes"] == [{"file": "Drums", "name": "Drums", "port": "TD-17"},
-                               {"file": "Keys", "name": "Keys", "port": "Launchkey Mini MK3"}]
+        ok("take.json names each notes track's file, track, port and icon, the one that is not plugged in too",
+           record["notes"] == [{"file": "Drums", "name": "Drums", "port": "TD-17", "icon": None},
+                               {"file": "Keys", "name": "Keys", "port": "Launchkey Mini MK3", "icon": None}]
            and [(t["file"], t.get("name")) for t in record["tracks"]] == [("Gtr", "Gtr"), ("Drums", "Drums")])
         play67(a, fake)
         a._midi.drain()
@@ -14449,6 +14449,63 @@ def main():
        from_last89["ok"] is True and a89._config["lineup"] == "Trio")
     a89.finish_rehearsal()
 
+    # Start is what the screen opens with next time, after the app is closed.
+    a89.start_rehearsal("Written", 0, SR, [{"name": "Guitar", "channel": 1}], lineup="Full band")
+    disk89 = json.loads((tmp89 / "config.json").read_text(encoding="utf-8"))
+    ok("Start writes last time and the pick down",
+       disk89["lineup"] == "Full band" and [t["name"] for t in disk89["tracks"]] == ["Guitar"])
+    a89.finish_rehearsal()
+    odd89 = a89.start_rehearsal("Odd", 0, SR, [{"name": "Guitar", "channel": 1}], lineup=["Trio"])
+    ok("a pick that is not a name is kept as none",
+       odd89["ok"] is True and a89._config["lineup"] is None)
+    a89.finish_rehearsal()
+
+    # A hand edit that is not a name, or a layout that is not one, costs that
+    # much and no more: the rest of the settings stay.
+    kept89 = L89.migrate({"recordings_dir": "/Music/Takes", "lineup": ["Trio"],
+                          "lineups": [{"name": "Trio", "tracks": [], "layouts": []}]})
+    ok("a picked lineup that is not a name is none, and nothing else goes",
+       kept89["lineup"] is None and kept89["recordings_dir"] == "/Music/Takes"
+       and [l["name"] for l in kept89["lineups"]] == ["Trio"])
+    odd_maps89 = L89.migrate({"lineups": [{"name": "Trio", "tracks": [{"name": "Bass"}], "layouts": [
+        {"device": card89, "inputs": [1, 2]},
+        {"device": "Desk", "inputs": {"Bass": 1}},
+        {"device": card89, "inputs": {"Bass": "2", "Keys": 3, "Vox": True}},
+    ]}]})
+    ok("a layout whose inputs or card is not a map is dropped, and an input that is not a number",
+       odd_maps89["lineups"][0]["layouts"] == [{"device": card89, "inputs": {"Keys": 3}}])
+    ok("so it can be laid out",
+       L89.laid_out(odd_maps89["lineups"], card89, 8)[0]["tracks"][0]["channel"] == 1)
+
+    # The lineups come back laid out on the card the screen uses, which on a
+    # first run is not yet the saved one.
+    a89._config["device_index"] = None
+    a89._config["device"] = None
+    on_screen89 = a89.update_lineup("Trio", 0, trio89)
+    ok("Update answers the lineups laid out on the card it was given",
+       [t["channel"] for t in on_screen89["lineups"][1]["tracks"]] == [2, 3, 4])
+    ok("and so does Rename",
+       [t["channel"] for t in a89.rename_lineup("Trio", "Trio", 0)["lineups"][1]["tracks"]] == [2, 3, 4])
+    a89.add_lineup("Duo", 0, trio89[:2])
+    ok("and Delete",
+       [t["channel"] for t in a89.delete_lineup("Duo", 0)["lineups"][1]["tracks"]] == [2, 3, 4])
+
+    # A lineup bigger than the card: last time and the lineup are laid out
+    # alike, so the screen does not open "changed".
+    tmp89b = tmp / "s89b"
+    tmp89b.mkdir()
+    _, b89 = fresh_api(tmp89b)
+    small89 = identity89(1)
+    b89._config.update(L89.migrate({
+        "tracks": [{"name": "Guitar"}, {"name": "Bass"}, {"name": "Keys"}],
+        "layouts": [{"device": small89, "inputs": {"Guitar": 1, "Bass": 2, "Keys": 3}}]}))
+    b89._config["device_index"] = 1
+    b89._config["device"] = small89
+    small_open89 = b89.load_default_tracks()
+    ok("on a card with fewer inputs, last time is the lineup laid out",
+       small_open89["tracks"] == small_open89["lineups"][0]["tracks"]
+       and [t["channel"] for t in small_open89["tracks"]] == [1, None, None])
+
     print("\n[90] Icons from the take")
     # A take keeps each track's icon (lineups spec, Part 3): the player's lanes, the drum
     # grid, the counted tempo and the drift line read it from the take, never from the band,
@@ -14515,6 +14572,10 @@ def main():
     print("  a take under review")
     a90.start_take()
     a90._recorder._callback(np.full((SR, 2), 900, dtype=np.int16), SR, None, None)
+    record90 = json.loads((Path(a90._recorder.out_dir) / "take.json").read_text(encoding="utf-8"))
+    ok("take.json says each track's icon, and none for a track with none",
+       [(t["name"], t["icon"]) for t in record90["tracks"] if "icon" in t]
+       == [("Drums", "drums"), ("Bass", None)])
     stopped90 = a90.stop_take()
     ok("the review screen gets each track with the icon its rehearsal started with",
        {t["name"]: t.get("icon") for t in stopped90["tracks"]} == {"Drums": "drums", "Bass": None})
@@ -14533,9 +14594,9 @@ def main():
             for name in ("Drums", "Bass")]}), encoding="utf-8")
         return a90.recover_draft(str(d))["take"]
 
-    ok("keeps the icons its take.json recorded, and a track with none there takes last time's",
-       {t["name"]: t.get("icon") for t in draft90(7, {"Drums": "drums"})["tracks"]}
-       == {"Drums": "drums", "Bass": "bass"})
+    ok("keeps the icons its take.json recorded, and none for a track recorded with none",
+       {t["name"]: t.get("icon") for t in draft90(7, {"Drums": "drums", "Bass": None})["tracks"]}
+       == {"Drums": "drums", "Bass": None})
     ok("one recorded before take.json kept icons gets last time's band icons by name",
        {t["name"]: t.get("icon") for t in draft90(8, {})["tracks"]}
        == {"Drums": "percussion", "Bass": "bass"})

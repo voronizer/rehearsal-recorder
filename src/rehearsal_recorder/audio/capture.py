@@ -652,7 +652,7 @@ class AudioRecorder:
                 {"file": self.safe_name(t["name"]),
                  "name": t["name"],
                  "channels": self._width[t["name"]],
-                 **({"icon": t["icon"]} if t.get("icon") else {})}
+                 "icon": t.get("icon") or None}
                 for t in self.tracks
             ],
             "notes": self._notes,

@@ -122,6 +122,9 @@ export function Setup({
   // screen opens; from then on the screen keeps it.
   const [lineups, setLineups] = useState<Lineup[]>([])
   const [picked, setPicked] = useState<string | null>(null)
+  // Until Python has answered, the title would say "Tracks" and offer Save
+  // as new… for a moment, then change to the lineup (B4).
+  const [lineupsRead, setLineupsRead] = useState(false)
   const [askingLineup, setAskingLineup] = useState<LineupAsk | null>(null)
   const [starting, setStarting] = useState(false)
 
@@ -252,6 +255,7 @@ export function Setup({
     // picked stays the one the tracks on screen came from.
     setLineups(tpl?.lineups ?? [])
     if (band === undefined) setPicked(tpl?.lineup ?? null)
+    setLineupsRead(true)
     return cfg.missing_device !== null
   }
 
@@ -356,6 +360,9 @@ export function Setup({
   // its tracks: then there is nothing for Update to keep (lib/lineups).
   const pickedLineup = lineups.find((l) => l.name === picked) ?? null
   const changed = pickedLineup !== null && !sameTracks(tracks, pickedLineup.tracks)
+  // What Start would refuse, a lineup is not kept with: no tracks, or one
+  // with no name.
+  const canKeepLineup = tracks.length > 0 && tracks.every((t) => t.name.trim()) && !starting
 
   /**
    * Whether the check opened this track's port: the track records as it did
@@ -779,9 +786,12 @@ export function Setup({
   /**
    * Puts a lineup's tracks on screen at once. Tracks changed since the
    * lineup they came from would be lost, so a notice says so with an Undo
-   * (B1) that brings them back, and the pick with them. A check running
-   * listens to the old lineup's inputs, and stops; the Undos of tracks taken
-   * off would put a track of the old lineup into this one, and go.
+   * (B1) that brings them back, and the pick with them. A pick that loses
+   * nothing leaves that notice: picking the wrong lineup and then the right
+   * one back still has the changes to undo. A check running listens to the
+   * old lineup's inputs, and stops, at the pick and at its Undo; the Undos
+   * of tracks taken off would put a track of the old lineup into this one,
+   * and go.
    */
   const pickLineup = (name: string) => {
     const next = lineups.find((l) => l.name === name)
@@ -803,51 +813,62 @@ export function Setup({
         action: {
           label: "Undo",
           run: () => {
+            if (checkingRef.current) void stopCheck()
             setTracks(before)
             setPicked(was)
           },
         },
       })
-    } else {
-      dismiss(LINEUP)
     }
     setPicked(name)
     setTracks(next.tracks.map((t) => ({ ...t })))
   }
 
-  /** The lineups as Python has them after a change, or what is wrong. */
-  const tookLineups = (res: LineupsAnswer, failed: string): string | null => {
+  /**
+   * The lineups as Python has them after a change, and the one picked on
+   * screen after it (`pickOf`), or what is wrong. Python's own pick is last
+   * time's, which a pick not yet started is not.
+   */
+  const tookLineups = (
+    res: LineupsAnswer,
+    failed: string,
+    pickOf: (got: Lineup[]) => string | null
+  ): string | null => {
     if (!res.ok) return res.error ?? failed
-    setLineups(res.lineups ?? [])
-    setPicked(res.lineup ?? null)
+    const got = res.lineups ?? []
+    setLineups(got)
+    setPicked(pickOf(got))
     return null
   }
 
   // Update and Save as new keep the tracks on screen on this card.
-  // device_index says which card the inputs are for; it does not change the
-  // recording device, which lives in Settings.
+  // device_index says which card the inputs are for, and the lineups come
+  // back laid out on it; it does not change the recording device, which
+  // lives in Settings.
   const updateLineup = async () => {
     if (!pickedLineup) return
+    const name = pickedLineup.name
     dismiss(ERROR)
-    const res = await api().update_lineup(pickedLineup.name, deviceIndex, tracks)
-    const wrong = tookLineups(res, "Could not update the lineup")
+    const res = await api().update_lineup(name, deviceIndex, tracks)
+    const wrong = tookLineups(res, "Could not update the lineup", () => name)
     if (wrong) sayError(wrong)
   }
-  const saveNewLineup = async (newName: string) =>
-    tookLineups(await api().add_lineup(newName, deviceIndex, tracks), "Could not save the lineup")
-  const renameLineup = async (newName: string) =>
-    pickedLineup
-      ? tookLineups(
-          await api().rename_lineup(pickedLineup.name, newName),
-          "Could not rename the lineup"
-        )
-      : null
+  const saveNewLineup = async (newName: string) => {
+    const res = await api().add_lineup(newName, deviceIndex, tracks)
+    // Python picks the new one, by the name it was kept under.
+    return tookLineups(res, "Could not save the lineup", () => res.lineup ?? null)
+  }
+  const renameLineup = async (newName: string) => {
+    if (!pickedLineup) return null
+    // A rename keeps every lineup in its place.
+    const at = lineups.indexOf(pickedLineup)
+    const res = await api().rename_lineup(pickedLineup.name, newName, deviceIndex)
+    return tookLineups(res, "Could not rename the lineup", (got) => got[at]?.name ?? null)
+  }
   const deleteLineup = async () => {
     if (!pickedLineup) return
-    const wrong = tookLineups(
-      await api().delete_lineup(pickedLineup.name),
-      "Could not delete the lineup"
-    )
+    const res = await api().delete_lineup(pickedLineup.name, deviceIndex)
+    const wrong = tookLineups(res, "Could not delete the lineup", () => null)
     if (wrong) sayError(wrong)
   }
 
@@ -1013,12 +1034,16 @@ export function Setup({
       <div className="flex items-center justify-between gap-4">
         {/* The group is still read by its heading: the lineup's menu is in
             it. */}
-        <h2 className="flex min-w-0 text-sm font-semibold">
+        <h2 className={cn("flex min-w-0 text-sm font-semibold", !lineupsRead && "invisible")}>
           <LineupMenu
             lineups={lineups}
             picked={pickedLineup?.name ?? null}
             changed={changed}
-            disabled={starting}
+            keepable={canKeepLineup}
+            // Look again lays the lineups out anew, and a check opening
+            // listens to the tracks it was given: a pick then would be lost
+            // or not heard.
+            disabled={starting || rescanning || openingCheck}
             onPick={pickLineup}
             onAsk={setAskingLineup}
           />
@@ -1028,14 +1053,24 @@ export function Setup({
               and Save as new… makes another; with none picked, only Save as
               new… is there to keep them. Before Check signal, so it keeps
               its place as these come and go (B4). */}
-          {pickedLineup && changed && (
-            <Button variant="outline" size="row" onClick={() => void updateLineup()}>
+          {lineupsRead && pickedLineup && changed && (
+            <Button
+              variant="outline"
+              size="row"
+              disabled={!canKeepLineup}
+              onClick={() => void updateLineup()}
+            >
               <Check />
               Update
             </Button>
           )}
-          {(!pickedLineup || changed) && (
-            <Button variant="outline" size="row" onClick={() => setAskingLineup("new")}>
+          {lineupsRead && (!pickedLineup || changed) && (
+            <Button
+              variant="outline"
+              size="row"
+              disabled={!canKeepLineup}
+              onClick={() => setAskingLineup("new")}
+            >
               <Plus />
               Save as new…
             </Button>

@@ -1050,7 +1050,8 @@ class Api:
         """(the folder's Library, None), or (None, why it cannot be used)."""
         try:
             # The band's icons are given to the takes of a database from
-            # before takes kept their own (migration 0010), once.
+            # before takes kept their own (migration 0010), once, and to an
+            # old session.json's brought in after it.
             return Library(Path(folder), cloud_dir=lambda: self._cloud_dir,
                            icons=layouts.icons(self._config.get("tracks"))), None
         except LibraryUnavailable as e:
@@ -1989,7 +1990,7 @@ class Api:
             members = self._config.get("tracks", [])
         else:
             members = [layouts.band_member(t) for t in band]
-        answer = self._lineups_answer()
+        answer = self._lineups_answer(index)
         return {
             "device_index": index,
             "samplerate": self._config.get("samplerate"),
@@ -2006,11 +2007,11 @@ class Api:
 
     # ---------- lineups ----------
 
-    def _lineups_answer(self):
-        """Every lineup laid out on the card the setup screen uses, and the
-        one picked. The screen works out for itself whether the tracks on it
-        are still that lineup's."""
-        index = saved_device(self._config, "device", True)
+    def _lineups_answer(self, index):
+        """Every lineup laid out on the card the setup screen uses, `index`,
+        and the one picked. The screen works out for itself whether the
+        tracks on it are still that lineup's. On a first run that card is
+        not the saved one yet, so the screen says which it is."""
         return {
             "ok": True,
             "lineups": layouts.laid_out(
@@ -2037,7 +2038,7 @@ class Api:
         self._remember_layout(device_index, tracks)
         self._config["lineup"] = lineup["name"]
         self._write_config()
-        return self._lineups_answer()
+        return self._lineups_answer(device_index)
 
     def update_lineup(self, name, device_index, tracks):
         """Update: the tracks on screen over the lineup called `name`."""
@@ -2061,7 +2062,9 @@ class Api:
         lineups.append(lineup)
         return self._keep_lineup(lineup, device_index, tracks)
 
-    def rename_lineup(self, name, new_name):
+    def rename_lineup(self, name, new_name, device_index=None):
+        """The lineup called `name` called `new_name`. The answer lays the
+        lineups out on `device_index`, the card on screen, as Update's does."""
         try:
             lineup = self._lineup(name)
             new_name = layouts.lineup_name(
@@ -2072,11 +2075,12 @@ class Api:
         if self._config.get("lineup") == name:
             self._config["lineup"] = new_name
         self._write_config()
-        return self._lineups_answer()
+        return self._lineups_answer(device_index)
 
-    def delete_lineup(self, name):
+    def delete_lineup(self, name, device_index=None):
         """The lineup gone. The tracks on screen and last time stay as they
-        are; with the picked one gone, none is picked."""
+        are; with the picked one gone, none is picked. The answer lays the
+        rest out on `device_index`, the card on screen."""
         try:
             lineup = self._lineup(name)
         except layouts.LineupRefused as e:
@@ -2085,7 +2089,7 @@ class Api:
         if self._config.get("lineup") == name:
             self._config["lineup"] = None
         self._write_config()
-        return self._lineups_answer()
+        return self._lineups_answer(device_index)
 
     def save_default_tracks(self, config):
         """Writes last time without starting. The setup screen no longer
@@ -2346,7 +2350,10 @@ class Api:
         # card should bring it back without anyone remembering a button.
         self._remember_layout(device_index, tracks)
         picked = {each["name"] for each in self._config.get("lineups", [])}
-        self._config["lineup"] = lineup if lineup in picked else None
+        self._config["lineup"] = lineup if isinstance(lineup, str) and lineup in picked else None
+        # Written now: the screen opens with it next time, after the app is
+        # closed.
+        self._write_config()
         # Asked first: with no database there is nowhere to keep the takes,
         # and nothing should be created on disk for them.
         library = self._lib
@@ -2881,7 +2888,7 @@ class Api:
             # by it, as its audio is, and not by its file.
             notes = [{"file": stems[t["name"]], "name": t["name"],
                       "port": (port_of(t) or {}).get("name", ""),
-                      **({"icon": t["icon"]} if t.get("icon") else {})}
+                      "icon": t.get("icon") or None}
                      for t in notes_tracks]
 
         # A click on another device places itself by a clock of the take's
@@ -3534,8 +3541,8 @@ class Api:
 
         take_number = max((t["take_number"] for t in r["takes"]), default=0) + 1
         # Its tempo and click, before the files move (as at keep_take), and
-        # its tracks' icons: as take.json kept them, and for a draft written
-        # before it kept them, or a track it kept none for, last time's.
+        # its tracks' icons: as take.json kept them, none where it says none,
+        # and for a draft written before it kept them, last time's.
         meter = self._meter_of_draft(draft_dir)
         icon_of = {**layouts.icons(self._config.get("tracks")), **draft_icons(draft_dir)}
         # A draft rescued with no name is a take nobody named: "Take 5".

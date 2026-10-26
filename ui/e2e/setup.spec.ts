@@ -1150,7 +1150,41 @@ test.describe("lineups", () => {
     await dialog.getByRole("button", { name: "Rename" }).click()
     await expect(dialog).toHaveCount(0)
     await expect(lineupTitle(page)).toHaveAccessibleName("Full band")
-    expect((await calls(page, "rename_lineup")).at(-1)?.args).toEqual(["Band", "Full band"])
+    // With the card on screen, which the answer lays the lineups out on.
+    expect((await calls(page, "rename_lineup")).at(-1)?.args).toEqual(["Band", "Full band", 0])
+  })
+
+  test("a lineup picked since the screen opened stays picked when renamed", async ({ page }) => {
+    // Python's pick is last time's, Band; the screen's is Trio.
+    await openApp(page, { before: both() })
+    await pick(page, "Trio")
+    await lineupTitle(page).click()
+    await menu(page).getByRole("menuitem", { name: "Rename “Trio”…" }).click()
+    const dialog = page.getByRole("dialog", { name: "Rename “Trio”" })
+    await dialog.getByRole("textbox", { name: "Name" }).fill("Power trio")
+    await page.keyboard.press("Enter")
+    await expect(dialog).toHaveCount(0)
+    await expect(lineupTitle(page)).toHaveAccessibleName("Power trio")
+    await expect(update(page)).toHaveCount(0)
+    expect(await namesOf(page)).toEqual(["Drums", "Bass", "Guitar"])
+  })
+
+  test("a lineup picked since the screen opened, deleted, leaves none picked", async ({
+    page,
+  }) => {
+    await openApp(page, { before: both() })
+    await pick(page, "Trio")
+    await lineupTitle(page).click()
+    await menu(page).getByRole("menuitem", { name: "Delete “Trio”…" }).click()
+    await page
+      .getByRole("dialog", { name: "Delete “Trio”?" })
+      .getByRole("button", { name: "Delete lineup" })
+      .click()
+    await expect(lineupTitle(page)).toHaveAccessibleName("Tracks")
+    await expect(update(page)).toHaveCount(0)
+    await expect(saveNew(page)).toBeVisible()
+    expect(await namesOf(page)).toEqual(["Drums", "Bass", "Guitar"])
+    expect((await calls(page, "delete_lineup")).at(-1)?.args).toEqual(["Trio", 0])
   })
 
   test("picking a lineup over changed tracks says so, and Undo brings them back", async ({
@@ -1175,6 +1209,96 @@ test.describe("lineups", () => {
     expect(await namesOf(page)).toEqual(["Guitar", "Voice"])
     await expect(lineupTitle(page)).toHaveAccessibleName("Band · changed")
     await expect(notices(page)).toHaveCount(0)
+  })
+
+  test("picking back a lineup keeps the Undo of the changes the first pick lost", async ({
+    page,
+  }) => {
+    await openApp(page, { before: both() })
+    await page.getByRole("textbox", { name: "Track 2 name" }).fill("Voice")
+    await pick(page, "Trio")
+    // Trio is as it was saved, so this pick loses nothing of its own.
+    await pick(page, "Band")
+    const notice = said(page, "Your changes to Band were not kept.")
+    await expect(notice).toHaveCount(1)
+    await notice.getByRole("button", { name: "Undo" }).click()
+    expect(await namesOf(page)).toEqual(["Guitar", "Voice"])
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band · changed")
+  })
+
+  test("the Undo of a pick stops the check, which listens to the lineup picked", async ({
+    page,
+  }) => {
+    await openApp(page, { before: both() })
+    await page.getByRole("textbox", { name: "Track 2 name" }).fill("Voice")
+    await pick(page, "Trio")
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+    await said(page, "Your changes to Band were not kept.")
+      .getByRole("button", { name: "Undo" })
+      .click()
+    await expect(page.getByRole("button", { name: "Check signal" })).toBeVisible()
+    expect(await callCount(page, "stop_monitor")).toBe(1)
+  })
+
+  test("Update and Save as new wait, as Start does, for every track to have a name", async ({
+    page,
+  }) => {
+    await openApp(page, { before: both() })
+    await page.getByRole("textbox", { name: "Track 2 name" }).fill(" ")
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band · changed")
+    await expect(update(page)).toBeDisabled()
+    await expect(saveNew(page)).toBeDisabled()
+    await page.getByRole("textbox", { name: "Track 2 name" }).fill("Voice")
+    await expect(update(page)).toBeEnabled()
+    // With every track taken off there is nothing to keep.
+    await page.getByRole("button", { name: "Remove track Guitar" }).click()
+    await page.getByRole("button", { name: "Remove track Voice" }).click()
+    await expect(update(page)).toBeDisabled()
+    await expect(saveNew(page)).toBeDisabled()
+    await lineupTitle(page).click()
+    await expect(menu(page).getByRole("menuitem", { name: "Save as new lineup…" })).toBeDisabled()
+  })
+
+  test("the lineups and Update wait while Start is under way", async ({ page }) => {
+    await openApp(page, { before: both() })
+    await page.getByRole("button", { name: "Remove track Vocals" }).click()
+    await hold(page, "start_rehearsal")
+    await startButton(page).click()
+    await expect.poll(() => callCount(page, "start_rehearsal")).toBe(1)
+    await expect(lineupTitle(page)).toBeDisabled()
+    await expect(update(page)).toBeDisabled()
+    await expect(saveNew(page)).toBeDisabled()
+    await letGo(page, "start_rehearsal")
+  })
+
+  test("the lineups wait while the signal check opens", async ({ page }) => {
+    await openApp(page, { before: both() })
+    await hold(page, "start_monitor")
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await expect.poll(() => callCount(page, "start_monitor")).toBe(1)
+    await expect(lineupTitle(page)).toBeDisabled()
+    await letGo(page, "start_monitor")
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+    await expect(lineupTitle(page)).toBeEnabled()
+  })
+
+  test("the title waits for the lineups before it says anything", async ({ page }) => {
+    // Held, as a slow bridge would: the head shows no "Tracks" and no Save
+    // as new… before Band comes.
+    await openApp(page, {
+      before: both(),
+      after:
+        "const answer = window.pywebview.api.load_default_tracks;" +
+        "const read = new Promise((r) => (window.__LET_READ__ = r));" +
+        "window.pywebview.api.load_default_tracks = async (band) => (await read, answer(band));",
+    })
+    await expect(page.getByRole("button", { name: "Check signal" })).toBeVisible()
+    await expect(lineupTitle(page)).toBeHidden()
+    await expect(saveNew(page)).toHaveCount(0)
+    await page.evaluate(() => (window as unknown as { __LET_READ__: () => void }).__LET_READ__())
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band")
+    await expect(saveNew(page)).toHaveCount(0)
   })
 
   test("picking a lineup with nothing changed says nothing, and stops the check", async ({

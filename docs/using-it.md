@@ -77,7 +77,9 @@ The title over the tracks is the lineup on screen, for example **Full
 band**. Click it to choose another one: its tracks take the place of the
 ones on screen at once, each on its own input. The same menu has **Save as
 new lineup…**, and **Rename** and **Delete** for the lineup on screen.
-Delete asks first, and the tracks on screen stay.
+Delete asks first, and the tracks on screen stay. The title then reads
+“Tracks”, and **Save as new…** stands beside it in case you want to keep
+them under another name.
 
 Take a track off or change an input, and the title says “Full band ·
 changed”. Two buttons then stand beside **Check signal**:

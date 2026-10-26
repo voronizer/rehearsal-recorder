@@ -1814,7 +1814,7 @@ window.__MAKE_API__ = () => ({
     if (named.error) return {ok:false, error:named.error};
     return keepLineups([...lineups, {name:named.name, tracks:copied(tracksIn)}], named.name);
   }),
-  rename_lineup: track('rename_lineup', async (name, newName) => {
+  rename_lineup: track('rename_lineup', async (name, newName, _dev) => {
     const {lineups, lineup} = lineupsNow();
     if (!lineups.some(l => l.name === name)) return {ok:false, error:`No lineup is called ${name}`};
     const named = lineupName(lineups, newName, name);
@@ -1822,7 +1822,7 @@ window.__MAKE_API__ = () => ({
     return keepLineups(lineups.map(l => l.name === name ? {...l, name:named.name} : l),
                        lineup === name ? named.name : lineup);
   }),
-  delete_lineup: track('delete_lineup', async (name) => {
+  delete_lineup: track('delete_lineup', async (name, _dev) => {
     const {lineups, lineup} = lineupsNow();
     if (!lineups.some(l => l.name === name)) return {ok:false, error:`No lineup is called ${name}`};
     return keepLineups(lineups.filter(l => l.name !== name), lineup === name ? null : lineup);

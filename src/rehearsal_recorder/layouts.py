@@ -160,7 +160,7 @@ def migrate(config):
         config["lineup"] = FIRST_LINEUP
     config["lineups"] = _clean_lineups(config["lineups"])
     names = {lineup["name"] for lineup in config["lineups"]}
-    if config.get("lineup") not in names:
+    if not isinstance(config.get("lineup"), str) or config["lineup"] not in names:
         config["lineup"] = None
     return config
 
@@ -168,7 +168,8 @@ def migrate(config):
 def _clean_lineups(lineups):
     """The lineups a hand-edited config holds that can be read: each with a
     name and a list of tracks, the first of any two names that differ only
-    in case, each track with a name and each layout a map."""
+    in case, each track with a name, and each layout a map whose card is a
+    map and whose inputs are numbers."""
     out, seen = [], set()
     for lineup in lineups if isinstance(lineups, list) else []:
         if not isinstance(lineup, dict):
@@ -185,9 +186,24 @@ def _clean_lineups(lineups):
             "name": name,
             "tracks": [t for t in band
                        if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]],
-            "layouts": [e for e in maps if isinstance(e, dict)],
+            "layouts": [_clean_layout(e) for e in maps if _readable_layout(e)],
         })
     return out
+
+
+def _readable_layout(entry):
+    return (isinstance(entry, dict)
+            and isinstance(entry.get("device") or {}, dict)
+            and isinstance(entry.get("inputs") or {}, dict))
+
+
+def _clean_layout(entry):
+    """The layout with only the inputs that are numbers. bool is an int to
+    Python, and True is no input."""
+    if "inputs" not in entry:
+        return entry
+    return {**entry, "inputs": {name: channel for name, channel in (entry["inputs"] or {}).items()
+                                if isinstance(name, str) and type(channel) is int}}
 
 
 def lineup_name(lineups, name, renaming=None):

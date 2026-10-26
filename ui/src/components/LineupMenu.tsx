@@ -31,12 +31,15 @@ export type LineupAsk = "new" | "rename" | "delete"
  * not that lineup's. Its menu lists the lineups, each with its tracks
  * counted, the picked one checked, then *Save as new lineup…* and, with one
  * picked, *Rename* and *Delete* it. A long name is cut and shown whole in
- * the shared tip (B6); *changed* is never cut.
+ * the shared tip (B6); *changed* is never cut. `keepable` says whether the
+ * tracks on screen can be kept as a lineup, as Start says whether they can
+ * start.
  */
 export function LineupMenu({
   lineups,
   picked,
   changed,
+  keepable,
   disabled,
   onPick,
   onAsk,
@@ -44,6 +47,7 @@ export function LineupMenu({
   lineups: Lineup[]
   picked: string | null
   changed: boolean
+  keepable: boolean
   disabled?: boolean
   onPick: (name: string) => void
   onAsk: (ask: LineupAsk) => void
@@ -106,7 +110,7 @@ export function LineupMenu({
             <DropdownMenuSeparator />
           </>
         )}
-        <DropdownMenuItem onSelect={() => onAsk("new")}>
+        <DropdownMenuItem disabled={!keepable} onSelect={() => onAsk("new")}>
           <Plus />
           Save as new lineup…
         </DropdownMenuItem>
