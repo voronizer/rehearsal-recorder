@@ -41,14 +41,19 @@ def database_path(recordings_dir):
     return Path(recordings_dir) / DB_NAME
 
 
-def alembic_config(connection=None, migrations=MIGRATIONS):
+def alembic_config(connection=None, migrations=MIGRATIONS, icons=None):
     """Alembic's settings, built in code: the app has no alembic.ini of its
     own, and the migrations are found next to this file wherever the package
-    was installed or bundled. `migrations` is another folder only in tests."""
+    was installed or bundled. `migrations` is another folder only in tests.
+
+    `icons` is the band's icon for each name, {name: icon}, which migration
+    0010 gives the takes recorded before it: a migration cannot read the
+    app's settings itself."""
     cfg = Config()
     cfg.set_main_option("script_location", str(migrations))
     if connection is not None:
         cfg.attributes["connection"] = connection
+    cfg.attributes["icons"] = dict(icons or {})
     return cfg
 
 
@@ -100,11 +105,11 @@ def _backup(path, revision):
     return target
 
 
-def open_engine(recordings_dir, migrations=MIGRATIONS):
+def open_engine(recordings_dir, migrations=MIGRATIONS, icons=None):
     """
     The recordings folder's database, created if there is none and upgraded
     to the newest schema. Raises LibraryUnavailable when it cannot be used;
-    the file is then exactly as it was found.
+    the file is then exactly as it was found. `icons`: see alembic_config().
     """
     path = database_path(recordings_dir)
     engine = make_engine(path)
@@ -121,7 +126,7 @@ def open_engine(recordings_dir, migrations=MIGRATIONS):
             if current is not None:
                 _backup(path, current)
             with engine.begin() as connection:
-                command.upgrade(alembic_config(connection, migrations), "head")
+                command.upgrade(alembic_config(connection, migrations, icons), "head")
     except LibraryUnavailable:
         engine.dispose()
         raise

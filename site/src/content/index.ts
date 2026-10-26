@@ -41,7 +41,7 @@ export type Step = (typeof STEPS)[number]
 
 /** Each step's items, in order: its tiles, then its cards. */
 export const ITEMS = {
-  before: ["set", "tempo", "backing", "left-off", "tap", "counted", "first-take", "inputs"],
+  before: ["set", "tempo", "backing", "lineups", "left-off", "tap", "counted", "first-take", "inputs"],
   during: ["tracks", "midi", "count-in", "edge", "last-time", "clip", "awake", "unplugged", "disk"],
   after: ["marks", "drift", "undo", "same-bar", "false-starts"],
   later: ["song-page", "cloud", "mark-lead", "numbers", "cloud-follows", "phone-mix", "bars", "wav-tempo"],

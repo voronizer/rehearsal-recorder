@@ -95,6 +95,9 @@ export type TrackFile = {
    *  the band heard it (backing-track spec, Part 3). Every other track has
    *  none. */
   kind?: "backing"
+  /** The icon its track had when the take was recorded, which the take
+   *  keeps; none for a track that had none. */
+  icon?: string
 }
 
 /** A take's notes of one track: the .mid saved beside the audio. `port` is
@@ -107,6 +110,8 @@ export type TrackFile = {
 export type NotesFile = {
   name: string
   file: string
+  /** As a TrackFile's: the icon the take keeps for it. */
+  icon?: string
   port: string
   after: string | null
   place?: number
@@ -117,6 +122,9 @@ export type NotesFile = {
  *  is. */
 export type MissingNotes = {
   name: string
+  /** The icon its track had, on a take under review; a saved take keeps
+   *  none for a lane with no file. */
+  icon?: string
   port: string
   after: string | null
   place?: number
@@ -611,13 +619,20 @@ export type TrackTemplate = {
   device_index?: number
   samplerate?: number
   bit_depth?: number
+  /** Last time: what Start rehearsal had on screen. */
   tracks?: Track[]
+  lineups?: Lineup[]
+  /** The lineup last time was picked from, or null for none. */
+  lineup?: string | null
 }
+
+/** A lineup of the band, laid out on the interface in force. */
+export type Lineup = { name: string; tracks: Track[] }
 
 /** A track of a take as take_media returns it: address, length and waveform. */
 export type TrackMedia = {
   name: string
-  /** The band's icon for this name, when it has one. */
+  /** The icon the take keeps for this track, when it has one. */
   icon?: string
   url: string | null
   error?: string
@@ -677,9 +692,9 @@ export type MidiActivity = Record<string, MidiTrackActivity>
  * `high` (whole octaves, C to B). The fourth is the note-on's velocity, 1 to
  * 127 as the .mid has it, unlike `MidiTrackActivity.vel` (0 to 1).
  *
- * `icon` is the band's for the name, found as take_media finds a track's, on
- * an error too: a track that records notes only has no audio lane to take it
- * from.
+ * `icon` is the one the take keeps for the file, as take_media's lanes have
+ * theirs, on an error too: a track that records notes only has no audio lane
+ * to take it from. A lane with no file gets the band's, by its name.
  */
 export type TakeNotes = { icon?: string } & (
   | { name: string; error: string }
@@ -1077,6 +1092,9 @@ export type Settings = MetronomeSettings & BackingSettings & {
 
 type Ok<T = object> = { ok: boolean; error?: string } & T
 
+/** Every lineup laid out again, and the one picked, after a change. */
+export type LineupsAnswer = Ok<{ lineups?: Lineup[]; lineup?: string | null }>
+
 type PyApi = {
   ping(): Promise<{ ok: boolean; message: string }>
   list_input_devices(): Promise<Device[]>
@@ -1093,7 +1111,27 @@ type PyApi = {
   rescan_devices(): Promise<
     Ok<{ found?: string[]; gone?: string[]; warning?: string }>
   >
-  save_default_tracks(config: TrackTemplate): Promise<Ok>
+  /** Update: the tracks on screen over that lineup, and last time too. */
+  update_lineup(
+    name: string,
+    deviceIndex: number | null,
+    tracks: Track[]
+  ): Promise<LineupsAnswer>
+  /** Save as new: a lineup of the tracks on screen, picked. Refused with
+   *  an empty name or one another lineup has, regardless of case. */
+  add_lineup(
+    name: string,
+    deviceIndex: number | null,
+    tracks: Track[]
+  ): Promise<LineupsAnswer>
+  /** Each answers the lineups laid out on `deviceIndex`, the card on
+   *  screen, as Update and Save as new do. */
+  rename_lineup(
+    name: string,
+    newName: string,
+    deviceIndex: number | null
+  ): Promise<LineupsAnswer>
+  delete_lineup(name: string, deviceIndex: number | null): Promise<LineupsAnswer>
   media_url(absPath: string): Promise<string | null>
   /** A track's address, length and waveform. A range narrows the waveform to
    *  the part on screen; the lengths returned are always the whole file's. */
@@ -1111,7 +1149,9 @@ type PyApi = {
     tracks: Track[],
     bitDepth?: number,
     /** The set it plays by; left out or null, it plays freely. */
-    setId?: number | null
+    setId?: number | null,
+    /** The lineup picked over the tracks, kept with last time. */
+    lineup?: string | null
   ): Promise<Ok<{ folder?: string }>>
   /** Which rate/depth combinations this input actually accepts. */
   recording_formats(
@@ -1513,14 +1553,14 @@ type PyApi = {
    *  per file in the order asked. A track with no file (its port never
    *  appeared) is asked with a file of null, for its icon: it is answered
    *  "Notes file not found". */
-  take_notes(files: (TrackFile | { name: string; file: null })[]): Promise<TakeNotes[]>
+  take_notes(files: (TrackFile | { name: string; file: null; icon?: string })[]): Promise<TakeNotes[]>
   /** The band's tempo through a take, bar by bar, for the drift line on
    *  Master: counted from the drums (their .mid, else their audio) or the mix,
    *  against the aim Python finds from the take's own meter and its song.
    *  The last 32 answers are kept, so a take opened again is instant. */
   take_drift(
     tracks: TrackFile[],
-    notes: { name: string; file: string }[],
+    notes: { name: string; file: string; icon?: string }[],
     meter: { tempo: number | null; signature: Signature | null; click: boolean; song: string | null }
   ): Promise<TakeDrift>
   activity(): Promise<Activity>

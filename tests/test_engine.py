@@ -3540,8 +3540,9 @@ def main():
        flat["layouts"] == [{"device": xr18,
                             "inputs": {"Guitar": 3, "Vocals": 7}}])
     ok("migrating twice changes nothing", L.migrate(L.migrate(flat)) == flat)
-    ok("nothing saved migrates to nothing",
-       L.migrate({}) == {"tracks": [], "layouts": []})
+    ok("nothing saved migrates to no band, and Band as its one lineup",
+       L.migrate({}) == {"tracks": [], "layouts": [], "lineup": "Band",
+                         "lineups": [{"name": "Band", "tracks": [], "layouts": []}]})
 
     # The shape where each card carried its own band: nobody may be lost by
     # reading it, so the band is everyone who appeared on any card.
@@ -3861,13 +3862,15 @@ def main():
        a35.load_default_tracks([{"name": "Vox", "icon": "vocals"}])["tracks"][0]
        .get("icon") == "vocals")
 
-    # The player is shown takes, and a take's tracks are only names and
-    # files: the icon is the band's, found by the name.
-    media = a35.take_media([{"name": "Bass", "file": str(sides / "Gtr.wav")},
+    # The player is shown takes, and a take keeps each track's icon (lineups
+    # spec, Part 3): the band's icons draw no take.
+    media = a35.take_media([{"name": "Bass", "file": str(sides / "Gtr.wav"), "icon": "bass"},
                             {"name": "Gtr", "file": str(sides / "Gtr.wav")},
-                            {"name": "Keys", "file": str(sides / "nowhere.wav")}])
-    ok("the player is told each track's icon, by its name in the band",
+                            {"name": "Keys", "file": str(sides / "nowhere.wav"), "icon": "keys"}])
+    ok("the player is told each track's icon, as the take keeps it",
        [m.get("icon") for m in media] == ["bass", None, "keys"])
+    ok("and none for a track the take keeps none for, though the band has one",
+       "icon" not in a35.take_media([{"name": "Bass", "file": str(sides / "Gtr.wav")}])[0])
 
     print("\n[34] Looking for interfaces again")
     # PortAudio lists devices once, when it starts, so a card plugged in
@@ -8191,9 +8194,9 @@ def main():
            len(spy) == 1 and spy[0][0] == temp and spy[0][1] is rec._clock
            and rec._clock is not None and rec._clock.started_ns is not None)
         record = json.loads((temp / "take.json").read_text(encoding="utf-8"))
-        ok("take.json names each notes track's file, track and port, the one that is not plugged in too",
-           record["notes"] == [{"file": "Drums", "name": "Drums", "port": "TD-17"},
-                               {"file": "Keys", "name": "Keys", "port": "Launchkey Mini MK3"}]
+        ok("take.json names each notes track's file, track, port and icon, the one that is not plugged in too",
+           record["notes"] == [{"file": "Drums", "name": "Drums", "port": "TD-17", "icon": None},
+                               {"file": "Keys", "name": "Keys", "port": "Launchkey Mini MK3", "icon": None}]
            and [(t["file"], t.get("name")) for t in record["tracks"]] == [("Gtr", "Gtr"), ("Drums", "Drums")])
         play67(a, fake)
         a._midi.drain()
@@ -9570,9 +9573,8 @@ def main():
        and sorted(p.parent.name for p in target69.rglob("*.mid")) == [Path(a69._lib.take(folder69, 3)["cloud"]["tracks"]).name])
 
     print("\n[70] take_notes")
-    # The player draws a take's notes from its .mid files. A take knows them only
-    # by name and file, and whether a lane is a drum grid is the band's icon, found
-    # by that name as take_media finds a track's.
+    # The player draws a take's notes from its .mid files. Whether a lane is a drum
+    # grid is the icon the take keeps for that file, as take_media's lanes are.
     from rehearsal_recorder.midi.notes import DRUM_ROWS as DRUM_ROWS70
     from rehearsal_recorder.midi.smf import write_mid as write_mid70
 
@@ -9593,9 +9595,10 @@ def main():
     drums70 = hits70(folder70 / "Drums.mid", 0, [36, 38, 42, 99])   # on channel 1: only the icon says a kit
     keys70 = hits70(folder70 / "Keys.mid", 0, [61, 74])
     pad70 = hits70(folder70 / "Pad.mid", 9, [36, 38])               # not in the band, but on channel 10
-    answered = a70.take_notes([{"name": "Drums", "file": drums70}, {"name": "Keys", "file": keys70},
+    answered = a70.take_notes([{"name": "Drums", "file": drums70, "icon": "drums"},
+                               {"name": "Keys", "file": keys70, "icon": "keys"},
                                {"name": "Pad", "file": pad70}])
-    ok("a Both track named Drums with the drums icon in the band reads as drums, the rows in the order they are drawn",
+    ok("a .mid the take gave the drums icon reads as drums, the rows in the order they are drawn",
        answered[0]["name"] == "Drums" and answered[0]["drums"] is True
        and answered[0]["rows"] == DRUM_ROWS70 + ["Other"]
        and [n[2] for n in answered[0]["notes"]] == [5, 4, 2, 6])
@@ -9606,27 +9609,28 @@ def main():
        answered[1]["name"] == "Keys" and answered[1]["drums"] is False
        and (answered[1]["low"], answered[1]["high"]) == (60, 83)
        and [n[2] for n in answered[1]["notes"]] == [61, 74])
-    ok("a name the band does not have is judged by its file alone: notes on channel 10 are drums",
+    ok("a file with no icon is judged by itself alone: notes on channel 10 are drums",
        answered[2]["name"] == "Pad" and answered[2]["drums"] is True and answered[2]["rows"] == DRUM_ROWS70)
     ok("each file is answered, in the order it was asked", [a["name"] for a in answered] == ["Drums", "Keys", "Pad"])
     ok("what the player is sent can go over the bridge as JSON", json.loads(json.dumps(answered)) == answered)
 
     # A track that records notes only has no audio lane, and so no take_media answer to take its icon from: the
-    # plate of its notes lane takes it from here, found as take_media finds a track's.
-    ok("each answer carries the band's icon for its name, as take_media's does",
+    # plate of its notes lane takes it from here. One whose port never appeared has no file in the take to keep
+    # an icon, and is given the band's, by its name.
+    ok("each answer carries the icon its file was given, as take_media's does",
        answered[0].get("icon") == "drums" and answered[1].get("icon") == "keys")
-    ok("a name the band does not have gets no icon",
+    ok("a file with no icon gets none",
        "icon" not in answered[2])
-    iconned70 = a70.take_notes([{"name": "Keys", "file": str(folder70 / "Gone.mid")},
+    iconned70 = a70.take_notes([{"name": "Keys", "file": str(folder70 / "Gone.mid"), "icon": "keys"},
                                 {"name": "Drums", "file": None}, {"name": "Keys"}, {"name": "Bass", "file": None}])
-    ok("an answer that is an error carries the icon too: a file not found, a file of None, no file at all",
+    ok("an answer that is an error carries the icon too: a file not found its own, a file of None or none at all the band's",
        iconned70[:3] == [{"name": "Keys", "icon": "keys", "error": "Notes file not found"},
                          {"name": "Drums", "icon": "drums", "error": "Notes file not found"},
                          {"name": "Keys", "icon": "keys", "error": "Notes file not found"}])
     ok("and a band member with no icon gets none, as take_media gives none",
        iconned70[3] == {"name": "Bass", "error": "Notes file not found"})
     ok("a name that is not text gets no icon, and does not fail the call",
-       a70.take_notes([{"name": ["Keys"], "file": None}, {"name": "Keys", "file": keys70}])[1].get("icon") == "keys")
+       a70.take_notes([{"name": ["Keys"], "file": None}, {"name": "Keys", "file": None}])[1].get("icon") == "keys")
 
     gone70 = str(folder70 / "Gone.mid")
     (folder70 / "Torn.mid").write_bytes(b"MThd\x00\x00\x00\x06\x00")
@@ -9640,8 +9644,8 @@ def main():
     catcher70.emit = said70.append
     logging70.getLogger(apimod70.__name__).addHandler(catcher70)
     try:
-        mixed = a70.take_notes([{"name": "Bass", "file": gone70}, {"name": "Drums", "file": drums70},
-                                {"name": "Keys", "file": str(folder70 / "Torn.mid")},
+        mixed = a70.take_notes([{"name": "Bass", "file": gone70}, {"name": "Drums", "file": drums70, "icon": "drums"},
+                                {"name": "Keys", "file": str(folder70 / "Torn.mid"), "icon": "keys"},
                                 {"name": "Pad", "file": str(folder70 / "Empty.mid")},
                                 {"name": "Folder", "file": str(folder70)},
                                 {"name": "Keys", "file": keys70}])
@@ -9664,7 +9668,7 @@ def main():
         # raises OSError (ENAMETOOLONG) from the existence check on Linux and macOS, and is simply not there on Windows.
         long70 = str(folder70 / ("x" * 300 + ".mid"))
         refused = a70.take_notes([{"name": "Keys", "file": keys70}, {"name": "Long", "file": long70},
-                                  {"name": "Drums", "file": drums70}])
+                                  {"name": "Drums", "file": drums70, "icon": "drums"}])
         ok("a name too long for the file system is answered with an error, and the other files still answer",
            [r["name"] for r in refused] == ["Keys", "Long", "Drums"]
            and refused[1].get("error") in ("Notes file not found", "Notes file not readable")
@@ -9699,9 +9703,9 @@ def main():
     ok("a file that goes between two calls is not found the second time",
        a70.take_notes([{"name": "Pad", "file": pad70}]) == [{"name": "Pad", "error": "Notes file not found"}])
     a70._config["tracks"] = [{"name": "Pad", "icon": "drums"}]
-    ok("the icon is read from the band as it is now",
-       a70.take_notes([{"name": "Keys", "file": keys70}])[0]["drums"] is False
-       and a70.take_notes([{"name": "Pad", "file": drums70}])[0]["drums"] is True)
+    ok("the band's icon does not make a file a drum grid: only the take's does",
+       a70.take_notes([{"name": "Pad", "file": drums70}])[0]["drums"] is False
+       and a70.take_notes([{"name": "Pad", "file": drums70, "icon": "drums"}])[0]["drums"] is True)
     a70._config["tracks"] = None
     ok("a band that is not set yet leaves every file to its channel",
        a70.take_notes([{"name": "Drums", "file": drums70}])[0]["drums"] is False)
@@ -14278,6 +14282,325 @@ def main():
        a88.update_status()["updated"] is None and state87(where88).exists())
     ok("run from source, nothing of this happens",
        a88.start_update_checks() is False and state87(where88).exists())
+
+    print("\n[89] Lineups")
+    from rehearsal_recorder import layouts as L89
+    from rehearsal_recorder.audio.devices import device_identity as identity89
+    card89 = identity89(0)
+    today89 = {"tracks": [{"name": "Guitar"}, {"name": "Bass"}],
+               "layouts": [{"device": card89, "inputs": {"Guitar": 1, "Bass": 2}}]}
+    once89 = L89.migrate(json.loads(json.dumps(today89)))
+    ok("today's band becomes the first lineup, Band",
+       once89["lineups"] == [{"name": "Band", "tracks": today89["tracks"],
+                              "layouts": today89["layouts"]}]
+       and once89["lineup"] == "Band")
+    ok("and last time stays as it was",
+       once89["tracks"] == today89["tracks"] and once89["layouts"] == today89["layouts"])
+    twice89 = L89.migrate(json.loads(json.dumps(once89)))
+    ok("migrating twice changes nothing", twice89 == once89)
+    once89["lineups"][0]["tracks"].append({"name": "Keys"})
+    ok("the lineup is a copy, not last time itself", len(once89["tracks"]) == 2)
+    fresh89 = L89.migrate({})
+    ok("a fresh install gets Band with no tracks",
+       fresh89["lineups"] == [{"name": "Band", "tracks": [], "layouts": []}]
+       and fresh89["lineup"] == "Band")
+    ok("which is laid out as the first-run pair",
+       [t["name"] for t in L89.laid_out(fresh89["lineups"], card89, 8)[0]["tracks"]]
+       == ["Guitar 1", "Vocals"])
+    ok("a lineups key that is not a list is none",
+       L89.migrate({"lineups": "Trio"})["lineups"] == [])
+    hand89 = L89.migrate({"lineups": [
+        {"tracks": []}, {"name": "  ", "tracks": [], "layouts": []},
+        {"name": "Trio", "tracks": "Bass", "layouts": []},
+        {"name": "Duo", "tracks": [{"name": "Bass"}, "Keys", {"channel": 3}], "layouts": [7]},
+        {"name": "duo", "tracks": [], "layouts": []},
+    ], "lineup": "Gone"})
+    ok("a hand-edited lineup with no name or no list of tracks is dropped, and a second of one name",
+       [l["name"] for l in hand89["lineups"]] == ["Duo"])
+    ok("a track with no name and a layout that is not a map are dropped",
+       hand89["lineups"][0]["tracks"] == [{"name": "Bass"}]
+       and hand89["lineups"][0]["layouts"] == [])
+    ok("a picked lineup that is not there is none", hand89["lineup"] is None)
+    ok("deleting every lineup is kept", L89.migrate({"lineups": []})["lineups"] == [])
+    ok("a missing lineup key reads as none",
+       L89.migrate({"lineups": [{"name": "Trio", "tracks": [], "layouts": []}]})["lineup"] is None)
+    try:
+        L89.lineup_name([{"name": "Trio"}], " trio ")
+        ok("a name another lineup has is refused", False)
+    except L89.LineupRefused as e:
+        ok("a name another lineup has is refused", str(e) == "There is already a lineup called Trio")
+    try:
+        L89.lineup_name([], "   ")
+        ok("an empty name is refused", False)
+    except L89.LineupRefused as e:
+        ok("an empty name is refused", str(e) == "A lineup needs a name")
+    ok("a name is trimmed and cut at 40", L89.lineup_name([], "  " + "x" * 50) == "x" * 40)
+    ok("a lineup may keep its own name in another case",
+       L89.lineup_name([{"name": "Trio"}], "TRIO", renaming="Trio") == "TRIO")
+
+    tmp89 = tmp / "s89"
+    tmp89.mkdir()
+    apimod89, a89 = fresh_api(tmp89)
+    a89._config.update(L89.migrate(json.loads(json.dumps(today89))))
+    a89._config["device_index"] = 0
+    a89._config["device"] = card89
+    first89 = a89.load_default_tracks()
+    ok("the setup screen gets the lineups laid out on the card, and the picked one",
+       first89["lineups"] == [{"name": "Band", "tracks": first89["tracks"]}]
+       and first89["lineup"] == "Band"
+       and [(t["name"], t["channel"]) for t in first89["tracks"]] == [("Guitar", 1), ("Bass", 2)])
+    trio89 = [{"name": "Bass", "channel": 2}, {"name": "Guitar", "channel": 3, "icon": "guitar"},
+              {"name": "Vocals", "channel": 4}]
+    added89 = a89.add_lineup("Trio", 0, trio89)
+    ok("Save as new adds a lineup and picks it",
+       added89["ok"] is True and [l["name"] for l in added89["lineups"]] == ["Band", "Trio"]
+       and added89["lineup"] == "Trio")
+    ok("with the tracks on screen, laid out",
+       [(t["name"], t["channel"], t.get("icon")) for t in added89["lineups"][1]["tracks"]]
+       == [("Bass", 2, None), ("Guitar", 3, "guitar"), ("Vocals", 4, None)])
+    ok("and they are last time too",
+       [t["name"] for t in a89.load_default_tracks()["tracks"]] == ["Bass", "Guitar", "Vocals"]
+       and a89._config["lineup"] == "Trio")
+    ok("and it is written down",
+       json.loads((tmp89 / "config.json").read_text(encoding="utf-8"))["lineup"] == "Trio")
+    ok("a name another lineup has is refused, whatever its case",
+       a89.add_lineup("trio", 0, trio89) == {"ok": False, "error": "There is already a lineup called Trio"})
+    ok("and an empty one",
+       a89.add_lineup("  ", 0, trio89) == {"ok": False, "error": "A lineup needs a name"})
+    long89 = a89.add_lineup("y" * 50, 0, trio89)
+    ok("a long name is kept cut at 40", long89["lineup"] == "y" * 40)
+    a89.delete_lineup("y" * 40)
+
+    other89 = {"name": "Other desk", "host_api": "CoreAudio"}
+    a89._config["layouts"].append({"device": other89, "inputs": {"Vocals": 7}})
+    a89.add_lineup("With keys", 0, trio89 + [{"name": "Keys", "channel": 5}])
+    keys89 = next(l for l in a89._config["lineups"] if l["name"] == "With keys")
+    on_other89 = L89.laid_out([keys89], other89, 8)[0]["tracks"]
+    ok("a new lineup keeps last time's inputs on other cards",
+       next(t for t in on_other89 if t["name"] == "Vocals")["channel"] == 7)
+    a89.delete_lineup("With keys")
+
+    no_drums89 = [{"name": "Guitar", "channel": 1}]
+    updated89 = a89.update_lineup("Band", 0, no_drums89)
+    ok("Update writes over the picked lineup",
+       updated89["ok"] is True and updated89["lineup"] == "Band"
+       and [t["name"] for t in updated89["lineups"][0]["tracks"]] == ["Guitar"])
+    ok("and leaves the others as they were",
+       [t["name"] for t in updated89["lineups"][1]["tracks"]] == ["Bass", "Guitar", "Vocals"])
+    ok("and makes it last time",
+       [t["name"] for t in a89.load_default_tracks()["tracks"]] == ["Guitar"])
+    ok("a lineup nobody has is not updated",
+       a89.update_lineup("Nobody", 0, no_drums89) == {"ok": False, "error": "No lineup is called Nobody"})
+    nocard89 = a89.update_lineup("Band", None, [{"name": "Drums", "channel": 1}])
+    ok("Update with no interface in hand still keeps the lineup", nocard89["ok"] is True)
+    a89._config["device_index"] = None
+    a89._config["device"] = None
+    ok("and with no card it is laid out from it",
+       [t["name"] for t in a89.load_default_tracks()["lineups"][0]["tracks"]] == ["Drums"])
+    a89._config["device_index"] = 0
+    a89._config["device"] = card89
+
+    renamed89 = a89.rename_lineup("Trio", "trio")
+    ok("a lineup can be renamed to its own name in another case",
+       renamed89["ok"] is True and [l["name"] for l in renamed89["lineups"]] == ["Band", "trio"])
+    ok("but not to another lineup's",
+       a89.rename_lineup("trio", "band") == {"ok": False, "error": "There is already a lineup called Band"})
+    ok("nor one nobody has",
+       a89.rename_lineup("Nobody", "X") == {"ok": False, "error": "No lineup is called Nobody"})
+    a89.update_lineup("trio", 0, trio89)
+    ok("renaming the picked lineup renames the pick",
+       a89.rename_lineup("trio", "Trio")["lineup"] == "Trio" and a89._config["lineup"] == "Trio")
+    ok("renaming another leaves the pick",
+       a89.rename_lineup("Band", "Full band")["lineup"] == "Trio")
+    gone89 = a89.delete_lineup("Trio")
+    ok("deleting the picked lineup picks none",
+       gone89["ok"] is True and gone89["lineup"] is None
+       and [l["name"] for l in gone89["lineups"]] == ["Full band"])
+    ok("and leaves last time as it was",
+       [t["name"] for t in a89.load_default_tracks()["tracks"]] == ["Bass", "Guitar", "Vocals"])
+    ok("a lineup nobody has is not deleted",
+       a89.delete_lineup("Nobody") == {"ok": False, "error": "No lineup is called Nobody"})
+    last89 = a89.delete_lineup("Full band")
+    ok("the last lineup can be deleted", last89["ok"] is True and last89["lineups"] == [])
+    ok("and stays deleted when the settings are read again",
+       a89._read_config()["lineups"] == [])
+
+    a89.add_lineup("Full band", 0, [{"name": "Guitar", "channel": 1}, {"name": "Drums", "channel": 2}])
+    a89.add_lineup("Trio", 0, trio89)
+    before89 = json.loads(json.dumps(a89._config["lineups"]))
+    started89 = a89.start_rehearsal("Lineup", 0, SR, [{"name": "Guitar", "channel": 1}], lineup="Full band")
+    ok("Start writes into no lineup",
+       started89["ok"] is True and a89._config["lineups"] == before89)
+    ok("and keeps the tracks and the pick as last time",
+       [t["name"] for t in a89._config["tracks"]] == ["Guitar"] and a89._config["lineup"] == "Full band")
+    a89.finish_rehearsal()
+    a89.start_rehearsal("Nobody's", 0, SR, [{"name": "Guitar", "channel": 1}], lineup="Nobody")
+    ok("a pick nobody has is kept as none", a89._config["lineup"] is None)
+    a89.finish_rehearsal()
+    from_pads89 = a89._transport.execute("start_rehearsal", {
+        "name": "Pads", "device_index": 0, "samplerate": SR,
+        "tracks": [{"name": "Bass", "channel": 2}], "lineup": "Trio"}, wait=True)
+    ok("the controller's Start with a setup takes the lineup",
+       from_pads89["ok"] is True and a89._config["lineup"] == "Trio")
+    a89.finish_rehearsal()
+    a89._config["samplerate"] = SR
+    from_last89 = a89._transport.execute("start_rehearsal", {}, wait=True)
+    ok("and without a setup keeps last time's",
+       from_last89["ok"] is True and a89._config["lineup"] == "Trio")
+    a89.finish_rehearsal()
+
+    # Start is what the screen opens with next time, after the app is closed.
+    a89.start_rehearsal("Written", 0, SR, [{"name": "Guitar", "channel": 1}], lineup="Full band")
+    disk89 = json.loads((tmp89 / "config.json").read_text(encoding="utf-8"))
+    ok("Start writes last time and the pick down",
+       disk89["lineup"] == "Full band" and [t["name"] for t in disk89["tracks"]] == ["Guitar"])
+    a89.finish_rehearsal()
+    odd89 = a89.start_rehearsal("Odd", 0, SR, [{"name": "Guitar", "channel": 1}], lineup=["Trio"])
+    ok("a pick that is not a name is kept as none",
+       odd89["ok"] is True and a89._config["lineup"] is None)
+    a89.finish_rehearsal()
+
+    # A hand edit that is not a name, or a layout that is not one, costs that
+    # much and no more: the rest of the settings stay.
+    kept89 = L89.migrate({"recordings_dir": "/Music/Takes", "lineup": ["Trio"],
+                          "lineups": [{"name": "Trio", "tracks": [], "layouts": []}]})
+    ok("a picked lineup that is not a name is none, and nothing else goes",
+       kept89["lineup"] is None and kept89["recordings_dir"] == "/Music/Takes"
+       and [l["name"] for l in kept89["lineups"]] == ["Trio"])
+    odd_maps89 = L89.migrate({"lineups": [{"name": "Trio", "tracks": [{"name": "Bass"}], "layouts": [
+        {"device": card89, "inputs": [1, 2]},
+        {"device": "Desk", "inputs": {"Bass": 1}},
+        {"device": card89, "inputs": {"Bass": "2", "Keys": 3, "Vox": True}},
+    ]}]})
+    ok("a layout whose inputs or card is not a map is dropped, and an input that is not a number",
+       odd_maps89["lineups"][0]["layouts"] == [{"device": card89, "inputs": {"Keys": 3}}])
+    ok("so it can be laid out",
+       L89.laid_out(odd_maps89["lineups"], card89, 8)[0]["tracks"][0]["channel"] == 1)
+
+    # The lineups come back laid out on the card the screen uses, which on a
+    # first run is not yet the saved one.
+    a89._config["device_index"] = None
+    a89._config["device"] = None
+    on_screen89 = a89.update_lineup("Trio", 0, trio89)
+    ok("Update answers the lineups laid out on the card it was given",
+       [t["channel"] for t in on_screen89["lineups"][1]["tracks"]] == [2, 3, 4])
+    ok("and so does Rename",
+       [t["channel"] for t in a89.rename_lineup("Trio", "Trio", 0)["lineups"][1]["tracks"]] == [2, 3, 4])
+    a89.add_lineup("Duo", 0, trio89[:2])
+    ok("and Delete",
+       [t["channel"] for t in a89.delete_lineup("Duo", 0)["lineups"][1]["tracks"]] == [2, 3, 4])
+
+    # A lineup bigger than the card: last time and the lineup are laid out
+    # alike, so the screen does not open "changed".
+    tmp89b = tmp / "s89b"
+    tmp89b.mkdir()
+    _, b89 = fresh_api(tmp89b)
+    small89 = identity89(1)
+    b89._config.update(L89.migrate({
+        "tracks": [{"name": "Guitar"}, {"name": "Bass"}, {"name": "Keys"}],
+        "layouts": [{"device": small89, "inputs": {"Guitar": 1, "Bass": 2, "Keys": 3}}]}))
+    b89._config["device_index"] = 1
+    b89._config["device"] = small89
+    small_open89 = b89.load_default_tracks()
+    ok("on a card with fewer inputs, last time is the lineup laid out",
+       small_open89["tracks"] == small_open89["lineups"][0]["tracks"]
+       and [t["channel"] for t in small_open89["tracks"]] == [1, None, None])
+
+    print("\n[90] Icons from the take")
+    # A take keeps each track's icon (lineups spec, Part 3): the player's lanes, the drum
+    # grid, the counted tempo and the drift line read it from the take, never from the band,
+    # so switching lineups or changing an icon redraws no old take.
+    from rehearsal_recorder.midi.smf import write_mid as write_mid90
+    tmp90 = tmp / "s90"
+    tmp90.mkdir()
+    apimod90, a90 = fresh_api(tmp90)
+    a90.start_rehearsal("Icons", 0, SR, [{"name": "Drums", "channel": 1, "icon": "drums"},
+                                         {"name": "Bass", "channel": 2}])
+    folder90 = Path(a90._session["folder"])
+    d90 = folder90 / "_drafts" / "take 1"
+    write_wav(d90 / "Drums.wav", 100, seconds=1.0)
+    write_wav(d90 / "Bass.wav", 100, seconds=1.0)
+    a90._session["take_counter"] = 1
+    a90.save_default_tracks({"device_index": 0, "tracks": [
+        {"name": "Drums", "channel": 1, "icon": "percussion"}, {"name": "Bass", "channel": 2, "icon": "bass"}]})
+    kept90 = a90.keep_take(1, str(d90), "", 1.0, [{"name": "Drums", "file": str(d90 / "Drums.wav")},
+                                                  {"name": "Bass", "file": str(d90 / "Bass.wav")}])["take"]
+    ok("a take keeps the icons its rehearsal started with, whatever the band says by Keep",
+       [t.get("icon") for t in kept90["tracks"]] == ["drums", None])
+    ok("and the library has them too",
+       [t.get("icon") for t in a90._lib.take(folder90, 1)["tracks"]] == ["drums", None])
+    drums90, bass90 = kept90["tracks"][0]["file"], kept90["tracks"][1]["file"]
+    media90 = a90.take_media([{"name": "Drums", "file": drums90, "icon": "drums"},
+                              {"name": "Bass", "file": bass90}])
+    ok("the player gets the take's icon, not the band's", media90[0].get("icon") == "drums")
+    ok("and none for a track the take keeps none for, whatever the band gives that name",
+       "icon" not in media90[1])
+
+    kit90 = folder90 / "Kit.mid"
+    write_mid90(kit90, track_name="Kit", port_name="Port", start=[],
+                events=[(0.0, bytes((0x90, 36, 100))), (0.1, bytes((0x80, 36, 0)))])
+    a90._config["tracks"] = [{"name": "Kit", "icon": "drums"}]
+    ok("a .mid the take gave the drums icon is a drum grid, and says so",
+       a90.take_notes([{"name": "Kit", "file": str(kit90), "icon": "drums"}])[0]["drums"] is True
+       and a90.take_notes([{"name": "Kit", "file": str(kit90), "icon": "drums"}])[0].get("icon") == "drums")
+    ok("and the same file without it is not, whatever the band says",
+       a90.take_notes([{"name": "Kit", "file": str(kit90)}])[0]["drums"] is False)
+
+    a90._config["tracks"] = [{"name": "Drums"}, {"name": "Bass"}]
+    asked90 = []
+    count90 = apimod90.tempomod.count
+    apimod90.tempomod.count = lambda **kw: asked90.append(kw) or 120
+    try:
+        a90.count_tempo(str(folder90), 1, "4/4")
+    finally:
+        apimod90.tempomod.count = count90
+    ok("a tempo is counted from the drums the take gave the icon, though the band gives none",
+       asked90 and asked90[0]["drums_wav"] == drums90)
+    minus90 = str(folder90 / "Minus.wav")
+    write_wav(Path(minus90), 100, seconds=1.0)
+    heard90 = []
+    drift90 = apimod90.driftmod.count
+    apimod90.driftmod.count = lambda **kw: heard90.append(kw) or {"ok": False, "why": "no-beat"}
+    try:
+        a90.take_drift([{"name": "Drums", "file": drums90, "icon": "drums"}, {"name": "Bass", "file": bass90},
+                        {"name": "Minus", "file": minus90, "icon": "backing"}], [], {})
+    finally:
+        apimod90.driftmod.count = drift90
+    ok("the drift line listens to the take's drums, and leaves out a track it gave the backing icon",
+       heard90 and heard90[0]["drums"] == [drums90] and minus90 not in heard90[0]["mix"])
+
+    print("  a take under review")
+    a90.start_take()
+    a90._recorder._callback(np.full((SR, 2), 900, dtype=np.int16), SR, None, None)
+    record90 = json.loads((Path(a90._recorder.out_dir) / "take.json").read_text(encoding="utf-8"))
+    ok("take.json says each track's icon, and none for a track with none",
+       [(t["name"], t["icon"]) for t in record90["tracks"] if "icon" in t]
+       == [("Drums", "drums"), ("Bass", None)])
+    stopped90 = a90.stop_take()
+    ok("the review screen gets each track with the icon its rehearsal started with",
+       {t["name"]: t.get("icon") for t in stopped90["tracks"]} == {"Drums": "drums", "Bass": None})
+    a90.discard_take(stopped90["temp_dir"])
+
+    print("  a draft rescued after a crash")
+    a90._config["tracks"] = [{"name": "Drums", "icon": "percussion"}, {"name": "Bass", "icon": "bass"}]
+
+    def draft90(number, icons):
+        d = folder90 / "_drafts" / f"take {number}"
+        d.mkdir(parents=True)
+        for name in ("Drums", "Bass"):
+            (d / f"{name}.raw").write_bytes(struct.pack("<h", 700) * 4800)
+        (d / "take.json").write_text(json.dumps({"samplerate": SR, "bit_depth": 16, "notes": [], "tracks": [
+            {"file": name, "name": name, "channels": 1, **({"icon": icons[name]} if name in icons else {})}
+            for name in ("Drums", "Bass")]}), encoding="utf-8")
+        return a90.recover_draft(str(d))["take"]
+
+    ok("keeps the icons its take.json recorded, and none for a track recorded with none",
+       {t["name"]: t.get("icon") for t in draft90(7, {"Drums": "drums", "Bass": None})["tracks"]}
+       == {"Drums": "drums", "Bass": None})
+    ok("one recorded before take.json kept icons gets last time's band icons by name",
+       {t["name"]: t.get("icon") for t in draft90(8, {})["tracks"]}
+       == {"Drums": "percussion", "Bass": "bass"})
+    a90.finish_rehearsal()
 
     print("\n" + "=" * 60)
     if problems:

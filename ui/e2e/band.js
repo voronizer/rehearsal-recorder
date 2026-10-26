@@ -257,7 +257,20 @@ outputDevices = () => [
    max_output_channels: 18, default_samplerate: 48000}];
 api.list_output_devices = async () => withClickReason(outputDevices());
 api.recording_formats = async () => ({ok: true, formats: {'44100': [16, 24], '48000': [16, 24]}});
-api.load_default_tracks = async () => ({tracks: PARTS.map(p => ({...p, stereo: false}))});
+// The band's lineups, as the site names them: the four, the three of them
+// when the drummer is away, each on the input they always take, and the four
+// with a keyboard player sitting in.
+const LINEUPS = [
+  {name: 'Full band', tracks: PARTS},
+  {name: 'Trio', tracks: PARTS.filter(p => p.name !== 'Drums')},
+  {name: 'With keys', tracks: [...PARTS.slice(0, 3),
+    {name: 'Keys', channel: 5, icon: 'keys', stereo: true}, PARTS[3]]},
+].map(l => ({...l, tracks: l.tracks.map(t => ({stereo: false, ...t}))}));
+// Kept in the fake's config, so Update and Save as new work on them too;
+// each page starts from these again.
+writeCfg({...readCfg(), lineups: LINEUPS, lineup: 'Full band'});
+api.load_default_tracks = async () => ({tracks: PARTS.map(p => ({...p, stereo: false})),
+  ...lineupsNow()});
 api.disk_estimate = async (count, rate, depth) => {
   const perSec = count * rate * (depth === 24 ? 3 : 2), free = 61e9;
   return {ok: true, free_bytes: free, bytes_per_sec: perSec, minutes: free / perSec / 60, low: false};
@@ -310,10 +323,11 @@ api.stop_take = async () => {
 api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
   const dur = fileDurations[t.file] ?? 6;
   const a = from ?? 0, b = to ?? dur;
-  // The band's icon, found by the name, as take_media does; the take's
+  // The icon the take keeps, or for one of these takes, which keep none,
+  // the band's: they were all recorded by the four of them. The take's
   // Backing track has the backing track's, and says what it is.
   const own = t.kind === 'backing' ? {icon: 'backing', kind: 'backing'}
-    : {icon: (PARTS.find(p => p.name === t.name) || {}).icon};
+    : {icon: t.icon || (PARTS.find(p => p.name === t.name) || {}).icon};
   // A stereo Backing track has two rows, the second a little quieter.
   const row = peaksOf(t.file, buckets || 900, a, b);
   return {name: t.name, ...own, url: 'about:blank', frames: 48000 * dur, samplerate: 48000,

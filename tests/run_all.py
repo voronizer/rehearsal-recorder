@@ -99,7 +99,7 @@ things to be true:
                        synthetic takes with a known tempo in every bar
                        (drums with bleed, a .mid, the mix, 3/4, 6/8, a
                        ballad, a click take after its count-in, a stop),
-                       the sources by the band's icons, and Api.take_drift:
+                       the sources by the take's icons, and Api.take_drift:
                        the aim, 32 answers kept, Record stopping a count.
 
     test_click.py      the metronome's click: its tempos and accents, every

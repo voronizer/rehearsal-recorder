@@ -391,7 +391,7 @@ The other shared components, each with its stories:
   says an old name is a song's now, as wide as the field.
 - **DropdownMenu**, `dropdown-menu.tsx`: a menu of things to pick or do,
   with a check on the chosen one. The set picker beside **Start rehearsal**
-  is its one use so far.
+  and the lineup in the title over the tracks are its uses so far.
 - **Separator**, `separator.tsx`: a 1 px line in the border colour, across
   or down. Under the hood's line over the interface check is its one use.
 - **Badge**, `badge.tsx`: a small pill for a word or a count, in the accent,

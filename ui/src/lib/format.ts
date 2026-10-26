@@ -156,6 +156,11 @@ export function songsLabel(n: number): string {
   return `${n} ${nounFor(n, "song")}`
 }
 
+/** "1 track", "4 tracks": the tracks in a lineup. */
+export function tracksLabel(n: number): string {
+  return `${n} ${nounFor(n, "track")}`
+}
+
 /** "1 mark", "221 marks": the marks in a take, a rehearsal, a song or a label. */
 export function marksLabel(n: number): string {
   return countOf(n, "mark")

@@ -258,7 +258,7 @@ test.describe("setup", () => {
     await expect(picker(page, 1)).toHaveText("TD-17")
   })
 
-  test("a new track records Audio, and the template keeps each mode and port", async ({ page }) => {
+  test("a new track records Audio, and Update keeps each mode and port", async ({ page }) => {
     await openApp(page)
     await page.getByRole("button", { name: "Add track" }).click()
     expect(await pressed(page, 3)).toEqual(["Audio"])
@@ -269,18 +269,20 @@ test.describe("setup", () => {
     await pickPort(page, 1, "TD-17")
     await setMode(page, 3, "MIDI")
     await pickPort(page, 3, "Launchkey Mini MK3")
-    await page.getByRole("button", { name: "Save as template" }).click()
-    const saved = (await calls(page, "save_default_tracks")).at(-1)?.args[0] as {
-      tracks: { name: string; mode?: string; midi_port?: Record<string, string> | null }[]
-    }
-    expect(saved.tracks.map((t) => [t.name, t.mode ?? "audio", t.midi_port?.name ?? null])).toEqual([
+    await page.getByRole("button", { name: "Update", exact: true }).click()
+    const saved = (await calls(page, "update_lineup")).at(-1)?.args[2] as {
+      name: string
+      mode?: string
+      midi_port?: Record<string, string> | null
+    }[]
+    expect(saved.map((t) => [t.name, t.mode ?? "audio", t.midi_port?.name ?? null])).toEqual([
       ["Guitar", "both", "TD-17"],
       ["Vocals", "audio", null],
       ["Keys", "midi", "Launchkey Mini MK3"],
     ])
     // The port as the system describes it, which finds it again when its
     // name changes (P1), and nothing that is only the check's.
-    expect(Object.keys(saved.tracks[0].midi_port!).sort()).toEqual(["device", "id", "maker", "name"])
+    expect(Object.keys(saved[0].midi_port!).sort()).toEqual(["device", "id", "maker", "name"])
   })
 
   test("Start hands the check's ports to the rehearsal, with each track's mode", async ({

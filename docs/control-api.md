@@ -6,7 +6,8 @@ Python adapters obtain the interface from `api.controls`. The existing `Api`
 exposes bridge methods for the GUI. MIDI receives the control
 interface directly. No REST server is added.
 `start_rehearsal` accepts an explicit setup (name, device_index, samplerate, tracks,
-optional bit_depth/set_id); without parameters it uses the saved recording setup.
+optional bit_depth/set_id/lineup); without parameters it uses the saved recording setup
+and keeps last time's lineup.
 
 ## Interface
 

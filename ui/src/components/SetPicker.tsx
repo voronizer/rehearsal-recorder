@@ -120,9 +120,10 @@ export function SetPicker({
   )
 }
 
-/** A set in the menu: its name, cut at the menu's width and whole in its
- *  tip on hover and when the arrows reach it, and how many songs it has. */
-function Choice({ value, label, detail }: { value: string; label: string; detail?: string }) {
+/** A set in the menu, or a lineup in its own: its name, cut at the menu's
+ *  width and whole in its tip on hover and when the arrows reach it, and how
+ *  many songs or tracks it has. */
+export function Choice({ value, label, detail }: { value: string; label: string; detail?: string }) {
   const [nameRef, cut] = useCut<HTMLSpanElement>()
   return (
     <WholeTip cut={cut} text={label}>

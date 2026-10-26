@@ -79,6 +79,34 @@ function withIcon(t) {
   const icon = (window.__BAND_ICONS__ || {})[t.name];
   return icon ? {...t, icon} : t;
 }
+// Last time's tracks, as load_default_tracks answers them with no band given.
+function lastTime() {
+  return (window.__TRACKS_FROM_A_BIGGER_CARD__
+    ? [{name:'Guitar', channel:1}, {name:'Vocals', channel:12}]
+    : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]).map(withIcon);
+}
+// The lineups and the picked one, kept in the config as Python keeps them.
+// The fake has one card, so a lineup's tracks are kept as they were saved,
+// already laid out. With none saved there is one, Band, of last time's
+// tracks, as layouts.migrate makes it.
+function lineupsNow() {
+  const cfg = readCfg();
+  if (!Array.isArray(cfg.lineups)) return {lineups:[{name:'Band', tracks:lastTime()}], lineup:'Band'};
+  return {lineups:cfg.lineups, lineup:cfg.lineups.some(l => l.name === cfg.lineup) ? cfg.lineup : null};
+}
+function keepLineups(lineups, lineup) {
+  writeCfg({...readCfg(), lineups, lineup});
+  return {ok:true, lineups, lineup};
+}
+const copied = (tracks) => (tracks || []).map(t => ({...t}));
+// layouts.lineup_name: trimmed, cut at 40, refused empty or when another
+// lineup has it, whatever its case; `renaming` may keep its own name.
+function lineupName(lineups, name, renaming = null) {
+  const cut = String(name ?? '').trim().slice(0, 40).trim();
+  if (!cut) return {error:'A lineup needs a name'};
+  const other = lineups.find(l => l.name !== renaming && l.name.toLowerCase() === cut.toLowerCase());
+  return other ? {error:`There is already a lineup called ${other.name}`} : {name:cut};
+}
 // Mirrors what audio/player.py measures in the mix: post-fader, silent when
 // muted or when another track is soloed, and nothing at all while stopped.
 function levels() {
@@ -1334,8 +1362,8 @@ function keysPattern(seconds) {
 }
 // A take's notes read back, as api.take_notes answers: whole octaves, C to B,
 // for what is not drums.
-function notesOfFile(name, seconds) {
-  if (isKit({name})) return {name, drums: true, rows: [...KIT_ROWS], notes: kitPattern(seconds)};
+function notesOfFile(name, seconds, icon) {
+  if (isKit({name, icon})) return {name, drums: true, rows: [...KIT_ROWS], notes: kitPattern(seconds)};
   const notes = keysPattern(seconds);
   const pitches = notes.map(n => n[2]);
   return {name, drums: false,
@@ -1749,10 +1777,7 @@ window.__MAKE_API__ = () => ({
         name: t.name, stereo: !midiOnly && !!t.stereo, ...(t.icon ? {icon: t.icon} : {}),
         ...(t.mode ? {mode: t.mode} : {}), ...(t.midi_port ? {midi_port: t.midi_port} : {}),
         channel: midiOnly ? null : pluggedIn ? nth + 1 : (nth === 0 ? 1 : null)};
-    })}) : ({
-    tracks: (window.__TRACKS_FROM_A_BIGGER_CARD__
-      ? [{name:'Guitar', channel:1}, {name:'Vocals', channel:12}]
-      : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]).map(withIcon)})),
+    }), ...lineupsNow()}) : ({tracks: lastTime(), ...lineupsNow()})),
   set_recording_format: track('set_recording_format', async (dev, rate, depth) => {
     recording = {device_index: dev, samplerate: rate, bit_depth: depth};
     return {ok:true, ...recording};
@@ -1778,7 +1803,30 @@ window.__MAKE_API__ = () => ({
           'rates it takes. The driver said: Unanticipated host error ' +
           '[PaErrorCode -9999]'}
       : {ok:true, formats:{'44100':[16,24], '48000':[16,24], '96000':[24]}})),
-  save_default_tracks: track('save_default_tracks', async () => ({ok:true})),
+  update_lineup: track('update_lineup', async (name, _dev, tracksIn) => {
+    const {lineups} = lineupsNow();
+    if (!lineups.some(l => l.name === name)) return {ok:false, error:`No lineup is called ${name}`};
+    return keepLineups(lineups.map(l => l.name === name ? {name, tracks:copied(tracksIn)} : l), name);
+  }),
+  add_lineup: track('add_lineup', async (name, _dev, tracksIn) => {
+    const {lineups} = lineupsNow();
+    const named = lineupName(lineups, name);
+    if (named.error) return {ok:false, error:named.error};
+    return keepLineups([...lineups, {name:named.name, tracks:copied(tracksIn)}], named.name);
+  }),
+  rename_lineup: track('rename_lineup', async (name, newName, _dev) => {
+    const {lineups, lineup} = lineupsNow();
+    if (!lineups.some(l => l.name === name)) return {ok:false, error:`No lineup is called ${name}`};
+    const named = lineupName(lineups, newName, name);
+    if (named.error) return {ok:false, error:named.error};
+    return keepLineups(lineups.map(l => l.name === name ? {...l, name:named.name} : l),
+                       lineup === name ? named.name : lineup);
+  }),
+  delete_lineup: track('delete_lineup', async (name, _dev) => {
+    const {lineups, lineup} = lineupsNow();
+    if (!lineups.some(l => l.name === name)) return {ok:false, error:`No lineup is called ${name}`};
+    return keepLineups(lineups.filter(l => l.name !== name), lineup === name ? null : lineup);
+  }),
 
   disk_estimate: track('disk_estimate', async (count, rate, depth) => {
     const perSec = count * rate * (depth === 24 ? 3 : 2);
@@ -1824,12 +1872,17 @@ window.__MAKE_API__ = () => ({
   midi_activity: async () => midiActivity(true),
   // The notes of a take's tracks, a kit pattern for the drums and a keyboard
   // line for the rest, as long as the take (api.take_notes). Each answer, an
-  // error too, carries the band's icon for its name, as take_media's does.
+  // error too, carries the file's icon, as take_media's does: the one the
+  // take keeps, or for a take of the fake's, which keeps none, the one
+  // __BAND_ICONS__ says it was recorded with.
   take_notes: track('take_notes', async (files) => {
     await held('take_notes');
-    return (files || []).map(({name, file}) => withIcon(file
-      ? notesOfFile(name, fileDurations[file] ?? (P ? P.duration : TAKE))
-      : {name, error:'Notes file not found'}));
+    return (files || []).map(({name, file, icon}) => {
+      const answer = file
+        ? notesOfFile(name, fileDurations[file] ?? (P ? P.duration : TAKE), icon)
+        : {name, error:'Notes file not found'};
+      return icon ? {...answer, icon} : withIcon(answer);
+    });
   }),
 
   // The band's tempo through a take, bar by bar (api.take_drift). See
@@ -1870,8 +1923,11 @@ window.__MAKE_API__ = () => ({
   // A page can start the rehearsal with takes in it already:
   // window.__TONIGHT__ = [{name, duration_sec, starred?, markers?, cloud?}, …],
   // numbered from 1 in that order.
-  start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, tracksIn, _depth, setId) => {
+  start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, tracksIn, _depth, setId, lineup) => {
     await held('start_rehearsal');
+    // Kept with last time, as Python keeps it; no lineup is written.
+    const {lineups} = lineupsNow();
+    writeCfg({...readCfg(), lineups, lineup: lineups.some(l => l.name === lineup) ? lineup : null});
     const folder = '/rec/' + name;
     const tonight = (window.__TONIGHT__ || []).map((t, i) => ({take_number:i + 1, markers:[],
       tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));
@@ -1961,7 +2017,7 @@ window.__MAKE_API__ = () => ({
     const api = window.pywebview.api;
     if (action === 'start_rehearsal') {
       const p = parameters || {};
-      return api.start_rehearsal(p.name || 'Rehearsal', p.device_index ?? 0, p.samplerate || 44100, p.tracks || [], p.bit_depth || 24, p.set_id);
+      return api.start_rehearsal(p.name || 'Rehearsal', p.device_index ?? 0, p.samplerate || 44100, p.tracks || [], p.bit_depth || 24, p.set_id, p.lineup);
     }
     if (action === 'stop_rehearsal') { await api.player_close(); return api.finish_rehearsal(); }
     if (action === 'record_stop') action = midiTake && midiTake.ended === null ? 'stop_keep' : 'start';
@@ -2040,14 +2096,24 @@ window.__MAKE_API__ = () => ({
       take.temp_dir = `${session.folder}/_drafts/take ${takeCounter}`;
       take.tracks = take.tracks.map(t => ({...t, file:`${take.temp_dir}/${t.name}.wav`}));
     }
-    if (!band.some(takesNotes)) return {...take, ...backingAtStop(take.tracks, `${take.temp_dir}/Backing.wav`)};
-    take.tracks = band.filter(takesSound).map(t => ({name:t.name, file:`/rec/${t.name}.wav`}));
+    // Each with its track's icon at Start, as Python hands it to the review
+    // screen and Keep keeps it.
+    const iconed = (f) => {
+      const own = band.find(t => t.name === f.name);
+      return own && own.icon ? {...f, icon: own.icon} : f;
+    };
+    if (!band.some(takesNotes)) {
+      take.tracks = take.tracks.map(iconed);
+      return {...take, ...backingAtStop(take.tracks, `${take.temp_dir}/Backing.wav`)};
+    }
+    take.tracks = band.filter(takesSound).map(t => iconed({name:t.name, file:`/rec/${t.name}.wav`}));
     Object.assign(take, backingAtStop(take.tracks, '/rec/Backing.wav'));
     // A port that was there at any point of the take has its notes; one gone
     // the whole take has none.
     const heard = band.filter(t => takesNotes(t)
       && (midiPortState(t) === 'ok' || (midiTake && midiTake.heard.has(t.name)))).map(t => t.name);
-    return {...take, ...notesOfTake(band, take.tracks, heard)};
+    const lanes = notesOfTake(band, take.tracks, heard);
+    return {...take, notes: lanes.notes.map(iconed), notes_missing: lanes.notes_missing.map(iconed)};
   }),
   keep_take: track('keep_take', async (n, dir, name, dur, tracks, markers, _cloud, notes) => {
     // A crop of the draft waiting for its Undo is over once it is kept.
@@ -2138,9 +2204,10 @@ window.__MAKE_API__ = () => ({
               duration_sec:0, peaks:[]};
     const dur = fileDurations[t.file] ?? TAKE;
     const row = Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9);
-    // The take's Backing track has the backing track's icon, whatever the
-    // band calls its tracks.
-    const {icon} = t.kind === 'backing' ? {icon: 'backing'} : withIcon({name: t.name});
+    // The take's Backing track has the backing track's icon. Any other
+    // track has the one the take keeps, or for a take of the fake's, which
+    // keeps none, the one __BAND_ICONS__ says it was recorded with.
+    const {icon} = t.kind === 'backing' ? {icon: 'backing'} : t.icon ? t : withIcon({name: t.name});
     return {name:t.name, ...(icon ? {icon} : {}), ...(t.kind === 'backing' ? {kind: 'backing'} : {}),
       url:'about:blank', frames:48000*dur,
       samplerate:48000, duration_sec:dur,
