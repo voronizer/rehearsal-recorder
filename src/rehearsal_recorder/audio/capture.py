@@ -642,16 +642,17 @@ class AudioRecorder:
     def _write_record(self):
         """What the folder needs to describe itself if the app dies: the
         format, how wide each track is, which track each file is (a file's
-        name is not always its track's: "Synth/Pad" is Synth_Pad.raw), and
-        which tracks are notes. Best effort — a take that cannot write this is
-        still worth recording."""
+        name is not always its track's: "Synth/Pad" is Synth_Pad.raw), each
+        track's icon, which the take keeps, and which tracks are notes. Best
+        effort — a take that cannot write this is still worth recording."""
         record = {
             "samplerate": self.samplerate,
             "bit_depth": self.bit_depth,
             "tracks": [
                 {"file": self.safe_name(t["name"]),
                  "name": t["name"],
-                 "channels": self._width[t["name"]]}
+                 "channels": self._width[t["name"]],
+                 **({"icon": t["icon"]} if t.get("icon") else {})}
                 for t in self.tracks
             ],
             "notes": self._notes,

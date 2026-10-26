@@ -1362,8 +1362,8 @@ function keysPattern(seconds) {
 }
 // A take's notes read back, as api.take_notes answers: whole octaves, C to B,
 // for what is not drums.
-function notesOfFile(name, seconds) {
-  if (isKit({name})) return {name, drums: true, rows: [...KIT_ROWS], notes: kitPattern(seconds)};
+function notesOfFile(name, seconds, icon) {
+  if (isKit({name, icon})) return {name, drums: true, rows: [...KIT_ROWS], notes: kitPattern(seconds)};
   const notes = keysPattern(seconds);
   const pitches = notes.map(n => n[2]);
   return {name, drums: false,
@@ -1873,12 +1873,17 @@ window.__MAKE_API__ = () => ({
   midi_activity: async () => midiActivity(true),
   // The notes of a take's tracks, a kit pattern for the drums and a keyboard
   // line for the rest, as long as the take (api.take_notes). Each answer, an
-  // error too, carries the band's icon for its name, as take_media's does.
+  // error too, carries the file's icon, as take_media's does: the one the
+  // take keeps, or for a take of the fake's, which keeps none, the one
+  // __BAND_ICONS__ says it was recorded with.
   take_notes: track('take_notes', async (files) => {
     await held('take_notes');
-    return (files || []).map(({name, file}) => withIcon(file
-      ? notesOfFile(name, fileDurations[file] ?? (P ? P.duration : TAKE))
-      : {name, error:'Notes file not found'}));
+    return (files || []).map(({name, file, icon}) => {
+      const answer = file
+        ? notesOfFile(name, fileDurations[file] ?? (P ? P.duration : TAKE), icon)
+        : {name, error:'Notes file not found'};
+      return icon ? {...answer, icon} : withIcon(answer);
+    });
   }),
 
   // The band's tempo through a take, bar by bar (api.take_drift). See
@@ -2092,14 +2097,24 @@ window.__MAKE_API__ = () => ({
       take.temp_dir = `${session.folder}/_drafts/take ${takeCounter}`;
       take.tracks = take.tracks.map(t => ({...t, file:`${take.temp_dir}/${t.name}.wav`}));
     }
-    if (!band.some(takesNotes)) return {...take, ...backingAtStop(take.tracks, `${take.temp_dir}/Backing.wav`)};
-    take.tracks = band.filter(takesSound).map(t => ({name:t.name, file:`/rec/${t.name}.wav`}));
+    // Each with its track's icon at Start, as Python hands it to the review
+    // screen and Keep keeps it.
+    const iconed = (f) => {
+      const own = band.find(t => t.name === f.name);
+      return own && own.icon ? {...f, icon: own.icon} : f;
+    };
+    if (!band.some(takesNotes)) {
+      take.tracks = take.tracks.map(iconed);
+      return {...take, ...backingAtStop(take.tracks, `${take.temp_dir}/Backing.wav`)};
+    }
+    take.tracks = band.filter(takesSound).map(t => iconed({name:t.name, file:`/rec/${t.name}.wav`}));
     Object.assign(take, backingAtStop(take.tracks, '/rec/Backing.wav'));
     // A port that was there at any point of the take has its notes; one gone
     // the whole take has none.
     const heard = band.filter(t => takesNotes(t)
       && (midiPortState(t) === 'ok' || (midiTake && midiTake.heard.has(t.name)))).map(t => t.name);
-    return {...take, ...notesOfTake(band, take.tracks, heard)};
+    const lanes = notesOfTake(band, take.tracks, heard);
+    return {...take, notes: lanes.notes.map(iconed), notes_missing: lanes.notes_missing.map(iconed)};
   }),
   keep_take: track('keep_take', async (n, dir, name, dur, tracks, markers, _cloud, notes) => {
     // A crop of the draft waiting for its Undo is over once it is kept.
@@ -2190,9 +2205,10 @@ window.__MAKE_API__ = () => ({
               duration_sec:0, peaks:[]};
     const dur = fileDurations[t.file] ?? TAKE;
     const row = Array.from({length:300}, (_, i) => Math.abs(Math.sin(i / 9)) * 0.9);
-    // The take's Backing track has the backing track's icon, whatever the
-    // band calls its tracks.
-    const {icon} = t.kind === 'backing' ? {icon: 'backing'} : withIcon({name: t.name});
+    // The take's Backing track has the backing track's icon. Any other
+    // track has the one the take keeps, or for a take of the fake's, which
+    // keeps none, the one __BAND_ICONS__ says it was recorded with.
+    const {icon} = t.kind === 'backing' ? {icon: 'backing'} : t.icon ? t : withIcon({name: t.name});
     return {name:t.name, ...(icon ? {icon} : {}), ...(t.kind === 'backing' ? {kind: 'backing'} : {}),
       url:'about:blank', frames:48000*dur,
       samplerate:48000, duration_sec:dur,

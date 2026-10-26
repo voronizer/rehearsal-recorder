@@ -94,6 +94,19 @@ def _names(take_dir, kind):
         return {}
 
 
+def icons(take_dir):
+    """The icon of each of a take's tracks by name, its notes' too, as
+    take.json records them. Empty for a take recorded before the record kept
+    them."""
+    try:
+        record = json.loads((Path(take_dir) / TAKE_RECORD).read_text("utf-8"))
+        return {e["name"]: e["icon"] for kind in ("tracks", "notes") for e in record.get(kind) or []
+                if isinstance(e, dict) and isinstance(e.get("name"), str)
+                and isinstance(e.get("icon"), str) and e["icon"]}
+    except Exception:
+        return {}
+
+
 def draft_dirs(rehearsal_folder):
     """Every draft take folder inside a rehearsal that still holds audio."""
     drafts_root = Path(rehearsal_folder) / DRAFTS_DIR

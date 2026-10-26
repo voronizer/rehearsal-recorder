@@ -310,10 +310,11 @@ api.stop_take = async () => {
 api.take_media = async (tracks, buckets, from, to) => tracks.map(t => {
   const dur = fileDurations[t.file] ?? 6;
   const a = from ?? 0, b = to ?? dur;
-  // The band's icon, found by the name, as take_media does; the take's
+  // The icon the take keeps, or for one of these takes, which keep none,
+  // the band's: they were all recorded by the four of them. The take's
   // Backing track has the backing track's, and says what it is.
   const own = t.kind === 'backing' ? {icon: 'backing', kind: 'backing'}
-    : {icon: (PARTS.find(p => p.name === t.name) || {}).icon};
+    : {icon: t.icon || (PARTS.find(p => p.name === t.name) || {}).icon};
   // A stereo Backing track has two rows, the second a little quieter.
   const row = peaksOf(t.file, buckets || 900, a, b);
   return {name: t.name, ...own, url: 'about:blank', frames: 48000 * dur, samplerate: 48000,

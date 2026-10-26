@@ -36,7 +36,7 @@ that was recording notes comes back with a `.mid` too), take naming, renaming,
 markers, both bit depths, compressing cloud copies, the notes going to the
 cloud with the original tracks (each `.mid` as it is, never encoded, left out
 of the mix, sent again after a crop), and the notes the player is sent for a
-take (`take_notes`: a drum grid by the band's icon, a missing file or one that
+take (`take_notes`: a drum grid by the icon the take keeps, a missing file or one that
 cannot be read answered with an error while the others answer). The MIDI
 ports before a take run here too, through the Api on a fake port system: the
 signal check opens them (a band of nothing but MIDI is checked all the same),
@@ -257,7 +257,7 @@ eight bars of guitar, a two-bar stop with no tempo; a kick mic and overheads
 summed, silent drums falling to the mix, a take under 4 bars "short", a held
 chord "no-beat". Then the Api: the aim from the click, the take's tempo, the
 song's (through the library) and the take's own middle; the sources by the
-band's icons, a backing track left out of the mix, missing files; the same
+take's icons, a backing track left out of the mix, missing files; the same
 answer again, a rewritten file counted afresh, 32 kept; Record stopping a
 count in progress; the `drift_tolerance` setting. Run with
 `python tests/test_drift.py`.

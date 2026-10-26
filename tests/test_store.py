@@ -2185,6 +2185,65 @@ def main():
     ok("and lasts across a restart", lib.song_backing(palyn19)["heard"] is True)
     lib.close()
 
+    print("\n[20] A take's icons (migration 0010)")
+    # A take keeps the icon each of its tracks was recorded with, so switching lineups or
+    # changing an icon never redraws an old take (lineups spec, Part 3). Takes from before are
+    # given the band's icons once, by name, when the database is upgraded.
+    rec20 = tmp / "Icons"
+    rec20.mkdir()
+    db.open_engine(rec20, migrations_up_to(tmp, "0009")).dispose()
+    engine = db.make_engine(db.database_path(rec20))
+    with engine.begin() as c:
+        c.execute(text("INSERT INTO rehearsal (id, folder, name, created_at, samplerate, bit_depth) "
+                       "VALUES (1, 'Night', 'Night', '2026-10-01T19:00:00', 48000, 24)"))
+        c.execute(text("INSERT INTO take (id, rehearsal_id, take_number, duration_sec, cloud_skip, cloud_send, "
+                       "starred, click) VALUES (1, 1, 1, 1.0, 0, 0, 0, 0)"))
+        for i, (name20, file20, kind20) in enumerate([
+                ("Drums", "01/Drums.wav", "audio"), ("Keys", "01/Keys.wav", "audio"),
+                ("Drums", "01/Drums.mid", "midi"), ("Backing", "01/Backing.wav", "backing")]):
+            c.execute(text("INSERT INTO take_file (take_id, position, name, file, kind) "
+                           "VALUES (1, :p, :n, :f, :k)"), {"p": i, "n": name20, "f": file20, "k": kind20})
+    engine.dispose()
+    engine = db.open_engine(rec20, icons={"Drums": "drums", "Bass": "bass", "Backing": "keys"})
+    ok("a database at 0009 is moved on to the newest migration", db.current_revision(engine) == HEAD)
+    with engine.connect() as c:
+        drift20 = compare_metadata(MigrationContext.configure(c), Base.metadata)
+    engine.dispose()
+    ok("and it is then what models.py describes", drift20 == [])
+    icons20 = rows19(rec20, "SELECT file, icon FROM take_file ORDER BY position")
+    ok("an old take's files get the band's icons by name, its .mid too",
+       icons20[0] == ("01/Drums.wav", "drums") and icons20[2] == ("01/Drums.mid", "drums"))
+    ok("a name the band gives no icon gets none", icons20[1] == ("01/Keys.wav", None))
+    ok("and its Backing track none, whatever it is called", icons20[3] == ("01/Backing.wav", None))
+    db.open_engine(rec20, icons={"Drums": "percussion", "Keys": "keys"}).dispose()
+    ok("opened again with other icons, nothing changes: they are given once",
+       rows19(rec20, "SELECT file, icon FROM take_file ORDER BY position") == icons20)
+
+    lib = Library(rec20)
+    night20 = rec20 / "Night"
+    old20 = lib.take(night20, 1)
+    ok("the take gives each track its icon, and none for one without",
+       old20["tracks"][:2] == [{"name": "Drums", "file": str(night20 / "01/Drums.wav"), "icon": "drums"},
+                               {"name": "Keys", "file": str(night20 / "01/Keys.wav")}])
+    ok("its notes too", old20["notes"][0].get("icon") == "drums")
+    ok("and its Backing track only its kind",
+       old20["tracks"][2] == {"name": "Backing", "file": str(night20 / "01/Backing.wav"), "kind": "backing"})
+    new20 = lib.add_take(night20, {
+        "take_number": 2, "name": "Viasna",
+        "tracks": [{"name": "Drums", "file": str(night20 / "02/Drums.wav"), "icon": "drums"},
+                   {"name": "Keys", "file": str(night20 / "02/Keys.wav")}],
+        "notes": [{"name": "Keys", "file": str(night20 / "02/Keys.mid"), "icon": "keys"}],
+        "backing": {"name": "Backing", "file": str(night20 / "02/Backing.wav"), "icon": "keys"}})
+    ok("a new take keeps the icons it is given",
+       [t.get("icon") for t in new20["tracks"]] == ["drums", None, None]
+       and new20["notes"][0].get("icon") == "keys")
+    ok("with no icon key for a track that has none", "icon" not in new20["tracks"][1])
+    cropped20 = lib.update_take(night20, 2, tracks=new20["tracks"], notes=new20["notes"])
+    ok("a crop that hands the tracks back keeps their icons",
+       [t.get("icon") for t in cropped20["tracks"]] == ["drums", None, None]
+       and cropped20["notes"][0].get("icon") == "keys")
+    lib.close()
+
     print()
     if problems:
         print(f"{len(problems)} problem(s):")

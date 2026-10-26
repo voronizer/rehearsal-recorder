@@ -292,8 +292,9 @@ def main():
                              {"name": "Bass", "channel": 2, "icon": "bass"},
                              {"name": "Minus", "channel": 3, "icon": "backing"}]
     api._lib.song_tempos = lambda: {"Pałyn": (128, "4/4"), "Ahoń": (None, None)}
-    kit = [{"name": "Drums", "file": palyn.drums}, {"name": "Bass", "file": palyn.band}]
-    notes = [{"name": "Drums", "file": palyn.mid}]
+    # The take's own icons find the sources; the band's above find none (lineups spec, Part 3).
+    kit = [{"name": "Drums", "file": palyn.drums, "icon": "drums"}, {"name": "Bass", "file": palyn.band, "icon": "bass"}]
+    notes = [{"name": "Drums", "file": palyn.mid, "icon": "drums"}]
     found = api.take_drift(kit, notes, {"tempo": 128, "signature": "4/4", "click": True, "song": "Pałyn"})
     ok("a click take aims at its click", found.get("aim") == {"tempo": 128, "signature": "4/4", "from": "click", "song": None})
     ok("the drums' .mid is found by the drums icon", found.get("source") == "drums-mid")
@@ -311,12 +312,14 @@ def main():
        and found["aim"]["tempo"] == round(found["middle"]))
     found = api.take_drift([{"name": "Guitar", "file": palyn.drums}], [], {})
     ok("a take with no drums icon is counted from the mix", found.get("source") == "mix")
+    found = api.take_drift([{"name": "Drums", "file": palyn.drums}], [{"name": "Drums", "file": palyn.mid}], {})
+    ok("and so is one whose Drums the band gives the icon and the take does not", found.get("source") == "mix")
     minus = str(write_wav(folder / "minus.wav", loud(np.sin(2 * np.pi * 220 * np.arange(int(20 * SR)) / SR))))
     seen = []
     real = drift.count
     drift.count = lambda **kw: seen.append(kw["mix"]) or {"ok": False, "why": "no-beat"}
     try:
-        api.take_drift([{"name": "Bass", "file": palyn.band}, {"name": "Minus", "file": minus}], [], {})
+        api.take_drift([{"name": "Bass", "file": palyn.band}, {"name": "Minus", "file": minus, "icon": "backing"}], [], {})
     finally:
         drift.count = real
     ok("a backing track is left out of the mix", seen == [[palyn.band]])

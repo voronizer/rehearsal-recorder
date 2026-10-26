@@ -191,6 +191,16 @@ test.describe("notes in the player", () => {
     expect(Math.abs(lane.y - (await box(keys)).y - 3)).toBeLessThan(1)
   })
 
+  test("draws the icons the take was recorded with, whatever the band has now", async ({ page }) => {
+    // The band's icons gone since the take: the take keeps its own, and its
+    // lanes are drawn with them (lineups spec, Part 3).
+    await review(page, "window.__BAND_ICONS__ = {};")
+    await expect(plate(page, "Drums").locator("[data-icon]")).toHaveAttribute("data-icon", "drums")
+    await expect(notesPlate(page, "Keys").locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
+    const asked = (await calls(page, "take_notes"))[0].args[0] as { name: string; icon?: string }[]
+    expect(asked.map((f) => [f.name, f.icon])).toEqual([["Drums", "drums"], ["Keys", "keys"]])
+  })
+
   test("puts a missing and a saved MIDI lane after the same audio lane in band order", async ({
     page,
   }) => {
@@ -227,9 +237,10 @@ test.describe("notes in the player", () => {
     // Its icon comes from the same call as the notes: one, for the take.
     await expect(keys.locator("[data-icon]")).toHaveAttribute("data-icon", "keys")
     expect(await callCount(page, "take_notes")).toBe(1)
+    // Each with the icon the take keeps for it.
     expect((await calls(page, "take_notes"))[0].args[0]).toEqual([
-      { name: "Drums", file: "/rec/Drums.mid" },
-      { name: "Keys", file: null },
+      { name: "Drums", file: "/rec/Drums.mid", icon: "drums" },
+      { name: "Keys", file: null, icon: "keys" },
     ])
     // The drums' notes are there all the same.
     await expect(notesLane(page, "Drums")).not.toContainText("No notes")
@@ -264,8 +275,8 @@ test.describe("notes in the player", () => {
     const w = await box(wave(page, "Drums"))
     expect(Math.abs((await box(notesLane(page, "Drums"))).y - (w.y + w.height))).toBeLessThan(1)
     expect((await calls(page, "take_notes"))[0].args[0]).toEqual([
-      { name: "Keys", file: "/rec/Keys.mid" },
-      { name: "Drums", file: null },
+      { name: "Keys", file: "/rec/Keys.mid", icon: "keys" },
+      { name: "Drums", file: null, icon: "drums" },
     ])
   })
 
@@ -296,8 +307,8 @@ test.describe("notes in the player", () => {
     await expect(notesLane(page, "Keys")).toBeVisible()
     await expect.poll(() => callCount(page, "take_notes")).toBe(1)
     expect((await calls(page, "take_notes"))[0].args[0]).toEqual([
-      { name: "Drums", file: "/rec/Drums.mid" },
-      { name: "Keys", file: "/rec/Keys.mid" },
+      { name: "Drums", file: "/rec/Drums.mid", icon: "drums" },
+      { name: "Keys", file: "/rec/Keys.mid", icon: "keys" },
     ])
     const t = await box(timeline(page))
     await page.mouse.move(t.x + t.width * 0.3, t.y + t.height / 2)
@@ -527,7 +538,11 @@ test.describe("notes in the player", () => {
     await dragRegion(page, 0.25, 0.75)
     await page.getByRole("button", { name: "Crop to the region" }).click()
     await expect.poll(() => callCount(page, "crop_draft")).toBe(1)
-    expect((await calls(page, "crop_draft"))[0].args[4]).toEqual(NOTES)
+    // With the icons the take keeps, as stop_take gave them.
+    const ICONS: Record<string, string> = { Drums: "drums", Keys: "keys" }
+    expect((await calls(page, "crop_draft"))[0].args[4]).toEqual(
+      NOTES.map((n) => ({ ...n, icon: ICONS[n.name] }))
+    )
     // The cut take is a take opened again: its notes are asked for anew.
     await expect.poll(() => callCount(page, "take_notes")).toBe(2)
     const cut = (await calls(page, "take_notes"))[1].args[0] as { file: string }[]

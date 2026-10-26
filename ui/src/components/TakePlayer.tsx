@@ -60,8 +60,8 @@ function useTakeNotes(notes?: NotesFile[], missing?: MissingNotes[]) {
   } | null>(null)
   useEffect(() => {
     const files = [
-      ...(notes ?? []).map((n) => ({ name: n.name, file: n.file })),
-      ...(missing ?? []).map((m) => ({ name: m.name, file: null })),
+      ...(notes ?? []).map((n) => ({ name: n.name, file: n.file, ...(n.icon ? { icon: n.icon } : {}) })),
+      ...(missing ?? []).map((m) => ({ name: m.name, file: null, ...(m.icon ? { icon: m.icon } : {}) })),
     ]
     if (files.length === 0) return
     let alive = true

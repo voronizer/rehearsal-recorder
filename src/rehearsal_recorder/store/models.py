@@ -215,6 +215,10 @@ class TakeFile(Base):
     # that nothing which opens a take's tracks as audio is handed a .mid.
     # Added in place, like song_id on `take`.
     kind: Mapped[str] = mapped_column(String, default=AUDIO_FILE, server_default=AUDIO_FILE)
+    # The icon its track had when the take was recorded (migration 0010), so
+    # the player draws the take as it was. None for a Backing track, and for
+    # a track that had none.
+    icon: Mapped[str | None] = mapped_column(String, nullable=True)
 
     take: Mapped[Take] = relationship(back_populates="files")
 

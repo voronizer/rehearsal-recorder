@@ -3862,13 +3862,15 @@ def main():
        a35.load_default_tracks([{"name": "Vox", "icon": "vocals"}])["tracks"][0]
        .get("icon") == "vocals")
 
-    # The player is shown takes, and a take's tracks are only names and
-    # files: the icon is the band's, found by the name.
-    media = a35.take_media([{"name": "Bass", "file": str(sides / "Gtr.wav")},
+    # The player is shown takes, and a take keeps each track's icon (lineups
+    # spec, Part 3): the band's icons draw no take.
+    media = a35.take_media([{"name": "Bass", "file": str(sides / "Gtr.wav"), "icon": "bass"},
                             {"name": "Gtr", "file": str(sides / "Gtr.wav")},
-                            {"name": "Keys", "file": str(sides / "nowhere.wav")}])
-    ok("the player is told each track's icon, by its name in the band",
+                            {"name": "Keys", "file": str(sides / "nowhere.wav"), "icon": "keys"}])
+    ok("the player is told each track's icon, as the take keeps it",
        [m.get("icon") for m in media] == ["bass", None, "keys"])
+    ok("and none for a track the take keeps none for, though the band has one",
+       "icon" not in a35.take_media([{"name": "Bass", "file": str(sides / "Gtr.wav")}])[0])
 
     print("\n[34] Looking for interfaces again")
     # PortAudio lists devices once, when it starts, so a card plugged in
@@ -9571,9 +9573,8 @@ def main():
        and sorted(p.parent.name for p in target69.rglob("*.mid")) == [Path(a69._lib.take(folder69, 3)["cloud"]["tracks"]).name])
 
     print("\n[70] take_notes")
-    # The player draws a take's notes from its .mid files. A take knows them only
-    # by name and file, and whether a lane is a drum grid is the band's icon, found
-    # by that name as take_media finds a track's.
+    # The player draws a take's notes from its .mid files. Whether a lane is a drum
+    # grid is the icon the take keeps for that file, as take_media's lanes are.
     from rehearsal_recorder.midi.notes import DRUM_ROWS as DRUM_ROWS70
     from rehearsal_recorder.midi.smf import write_mid as write_mid70
 
@@ -9594,9 +9595,10 @@ def main():
     drums70 = hits70(folder70 / "Drums.mid", 0, [36, 38, 42, 99])   # on channel 1: only the icon says a kit
     keys70 = hits70(folder70 / "Keys.mid", 0, [61, 74])
     pad70 = hits70(folder70 / "Pad.mid", 9, [36, 38])               # not in the band, but on channel 10
-    answered = a70.take_notes([{"name": "Drums", "file": drums70}, {"name": "Keys", "file": keys70},
+    answered = a70.take_notes([{"name": "Drums", "file": drums70, "icon": "drums"},
+                               {"name": "Keys", "file": keys70, "icon": "keys"},
                                {"name": "Pad", "file": pad70}])
-    ok("a Both track named Drums with the drums icon in the band reads as drums, the rows in the order they are drawn",
+    ok("a .mid the take gave the drums icon reads as drums, the rows in the order they are drawn",
        answered[0]["name"] == "Drums" and answered[0]["drums"] is True
        and answered[0]["rows"] == DRUM_ROWS70 + ["Other"]
        and [n[2] for n in answered[0]["notes"]] == [5, 4, 2, 6])
@@ -9607,27 +9609,28 @@ def main():
        answered[1]["name"] == "Keys" and answered[1]["drums"] is False
        and (answered[1]["low"], answered[1]["high"]) == (60, 83)
        and [n[2] for n in answered[1]["notes"]] == [61, 74])
-    ok("a name the band does not have is judged by its file alone: notes on channel 10 are drums",
+    ok("a file with no icon is judged by itself alone: notes on channel 10 are drums",
        answered[2]["name"] == "Pad" and answered[2]["drums"] is True and answered[2]["rows"] == DRUM_ROWS70)
     ok("each file is answered, in the order it was asked", [a["name"] for a in answered] == ["Drums", "Keys", "Pad"])
     ok("what the player is sent can go over the bridge as JSON", json.loads(json.dumps(answered)) == answered)
 
     # A track that records notes only has no audio lane, and so no take_media answer to take its icon from: the
-    # plate of its notes lane takes it from here, found as take_media finds a track's.
-    ok("each answer carries the band's icon for its name, as take_media's does",
+    # plate of its notes lane takes it from here. One whose port never appeared has no file in the take to keep
+    # an icon, and is given the band's, by its name.
+    ok("each answer carries the icon its file was given, as take_media's does",
        answered[0].get("icon") == "drums" and answered[1].get("icon") == "keys")
-    ok("a name the band does not have gets no icon",
+    ok("a file with no icon gets none",
        "icon" not in answered[2])
-    iconned70 = a70.take_notes([{"name": "Keys", "file": str(folder70 / "Gone.mid")},
+    iconned70 = a70.take_notes([{"name": "Keys", "file": str(folder70 / "Gone.mid"), "icon": "keys"},
                                 {"name": "Drums", "file": None}, {"name": "Keys"}, {"name": "Bass", "file": None}])
-    ok("an answer that is an error carries the icon too: a file not found, a file of None, no file at all",
+    ok("an answer that is an error carries the icon too: a file not found its own, a file of None or none at all the band's",
        iconned70[:3] == [{"name": "Keys", "icon": "keys", "error": "Notes file not found"},
                          {"name": "Drums", "icon": "drums", "error": "Notes file not found"},
                          {"name": "Keys", "icon": "keys", "error": "Notes file not found"}])
     ok("and a band member with no icon gets none, as take_media gives none",
        iconned70[3] == {"name": "Bass", "error": "Notes file not found"})
     ok("a name that is not text gets no icon, and does not fail the call",
-       a70.take_notes([{"name": ["Keys"], "file": None}, {"name": "Keys", "file": keys70}])[1].get("icon") == "keys")
+       a70.take_notes([{"name": ["Keys"], "file": None}, {"name": "Keys", "file": None}])[1].get("icon") == "keys")
 
     gone70 = str(folder70 / "Gone.mid")
     (folder70 / "Torn.mid").write_bytes(b"MThd\x00\x00\x00\x06\x00")
@@ -9641,8 +9644,8 @@ def main():
     catcher70.emit = said70.append
     logging70.getLogger(apimod70.__name__).addHandler(catcher70)
     try:
-        mixed = a70.take_notes([{"name": "Bass", "file": gone70}, {"name": "Drums", "file": drums70},
-                                {"name": "Keys", "file": str(folder70 / "Torn.mid")},
+        mixed = a70.take_notes([{"name": "Bass", "file": gone70}, {"name": "Drums", "file": drums70, "icon": "drums"},
+                                {"name": "Keys", "file": str(folder70 / "Torn.mid"), "icon": "keys"},
                                 {"name": "Pad", "file": str(folder70 / "Empty.mid")},
                                 {"name": "Folder", "file": str(folder70)},
                                 {"name": "Keys", "file": keys70}])
@@ -9665,7 +9668,7 @@ def main():
         # raises OSError (ENAMETOOLONG) from the existence check on Linux and macOS, and is simply not there on Windows.
         long70 = str(folder70 / ("x" * 300 + ".mid"))
         refused = a70.take_notes([{"name": "Keys", "file": keys70}, {"name": "Long", "file": long70},
-                                  {"name": "Drums", "file": drums70}])
+                                  {"name": "Drums", "file": drums70, "icon": "drums"}])
         ok("a name too long for the file system is answered with an error, and the other files still answer",
            [r["name"] for r in refused] == ["Keys", "Long", "Drums"]
            and refused[1].get("error") in ("Notes file not found", "Notes file not readable")
@@ -9700,9 +9703,9 @@ def main():
     ok("a file that goes between two calls is not found the second time",
        a70.take_notes([{"name": "Pad", "file": pad70}]) == [{"name": "Pad", "error": "Notes file not found"}])
     a70._config["tracks"] = [{"name": "Pad", "icon": "drums"}]
-    ok("the icon is read from the band as it is now",
-       a70.take_notes([{"name": "Keys", "file": keys70}])[0]["drums"] is False
-       and a70.take_notes([{"name": "Pad", "file": drums70}])[0]["drums"] is True)
+    ok("the band's icon does not make a file a drum grid: only the take's does",
+       a70.take_notes([{"name": "Pad", "file": drums70}])[0]["drums"] is False
+       and a70.take_notes([{"name": "Pad", "file": drums70, "icon": "drums"}])[0]["drums"] is True)
     a70._config["tracks"] = None
     ok("a band that is not set yet leaves every file to its channel",
        a70.take_notes([{"name": "Drums", "file": drums70}])[0]["drums"] is False)
@@ -14445,6 +14448,98 @@ def main():
     ok("and without a setup keeps last time's",
        from_last89["ok"] is True and a89._config["lineup"] == "Trio")
     a89.finish_rehearsal()
+
+    print("\n[90] Icons from the take")
+    # A take keeps each track's icon (lineups spec, Part 3): the player's lanes, the drum
+    # grid, the counted tempo and the drift line read it from the take, never from the band,
+    # so switching lineups or changing an icon redraws no old take.
+    from rehearsal_recorder.midi.smf import write_mid as write_mid90
+    tmp90 = tmp / "s90"
+    tmp90.mkdir()
+    apimod90, a90 = fresh_api(tmp90)
+    a90.start_rehearsal("Icons", 0, SR, [{"name": "Drums", "channel": 1, "icon": "drums"},
+                                         {"name": "Bass", "channel": 2}])
+    folder90 = Path(a90._session["folder"])
+    d90 = folder90 / "_drafts" / "take 1"
+    write_wav(d90 / "Drums.wav", 100, seconds=1.0)
+    write_wav(d90 / "Bass.wav", 100, seconds=1.0)
+    a90._session["take_counter"] = 1
+    a90.save_default_tracks({"device_index": 0, "tracks": [
+        {"name": "Drums", "channel": 1, "icon": "percussion"}, {"name": "Bass", "channel": 2, "icon": "bass"}]})
+    kept90 = a90.keep_take(1, str(d90), "", 1.0, [{"name": "Drums", "file": str(d90 / "Drums.wav")},
+                                                  {"name": "Bass", "file": str(d90 / "Bass.wav")}])["take"]
+    ok("a take keeps the icons its rehearsal started with, whatever the band says by Keep",
+       [t.get("icon") for t in kept90["tracks"]] == ["drums", None])
+    ok("and the library has them too",
+       [t.get("icon") for t in a90._lib.take(folder90, 1)["tracks"]] == ["drums", None])
+    drums90, bass90 = kept90["tracks"][0]["file"], kept90["tracks"][1]["file"]
+    media90 = a90.take_media([{"name": "Drums", "file": drums90, "icon": "drums"},
+                              {"name": "Bass", "file": bass90}])
+    ok("the player gets the take's icon, not the band's", media90[0].get("icon") == "drums")
+    ok("and none for a track the take keeps none for, whatever the band gives that name",
+       "icon" not in media90[1])
+
+    kit90 = folder90 / "Kit.mid"
+    write_mid90(kit90, track_name="Kit", port_name="Port", start=[],
+                events=[(0.0, bytes((0x90, 36, 100))), (0.1, bytes((0x80, 36, 0)))])
+    a90._config["tracks"] = [{"name": "Kit", "icon": "drums"}]
+    ok("a .mid the take gave the drums icon is a drum grid, and says so",
+       a90.take_notes([{"name": "Kit", "file": str(kit90), "icon": "drums"}])[0]["drums"] is True
+       and a90.take_notes([{"name": "Kit", "file": str(kit90), "icon": "drums"}])[0].get("icon") == "drums")
+    ok("and the same file without it is not, whatever the band says",
+       a90.take_notes([{"name": "Kit", "file": str(kit90)}])[0]["drums"] is False)
+
+    a90._config["tracks"] = [{"name": "Drums"}, {"name": "Bass"}]
+    asked90 = []
+    count90 = apimod90.tempomod.count
+    apimod90.tempomod.count = lambda **kw: asked90.append(kw) or 120
+    try:
+        a90.count_tempo(str(folder90), 1, "4/4")
+    finally:
+        apimod90.tempomod.count = count90
+    ok("a tempo is counted from the drums the take gave the icon, though the band gives none",
+       asked90 and asked90[0]["drums_wav"] == drums90)
+    minus90 = str(folder90 / "Minus.wav")
+    write_wav(Path(minus90), 100, seconds=1.0)
+    heard90 = []
+    drift90 = apimod90.driftmod.count
+    apimod90.driftmod.count = lambda **kw: heard90.append(kw) or {"ok": False, "why": "no-beat"}
+    try:
+        a90.take_drift([{"name": "Drums", "file": drums90, "icon": "drums"}, {"name": "Bass", "file": bass90},
+                        {"name": "Minus", "file": minus90, "icon": "backing"}], [], {})
+    finally:
+        apimod90.driftmod.count = drift90
+    ok("the drift line listens to the take's drums, and leaves out a track it gave the backing icon",
+       heard90 and heard90[0]["drums"] == [drums90] and minus90 not in heard90[0]["mix"])
+
+    print("  a take under review")
+    a90.start_take()
+    a90._recorder._callback(np.full((SR, 2), 900, dtype=np.int16), SR, None, None)
+    stopped90 = a90.stop_take()
+    ok("the review screen gets each track with the icon its rehearsal started with",
+       {t["name"]: t.get("icon") for t in stopped90["tracks"]} == {"Drums": "drums", "Bass": None})
+    a90.discard_take(stopped90["temp_dir"])
+
+    print("  a draft rescued after a crash")
+    a90._config["tracks"] = [{"name": "Drums", "icon": "percussion"}, {"name": "Bass", "icon": "bass"}]
+
+    def draft90(number, icons):
+        d = folder90 / "_drafts" / f"take {number}"
+        d.mkdir(parents=True)
+        for name in ("Drums", "Bass"):
+            (d / f"{name}.raw").write_bytes(struct.pack("<h", 700) * 4800)
+        (d / "take.json").write_text(json.dumps({"samplerate": SR, "bit_depth": 16, "notes": [], "tracks": [
+            {"file": name, "name": name, "channels": 1, **({"icon": icons[name]} if name in icons else {})}
+            for name in ("Drums", "Bass")]}), encoding="utf-8")
+        return a90.recover_draft(str(d))["take"]
+
+    ok("keeps the icons its take.json recorded, and a track with none there takes last time's",
+       {t["name"]: t.get("icon") for t in draft90(7, {"Drums": "drums"})["tracks"]}
+       == {"Drums": "drums", "Bass": "bass"})
+    ok("one recorded before take.json kept icons gets last time's band icons by name",
+       {t["name"]: t.get("icon") for t in draft90(8, {})["tracks"]}
+       == {"Drums": "percussion", "Bass": "bass"})
+    a90.finish_rehearsal()
 
     print("\n" + "=" * 60)
     if problems:

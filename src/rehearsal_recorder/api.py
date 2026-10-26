@@ -46,6 +46,7 @@ from rehearsal_recorder.audio.drafts import (
     has_audio,
     wav_frames,
 )
+from rehearsal_recorder.audio.drafts import icons as draft_icons
 from rehearsal_recorder.audio.encode import (
     CLOUD_FORMATS_INFO,
     available as encoder_available,
@@ -431,6 +432,16 @@ CROPPING = "Wait until the crop is done."
 # by its Undo, or by an end that put it back (Api._put_back). Not that it
 # has gone to the Trash, which an Undo too late answers (holding.gone_text).
 BACK = "It is back where it was."
+
+
+def _with_icons(files, icon_of):
+    """A take's files, each with the icon `icon_of` has for its name, so the
+    take keeps it. The Backing track keeps none: its kind says what it is."""
+    return [
+        {**f, "icon": icon_of[f["name"]]}
+        if f.get("kind") != "backing" and icon_of.get(f["name"]) else f
+        for f in files
+    ]
 
 
 def _take_dir_name(take_number, name):
@@ -1038,7 +1049,10 @@ class Api:
     def _new_library(self, folder):
         """(the folder's Library, None), or (None, why it cannot be used)."""
         try:
-            return Library(Path(folder), cloud_dir=lambda: self._cloud_dir), None
+            # The band's icons are given to the takes of a database from
+            # before takes kept their own (migration 0010), once.
+            return Library(Path(folder), cloud_dir=lambda: self._cloud_dir,
+                           icons=layouts.icons(self._config.get("tracks"))), None
         except LibraryUnavailable as e:
             logging.getLogger(__name__).error("recordings database: %s", e, exc_info=True)
             return None, str(e)
@@ -1633,19 +1647,19 @@ class Api:
         bridge turns a missing argument into None, so the bucket count falls
         back here rather than being duplicated in the interface.
 
-        A take knows its tracks only by name and file. The icon beside each
-        is the band's, found by that name: an old take whose tracks were
-        called something else gets none, and is drawn with the neutral one.
-        Its Backing track ("kind": "backing") has the backing track's icon,
-        whatever the band calls its tracks, and says what it is."""
+        The icon beside each track is the one the take keeps for it ("icon",
+        as the library gives the take), never the band's as it is now: a
+        lineup picked since, or an icon changed, redraws no old take. A track
+        the take keeps none for gets none, and is drawn with the neutral one.
+        Its Backing track ("kind": "backing") has the backing track's icon
+        and says what it is."""
         buckets = buckets or DEFAULT_BUCKETS
-        icon_of = layouts.icons(self._config.get("tracks"))
         result = []
         for t in tracks:
             if t.get("kind") == "backing":
                 icon = {"icon": "backing", "kind": "backing"}
             else:
-                icon = {"icon": icon_of[t["name"]]} if t["name"] in icon_of else {}
+                icon = {"icon": t["icon"]} if isinstance(t.get("icon"), str) and t["icon"] else {}
             path = Path(t["file"])
             if not path.exists():
                 result.append({
@@ -1685,10 +1699,9 @@ class Api:
         notes of a whole take are sent at once, so zooming asks for nothing
         again.
 
-        A take knows its notes only by name and file, as it knows its tracks.
-        Whether the lane is a drum grid is the band's icon, found by that name
-        as take_media finds a track's; a name the band does not have is judged
-        by the file alone.
+        Whether the lane is a drum grid is the icon the take keeps for the
+        file, as take_media's lanes take theirs; a file with none is judged by
+        itself alone.
 
         Every file is answered on its own and one can never fail the call: one
         that is not there, or has no path, is "Notes file not found"; any other
@@ -1696,20 +1709,23 @@ class Api:
         will not answer) is "Notes file not readable", said in the log. The
         answer carries the file's "name" when it was given one.
 
-        Each answer, an error too, carries the band's icon for its name, as
-        take_media's does: a track that records notes only has no audio lane
-        to take it from, and the plate of its notes lane shows it. A track
-        whose port never appeared has no file at all, and is asked with a
-        file of None for the same reason."""
+        Each answer, an error too, carries that icon, as take_media's does: a
+        track that records notes only has no audio lane to take it from, and
+        the plate of its notes lane shows it. A track whose port never
+        appeared has no file at all, and is asked with a file of None for the
+        same reason; with no file of the take to keep an icon, it is given
+        the band's, by its name."""
         icon_of = layouts.icons(self._config.get("tracks"))
         result = []
         for f in files:
             if not isinstance(f, dict):
                 f = {}
             named = {"name": f["name"]} if "name" in f else {}
+            if isinstance(f.get("icon"), str) and f["icon"]:
+                named["icon"] = f["icon"]
             # A name that is not text is no member of the band, and cannot be
             # looked up in it without failing the call.
-            if isinstance(f.get("name"), str) and f["name"] in icon_of:
+            elif f.get("file") is None and isinstance(f.get("name"), str) and f["name"] in icon_of:
                 named["icon"] = icon_of[f["name"]]
             if f.get("file") is None:
                 result.append({**named, "error": "Notes file not found"})
@@ -1719,7 +1735,7 @@ class Api:
                 if not path.exists():
                     result.append({**named, "error": "Notes file not found"})
                     continue
-                notes = read_notes(path, icon_of.get(f.get("name")) == "drums")
+                notes = read_notes(path, named.get("icon") == "drums")
             except Exception as e:
                 # The log, not print: a console that cannot show a name such as
                 # "Pałyn" would raise here and fail the call for this very file.
@@ -2864,7 +2880,8 @@ class Api:
             # The track's name too: a draft recovered after a crash is named
             # by it, as its audio is, and not by its file.
             notes = [{"file": stems[t["name"]], "name": t["name"],
-                      "port": (port_of(t) or {}).get("name", "")}
+                      "port": (port_of(t) or {}).get("name", ""),
+                      **({"icon": t["icon"]} if t.get("icon") else {})}
                      for t in notes_tracks]
 
         # A click on another device places itself by a clock of the take's
@@ -3019,10 +3036,15 @@ class Api:
             # says so, and so does this, for Keep in this session.
             meter["click"] = meter["click"] and whole(getattr(recorder.click, "first_click_frame", None))
         notes, missing = self._note_lanes(band, result["tracks"], result["notes"])
+        # Each with its track's icon, as Keep will keep it, so the review
+        # screen draws the take as it was started.
+        icon_of = layouts.icons(band)
+        notes, missing = _with_icons(notes, icon_of), _with_icons(missing, icon_of)
         # The Backing track last, as the take keeps it; whether it is heard
         # is its song's, as M in the player last left it.
         backing = result.get("backing")
-        tracks = result["tracks"] + ([{**backing, "kind": "backing"}] if backing else [])
+        tracks = (_with_icons(result["tracks"], icon_of)
+                  + ([{**backing, "kind": "backing"}] if backing else []))
         return {
             "ok": True,
             "take_number": take_number,
@@ -3184,13 +3206,15 @@ class Api:
         meter = self._meter_of_draft(temp_dir)
         notes = self._draft_notes(temp_dir, s["tracks"], notes)
         moved, moved_notes, undo = self._move_take_files(temp_dir, take_dir, tracks, notes)
+        # Each with the icon its track had at Start, kept with the take.
+        icon_of = layouts.icons(s["tracks"])
 
         take_info = {
             "take_number": take_number,
             "name": (custom_name or "").strip(),
             "duration_sec": duration_sec,
-            "tracks": moved,
-            "notes": moved_notes,
+            "tracks": _with_icons(moved, icon_of),
+            "notes": _with_icons(moved_notes, icon_of),
             "markers": [self._as_marker(m) for m in (markers or [])],
             # What the metronome showed at Record, and whether it clicked: a
             # song with no tempo takes a click take's (Library.add_take).
@@ -3509,8 +3533,11 @@ class Api:
             return {**result, "ended": ended}
 
         take_number = max((t["take_number"] for t in r["takes"]), default=0) + 1
-        # Its tempo and click, before the files move (as at keep_take).
+        # Its tempo and click, before the files move (as at keep_take), and
+        # its tracks' icons: as take.json kept them, and for a draft written
+        # before it kept them, or a track it kept none for, last time's.
         meter = self._meter_of_draft(draft_dir)
+        icon_of = {**layouts.icons(self._config.get("tracks")), **draft_icons(draft_dir)}
         # A draft rescued with no name is a take nobody named: "Take 5".
         display_name = (name or "").strip()
         named = self._lib.resolve_name(folder, display_name, take_number)
@@ -3528,8 +3555,8 @@ class Api:
             "take_number": take_number,
             "name": display_name,
             "duration_sec": result["duration_sec"],
-            "tracks": moved,
-            "notes": moved_notes,
+            "tracks": _with_icons(moved, icon_of),
+            "notes": _with_icons(moved_notes, icon_of),
             # A rescued take was never listened to, so it has no marks yet.
             "markers": [],
             **meter,
@@ -5119,9 +5146,10 @@ class Api:
         """
         A take's tempo, counted from its files (spec Part 10), as a whole
         number in `signature`'s own count: the drums' .mid when it has one,
-        else the drums' WAV (the band's track with the drums icon), else
-        every track mixed; never its Backing track, which is the file's tempo
-        and not the band's. {"ok": True, "tempo"}, or {"ok": False, "error"}.
+        else the drums' WAV (the track the take keeps the drums icon for),
+        else every track mixed; never its Backing track, which is the file's
+        tempo and not the band's. {"ok": True, "tempo"}, or {"ok": False,
+        "error"}.
         """
         if signature not in SIGNATURES:
             return {"ok": False, "error": SIGNATURE_RULE}
@@ -5137,10 +5165,9 @@ class Api:
             return {"ok": False,
                     "error": f"Missing from the take's folder: {', '.join(missing)}" if missing
                     else "The take has no files left on disk"}
-        icons = layouts.icons(self._config.get("tracks"))
-        drums = [t["file"] for t in tracks if icons.get(t["name"]) == "drums"]
+        drums = [t["file"] for t in tracks if t.get("icon") == "drums"]
         hits = [n["file"] for n in take.get("notes") or []
-                if icons.get(n["name"]) == "drums" and Path(n["file"]).is_file()]
+                if n.get("icon") == "drums" and Path(n["file"]).is_file()]
         try:
             found = tempomod.count(drums_mid=hits[0] if hits else None,
                                    drums_wav=drums[0] if drums else None,
@@ -5155,14 +5182,15 @@ class Api:
         """
         The band's tempo through a take, bar by bar, for the drift line on
         Master (drift spec Parts 1, 2 and 4). `tracks` and `notes` are the
-        take's audio and .mid files as the player has them, {"name", "file"};
+        take's audio and .mid files as the player has them, {"name", "file",
+        "icon"};
         `meter` is the take's own {"tempo", "signature", "click", "song"}.
 
         The aim is the click's tempo on a click take, else the take's tempo,
         else its song's tempo now, else the middle of its own bars. What it
-        listens to is found by the band's icons, as take_media finds a lane's:
-        the drums' .mid, else the drums' WAVs, else every WAV but a backing
-        track's: the take's Backing track, and a track the band gave the
+        listens to is found by the icons the take keeps, as take_media finds
+        a lane's: the drums' .mid, else the drums' WAVs, else every WAV but a
+        backing track's: the take's Backing track, and a track given the
         backing track's icon.
 
         {"ok": True, "source", "per_bar", "middle", "aim": {"tempo",
@@ -5177,15 +5205,14 @@ class Api:
         if self._recorder is not None:
             return {"ok": False, "why": "recording"}
         meter = meter if isinstance(meter, dict) else {}
-        icons = layouts.icons(self._config.get("tracks"))
         wavs = [t for t in tracks or [] if isinstance(t, dict) and t.get("file") and t.get("kind") != "backing"]
         if not wavs or any(not Path(t["file"]).is_file() for t in wavs):
             return {"ok": False, "why": "missing"}
         tempo, signature, source, song = self._drift_aim(meter)
-        drums = [t["file"] for t in wavs if icons.get(t.get("name")) == "drums"]
+        drums = [t["file"] for t in wavs if t.get("icon") == "drums"]
         hits = [n["file"] for n in notes or [] if isinstance(n, dict) and n.get("file")
-                and icons.get(n.get("name")) == "drums" and Path(n["file"]).is_file()]
-        mix = [t["file"] for t in wavs if icons.get(t.get("name")) != "backing"]
+                and n.get("icon") == "drums" and Path(n["file"]).is_file()]
+        mix = [t["file"] for t in wavs if t.get("icon") != "backing"]
         files = hits[:1] + drums + mix
         try:
             key = (tuple((f, os.stat(f).st_size, os.stat(f).st_mtime_ns) for f in files), tempo, signature, source, song)

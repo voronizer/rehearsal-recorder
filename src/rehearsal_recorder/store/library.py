@@ -153,15 +153,19 @@ _GO_ORDER = (Rehearsal.created_at.desc(), Rehearsal.id, Take.take_number)
 
 
 class Library:
-    def __init__(self, recordings_dir, cloud_dir=lambda: None, migrations=MIGRATIONS):
+    def __init__(self, recordings_dir, cloud_dir=lambda: None, migrations=MIGRATIONS,
+                 icons=None):
         """
         cloud_dir: a function returning the cloud folder from the settings, or
         None. Asked on every read, because the setting changes while the app
         runs.
+
+        icons: the band's icon for each name, given to the takes of a database
+        from before takes kept their own (migration 0010).
         """
         self.recordings_dir = Path(recordings_dir)
         self._cloud_dir = cloud_dir
-        self._engine = open_engine(self.recordings_dir, migrations)
+        self._engine = open_engine(self.recordings_dir, migrations, icons)
         self._session = sessionmaker(self._engine, expire_on_commit=False)
 
     def close(self):
@@ -272,9 +276,11 @@ class Library:
             "click": take.click,
             "duration_sec": take.duration_sec,
             "tracks": [{"name": f.name, "file": str(folder / Path(f.file)),
-                        **({"kind": BACKING_FILE} if f.kind == BACKING_FILE else {})} for f in audio],
+                        **({"kind": BACKING_FILE} if f.kind == BACKING_FILE else {}),
+                        **({"icon": f.icon} if f.icon else {})} for f in audio],
             "notes": [
                 {"name": f.name, "file": str(folder / Path(f.file)),
+                 **({"icon": f.icon} if f.icon else {}),
                  "port": ports.get(f.name),
                  "after": rules.lane_after(band, heard, f.name), **rules.place_in(band, f.name)}
                 for f in notes
@@ -338,17 +344,21 @@ class Library:
 
     @staticmethod
     def _files(folder, files, kind, start=0):
-        """[{"name", "file": absolute}] → rows of that kind (AUDIO_FILE or
-        NOTES_FILE) relative to the rehearsal, numbered from `start`. An audio
-        file that says it is the Backing track ("kind": "backing", as the
-        take gave it) stays one, so a crop that hands the tracks back keeps
-        it."""
-        return [
-            TakeFile(position=start + i, name=f["name"],
-                     kind=BACKING_FILE if kind == AUDIO_FILE and f.get("kind") == BACKING_FILE else kind,
-                     file=_relative(f["file"], folder))
-            for i, f in enumerate(files)
-        ]
+        """[{"name", "file": absolute, "icon"}] → rows of that kind (AUDIO_FILE
+        or NOTES_FILE) relative to the rehearsal, numbered from `start`. An
+        audio file that says it is the Backing track ("kind": "backing", as
+        the take gave it) stays one, so a crop that hands the tracks back
+        keeps it, and keeps no icon. Every other file keeps the icon it is
+        given, so the crop keeps those too."""
+        rows = []
+        for i, f in enumerate(files):
+            backing = kind == AUDIO_FILE and f.get("kind") == BACKING_FILE
+            icon = f.get("icon")
+            rows.append(TakeFile(
+                position=start + i, name=f["name"], kind=BACKING_FILE if backing else kind,
+                file=_relative(f["file"], folder),
+                icon=icon if isinstance(icon, str) and icon and not backing else None))
+        return rows
 
     @classmethod
     def _take_files(cls, folder, take):

@@ -95,6 +95,9 @@ export type TrackFile = {
    *  the band heard it (backing-track spec, Part 3). Every other track has
    *  none. */
   kind?: "backing"
+  /** The icon its track had when the take was recorded, which the take
+   *  keeps; none for a track that had none. */
+  icon?: string
 }
 
 /** A take's notes of one track: the .mid saved beside the audio. `port` is
@@ -107,6 +110,8 @@ export type TrackFile = {
 export type NotesFile = {
   name: string
   file: string
+  /** As a TrackFile's: the icon the take keeps for it. */
+  icon?: string
   port: string
   after: string | null
   place?: number
@@ -117,6 +122,9 @@ export type NotesFile = {
  *  is. */
 export type MissingNotes = {
   name: string
+  /** The icon its track had, on a take under review; a saved take keeps
+   *  none for a lane with no file. */
+  icon?: string
   port: string
   after: string | null
   place?: number
@@ -624,7 +632,7 @@ export type Lineup = { name: string; tracks: Track[] }
 /** A track of a take as take_media returns it: address, length and waveform. */
 export type TrackMedia = {
   name: string
-  /** The band's icon for this name, when it has one. */
+  /** The icon the take keeps for this track, when it has one. */
   icon?: string
   url: string | null
   error?: string
@@ -684,9 +692,9 @@ export type MidiActivity = Record<string, MidiTrackActivity>
  * `high` (whole octaves, C to B). The fourth is the note-on's velocity, 1 to
  * 127 as the .mid has it, unlike `MidiTrackActivity.vel` (0 to 1).
  *
- * `icon` is the band's for the name, found as take_media finds a track's, on
- * an error too: a track that records notes only has no audio lane to take it
- * from.
+ * `icon` is the one the take keeps for the file, as take_media's lanes have
+ * theirs, on an error too: a track that records notes only has no audio lane
+ * to take it from. A lane with no file gets the band's, by its name.
  */
 export type TakeNotes = { icon?: string } & (
   | { name: string; error: string }
@@ -1540,14 +1548,14 @@ type PyApi = {
    *  per file in the order asked. A track with no file (its port never
    *  appeared) is asked with a file of null, for its icon: it is answered
    *  "Notes file not found". */
-  take_notes(files: (TrackFile | { name: string; file: null })[]): Promise<TakeNotes[]>
+  take_notes(files: (TrackFile | { name: string; file: null; icon?: string })[]): Promise<TakeNotes[]>
   /** The band's tempo through a take, bar by bar, for the drift line on
    *  Master: counted from the drums (their .mid, else their audio) or the mix,
    *  against the aim Python finds from the take's own meter and its song.
    *  The last 32 answers are kept, so a take opened again is instant. */
   take_drift(
     tracks: TrackFile[],
-    notes: { name: string; file: string }[],
+    notes: { name: string; file: string; icon?: string }[],
     meter: { tempo: number | null; signature: Signature | null; click: boolean; song: string | null }
   ): Promise<TakeDrift>
   activity(): Promise<Activity>
