@@ -377,6 +377,18 @@ export function withKeys({ space, player }: { space?: boolean; player?: boolean 
   )
 }
 
+/** A page script: the band's lineups as the config keeps them, laid out on
+ *  the fake's card already, and the one picked, null for none. Merged into
+ *  the config the fake keeps, as withKeys is. */
+export function withLineups(lineups: { name: string; tracks: object[] }[], picked: string | null) {
+  const kept = JSON.stringify({ lineups, lineup: picked })
+  return (
+    `localStorage.setItem("mock-python-config", JSON.stringify({` +
+    `...(JSON.parse(localStorage.getItem("mock-python-config")) || {theme: "dark", ui_scale: 1}),` +
+    `...${kept}}));`
+  )
+}
+
 /** From now on, at every frame, which page head is drawn: its title (the
  *  h2's name), or null in a frame with none. `headsSeen` stops and says them. */
 export const watchHeads = (page: Page) =>

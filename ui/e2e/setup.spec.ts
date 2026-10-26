@@ -20,6 +20,7 @@ import {
   style,
   test,
   themed,
+  withLineups,
 } from "./app.ts"
 import type { Locator, Page } from "@playwright/test"
 
@@ -57,6 +58,9 @@ async function openFour(page: Page, levels: Record<string, number[]> = {}, befor
   })
   await expect(rows(page)).toHaveCount(4)
 }
+
+/** The title over the tracks: the lineup picked, a menu of them all. */
+const lineupTitle = (page: Page) => page.locator("[data-lineup]")
 
 /** The tracks group's rows, one per track, in the band's order. */
 const rows = (page: Page) => page.locator("[data-track-row]")
@@ -96,7 +100,7 @@ async function polls(page: Page, n: number) {
   await expect.poll(() => callCount(page, "monitor_levels")).toBeGreaterThanOrEqual(done + n)
 }
 
-test("says the app's name with its logo, and fills the band in from the template", async ({
+test("says the app's name with its logo, and fills the band in from last time", async ({
   page,
 }) => {
   await openApp(page)
@@ -247,10 +251,9 @@ test.describe("the signal check", () => {
   test("Check signal shows a spinner only after one second", async ({ page }) => {
     await openApp(page)
     const check = page.getByRole("button", { name: "Check signal" })
-    const save = page.getByRole("button", { name: "Save as template" })
     await expect(check).toBeVisible()
     await settled(page)
-    const boxes = async () => [await check.boundingBox(), await save.boundingBox()]
+    const boxes = async () => [await check.boundingBox(), await lineupTitle(page).boundingBox()]
     const before = await boxes()
     await hold(page, "start_monitor")
     const spinner = check.getByRole("status", { name: "Loading" })
@@ -367,7 +370,7 @@ test("does not guess a driver when several are offered and none is resolved", as
 })
 
 test("names a track left on another card's inputs, and what would fix it", async ({ page }) => {
-  // The template keeps its input numbers, and changing the interface in
+  // Last time keeps its input numbers, and changing the interface in
   // Settings does not touch them. On a narrower card the selector went blank
   // and nothing said anything until the signal check came back with
   // paInvalidChannelCount.
@@ -515,12 +518,13 @@ test.describe("a track's icon", () => {
     await page.keyboard.press("Enter")
     await expect(second).toHaveAttribute("data-icon", "vocals")
 
-    // Kept with the band, as stereo is: in the template and when it starts.
-    await page.getByRole("button", { name: "Save as template" }).click()
-    const saved = (await calls(page, "save_default_tracks")).at(-1)?.args[0] as {
-      tracks: { name: string; icon?: string }[]
-    }
-    expect(saved.tracks.map((t) => [t.name, t.icon])).toEqual([
+    // Kept with the band, as stereo is: in the lineup and when it starts.
+    await page.getByRole("button", { name: "Update", exact: true }).click()
+    const saved = (await calls(page, "update_lineup")).at(-1)?.args[2] as {
+      name: string
+      icon?: string
+    }[]
+    expect(saved.map((t) => [t.name, t.icon])).toEqual([
       ["Guitar", "guitar-electric"],
       ["Vocals", "vocals"],
     ])
@@ -908,8 +912,9 @@ test.describe("the start screen's groups", () => {
     await expect(page.locator("[data-part='past']")).toBeVisible()
     await settled(page)
 
-    // "Recording with" is the group's first row, under its head.
-    const head = (await group.getByRole("heading", { name: "Tracks" }).boundingBox())!
+    // "Recording with" is the group's first row, under its head: the
+    // lineup's name, Band for the fake.
+    const head = (await group.getByRole("heading", { name: "Band", exact: true }).boundingBox())!
     const rw = (await recordingWith.boundingBox())!
     const first = (await rows(page).first().boundingBox())!
     expect(head.y + head.height).toBeLessThanOrEqual(rw.y)
@@ -960,21 +965,21 @@ test.describe("the start screen's groups", () => {
     expect(Math.abs(first.y - (rw.y + rw.height))).toBeLessThanOrEqual(1)
   })
 
-  test("Check signal does not move when the template is saved", async ({ page }) => {
+  test("Check signal does not move as Update comes and goes", async ({ page }) => {
     await openApp(page)
     const check = page.getByRole("button", { name: "Check signal" })
-    const save = page.getByRole("button", { name: /^(Save as template|Template saved)$/ })
-    await expect(save).toHaveAccessibleName("Save as template")
+    await expect(check).toBeVisible()
     await settled(page)
-    const boxes = async () => [await check.boundingBox(), await save.boundingBox()]
+    const boxes = async () => [await check.boundingBox(), await lineupTitle(page).boundingBox()]
     const before = await boxes()
 
-    await save.click()
-    await expect(save).toHaveAccessibleName("Template saved")
-    expect(await boxes()).toEqual(before)
-    // It says Save as template again after a while, in the same box.
-    await expect(save).toHaveAccessibleName("Save as template", { timeout: 4000 })
-    expect(await boxes()).toEqual(before)
+    await page.getByRole("textbox", { name: "Track 1 name" }).fill("Bass")
+    const update = page.getByRole("button", { name: "Update", exact: true })
+    await expect(update).toBeVisible()
+    expect(await check.boundingBox()).toEqual(before[0])
+    await update.click()
+    await expect(update).toHaveCount(0)
+    expect(await check.boundingBox()).toEqual(before[0])
   })
 
   test("Start keeps its width while Last time plays", async ({ page }) => {
@@ -997,6 +1002,307 @@ test.describe("the start screen's groups", () => {
     await expect(chip).toHaveCount(1)
     await expect(chip).toHaveCSS("visibility", "hidden")
     expect(await keyOn(startButton(page))).toBeNull()
+  })
+})
+
+// Named lineups of the band (#13): the title over the tracks is the lineup
+// picked, a menu of them all. The screen says when its tracks are no longer
+// that lineup's, and Update or Save as new... keep them.
+test.describe("lineups", () => {
+  /** The fake's two. Band is last time's pair, as the screen opens with it. */
+  const BAND = [
+    { name: "Guitar", channel: 1 },
+    { name: "Vocals", channel: 2 },
+  ]
+  const TRIO = [
+    { name: "Drums", channel: 1, icon: "drums" },
+    { name: "Bass", channel: 2, icon: "bass" },
+    { name: "Guitar", channel: 3, icon: "guitar-electric" },
+  ]
+  const both = () =>
+    withLineups(
+      [
+        { name: "Band", tracks: BAND },
+        { name: "Trio", tracks: TRIO },
+      ],
+      "Band"
+    )
+  const menu = (page: Page) => page.getByRole("menu", { name: "Lineups" })
+  const update = (page: Page) => page.getByRole("button", { name: "Update", exact: true })
+  const saveNew = (page: Page) => page.getByRole("button", { name: "Save as new…" })
+  /** The shared tip a cut name shows whole in (B6), the open one. */
+  const tip = (page: Page) => page.locator("[data-whole][data-state$='open']")
+
+  async function pick(page: Page, name: string) {
+    await lineupTitle(page).click()
+    await menu(page)
+      .getByRole("menuitemradio", { name: new RegExp(`^${literally(name)}`) })
+      .click()
+    await expect(menu(page)).toHaveCount(0)
+  }
+
+  test("the title over the tracks is the lineup picked, a menu of them all", async ({ page }) => {
+    await openApp(page, { before: both() })
+    // Still the group's heading, read by its lineup.
+    await expect(page.getByRole("heading", { name: "Band", exact: true })).toBeVisible()
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band")
+    // The tracks are Band's: there is nothing to keep.
+    await expect(update(page)).toHaveCount(0)
+    await expect(saveNew(page)).toHaveCount(0)
+
+    await lineupTitle(page).click()
+    const items = menu(page).getByRole("menuitemradio")
+    await expect(items).toHaveText([/^Band\s*2 tracks$/, /^Trio\s*3 tracks$/])
+    await expect(items.first()).toHaveAttribute("aria-checked", "true")
+    await expect(menu(page).getByRole("menuitem")).toHaveText([
+      "Save as new lineup…",
+      "Rename “Band”…",
+      "Delete “Band”…",
+    ])
+  })
+
+  test("a track taken off makes the lineup changed, and Check signal stays put", async ({
+    page,
+  }) => {
+    await openApp(page, { before: both() })
+    const check = page.getByRole("button", { name: "Check signal" })
+    await expect(check).toBeVisible()
+    await settled(page)
+    const before = await check.boundingBox()
+
+    await page.getByRole("button", { name: "Remove track Vocals" }).click()
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band · changed")
+    await expect(update(page)).toBeVisible()
+    await expect(saveNew(page)).toBeVisible()
+    // Both stand before Check signal, which keeps its place at the end (B4).
+    const u = (await update(page).boundingBox())!
+    const s = (await saveNew(page).boundingBox())!
+    expect(u.x + u.width).toBeLessThanOrEqual(s.x)
+    expect(s.x + s.width).toBeLessThanOrEqual(before!.x)
+    expect(await check.boundingBox()).toEqual(before)
+
+    // Put back, the tracks are Band's again.
+    await said(page, "Vocals was taken off.").getByRole("button", { name: "Undo" }).click()
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band")
+    await expect(update(page)).toHaveCount(0)
+    expect(await check.boundingBox()).toEqual(before)
+  })
+
+  test("Update keeps the tracks on screen in the lineup", async ({ page }) => {
+    await openApp(page, { before: both() })
+    await page.getByRole("textbox", { name: "Track 2 name" }).fill("Voice")
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band · changed")
+    await update(page).click()
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band")
+    await expect(update(page)).toHaveCount(0)
+    const [name, , tracks] = (await calls(page, "update_lineup")).at(-1)!.args as [
+      string,
+      number,
+      { name: string; channel: number }[],
+    ]
+    expect(name).toBe("Band")
+    expect(tracks.map((t) => [t.name, t.channel])).toEqual([
+      ["Guitar", 1],
+      ["Voice", 2],
+    ])
+  })
+
+  test("Save as new makes another lineup and picks it; a name taken is refused", async ({
+    page,
+  }) => {
+    await openApp(page, { before: both() })
+    await page.getByRole("button", { name: "Remove track Vocals" }).click()
+    await saveNew(page).click()
+    const dialog = page.getByRole("dialog", { name: "Save as a new lineup" })
+    await expect(dialog).toContainText("The tracks on screen, their icons and their inputs.")
+    const field = dialog.getByRole("textbox", { name: "Name" })
+    await expect(field).toBeFocused()
+    await field.fill("trio")
+    await dialog.getByRole("button", { name: "Save lineup" }).click()
+    // Said beside the field, and the window stays.
+    await expect(dialog).toContainText("There is already a lineup called Trio")
+    await expect(field).toHaveAttribute("aria-invalid", "true")
+    // Gone as soon as the name changes.
+    await field.fill("Acoustic")
+    await expect(dialog).not.toContainText("There is already")
+    await expect(field).toHaveAttribute("aria-invalid", "false")
+    await page.keyboard.press("Enter")
+    await expect(dialog).toHaveCount(0)
+
+    await expect(lineupTitle(page)).toHaveAccessibleName("Acoustic")
+    await lineupTitle(page).click()
+    const items = menu(page).getByRole("menuitemradio")
+    await expect(items).toHaveText([/^Band\s*2 tracks$/, /^Trio/, /^Acoustic\s*1 track$/])
+    await expect(items.last()).toHaveAttribute("aria-checked", "true")
+  })
+
+  test("Rename renames the lineup picked; a name taken is refused", async ({ page }) => {
+    await openApp(page, { before: both() })
+    await lineupTitle(page).click()
+    await menu(page).getByRole("menuitem", { name: "Rename “Band”…" }).click()
+    const dialog = page.getByRole("dialog", { name: "Rename “Band”" })
+    const field = dialog.getByRole("textbox", { name: "Name" })
+    await expect(field).toHaveValue("Band")
+    await field.fill("TRIO")
+    await page.keyboard.press("Enter")
+    await expect(dialog).toContainText("There is already a lineup called Trio")
+    await field.fill("Full band")
+    await dialog.getByRole("button", { name: "Rename" }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(lineupTitle(page)).toHaveAccessibleName("Full band")
+    expect((await calls(page, "rename_lineup")).at(-1)?.args).toEqual(["Band", "Full band"])
+  })
+
+  test("picking a lineup over changed tracks says so, and Undo brings them back", async ({
+    page,
+  }) => {
+    await openApp(page, { before: both() })
+    await page.getByRole("textbox", { name: "Track 2 name" }).fill("Voice")
+    await pick(page, "Trio")
+    await expect(lineupTitle(page)).toHaveAccessibleName("Trio")
+    await expect(rows(page)).toHaveCount(3)
+    expect(await namesOf(page)).toEqual(["Drums", "Bass", "Guitar"])
+    await expect(page.locator("[aria-label='Track 3 input']")).toHaveText("Input 3")
+    await expect(page.getByRole("button", { name: "Track 1 icon" })).toHaveAttribute(
+      "data-icon",
+      "drums"
+    )
+    const notice = said(page, "Your changes to Band were not kept.")
+    await expect(notice).toHaveCount(1)
+
+    await notice.getByRole("button", { name: "Undo" }).click()
+    await expect(rows(page)).toHaveCount(2)
+    expect(await namesOf(page)).toEqual(["Guitar", "Voice"])
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band · changed")
+    await expect(notices(page)).toHaveCount(0)
+  })
+
+  test("picking a lineup with nothing changed says nothing, and stops the check", async ({
+    page,
+  }) => {
+    await openApp(page, { before: both() })
+    await page.getByRole("button", { name: "Check signal" }).click()
+    await expect(page.getByRole("button", { name: "Stop checking" })).toBeVisible()
+    await pick(page, "Trio")
+    await expect(page.getByRole("button", { name: "Check signal" })).toBeVisible()
+    expect(await callCount(page, "stop_monitor")).toBe(1)
+    await expect(rows(page)).toHaveCount(3)
+    await expect(notices(page)).toHaveCount(0)
+  })
+
+  test("picking a lineup with none picked says the tracks on screen were not kept", async ({
+    page,
+  }) => {
+    await openApp(page, { before: withLineups([{ name: "Trio", tracks: TRIO }], null) })
+    await expect(lineupTitle(page)).toHaveAccessibleName("Tracks")
+    await pick(page, "Trio")
+    await expect(rows(page)).toHaveCount(3)
+    const notice = said(page, "The tracks on screen were not kept.")
+    await notice.getByRole("button", { name: "Undo" }).click()
+    await expect(rows(page)).toHaveCount(2)
+    expect(await namesOf(page)).toEqual(["Guitar", "Vocals"])
+    await expect(lineupTitle(page)).toHaveAccessibleName("Tracks")
+  })
+
+  test("after a lineup is picked with the mouse, Space starts the rehearsal", async ({ page }) => {
+    await openApp(page, { before: both() })
+    await pick(page, "Trio")
+    await page.keyboard.press("Space")
+    await expect(page.getByRole("button", { name: /Record take 1/ })).toBeVisible()
+    await expect(menu(page)).toHaveCount(0)
+  })
+
+  test("a track taken off is not put back into the lineup picked after", async ({ page }) => {
+    await openApp(page, { before: both() })
+    await page.getByRole("button", { name: "Remove track Vocals" }).click()
+    await expect(said(page, "Vocals was taken off.")).toHaveCount(1)
+    await pick(page, "Trio")
+    await expect(said(page, "Vocals was taken off.")).toHaveCount(0)
+    await expect(said(page, "Your changes to Band were not kept.")).toHaveCount(1)
+  })
+
+  test("Delete asks first; with the picked one gone the title says Tracks", async ({ page }) => {
+    await openApp(page, { before: both() })
+    await lineupTitle(page).click()
+    await menu(page).getByRole("menuitem", { name: "Delete “Band”…" }).click()
+    const ask = page.getByRole("dialog", { name: "Delete “Band”?" })
+    await expect(ask).toContainText(
+      "The tracks on screen stay as they are. Rehearsals recorded with it keep their tracks."
+    )
+    await ask.getByRole("button", { name: "Cancel" }).click()
+    await expect(ask).toHaveCount(0)
+    expect(await callCount(page, "delete_lineup")).toBe(0)
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band")
+
+    await lineupTitle(page).click()
+    await menu(page).getByRole("menuitem", { name: "Delete “Band”…" }).click()
+    await ask.getByRole("button", { name: "Delete lineup" }).click()
+    await expect(lineupTitle(page)).toHaveAccessibleName("Tracks")
+    await expect(page.getByRole("heading", { name: "Tracks", exact: true })).toBeVisible()
+    // The tracks stay, and with none picked they can be kept as a new one.
+    expect(await namesOf(page)).toEqual(["Guitar", "Vocals"])
+    await expect(saveNew(page)).toBeVisible()
+    await expect(update(page)).toHaveCount(0)
+    await lineupTitle(page).click()
+    await expect(menu(page).getByRole("menuitemradio")).toHaveText([/^Trio/])
+    await expect(menu(page).getByRole("menuitem")).toHaveText(["Save as new lineup…"])
+  })
+
+  test("a lineup with more tracks than the card has inputs is not changed", async ({ page }) => {
+    // Python lays the four out on the little box's two inputs: two of them
+    // wait for an input, in the lineup and on the screen alike.
+    const laid = [
+      { name: "Drums", channel: 1 },
+      { name: "Bass", channel: 2 },
+      { name: "Guitar", channel: null },
+      { name: "Vocals", channel: null },
+    ]
+    await openApp(page, {
+      before:
+        "window.__TRACKS_FROM_A_BIGGER_CARD__ = true;" +
+        withLineups([{ name: "Band", tracks: laid }], "Band"),
+      after:
+        "const answer = window.pywebview.api.load_default_tracks;" +
+        "window.pywebview.api.load_default_tracks = async (band) =>" +
+        ` ({...(await answer(band)), tracks: ${JSON.stringify(laid)}});`,
+    })
+    await expect(rows(page)).toHaveCount(4)
+    await expect(lineupTitle(page)).toHaveAccessibleName("Band")
+    await expect(update(page)).toHaveCount(0)
+    // Start waits for the two to be given inputs, as it does without lineups.
+    await expect(startButton(page)).toBeDisabled()
+  })
+
+  test("a long lineup name is cut, and whole in its tip", async ({ page }) => {
+    // The longest name there is, in the smallest window at 150 %.
+    const long = "Full band with the brass and two singers"
+    await page.setViewportSize({ width: 960, height: 680 })
+    await openApp(page, {
+      before: scaled(1.5) + withLineups([{ name: long, tracks: BAND }], long),
+    })
+    await page.getByRole("button", { name: "Remove track Vocals" }).click()
+    // The name gives way; "changed" does not.
+    await expect(lineupTitle(page)).toHaveAccessibleName(`${long} · changed`)
+    const name = lineupTitle(page).locator("[data-lineup-name]")
+    await expect(name).toHaveText(long)
+    expect(await name.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+    const changed = lineupTitle(page).getByText("· changed")
+    expect(await changed.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+    const word = (await changed.boundingBox())!
+    const button = (await lineupTitle(page).boundingBox())!
+    expect(word.x + word.width).toBeLessThanOrEqual(button.x + button.width)
+    await expect(lineupTitle(page)).not.toHaveAttribute("title")
+    await lineupTitle(page).hover()
+    await expect(tip(page)).toHaveText(long)
+  })
+
+  test("Start keeps which lineup was picked, and writes into none", async ({ page }) => {
+    await openApp(page, { before: both() })
+    await pick(page, "Trio")
+    await startButton(page).click()
+    await expect.poll(() => callCount(page, "start_rehearsal")).toBe(1)
+    expect((await calls(page, "start_rehearsal"))[0].args[6]).toBe("Trio")
+    expect(await callCount(page, "update_lineup")).toBe(0)
   })
 })
 

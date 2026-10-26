@@ -24,6 +24,7 @@ import { FigureLine, Figures, WholeTip, useCut } from "@/components/ui/whole"
 import { FooterRow } from "@/components/FooterRow"
 import { DiskLine } from "@/components/HealthLine"
 import { LastTime } from "@/components/LastTime"
+import { LineupDialogs, LineupMenu, type LineupAsk } from "@/components/LineupMenu"
 import { NewDot } from "@/components/NewDot"
 import { NewSetDialog, SetPicker } from "@/components/SetPicker"
 import { Shell } from "@/components/Shell"
@@ -43,6 +44,7 @@ import { useUpdate } from "@/lib/update"
 import { useWide } from "@/lib/wide"
 import { diskLine, inputsLabel, notConnected } from "@/lib/format"
 import { QUIET_THRESHOLD, fallBack } from "@/lib/levels"
+import { sameTracks } from "@/lib/lineups"
 import { modeOf, notesProblem, recordsAudio, recordsNotes } from "@/lib/midi"
 import { findPort, portLine, type PortStanding } from "@/lib/midiPorts"
 import { SPINNER_AFTER_MS } from "@/lib/playLook"
@@ -51,6 +53,8 @@ import {
   type Device,
   type DiskEstimate,
   type LastTime as LastTimeData,
+  type Lineup,
+  type LineupsAnswer,
   type MidiActivity,
   type MidiPorts,
   type RecordMode,
@@ -74,6 +78,9 @@ const SAID = "setup-track"
 
 /** The notice a button's failure is said in: Look again, Check signal, Start. */
 const ERROR = "setup"
+
+/** The notice that says the tracks on screen gave way to a lineup picked. */
+const LINEUP = "setup-lineup"
 
 /** What a track's band entry keeps across interfaces: what is on screen when
  *  a card found by looking again is laid out. */
@@ -110,7 +117,12 @@ export function Setup({
   const [bitDepth, setBitDepth] = useState(24)
   const [name, setName] = useState("")
   const [tracks, setTracks] = useState<Track[]>([])
-  const [saved, setSaved] = useState(false)
+  // The band's lineups, laid out on the card in force, and the one the
+  // tracks on screen came from (#13). Python says which was picked when the
+  // screen opens; from then on the screen keeps it.
+  const [lineups, setLineups] = useState<Lineup[]>([])
+  const [picked, setPicked] = useState<string | null>(null)
+  const [askingLineup, setAskingLineup] = useState<LineupAsk | null>(null)
   const [starting, setStarting] = useState(false)
 
   // Signal check: listen to the inputs without recording, so everyone can
@@ -236,6 +248,10 @@ export function Setup({
     // layouts.for_device(). The screen does not second-guess it.
     const tpl = await api().load_default_tracks(band)
     setTracks(tpl?.tracks ?? [])
+    // A card found by looking again lays the lineups out anew; the one
+    // picked stays the one the tracks on screen came from.
+    setLineups(tpl?.lineups ?? [])
+    if (band === undefined) setPicked(tpl?.lineup ?? null)
     return cfg.missing_device !== null
   }
 
@@ -335,6 +351,11 @@ export function Setup({
     notesSay === null &&
     deviceIndex !== null &&
     !starting
+
+  // The lineup the tracks on screen came from, and whether they are still
+  // its tracks: then there is nothing for Update to keep (lib/lineups).
+  const pickedLineup = lineups.find((l) => l.name === picked) ?? null
+  const changed = pickedLineup !== null && !sameTracks(tracks, pickedLineup.tracks)
 
   /**
    * Whether the check opened this track's port: the track records as it did
@@ -687,14 +708,16 @@ export function Setup({
     window.setTimeout(watch, MONITOR_HEALTH_MS)
   }
 
-  // Turn the check off when leaving the screen. A track taken off can be put
-  // back only here: its Undo goes with the screen.
+  // Turn the check off when leaving the screen. A track taken off, or the
+  // tracks a lineup picked replaced, can be put back only here: their Undo
+  // goes with the screen.
   useEffect(() => {
     const said = saidKeys.current
     return () => {
       checkingRef.current = false
       void stopMonitorQuietly()
       for (const key of said) dismiss(key)
+      dismiss(LINEUP)
     }
   }, [])
 
@@ -711,6 +734,7 @@ export function Setup({
     const res = await api().control_command("start_rehearsal", {
       name: name.trim() || "Rehearsal", device_index: deviceIndex,
       samplerate, tracks, bit_depth: bitDepth, set_id: await chosenSet(),
+      lineup: pickedLineup?.name ?? null,
     })
     setStarting(false)
     if (!res.ok) {
@@ -752,12 +776,79 @@ export function Setup({
     [cued, player.playing, player.loading, player.position]
   )
 
-  const saveTemplate = async () => {
-    // device_index says which card this layout is for. It does not change the
-    // chosen recording device — that lives in Settings.
-    await api().save_default_tracks({ tracks, device_index: deviceIndex ?? undefined })
-    setSaved(true)
-    window.setTimeout(() => setSaved(false), 2500)
+  /**
+   * Puts a lineup's tracks on screen at once. Tracks changed since the
+   * lineup they came from would be lost, so a notice says so with an Undo
+   * (B1) that brings them back, and the pick with them. A check running
+   * listens to the old lineup's inputs, and stops; the Undos of tracks taken
+   * off would put a track of the old lineup into this one, and go.
+   */
+  const pickLineup = (name: string) => {
+    const next = lineups.find((l) => l.name === name)
+    if (!next || (name === picked && !changed)) return
+    if (checking) void stopCheck()
+    for (const key of saidKeys.current) dismiss(key)
+    saidKeys.current.clear()
+    // With none picked, nothing on screen is kept anywhere but here.
+    const lost = pickedLineup ? changed : tracks.length > 0
+    if (lost) {
+      const before = tracks
+      const was = picked
+      notify({
+        key: LINEUP,
+        kind: "done",
+        text: pickedLineup
+          ? `Your changes to ${pickedLineup.name} were not kept.`
+          : "The tracks on screen were not kept.",
+        action: {
+          label: "Undo",
+          run: () => {
+            setTracks(before)
+            setPicked(was)
+          },
+        },
+      })
+    } else {
+      dismiss(LINEUP)
+    }
+    setPicked(name)
+    setTracks(next.tracks.map((t) => ({ ...t })))
+  }
+
+  /** The lineups as Python has them after a change, or what is wrong. */
+  const tookLineups = (res: LineupsAnswer, failed: string): string | null => {
+    if (!res.ok) return res.error ?? failed
+    setLineups(res.lineups ?? [])
+    setPicked(res.lineup ?? null)
+    return null
+  }
+
+  // Update and Save as new keep the tracks on screen on this card.
+  // device_index says which card the inputs are for; it does not change the
+  // recording device, which lives in Settings.
+  const updateLineup = async () => {
+    if (!pickedLineup) return
+    dismiss(ERROR)
+    const res = await api().update_lineup(pickedLineup.name, deviceIndex, tracks)
+    const wrong = tookLineups(res, "Could not update the lineup")
+    if (wrong) sayError(wrong)
+  }
+  const saveNewLineup = async (newName: string) =>
+    tookLineups(await api().add_lineup(newName, deviceIndex, tracks), "Could not save the lineup")
+  const renameLineup = async (newName: string) =>
+    pickedLineup
+      ? tookLineups(
+          await api().rename_lineup(pickedLineup.name, newName),
+          "Could not rename the lineup"
+        )
+      : null
+  const deleteLineup = async () => {
+    if (!pickedLineup) return
+    const wrong = tookLineups(
+      await api().delete_lineup(pickedLineup.name),
+      "Could not delete the lineup"
+    )
+    if (wrong) sayError(wrong)
   }
 
   // Tonight's name, in the footer beside the set and Start (Q1): it is the
@@ -920,8 +1011,35 @@ export function Setup({
   const tracksHead = (
     <div className="flex flex-col gap-1 px-6 pt-6 pb-4">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-sm font-semibold">Tracks</h2>
+        {/* The group is still read by its heading: the lineup's menu is in
+            it. */}
+        <h2 className="flex min-w-0 text-sm font-semibold">
+          <LineupMenu
+            lineups={lineups}
+            picked={pickedLineup?.name ?? null}
+            changed={changed}
+            disabled={starting}
+            onPick={pickLineup}
+            onAsk={setAskingLineup}
+          />
+        </h2>
         <div className="flex shrink-0 items-center gap-2">
+          {/* While the tracks are not the lineup's, Update keeps them in it,
+              and Save as new… makes another; with none picked, only Save as
+              new… is there to keep them. Before Check signal, so it keeps
+              its place as these come and go (B4). */}
+          {pickedLineup && changed && (
+            <Button variant="outline" size="row" onClick={() => void updateLineup()}>
+              <Check />
+              Update
+            </Button>
+          )}
+          {(!pickedLineup || changed) && (
+            <Button variant="outline" size="row" onClick={() => setAskingLineup("new")}>
+              <Plus />
+              Save as new…
+            </Button>
+          )}
           {/* It says what pressing it does, so it is a button, not a
               toggle; grey while it runs, as what is on is (F2), under the
               pointer too. A running check can always be stopped, even with
@@ -948,27 +1066,17 @@ export function Setup({
               </span>
             </span>
           </Button>
-          <Button variant="outline" size="row" onClick={saveTemplate}>
-            {/* As wide whichever it says, so Check signal beside it never
-                moves (B4). */}
-            <span className="grid">
-              <span className={cn("col-start-1 row-start-1", saved && "invisible")}>
-                Save as template
-              </span>
-              <span
-                className={cn(
-                  "col-start-1 row-start-1 flex items-center gap-2",
-                  !saved && "invisible"
-                )}
-              >
-                <Check />
-                Template saved
-              </span>
-            </span>
-          </Button>
         </div>
       </div>
       {hint}
+      <LineupDialogs
+        asking={askingLineup}
+        current={pickedLineup?.name ?? null}
+        onClose={() => setAskingLineup(null)}
+        onSaveNew={saveNewLineup}
+        onRename={renameLineup}
+        onDelete={() => void deleteLineup()}
+      />
     </div>
   )
 

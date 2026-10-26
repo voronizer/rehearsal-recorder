@@ -27,6 +27,7 @@ import {
   savedLine,
   songsLabel,
   takesLabel,
+  tracksLabel,
 } from "@/lib/format"
 
 describe("times", () => {
@@ -96,6 +97,10 @@ describe("amounts", () => {
   it("counts songs in the singular and the plural", () => {
     expect(songsLabel(1)).toBe("1 song")
     expect(songsLabel(6)).toBe("6 songs")
+  })
+  it("counts a lineup's tracks in the singular and the plural", () => {
+    expect(tracksLabel(1)).toBe("1 track")
+    expect(tracksLabel(4)).toBe("4 tracks")
   })
   it("says how many takes are in the cloud", () => {
     expect(inCloudLabel(1)).toBe("1 in the cloud")

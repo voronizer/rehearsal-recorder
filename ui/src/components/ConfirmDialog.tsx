@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useId, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -9,6 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Whole } from "@/components/ui/whole"
 import { TakeNameField } from "@/components/TakeNameField"
 import type { SongChoices, Take } from "@/lib/api"
 import { useHeld } from "@/lib/held"
@@ -73,12 +75,22 @@ export function ConfirmDialog({
   )
 }
 
-/** Asking for a single line of text — used for renaming. */
+/**
+ * Asking for a single line of text: renaming, or naming something new.
+ *
+ * `onSubmit` may refuse the text by answering what is wrong with it (a name
+ * another lineup has): the window stays and says so beside the field's
+ * label, as New set does, until the text changes. Said there, it takes the
+ * label's own row, so nothing under it moves (B4); give a `fieldLabel` when
+ * the text can be refused.
+ */
 export function PromptDialog({
   open,
   onOpenChange,
   title,
   label,
+  fieldLabel,
+  maxLength,
   initialValue,
   actionLabel = "Rename",
   onSubmit,
@@ -88,20 +100,36 @@ export function PromptDialog({
   title: string
   /** A line under the title, saying what renaming does. */
   label?: string
+  /** The field's own name, over it. */
+  fieldLabel?: string
+  maxLength?: number
   initialValue: string
   actionLabel?: string
-  onSubmit: (value: string) => void
+  /** What is wrong with the text, to keep the window open and say it. */
+  onSubmit: (value: string) => void | string | null | Promise<void | string | null>
 }) {
   const [value, setValue] = useState(initialValue)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const fieldId = useId()
 
   useEffect(() => {
-    if (open) setValue(initialValue)
+    if (!open) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setValue(initialValue)
+    setError(null)
   }, [open, initialValue])
 
-  const submit = () => {
+  const submit = async () => {
     const trimmed = value.trim()
-    if (!trimmed) return
-    onSubmit(trimmed)
+    if (!trimmed || busy) return
+    setBusy(true)
+    const refused = await onSubmit(trimmed)
+    setBusy(false)
+    if (typeof refused === "string") {
+      setError(refused)
+      return
+    }
     onOpenChange(false)
   }
 
@@ -112,20 +140,43 @@ export function PromptDialog({
           <DialogTitle>{title}</DialogTitle>
           {label && <DialogDescription>{label}</DialogDescription>}
         </DialogHeader>
-        <Input
-          autoFocus
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault()
-              submit()
-            }
-          }}
-        />
+        <div className="flex flex-col gap-2">
+          {(fieldLabel || error) && (
+            <div className="flex h-3.5 min-w-0 items-center gap-2">
+              {fieldLabel && (
+                <Label htmlFor={fieldId} className="shrink-0">
+                  {fieldLabel}
+                </Label>
+              )}
+              {error && (
+                <p className="flex min-w-0 text-sm text-destructive">
+                  {fieldLabel && <span className="shrink-0 whitespace-pre">· </span>}
+                  <Whole text={error} className="min-w-0 truncate" />
+                </p>
+              )}
+            </div>
+          )}
+          <Input
+            id={fieldId}
+            autoFocus
+            value={value}
+            maxLength={maxLength}
+            aria-invalid={error !== null}
+            onChange={(e) => {
+              setValue(e.target.value)
+              setError(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                void submit()
+              }
+            }}
+          />
+        </div>
         <DialogButtons
           action={
-            <Button onClick={submit} disabled={!value.trim()}>
+            <Button onClick={() => void submit()} disabled={!value.trim() || busy}>
               {actionLabel}
             </Button>
           }

@@ -2018,7 +2018,7 @@ window.__MAKE_API__ = () => ({
     const api = window.pywebview.api;
     if (action === 'start_rehearsal') {
       const p = parameters || {};
-      return api.start_rehearsal(p.name || 'Rehearsal', p.device_index ?? 0, p.samplerate || 44100, p.tracks || [], p.bit_depth || 24, p.set_id);
+      return api.start_rehearsal(p.name || 'Rehearsal', p.device_index ?? 0, p.samplerate || 44100, p.tracks || [], p.bit_depth || 24, p.set_id, p.lineup);
     }
     if (action === 'stop_rehearsal') { await api.player_close(); return api.finish_rehearsal(); }
     if (action === 'record_stop') action = midiTake && midiTake.ended === null ? 'stop_keep' : 'start';
