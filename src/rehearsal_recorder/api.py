@@ -19,6 +19,7 @@ the separate cloud folder is for — only the takes worth keeping go there.
 """
 
 import collections
+import copy
 import functools
 import json
 import logging
@@ -1972,6 +1973,7 @@ class Api:
             members = self._config.get("tracks", [])
         else:
             members = [layouts.band_member(t) for t in band]
+        answer = self._lineups_answer()
         return {
             "device_index": index,
             "samplerate": self._config.get("samplerate"),
@@ -1982,9 +1984,97 @@ class Api:
                 device_identity(index),
                 self._input_count(index),
             ),
+            "lineups": answer["lineups"],
+            "lineup": answer["lineup"],
         }
 
+    # ---------- lineups ----------
+
+    def _lineups_answer(self):
+        """Every lineup laid out on the card the setup screen uses, and the
+        one picked. The screen works out for itself whether the tracks on it
+        are still that lineup's."""
+        index = saved_device(self._config, "device", True)
+        return {
+            "ok": True,
+            "lineups": layouts.laid_out(
+                self._config.get("lineups", []),
+                device_identity(index),
+                self._input_count(index),
+            ),
+            "lineup": self._config.get("lineup"),
+        }
+
+    def _lineup(self, name):
+        for lineup in self._config.get("lineups", []):
+            if lineup["name"] == name:
+                return lineup
+        raise layouts.LineupRefused(f"No lineup is called {name}")
+
+    def _keep_lineup(self, lineup, device_index, tracks):
+        """The tracks on screen written into `lineup`, and made last time
+        too, so the screen opens with what was just saved rather than with
+        what was on it the last time someone pressed Start."""
+        lineup["tracks"] = [layouts.band_member(t) for t in tracks]
+        lineup["layouts"] = layouts.remember(
+            lineup["layouts"], device_identity(device_index), tracks)
+        self._remember_layout(device_index, tracks)
+        self._config["lineup"] = lineup["name"]
+        self._write_config()
+        return self._lineups_answer()
+
+    def update_lineup(self, name, device_index, tracks):
+        """Update: the tracks on screen over the lineup called `name`."""
+        try:
+            return self._keep_lineup(self._lineup(name), device_index, tracks)
+        except layouts.LineupRefused as e:
+            return {"ok": False, "error": str(e)}
+
+    def add_lineup(self, name, device_index, tracks):
+        """Save as new: a lineup made of the tracks on screen, picked.
+
+        It starts from last time's inputs on every other card, so where
+        each of them plugs in elsewhere is not forgotten."""
+        lineups = self._config.setdefault("lineups", [])
+        try:
+            name = layouts.lineup_name(lineups, name)
+        except layouts.LineupRefused as e:
+            return {"ok": False, "error": str(e)}
+        lineup = {"name": name, "tracks": [],
+                  "layouts": copy.deepcopy(self._config.get("layouts", []))}
+        lineups.append(lineup)
+        return self._keep_lineup(lineup, device_index, tracks)
+
+    def rename_lineup(self, name, new_name):
+        try:
+            lineup = self._lineup(name)
+            new_name = layouts.lineup_name(
+                self._config["lineups"], new_name, renaming=name)
+        except layouts.LineupRefused as e:
+            return {"ok": False, "error": str(e)}
+        lineup["name"] = new_name
+        if self._config.get("lineup") == name:
+            self._config["lineup"] = new_name
+        self._write_config()
+        return self._lineups_answer()
+
+    def delete_lineup(self, name):
+        """The lineup gone. The tracks on screen and last time stay as they
+        are; with the picked one gone, none is picked."""
+        try:
+            lineup = self._lineup(name)
+        except layouts.LineupRefused as e:
+            return {"ok": False, "error": str(e)}
+        self._config["lineups"].remove(lineup)
+        if self._config.get("lineup") == name:
+            self._config["lineup"] = None
+        self._write_config()
+        return self._lineups_answer()
+
     def save_default_tracks(self, config):
+        """Writes last time without starting. The setup screen no longer
+        calls it, since lineups replaced Save as template; tests use it to
+        set up a band."""
         # device_index says which card this layout belongs to. It does not
         # change the saved recording device: that choice lives in Settings.
         if "tracks" in config:
@@ -2214,11 +2304,15 @@ class Api:
     @serialised
     def start_rehearsal(
         self, name, device_index, samplerate, tracks, bit_depth=DEFAULT_DEPTH,
-        set_id=None,
+        set_id=None, lineup=None,
     ):
         """`set_id` is the set picked beside Start rehearsal: the rehearsal
         keeps a copy of it as it is now, and its first song is the first
-        take. One that is not there any more starts it with none."""
+        take. One that is not there any more starts it with none.
+
+        `lineup` is the lineup picked over the tracks. It is kept with last
+        time, so the screen opens with it picked; the lineup itself is not
+        written."""
         if self._transport.pending_take:
             return {"ok": False, "error": "Recover the failed take first"}
         if not tracks:
@@ -2235,6 +2329,8 @@ class Api:
         # The band set this up against this card; a week from now the same
         # card should bring it back without anyone remembering a button.
         self._remember_layout(device_index, tracks)
+        picked = {each["name"] for each in self._config.get("lineups", [])}
+        self._config["lineup"] = lineup if lineup in picked else None
         # Asked first: with no database there is nowhere to keep the takes,
         # and nothing should be created on disk for them.
         library = self._lib

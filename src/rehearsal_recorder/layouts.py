@@ -23,14 +23,35 @@ records only MIDI is plugged into no input, and holds none.
 The interface is identified by name and audio system rather than by its
 position in PortAudio's list, which moves — see audio/devices.py.
 
+A band can keep several lineups: Full band, Trio, With keys. Each is a band
+and its own `layouts`, in the same shapes, so everything above works on a
+lineup unchanged. `lineups` holds them and `lineup` names the one picked.
+`tracks` and `layouts` themselves are *last time*: what Start rehearsal had
+on screen, which the setup screen opens with. Start writes only there; a
+lineup changes when someone saves it, so taking the drums off for one
+evening leaves Full band as it was.
+
 Everything here is a pure function over plain dictionaries: no sound card is
 touched, which is what makes the cases in for_device() testable without one.
 """
+
+import copy
 
 from rehearsal_recorder.midi import rules
 
 # What a fresh install starts with, when there is no band yet.
 DEFAULT_BAND = ({"name": "Guitar 1"}, {"name": "Vocals"})
+
+# The lineup today's band becomes, and a fresh install starts with.
+FIRST_LINEUP = "Band"
+
+# How long a lineup's name may be: a label's and a set's length, which is
+# store/library.py's LABEL_NAME_MAX. Kept apart so this file needs no store.
+NAME_MAX = 40
+
+
+class LineupRefused(ValueError):
+    """A lineup name that cannot be taken, in the words the screen shows."""
 
 
 def band_member(track):
@@ -72,8 +93,8 @@ def _same(a, b):
 
 def migrate(config):
     """
-    The same config with `tracks` as a list of names and `layouts` as one
-    input map per interface.
+    The same config with `tracks` as a list of names, `layouts` as one
+    input map per interface, and `lineups` and `lineup` as above.
 
     Running this on a config already in that shape changes nothing, so it is
     safe on every read.
@@ -126,7 +147,74 @@ def migrate(config):
         config["tracks"] = band
 
     config.setdefault("tracks", [])
+
+    # Before lineups there was one band, so it becomes the first of them.
+    # Only when the key is missing: a band that has deleted every lineup
+    # keeps none.
+    if "lineups" not in config:
+        config["lineups"] = [{
+            "name": FIRST_LINEUP,
+            "tracks": copy.deepcopy(config["tracks"]),
+            "layouts": copy.deepcopy(config["layouts"]),
+        }]
+        config["lineup"] = FIRST_LINEUP
+    config["lineups"] = _clean_lineups(config["lineups"])
+    names = {lineup["name"] for lineup in config["lineups"]}
+    if config.get("lineup") not in names:
+        config["lineup"] = None
     return config
+
+
+def _clean_lineups(lineups):
+    """The lineups a hand-edited config holds that can be read: each with a
+    name and a list of tracks, the first of any two names that differ only
+    in case, each track with a name and each layout a map."""
+    out, seen = [], set()
+    for lineup in lineups if isinstance(lineups, list) else []:
+        if not isinstance(lineup, dict):
+            continue
+        name = lineup.get("name")
+        band = lineup.get("tracks")
+        maps = lineup.get("layouts", [])
+        if not (isinstance(name, str) and name.strip()) or not isinstance(band, list):
+            continue
+        if not isinstance(maps, list) or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        out.append({
+            "name": name,
+            "tracks": [t for t in band
+                       if isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"]],
+            "layouts": [e for e in maps if isinstance(e, dict)],
+        })
+    return out
+
+
+def lineup_name(lineups, name, renaming=None):
+    """
+    `name` as a lineup is called: trimmed and cut as a set's name is.
+
+    Refused when empty, or when another lineup has it, compared regardless of
+    case. `renaming` is the name of the lineup being renamed, which may keep
+    its own name in another case.
+    """
+    name = str(name or "").strip()[:NAME_MAX].strip()
+    if not name:
+        raise LineupRefused("A lineup needs a name")
+    for other in lineups or []:
+        if other["name"] != renaming and other["name"].casefold() == name.casefold():
+            raise LineupRefused(f"There is already a lineup called {other['name']}")
+    return name
+
+
+def laid_out(lineups, identity, max_inputs):
+    """Each lineup by name, with its tracks as the setup screen would put
+    them on this interface."""
+    return [
+        {"name": lineup["name"],
+         "tracks": for_device(lineup["tracks"], lineup["layouts"], identity, max_inputs)}
+        for lineup in lineups or []
+    ]
 
 
 def find(layouts, identity):

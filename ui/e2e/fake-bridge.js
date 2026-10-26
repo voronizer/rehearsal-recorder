@@ -79,6 +79,34 @@ function withIcon(t) {
   const icon = (window.__BAND_ICONS__ || {})[t.name];
   return icon ? {...t, icon} : t;
 }
+// Last time's tracks, as load_default_tracks answers them with no band given.
+function lastTime() {
+  return (window.__TRACKS_FROM_A_BIGGER_CARD__
+    ? [{name:'Guitar', channel:1}, {name:'Vocals', channel:12}]
+    : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]).map(withIcon);
+}
+// The lineups and the picked one, kept in the config as Python keeps them.
+// The fake has one card, so a lineup's tracks are kept as they were saved,
+// already laid out. With none saved there is one, Band, of last time's
+// tracks, as layouts.migrate makes it.
+function lineupsNow() {
+  const cfg = readCfg();
+  if (!Array.isArray(cfg.lineups)) return {lineups:[{name:'Band', tracks:lastTime()}], lineup:'Band'};
+  return {lineups:cfg.lineups, lineup:cfg.lineups.some(l => l.name === cfg.lineup) ? cfg.lineup : null};
+}
+function keepLineups(lineups, lineup) {
+  writeCfg({...readCfg(), lineups, lineup});
+  return {ok:true, lineups, lineup};
+}
+const copied = (tracks) => (tracks || []).map(t => ({...t}));
+// layouts.lineup_name: trimmed, cut at 40, refused empty or when another
+// lineup has it, whatever its case; `renaming` may keep its own name.
+function lineupName(lineups, name, renaming = null) {
+  const cut = String(name ?? '').trim().slice(0, 40).trim();
+  if (!cut) return {error:'A lineup needs a name'};
+  const other = lineups.find(l => l.name !== renaming && l.name.toLowerCase() === cut.toLowerCase());
+  return other ? {error:`There is already a lineup called ${other.name}`} : {name:cut};
+}
 // Mirrors what audio/player.py measures in the mix: post-fader, silent when
 // muted or when another track is soloed, and nothing at all while stopped.
 function levels() {
@@ -1749,10 +1777,7 @@ window.__MAKE_API__ = () => ({
         name: t.name, stereo: !midiOnly && !!t.stereo, ...(t.icon ? {icon: t.icon} : {}),
         ...(t.mode ? {mode: t.mode} : {}), ...(t.midi_port ? {midi_port: t.midi_port} : {}),
         channel: midiOnly ? null : pluggedIn ? nth + 1 : (nth === 0 ? 1 : null)};
-    })}) : ({
-    tracks: (window.__TRACKS_FROM_A_BIGGER_CARD__
-      ? [{name:'Guitar', channel:1}, {name:'Vocals', channel:12}]
-      : [{name:'Guitar', channel:1}, {name:'Vocals', channel:2}]).map(withIcon)})),
+    }), ...lineupsNow()}) : ({tracks: lastTime(), ...lineupsNow()})),
   set_recording_format: track('set_recording_format', async (dev, rate, depth) => {
     recording = {device_index: dev, samplerate: rate, bit_depth: depth};
     return {ok:true, ...recording};
@@ -1779,6 +1804,30 @@ window.__MAKE_API__ = () => ({
           '[PaErrorCode -9999]'}
       : {ok:true, formats:{'44100':[16,24], '48000':[16,24], '96000':[24]}})),
   save_default_tracks: track('save_default_tracks', async () => ({ok:true})),
+  update_lineup: track('update_lineup', async (name, _dev, tracksIn) => {
+    const {lineups} = lineupsNow();
+    if (!lineups.some(l => l.name === name)) return {ok:false, error:`No lineup is called ${name}`};
+    return keepLineups(lineups.map(l => l.name === name ? {name, tracks:copied(tracksIn)} : l), name);
+  }),
+  add_lineup: track('add_lineup', async (name, _dev, tracksIn) => {
+    const {lineups} = lineupsNow();
+    const named = lineupName(lineups, name);
+    if (named.error) return {ok:false, error:named.error};
+    return keepLineups([...lineups, {name:named.name, tracks:copied(tracksIn)}], named.name);
+  }),
+  rename_lineup: track('rename_lineup', async (name, newName) => {
+    const {lineups, lineup} = lineupsNow();
+    if (!lineups.some(l => l.name === name)) return {ok:false, error:`No lineup is called ${name}`};
+    const named = lineupName(lineups, newName, name);
+    if (named.error) return {ok:false, error:named.error};
+    return keepLineups(lineups.map(l => l.name === name ? {...l, name:named.name} : l),
+                       lineup === name ? named.name : lineup);
+  }),
+  delete_lineup: track('delete_lineup', async (name) => {
+    const {lineups, lineup} = lineupsNow();
+    if (!lineups.some(l => l.name === name)) return {ok:false, error:`No lineup is called ${name}`};
+    return keepLineups(lineups.filter(l => l.name !== name), lineup === name ? null : lineup);
+  }),
 
   disk_estimate: track('disk_estimate', async (count, rate, depth) => {
     const perSec = count * rate * (depth === 24 ? 3 : 2);
@@ -1870,8 +1919,11 @@ window.__MAKE_API__ = () => ({
   // A page can start the rehearsal with takes in it already:
   // window.__TONIGHT__ = [{name, duration_sec, starred?, markers?, cloud?}, …],
   // numbered from 1 in that order.
-  start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, tracksIn, _depth, setId) => {
+  start_rehearsal: track('start_rehearsal', async (name, _dev, _rate, tracksIn, _depth, setId, lineup) => {
     await held('start_rehearsal');
+    // Kept with last time, as Python keeps it; no lineup is written.
+    const {lineups} = lineupsNow();
+    writeCfg({...readCfg(), lineups, lineup: lineups.some(l => l.name === lineup) ? lineup : null});
     const folder = '/rec/' + name;
     const tonight = (window.__TONIGHT__ || []).map((t, i) => ({take_number:i + 1, markers:[],
       tracks:[{name:'Guitar', file:`${folder}/t${i + 1}.wav`}], ...t}));

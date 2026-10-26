@@ -244,14 +244,15 @@ class Transport(ControlAPI):
             return {"ok": False, "result": "unavailable", "error": "Resolve recorder recovery/library errors first"}
         if parameters:
             required = {"name", "device_index", "samplerate", "tracks"}
-            if not required <= parameters.keys() or parameters.keys() - (required | {"bit_depth", "set_id"}):
+            if not required <= parameters.keys() or parameters.keys() - (required | {"bit_depth", "set_id", "lineup"}):
                 return {"ok": False, "result": "unavailable", "error": "Invalid rehearsal setup"}
             return api.start_rehearsal(**parameters)
         settings, layout = api.get_settings(), api.load_default_tracks()
         if settings.get("missing_device") or settings.get("device_index") is None:
             return {"ok": False, "result": "unavailable", "error": "Choose an available input device in the recorder"}
         result = api.start_rehearsal("Rehearsal", settings["device_index"], settings["samplerate"],
-                                     layout["tracks"], settings["bit_depth"], set_id=settings.get("next_set"))
+                                     layout["tracks"], settings["bit_depth"], set_id=settings.get("next_set"),
+                                     lineup=layout.get("lineup"))
         if not result.get("ok"): result.setdefault("result","unavailable")
         return result
 

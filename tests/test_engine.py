@@ -3540,8 +3540,9 @@ def main():
        flat["layouts"] == [{"device": xr18,
                             "inputs": {"Guitar": 3, "Vocals": 7}}])
     ok("migrating twice changes nothing", L.migrate(L.migrate(flat)) == flat)
-    ok("nothing saved migrates to nothing",
-       L.migrate({}) == {"tracks": [], "layouts": []})
+    ok("nothing saved migrates to no band, and Band as its one lineup",
+       L.migrate({}) == {"tracks": [], "layouts": [], "lineup": "Band",
+                         "lineups": [{"name": "Band", "tracks": [], "layouts": []}]})
 
     # The shape where each card carried its own band: nobody may be lost by
     # reading it, so the band is everyone who appeared on any card.
@@ -14278,6 +14279,172 @@ def main():
        a88.update_status()["updated"] is None and state87(where88).exists())
     ok("run from source, nothing of this happens",
        a88.start_update_checks() is False and state87(where88).exists())
+
+    print("\n[89] Lineups")
+    from rehearsal_recorder import layouts as L89
+    from rehearsal_recorder.audio.devices import device_identity as identity89
+    card89 = identity89(0)
+    today89 = {"tracks": [{"name": "Guitar"}, {"name": "Bass"}],
+               "layouts": [{"device": card89, "inputs": {"Guitar": 1, "Bass": 2}}]}
+    once89 = L89.migrate(json.loads(json.dumps(today89)))
+    ok("today's band becomes the first lineup, Band",
+       once89["lineups"] == [{"name": "Band", "tracks": today89["tracks"],
+                              "layouts": today89["layouts"]}]
+       and once89["lineup"] == "Band")
+    ok("and last time stays as it was",
+       once89["tracks"] == today89["tracks"] and once89["layouts"] == today89["layouts"])
+    twice89 = L89.migrate(json.loads(json.dumps(once89)))
+    ok("migrating twice changes nothing", twice89 == once89)
+    once89["lineups"][0]["tracks"].append({"name": "Keys"})
+    ok("the lineup is a copy, not last time itself", len(once89["tracks"]) == 2)
+    fresh89 = L89.migrate({})
+    ok("a fresh install gets Band with no tracks",
+       fresh89["lineups"] == [{"name": "Band", "tracks": [], "layouts": []}]
+       and fresh89["lineup"] == "Band")
+    ok("which is laid out as the first-run pair",
+       [t["name"] for t in L89.laid_out(fresh89["lineups"], card89, 8)[0]["tracks"]]
+       == ["Guitar 1", "Vocals"])
+    ok("a lineups key that is not a list is none",
+       L89.migrate({"lineups": "Trio"})["lineups"] == [])
+    hand89 = L89.migrate({"lineups": [
+        {"tracks": []}, {"name": "  ", "tracks": [], "layouts": []},
+        {"name": "Trio", "tracks": "Bass", "layouts": []},
+        {"name": "Duo", "tracks": [{"name": "Bass"}, "Keys", {"channel": 3}], "layouts": [7]},
+        {"name": "duo", "tracks": [], "layouts": []},
+    ], "lineup": "Gone"})
+    ok("a hand-edited lineup with no name or no list of tracks is dropped, and a second of one name",
+       [l["name"] for l in hand89["lineups"]] == ["Duo"])
+    ok("a track with no name and a layout that is not a map are dropped",
+       hand89["lineups"][0]["tracks"] == [{"name": "Bass"}]
+       and hand89["lineups"][0]["layouts"] == [])
+    ok("a picked lineup that is not there is none", hand89["lineup"] is None)
+    ok("deleting every lineup is kept", L89.migrate({"lineups": []})["lineups"] == [])
+    ok("a missing lineup key reads as none",
+       L89.migrate({"lineups": [{"name": "Trio", "tracks": [], "layouts": []}]})["lineup"] is None)
+    try:
+        L89.lineup_name([{"name": "Trio"}], " trio ")
+        ok("a name another lineup has is refused", False)
+    except L89.LineupRefused as e:
+        ok("a name another lineup has is refused", str(e) == "There is already a lineup called Trio")
+    try:
+        L89.lineup_name([], "   ")
+        ok("an empty name is refused", False)
+    except L89.LineupRefused as e:
+        ok("an empty name is refused", str(e) == "A lineup needs a name")
+    ok("a name is trimmed and cut at 40", L89.lineup_name([], "  " + "x" * 50) == "x" * 40)
+    ok("a lineup may keep its own name in another case",
+       L89.lineup_name([{"name": "Trio"}], "TRIO", renaming="Trio") == "TRIO")
+
+    tmp89 = tmp / "s89"
+    tmp89.mkdir()
+    apimod89, a89 = fresh_api(tmp89)
+    a89._config.update(L89.migrate(json.loads(json.dumps(today89))))
+    a89._config["device_index"] = 0
+    a89._config["device"] = card89
+    first89 = a89.load_default_tracks()
+    ok("the setup screen gets the lineups laid out on the card, and the picked one",
+       first89["lineups"] == [{"name": "Band", "tracks": first89["tracks"]}]
+       and first89["lineup"] == "Band"
+       and [(t["name"], t["channel"]) for t in first89["tracks"]] == [("Guitar", 1), ("Bass", 2)])
+    trio89 = [{"name": "Bass", "channel": 2}, {"name": "Guitar", "channel": 3, "icon": "guitar"},
+              {"name": "Vocals", "channel": 4}]
+    added89 = a89.add_lineup("Trio", 0, trio89)
+    ok("Save as new adds a lineup and picks it",
+       added89["ok"] is True and [l["name"] for l in added89["lineups"]] == ["Band", "Trio"]
+       and added89["lineup"] == "Trio")
+    ok("with the tracks on screen, laid out",
+       [(t["name"], t["channel"], t.get("icon")) for t in added89["lineups"][1]["tracks"]]
+       == [("Bass", 2, None), ("Guitar", 3, "guitar"), ("Vocals", 4, None)])
+    ok("and they are last time too",
+       [t["name"] for t in a89.load_default_tracks()["tracks"]] == ["Bass", "Guitar", "Vocals"]
+       and a89._config["lineup"] == "Trio")
+    ok("and it is written down",
+       json.loads((tmp89 / "config.json").read_text(encoding="utf-8"))["lineup"] == "Trio")
+    ok("a name another lineup has is refused, whatever its case",
+       a89.add_lineup("trio", 0, trio89) == {"ok": False, "error": "There is already a lineup called Trio"})
+    ok("and an empty one",
+       a89.add_lineup("  ", 0, trio89) == {"ok": False, "error": "A lineup needs a name"})
+    long89 = a89.add_lineup("y" * 50, 0, trio89)
+    ok("a long name is kept cut at 40", long89["lineup"] == "y" * 40)
+    a89.delete_lineup("y" * 40)
+
+    other89 = {"name": "Other desk", "host_api": "CoreAudio"}
+    a89._config["layouts"].append({"device": other89, "inputs": {"Vocals": 7}})
+    a89.add_lineup("With keys", 0, trio89 + [{"name": "Keys", "channel": 5}])
+    keys89 = next(l for l in a89._config["lineups"] if l["name"] == "With keys")
+    on_other89 = L89.laid_out([keys89], other89, 8)[0]["tracks"]
+    ok("a new lineup keeps last time's inputs on other cards",
+       next(t for t in on_other89 if t["name"] == "Vocals")["channel"] == 7)
+    a89.delete_lineup("With keys")
+
+    no_drums89 = [{"name": "Guitar", "channel": 1}]
+    updated89 = a89.update_lineup("Band", 0, no_drums89)
+    ok("Update writes over the picked lineup",
+       updated89["ok"] is True and updated89["lineup"] == "Band"
+       and [t["name"] for t in updated89["lineups"][0]["tracks"]] == ["Guitar"])
+    ok("and leaves the others as they were",
+       [t["name"] for t in updated89["lineups"][1]["tracks"]] == ["Bass", "Guitar", "Vocals"])
+    ok("and makes it last time",
+       [t["name"] for t in a89.load_default_tracks()["tracks"]] == ["Guitar"])
+    ok("a lineup nobody has is not updated",
+       a89.update_lineup("Nobody", 0, no_drums89) == {"ok": False, "error": "No lineup is called Nobody"})
+    nocard89 = a89.update_lineup("Band", None, [{"name": "Drums", "channel": 1}])
+    ok("Update with no interface in hand still keeps the lineup", nocard89["ok"] is True)
+    a89._config["device_index"] = None
+    a89._config["device"] = None
+    ok("and with no card it is laid out from it",
+       [t["name"] for t in a89.load_default_tracks()["lineups"][0]["tracks"]] == ["Drums"])
+    a89._config["device_index"] = 0
+    a89._config["device"] = card89
+
+    renamed89 = a89.rename_lineup("Trio", "trio")
+    ok("a lineup can be renamed to its own name in another case",
+       renamed89["ok"] is True and [l["name"] for l in renamed89["lineups"]] == ["Band", "trio"])
+    ok("but not to another lineup's",
+       a89.rename_lineup("trio", "band") == {"ok": False, "error": "There is already a lineup called Band"})
+    ok("nor one nobody has",
+       a89.rename_lineup("Nobody", "X") == {"ok": False, "error": "No lineup is called Nobody"})
+    a89.update_lineup("trio", 0, trio89)
+    ok("renaming the picked lineup renames the pick",
+       a89.rename_lineup("trio", "Trio")["lineup"] == "Trio" and a89._config["lineup"] == "Trio")
+    ok("renaming another leaves the pick",
+       a89.rename_lineup("Band", "Full band")["lineup"] == "Trio")
+    gone89 = a89.delete_lineup("Trio")
+    ok("deleting the picked lineup picks none",
+       gone89["ok"] is True and gone89["lineup"] is None
+       and [l["name"] for l in gone89["lineups"]] == ["Full band"])
+    ok("and leaves last time as it was",
+       [t["name"] for t in a89.load_default_tracks()["tracks"]] == ["Bass", "Guitar", "Vocals"])
+    ok("a lineup nobody has is not deleted",
+       a89.delete_lineup("Nobody") == {"ok": False, "error": "No lineup is called Nobody"})
+    last89 = a89.delete_lineup("Full band")
+    ok("the last lineup can be deleted", last89["ok"] is True and last89["lineups"] == [])
+    ok("and stays deleted when the settings are read again",
+       a89._read_config()["lineups"] == [])
+
+    a89.add_lineup("Full band", 0, [{"name": "Guitar", "channel": 1}, {"name": "Drums", "channel": 2}])
+    a89.add_lineup("Trio", 0, trio89)
+    before89 = json.loads(json.dumps(a89._config["lineups"]))
+    started89 = a89.start_rehearsal("Lineup", 0, SR, [{"name": "Guitar", "channel": 1}], lineup="Full band")
+    ok("Start writes into no lineup",
+       started89["ok"] is True and a89._config["lineups"] == before89)
+    ok("and keeps the tracks and the pick as last time",
+       [t["name"] for t in a89._config["tracks"]] == ["Guitar"] and a89._config["lineup"] == "Full band")
+    a89.finish_rehearsal()
+    a89.start_rehearsal("Nobody's", 0, SR, [{"name": "Guitar", "channel": 1}], lineup="Nobody")
+    ok("a pick nobody has is kept as none", a89._config["lineup"] is None)
+    a89.finish_rehearsal()
+    from_pads89 = a89._transport.execute("start_rehearsal", {
+        "name": "Pads", "device_index": 0, "samplerate": SR,
+        "tracks": [{"name": "Bass", "channel": 2}], "lineup": "Trio"}, wait=True)
+    ok("the controller's Start with a setup takes the lineup",
+       from_pads89["ok"] is True and a89._config["lineup"] == "Trio")
+    a89.finish_rehearsal()
+    a89._config["samplerate"] = SR
+    from_last89 = a89._transport.execute("start_rehearsal", {}, wait=True)
+    ok("and without a setup keeps last time's",
+       from_last89["ok"] is True and a89._config["lineup"] == "Trio")
+    a89.finish_rehearsal()
 
     print("\n" + "=" * 60)
     if problems:

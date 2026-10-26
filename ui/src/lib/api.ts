@@ -611,8 +611,15 @@ export type TrackTemplate = {
   device_index?: number
   samplerate?: number
   bit_depth?: number
+  /** Last time: what Start rehearsal had on screen. */
   tracks?: Track[]
+  lineups?: Lineup[]
+  /** The lineup last time was picked from, or null for none. */
+  lineup?: string | null
 }
+
+/** A lineup of the band, laid out on the interface in force. */
+export type Lineup = { name: string; tracks: Track[] }
 
 /** A track of a take as take_media returns it: address, length and waveform. */
 export type TrackMedia = {
@@ -1077,6 +1084,9 @@ export type Settings = MetronomeSettings & BackingSettings & {
 
 type Ok<T = object> = { ok: boolean; error?: string } & T
 
+/** Every lineup laid out again, and the one picked, after a change. */
+export type LineupsAnswer = Ok<{ lineups?: Lineup[]; lineup?: string | null }>
+
 type PyApi = {
   ping(): Promise<{ ok: boolean; message: string }>
   list_input_devices(): Promise<Device[]>
@@ -1094,6 +1104,21 @@ type PyApi = {
     Ok<{ found?: string[]; gone?: string[]; warning?: string }>
   >
   save_default_tracks(config: TrackTemplate): Promise<Ok>
+  /** Update: the tracks on screen over that lineup, and last time too. */
+  update_lineup(
+    name: string,
+    deviceIndex: number | null,
+    tracks: Track[]
+  ): Promise<LineupsAnswer>
+  /** Save as new: a lineup of the tracks on screen, picked. Refused with
+   *  an empty name or one another lineup has, regardless of case. */
+  add_lineup(
+    name: string,
+    deviceIndex: number | null,
+    tracks: Track[]
+  ): Promise<LineupsAnswer>
+  rename_lineup(name: string, newName: string): Promise<LineupsAnswer>
+  delete_lineup(name: string): Promise<LineupsAnswer>
   media_url(absPath: string): Promise<string | null>
   /** A track's address, length and waveform. A range narrows the waveform to
    *  the part on screen; the lengths returned are always the whole file's. */
@@ -1111,7 +1136,9 @@ type PyApi = {
     tracks: Track[],
     bitDepth?: number,
     /** The set it plays by; left out or null, it plays freely. */
-    setId?: number | null
+    setId?: number | null,
+    /** The lineup picked over the tracks, kept with last time. */
+    lineup?: string | null
   ): Promise<Ok<{ folder?: string }>>
   /** Which rate/depth combinations this input actually accepts. */
   recording_formats(
