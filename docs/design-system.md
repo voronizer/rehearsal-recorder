@@ -840,16 +840,16 @@ as the `cn` import.
   room the columns leave, is cut where that ends, and is whole in the
   tooltip. In History each page has the pane head (`PaneHead`, C8): the
   title on up to two lines, then cut and whole in the tooltip, with the
-  pencil after its last word, as on Review. The actions at its right get
-  what the title leaves: a rehearsal's figures give way to its name whole,
-  before the name takes a second line, and Delete stays. Under the name the
-  date is whole, the set is cut to half the line at most, and the folder's
-  path has the rest. The path is the button that opens the folder, cut at
-  its end, and its name and tip are in the system's words (P2), "Show in
-  Finder", with the whole path in the tip while it is cut. A rehearsal not
-  on disk has its path as plain text. A row in History's lists has its name
-  on up to two lines, then cut, and the figures beside it give way first,
-  as on Earlier's rows. The header's totals are `Figures` too, the size
+  pencil after its last word, as on Review, and on a rehearsal's page the
+  folder button after the pencil. The actions at its right get what the
+  title leaves: a rehearsal's figures give way to its name whole, before
+  the name takes a second line, and Delete stays. Under the name the date
+  is whole and the set is cut to half the line at most. The folder's path
+  is not shown: the folder button's name and tip are in the system's words
+  (P2), "Show in Finder", and the tip has the whole path under them. A
+  rehearsal not on disk has no folder button and no path. A row in
+  History's lists has its name on up to two lines, then cut, and the
+  figures beside it give way first, as on Earlier's rows. The header's totals are `Figures` too, the size
   dropping first and the count last. A take's row in Drafts has the
   rehearsal's name on up to two lines, then cut, whole in the tip and a Tab
   stop while it is cut (`Whole reach`); a name that fits on two lines is

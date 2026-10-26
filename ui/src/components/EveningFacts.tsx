@@ -36,7 +36,7 @@ function Fact({ label, value, hidden }: { label: string; value: string; hidden?:
  * at them says all four, as one line, once any has given way; a screen
  * reader is read that line whatever shows. The folder button never gives
  * way. Without `withFolder` there is none: History opens the folder from the
- * path under the rehearsal's name.
+ * button after the pencil beside the rehearsal's name.
  *
  * `takes` is null while they are being read: the place is there all the
  * same, as tall as ever, with the folder button in it if there is one and
