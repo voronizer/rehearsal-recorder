@@ -1666,55 +1666,6 @@ test.describe("Last time and long names on the shared pieces", () => {
     await expect(target).toBeFocused()
   }
 
-  test("Not played keeps the song name whole and drops figures", async ({ page }) => {
-    await openBandApp(page, { stress: true })
-    // Dym's ▶ plays a ★ go from another evening: its figure line is the
-    // longest there is, and it used to squeeze "Dym" to "D…".
-    const star = "★ Dym 2 (Tue 15 Sep)"
-    const check = async (past: Locator, where: string) => {
-      const row = past.getByRole("region", { name: "Not played last time" }).locator("[data-song='Dym']")
-      const name = row.locator("[data-name]")
-      await expect(name, where).toHaveText("Dym")
-      await expect(name, where).not.toHaveAttribute("data-cut")
-      expect(
-        await name.evaluate((el) => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight),
-        where
-      ).toBe(true)
-      // In the one link look: the text's colour, underlined at rest.
-      await expect(songName(past, "Dym"), where).toHaveCSS("text-decoration-line", "underline")
-
-      const figures = row.locator("[data-figures]")
-      await expect(figures, where).toHaveAttribute("data-dropped")
-      const read = figures.locator(".sr-only")
-      await expect(read, where).toHaveText(new RegExp(`^${literally(star)} · Sat 19 Sep, .+ ago · 4 takes$`))
-      // Dropped in order, the least needed first: how long ago, then the
-      // day, then the goes, the ★ go last. The ★ is drawn, not written.
-      const ago = (await read.innerText()).split(", ")[1].split(" · ")[0]
-      const kept = [
-        `${star} · Sat 19 Sep, ${ago} · 4 takes`,
-        `${star} · Sat 19 Sep · 4 takes`,
-        `${star} · 4 takes`,
-        star,
-        "",
-      ].map((line) => line.replace("★ ", ""))
-      const shown = (await figures.locator("[data-shown]").innerText()).trim()
-      // The card leaves the line room for some of it, beside the setup and in
-      // the panel alike: not none.
-      expect(kept.slice(1, -1), `${where}: "${shown}"`).toContain(shown)
-
-      // What dropped is a keyboard's too: the name's tip says the line whole.
-      await dayLine(past).click()
-      await tabTo(page, songName(past, "Dym"))
-      await expect(tip(page), where).toBeVisible()
-      await expect(tip(page), where).toContainText(`${star.replace("★ ", "")} · Sat 19 Sep, ${ago} · 4 takes`)
-      await dayLine(past).click()
-      await expect(tips(page), where).toHaveCount(0)
-    }
-
-    await check(beside(page), "beside the setup")
-    await check(await openPanel(page), "in the panel")
-  })
-
   test("the check's readings do not measure Last time again", async ({ page }) => {
     // The stress data beside the setup: two dozen figure lines and cut names,
     // each measured as it is drawn. The check reads the levels every 80 ms.
@@ -2137,7 +2088,6 @@ test.describe("Last time and long names on the shared pieces", () => {
     const heading = past.getByRole("heading", { name: /^Last time · /i })
     await expect(heading).toHaveText(/^Last time · \w{3} \d{1,2} \w{3}, .+$/)
     await expect(heading).toHaveCSS("text-transform", "none")
-    for (const name of ["Not played last time", "Earlier"])
-      await expect(past.getByRole("heading", { name, exact: true }), name).toHaveCSS("text-transform", "none")
+    await expect(past.getByRole("heading", { name: "Earlier", exact: true })).toHaveCSS("text-transform", "none")
   })
 })

@@ -449,8 +449,7 @@ export type SongChoice = {
 export type SongChoices = { here: SongChoice[]; other: SongChoice[] }
 
 /** What a song's ▶ plays (api.last_time): its newest ★ go, from whichever
- *  rehearsal it was played at, or with none its last go at the rehearsal it
- *  is listed under. */
+ *  rehearsal it was played at, or with none its last go last time. */
 export type SongPlays = {
   folder: string
   rehearsal: string
@@ -583,8 +582,8 @@ export type MergeAnswer = Ok<{
 
 /**
  * What the setup screen says about the rehearsals before this one
- * (api.last_time): the last one song by song, the songs it left out, and
- * the few after it in history's list.
+ * (api.last_time): the last one song by song, and the few after it in
+ * history's list.
  */
 export type LastTime = {
   /** The newest rehearsal on disk that played a song, or with none named,
@@ -598,19 +597,6 @@ export type LastTime = {
     runs: Run[]
     in_cloud: number
   } | null
-  /** Songs of older rehearsals that the last one did not play, the latest
-   *  time each was played first, with the last go it got then. */
-  not_played: {
-    name: string
-    folder: string
-    /** The rehearsal it was last played at. */
-    rehearsal: string
-    created_at: string
-    goes: number
-    take: Take
-    /** What its ▶ plays. */
-    plays: SongPlays
-  }[]
   earlier: {
     folder: string
     name: string
@@ -619,8 +605,6 @@ export type LastTime = {
     total_duration_sec: number
     missing: boolean
   }[]
-  /** Every rehearsal in history. */
-  count: number
 }
 
 export type TrackTemplate = {

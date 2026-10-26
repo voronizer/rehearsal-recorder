@@ -69,7 +69,7 @@ export const FromTheLeft: Story = {
     <Open side="left">
       <SheetTitle className="sr-only">Last time</SheetTitle>
       <SheetDescription className="sr-only">
-        The last rehearsal, the songs not played in it, and earlier ones.
+        The last rehearsal song by song, and earlier ones.
       </SheetDescription>
       <Songs n={4} />
     </Open>
@@ -81,7 +81,7 @@ export const FromTheRight: Story = {
     <Open side="right">
       <SheetTitle className="sr-only">Last time</SheetTitle>
       <SheetDescription className="sr-only">
-        The last rehearsal, the songs not played in it, and earlier ones.
+        The last rehearsal song by song, and earlier ones.
       </SheetDescription>
       <Songs n={4} />
     </Open>
@@ -95,7 +95,7 @@ export const WithAHeader: Story = {
       <SheetHeader>
         <SheetTitle>Last time</SheetTitle>
         <SheetDescription>
-          The last rehearsal, the songs not played in it, and earlier ones.
+          The last rehearsal song by song, and earlier ones.
         </SheetDescription>
       </SheetHeader>
       <Songs n={4} />
@@ -109,7 +109,7 @@ export const Scrolls: Story = {
     <Open side="left">
       <SheetTitle className="sr-only">Last time</SheetTitle>
       <SheetDescription className="sr-only">
-        The last rehearsal, the songs not played in it, and earlier ones.
+        The last rehearsal song by song, and earlier ones.
       </SheetDescription>
       <Songs n={60} />
     </Open>
@@ -131,7 +131,7 @@ function WithNotice() {
       <Open side="left">
         <SheetTitle className="sr-only">Last time</SheetTitle>
         <SheetDescription className="sr-only">
-          The last rehearsal, the songs not played in it, and earlier ones.
+          The last rehearsal song by song, and earlier ones.
         </SheetDescription>
         <Songs n={4} />
       </Open>

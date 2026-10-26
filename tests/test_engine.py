@@ -2212,7 +2212,7 @@ def main():
         return str(folder)
 
     ok("with no rehearsal at all there is no last time",
-       e.last_time() == {"last": None, "not_played": [], "earlier": [], "count": 0})
+       e.last_time() == {"last": None, "earlier": []})
 
     older = rehearsal("First", "2026-08-25T19:00:00", [
         ("Polyn", 200, ()), ("Doroga", 230, ()), ("Doroga 2", 240, ("good",))])
@@ -2247,19 +2247,10 @@ def main():
        == [("Polyn", [1, 2, 5]), ("Vesna", [3])])
     ok("and its evening, drawn the same way as in history",
        lt["last"]["runs"] == runs["Tuesday jam"])
-    ok("songs it did not play come from the rehearsals before it, the latest first",
-       [(s["name"], s["rehearsal"], s["goes"]) for s in lt["not_played"]]
-       == [("Dym", "New songs", 2), ("Ptaha", "New songs", 1), ("Doroga", "First", 2)])
-    ok("each with its last go, ready to play",
-       [s["take"]["name"] for s in lt["not_played"]] == ["Dym 2", "Ptaha 1", "Doroga 2"]
-       and lt["not_played"][0]["folder"] == mid and lt["not_played"][2]["folder"] == older)
-    ok("a song it did play is not among them, however long ago it was first played",
-       "Polyn" not in {s["name"] for s in lt["not_played"]})
     ok("the other rehearsals follow, newest first, the soundcheck included",
        [r["name"] for r in lt["earlier"]] == ["Soundcheck", "New songs", "First"]
        and lt["earlier"][0]["take_count"] == 2
        and lt["earlier"][0]["total_duration_sec"] == 305)
-    ok("and how many there are in all", lt["count"] == 4)
 
     # Naming a take in one of them offers the whole repertoire.
     ch = e.song_choices(last)
@@ -2284,9 +2275,7 @@ def main():
     import shutil as _shutil
     _shutil.move(mid, str(tmp5 / "elsewhere"))
     lt = e.last_time()
-    ok("a rehearsal not on disk gives no songs to play",
-       [s["name"] for s in lt["not_played"]] == ["Doroga"])
-    ok("but is still listed among the others, as missing",
+    ok("a rehearsal not on disk is still listed among the others, as missing",
        [(r["name"], r["missing"]) for r in lt["earlier"]][1] == ("New songs", True))
 
     print("\n[17] A discarded take is moved, not destroyed")
@@ -5971,16 +5960,13 @@ def main():
     def plays54(name):
         """(folder, take_number) of what the song's ▶ plays in last_time."""
         lt = s54.last_time()
-        for s in lt["last"]["songs"] + lt["not_played"]:
+        for s in lt["last"]["songs"]:
             if s["name"] == name:
                 return (s["plays"]["folder"], s["plays"]["take"]["take_number"])
         return None
 
     ok("with no star, a song's play button plays its last go, as before",
        plays54("Polyn") == (last54, 3) and plays54("Vesna") == (last54, 2))
-    ok("and a song not played last time plays its last go then, which it still lists",
-       plays54("Doroga") == (first54, 4)
-       and s54.last_time()["not_played"][0]["take"]["take_number"] == 4)
 
     jam54 = s54.set_take_star(last54, 4, True)
     ok("a star goes on a take with no song", jam54["ok"] and jam54["take"]["starred"]
@@ -6009,10 +5995,6 @@ def main():
     s54.set_take_star(last54, 3, False)
     ok("taken off again, the newest starred go is the older rehearsal's",
        plays54("Polyn") == (mid54, 1))
-    s54.set_take_star(first54, 3, True)
-    ok("a song not played last time plays its starred go too",
-       plays54("Doroga") == (first54, 3)
-       and s54.last_time()["not_played"][0]["take"]["take_number"] == 4)
 
     import shutil as _shutil54
     _shutil54.move(mid54, str(tmp54 / "elsewhere"))

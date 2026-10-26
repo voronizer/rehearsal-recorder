@@ -1,4 +1,4 @@
-import { ChevronRight, History, Star } from "lucide-react"
+import { ChevronRight, Star } from "lucide-react"
 import { memo, useEffect, useRef, useState, type ReactNode } from "react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -16,8 +16,6 @@ import {
   formatDuration,
   formatMMSS,
   inCloudLabel,
-  longAgo,
-  rehearsalsLabel,
   takesLabel,
 } from "@/lib/format"
 import { labelOf, useLabels } from "@/lib/labels"
@@ -37,8 +35,6 @@ export type LastTimePlayback = {
 /** How many notes a song shows here before it says how many more there are:
  *  this is a glance before playing, not the rehearsal itself. */
 const NOTES_SHOWN = 2
-/** And how many of the songs left out. */
-const LEFT_OUT_SHOWN = 5
 
 /**
  * Last time, beside the setup: the rehearsal before this one, song by song,
@@ -48,9 +44,9 @@ const LEFT_OUT_SHOWN = 5
  * each ran — and not on marks, which are few: a song's row plays its newest
  * ★ go, wherever it was played, or with none its last go, which is usually
  * the one they settled on. The notes left while listening are added under
- * their song where there are any. Under it, the songs that were not played
- * last time, each with its own newest ★ go or last go, and the other
- * rehearsals, which open in history.
+ * their song where there are any. Under it, the rehearsals before it, which
+ * open in history. History itself opens from the header, so this has no
+ * button of its own for it.
  *
  * Every name here keeps its width (Q3): it wraps to a second line only when
  * it is longer than its whole row, and the figures beside it drop whole, the
@@ -68,7 +64,6 @@ export const LastTime = memo(function LastTime({
   problem,
   onPlay,
   onOpen,
-  onAll,
   onOpenSong,
 }: {
   data: LastTimeData
@@ -77,7 +72,6 @@ export const LastTime = memo(function LastTime({
   problem?: string | null
   onPlay: (take: Take) => void
   onOpen: (folder: string) => void
-  onAll: () => void
   /** Opens a song's page in History's Songs view; null is Not named's. */
   onOpenSong?: (title: string | null) => void
 }) {
@@ -106,7 +100,6 @@ export const LastTime = memo(function LastTime({
   ]
     .filter(Boolean)
     .join(" · ")
-  const leftOut = data.not_played.slice(0, LEFT_OUT_SHOWN)
 
   return (
     <aside aria-label="Last time" className="flex min-w-0 flex-col gap-8">
@@ -158,51 +151,14 @@ export const LastTime = memo(function LastTime({
         </div>
       </Card>
 
-      {leftOut.length > 0 && (
-        <section aria-label="Not played last time" className="flex flex-col gap-1">
-          <h2 className="px-1 pb-1 text-xs font-semibold text-muted-foreground">
-            Not played last time
-          </h2>
-          {leftOut.map((s) => (
-            <NotPlayedRow
-              key={s.name}
-              song={s}
-              playback={playback}
-              problem={problem}
-              onPlay={onPlay}
-              onOpenSong={onOpenSong}
-            />
+      {data.earlier.length > 0 && (
+        <section aria-label="Earlier" className="flex flex-col gap-1">
+          <h2 className="px-1 pb-1 text-xs font-semibold text-muted-foreground">Earlier</h2>
+          {data.earlier.map((r) => (
+            <EarlierRow key={r.folder} rehearsal={r} onOpen={onOpen} />
           ))}
-          {data.not_played.length > leftOut.length && (
-            <p className="px-1 pt-1 text-xs text-muted-foreground">
-              and {data.not_played.length - leftOut.length} more in History
-            </p>
-          )}
         </section>
       )}
-
-      <section aria-label="Earlier" className="flex flex-col gap-1">
-        {data.earlier.length > 0 && (
-          <h2 className="px-1 pb-1 text-xs font-semibold text-muted-foreground">Earlier</h2>
-        )}
-        {data.earlier.map((r) => (
-          <EarlierRow key={r.folder} rehearsal={r} onOpen={onOpen} />
-        ))}
-        {/* Called what the button in the header is called, since it goes
-            to the same place: two names would read as two screens. */}
-        <Button
-          variant="ghost"
-          size="row"
-          onClick={onAll}
-          className="gap-2 self-start px-2 font-semibold has-[>svg]:px-2"
-        >
-          <History className="size-3.5" />
-          History
-          <span className="font-normal text-muted-foreground">
-            · {rehearsalsLabel(data.count)}
-          </span>
-        </Button>
-      </section>
     </aside>
   )
 })
@@ -312,78 +268,6 @@ function SongRow({
           starred: t.starred ?? false,
           lit: isTarget(t),
         }))}
-      />
-    </div>
-  )
-}
-
-/** A song the last rehearsal did not play: ▶ plays its newest ★ go or its
- *  last go, from whichever rehearsal that was. */
-function NotPlayedRow({
-  song: s,
-  playback,
-  problem,
-  onPlay,
-  onOpenSong,
-}: {
-  song: LastTimeData["not_played"][number]
-  playback: LastTimePlayback | null
-  problem?: string | null
-  onPlay: (take: Take) => void
-  onOpenSong?: (title: string | null) => void
-}) {
-  const target = s.plays.take
-  const starred = target.starred ?? false
-  const here = playback?.take === target ? playback : null
-  const ago = longAgo(s.created_at)
-  // A ★ go from another rehearsal than the one listed says its day.
-  const day = s.plays.folder !== s.folder ? ` (${formatDay(s.plays.created_at)})` : ""
-  // The ★ go stays longest, then the goes, then the day; how long ago goes
-  // first.
-  const parts: FigurePart[] = here
-    ? [playingPart(here)]
-    : [
-        ...(starred
-          ? [
-              {
-                text: `★ ${target.name}${day}`,
-                keep: 3,
-                node: (
-                  <>
-                    <StarMark /> <TakeTitle take={target} />
-                    {day}
-                  </>
-                ),
-              },
-            ]
-          : []),
-        { text: formatDay(s.created_at), keep: 1 },
-        ...(ago ? [{ text: ago, keep: 0, join: ", " as const }] : []),
-        { text: takesLabel(s.goes), keep: 2 },
-      ]
-  return (
-    <div
-      data-song={s.name}
-      className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 px-1 py-1"
-    >
-      <RowPlay
-        take={target}
-        here={here}
-        problem={problem}
-        label={playLabel(target, s.name)}
-        onPlay={onPlay}
-      />
-      <NameAndFigures
-        parts={parts}
-        name={(figures) => (
-          <SongName
-            title={s.name}
-            onOpen={onOpenSong}
-            className="flex-[0_1_auto] text-sm font-semibold"
-            textClassName="line-clamp-2 break-words"
-            figures={figures}
-          />
-        )}
       />
     </div>
   )

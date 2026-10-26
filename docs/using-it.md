@@ -96,13 +96,9 @@ it is not last time's last take. A song with no star plays its last take,
 which is usually the one you settled on. Listen to where you left off before
 you start.
 
-Under it, **Not played last time** lists the songs you did not play then,
-each with the day it was last played and its newest starred take, or its
-last take, to listen to. **Earlier** lists the rehearsals before that.
-**Open**, or a rehearsal under **Earlier**, opens it in History, and
-**History** under the list does what the **History** button at the top does.
-A soundcheck with no named takes is skipped: last time is the last rehearsal
-that played a song.
+Under it, **Earlier** lists the rehearsals before that. **Open**, or a
+rehearsal under **Earlier**, opens it in History. A soundcheck with no named
+takes is skipped: last time is the last rehearsal that played a song.
 
 While something plays from here, Space pauses it and Esc stops it. Once it
 has stopped, Space starts the rehearsal as usual. **Check signal** stops it

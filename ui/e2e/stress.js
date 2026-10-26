@@ -26,38 +26,6 @@
   // and leaves its figures no room at all.
   PAST['/rec/soundcheck'][0] = 'Soundcheck at the community hall before the open-air concert';
 
-  // Not played last time: seven, so five show and "and 2 more"; one with a
-  // long name and a ★ go from another evening, the longest line there is.
-  const lastTime = api.last_time;
-  api.last_time = async () => {
-    const r = await lastTime();
-    const before = pastTakes('/rec/tue-before');
-    const sat = pastTakes('/rec/sat');
-    const at = (folder, rehearsal, created_at, take) => ({folder, rehearsal, created_at, take});
-    const TUE = ['/rec/tue-before', 'Tuesday jam', '2026-09-15T19:00:00'];
-    const SAT = ['/rec/sat', 'New songs', '2026-09-19T15:00:00'];
-    // The ★ goes made up here are copies of other takes, so each is given
-    // the song and go its name says, or it would still be that take's.
-    const starred = {...before[7], name: 'Lullaby for a drummer who never sleeps 3',
-                     song: 'Lullaby for a drummer who never sleeps', go: 3, starred: true};
-    const extra = [
-      {name: 'Lullaby for a drummer who never sleeps', folder: SAT[0], rehearsal: SAT[1],
-       created_at: SAT[2], goes: 5, take: sat[1], plays: at(...TUE, starred)},
-      {name: 'Daroha', folder: TUE[0], rehearsal: TUE[1], created_at: TUE[2], goes: 2,
-       take: before[8], plays: at(...TUE, before[8])},
-      {name: 'Skrypka', folder: TUE[0], rehearsal: TUE[1], created_at: TUE[2], goes: 1,
-       take: before[3], plays: at(...TUE, before[3])},
-      {name: 'Navalnica', folder: SAT[0], rehearsal: SAT[1], created_at: SAT[2], goes: 3,
-       take: sat[4], plays: at(...SAT, sat[4])},
-      {name: 'Kryničnaja', folder: SAT[0], rehearsal: SAT[1], created_at: SAT[2], goes: 2,
-       take: sat[5], plays: at(...SAT, sat[5])}];
-    // Dym's ★ go from another evening: its line is the one that squeezed
-    // "Dym" to "D…" in the left part (project memory, 2026-10-07).
-    const dym = {...r.not_played[0],
-      plays: at(...TUE, {...before[2], name: 'Dym 2', song: 'Dym', go: 2, starred: true})};
-    return {...r, not_played: [dym, extra[0], r.not_played[1], ...extra.slice(1)]};
-  };
-
   // Five tracks: the drummer on Both from the kit, a long name, keys on MIDI.
   window.__MIDI_PLAYED__ = ['TD-17', 'Launchkey Mini MK3'];
   api.load_default_tracks = async () => ({tracks: [

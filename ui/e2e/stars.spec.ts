@@ -155,18 +155,6 @@ test("a ★ on last time's last go plays it and says nothing more", async ({ pag
   await expect(palyn.locator("[data-starred]")).toHaveCount(1)
 })
 
-test("a song not played last time plays its ★ go too", async ({ page }) => {
-  await openApp(page, {
-    before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/older#1'];",
-  })
-  const leftOut = lastTime(page).getByRole("region", { name: "Not played last time" })
-  await expect(leftOut).toContainText("★ Daroha 1 · ")
-  await leftOut.getByRole("button", { name: "Play Daroha 1, the starred take of Daroha" }).click()
-  expect((await calls(page, "player_open")).at(-1)?.args[0]).toEqual([
-    { name: "Guitar", file: "/rec/older/d1.wav" },
-  ])
-})
-
 test("the bar of the go ▶ plays is lit, starred or not", async ({ page }) => {
   await openApp(page, {
     before: "window.__FULL_EVENING__ = true; window.__STARRED__ = ['/rec/old#1'];",
