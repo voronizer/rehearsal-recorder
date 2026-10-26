@@ -868,13 +868,22 @@ def open_system(quiet=False) -> tuple[PortSystem | None, str | None]:
 
 
 def open_controller_system(primary):
-    """BLE-capable control ports without changing instrument timestamps or IDs."""
-    if not WINDOWS or getattr(getattr(primary, "api", None), "name", None) != "WINDOWS_MM":
+    """
+    The ports the controller is looked for on. On Windows WinRT, which alone
+    serves Bluetooth MIDI there, opened through pywinrt and not the library:
+    the library's WinRT waits for a switched-off controller with the GIL held,
+    and the whole app with it (winrt_ports.py says how). Even when the
+    instruments are on Windows MIDI Services, whose library open is the same
+    kind of wait. Elsewhere the instruments' system, whose ports open at once.
+    """
+    if not WINDOWS or primary is None:
         return primary
+    from rehearsal_recorder.midi.winrt_ports import WinRTSystem
+
     try:
-        system = PortSystem("WINDOWS_UWP")
+        system = WinRTSystem()
     except Exception as exc:
-        # WinMM still serves wired controllers when WinRT is unavailable.
+        # The instruments' system still serves wired controllers.
         log.error("Controller MIDI: using %s; WinRT unavailable: %s", primary.name, _reason(exc))
         return primary
     log.error("Controller MIDI: %s; instrument MIDI remains %s", system.name, primary.name)

@@ -31,6 +31,9 @@ MACOS = sys.platform == "darwin"
 # Where the app writes what every thread was doing if it dies hard — see
 # app._arm_crash_log. Here so the window can say where it is too.
 CRASH_LOG = Path.home() / ".rehearsal-recorder" / "crash.log"
+# The settings api.py keeps. Here so that the startup window can read the
+# theme before the app, and PortAudio with it, is loaded (app._startup_theme).
+CONFIG_PATH = CRASH_LOG.with_name("config.json")
 
 
 # This file is src/rehearsal_recorder/platform_support.py, so the folder that

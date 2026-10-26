@@ -49,6 +49,8 @@ things to be true:
                        library, against a stand-in for the library that has
                        the real one's quirks. The other suites block the
                        library; this one puts the stand-in in its place.
+                       And midi/winrt_ports.py, the controller's ports on
+                       Windows, against a stand-in for pywinrt.
 
     test_midi.py       recording notes beside the audio. So far: what stops
                        Start (no track that records sound, a track with no

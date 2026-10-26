@@ -121,6 +121,7 @@ from rehearsal_recorder.control import ControlAPI
 from rehearsal_recorder import diagnostics
 from rehearsal_recorder.audio.probe import InterfaceCheck, plan_for, tracks_for
 from rehearsal_recorder.platform_support import (
+    CONFIG_PATH,
     CRASH_LOG,
     FALLBACK_TRASH,
     KeepAwake,
@@ -136,7 +137,6 @@ from rehearsal_recorder.platform_support import (
     trash_name,
 )
 
-CONFIG_PATH = Path.home() / ".rehearsal-recorder" / "config.json"
 RECORDINGS_ROOT = Path.home() / "RehearsalRecordings"
 # Where Under the hood sends someone to see whether there is a newer version.
 RELEASES_URL = "https://github.com/voronizer/rehearsal-recorder/releases"
@@ -810,7 +810,11 @@ class _TapPorts:
 
 
 class Api:
-    def __init__(self, server_port=0):
+    def __init__(self, server_port=0, on_step=lambda text: None):
+        """
+        `on_step(text)` is told each part of starting that can take a while,
+        in the words the startup screen shows (app.py).
+        """
         self._config_lock = threading.RLock()
         self._transport = Transport(self)
         # Python adapters use controls; the webview exposes only the explicit
@@ -837,6 +841,7 @@ class Api:
         # The MIDI ports of the signal check and of the rehearsal, kept open
         # between takes so that what an instrument has set is in the next one.
         # No port is opened until a check or a rehearsal asks.
+        on_step("Starting MIDI…")
         system, midi_error = open_midi_system()
         self._midi_system = system
         self._controller_system = midiports.open_controller_system(system)
@@ -928,6 +933,7 @@ class Api:
         self._recordings_dir.mkdir(parents=True, exist_ok=True)
 
         # What went wrong while starting, for the interface to say once.
+        on_step("Opening your rehearsals…")
         self._library = None
         self._library_error = None
         self._problems = []
@@ -982,9 +988,12 @@ class Api:
         while it is still there to do it. Then the publishing worker is stood
         down instead of being killed wherever it happens to be.
         """
-        self._controller.close()
+        # The controller's own system first: an open of a controller that is
+        # off gives up as soon as its system closes (winrt_ports.py), so the
+        # controller's thread stops at once and not when the open would have.
         if self._controller_system is not None and self._controller_system is not self._midi_system:
             self._controller_system.close()
+        self._controller.close()
         recorder, self._recorder = self._recorder, None
         if recorder is not None:
             try:

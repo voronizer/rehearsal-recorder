@@ -1432,6 +1432,11 @@ MIDI window, pair it there, and come back. On Windows, pair it in the
 Bluetooth settings of Windows. When the line under the list says
 “Controller ready”, it works.
 
+On Windows, if the controller is switched off or too far away, РЭХА starts
+as usual and **Settings › Controls** says “The controller does not answer”.
+Switch the controller on, and РЭХА connects to it by itself: it tries every
+15 seconds.
+
 From the controller:
 
 - **Record/Stop** starts a take. Pressed again, it stops the take and keeps

@@ -104,6 +104,14 @@ on the Mac and the Windows machine. The other suites stub the library out with
 `sys.modules["pylibremidi"] = None`; the ones for code built on `ports.py`
 use `fake_midi.py`, a system with nothing behind it.
 
+The controller's ports on Windows, `midi/winrt_ports.py`, go through pywinrt
+and not the library. The same suite runs them against `fake_winrt.py`, which
+copies what pywinrt does: an open's result through its Completed handler, an
+open of a switched-off controller that never finishes, watchers that list the
+ports on threads of their own, a watcher Windows stops. It checks that such an
+open is given up after its time, said once, tried again later, and ended at
+once by closing or by choosing another controller.
+
 ## test_midi.py: notes beside the audio
 
 So far: the three sentences that stop Start (no track that records sound, a

@@ -38,3 +38,14 @@ pylibremidi>=5.4.3
 
 # Writing and reading the .mid files a take's notes are saved to.
 mido>=1.3.3
+
+# The controller's ports on Windows, through WinRT itself and not through
+# pylibremidi, whose open waits for a switched-off Bluetooth controller with
+# the whole app stopped (midi/winrt_ports.py says why). Windows only, and
+# Python 3.11 or later, which pywinrt needs; on 3.10 the controller stays on
+# the instruments' MIDI, wired controllers only. The packages these need
+# (winrt-runtime, winrt-Windows.Foundation, winrt-Windows.Foundation.Collections,
+# winrt-Windows.Storage.Streams) come with them, and winrt-runtime brings its
+# own PyInstaller hook, which collects the tables its modules read.
+winrt-Windows.Devices.Midi>=4!10.0.28000.2705; sys_platform == "win32" and python_version >= "3.11"
+winrt-Windows.Devices.Enumeration>=4!10.0.28000.2705; sys_platform == "win32" and python_version >= "3.11"
