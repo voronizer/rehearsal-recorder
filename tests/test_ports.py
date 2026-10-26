@@ -849,6 +849,12 @@ def main():
 
     winrt_ports.OPEN_PATIENCE_SEC, winrt_ports.RETRY_SEC = 0.4, 0.6
     winrt_ports.WATCH_LOOK_SEC = 0.05
+
+    # The pause is counted on time.monotonic(), which on Windows moves in
+    # steps of 15.6 ms: a sleep of exactly RETRY_SEC can end a step before
+    # the pause does, and the port is still not asked. 50 ms more is past it.
+    def past_the_pause():
+        time.sleep(winrt_ports.RETRY_SEC + 0.05)
     world = fake_winrt.World()
     world.ports["in"]["ctl-in"] = "Controller (Bluetooth MIDI IN)"
     world.ports["out"]["ctl-out"] = "Controller (Bluetooth MIDI OUT)"
@@ -933,7 +939,7 @@ def main():
         ok("asked again at once, it says the same without asking Windows",
            str(e) == winrt_ports.NOT_ANSWERING and len(world.asked) == asked
            and time.perf_counter() - began < 0.1)
-    time.sleep(winrt_ports.RETRY_SEC)
+    past_the_pause()
     try:
         system.open_output(out)
     except ports.PortBusy:
@@ -945,7 +951,7 @@ def main():
 
     # Windows opens it after all, once the app gave up: nobody holds that port.
     world.ignore_cancel = True
-    time.sleep(winrt_ports.RETRY_SEC)
+    past_the_pause()
     try:
         system.open_output(out)
     except ports.PortBusy:
@@ -957,7 +963,7 @@ def main():
     world.ignore_cancel = False
     world.hang.clear()
     logged.records.clear()
-    time.sleep(winrt_ports.RETRY_SEC)
+    past_the_pause()
 
     # Windows saying no is not the same as not answering.
     world.refuse.add("ctl-in")
@@ -995,7 +1001,7 @@ def main():
     world.hang.add("ctl-out")
     controller = Controller(system, Transport(), threads=False)
     controller.configure({"input": inp.saved(), "output": out.saved()})
-    time.sleep(winrt_ports.RETRY_SEC)
+    past_the_pause()
     began = time.perf_counter()
     controller.tick()
     ok("the controller's tick gives up with the open, and says why",
@@ -1008,7 +1014,7 @@ def main():
        controller.error == winrt_ports.NOT_ANSWERING and len(reads) == read
        and len(world.asked) == quiet)
     world.hang = {"ctl-in"}
-    time.sleep(winrt_ports.RETRY_SEC)
+    past_the_pause()
     controller.tick()
     opened = world.closed.count("ctl-out")
     quiet = len(world.asked)
@@ -1019,7 +1025,7 @@ def main():
        controller.error == winrt_ports.NOT_ANSWERING and len(world.asked) == quiet
        and world.closed.count("ctl-out") == opened)
     world.hang.clear()
-    time.sleep(winrt_ports.RETRY_SEC)
+    past_the_pause()
     controller.tick()
     ok("and opens the controller once it answers", controller.status()["port_open"]
        and controller.error is None)
@@ -1049,7 +1055,7 @@ def main():
 
     # Closing the window while an open waits.
     winrt_ports.OPEN_PATIENCE_SEC = 30
-    time.sleep(winrt_ports.RETRY_SEC)
+    past_the_pause()
     outcome = []
 
     def waits():
