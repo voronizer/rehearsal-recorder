@@ -33,6 +33,17 @@ from rehearsal_recorder.audio import drift, tempo
 problems = []
 
 
+def raises(call, kind):
+    """Whether `call` raises `kind`."""
+    try:
+        call()
+    except kind:
+        return True
+    except Exception:  # noqa: BLE001 - another one is a no
+        return False
+    return False
+
+
 def ok(label, cond):
     # Labels stay in what a Windows console's code page (cp1252) can
     # print: CI runs these there, and print() fails on anything else.
@@ -430,19 +441,26 @@ def main():
     # take click as it opened: the count goes to a Python of its own.
     asked = {"drums_mid": [palyn.mid], "drums": [palyn.drums], "mix": [palyn.band], "tempo": 128, "signature": "4/4"}
     here = drift.count(**asked)
-    seen = []
-
-    def looks():
-        seen.extend(p.name for p in multiprocessing.active_children())
-        return False
-    ok("a count in a second process says what a count here says", drift.count_apart(stop=looks, **asked) == here)
-    ok("and it was counted in one", "drift count" in seen)
+    drift._end_apart()
+    drift.start_apart()
+    ahead = [p.pid for p in multiprocessing.active_children() if p.name == "drift count"]
+    ok("the second process can start ahead of the first count", len(ahead) == 1)
+    ok("a count there says what a count here says", drift.count_apart(**asked) == here)
+    ok("and the same process counts the next take",
+       drift.count_apart(**{**asked, "tempo": 127}) == drift.count(**{**asked, "tempo": 127})
+       and [p.pid for p in multiprocessing.active_children() if p.name == "drift count"] == ahead)
+    asks = []
     try:
-        drift.count_apart(stop=lambda: bool(multiprocessing.active_children()), **asked)
+        drift.count_apart(stop=lambda: asks.append(1) or len(asks) > 1, **asked)
         stopped = False
     except tempo.Cancelled:
         stopped = True
-    ok("told to stop, it says so, and the second process is gone", stopped and not multiprocessing.active_children())
+    ok("told to stop in the middle, it says so, and the second process is gone",
+       stopped and not multiprocessing.active_children())
+    ok("the next count starts another", drift.count_apart(**asked) == here)
+    ok("one told to stop before it begins stops, and the process stays",
+       raises(lambda: drift.count_apart(stop=lambda: True, **asked), tempo.Cancelled)
+       and len(multiprocessing.active_children()) == 1)
     junk = folder / "junk.wav"
     junk.write_bytes(b"not a wav at all")
     raised = []
@@ -451,7 +469,12 @@ def main():
             counts(mix=[str(junk)], tempo=128)
         except Exception as e:  # noqa: BLE001 - which one is the check
             raised.append(type(e))
-    ok("a file it cannot read raises here what it raised there", len(raised) == 2 and raised[0] is raised[1])
+    ok("a file it cannot read raises here what it raised there, and the process stays",
+       len(raised) == 2 and raised[0] is raised[1] and len(multiprocessing.active_children()) == 1)
+    drift._apart.process.kill()
+    drift._apart.process.join(5)
+    ok("one that has ended is started again for the next count",
+       drift.count_apart(**asked) == here and len(multiprocessing.active_children()) == 1)
 
     said = []
     hears = logging.Handler()
@@ -459,52 +482,81 @@ def main():
     logging.getLogger(drift.__name__).addHandler(hears)
 
     class Context:
-        """The spawn context, with a second process that `start` stands in for."""
+        """The spawn context, with a second process that `start` and the
+        pipe's far end stand in for."""
 
-        def __init__(self, start):
-            self.begin = start
+        def __init__(self, start, answer):
+            self.begin, self.answer = start, answer
 
-        def Pipe(self, duplex):
-            return multiprocessing.Pipe(duplex)
+        def Pipe(self):
+            ours, theirs = multiprocessing.Pipe()
+            return ours, Far(self.answer, theirs)
 
         def Process(self, **kw):
             begin = self.begin
 
             class Apart:
+                # Never ready while `keep` is open: the process does not end.
+                sentinel, keep = multiprocessing.Pipe(False)
+
                 def start(self):
                     begin()
 
                 def is_alive(self):
-                    return False
+                    return True
+
+                def kill(self):
+                    pass
 
                 def join(self, timeout=None):
                     pass
             return Apart()
 
+    class Far:
+        """The second process's end of the pipe: `answer` says what it does
+        with a count it is asked for, as the parent closes its copy."""
+
+        def __init__(self, answer, pipe):
+            self.answer, self.pipe = answer, pipe
+
+        def close(self):
+            self.answer(self.pipe)
+
     def refused():
         raise OSError("Access is denied")
     real, patience = drift.multiprocessing.get_context, drift.START_PATIENCE_SEC
     try:
-        drift.multiprocessing.get_context = lambda method: Context(refused)
+        drift._end_apart()
+        drift.multiprocessing.get_context = lambda method: Context(refused, lambda pipe: pipe.close())
         ok("a second process that does not start leaves the count to the app",
-           drift.count_apart(**asked) == here and "did not start" in said[-1])
-        drift.multiprocessing.get_context = lambda method: Context(lambda: None)
-        ok("and so does one that ends without an answer",
-           drift.count_apart(**asked) == here and "ended without an answer" in said[-1])
+           drift.count_apart(**asked) == here and "did not start" in said[-1] and drift._apart is None)
+        drift.multiprocessing.get_context = lambda method: Context(lambda: None, lambda pipe: pipe.close())
+        # Gone before it was asked, or after: either way it had not begun.
+        ok("and so does one that ends before it begins",
+           drift.count_apart(**asked) == here and drift._apart is None
+           and said[-1].startswith("A take's drift is counted in the app: the second process "))
+
+        def begins_and_ends(pipe):
+            # Takes the count, says it has begun, and is gone.
+            threading.Thread(target=lambda: (pipe.recv(), pipe.send(("counting", None)), pipe.close())).start()
+        drift.multiprocessing.get_context = lambda method: Context(lambda: None, begins_and_ends)
+        ok("one that ends in the middle of a count raises, and the app does not count it again",
+           raises(lambda: drift.count_apart(**asked), ChildProcessError) and drift._apart is None)
         drift.multiprocessing.get_context = real
         drift.START_PATIENCE_SEC = 0
-        ok("and one that has not begun in time",
+        ok("one that has not begun in time leaves the count to the app",
            drift.count_apart(**asked) == here and "had not begun" in said[-1]
            and not multiprocessing.active_children())
     finally:
         drift.multiprocessing.get_context, drift.START_PATIENCE_SEC = real, patience
         logging.getLogger(drift.__name__).removeHandler(hears)
 
-    # What a second process imports to count: had it PortAudio among it, the
-    # second process would start it, and with ASIO cut into the take.
+    # What a second process imports to count, the app's entry first, as a
+    # built app's does: had it PortAudio among it, the second process would
+    # start it, and with ASIO cut into the take.
     clean = subprocess.run(
         [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
-         "import rehearsal_recorder.audio.drift; print('sounddevice' in sys.modules)",
+         "import rehearsal_recorder.app, rehearsal_recorder.audio.drift; print('sounddevice' in sys.modules)",
          str(Path(__file__).resolve().parent.parent / "src")],
         capture_output=True, text=True, timeout=120)
     ok("and nothing it imports starts PortAudio", clean.stdout.strip() == "False")

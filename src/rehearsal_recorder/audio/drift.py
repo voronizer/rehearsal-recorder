@@ -17,6 +17,9 @@ playing as it is counted, and both in one Python made it click.
 
 import logging
 import multiprocessing
+import multiprocessing.connection
+import os
+import threading
 import time
 
 import numpy as np
@@ -31,12 +34,17 @@ MIN_BARS = 4
 # steady beat in it, and the next is tried.
 COUNTED_SHARE = 0.5
 BEATS_A_BAR = {"4/4": 4, "3/4": 3, "2/4": 2, "6/8": 6}
-# How long a second process has to start counting, in seconds, before the
+# How long the second process has to begin a count, in seconds, before the
 # count is made in the app instead: a Reha.exe that Windows is slow to start
 # again, or a build that never gets to the count at all.
 START_PATIENCE_SEC = 30
 # How often the wait for the second process's answer asks `stop`, in seconds.
 STOP_POLL_SEC = 0.05
+
+# count_apart's second process, kept from one count to the next, and the lock
+# that gives it one count at a time.
+_apart = None
+_apart_lock = threading.Lock()
 
 
 def count(*, drums_mid=(), drums=(), mix=(), tempo=None, signature="4/4", click=False, stop=None):
@@ -99,80 +107,183 @@ def count(*, drums_mid=(), drums=(), mix=(), tempo=None, signature="4/4", click=
 
 def count_apart(*, stop=None, **kw):
     """
-    `count` in a second process of its own, which is how the app counts a
-    take's drift: the review screen asks for it the moment a take opens, as
-    the take starts to play.
+    `count` in a second process, which is how the app counts a take's drift:
+    the review screen asks for it the moment a take opens, as the take starts
+    to play.
 
     The take is mixed in Python, on the sound card's thread (audio/player.py),
     and Python runs one thread at a time. The beat tracker is a loop in Python
     over every step of the take, and beside it the mix missed the card's
-    deadline: the take clicked and dropped out for its first seconds. A second
-    process has a Python of its own. It reads the WAVs and the .mid by their
-    paths, and nothing it imports starts PortAudio: started with ASIO, it can
-    interrupt what is playing for a moment (rehearsal_recorder/__init__.py
+    deadline: the take clicked and dropped out for its first seconds. The
+    second process has a Python of its own. It reads the WAVs and the .mid by
+    their paths, and nothing it imports starts PortAudio: started with ASIO,
+    it can interrupt what is playing for a moment (rehearsal_recorder/__init__.py
     says when), and here that is the take.
 
-    `stop` is asked here while the count runs there. When it says so, the
-    second process is ended at once and tempo.Cancelled raised, as `count`
-    raises it. What `count` raises there is raised here. A second process
-    that cannot start, has not begun after START_PATIENCE_SEC or ends without
-    an answer leaves the count to this one, as before, and the log says why.
+    One process counts one take at a time and is kept for the next
+    (start_apart says why). `stop` is asked here while it counts. When it
+    says so, the process is ended at once, to be started again for the next
+    count, and tempo.Cancelled raised, as `count` raises it. What `count`
+    raises there is raised here; a process that ends in the middle of a count
+    raises ChildProcessError, and that take is not counted again here. One
+    that cannot start, ends before it begins or has not begun after
+    START_PATIENCE_SEC leaves the count to this one, as before, and the log
+    says why.
     """
-    context = multiprocessing.get_context("spawn")
-    answers, sender = context.Pipe(duplex=False)
-    apart = context.Process(target=_count_here, args=(sender, kw), name="drift count", daemon=True)
+    global _apart
+    stopped = lambda: stop is not None and stop()
+    while not _apart_lock.acquire(timeout=STOP_POLL_SEC):
+        if stopped():
+            raise tempomod.Cancelled()
     try:
-        apart.start()
-    except Exception as e:  # noqa: BLE001 - whatever it was, the app can count
-        answers.close()
-        sender.close()
-        log.warning("A take's drift is counted in the app: a second process did not start: %r", e)
-        return count(stop=stop, **kw)
-    # Only the second process writes, so its end is the end of the pipe.
-    sender.close()
-    why = "ended without an answer"
-    try:
-        started, began = False, time.monotonic()
-        while True:
-            if stop is not None and stop():
-                raise tempomod.Cancelled()
-            try:
-                if not answers.poll(STOP_POLL_SEC):
-                    if not started and time.monotonic() - began > START_PATIENCE_SEC:
-                        why = f"had not begun after {START_PATIENCE_SEC} s"
-                        break
-                    continue
-                kind, value = answers.recv()
-            except (EOFError, OSError):
-                break
-            if kind == "started":
-                started = True
-            elif kind == "done":
-                return value
-            else:
-                raise value
+        if stopped():
+            raise tempomod.Cancelled()
+        try:
+            if _apart is not None and not _apart.process.is_alive():
+                # Ended between two counts: another takes its place.
+                _end_apart()
+            if _apart is None:
+                _apart = _Apart()
+            return _apart.count(kw, stopped)
+        except _Gone as e:
+            _end_apart()
+            if e.counting:
+                raise ChildProcessError(f"The second process counting a take's drift {e}") from None
+            why = str(e)
+        except tempomod.Cancelled:
+            _end_apart()
+            raise
+        except Exception as e:  # noqa: BLE001 - it did not start; the app can count
+            if _apart is not None:
+                raise
+            why = f"did not start: {e!r}"
     finally:
-        if apart.is_alive():
-            apart.kill()
-        apart.join(5)
-        answers.close()
+        _apart_lock.release()
     log.warning("A take's drift is counted in the app: the second process %s", why)
     return count(stop=stop, **kw)
 
 
-def _count_here(sender, kw):
-    """The second process's side of count_apart: that it has begun, then
-    `count`'s answer, or what it raised."""
-    sender.send(("started", None))
-    try:
-        answer = ("done", count(**kw))
-    except Exception as e:  # noqa: BLE001 - raised again in the app
-        answer = ("failed", e)
-    try:
-        sender.send(answer)
-    except Exception as e:  # noqa: BLE001 - an exception that cannot be pickled
-        sender.send(("failed", RuntimeError(f"{answer[1]!r}, sent back as {e!r}")))
-    sender.close()
+def start_apart():
+    """
+    Starts count_apart's second process ahead of its first count. In a built
+    app it is this program started again, and Windows shows its busy cursor
+    for two seconds after it starts a program (Microsoft's STARTUPINFO,
+    STARTF_FORCEONFEEDBACK): better once as the app opens than each time a
+    take does. Never raises: one that does not start now is tried again by
+    the first count.
+    """
+    global _apart
+    with _apart_lock:
+        if _apart is None:
+            try:
+                _apart = _Apart()
+            except Exception as e:  # noqa: BLE001 - the count tries again
+                log.warning("The second process for a take's drift did not start: %r", e)
+
+
+class _Gone(Exception):
+    """count_apart's second process is not there to answer; `counting` is
+    whether it had begun the count it was asked for."""
+
+    def __init__(self, why, counting):
+        super().__init__(why)
+        self.counting = counting
+
+
+class _Apart:
+    """The second process, and its end of the pipe between them."""
+
+    def __init__(self):
+        context = multiprocessing.get_context("spawn")
+        self.pipe, theirs = context.Pipe()
+        self.process = context.Process(target=_count_there, args=(theirs,), name="drift count", daemon=True)
+        try:
+            self.process.start()
+        except BaseException:
+            self.pipe.close()
+            raise
+        finally:
+            theirs.close()
+
+    def count(self, kw, stopped):
+        """`count(**kw)` there: its answer, or what it raised. _Gone when the
+        process is not there to give one."""
+        try:
+            self.pipe.send(("count", kw))
+        except OSError as e:
+            raise _Gone(f"could not be asked: {e!r}", counting=False) from None
+        asked, counting = time.monotonic(), False
+        while True:
+            if stopped():
+                raise tempomod.Cancelled()
+            ready = multiprocessing.connection.wait([self.pipe, self.process.sentinel], STOP_POLL_SEC)
+            if self.pipe in ready:
+                try:
+                    kind, value = self.pipe.recv()
+                except (EOFError, OSError):
+                    raise _Gone("ended without an answer", counting) from None
+                except Exception as e:  # noqa: BLE001 - what it sent cannot be read
+                    raise _Gone(f"sent an answer that cannot be read: {e!r}", counting) from None
+                if kind == "counting":
+                    counting = True
+                elif kind == "done":
+                    return value
+                else:
+                    raise value
+            elif ready:
+                raise _Gone("ended without an answer", counting)
+            elif not counting and time.monotonic() - asked > START_PATIENCE_SEC:
+                raise _Gone(f"had not begun after {START_PATIENCE_SEC} s", counting)
+
+    def end(self):
+        if self.process.is_alive():
+            self.process.kill()
+        self.process.join(5)
+        self.pipe.close()
+
+
+def _end_apart():
+    """Ends the second process, for the next count to start another."""
+    global _apart
+    if _apart is not None:
+        _apart, gone = None, _apart
+        gone.end()
+
+
+def _count_there(pipe):
+    """The second process: counts what it is asked to, one take at a time,
+    until the app goes."""
+    app = multiprocessing.parent_process()
+    if app is not None:
+        threading.Thread(target=_end_with, args=(app,), name="app gone", daemon=True).start()
+    while True:
+        try:
+            _, kw = pipe.recv()
+            pipe.send(("counting", None))
+        except (EOFError, OSError):
+            return
+        try:
+            answer = ("done", count(**kw))
+        except Exception as e:  # noqa: BLE001 - raised again in the app
+            answer = ("failed", e)
+        try:
+            try:
+                pipe.send(answer)
+            except OSError:
+                return
+            except Exception as e:  # noqa: BLE001 - an exception that cannot be pickled
+                pipe.send(("failed", RuntimeError(f"{answer[1]!r}, sent back as {e!r}")))
+        except OSError:
+            return
+
+
+def _end_with(app):
+    """The second process's watch on the app. An app that has gone (a crash,
+    Task Manager) waits for no answer, and the take's files are let go of now,
+    not when the count ends. Gone without a word: in a built app on Windows
+    there is nowhere to write one, and an error would be a dialog."""
+    app.join()
+    os._exit(0)
 
 
 def _bar_one(times, tempo, per_bar):

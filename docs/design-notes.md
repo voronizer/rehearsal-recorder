@@ -343,9 +343,11 @@ ceiling and the split between two playback modes.
   it made the take click: the drift count, which starts as the review screen
   opens a take. So Python hands its thread over every 1 ms, not its own 5
   (`SWITCH_INTERVAL_SEC` in `app.py`), and a take's drift is counted in a
-  second process (`count_apart` in `audio/drift.py`). That process must not
-  import the player: importing sounddevice starts PortAudio, which with ASIO
-  can cut into what is playing. This is why a take's WAV is opened in
+  second process (`count_apart` in `audio/drift.py`). It starts as the app
+  opens and is kept: Windows shows a busy cursor for two seconds each time a
+  program starts, and Record ends it only in the middle of a count. It must
+  not import the player: importing sounddevice starts PortAudio, which with
+  ASIO can cut into what is playing. This is why a take's WAV is opened in
   `audio/wavfile.py`.
 
 **One surface for seeking and selecting.** A press on the lanes that does not

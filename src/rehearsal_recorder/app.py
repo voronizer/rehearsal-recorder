@@ -620,6 +620,10 @@ def main():
             window.load_url(url)
             window.events.loaded.wait(15)
             api.start_update_checks()
+            # Before the first take opens, not as it does: audio/drift.py.
+            from rehearsal_recorder.audio import drift
+
+            drift.start_apart()
         except Exception as exc:
             log.exception("Application startup failed")
             app_state["failed"] = True
