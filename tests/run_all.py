@@ -102,7 +102,9 @@ things to be true:
                        (drums with bleed, a .mid, the mix, 3/4, 6/8, a
                        ballad, a click take after its count-in, a stop),
                        the sources by the take's icons, and Api.take_drift:
-                       the aim, 32 answers kept, Record stopping a count.
+                       the aim, 32 answers kept, Record stopping a count;
+                       the count in a second process, and the app counting
+                       when that process fails.
 
     test_click.py      the metronome's click: its tempos and accents, every
                        click of an hour on its frame, the three sounds and

@@ -10,11 +10,20 @@ The beats are found around the take's tempo when it has one, else around the
 counter's count of the take (`audio/tempo.py`); each bar's tempo is a robust
 line through its beats. Which bars ran ahead or dragged is for the interface
 to say, so a change of the tolerance counts nothing again.
+
+The app counts a take in a second process (`count_apart`): the take may be
+playing as it is counted, and both in one Python made it click.
 """
+
+import logging
+import multiprocessing
+import time
 
 import numpy as np
 
 from rehearsal_recorder.audio import tempo as tempomod
+
+log = logging.getLogger(__name__)
 
 # Fewer bars than this is too short to show a tempo along.
 MIN_BARS = 4
@@ -22,6 +31,12 @@ MIN_BARS = 4
 # steady beat in it, and the next is tried.
 COUNTED_SHARE = 0.5
 BEATS_A_BAR = {"4/4": 4, "3/4": 3, "2/4": 2, "6/8": 6}
+# How long a second process has to start counting, in seconds, before the
+# count is made in the app instead: a Reha.exe that Windows is slow to start
+# again, or a build that never gets to the count at all.
+START_PATIENCE_SEC = 30
+# How often the wait for the second process's answer asks `stop`, in seconds.
+STOP_POLL_SEC = 0.05
 
 
 def count(*, drums_mid=(), drums=(), mix=(), tempo=None, signature="4/4", click=False, stop=None):
@@ -80,6 +95,84 @@ def count(*, drums_mid=(), drums=(), mix=(), tempo=None, signature="4/4", click=
         return {"ok": True, "source": name, "per_bar": per_bar, "tempo": float(aim),
                 "middle": float(np.median(counted)), "bars": bars}
     return {"ok": False, "why": "short" if short else "no-beat"}
+
+
+def count_apart(*, stop=None, **kw):
+    """
+    `count` in a second process of its own, which is how the app counts a
+    take's drift: the review screen asks for it the moment a take opens, as
+    the take starts to play.
+
+    The take is mixed in Python, on the sound card's thread (audio/player.py),
+    and Python runs one thread at a time. The beat tracker is a loop in Python
+    over every step of the take, and beside it the mix missed the card's
+    deadline: the take clicked and dropped out for its first seconds. A second
+    process has a Python of its own. It reads the WAVs and the .mid by their
+    paths, and nothing it imports starts PortAudio: started with ASIO, it can
+    interrupt what is playing for a moment (rehearsal_recorder/__init__.py
+    says when), and here that is the take.
+
+    `stop` is asked here while the count runs there. When it says so, the
+    second process is ended at once and tempo.Cancelled raised, as `count`
+    raises it. What `count` raises there is raised here. A second process
+    that cannot start, has not begun after START_PATIENCE_SEC or ends without
+    an answer leaves the count to this one, as before, and the log says why.
+    """
+    context = multiprocessing.get_context("spawn")
+    answers, sender = context.Pipe(duplex=False)
+    apart = context.Process(target=_count_here, args=(sender, kw), name="drift count", daemon=True)
+    try:
+        apart.start()
+    except Exception as e:  # noqa: BLE001 - whatever it was, the app can count
+        answers.close()
+        sender.close()
+        log.warning("A take's drift is counted in the app: a second process did not start: %r", e)
+        return count(stop=stop, **kw)
+    # Only the second process writes, so its end is the end of the pipe.
+    sender.close()
+    why = "ended without an answer"
+    try:
+        started, began = False, time.monotonic()
+        while True:
+            if stop is not None and stop():
+                raise tempomod.Cancelled()
+            try:
+                if not answers.poll(STOP_POLL_SEC):
+                    if not started and time.monotonic() - began > START_PATIENCE_SEC:
+                        why = f"had not begun after {START_PATIENCE_SEC} s"
+                        break
+                    continue
+                kind, value = answers.recv()
+            except (EOFError, OSError):
+                break
+            if kind == "started":
+                started = True
+            elif kind == "done":
+                return value
+            else:
+                raise value
+    finally:
+        if apart.is_alive():
+            apart.kill()
+        apart.join(5)
+        answers.close()
+    log.warning("A take's drift is counted in the app: the second process %s", why)
+    return count(stop=stop, **kw)
+
+
+def _count_here(sender, kw):
+    """The second process's side of count_apart: that it has begun, then
+    `count`'s answer, or what it raised."""
+    sender.send(("started", None))
+    try:
+        answer = ("done", count(**kw))
+    except Exception as e:  # noqa: BLE001 - raised again in the app
+        answer = ("failed", e)
+    try:
+        sender.send(answer)
+    except Exception as e:  # noqa: BLE001 - an exception that cannot be pickled
+        sender.send(("failed", RuntimeError(f"{answer[1]!r}, sent back as {e!r}")))
+    sender.close()
 
 
 def _bar_one(times, tempo, per_bar):

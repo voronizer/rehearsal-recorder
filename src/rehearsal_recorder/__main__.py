@@ -8,9 +8,14 @@ same way whether it was launched by this line, by the `rehearsal-recorder`
 command, or from inside a bundle.
 """
 
+import multiprocessing
 import sys
 
 from rehearsal_recorder.app import main
 
 if __name__ == "__main__":
+    # First: in a built app, a second process (a take's drift, counted apart:
+    # audio/drift.py) starts this same program, and this is where it turns
+    # into that count instead of a second window.
+    multiprocessing.freeze_support()
     sys.exit(main())

@@ -13,7 +13,11 @@ No sound card, no browser, no MIDI port: WAVs and .mid files in a temporary
 folder, given to the counter by their paths.
 """
 
+import logging
+import multiprocessing
 import os
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -316,12 +320,12 @@ def main():
     ok("and so is one whose Drums the band gives the icon and the take does not", found.get("source") == "mix")
     minus = str(write_wav(folder / "minus.wav", loud(np.sin(2 * np.pi * 220 * np.arange(int(20 * SR)) / SR))))
     seen = []
-    real = drift.count
-    drift.count = lambda **kw: seen.append(kw["mix"]) or {"ok": False, "why": "no-beat"}
+    real = drift.count_apart
+    drift.count_apart = lambda **kw: seen.append(kw["mix"]) or {"ok": False, "why": "no-beat"}
     try:
         api.take_drift([{"name": "Bass", "file": palyn.band}, {"name": "Minus", "file": minus, "icon": "backing"}], [], {})
     finally:
-        drift.count = real
+        drift.count_apart = real
     ok("a backing track is left out of the mix", seen == [[palyn.band]])
     ok("a file not on disk is missing",
        api.take_drift([{"name": "Drums", "file": str(folder / "gone.wav")}], [], {}) == {"ok": False, "why": "missing"})
@@ -334,17 +338,17 @@ def main():
     os.utime(palyn.band, ns=(stamp + 10 ** 9, stamp + 10 ** 9))
     ok("a file rewritten since is counted afresh", api.take_drift(kit, [], meter) is not first)
     counted = []
-    drift.count = lambda **kw: counted.append(1) or {"ok": False, "why": "no-beat"}
+    drift.count_apart = lambda **kw: counted.append(1) or {"ok": False, "why": "no-beat"}
     try:
         for t in range(apimod.DRIFTS_KEPT + 1):
             api.take_drift(kit, [], {"tempo": 200 + t, "signature": "4/4"})
         api.take_drift(kit, [], {"tempo": 200, "signature": "4/4"})
     finally:
-        drift.count = real
+        drift.count_apart = real
     ok(f"{apimod.DRIFTS_KEPT} answers are kept: the oldest is counted again after one more",
        len(counted) == apimod.DRIFTS_KEPT + 2)
     counted, both = [], []
-    drift.count = lambda **kw: counted.append(1) or time.sleep(0.3) or {"ok": False, "why": "no-beat"}
+    drift.count_apart = lambda **kw: counted.append(1) or time.sleep(0.3) or {"ok": False, "why": "no-beat"}
     try:
         asks = [threading.Thread(target=lambda: both.append(api.take_drift(kit, [], {"tempo": 97, "signature": "4/4"})))
                 for _ in range(2)]
@@ -353,7 +357,7 @@ def main():
         for a in asks:
             a.join(5)
     finally:
-        drift.count = real
+        drift.count_apart = real
     ok("two asks for one take at once count it once, and both get the answer",
        counted == [1] and both == [{"ok": False, "why": "no-beat"}] * 2)
 
@@ -368,7 +372,7 @@ def main():
                 raise tempo.Cancelled()
             time.sleep(0.01)
         return {"ok": False, "why": "no-beat"}
-    drift.count = waits
+    drift.count_apart = waits
     try:
         ok("a rehearsal starts", api.start_rehearsal("Drift", 0, 48000, [{"name": "Guitar", "channel": 1}])["ok"])
         worker = threading.Thread(target=lambda: results.append(api.take_drift(kit, [], {"tempo": 99, "signature": "4/4"})))
@@ -377,7 +381,7 @@ def main():
         ok("Record starts a take", api.start_take()["ok"])
         worker.join(5)
     finally:
-        drift.count = real
+        drift.count_apart = real
     ok("Record stops a count in progress, which says so", results == [{"ok": False, "why": "recording"}])
     ok("and none is counted while a take records",
        api.take_drift(kit, [], meter) == {"ok": False, "why": "recording"})
@@ -401,7 +405,7 @@ def main():
             if kw["stop"]():
                 raise tempo.Cancelled()
         return {"ok": False, "why": "no-beat"}
-    recorder, apimod.AudioRecorder, drift.count = apimod.AudioRecorder, Refused, holds
+    recorder, apimod.AudioRecorder, drift.count_apart = apimod.AudioRecorder, Refused, holds
     try:
         worker = threading.Thread(target=lambda: results.append(api.take_drift(kit, [], {"tempo": 98, "signature": "4/4"})))
         worker.start()
@@ -412,7 +416,7 @@ def main():
         released.set()
         worker.join(5)
     finally:
-        apimod.AudioRecorder, drift.count = recorder, real
+        apimod.AudioRecorder, drift.count_apart = recorder, real
     ok("and leaves the count to finish", results == [{"ok": False, "why": "no-beat"}])
 
     ok("the tolerance is 2% until it is changed", api.get_settings()["drift_tolerance"] == 0.02)
@@ -420,6 +424,90 @@ def main():
        and api.get_settings()["drift_tolerance"] == 0.03)
     ok("4% is refused, and 3% stays", not api.set_metronome_setting("drift_tolerance", 0.04)["ok"]
        and api.get_settings()["drift_tolerance"] == 0.03)
+
+    print("\n[8] The app counts a take in a second process")
+    # The take is mixed in Python, and the tracker's loop beside it made the
+    # take click as it opened: the count goes to a Python of its own.
+    asked = {"drums_mid": [palyn.mid], "drums": [palyn.drums], "mix": [palyn.band], "tempo": 128, "signature": "4/4"}
+    here = drift.count(**asked)
+    seen = []
+
+    def looks():
+        seen.extend(p.name for p in multiprocessing.active_children())
+        return False
+    ok("a count in a second process says what a count here says", drift.count_apart(stop=looks, **asked) == here)
+    ok("and it was counted in one", "drift count" in seen)
+    try:
+        drift.count_apart(stop=lambda: bool(multiprocessing.active_children()), **asked)
+        stopped = False
+    except tempo.Cancelled:
+        stopped = True
+    ok("told to stop, it says so, and the second process is gone", stopped and not multiprocessing.active_children())
+    junk = folder / "junk.wav"
+    junk.write_bytes(b"not a wav at all")
+    raised = []
+    for counts in (drift.count, drift.count_apart):
+        try:
+            counts(mix=[str(junk)], tempo=128)
+        except Exception as e:  # noqa: BLE001 - which one is the check
+            raised.append(type(e))
+    ok("a file it cannot read raises here what it raised there", len(raised) == 2 and raised[0] is raised[1])
+
+    said = []
+    hears = logging.Handler()
+    hears.emit = lambda record: said.append(record.getMessage())
+    logging.getLogger(drift.__name__).addHandler(hears)
+
+    class Context:
+        """The spawn context, with a second process that `start` stands in for."""
+
+        def __init__(self, start):
+            self.begin = start
+
+        def Pipe(self, duplex):
+            return multiprocessing.Pipe(duplex)
+
+        def Process(self, **kw):
+            begin = self.begin
+
+            class Apart:
+                def start(self):
+                    begin()
+
+                def is_alive(self):
+                    return False
+
+                def join(self, timeout=None):
+                    pass
+            return Apart()
+
+    def refused():
+        raise OSError("Access is denied")
+    real, patience = drift.multiprocessing.get_context, drift.START_PATIENCE_SEC
+    try:
+        drift.multiprocessing.get_context = lambda method: Context(refused)
+        ok("a second process that does not start leaves the count to the app",
+           drift.count_apart(**asked) == here and "did not start" in said[-1])
+        drift.multiprocessing.get_context = lambda method: Context(lambda: None)
+        ok("and so does one that ends without an answer",
+           drift.count_apart(**asked) == here and "ended without an answer" in said[-1])
+        drift.multiprocessing.get_context = real
+        drift.START_PATIENCE_SEC = 0
+        ok("and one that has not begun in time",
+           drift.count_apart(**asked) == here and "had not begun" in said[-1]
+           and not multiprocessing.active_children())
+    finally:
+        drift.multiprocessing.get_context, drift.START_PATIENCE_SEC = real, patience
+        logging.getLogger(drift.__name__).removeHandler(hears)
+
+    # What a second process imports to count: had it PortAudio among it, the
+    # second process would start it, and with ASIO cut into the take.
+    clean = subprocess.run(
+        [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
+         "import rehearsal_recorder.audio.drift; print('sounddevice' in sys.modules)",
+         str(Path(__file__).resolve().parent.parent / "src")],
+        capture_output=True, text=True, timeout=120)
+    ok("and nothing it imports starts PortAudio", clean.stdout.strip() == "False")
 
     print("\n" + "=" * 60)
     if problems:

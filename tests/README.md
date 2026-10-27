@@ -267,7 +267,11 @@ chord "no-beat". Then the Api: the aim from the click, the take's tempo, the
 song's (through the library) and the take's own middle; the sources by the
 take's icons, a backing track left out of the mix, missing files; the same
 answer again, a rewritten file counted afresh, 32 kept; Record stopping a
-count in progress; the `drift_tolerance` setting. Run with
+count in progress; the `drift_tolerance` setting. Last, the count in a
+second process, as the app makes it: the same answer as a count in the app,
+stopped at once, what a file that cannot be read raises, the count left to the
+app when the second process does not start, ends without an answer or has not
+begun in time, and nothing it imports starting PortAudio. Run with
 `python tests/test_drift.py`.
 
 ## test_backing.py: a song's backing track

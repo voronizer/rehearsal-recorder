@@ -14559,13 +14559,13 @@ def main():
     minus90 = str(folder90 / "Minus.wav")
     write_wav(Path(minus90), 100, seconds=1.0)
     heard90 = []
-    drift90 = apimod90.driftmod.count
-    apimod90.driftmod.count = lambda **kw: heard90.append(kw) or {"ok": False, "why": "no-beat"}
+    drift90 = apimod90.driftmod.count_apart
+    apimod90.driftmod.count_apart = lambda **kw: heard90.append(kw) or {"ok": False, "why": "no-beat"}
     try:
         a90.take_drift([{"name": "Drums", "file": drums90, "icon": "drums"}, {"name": "Bass", "file": bass90},
                         {"name": "Minus", "file": minus90, "icon": "backing"}], [], {})
     finally:
-        apimod90.driftmod.count = drift90
+        apimod90.driftmod.count_apart = drift90
     ok("the drift line listens to the take's drums, and leaves out a track it gave the backing icon",
        heard90 and heard90[0]["drums"] == [drums90] and minus90 not in heard90[0]["mix"])
 

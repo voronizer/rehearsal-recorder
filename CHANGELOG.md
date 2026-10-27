@@ -5,6 +5,14 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **A take plays without clicks right after Stop.** A take played straight
+  after **Stop** could click and drop out for its first seconds. At that
+  moment РЭХА works out the take's tempo drift for the line on Master, and
+  the sound had to wait for it. Now the drift is worked out apart from the
+  sound.
+
 ## 0.16.0
 
 - **Lineups.** The band can keep several lineups, each with its own name:

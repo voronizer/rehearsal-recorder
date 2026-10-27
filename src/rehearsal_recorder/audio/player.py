@@ -27,8 +27,6 @@ for both.
 
 import threading
 import time
-import wave
-from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
@@ -45,6 +43,7 @@ from rehearsal_recorder.audio.devices import (
     usable_output,
 )
 from rehearsal_recorder.audio.format import unpack24
+from rehearsal_recorder.audio.wavfile import _open_track
 
 BLOCK_FRAMES = 1024
 
@@ -56,59 +55,6 @@ def channel_label(channels):
 # How quickly gain follows a change. Switching the coefficient instantly
 # clicks, so it is eased towards the target over a few blocks.
 GAIN_SMOOTHING = 0.25
-
-
-def _open_track(path):
-    """
-    Returns (memmap, frames, samplerate, sample_bytes, channels) for a 16- or
-    24-bit wav. The memmap is shaped (frames, channels) at 16 bits and
-    (frames, channels, 3) at 24.
-
-    Neither is decoded here. 16-bit audio is mapped as int16 and read
-    directly; 24-bit is mapped as raw bytes, shaped (frames, 3), and turned
-    into numbers a block at a time while playing — numpy has no 24-bit type,
-    and converting a whole take up front would put its length back into memory,
-    which is exactly what memmap is here to avoid.
-    """
-    path = Path(path)
-    with wave.open(str(path), "rb") as wf:
-        frames = wf.getnframes()
-        samplerate = wf.getframerate()
-        channels = wf.getnchannels()
-        sampwidth = wf.getsampwidth()
-
-    if sampwidth not in (2, 3):
-        raise ValueError(
-            f"{path.name}: expected 16- or 24-bit, got {sampwidth * 8}"
-        )
-
-    # In our files the data chunk is last, so the offset is derived from the
-    # end of the file instead of parsing the header by hand.
-    data_bytes = frames * channels * sampwidth
-    offset = path.stat().st_size - data_bytes
-    if offset < 0:
-        raise ValueError(f"{path.name}: file is shorter than its header claims")
-
-    # Both channels of a stereo track are kept. Keeping only the first meant
-    # a stereo file played as its left channel with nothing said about the
-    # other, which is a silent way to lose half a keyboard. Anything wider
-    # than a pair is not something this app records, so the first two are
-    # taken and the rest left alone.
-    kept = min(channels, 2)
-    if sampwidth == 2:
-        data = np.memmap(
-            path, dtype="<i2", mode="r", offset=offset, shape=(frames * channels,)
-        ).reshape(frames, channels)[:, :kept]
-    else:
-        data = np.memmap(
-            path,
-            dtype=np.uint8,
-            mode="r",
-            offset=offset,
-            shape=(frames, channels, 3),
-        )[:, :kept, :]
-
-    return data, frames, samplerate, sampwidth, kept
 
 
 class Track:
