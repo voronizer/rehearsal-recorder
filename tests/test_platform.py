@@ -625,6 +625,10 @@ def main():
     # take's tempo: a build that lost what either needs fails here.
     ok("and it renders the click and writes a WAV with its tempo",
        said is not None and "ok   click and WAV tempo" in said)
+    # A take clicked as it opened while its drift was counted beside it.
+    ok("and it counts a take's drift in a second process",
+       said is not None and "ok   drift in a second process" in said)
+    ok("with Python handing over every 1 ms", said is not None and "ok   Python's turns" in said)
     # Its own line says the MIDI system, so the log is not asked to say it too.
     ok("and the MIDI system is not said a second time, on stderr",
        not [ln for ln in run.stderr.decode("utf-8", "replace").splitlines()

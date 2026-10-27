@@ -13,7 +13,11 @@ No sound card, no browser, no MIDI port: WAVs and .mid files in a temporary
 folder, given to the counter by their paths.
 """
 
+import logging
+import multiprocessing
 import os
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -27,6 +31,17 @@ from test_tempo import hit, write_drums_mid, write_wav
 from rehearsal_recorder.audio import drift, tempo
 
 problems = []
+
+
+def raises(call, kind):
+    """Whether `call` raises `kind`."""
+    try:
+        call()
+    except kind:
+        return True
+    except Exception:  # noqa: BLE001 - another one is a no
+        return False
+    return False
 
 
 def ok(label, cond):
@@ -316,12 +331,12 @@ def main():
     ok("and so is one whose Drums the band gives the icon and the take does not", found.get("source") == "mix")
     minus = str(write_wav(folder / "minus.wav", loud(np.sin(2 * np.pi * 220 * np.arange(int(20 * SR)) / SR))))
     seen = []
-    real = drift.count
-    drift.count = lambda **kw: seen.append(kw["mix"]) or {"ok": False, "why": "no-beat"}
+    real = drift.count_apart
+    drift.count_apart = lambda **kw: seen.append(kw["mix"]) or {"ok": False, "why": "no-beat"}
     try:
         api.take_drift([{"name": "Bass", "file": palyn.band}, {"name": "Minus", "file": minus, "icon": "backing"}], [], {})
     finally:
-        drift.count = real
+        drift.count_apart = real
     ok("a backing track is left out of the mix", seen == [[palyn.band]])
     ok("a file not on disk is missing",
        api.take_drift([{"name": "Drums", "file": str(folder / "gone.wav")}], [], {}) == {"ok": False, "why": "missing"})
@@ -334,17 +349,17 @@ def main():
     os.utime(palyn.band, ns=(stamp + 10 ** 9, stamp + 10 ** 9))
     ok("a file rewritten since is counted afresh", api.take_drift(kit, [], meter) is not first)
     counted = []
-    drift.count = lambda **kw: counted.append(1) or {"ok": False, "why": "no-beat"}
+    drift.count_apart = lambda **kw: counted.append(1) or {"ok": False, "why": "no-beat"}
     try:
         for t in range(apimod.DRIFTS_KEPT + 1):
             api.take_drift(kit, [], {"tempo": 200 + t, "signature": "4/4"})
         api.take_drift(kit, [], {"tempo": 200, "signature": "4/4"})
     finally:
-        drift.count = real
+        drift.count_apart = real
     ok(f"{apimod.DRIFTS_KEPT} answers are kept: the oldest is counted again after one more",
        len(counted) == apimod.DRIFTS_KEPT + 2)
     counted, both = [], []
-    drift.count = lambda **kw: counted.append(1) or time.sleep(0.3) or {"ok": False, "why": "no-beat"}
+    drift.count_apart = lambda **kw: counted.append(1) or time.sleep(0.3) or {"ok": False, "why": "no-beat"}
     try:
         asks = [threading.Thread(target=lambda: both.append(api.take_drift(kit, [], {"tempo": 97, "signature": "4/4"})))
                 for _ in range(2)]
@@ -353,7 +368,7 @@ def main():
         for a in asks:
             a.join(5)
     finally:
-        drift.count = real
+        drift.count_apart = real
     ok("two asks for one take at once count it once, and both get the answer",
        counted == [1] and both == [{"ok": False, "why": "no-beat"}] * 2)
 
@@ -368,7 +383,7 @@ def main():
                 raise tempo.Cancelled()
             time.sleep(0.01)
         return {"ok": False, "why": "no-beat"}
-    drift.count = waits
+    drift.count_apart = waits
     try:
         ok("a rehearsal starts", api.start_rehearsal("Drift", 0, 48000, [{"name": "Guitar", "channel": 1}])["ok"])
         worker = threading.Thread(target=lambda: results.append(api.take_drift(kit, [], {"tempo": 99, "signature": "4/4"})))
@@ -377,7 +392,7 @@ def main():
         ok("Record starts a take", api.start_take()["ok"])
         worker.join(5)
     finally:
-        drift.count = real
+        drift.count_apart = real
     ok("Record stops a count in progress, which says so", results == [{"ok": False, "why": "recording"}])
     ok("and none is counted while a take records",
        api.take_drift(kit, [], meter) == {"ok": False, "why": "recording"})
@@ -401,7 +416,7 @@ def main():
             if kw["stop"]():
                 raise tempo.Cancelled()
         return {"ok": False, "why": "no-beat"}
-    recorder, apimod.AudioRecorder, drift.count = apimod.AudioRecorder, Refused, holds
+    recorder, apimod.AudioRecorder, drift.count_apart = apimod.AudioRecorder, Refused, holds
     try:
         worker = threading.Thread(target=lambda: results.append(api.take_drift(kit, [], {"tempo": 98, "signature": "4/4"})))
         worker.start()
@@ -412,7 +427,7 @@ def main():
         released.set()
         worker.join(5)
     finally:
-        apimod.AudioRecorder, drift.count = recorder, real
+        apimod.AudioRecorder, drift.count_apart = recorder, real
     ok("and leaves the count to finish", results == [{"ok": False, "why": "no-beat"}])
 
     ok("the tolerance is 2% until it is changed", api.get_settings()["drift_tolerance"] == 0.02)
@@ -420,6 +435,131 @@ def main():
        and api.get_settings()["drift_tolerance"] == 0.03)
     ok("4% is refused, and 3% stays", not api.set_metronome_setting("drift_tolerance", 0.04)["ok"]
        and api.get_settings()["drift_tolerance"] == 0.03)
+
+    print("\n[8] The app counts a take in a second process")
+    # The take is mixed in Python, and the tracker's loop beside it made the
+    # take click as it opened: the count goes to a Python of its own.
+    asked = {"drums_mid": [palyn.mid], "drums": [palyn.drums], "mix": [palyn.band], "tempo": 128, "signature": "4/4"}
+    here = drift.count(**asked)
+    drift._end_apart()
+    drift.start_apart()
+    ahead = [p.pid for p in multiprocessing.active_children() if p.name == "drift count"]
+    ok("the second process can start ahead of the first count", len(ahead) == 1)
+    ok("a count there says what a count here says", drift.count_apart(**asked) == here)
+    ok("and the same process counts the next take",
+       drift.count_apart(**{**asked, "tempo": 127}) == drift.count(**{**asked, "tempo": 127})
+       and [p.pid for p in multiprocessing.active_children() if p.name == "drift count"] == ahead)
+    asks = []
+    try:
+        drift.count_apart(stop=lambda: asks.append(1) or len(asks) > 1, **asked)
+        stopped = False
+    except tempo.Cancelled:
+        stopped = True
+    ok("told to stop in the middle, it says so, and the second process is gone",
+       stopped and not multiprocessing.active_children())
+    ok("the next count starts another", drift.count_apart(**asked) == here)
+    ok("one told to stop before it begins stops, and the process stays",
+       raises(lambda: drift.count_apart(stop=lambda: True, **asked), tempo.Cancelled)
+       and len(multiprocessing.active_children()) == 1)
+    junk = folder / "junk.wav"
+    junk.write_bytes(b"not a wav at all")
+    raised = []
+    for counts in (drift.count, drift.count_apart):
+        try:
+            counts(mix=[str(junk)], tempo=128)
+        except Exception as e:  # noqa: BLE001 - which one is the check
+            raised.append(type(e))
+    ok("a file it cannot read raises here what it raised there, and the process stays",
+       len(raised) == 2 and raised[0] is raised[1] and len(multiprocessing.active_children()) == 1)
+    drift._apart.process.kill()
+    drift._apart.process.join(5)
+    ok("one that has ended is started again for the next count",
+       drift.count_apart(**asked) == here and len(multiprocessing.active_children()) == 1)
+
+    said = []
+    hears = logging.Handler()
+    hears.emit = lambda record: said.append(record.getMessage())
+    logging.getLogger(drift.__name__).addHandler(hears)
+
+    class Context:
+        """The spawn context, with a second process that `start` and the
+        pipe's far end stand in for."""
+
+        def __init__(self, start, answer):
+            self.begin, self.answer = start, answer
+
+        def Pipe(self):
+            ours, theirs = multiprocessing.Pipe()
+            return ours, Far(self.answer, theirs)
+
+        def Process(self, **kw):
+            begin = self.begin
+
+            class Apart:
+                # Never ready while `keep` is open: the process does not end.
+                sentinel, keep = multiprocessing.Pipe(False)
+
+                def start(self):
+                    begin()
+
+                def is_alive(self):
+                    return True
+
+                def kill(self):
+                    pass
+
+                def join(self, timeout=None):
+                    pass
+            return Apart()
+
+    class Far:
+        """The second process's end of the pipe: `answer` says what it does
+        with a count it is asked for, as the parent closes its copy."""
+
+        def __init__(self, answer, pipe):
+            self.answer, self.pipe = answer, pipe
+
+        def close(self):
+            self.answer(self.pipe)
+
+    def refused():
+        raise OSError("Access is denied")
+    real, patience = drift.multiprocessing.get_context, drift.START_PATIENCE_SEC
+    try:
+        drift._end_apart()
+        drift.multiprocessing.get_context = lambda method: Context(refused, lambda pipe: pipe.close())
+        ok("a second process that does not start leaves the count to the app",
+           drift.count_apart(**asked) == here and "did not start" in said[-1] and drift._apart is None)
+        drift.multiprocessing.get_context = lambda method: Context(lambda: None, lambda pipe: pipe.close())
+        # Gone before it was asked, or after: either way it had not begun.
+        ok("and so does one that ends before it begins",
+           drift.count_apart(**asked) == here and drift._apart is None
+           and said[-1].startswith("A take's drift is counted in the app: the second process "))
+
+        def begins_and_ends(pipe):
+            # Takes the count, says it has begun, and is gone.
+            threading.Thread(target=lambda: (pipe.recv(), pipe.send(("counting", None)), pipe.close())).start()
+        drift.multiprocessing.get_context = lambda method: Context(lambda: None, begins_and_ends)
+        ok("one that ends in the middle of a count raises, and the app does not count it again",
+           raises(lambda: drift.count_apart(**asked), ChildProcessError) and drift._apart is None)
+        drift.multiprocessing.get_context = real
+        drift.START_PATIENCE_SEC = 0
+        ok("one that has not begun in time leaves the count to the app",
+           drift.count_apart(**asked) == here and "had not begun" in said[-1]
+           and not multiprocessing.active_children())
+    finally:
+        drift.multiprocessing.get_context, drift.START_PATIENCE_SEC = real, patience
+        logging.getLogger(drift.__name__).removeHandler(hears)
+
+    # What a second process imports to count, the app's entry first, as a
+    # built app's does: had it PortAudio among it, the second process would
+    # start it, and with ASIO cut into the take.
+    clean = subprocess.run(
+        [sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
+         "import rehearsal_recorder.app, rehearsal_recorder.audio.drift; print('sounddevice' in sys.modules)",
+         str(Path(__file__).resolve().parent.parent / "src")],
+        capture_output=True, text=True, timeout=120)
+    ok("and nothing it imports starts PortAudio", clean.stdout.strip() == "False")
 
     print("\n" + "=" * 60)
     if problems:

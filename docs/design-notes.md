@@ -338,6 +338,17 @@ ceiling and the split between two playback modes.
 - The waveform is computed in Python (`audio/waveform.py`, numpy) and arrives
   as peaks. When zoomed in, the peaks are fetched again for the part on
   screen.
+- The mix is made in Python too, on the card's thread, a block every 21 ms
+  or so, and Python runs one thread at a time. A long loop in Python beside
+  it made the take click: the drift count, which starts as the review screen
+  opens a take. So Python hands its thread over every 1 ms, not its own 5
+  (`SWITCH_INTERVAL_SEC` in `app.py`), and a take's drift is counted in a
+  second process (`count_apart` in `audio/drift.py`). It starts as the app
+  opens and is kept: Windows shows a busy cursor for two seconds each time a
+  program starts, and Record ends it only in the middle of a count. It must
+  not import the player: importing sounddevice starts PortAudio, which with
+  ASIO can cut into what is playing. This is why a take's WAV is opened in
+  `audio/wavfile.py`.
 
 **One surface for seeking and selecting.** A press on the lanes that does not
 travel is a click and seeks; one that travels draws the repeat region. The

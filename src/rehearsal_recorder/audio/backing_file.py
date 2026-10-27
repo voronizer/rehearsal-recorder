@@ -10,7 +10,7 @@ original breaks nothing. Beside the copy it keeps the file ready to play: a
 resampled by soxr (VHQ, the resampler librosa uses). The ready file is a cache,
 named with its rate, and made again when the rate changes or it is missing.
 
-The ready file is read the way the player reads a take (audio/player.py,
+The ready file is read the way the player reads a take (audio/wavfile.py,
 `_open_track`): through a memory map, a block at a time, so a ten-minute file
 costs what a short one does. It is made a block at a time too. The app writes
 it itself (audio/wavfile.py), and reads its header itself, so playing it needs
@@ -145,7 +145,7 @@ def make_ready(copy, rate):
 def open_ready(path):
     """
     (memmap, frames, rate, 4, channels) for a ready file: the tuple
-    `player._open_track` gives for a take's WAV, the memmap float32 shaped
+    `wavfile._open_track` gives for a take's WAV, the memmap float32 shaped
     (frames, channels), 1.0 being full scale. Nothing is decoded here.
     """
     path = Path(path)

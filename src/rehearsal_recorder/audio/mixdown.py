@@ -14,8 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from rehearsal_recorder.audio.format import unpack24
-from rehearsal_recorder.audio.player import _open_track
-from rehearsal_recorder.audio.wavfile import WavWriter
+from rehearsal_recorder.audio.wavfile import WavWriter, _open_track
 
 CHUNK = 1 << 16
 

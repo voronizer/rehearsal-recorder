@@ -308,6 +308,48 @@ def selftest():
             raise RuntimeError(f"a second at 44.1 kHz came out {frames} frames at {rate} Hz, peak {peak:.3f}")
         return f"soxr {soxr.__version__}, a second at 44.1 kHz made ready at 48 kHz"
 
+    def drift_apart():
+        # A take's drift is counted in a second process (audio/drift.py), in a
+        # built app this program started again. A build that cannot start it
+        # counts in the app, as a take plays, and the take clicks.
+        import logging
+        import multiprocessing
+        import tempfile
+        import wave
+        from pathlib import Path
+
+        import numpy as np
+
+        from rehearsal_recorder.audio import drift
+
+        rate = 44100
+        hit = np.random.default_rng(0).normal(0, 0.5, 2000) * np.exp(-np.arange(2000) / 300)
+        pcm = np.zeros(20 * rate)
+        for start in range(rate // 2, len(pcm) - len(hit), rate // 2):  # 120 bpm
+            pcm[start:start + len(hit)] += hit
+        said, seen = [], []
+        hears = logging.Handler(logging.WARNING)
+        hears.emit = lambda record: said.append(record.getMessage())
+        logger = logging.getLogger(drift.__name__)
+        logger.addHandler(hears)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "click.wav"
+                with wave.open(str(path), "wb") as w:
+                    w.setnchannels(1)
+                    w.setsampwidth(2)
+                    w.setframerate(rate)
+                    w.writeframes((np.clip(pcm, -1, 1) * 32767).astype("<i2").tobytes())
+                found = drift.count_apart(mix=[str(path)], tempo=120, stop=lambda: seen.extend(
+                    p.name for p in multiprocessing.active_children()))
+        finally:
+            logger.removeHandler(hears)
+        if said:
+            raise RuntimeError(said[-1])
+        if "drift count" not in seen or not found.get("ok"):
+            raise RuntimeError(f"20 s of a click at 120 bpm counted as {found}")
+        return f"{len(found['bars'])} bars of a click at 120 bpm, counted in a second process"
+
     def interface():
         index = app_root() / "ui" / "dist" / "index.html"
         if not index.exists():
@@ -353,6 +395,14 @@ def selftest():
             raise RuntimeError(f"the file says {shown!r}, the app {__version__!r}")
         return shown
 
+    def python_turns():
+        # main sets it before it comes here. A take played at Python's own
+        # 5 ms clicks while its drift is counted.
+        turn = sys.getswitchinterval()
+        if abs(turn - SWITCH_INTERVAL_SEC) > 1e-9:
+            raise RuntimeError(f"every {turn * 1000:g} ms, not {SWITCH_INTERVAL_SEC * 1000:g}")
+        return f"every {turn * 1000:g} ms"
+
     def window_toolkit():
         from importlib.metadata import version
 
@@ -375,7 +425,9 @@ def selftest():
     check("click and WAV tempo", click_and_wav_tempo)
     check("sample formats", encoder)
     check("backing track", backing_track)
+    check("drift in a second process", drift_apart)
     check("numpy", numpy_works)
+    check("Python's turns", python_turns)
     check("history database", database)
     check("window toolkit", window_toolkit)
     check("built interface", interface)
@@ -388,6 +440,14 @@ def selftest():
     print("\nThis build has everything it needs.")
     return 0
 
+
+# How often Python hands its one running thread to another that waits, in
+# seconds (sys.setswitchinterval). A take is mixed in Python on the sound
+# card's thread, a block every 21 ms or so, and one block waits for its turn
+# several times over. At Python's own 5 ms, a count looping in Python beside it
+# kept the block waiting past the card's deadline, and the take clicked and
+# dropped out. At 1 ms the block is in time, and the count takes no longer.
+SWITCH_INTERVAL_SEC = 0.001
 
 # Where the local server listens while developing. Normally the port is
 # whatever is free, but Vite has to be told in advance where to forward /api
@@ -443,6 +503,9 @@ def _startup_theme():
 
 
 def main():
+    # First, so that the self-test and the probe run as the app does.
+    sys.setswitchinterval(SWITCH_INTERVAL_SEC)
+
     if "--selftest" in sys.argv:
         return selftest()
 
@@ -557,6 +620,10 @@ def main():
             window.load_url(url)
             window.events.loaded.wait(15)
             api.start_update_checks()
+            # Before the first take opens, not as it does: audio/drift.py.
+            from rehearsal_recorder.audio import drift
+
+            drift.start_apart()
         except Exception as exc:
             log.exception("Application startup failed")
             app_state["failed"] = True

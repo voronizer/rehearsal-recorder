@@ -37,7 +37,7 @@ import numpy as np
 
 from rehearsal_recorder.audio.click import SIGNATURES, per_quarter, tempo_range
 from rehearsal_recorder.audio.format import unpack24
-from rehearsal_recorder.audio.player import _open_track
+from rehearsal_recorder.audio.wavfile import _open_track
 from rehearsal_recorder.midi.notes import DRUM_MAP, DRUM_ROWS
 from rehearsal_recorder.midi.smf import read_events
 
@@ -151,7 +151,7 @@ def _mix(opened, start, stop):
     The samples `start` to `stop` of every track added into one mono block, 1.0
     being full scale; zero where a file does not reach, before it or after.
     A stereo track is its two sides averaged. A track is opened as
-    `player._open_track` opens a take's WAV, or as a backing track's ready
+    `wavfile._open_track` opens a take's WAV, or as a backing track's ready
     file is (`backing_file.open_ready`, 32-bit float).
     """
     out = np.zeros(stop - start, dtype=np.float32)

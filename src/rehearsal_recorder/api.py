@@ -5268,8 +5268,8 @@ class Api:
         round_ = self._drift_round
         stop = lambda: self._drift_round != round_ or self._recorder is not None
         try:
-            found = driftmod.count(drums_mid=hits, drums=drums, mix=mix, tempo=tempo,
-                                   signature=signature or "4/4", click=source == "click", stop=stop)
+            found = driftmod.count_apart(drums_mid=hits, drums=drums, mix=mix, tempo=tempo,
+                                         signature=signature or "4/4", click=source == "click", stop=stop)
         except tempomod.Cancelled:
             return {"ok": False, "why": "recording"}
         except (OSError, EOFError, wave.Error, ValueError) as e:

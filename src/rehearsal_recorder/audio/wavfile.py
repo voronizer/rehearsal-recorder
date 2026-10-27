@@ -5,16 +5,24 @@ The only place a WAV keeps a tempo that a DAW reads is an `acid` chunk, and
 neither `wave` nor python-soundfile writes a chunk of the caller's choosing
 (metronome spec, Part 9). Without one, a file from here is byte for byte what
 `wave` writes: RIFF, `fmt `, `data`. With one, the `acid` chunk goes between
-`fmt ` and `data`, so the data still ends the file, which is where the player
-finds it (audio/player.py, `_open_track`).
+`fmt ` and `data`, so the data still ends the file, which is where
+`_open_track` below finds it.
 
 The chunk says the quarter tempo, the signature and how many quarters the file
 holds. That count is only known at the end, so it is written then, with the
 sizes, as `wave` writes its sizes.
+
+How a take's WAV is read is here too, beside how it is written, and not in
+the player: the player starts PortAudio as it is imported, and a take's drift
+is counted in a second process that must not (audio/drift.py says why).
 """
 
 import struct
+import wave
 from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
 
 WAVE_FORMAT_PCM = 1
 # 32-bit float: a backing track's file made ready to play (audio/backing_file.py).
@@ -126,3 +134,56 @@ def read_acid(path):
                 return Acid(tempo, num, den)
             # A chunk of an odd size is followed by a byte of padding.
             f.seek(size + (size & 1), 1)
+
+
+def _open_track(path):
+    """
+    Returns (memmap, frames, samplerate, sample_bytes, channels) for a 16- or
+    24-bit wav. The memmap is shaped (frames, channels) at 16 bits and
+    (frames, channels, 3) at 24.
+
+    Neither is decoded here. 16-bit audio is mapped as int16 and read
+    directly; 24-bit is mapped as raw bytes, shaped (frames, 3), and turned
+    into numbers a block at a time while playing — numpy has no 24-bit type,
+    and converting a whole take up front would put its length back into memory,
+    which is exactly what memmap is here to avoid.
+    """
+    path = Path(path)
+    with wave.open(str(path), "rb") as wf:
+        frames = wf.getnframes()
+        samplerate = wf.getframerate()
+        channels = wf.getnchannels()
+        sampwidth = wf.getsampwidth()
+
+    if sampwidth not in (2, 3):
+        raise ValueError(
+            f"{path.name}: expected 16- or 24-bit, got {sampwidth * 8}"
+        )
+
+    # In our files the data chunk is last, so the offset is derived from the
+    # end of the file instead of parsing the header by hand.
+    data_bytes = frames * channels * sampwidth
+    offset = path.stat().st_size - data_bytes
+    if offset < 0:
+        raise ValueError(f"{path.name}: file is shorter than its header claims")
+
+    # Both channels of a stereo track are kept. Keeping only the first meant
+    # a stereo file played as its left channel with nothing said about the
+    # other, which is a silent way to lose half a keyboard. Anything wider
+    # than a pair is not something this app records, so the first two are
+    # taken and the rest left alone.
+    kept = min(channels, 2)
+    if sampwidth == 2:
+        data = np.memmap(
+            path, dtype="<i2", mode="r", offset=offset, shape=(frames * channels,)
+        ).reshape(frames, channels)[:, :kept]
+    else:
+        data = np.memmap(
+            path,
+            dtype=np.uint8,
+            mode="r",
+            offset=offset,
+            shape=(frames, channels, 3),
+        )[:, :kept, :]
+
+    return data, frames, samplerate, sampwidth, kept
