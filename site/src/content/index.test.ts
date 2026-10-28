@@ -67,10 +67,17 @@ describe("the site's content", () => {
 
   it("has the hero's words", () => {
     expect(content.hero.title).toBe("Multitrack recording for band rehearsals")
-    expect(content.hero.eyebrow).toBe("Free for macOS and Windows")
+    expect(content.hero.eyebrow).toBe("Our band's recorder, free for yours.")
     expect(content.hero.finePrint).toBe("Open source · Nothing else to install")
     expect(content.hero.caption).toContain("This is the app itself.")
     expect(content.hero.phoneCaption).toContain("Try it on a computer.")
+  })
+
+  it("has the words of the downloads at the end of the main page", () => {
+    expect(content.download.title).toBe("Record the next rehearsal.")
+    expect(content.download.lede.replace(/\s+/g, " ")).toBe(
+      "Free, for macOS and Windows. Plug in the interface, press **Record take**, play."
+    )
   })
 
   it("has the 404 page's words", () => {

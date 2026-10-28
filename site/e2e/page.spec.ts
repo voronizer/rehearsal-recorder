@@ -80,11 +80,13 @@ test("on a Mac, the Mac download is the button", async ({ page }) => {
     Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel" })
   )
   await page.goto("/")
-  await expect(page.locator(".btn")).toHaveText("Download for macOS")
-  await expect(page.locator(".btn")).toHaveAttribute("href", MAC_ZIP)
-  const other = page.getByRole("link", { name: "Download for Windows" })
-  await expect(other).toHaveAttribute("href", WIN_ZIP)
-  await expect(page.getByText(`Version ${VERSION} · Open source`)).toBeVisible()
+  // On the first screen, and again at the end of the page.
+  for (const at of [page.locator(".hero"), page.locator(".get-it")]) {
+    await expect(at.locator(".btn")).toHaveText("Download for macOS")
+    await expect(at.locator(".btn")).toHaveAttribute("href", MAC_ZIP)
+    await expect(at.getByRole("link", { name: "Download for Windows" })).toHaveAttribute("href", WIN_ZIP)
+    await expect(at.getByText(`Version ${VERSION} · Open source`)).toBeVisible()
+  }
 })
 
 test("on Windows, the Windows download is the button", async ({ page }) => {
@@ -92,12 +94,80 @@ test("on Windows, the Windows download is the button", async ({ page }) => {
     Object.defineProperty(Navigator.prototype, "platform", { get: () => "Win32" })
   )
   await page.goto("/")
-  await expect(page.locator(".btn")).toHaveText("Download for Windows")
-  await expect(page.locator(".btn")).toHaveAttribute("href", WIN_ZIP)
-  await expect(page.getByRole("link", { name: "Download for macOS" })).toHaveAttribute("href", MAC_ZIP)
+  for (const at of [page.locator(".hero"), page.locator(".get-it")]) {
+    await expect(at.locator(".btn")).toHaveText("Download for Windows")
+    await expect(at.locator(".btn")).toHaveAttribute("href", WIN_ZIP)
+    await expect(at.getByRole("link", { name: "Download for macOS" })).toHaveAttribute("href", MAC_ZIP)
+  }
 })
 
-test("the controller has a block of its own after the app, its photo beside its words", async ({ page }) => {
+test("the page ends with the downloads again, after the questions", async ({ page }) => {
+  await page.goto("/")
+  const end = page.locator(".get-it")
+  await expect(end.getByRole("heading", { level: 2 })).toHaveText("Record the next rehearsal.")
+  await expect(end.locator(".lede")).toHaveText("Free, for macOS and Windows. Plug in the interface, press Record take, play.")
+  await expect(end.locator(".lede strong, .lede b")).toHaveText("Record take")
+  const at = await page.evaluate(() => ({
+    faq: document.querySelector("#faq")!.getBoundingClientRect().bottom,
+    end: document.querySelector(".get-it")!.getBoundingClientRect(),
+    oss: document.querySelector(".oss")!.getBoundingClientRect().top,
+  }))
+  expect(at.end.top).toBeGreaterThanOrEqual(at.faq)
+  expect(at.end.bottom).toBeLessThanOrEqual(at.oss)
+})
+
+// A laptop's first screen shows a good part of the app, not just its top.
+test("at 1440 by 900 the first screen shows 300 px of the app", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto("/")
+  await expect(page.locator(".hero .eyebrow")).toHaveText("Our band's recorder, free for yours.")
+  const top = await page.locator(".hero .live").evaluate((el) => el.getBoundingClientRect().top)
+  expect(900 - top).toBeGreaterThanOrEqual(300)
+})
+
+/** How far apart two colours are for reading, as WCAG counts it. */
+function contrast(a: number[], b: number[]) {
+  const lum = (c: number[]) => {
+    const [r, g, bl] = c.map((v) => {
+      const s = v / 255
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl
+  }
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+// The red words over a heading read at 4.5:1, on white and on a tile.
+test("the red words over the headings read at 4.5:1 where they stand", async ({ page }) => {
+  await page.goto("/")
+  for (const sel of [".hero .eyebrow", "#stories .eyebrow"]) {
+    const [fg, bg] = await page.locator(sel).evaluate((el) => {
+      // The colour as the browser draws it, in sRGB, whatever the CSS wrote.
+      const rgb = (css: string) => {
+        const c = document.createElement("canvas").getContext("2d")!
+        c.fillStyle = css
+        c.fillRect(0, 0, 1, 1)
+        return [...c.getImageData(0, 0, 1, 1).data.slice(0, 3)]
+      }
+      let under: Element | null = el
+      while (under && getComputedStyle(under).backgroundColor === "rgba(0, 0, 0, 0)") under = under.parentElement
+      return [rgb(getComputedStyle(el).color), rgb(under ? getComputedStyle(under).backgroundColor : "#fff")]
+    })
+    expect(contrast(fg, bg), sel).toBeGreaterThanOrEqual(4.5)
+  }
+})
+
+// Small links still take a finger: 24 px high at least.
+test("the ribbon's and the footer's links are 24 px high", async ({ page }) => {
+  await page.goto("/")
+  const links = page.locator(".ribbon a, .footer a")
+  expect(await links.count()).toBeGreaterThanOrEqual(4)
+  for (const height of await links.evaluateAll((all) => all.map((a) => a.getBoundingClientRect().height)))
+    expect(height).toBeGreaterThanOrEqual(24)
+})
+
+test("the controller has a block of its own after the steps, its photo beside its words", async ({ page }) => {
   await page.goto("/")
   const block = page.locator("#controller")
   await expect(block.getByRole("heading", { level: 2 })).toHaveText("Start a take without going to the laptop.")
@@ -109,22 +179,22 @@ test("the controller has a block of its own after the app, its photo beside its 
   await expect(photo).toBeVisible()
   await expect.poll(() => photo.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBe(1000)
   const at = await page.evaluate(() => ({
-    hero: document.querySelector(".hero")!.getBoundingClientRect().bottom,
+    steps: document.querySelector("#how")!.getBoundingClientRect().bottom,
     block: document.querySelector("#controller")!.getBoundingClientRect(),
-    next: document.querySelector("#how")!.getBoundingClientRect().top,
+    next: document.querySelector("#faq")!.getBoundingClientRect().top,
     copy: document.querySelector("#controller .copy")!.getBoundingClientRect(),
     photo: document.querySelector("#controller img")!.getBoundingClientRect(),
   }))
-  expect(at.block.top).toBeGreaterThanOrEqual(at.hero)
+  expect(at.block.top).toBeGreaterThanOrEqual(at.steps)
   expect(at.block.bottom).toBeLessThanOrEqual(at.next)
   // Its four lines, the count-in last.
   await expect(block.locator("ul li")).toHaveCount(4)
   await expect(block.locator("ul li").last()).toHaveText(/^With the click on, REC counts the band in/)
   expect(at.copy.right).toBeLessThanOrEqual(at.photo.left)
-  // The photo goes to the block's edges: top, right and bottom.
-  expect(Math.abs(at.photo.top - at.block.top)).toBeLessThanOrEqual(1)
+  // The photo goes to the block's right edge, on the page's white: the
+  // tiles are for the stories and the steps.
   expect(Math.abs(at.photo.right - at.block.right)).toBeLessThanOrEqual(1)
-  expect(Math.abs(at.photo.bottom - at.block.bottom)).toBeLessThanOrEqual(1)
+  await expect(block).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
 })
 
 // On a phone the photo is under the words, across the whole block, and the

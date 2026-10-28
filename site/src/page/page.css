@@ -23,7 +23,9 @@
   --page-muted: var(--muted-foreground);
   --page-accent: var(--primary);
   --page-accent-fg: var(--primary-foreground);
-  --page-rec: #e5484d; /* the red of the icon */
+  /* The red of the icon, a shade darker: as words, on white or on a
+     tile, it keeps 4.5:1. */
+  --page-rec: #c42f36;
   --page-sans: --theme(--font-sans);
   --page-mono: --theme(--font-mono);
   color-scheme: light;
@@ -60,6 +62,8 @@ body {
 /* ---- What's new, as one line at the top ---- */
 .ribbon { text-align: center; font-size: 0.875rem; color: var(--page-muted); padding: 10px 16px; background: var(--page-tile); margin: 0 -20px; }
 .ribbon b { color: var(--page-fg); font-weight: 600; }
+/* A link 24 px high, at least, for a finger. */
+.ribbon .more { display: inline-block; padding-block: 4px; margin-block: -4px; }
 
 /* ---- Menu ---- */
 .nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 18px; }
@@ -74,10 +78,12 @@ body {
 @media (max-width: 680px) { .menu { gap: 18px; } .menu a:not(.get, .stories) { display: none; } }
 
 /* ---- Hero ---- */
-.hero { padding-block: clamp(40px, 7vw, 96px) clamp(72px, 11vw, 150px); display: grid; gap: clamp(40px, 6vw, 72px); }
-.hero-text { display: grid; gap: 22px; justify-items: center; text-align: center; }
+/* Short enough over the app that a laptop's first screen shows a good
+   part of it. */
+.hero { padding-block: clamp(24px, 3.5vw, 44px) clamp(72px, 11vw, 150px); display: grid; gap: clamp(32px, 4vw, 48px); }
+.hero-text { display: grid; gap: 18px; justify-items: center; text-align: center; }
 .eyebrow { font-size: 1rem; font-weight: 600; color: var(--page-rec); }
-.h1 { font-size: clamp(2.7rem, 7.2vw, 5.4rem); line-height: 1; font-weight: 600; letter-spacing: -0.045em; max-width: 14ch; }
+.h1 { font-size: clamp(2.7rem, 6vw, 4.25rem); line-height: 1; font-weight: 600; letter-spacing: -0.045em; max-width: 14ch; }
 .cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 26px; margin-top: 4px; }
 .btn { display: inline-flex; align-items: center; gap: 9px; padding: 13px 24px; border-radius: 999px; font-weight: 600; font-size: 1rem; text-decoration: none; background: var(--page-accent); color: var(--page-accent-fg); }
 .btn svg { width: 18px; height: 18px; flex: none; }
@@ -104,9 +110,9 @@ body {
   .caption.on-phone { display: block; }
 }
 
-/* ---- Stories, right after the first screen: the band's chat in a tile as
-   the controller's, its words on the left and the chat on the right, or
-   over it under 900 px ---- */
+/* ---- Stories, right after the first screen: the band's chat in a tile,
+   its words on the left and the chat on the right, or over it under
+   900 px ---- */
 .stories-block { background: var(--page-tile); border-radius: 28px; display: grid; gap: 28px; align-items: center; padding: clamp(26px, 4.5vw, 56px); margin-bottom: clamp(72px, 11vw, 150px); }
 @media (min-width: 900px) { .stories-block { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; } }
 .stories-block h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; margin: 0 0 6px; }
@@ -121,17 +127,18 @@ body {
 .chat-side.shown .say { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) { .chat-side .say { opacity: 1; transform: none; transition: none; } }
 
-/* ---- Victor Baikov's controller: its words beside its photo, or over it
-   on a phone. The photo goes to the block's edges, with no tile round it. ---- */
-.remote { background: var(--page-tile); border-radius: 28px; overflow: hidden; display: grid; }
-.remote .copy { padding: clamp(26px, 4.5vw, 56px); align-content: center; }
-@media (min-width: 900px) { .remote { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+/* ---- Victor Baikov's controller, after the four steps: its words beside
+   its photo, or over it on a phone, on the page's white: the tiles are
+   for the stories and the steps. ---- */
+.remote { display: grid; gap: 28px; align-items: center; }
+.remote .copy { align-content: center; }
+@media (min-width: 900px) { .remote { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; } }
 .remote h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; margin: 0 0 6px; }
 .remote ul { list-style: disc; margin: 0; padding-left: 1.1em; color: var(--page-muted); font-size: 0.875rem; display: grid; gap: 4px; max-width: 30rem; }
 .remote .fine p { color: var(--page-muted); font-size: 0.875rem; }
 /* On the narrowest phone the link is wider than the block. */
 .remote .more { white-space: normal; }
-.remote img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.remote img { display: block; width: 100%; height: auto; border-radius: 24px; }
 
 /* ---- Words beside a picture, as the controller's ---- */
 .copy { display: grid; gap: 8px; align-content: start; min-width: 0; }
@@ -207,7 +214,7 @@ body {
   .story { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(40px, 5vw, 72px); }
   /* In the middle of the screen, and never taller than it. */
   .stage { order: 2; top: max(16px, calc(50vh - 26rem)); width: 100%; max-width: calc((100vh - 120px - 9rem) * 1180 / 960); justify-self: end; }
-  .steps { order: 1; padding-bottom: 20vh; }
+  .steps { order: 1; padding-bottom: 6vh; }
 }
 @media (max-width: 899px) {
   .stage { background: var(--page-bg); padding-block: 8px; gap: 10px; }
@@ -282,7 +289,12 @@ body {
 .card-chat { padding-bottom: 8px; }
 .card-chat .say p { background: var(--page-bg); font-size: 0.9375rem; }
 .card-chat .say.me p { background: var(--page-accent); }
-.card-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 6px; }
+/* The card's words take what is left of it, and Read sits at its bottom,
+   level with its neighbour's. */
+.tale-card:has(.card-chat):not(.wide) { grid-template-rows: auto 1fr; }
+.card-copy { grid-template-rows: auto auto 1fr; }
+.card-copy:has(> .eyebrow) { grid-template-rows: auto auto auto 1fr; }
+.card-foot { display: flex; align-items: baseline; align-self: end; justify-content: space-between; gap: 12px; margin-top: 6px; }
 .tale-card:hover h2 { color: var(--page-accent); }
 /* At a story's end: the next story's card, its chat on the right from
    900 px, and the others' names under it. */
@@ -294,6 +306,13 @@ body {
 }
 .tale-next .also { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; }
 .tale-next .also .more { white-space: normal; }
+
+/* ---- The end of the main page: the downloads again, on the page's white
+   as on the first screen ---- */
+.get-it { display: grid; gap: 18px; justify-items: center; text-align: center; padding-block: 0 clamp(72px, 11vw, 150px); }
+.get-it > svg { width: 72px; height: 72px; }
+.get-it .lede { margin: 0; }
+.get-it .fine { margin: 0; }
 
 /* ---- Open source, as one line ---- */
 .oss { text-align: center; display: grid; gap: 12px; justify-items: center; padding-block: 8px clamp(56px, 8vw, 96px); }
@@ -315,7 +334,7 @@ body {
 /* ---- Footer ---- */
 .footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding-block: 24px 40px; border-top: 1px solid var(--page-line); color: var(--page-muted); font-size: 0.75rem; }
 .footer nav { display: flex; flex-wrap: wrap; gap: 20px; }
-.footer a { text-decoration: none; }
+.footer a { text-decoration: none; display: inline-block; padding-block: 4px; }
 .footer a:hover { color: var(--page-fg); }
 
 @media (prefers-reduced-motion: reduce) { .item, .live.settled iframe { transition: none; } }

@@ -5,7 +5,7 @@ rehearsal you record stays in History.
 
 ## eyebrow
 
-Free for macOS and Windows
+Our band's recorder, free for yours.
 
 ## fine print
 
