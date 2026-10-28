@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { content, type ItemId } from "../content"
+import { content, type Item, type ItemId } from "../content"
 import type { ToStage } from "../frame"
 import { BEAT_FOCUS, KIND, SHOWS, type Focus } from "./evening"
 import { LiveFrame } from "./LiveFrame"
@@ -70,8 +70,8 @@ function Over({ children }: { children: ReactNode }) {
 }
 
 /**
- * The four steps of an evening on the left, each with its tiles and cards,
- * and on the right the app's window, near enough to read, with a few words
+ * The four steps of an evening on the left, each with its tiles and, under
+ * them, its cards as a list that opens the one picked; and on the right the app's window, near enough to read, with a few words
  * under it on what it shows. The step in the middle of the screen is the
  * one the app goes through, the window following it; the rail under the
  * window fills as the page scrolls, and jumps to a step. A click on a tile
@@ -189,6 +189,23 @@ export function Story({ pieces }: { pieces: PieceData }) {
     tell()
   }
 
+  /** A tile, with its line; or a card, a row of the list under the tiles,
+   *  its line showing only while the window shows it. */
+  const itemOf = (item: Item) => {
+    const id = item.id
+    const on = picked === id
+    return (
+      <article key={id} className={`item ${KIND[id]}${on ? " on" : ""}`}>
+        <h4>
+          <button type="button" aria-pressed={on} onClick={() => pick(id)}>
+            <Title text={item.title} />
+          </button>
+        </h4>
+        {(KIND[id] === "tile" || on) && <Paragraphs text={item.line} />}
+      </article>
+    )
+  }
+
   const shows = picked && SHOWS[picked]
   const piece = shows && "piece" in shows ? shows.piece : null
   // Where the window looks: at the picked moment's part of the screen, or
@@ -247,20 +264,10 @@ export function Story({ pieces }: { pieces: PieceData }) {
               <h3>{s.title}</h3>
               <Paragraphs text={s.body} />
               <div className="items">
-                {s.items.map((item) => {
-                  const id = item.id
-                  const on = picked === id
-                  return (
-                    <article key={id} className={`item ${KIND[id]}${on ? " on" : ""}`}>
-                      <h4>
-                        <button type="button" aria-pressed={on} onClick={() => pick(id)}>
-                          <Title text={item.title} />
-                        </button>
-                      </h4>
-                      <Paragraphs text={item.line} />
-                    </article>
-                  )
-                })}
+                {s.items.filter((item) => KIND[item.id] === "tile").map(itemOf)}
+                {s.items.some((item) => KIND[item.id] === "card") && (
+                  <div className="cards">{s.items.filter((item) => KIND[item.id] === "card").map(itemOf)}</div>
+                )}
               </div>
             </li>
           ))}
