@@ -227,7 +227,9 @@ body {
 .rail button i { display: block; height: 2px; border-radius: 2px; background: var(--page-line); overflow: hidden; }
 .rail button i::after { content: ""; display: block; height: 100%; background: var(--page-fg); transform: scaleX(var(--p, 0)); transform-origin: left; }
 .rail button.on { color: var(--page-fg); }
-@media (min-width: 900px) {
+/* Beside the window: 900 px wide or more, and more than 500 px high. A
+   phone on its side, however wide, gets the phone's steps. */
+@media (min-width: 900px) and (min-height: 501px) {
   .story { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(40px, 5vw, 72px); }
   /* In the middle of the screen, and never taller than it. */
   .stage { order: 2; top: max(16px, calc(50vh - 26rem)); width: 100%; max-width: calc((100vh - 120px - 9rem) * 1180 / 960); justify-self: end; }
@@ -237,7 +239,7 @@ body {
    stands in the room of the step on show (Story.tsx), and the rest are a
    tile's grey till it comes. */
 .slot { display: none; }
-@media (max-width: 899px) {
+@media (max-width: 899px), (max-height: 500px) {
   .story { position: relative; }
   .stage { position: absolute; top: 0; left: 0; right: 0; gap: 10px; background: var(--page-bg); }
   .slot { display: block; height: var(--stage-h, 0px); margin-block: 8px; border-radius: 18px; background: var(--page-tile); }
@@ -250,7 +252,7 @@ body {
 }
 /* A phone on its side: the window no taller than half the screen, and its
    words beside it. */
-@media (max-width: 899px) and (max-height: 560px) {
+@media (max-width: 899px) and (max-height: 560px), (max-height: 500px) {
   .window { grid-template-columns: min(100%, calc((50svh - 16px) * 1180 / 960)) minmax(0, 1fr); align-items: start; }
   .about { height: auto; max-height: calc(50svh - 16px); }
 }

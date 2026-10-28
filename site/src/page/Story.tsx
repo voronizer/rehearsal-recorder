@@ -31,9 +31,10 @@ function Title({ text }: { text: string }) {
 }
 
 /** Where the steps are beside the window, held in the middle of the screen
- *  (page.css); on a phone the window stands at the top of the step on
- *  screen instead, in the room each step keeps for it. */
-const beside = () => matchMedia("(min-width: 900px)").matches
+ *  (page.css); on a phone, upright or on its side, the window stands at
+ *  the top of the step on screen instead, in the room each step keeps for
+ *  it. */
+const beside = () => matchMedia("(min-width: 900px) and (min-height: 501px)").matches
 
 /**
  * A piece of the app over the window, in its middle: made smaller to fit,

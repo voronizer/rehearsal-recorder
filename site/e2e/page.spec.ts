@@ -982,3 +982,27 @@ test("a chapter's number in a story has the recording dot", async ({ page }) => 
   await page.goto("/stories/tempo-drift")
   expect(await dotOf(page, ".chap-head .n")).toEqual(DOT)
 })
+
+// A phone on its side is wider than 900 px and shorter than 500: it gets
+// the phone's steps, not a window held at the side.
+test.describe("on a phone on its side", () => {
+  test.use({ viewport: { width: 932, height: 430 }, isMobile: true, hasTouch: true })
+
+  test("the window stands in the step on show", async ({ page }) => {
+    await page.goto("/")
+    for (let i = 0; i < 4; i++) {
+      await toStep(page, i)
+      await expect
+        .poll(() =>
+          page.evaluate((n) => {
+            const stage = document.querySelector("#how .stage")!.getBoundingClientRect()
+            const slot = document.querySelectorAll("#how .slot")[n].getBoundingClientRect()
+            return Math.abs(stage.top - slot.top) <= 1
+          }, i)
+        )
+        .toBe(true)
+    }
+    await expect(page.locator("#how .stage")).toHaveCSS("position", "absolute")
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(932)
+  })
+})
