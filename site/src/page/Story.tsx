@@ -30,7 +30,9 @@ function Title({ text }: { text: string }) {
   )
 }
 
-/** Where the steps are beside the window rather than under it (page.css). */
+/** Where the steps are beside the window, held in the middle of the screen
+ *  (page.css); on a phone the window stands at the top of the step on
+ *  screen instead, in the room each step keeps for it. */
 const beside = () => matchMedia("(min-width: 900px)").matches
 
 /**
@@ -93,6 +95,8 @@ export function Story({ pieces }: { pieces: PieceData }) {
   const sent = useRef<ToStage | null>(null)
   const stage = useRef<HTMLDivElement>(null)
   const steps = useRef<(HTMLLIElement | null)[]>([])
+  const slots = useRef<(HTMLDivElement | null)[]>([])
+  const whole = useRef<HTMLDivElement>(null)
   const rail = useRef<(HTMLElement | null)[]>([])
   const drawn = useMemo(() => itemPieces(pieces), [pieces])
 
@@ -114,10 +118,8 @@ export function Story({ pieces }: { pieces: PieceData }) {
     let queued = false
     const sync = () => {
       queued = false
-      // The middle of what is left of the screen for the steps: on a phone
-      // the window is held over them, at the top.
-      const top = beside() || !stage.current ? 0 : stage.current.getBoundingClientRect().bottom
-      const focus = (Math.min(Math.max(0, top), window.innerHeight / 2) + window.innerHeight) / 2
+      // The step in the middle of the screen is the one on show.
+      const focus = window.innerHeight / 2
       let at = steps.current.length - 1
       let part = 1
       for (let i = 0; i < steps.current.length; i++) {
@@ -157,6 +159,24 @@ export function Story({ pieces }: { pieces: PieceData }) {
     }
   }, [tell])
 
+  // On a phone: the room each step keeps is as tall as the window and the
+  // words under it, and the window stands in the room of the step on show.
+  useLayoutEffect(() => {
+    const held = stage.current
+    const story = whole.current
+    if (!held || !story) return
+    const place = () => {
+      story.style.setProperty("--stage-h", `${held.offsetHeight}px`)
+      const slot = slots.current[active]
+      held.style.top = beside() || !slot ? "" : `${slot.offsetTop}px`
+    }
+    place()
+    const resized = new ResizeObserver(place)
+    resized.observe(held)
+    resized.observe(story)
+    return () => resized.disconnect()
+  }, [active])
+
   const onBeat = useCallback((step: number, n: number) => setBeat([step, n]), [])
 
   const onReady = useCallback(
@@ -167,26 +187,34 @@ export function Story({ pieces }: { pieces: PieceData }) {
     [tell]
   )
 
-  /** Scrolls a step's top to the top of the screen, or, on a phone, to just
-   *  under the window held at the top. A step shorter than the room down to
-   *  the middle of what is left (sync's focus line) has its middle put
+  /** Scrolls a step's top to the top of the screen. A step shorter than the
+   *  room down to the middle of it (sync's focus line) has its middle put
    *  there instead, or the step after it would be the one on screen. */
   const goTo = (i: number) => {
     const step = steps.current[i]
-    const held = stage.current
-    if (!step || !held) return
-    const above = beside() ? 24 : parseFloat(getComputedStyle(held).top) + held.offsetHeight + 16
+    if (!step) return
+    const above = 24
     const box = step.getBoundingClientRect()
-    const focus = (Math.min(beside() ? 0 : above, window.innerHeight / 2) + window.innerHeight) / 2
+    const focus = window.innerHeight / 2
     const top = box.height < focus - above ? focus - box.height / 2 : above
     window.scrollTo({ top: window.scrollY + box.top - top, behavior: scrolling() })
   }
 
+  /** Shows an item in the window; on a phone, goes to the window too, at the
+   *  top of the item's step, unless it is all on screen already. At once:
+   *  a smooth scroll would pass through other steps, and moving into one
+   *  puts the item out (sync). */
   const pick = (id: ItemId) => {
-    if (pickedRef.current === id) return
-    pickedRef.current = id
-    setPicked(id)
-    tell()
+    if (pickedRef.current !== id) {
+      pickedRef.current = id
+      setPicked(id)
+      tell()
+    }
+    const slot = slots.current[STEP_OF.get(id)!]
+    if (beside() || !slot) return
+    const box = slot.getBoundingClientRect()
+    if (box.top < 0 || box.bottom > window.innerHeight)
+      window.scrollTo({ top: window.scrollY + box.top - 16, behavior: "instant" })
   }
 
   /** A tile, with its line; or a card, a row of the list under the tiles,
@@ -220,7 +248,7 @@ export function Story({ pieces }: { pieces: PieceData }) {
       <div className="head">
         <h2 className="h2">{story.title}</h2>
       </div>
-      <div className="story">
+      <div ref={whole} className="story">
         <div ref={stage} className="stage">
           <div className="window">
             <div className="view">
@@ -263,6 +291,9 @@ export function Story({ pieces }: { pieces: PieceData }) {
               <span className="n">{i + 1}</span>
               <h3>{s.title}</h3>
               <Paragraphs text={s.body} />
+              {/* The window's room on a phone, where it stands while this
+                  step is on show. */}
+              <div ref={(el) => void (slots.current[i] = el)} className="slot" aria-hidden="true" />
               <div className="items">
                 {s.items.filter((item) => KIND[item.id] === "tile").map(itemOf)}
                 {s.items.some((item) => KIND[item.id] === "card") && (
