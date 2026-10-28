@@ -98,3 +98,39 @@ for (const path of PAGES) {
     }
   })
 }
+
+// The live app and its pieces in the app's own dark theme.
+const frameDark = (page: Page, selector: string) =>
+  page
+    .locator(selector)
+    .first()
+    .contentFrame()
+    .locator("html")
+    .evaluate((el) => el.classList.contains("dark"))
+    .catch(() => null)
+
+test("in the dark the live app is dark", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" })
+  await page.goto("/")
+  await expect.poll(() => frameDark(page, 'iframe[src$="#hero"]'), { timeout: 20_000 }).toBe(true)
+  await page.locator("#how").evaluate((el) => window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top))
+  await expect.poll(() => frameDark(page, "#how iframe"), { timeout: 20_000 }).toBe(true)
+})
+
+test("in the dark a piece of the app is dark", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" })
+  await page.goto("/")
+  await page.locator("#how").getByRole("button", { name: "Rehearse the set, in order.", exact: true }).dispatchEvent("click")
+  const piece = page.locator("#how .over .piece")
+  await expect(piece).toBeVisible()
+  const bg = await piece.evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(luminance(await rgbOf(page, bg))).toBeLessThan(0.05)
+})
+
+test("the live app follows a change of the system", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" })
+  await page.goto("/")
+  await expect.poll(() => frameDark(page, 'iframe[src$="#hero"]'), { timeout: 20_000 }).toBe(false)
+  await page.emulateMedia({ colorScheme: "dark" })
+  await expect.poll(() => frameDark(page, 'iframe[src$="#hero"]'), { timeout: 20_000 }).toBe(true)
+})
