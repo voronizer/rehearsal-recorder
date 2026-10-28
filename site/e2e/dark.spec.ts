@@ -127,12 +127,17 @@ test("in the dark a piece of the app is dark", async ({ page }) => {
   expect(luminance(await rgbOf(page, bg))).toBeLessThan(0.05)
 })
 
+// Both frames, and both ways: light to dark, and back.
 test("the live app follows a change of the system", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" })
   await page.goto("/")
-  await expect.poll(() => frameDark(page, 'iframe[src$="#hero"]'), { timeout: 20_000 }).toBe(false)
+  await page.locator("#how").evaluate((el) => window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top))
+  const frames = ['iframe[src$="#hero"]', "#how iframe"]
+  for (const f of frames) await expect.poll(() => frameDark(page, f), { timeout: 20_000 }).toBe(false)
   await page.emulateMedia({ colorScheme: "dark" })
-  await expect.poll(() => frameDark(page, 'iframe[src$="#hero"]'), { timeout: 20_000 }).toBe(true)
+  for (const f of frames) await expect.poll(() => frameDark(page, f), { timeout: 20_000 }).toBe(true)
+  await page.emulateMedia({ colorScheme: "light" })
+  for (const f of frames) await expect.poll(() => frameDark(page, f), { timeout: 20_000 }).toBe(false)
 })
 
 // No white box on a dark page while a frame's own large script loads: the
