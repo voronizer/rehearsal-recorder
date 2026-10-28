@@ -816,3 +816,31 @@ test.describe("on a phone", () => {
     await expect(card).toHaveAttribute("aria-pressed", "true")
   })
 })
+
+// The headings in Geologica, from the site itself, on every page that has
+// them; and the icon's red as a dot before the words over a heading.
+for (const path of ["/", "/stories", "/stories/tempo-drift", "/404.html"]) {
+  test(`on ${path} the headings are in Geologica, from the site, with the red dot over them`, async ({ page }) => {
+    const away: string[] = []
+    page.on("request", (r) => {
+      if (/fonts\.(googleapis|gstatic)\.com/.test(r.url())) away.push(r.url())
+    })
+    await page.goto(path)
+    const heading = page.getByRole("heading", { level: 1 })
+    await expect(heading).toHaveCSS("font-family", /^"?Geologica"?,/)
+    await page.evaluate(() => document.fonts.ready)
+    const loaded = await page.evaluate(() =>
+      [...document.fonts].some((f) => f.family.replace(/"/g, "") === "Geologica" && f.status === "loaded")
+    )
+    expect(loaded).toBe(true)
+    expect(away).toEqual([])
+    const dot = await page
+      .locator(".eyebrow")
+      .first()
+      .evaluate((el) => {
+        const s = getComputedStyle(el, "::before")
+        return { color: s.backgroundColor, width: s.width, radius: s.borderRadius }
+      })
+    expect(dot).toEqual({ color: "rgb(229, 72, 77)", width: "9px", radius: "50%" })
+  })
+}
