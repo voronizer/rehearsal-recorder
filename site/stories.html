@@ -2,6 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Dark when the system is, set before the page is drawn so a dark
+         computer never sees it white, and kept with the system's setting
+         while the page is open. The class is the app's own (ui/src/index.css). -->
+    <script>
+      ;(() => {
+        const dark = matchMedia("(prefers-color-scheme: dark)")
+        const set = () => document.documentElement.classList.toggle("dark", dark.matches)
+        set()
+        dark.addEventListener("change", set)
+      })()
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- The page of stories, and each story as stories/<name>.html: the
          stories() plugin in vite.config.ts writes the page's head and its

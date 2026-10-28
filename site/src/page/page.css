@@ -41,6 +41,10 @@
   --page-mono: --theme(--font-mono);
   color-scheme: light;
 }
+/* In the dark (the head of each page sets .dark from the system), the
+   tokens above take the app's dark values, and the browser's own scroll
+   bars and fields follow. */
+:root.dark { color-scheme: dark; }
 
 /* What the app's styles set for a desktop window, undone for a page. */
 html,
