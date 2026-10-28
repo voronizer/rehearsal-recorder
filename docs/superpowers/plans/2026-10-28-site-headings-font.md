@@ -62,7 +62,27 @@
 - [ ] **Step 4: Run it and see it pass.** Expected: 5 passed.
 - [ ] **Step 5: Commit.**
 
-### Task 3: Review and the pull request
+### Task 3: The link picture in Geologica (spec section 8)
+
+**Files:** Modify `site/og.html` (no Google), `site/src/og/og.css` (`@font-face` from `../page/fonts/`, the heading in Geologica, the eyebrow's red and dot), `site/src/og/main.tsx` (wait for Geologica), `site/scripts/og.mjs` (its error), `site/scripts/og-fonts.conf` (its comment). Test: `site/e2e/og.spec.ts`.
+
+- [ ] **Step 1: Write the failing tests.** `og.html sets its heading in Geologica, from the site`: `h1` font-family matches `/^"?Geologica"?,/`, `data-og` is `ready`, no request to Google. `og.html says so when Geologica did not load`: with `**/geologica-*.woff2` aborted, `data-og` is `no-font`.
+- [ ] **Step 2: Run them and see them fail.** `npx playwright test e2e/og.spec.ts`. Expected: the heading is in Instrument Sans; the abort test reads `ready`.
+- [ ] **Step 3: Change the picture.**
+- [ ] **Step 4: Run them and see them pass; then `npm run og` draws a picture.**
+- [ ] **Step 5: Commit.**
+
+### Task 4: Phones on their side (spec section 9)
+
+**Files:** Modify `site/src/page/Story.tsx` (`beside()`), `site/src/page/page.css` (the steps' media queries). Test: `site/e2e/page.spec.ts`.
+
+- [ ] **Step 1: Write the failing test.** In a `describe` at 932 by 430, `isMobile`, `hasTouch`: `on a phone on its side the window stands in the step on show`: `.stage` position is `absolute`, for each step its top is the slot's within 1 px, and `scrollWidth` is 932.
+- [ ] **Step 2: Run it and see it fail.** Expected: position `sticky`.
+- [ ] **Step 3: Beside means `(min-width: 900px) and (min-height: 501px)`;** the phone's rules apply under 900 px wide or at 500 px high or less.
+- [ ] **Step 4: Run it and see it pass.**
+- [ ] **Step 5: Commit.**
+
+### Task 5: Review and the pull request
 
 - [ ] **Step 1:** `cd site && npx tsc -b && npx vitest run`, then `npm run build && npm run og && npx playwright test`. Expected: all pass.
 - [ ] **Step 2:** A fresh reviewer (superpowers:requesting-code-review) reads the branch against this plan and the spec; every finding is fixed or answered.

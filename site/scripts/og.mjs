@@ -27,7 +27,7 @@ try {
   // The page says whether its font came (src/og/main.tsx).
   await page.locator("html[data-og]").waitFor({ state: "attached", timeout: 30_000 })
   if ((await page.locator("html").getAttribute("data-og")) !== "ready") {
-    throw new Error("the page's font (Instrument Sans) did not load")
+    throw new Error("the heading's font (Geologica) did not load")
   }
   await page.screenshot({ path: out })
   console.log(`Drew ${out}`)

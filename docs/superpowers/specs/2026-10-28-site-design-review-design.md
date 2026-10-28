@@ -61,6 +61,13 @@ screenshots of the built site with each change made in the browser.
   on white and on a tile; the ribbon's and footer's links 24 px high.
 - **R9. A dark theme:** later, after R4 («Потом»).
 - **R10. Read level on the cards of the page of stories** («Да»).
+- **R11. The link picture in Geologica too** («1- да»), after the review
+  found `og.png` still in Instrument Sans from Google.
+- **R12. Phones on their side, 900 px or wider, get the phone's steps**
+  («2 - чинить»): at 932 by 430 the window was held at the side, 204 px
+  wide.
+- A window between 899 and 900 px wide, from a zoom: left as it is
+  («3 - ты псих?»).
 
 Process, from Alex on 28 Oct: the work follows superpowers, a spec and a
 plan before the code, and each test is written before the code it checks
@@ -178,6 +185,29 @@ Tests first, each seen failing:
 - In a tall, narrow window, 450 by 1600, a tap on an item of the next
   step puts the window in that step's room.
 
+## 8. The link picture (R11, this pull request)
+
+`og.html` sets its heading in Geologica from the site's own files, as the
+page does, and loads nothing from Google; its other words stay in the
+system's font (Inter on the CI runner, `scripts/og-fonts.conf`). The word
+over the heading is in the darker red of words, with the dot. `og.mjs`
+still draws no picture when Geologica did not load.
+
+Tests, written first: the picture's `h1` is in Geologica, no request goes
+to Google, and with the Geologica files blocked the page says `no-font`.
+
+## 9. Phones on their side (R12, this pull request)
+
+A screen 500 px high or less is a phone on its side, whatever its width.
+It gets the phone's steps, as under 900 px: the window in the step on
+show, with its words beside it (the landscape rule that was only for
+under 900 px). `beside()` in `Story.tsx` and the media queries of the
+steps in `page.css` say the same: beside is 900 px wide or more and more
+than 500 px high.
+
+Tests, written first: at 932 by 430 the window is not held, it stands in
+the room of the step on show, and the page does not scroll sideways.
+
 ## Claude's calls
 
 Made without asking, in the pull requests named:
@@ -190,6 +220,9 @@ Made without asking, in the pull requests named:
   room under the window.
 - **R4**: three subsets, not one file with every script; weights 500 to
   600 only; which headings take Geologica; the dot's size and ring.
+- **R11**: only the picture's heading in Geologica, its other words in the
+  system's font.
+- **R12**: 500 px high as the line for a phone on its side.
 
 ## Not in this
 
