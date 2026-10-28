@@ -766,6 +766,43 @@ test("the page names an icon Google's results can show", async ({ page, request 
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
+  // The window moving from step to step is not a layout shift: on a phone
+  // Speed Insights counts one over 0.25 as poor.
+  test("moving the window through the steps shifts nothing", async ({ page }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __shift: number }
+      w.__shift = 0
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries() as unknown as { value: number; hadRecentInput: boolean }[])
+          if (!e.hadRecentInput) w.__shift += e.value
+      }).observe({ type: "layout-shift", buffered: true })
+    })
+    await page.goto("/")
+    for (let i = 0; i < 4; i++) {
+      await toStep(page, i)
+      await page.waitForTimeout(400)
+    }
+    const shift = await page.evaluate(() => (window as unknown as { __shift: number }).__shift)
+    expect(shift).toBeLessThan(0.1)
+  })
+
+  // Turning the phone, or a window narrowed and widened, raises no error.
+  test("turning the phone raises no error", async ({ page }) => {
+    const errors: string[] = []
+    page.on("pageerror", (e) => errors.push(e.message))
+    await page.addInitScript(() =>
+      window.addEventListener("error", (e) => ((window as unknown as { __errors: string[] }).__errors ??= []).push(e.message))
+    )
+    await page.goto("/")
+    await toStep(page, 1)
+    for (const [width, height] of [[844, 390], [390, 844], [1280, 860], [390, 844]]) {
+      await page.setViewportSize({ width, height })
+      await page.waitForTimeout(300)
+    }
+    const raised = await page.evaluate(() => (window as unknown as { __errors?: string[] }).__errors ?? [])
+    expect([...errors, ...raised]).toEqual([])
+  })
+
   test("the page fits, and the app in it only shows", async ({ page }) => {
     await page.goto("/")
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible()
@@ -836,7 +873,8 @@ for (const path of PAGES) {
       const got = await document.fonts.load("600 40px Geologica", "РЭХА Pałyn")
       return got.filter((f) => f.family.replace(/"/g, "") === "Geologica").map((f) => f.status)
     })
-    expect(faces.length).toBeGreaterThanOrEqual(2)
+    // Latin, Latin Extended and Cyrillic, each from its own file.
+    expect(faces).toHaveLength(3)
     expect(faces.every((s) => s === "loaded")).toBe(true)
     expect(away).toEqual([])
   })
@@ -862,4 +900,85 @@ for (const path of PAGES) {
 test("a step's number has the recording dot", async ({ page }) => {
   await page.goto("/")
   expect(await dotOf(page, "#how .step .n")).toEqual(DOT)
+})
+
+// A tall, narrow window: the next step's room is all on screen while the
+// middle of the screen is still in the step before. A tap on an item of
+// the next step brings the window to that step's room.
+test("in a tall narrow window a tap puts the window in the item's own step", async ({ page }) => {
+  await page.setViewportSize({ width: 450, height: 1600 })
+  await page.goto("/")
+  const slot = page.locator("#how .slot").nth(1)
+  await slot.evaluate((el) => window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - 1010))
+  // The room all on screen, the middle of the screen still in the first step.
+  const room = (await slot.boundingBox())!
+  expect(room.y).toBeGreaterThanOrEqual(0)
+  expect(room.y + room.height).toBeLessThanOrEqual(1600)
+  await expect(page.locator(".rail button").nth(0)).toHaveAttribute("aria-current", "step")
+  await item(page, "Every musician on their own track.").click()
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const stage = document.querySelector("#how .stage")!.getBoundingClientRect()
+        const room = document.querySelectorAll("#how .slot")[1].getBoundingClientRect()
+        return Math.abs(stage.top - room.top) <= 1
+      })
+    )
+    .toBe(true)
+})
+
+// On the narrowest phone the line over the first heading wraps; its dot
+// stays on the first line, before the first word.
+test("at 320 px the hero's dot sits on the first line of its words", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  await page.goto("/")
+  const eyebrow = page.locator(".hero .eyebrow")
+  const shot = (await eyebrow.screenshot()).toString("base64")
+  const found = await eyebrow.evaluate(async (el, png) => {
+    const box = el.getBoundingClientRect()
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    const lines = [...range.getClientRects()]
+    const first = lines.reduce((a, b) => (b.top < a.top ? b : a))
+    // The dot's rows: pixels of the icon's red in the element's picture.
+    const img = new Image()
+    img.src = `data:image/png;base64,${png}`
+    await img.decode()
+    const c = document.createElement("canvas")
+    c.width = img.width
+    c.height = img.height
+    const g = c.getContext("2d")!
+    g.drawImage(img, 0, 0)
+    const px = g.getImageData(0, 0, c.width, c.height).data
+    const scale = img.height / box.height
+    let top = Infinity
+    let bottom = -Infinity
+    for (let y = 0; y < c.height; y++)
+      for (let x = 0; x < c.width; x++) {
+        const i = (y * c.width + x) * 4
+        if (Math.abs(px[i] - 229) < 12 && Math.abs(px[i + 1] - 72) < 12 && Math.abs(px[i + 2] - 77) < 12) {
+          top = Math.min(top, y)
+          bottom = Math.max(bottom, y)
+        }
+      }
+    const middle = box.top + (top + bottom) / 2 / scale
+    return { lines: new Set(lines.map((r) => Math.round(r.top))).size, middle, firstTop: first.top, firstBottom: first.bottom }
+  }, shot)
+  expect(found.lines).toBeGreaterThanOrEqual(2)
+  expect(found.middle).toBeGreaterThan(found.firstTop)
+  expect(found.middle).toBeLessThan(found.firstBottom)
+})
+
+// The rest of the words stay in the system's font, as in the app.
+test("running text, the menu and buttons stay in the system's font", async ({ page }) => {
+  await page.goto("/")
+  for (const sel of [".hero .lede", ".menu a", ".hero .btn", "#how .step > p"]) {
+    const family = await page.locator(sel).first().evaluate((el) => getComputedStyle(el).fontFamily)
+    expect(family, sel).toMatch(/^-apple-system,/)
+  }
+})
+
+test("a chapter's number in a story has the recording dot", async ({ page }) => {
+  await page.goto("/stories/tempo-drift")
+  expect(await dotOf(page, ".chap-head .n")).toEqual(DOT)
 })

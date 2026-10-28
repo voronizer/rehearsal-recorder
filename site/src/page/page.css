@@ -33,7 +33,8 @@
   /* The red of the icon, a shade darker: as words, on white or on a
      tile, it keeps 4.5:1. */
   --page-rec: #c42f36;
-  /* The icon's own red, for the dot of a recording: a mark, not words. */
+  /* The icon's own red, for a recording's dot. As a mark it needs the
+     3:1 of a graphic, and has 3.9:1 on white. */
   --page-dot: #e5484d;
   --page-sans: --theme(--font-sans);
   --page-display: "Geologica", var(--page-sans);
@@ -96,9 +97,9 @@ body {
 .hero-text { display: grid; gap: 18px; justify-items: center; text-align: center; }
 .eyebrow { font-size: 1rem; font-weight: 600; color: var(--page-rec); }
 /* The icon's red, as a recording's dot, before the word over a heading
-   and before a step's or a chapter's number. */
-.eyebrow, .step .n, .chap-head .n { display: inline-flex; align-items: center; gap: 8px; }
-.eyebrow::before, .step .n::before, .chap-head .n::before { content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--page-dot); box-shadow: 0 0 0 3px color-mix(in srgb, var(--page-dot) 22%, transparent); }
+   and before a step's or a chapter's number. In the line, so that where
+   the words wrap, on the narrowest phone, it stays before the first one. */
+.eyebrow::before, .step .n::before, .chap-head .n::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 8px; vertical-align: 0.05em; border-radius: 50%; background: var(--page-dot); box-shadow: 0 0 0 3px color-mix(in srgb, var(--page-dot) 22%, transparent); }
 .h1 { font-size: clamp(2.7rem, 6vw, 4.25rem); line-height: 1; font-weight: 600; letter-spacing: -0.045em; max-width: 14ch; }
 .cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 14px 26px; margin-top: 4px; }
 .btn { display: inline-flex; align-items: center; gap: 9px; padding: 13px 24px; border-radius: 999px; font-weight: 600; font-size: 1rem; text-decoration: none; background: var(--page-accent); color: var(--page-accent-fg); }
@@ -238,7 +239,7 @@ body {
 .slot { display: none; }
 @media (max-width: 899px) {
   .story { position: relative; }
-  .stage { position: absolute; left: 0; right: 0; gap: 10px; background: var(--page-bg); }
+  .stage { position: absolute; top: 0; left: 0; right: 0; gap: 10px; background: var(--page-bg); }
   .slot { display: block; height: var(--stage-h, 0px); margin-block: 8px; border-radius: 18px; background: var(--page-tile); }
   /* The steps are one under another, so the rail has nothing to show. */
   .rail { display: none; }

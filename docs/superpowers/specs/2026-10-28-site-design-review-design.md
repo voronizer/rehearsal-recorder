@@ -90,10 +90,16 @@ the version line.
 Under 900 px each step has a `.slot` after its line, as tall as the window
 and its words (`--stage-h`, measured). The one window (`.stage`, the live
 app is one frame on the page and moving it would reload it) is placed
-absolutely at the top of the slot of the step on show; the other slots are
-a tile's grey. The rail is not shown. A tap on an item whose window is off
-the screen goes there at once: a smooth scroll would pass through other
-steps, and moving into one puts the item out.
+absolutely at the top of the story and moved down to the slot of the step
+on show with a `translateY`, which, unlike a change of `top`, is not a
+layout shift (review, 28 Oct: moving `top` gave a CLS of 1.68 through the
+four steps, where Speed Insights calls 0.25 poor). The other slots are a
+tile's grey. The rooms take the window's height from a ResizeObserver on
+the window alone, and a resize of the browser; watching the story too saw
+its own write and looped. The rail is not shown. A tap on an item goes to
+its step's window at once when that window is off the screen or the
+item's step is not the one on show: a smooth scroll would pass through
+other steps, and moving into one puts the item out.
 
 ## 4. The order of the main page (R5, R6, #86)
 
@@ -143,8 +149,10 @@ and the pieces of the app stay in the system's font, as in the app.
 
 `--page-dot: #e5484d`, the icon's red. A 9 px dot with a 3 px ring of the
 same red at 22 %, before the word over a heading (`.eyebrow`) and before a
-step's and a chapter's number (`.step .n`, `.chap-head .n`), 8 px from it.
-It is a mark, not words, so the 3:1 of a graphic applies: 3.9:1 on white.
+step's and a chapter's number (`.step .n`, `.chap-head .n`), 8 px from it,
+in the line, so that on a 320 px phone, where the word over the first
+heading wraps, it stays before the first word. As a mark it needs the 3:1
+of a graphic, and has 3.9:1 on white.
 
 ### Tests, written first
 
@@ -155,7 +163,20 @@ It is a mark, not words, so the 3:1 of a graphic applies: 3.9:1 on white.
   from the site too.
 - The first `.eyebrow` of each page has the dot: a 9 px circle in
   `rgb(229, 72, 77)`.
-- A step's number has the dot too.
+- A step's and a chapter's number have the dot too.
+- At 320 px the hero's dot sits on the first of its two lines.
+- Running text, the menu and the buttons stay in the system's font.
+
+### Fixes to #87 from the review
+
+Tests first, each seen failing:
+
+- On a phone, scrolling through the four steps shifts the layout by less
+  than 0.1 (it was 1.68).
+- Turning the phone, or narrowing and widening the window, raises no
+  error (it raised three ResizeObserver loop errors).
+- In a tall, narrow window, 450 by 1600, a tap on an item of the next
+  step puts the window in that step's room.
 
 ## Claude's calls
 
