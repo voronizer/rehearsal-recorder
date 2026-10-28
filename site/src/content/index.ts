@@ -31,6 +31,9 @@ export type SiteContent = {
   /** The four steps of an evening, each with its items (story.md). */
   story: { title: string; steps: StoryStep[] }
   faq: { title: string; questions: Section[] }
+  /** The block that ends the main page with the downloads: its heading
+   *  and its line. */
+  download: { title: string; lede: string }
   closing: { title: string }
   /** The 404 page's heading and line. */
   notFound: { title: string; lede: string }
@@ -95,6 +98,7 @@ export function readContent(tagFromRelease?: string): SiteContent {
   }))
   const faq = doc("faq.md")
   const notFound = doc("notfound.md")
+  const download = doc("download.md")
 
   return {
     version,
@@ -117,6 +121,7 @@ export function readContent(tagFromRelease?: string): SiteContent {
     },
     story: { title: story.title!, steps },
     faq: { title: faq.title!, questions: faq.sections },
+    download: { title: download.title!, lede: download.intro },
     closing: { title: doc("closing.md").title! },
     notFound: { title: notFound.title!, lede: notFound.intro },
   }

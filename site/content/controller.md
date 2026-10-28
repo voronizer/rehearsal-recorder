@@ -1,8 +1,8 @@
 # Start a take without going to the laptop.
 
-<!-- The block right after the app at the top of the page: these words on
-     the left, its photo on the right (see
-     site/src/page/Controller.tsx). The list is its four lines. -->
+<!-- The block right after the four steps of an evening: these words on
+     the left, its photo on the right (see site/src/page/Controller.tsx).
+     The list is its four lines. -->
 
 Victor Baikov built a Bluetooth controller for РЭХА: five buttons, a knob and
 a small screen. Whoever has it starts and stops takes from where they play.
