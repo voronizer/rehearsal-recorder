@@ -841,3 +841,25 @@ for (const path of PAGES) {
     expect(away).toEqual([])
   })
 }
+
+// The icon's red as a recording's dot: before the word over a heading on
+// every kind of page, and before a step's number.
+const dotOf = (page: Page, selector: string) =>
+  page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const s = getComputedStyle(el, "::before")
+      return { color: s.backgroundColor, width: s.width, radius: s.borderRadius }
+    })
+const DOT = { color: "rgb(229, 72, 77)", width: "9px", radius: "50%" }
+for (const path of PAGES) {
+  test(`on ${path} the word over the heading has the recording dot`, async ({ page }) => {
+    await page.goto(path)
+    expect(await dotOf(page, ".eyebrow")).toEqual(DOT)
+  })
+}
+test("a step's number has the recording dot", async ({ page }) => {
+  await page.goto("/")
+  expect(await dotOf(page, "#how .step .n")).toEqual(DOT)
+})
