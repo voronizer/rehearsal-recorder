@@ -110,9 +110,9 @@ body {
   .caption.on-phone { display: block; }
 }
 
-/* ---- Stories, right after the first screen: the band's chat in a tile as
-   the controller's, its words on the left and the chat on the right, or
-   over it under 900 px ---- */
+/* ---- Stories, right after the first screen: the band's chat in a tile,
+   its words on the left and the chat on the right, or over it under
+   900 px ---- */
 .stories-block { background: var(--page-tile); border-radius: 28px; display: grid; gap: 28px; align-items: center; padding: clamp(26px, 4.5vw, 56px); margin-bottom: clamp(72px, 11vw, 150px); }
 @media (min-width: 900px) { .stories-block { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 56px; } }
 .stories-block h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; margin: 0 0 6px; }

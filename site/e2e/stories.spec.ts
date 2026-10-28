@@ -27,6 +27,17 @@ test("Stories in the menu opens the page of stories, and a card its story", asyn
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(STORIES[0][1])
 })
 
+// Read sits at the bottom of each card, level with its neighbour's, however
+// long the chat over it.
+test("on the page of stories, Read is level across each row of cards", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto("/stories")
+  const tops = await page.locator(".tale-card .card-foot").evaluateAll((all) => all.map((el) => el.getBoundingClientRect().top))
+  expect(tops).toHaveLength(4)
+  expect(Math.abs(tops[0] - tops[1])).toBeLessThanOrEqual(1)
+  expect(Math.abs(tops[2] - tops[3])).toBeLessThanOrEqual(1)
+})
+
 test("each card on the page of stories opens with its band's chat", async ({ page }) => {
   await page.goto("/stories")
   const cards = page.locator(".tale-card")
@@ -63,7 +74,7 @@ async function expectUnseenName(who: Locator, name: string) {
 test.describe("with Reduce motion", () => {
   test.use({ reducedMotion: "reduce" })
 
-  test("the block sits between the first screen and the controller, and opens its story or all of them", async ({ page }) => {
+  test("the block sits between the first screen and the steps, and opens its story or all of them", async ({ page }) => {
     await page.goto("/")
     const block = page.locator("#stories")
     await expect(block.locator(".eyebrow")).toHaveText("Stories")
@@ -77,10 +88,10 @@ test.describe("with Reduce motion", () => {
     const at = await page.evaluate(() => ({
       hero: document.querySelector(".hero")!.getBoundingClientRect().bottom,
       block: document.querySelector("#stories")!.getBoundingClientRect(),
-      controller: document.querySelector("#controller")!.getBoundingClientRect().top,
+      steps: document.querySelector("#how")!.getBoundingClientRect().top,
     }))
     expect(at.block.top).toBeGreaterThanOrEqual(at.hero)
-    expect(at.block.bottom).toBeLessThanOrEqual(at.controller)
+    expect(at.block.bottom).toBeLessThanOrEqual(at.steps)
     // The first two arguments of the mixer story, all there at once.
     await expect(block.locator(".say p")).toHaveText([
       "You came in late in the second bar.",
