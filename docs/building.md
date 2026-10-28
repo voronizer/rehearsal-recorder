@@ -77,7 +77,11 @@ It exits non-zero if anything is missing, and the CI build runs it on the
 artifact it just produced, on macOS and on Windows. A build that cannot answer
 for itself is not uploaded. On those two it also checks the version written
 on the file, which Finder and Explorer show, against the one the app knows:
-the `.app` once said 0.0.0 and the `.exe` nothing.
+the `.app` once said 0.0.0 and the `.exe` nothing. On Windows the CI build
+first marks every file "from the internet", as unpacking a browser's zip
+does, and the self-test then loads the window's .NET libraries. They load
+with that mark only because of `Reha.exe.config` beside `Reha.exe`, which
+the spec copies from `packaging/`; the file says why.
 
 **What the systems will say the first time.** The app is not signed with an
 Apple Developer certificate ($99/year) or an Authenticode certificate, so:

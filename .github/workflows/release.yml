@@ -118,6 +118,18 @@ jobs:
       - name: Package
         run: pyinstaller packaging/rehearsal-recorder.spec --noconfirm
 
+      # As a first download from reha.stream arrives: a browser marks the zip
+      # "from the internet", and Explorer passes the mark on to every file it
+      # unpacks. The self-test then loads the window's .NET libraries with the
+      # mark on, which only packaging/Reha.exe.config lets them do. A zip
+      # does not carry the mark, so the one attached below has none.
+      - name: Mark it as a browser's download
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -File dist/Reha | ForEach-Object {
+            Set-Content -LiteralPath $_.FullName -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+          }
+
       - name: Does the build have everything
         run: dist/Reha/Reha.exe --selftest
 

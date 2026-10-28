@@ -412,6 +412,24 @@ def selftest():
         # metadata, which the spec bundles for this line.
         return f"pywebview {version('pywebview')}"
 
+    def window_on_windows():
+        # pywebview draws the window on Windows with WinForms, which is .NET,
+        # reached through pythonnet. Loaded here as at start, so a build that
+        # lost a .NET library fails here and not on a band's laptop. .NET
+        # also refuses them while they carry a browser's "from the internet"
+        # mark, unless Reha.exe.config beside the program lets it (the file
+        # says why); release.yml marks the build that way before asking.
+        from pathlib import Path
+
+        if getattr(sys, "frozen", False):
+            config = Path(sys.executable + ".config")
+            if not config.is_file():
+                raise RuntimeError(f"no {config.name} beside {Path(sys.executable).name}")
+        import clr  # noqa: F401 - pythonnet starts .NET as it is imported
+        from webview.platforms import winforms  # noqa: F401 - loads its .NET libraries
+
+        return "pythonnet and the WinForms window load"
+
     check("audio engine", audio)
     check("looking for interfaces again", rescan_works)
     # Checks the ASIO DLL reached the bundle. It needs no ASIO driver on the
@@ -430,6 +448,8 @@ def selftest():
     check("Python's turns", python_turns)
     check("history database", database)
     check("window toolkit", window_toolkit)
+    if sys.platform == "win32":
+        check("window on Windows", window_on_windows)
     check("built interface", interface)
     check("version on the file", version_on_file)
     check("deleting", lambda: f"goes to the {trash_kind()}")
