@@ -774,11 +774,45 @@ test.describe("on a phone", () => {
     await expect(page.getByText("Try it on a computer.")).toBeVisible()
   })
 
-  test("the rail follows the steps, under the window", async ({ page }) => {
+  // Nothing is held at the top of the screen: the window stands in the room
+  // at the top of the step on show, and the rail, with the steps one under
+  // another, is not there.
+  test("the window stands at the top of the step on show", async ({ page }) => {
     await page.goto("/")
+    await expect(page.locator(".rail")).toBeHidden()
     for (let i = 0; i < 4; i++) {
       await toStep(page, i)
       await expect(page.locator(".rail button").nth(i)).toHaveAttribute("aria-current", "step")
+      await expect
+        .poll(() =>
+          page.evaluate((n) => {
+            const stage = document.querySelector("#how .stage")!.getBoundingClientRect()
+            const slot = document.querySelectorAll("#how .slot")[n].getBoundingClientRect()
+            return Math.abs(stage.top - slot.top) <= 1 && Math.abs(stage.height - slot.height) <= 1
+          }, i)
+        )
+        .toBe(true)
     }
+    await expect(page.locator("#how .stage")).toHaveCSS("position", "absolute")
+  })
+
+  // The card at the top of the screen, its step's window above it, off the
+  // screen: a tap brings the window back, in the card's step, showing it.
+  test("a card far under the window brings the window back, showing it", async ({ page }) => {
+    await page.goto("/")
+    const card = item(page, "Disk space in hours.")
+    await card.evaluate((el) => window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - 40))
+    await card.tap()
+    await expect(page.locator("#how .about h4")).toHaveText("Disk space in hours.")
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const stage = document.querySelector("#how .stage")!.getBoundingClientRect()
+          const slot = document.querySelectorAll("#how .slot")[1].getBoundingClientRect()
+          return Math.abs(stage.top - slot.top) <= 1 && stage.top >= 0 && stage.bottom <= window.innerHeight
+        })
+      )
+      .toBe(true)
+    await expect(card).toHaveAttribute("aria-pressed", "true")
   })
 })
