@@ -1,5 +1,11 @@
 # The website: reha.stream
 
+> Changed on 28 Oct 2026 by `2026-10-28-site-design-review-design.md`: the
+> headings are in Geologica, served by the site (D3 and the system font);
+> the main page ends with the downloads again; Victor Baikov's controller
+> comes after the steps; on a phone the steps' window stands in the step on
+> show rather than held at the top.
+
 **Status:** design approved by Alex on 2026-10-06 from the preview at
 <https://claude.ai/artifact/5TcydAK3GtgECuiZsQXfMB>; this spec is waiting
 for review.

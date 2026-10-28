@@ -31,9 +31,10 @@ function Title({ text }: { text: string }) {
 }
 
 /** Where the steps are beside the window, held in the middle of the screen
- *  (page.css); on a phone the window stands at the top of the step on
- *  screen instead, in the room each step keeps for it. */
-const beside = () => matchMedia("(min-width: 900px)").matches
+ *  (page.css); on a phone, upright or on its side, the window stands at
+ *  the top of the step on screen instead, in the room each step keeps for
+ *  it. */
+const beside = () => matchMedia("(min-width: 900px) and (min-height: 501px)").matches
 
 /**
  * A piece of the app over the window, in its middle: made smaller to fit,
@@ -161,6 +162,10 @@ export function Story({ pieces }: { pieces: PieceData }) {
 
   // On a phone: the room each step keeps is as tall as the window and the
   // words under it, and the window stands in the room of the step on show.
+  // It is moved there, not placed: a move of its top would count as a
+  // layout shift, which Speed Insights counts against the page. Only the
+  // window is watched: the rooms take its height, and watching the story
+  // too would see that write and loop.
   useLayoutEffect(() => {
     const held = stage.current
     const story = whole.current
@@ -168,13 +173,16 @@ export function Story({ pieces }: { pieces: PieceData }) {
     const place = () => {
       story.style.setProperty("--stage-h", `${held.offsetHeight}px`)
       const slot = slots.current[active]
-      held.style.top = beside() || !slot ? "" : `${slot.offsetTop}px`
+      held.style.transform = beside() || !slot ? "" : `translateY(${slot.offsetTop}px)`
     }
     place()
     const resized = new ResizeObserver(place)
     resized.observe(held)
-    resized.observe(story)
-    return () => resized.disconnect()
+    window.addEventListener("resize", place)
+    return () => {
+      resized.disconnect()
+      window.removeEventListener("resize", place)
+    }
   }, [active])
 
   const onBeat = useCallback((step: number, n: number) => setBeat([step, n]), [])
@@ -201,7 +209,8 @@ export function Story({ pieces }: { pieces: PieceData }) {
   }
 
   /** Shows an item in the window; on a phone, goes to the window too, at the
-   *  top of the item's step, unless it is all on screen already. At once:
+   *  top of the item's step, unless that step is on show and its window all
+   *  on screen already. At once:
    *  a smooth scroll would pass through other steps, and moving into one
    *  puts the item out (sync). */
   const pick = (id: ItemId) => {
@@ -213,7 +222,7 @@ export function Story({ pieces }: { pieces: PieceData }) {
     const slot = slots.current[STEP_OF.get(id)!]
     if (beside() || !slot) return
     const box = slot.getBoundingClientRect()
-    if (box.top < 0 || box.bottom > window.innerHeight)
+    if (STEP_OF.get(id) !== activeRef.current || box.top < 0 || box.bottom > window.innerHeight)
       window.scrollTo({ top: window.scrollY + box.top - 16, behavior: "instant" })
   }
 

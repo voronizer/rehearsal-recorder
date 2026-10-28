@@ -25,10 +25,38 @@ test("og.html shows the page's words beside the app", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-og", "ready")
 })
 
+// The picture's heading in the page's own Geologica, from the site.
+test("og.html sets its heading in Geologica, from the site", async ({ page }) => {
+  const away: string[] = []
+  page.on("request", (r) => {
+    if (/fonts\.(googleapis|gstatic)\.com/.test(r.url())) away.push(r.url())
+  })
+  await page.setViewportSize({ width: 1200, height: 630 })
+  await page.goto("/og.html")
+  const family = await page.getByRole("heading", { level: 1 }).evaluate((el) => getComputedStyle(el).fontFamily)
+  expect(family).toMatch(/^"?Geologica"?,/)
+  await expect(page.locator("html")).toHaveAttribute("data-og", "ready")
+  expect(away).toEqual([])
+  // The word over the heading, under it here, on one line with its dot,
+  // and inside the words' column: past it, it would run under the app.
+  const found = await page.locator(".og-eyebrow").evaluate((el) => {
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    const rects = [...range.getClientRects()]
+    return {
+      lines: new Set(rects.map((r) => Math.round(r.top))).size,
+      right: Math.max(...rects.map((r) => r.right)),
+      column: el.closest(".og-text")!.getBoundingClientRect().right,
+    }
+  })
+  expect(found.lines).toBe(1)
+  expect(found.right).toBeLessThanOrEqual(found.column)
+})
+
 // A picture in the fallback font would be cached by every chat that shows
-// it, so scripts/og.mjs draws none when the page's font did not come.
-test("og.html says so when the page's font did not load", async ({ page }) => {
-  await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort())
+// it, so scripts/og.mjs draws none when Geologica did not come.
+test("og.html says so when Geologica did not load", async ({ page }) => {
+  await page.route(/geologica-[^/]*\.woff2/, (route) => route.abort())
   await page.goto("/og.html")
   await expect(page.locator("html")).toHaveAttribute("data-og", "no-font")
 })
