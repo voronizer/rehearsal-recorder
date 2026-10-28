@@ -24,6 +24,11 @@ function luminance([r, g, b]: number[]) {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
 }
 
+const contrast = (a: number[], b: number[]) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
 const bodyLight = async (page: Page) =>
   luminance(await rgbOf(page, await page.evaluate(() => getComputedStyle(document.body).backgroundColor)))
 
@@ -65,5 +70,31 @@ for (const path of PAGES) {
       await page.emulateMedia({ colorScheme: "light" })
       await expect.poll(() => isDark(page)).toBe(false)
     })
+  })
+}
+
+// What is read on each page, against what it stands on: the heading, grey
+// words, the red word over the heading, and links as words, one on a tile.
+const WORDS: Record<string, string[]> = {
+  "/": ["h1", ".hero .lede", ".hero .eyebrow", ".hero a.more", "#stories a.more"],
+  "/stories": ["h1", ".lede", ".eyebrow", ".tale-card .more"],
+  "/stories/tempo-drift": ["h1", ".tale-head .fine", ".eyebrow", ".chap-body a", ".tale-next .also a.more"],
+  "/404.html": ["h1", ".lede", ".eyebrow", "a.more"],
+}
+for (const path of PAGES) {
+  test(`on ${path} in the dark the words read at 4.5:1`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" })
+    await page.goto(path)
+    for (const sel of WORDS[path]) {
+      const [fg, bg] = await page
+        .locator(sel)
+        .first()
+        .evaluate((el) => {
+          let under: Element | null = el
+          while (under && getComputedStyle(under).backgroundColor === "rgba(0, 0, 0, 0)") under = under.parentElement
+          return [getComputedStyle(el).color, under ? getComputedStyle(under).backgroundColor : "#fff"]
+        })
+      expect(contrast(await rgbOf(page, fg), await rgbOf(page, bg)), sel).toBeGreaterThanOrEqual(4.5)
+    }
   })
 }

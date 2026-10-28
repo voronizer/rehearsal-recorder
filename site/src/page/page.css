@@ -36,6 +36,9 @@
   /* The icon's own red, for a recording's dot. As a mark it needs the
      3:1 of a graphic, and has 3.9:1 on white. */
   --page-dot: #e5484d;
+  /* Links as words; buttons keep --page-accent, white on it in either
+     theme. */
+  --page-link: var(--page-accent);
   --page-sans: --theme(--font-sans);
   --page-display: "Geologica", var(--page-sans);
   --page-mono: --theme(--font-mono);
@@ -44,7 +47,14 @@
 /* In the dark (the head of each page sets .dark from the system), the
    tokens above take the app's dark values, and the browser's own scroll
    bars and fields follow. */
-:root.dark { color-scheme: dark; }
+:root.dark {
+  color-scheme: dark;
+  /* On the dark page the darker red reads 3.4:1 and the app's blue 3.8:1;
+     the icon's red reads 4.8:1, and this lighter blue 5.9:1, 6.2:1 on a
+     tile. */
+  --page-rec: #e5484d;
+  --page-link: oklch(0.66 0.17 266);
+}
 
 /* What the app's styles set for a desktop window, undone for a page. */
 html,
@@ -71,7 +81,7 @@ body {
 .h1, .h2, .copy h3, .step h3, .stories-block h2, .remote h2, .chap-head h2, .chap-body > p.joke, .tale-card h2, .oss p { font-family: var(--page-display); }
 .h2 { font-size: clamp(2rem, 4.8vw, 3.5rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; max-width: 20ch; }
 .lede { color: var(--page-muted); font-size: clamp(1.05rem, 1.6vw, 1.3rem); max-width: 36rem; text-wrap: pretty; }
-.more { color: var(--page-accent); text-decoration: none; font-weight: 600; white-space: nowrap; }
+.more { color: var(--page-link); text-decoration: none; font-weight: 600; white-space: nowrap; }
 .more::after { content: " ›"; }
 .more:hover { text-decoration: underline; }
 .wrap :focus-visible, .ribbon :focus-visible { outline: 2px solid var(--page-accent); outline-offset: 3px; border-radius: 6px; }
@@ -113,6 +123,8 @@ body {
 
 /* ---- The app, live, in a frame ---- */
 .screen { border-radius: 18px; overflow: hidden; background: var(--page-app); box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.06), 0 40px 80px -48px rgba(16, 24, 40, 0.45); }
+/* On the dark page a shadow is lost: the app's edge is the page's line. */
+.dark .screen { box-shadow: 0 0 0 1px var(--page-line); }
 /* The app's shape, 1180 by 960 (LiveFrame.tsx), from the first moment: the
    page under it, the stories' chat first, is where it will stay while the
    frame loads. */
@@ -295,7 +307,7 @@ body {
 .chap-head h2 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; overflow-wrap: anywhere; }
 .chap-body { display: grid; gap: 20px; min-width: 0; }
 .chap-body > p { margin: 0; font-size: 1.25rem; line-height: 1.6; text-wrap: pretty; overflow-wrap: anywhere; }
-.chap-body a { color: var(--page-accent); }
+.chap-body a { color: var(--page-link); }
 /* A joke, said big: a size under a chapter's name. */
 .chap-body > p.joke { font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; margin-block: 8px; max-width: 26ch; }
 .tale-get .cta { justify-content: flex-start; }
@@ -326,7 +338,7 @@ body {
 .card-copy { grid-template-rows: auto auto 1fr; }
 .card-copy:has(> .eyebrow) { grid-template-rows: auto auto auto 1fr; }
 .card-foot { display: flex; align-items: baseline; align-self: end; justify-content: space-between; gap: 12px; margin-top: 6px; }
-.tale-card:hover h2 { color: var(--page-accent); }
+.tale-card:hover h2 { color: var(--page-link); }
 /* At a story's end: the next story's card, its chat on the right from
    900 px, and the others' names under it. */
 .tale-next { display: grid; gap: 24px; margin-bottom: clamp(72px, 11vw, 150px); }
