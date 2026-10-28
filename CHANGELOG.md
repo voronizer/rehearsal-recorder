@@ -12,6 +12,10 @@ opening.
   moment РЭХА works out the take's tempo drift for the line on Master, and
   the sound had to wait for it. Now the drift is worked out apart from the
   sound.
+- **No unblocking on Windows.** Unpacked from a zip your browser downloaded,
+  РЭХА stopped at start with an error, unless **Unblock** was ticked in the
+  zip's **Properties** first. Now it starts either way. The first time you
+  open it, Windows still asks: click **More info**, then **Run anyway**.
 
 ## 0.16.0
 

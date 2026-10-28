@@ -32,6 +32,7 @@ Two things that are easy to get wrong and expensive to discover later:
   the app opens an input. The build would look perfect until the first take.
 """
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -154,6 +155,15 @@ coll = COLLECT(
     upx=False,
     name=NAME,
 )
+
+# .NET's settings for Reha.exe, which it reads only from beside the program:
+# Reha.exe.config, in the folder above _internal. COLLECT puts every data
+# file inside _internal and refuses a destination outside it, so the file is
+# copied once COLLECT has written the folder. Why the setting is needed is
+# in the file.
+if sys.platform == "win32":
+    shutil.copyfile(ROOT / "packaging" / f"{NAME}.exe.config",
+                    Path(DISTPATH) / NAME / f"{NAME}.exe.config")
 
 if sys.platform == "darwin":
     app = BUNDLE(

@@ -14,15 +14,6 @@ Download the zip for your system from
 [Releases](../../releases), unpack it and open Reha. Nothing to install:
 Python, the audio libraries and the app's screens are all inside.
 
-**On Windows, unblock the zip before you unpack it.** Right-click the
-downloaded file, choose **Properties**, tick **Unblock** at the bottom, then
-unpack it. Windows flags everything that arrives from the internet and
-passes that flag on to every file unpacked from a flagged archive. It will
-not load the app's audio libraries while they carry it, and the app then
-fails to start with errors that do not say why. Unblocking the zip clears
-the flag for everything inside in one go. Unpack first and you are
-unblocking fifty files by hand.
-
 The first time you open it, on macOS right-click it and choose **Open**
 instead of double-clicking; on Windows click **More info**, then **Run
 anyway**. You do this once, because the app is not signed with a paid
@@ -33,11 +24,10 @@ When a newer version is out, a dot appears on the gear on the start
 screen. Press **Update** in **Settings › Under the hood**, and when it says
 the new version is ready, press **Restart now**. The app closes and opens
 again as the new version a few seconds later. Your recordings and settings
-are kept in other folders, so an update does not touch them. On Windows a
-version the app downloads itself carries no flag, so there is nothing to
-unblock. To find out, the app asks GitHub which version is the latest when
-it starts and once a day, and sends nothing else. **Check for new
-versions**, in the same place, switches that off.
+are kept in other folders, so an update does not touch them. To find out,
+the app asks GitHub which version is the latest when it starts and once a
+day, and sends nothing else. **Check for new versions**, in the same place,
+switches that off.
 
 No release yet, or you want to build it yourself? Double-click
 **`build.command`** on macOS or **`build.bat`** on Windows, at the top of

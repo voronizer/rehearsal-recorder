@@ -1703,9 +1703,7 @@ time you open it.
 The old copy stays beside the new one, named with its version, for example
 “Reha 0.14.0”, until the new one has opened. Then it goes to the Trash (the
 Recycle Bin on Windows). Your recordings, the history and the settings are
-kept in other folders, so an update does not touch them. On Windows a
-version the app downloads itself carries no “from the internet” flag, so
-there is nothing to unblock.
+kept in other folders, so an update does not touch them.
 
 **On a Mac, macOS asks for the microphone again after each update.** The
 app is not signed with a paid developer certificate, so macOS treats each
