@@ -134,3 +134,31 @@ test("the live app follows a change of the system", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" })
   await expect.poll(() => frameDark(page, 'iframe[src$="#hero"]'), { timeout: 20_000 }).toBe(true)
 })
+
+// No white box on a dark page while a frame's own large script loads: the
+// frame's head sets the theme too.
+test("in the dark the live app is dark before its script runs", async ({ page }) => {
+  await page.route(/\/assets\/stage-[^/]*\.js$/, (route) => route.abort())
+  await page.emulateMedia({ colorScheme: "dark" })
+  await page.goto("/")
+  const frame = page.locator('iframe[src$="#hero"]').contentFrame()
+  await expect.poll(() => frame.locator("html").evaluate((el) => el.classList.contains("dark")).catch(() => null)).toBe(true)
+  const bg = await frame.locator("body").evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(luminance(await rgbOf(page, bg))).toBeLessThan(0.05)
+})
+
+// The 404 page's take stands on the page itself, where a shadow is lost in
+// the dark: its edge is the page's line.
+test("in the dark the 404 page's take has an edge", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" })
+  await page.goto("/404.html")
+  const [shadow, line] = await page.locator(".nf-take").evaluate((el) => {
+    const probe = document.createElement("div")
+    probe.style.color = "var(--page-line)"
+    document.body.append(probe)
+    const line = getComputedStyle(probe).color
+    probe.remove()
+    return [getComputedStyle(el).boxShadow, line]
+  })
+  expect(shadow.startsWith(line), `${shadow} / ${line}`).toBe(true)
+})

@@ -8,12 +8,15 @@
     <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
-      // The app in a frame of the site. The site is light, so the app is too,
-      // from the first paint: these are what the app's own index.html reads.
+      // The app in a frame of the site, in the system's theme as the site
+      // round it, from the first paint: a dark page never shows a white box
+      // while the frame's own script loads. The rest is what the app's own
+      // index.html reads.
       try {
-        localStorage.setItem("rr-theme", "light")
+        localStorage.setItem("rr-theme", "system")
         localStorage.setItem("rr-scale", "1")
       } catch (e) {}
+      document.documentElement.classList.toggle("dark", matchMedia("(prefers-color-scheme: dark)").matches)
       document.documentElement.style.fontSize = "16px"
     </script>
   </head>

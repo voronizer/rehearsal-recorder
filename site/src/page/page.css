@@ -124,7 +124,7 @@ body {
 /* ---- The app, live, in a frame ---- */
 .screen { border-radius: 18px; overflow: hidden; background: var(--page-app); box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.06), 0 40px 80px -48px rgba(16, 24, 40, 0.45); }
 /* On the dark page a shadow is lost: the app's edge is the page's line. */
-.dark .screen { box-shadow: 0 0 0 1px var(--page-line); }
+:root.dark .screen, :root.dark .piece { box-shadow: 0 0 0 1px var(--page-line); }
 /* The app's shape, 1180 by 960 (LiveFrame.tsx), from the first moment: the
    page under it, the stories' chat first, is where it will stay while the
    frame loads. */
