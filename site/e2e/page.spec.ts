@@ -816,3 +816,28 @@ test.describe("on a phone", () => {
     await expect(card).toHaveAttribute("aria-pressed", "true")
   })
 })
+
+// The headings in Geologica, served by the site itself, on every kind of
+// page that has them; the letters of РЭХА and of Pałyn too.
+const PAGES = ["/", "/stories", "/stories/tempo-drift", "/404.html"]
+for (const path of PAGES) {
+  test(`on ${path} the headings are in Geologica, from the site`, async ({ page }) => {
+    const away: string[] = []
+    page.on("request", (r) => {
+      if (/fonts\.(googleapis|gstatic)\.com/.test(r.url())) away.push(r.url())
+    })
+    await page.goto(path)
+    const family = await page.getByRole("heading", { level: 1 }).evaluate((el) => getComputedStyle(el).fontFamily)
+    expect(family).toMatch(/^"?Geologica"?,/)
+    // Without the font, the system's, as the rest of the page.
+    expect(family).toContain("-apple-system")
+    const faces = await page.evaluate(async () => {
+      await document.fonts.ready
+      const got = await document.fonts.load("600 40px Geologica", "РЭХА Pałyn")
+      return got.filter((f) => f.family.replace(/"/g, "") === "Geologica").map((f) => f.status)
+    })
+    expect(faces.length).toBeGreaterThanOrEqual(2)
+    expect(faces.every((s) => s === "loaded")).toBe(true)
+    expect(away).toEqual([])
+  })
+}

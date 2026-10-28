@@ -12,8 +12,15 @@
 /* The page's own colours and type, named apart from the app's (--muted,
    --accent and the rest are the app's, and its pieces use them). Each is
    the app's own light value (D4): the tiles are a side panel's grey, the
-   text and lines the app's, and the font the system's, as in the app. Only
-   the icon's red is the page's. */
+   text and lines the app's, and the font the system's, as in the app.
+   The page's own: the icon's red, and Geologica for the headings, so that
+   they look the same on a Mac and on Windows. */
+/* Geologica (SIL Open Font License, fonts/Geologica-OFL.txt), one variable
+   file for each script, 500 to 600: Latin, the Polish of the songs' names,
+   and the Cyrillic of РЭХА. A browser loads only the ones a page uses. */
+@font-face { font-family: "Geologica"; font-style: normal; font-weight: 500 600; font-display: swap; src: url("./fonts/geologica-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Geologica"; font-style: normal; font-weight: 500 600; font-display: swap; src: url("./fonts/geologica-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Geologica"; font-style: normal; font-weight: 500 600; font-display: swap; src: url("./fonts/geologica-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
 :root {
   --page-bg: var(--background);
   --page-tile: var(--panel);
@@ -27,6 +34,7 @@
      tile, it keeps 4.5:1. */
   --page-rec: #c42f36;
   --page-sans: --theme(--font-sans);
+  --page-display: "Geologica", var(--page-sans);
   --page-mono: --theme(--font-mono);
   color-scheme: light;
 }
@@ -52,6 +60,8 @@ body {
 .section { padding-block: clamp(72px, 11vw, 150px); }
 .head { display: grid; gap: 14px; justify-items: center; text-align: center; margin-bottom: clamp(36px, 5vw, 64px); }
 .h1, .h2, .copy h3, .step h3 { text-wrap: balance; margin: 0; }
+/* The headings in Geologica: the page's and the stories'. */
+.h1, .h2, .copy h3, .step h3, .stories-block h2, .remote h2, .chap-head h2, .chap-body > p.joke, .tale-card h2, .oss p { font-family: var(--page-display); }
 .h2 { font-size: clamp(2rem, 4.8vw, 3.5rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; max-width: 20ch; }
 .lede { color: var(--page-muted); font-size: clamp(1.05rem, 1.6vw, 1.3rem); max-width: 36rem; text-wrap: pretty; }
 .more { color: var(--page-accent); text-decoration: none; font-weight: 600; white-space: nowrap; }
