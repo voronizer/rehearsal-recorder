@@ -19,7 +19,10 @@ import { Story, startStory, type Target } from "./Story"
 // First, before anything sets a timer: the fake's own ones are held too.
 const hold = createHold(window as unknown as HoldWindow)
 installDemo()
-applyAppearance("light", 1)
+// The app's theme is the page's: the system's, dark or light, and it
+// follows a change while the page is open.
+applyAppearance("system", 1)
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyAppearance("system", 1))
 
 const root = document.documentElement
 root.dataset.held = "false"

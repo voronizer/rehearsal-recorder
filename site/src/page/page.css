@@ -3,16 +3,18 @@
 @import "../../../ui/src/index.css";
 @source "../../../ui/src";
 
-/* The page: white, one idea to a screen, centred heads, lots of air; the
-   app itself is the only picture, and it only runs while it is on screen.
+/* The page: white, or dark where the system is, one idea to a screen,
+   centred heads, lots of air; the app itself is the only picture, and it
+   only runs while it is on screen.
 
    Not in a layer, so it wins over the app's base styles; and never a bare
    element or a descendant selector that could reach into a piece of the
    app, which has to look as it does in the app. */
 /* The page's own colours and type, named apart from the app's (--muted,
    --accent and the rest are the app's, and its pieces use them). Each is
-   the app's own light value (D4): the tiles are a side panel's grey, the
-   text and lines the app's, and the font the system's, as in the app.
+   the app's own value, light or dark (D4): the tiles are a side panel's
+   grey, the text and lines the app's, and the font the system's, as in
+   the app.
    The page's own: the icon's red, and Geologica for the headings, so that
    they look the same on a Mac and on Windows. */
 /* Geologica (SIL Open Font License, fonts/Geologica-OFL.txt), one variable
@@ -36,10 +38,24 @@
   /* The icon's own red, for a recording's dot. As a mark it needs the
      3:1 of a graphic, and has 3.9:1 on white. */
   --page-dot: #e5484d;
+  /* Links as words; buttons keep --page-accent, white on it in either
+     theme. */
+  --page-link: var(--page-accent);
   --page-sans: --theme(--font-sans);
   --page-display: "Geologica", var(--page-sans);
   --page-mono: --theme(--font-mono);
   color-scheme: light;
+}
+/* In the dark (the head of each page sets .dark from the system), the
+   tokens above take the app's dark values, and the browser's own scroll
+   bars and fields follow. */
+:root.dark {
+  color-scheme: dark;
+  /* On the dark page the darker red reads 3.4:1 and the app's blue 3.8:1;
+     the icon's red reads 4.8:1, and this lighter blue 5.9:1, 6.1:1 on a
+     tile. */
+  --page-rec: #e5484d;
+  --page-link: oklch(0.66 0.17 266);
 }
 
 /* What the app's styles set for a desktop window, undone for a page. */
@@ -67,7 +83,7 @@ body {
 .h1, .h2, .copy h3, .step h3, .stories-block h2, .remote h2, .chap-head h2, .chap-body > p.joke, .tale-card h2, .oss p { font-family: var(--page-display); }
 .h2 { font-size: clamp(2rem, 4.8vw, 3.5rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; max-width: 20ch; }
 .lede { color: var(--page-muted); font-size: clamp(1.05rem, 1.6vw, 1.3rem); max-width: 36rem; text-wrap: pretty; }
-.more { color: var(--page-accent); text-decoration: none; font-weight: 600; white-space: nowrap; }
+.more { color: var(--page-link); text-decoration: none; font-weight: 600; white-space: nowrap; }
 .more::after { content: " ›"; }
 .more:hover { text-decoration: underline; }
 .wrap :focus-visible, .ribbon :focus-visible { outline: 2px solid var(--page-accent); outline-offset: 3px; border-radius: 6px; }
@@ -109,6 +125,8 @@ body {
 
 /* ---- The app, live, in a frame ---- */
 .screen { border-radius: 18px; overflow: hidden; background: var(--page-app); box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.06), 0 40px 80px -48px rgba(16, 24, 40, 0.45); }
+/* On the dark page a shadow is lost: the app's edge is the page's line. */
+:root.dark .screen, :root.dark .piece { box-shadow: 0 0 0 1px var(--page-line); }
 /* The app's shape, 1180 by 960 (LiveFrame.tsx), from the first moment: the
    page under it, the stories' chat first, is where it will stay while the
    frame loads. */
@@ -145,7 +163,7 @@ body {
 @media (prefers-reduced-motion: reduce) { .chat-side .say { opacity: 1; transform: none; transition: none; } }
 
 /* ---- Victor Baikov's controller, after the four steps: its words beside
-   its photo, or over it on a phone, on the page's white: the tiles are
+   its photo, or over it on a phone, on the page's own ground: the tiles are
    for the stories and the steps. ---- */
 .remote { display: grid; gap: 28px; align-items: center; }
 .remote .copy { align-content: center; }
@@ -291,7 +309,7 @@ body {
 .chap-head h2 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; text-wrap: balance; overflow-wrap: anywhere; }
 .chap-body { display: grid; gap: 20px; min-width: 0; }
 .chap-body > p { margin: 0; font-size: 1.25rem; line-height: 1.6; text-wrap: pretty; overflow-wrap: anywhere; }
-.chap-body a { color: var(--page-accent); }
+.chap-body a { color: var(--page-link); }
 /* A joke, said big: a size under a chapter's name. */
 .chap-body > p.joke { font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; margin-block: 8px; max-width: 26ch; }
 .tale-get .cta { justify-content: flex-start; }
@@ -312,7 +330,7 @@ body {
 .card-copy { display: grid; gap: 12px; align-content: start; }
 .card-copy > p { margin: 0; color: var(--page-muted); line-height: 1.45; }
 .card-copy > p.eyebrow { color: var(--page-rec); }
-/* The band's first lines on the card, in bubbles of the page's own white. */
+/* The band's first lines on the card, in bubbles of the page's own ground. */
 .card-chat { padding-bottom: 8px; }
 .card-chat .say p { background: var(--page-bg); font-size: 0.9375rem; }
 .card-chat .say.me p { background: var(--page-accent); }
@@ -322,7 +340,7 @@ body {
 .card-copy { grid-template-rows: auto auto 1fr; }
 .card-copy:has(> .eyebrow) { grid-template-rows: auto auto auto 1fr; }
 .card-foot { display: flex; align-items: baseline; align-self: end; justify-content: space-between; gap: 12px; margin-top: 6px; }
-.tale-card:hover h2 { color: var(--page-accent); }
+.tale-card:hover h2 { color: var(--page-link); }
 /* At a story's end: the next story's card, its chat on the right from
    900 px, and the others' names under it. */
 .tale-next { display: grid; gap: 24px; margin-bottom: clamp(72px, 11vw, 150px); }
@@ -334,7 +352,7 @@ body {
 .tale-next .also { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 28px; align-items: baseline; }
 .tale-next .also .more { white-space: normal; }
 
-/* ---- The end of the main page: the downloads again, on the page's white
+/* ---- The end of the main page: the downloads again, on the page's ground
    as on the first screen ---- */
 .get-it { display: grid; gap: 18px; justify-items: center; text-align: center; padding-block: 0 clamp(72px, 11vw, 150px); }
 .get-it > svg { width: 72px; height: 72px; }
