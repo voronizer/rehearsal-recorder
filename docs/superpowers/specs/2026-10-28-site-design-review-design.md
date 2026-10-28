@@ -205,6 +205,12 @@ under 900 px). `beside()` in `Story.tsx` and the media queries of the
 steps in `page.css` say the same: beside is 900 px wide or more and more
 than 500 px high.
 
+A laptop's window 500 px high or less gets the phone's steps too: a
+1366 by 768 screen at 125 % with a bookmarks bar comes to about 470 px.
+There the window is about 275 px wide with its words beside it, close to
+the 291 px it has held at the side at 501 px, so the step at the line is
+small. The review found this acceptable; it is meant.
+
 Tests, written first: at 932 by 430 the window is not held, it stands in
 the room of the step on show, and the page does not scroll sideways.
 

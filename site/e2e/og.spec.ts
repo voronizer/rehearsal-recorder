@@ -37,13 +37,20 @@ test("og.html sets its heading in Geologica, from the site", async ({ page }) =>
   expect(family).toMatch(/^"?Geologica"?,/)
   await expect(page.locator("html")).toHaveAttribute("data-og", "ready")
   expect(away).toEqual([])
-  // The word over the heading, under it here, on one line with its dot.
-  const lines = await page.locator(".og-eyebrow").evaluate((el) => {
+  // The word over the heading, under it here, on one line with its dot,
+  // and inside the words' column: past it, it would run under the app.
+  const found = await page.locator(".og-eyebrow").evaluate((el) => {
     const range = document.createRange()
     range.selectNodeContents(el)
-    return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size
+    const rects = [...range.getClientRects()]
+    return {
+      lines: new Set(rects.map((r) => Math.round(r.top))).size,
+      right: Math.max(...rects.map((r) => r.right)),
+      column: el.closest(".og-text")!.getBoundingClientRect().right,
+    }
   })
-  expect(lines).toBe(1)
+  expect(found.lines).toBe(1)
+  expect(found.right).toBeLessThanOrEqual(found.column)
 })
 
 // A picture in the fallback font would be cached by every chat that shows
