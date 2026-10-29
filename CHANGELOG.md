@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.16.1
 
 - **A take plays without clicks right after Stop.** A take played straight
   after **Stop** could click and drop out for its first seconds. At that
