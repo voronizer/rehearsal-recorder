@@ -2,8 +2,8 @@
 
 A web page where Alex's band listens to its takes after a rehearsal, track by
 track, stars the good ones and talks about them at the moment they happen.
-РЭХА sends the takes there. It opens at app.reha.stream on a phone or a
-computer.
+РЭХА sends the takes there. It opens at app.reha.stream, made for a
+computer first and working on a phone too.
 
 ## Alex's picks
 
@@ -12,8 +12,10 @@ unchanged: in the browser, on a phone and on a computer, only online; takes
 filed by song across rehearsals; each member stars a take, and everyone sees
 who starred what; a mark and a comment at a moment of a take are one thing,
 with replies, and can be closed; marks go one way, from РЭХА to the service;
-РЭХА and the service match songs by name; files in Cloudflare R2, text in D1,
-code on Workers; the service's code is open under FSL, РЭХА stays MIT.
+РЭХА and the service match songs by name; РЭХА has one set of send buttons,
+and Settings sends them either to the cloud folder or to the service, never
+both, the same three ways; files in Cloudflare R2, text in D1, code on
+Workers; the service's code is open under FSL, РЭХА stays MIT.
 
 On 30 October, in this thread:
 
@@ -45,6 +47,14 @@ On 30 October, in this thread:
   https://claude.ai/artifact/XTHyYnrgN6hjBVVLnSxtuK).
 - Other people who use РЭХА do not see the service: sending there appears
   only after a key is pasted in (17:34, a card).
+- Made for a computer first, with the phone supported (17:44, in words).
+- РЭХА usually runs as one copy at the rehearsal room, so a star in the
+  service is each member's own (17:47, in words).
+- On a computer the songs stay down the left, and the song or the take
+  opens on the right (17:52, a card; option Б of
+  https://claude.ai/artifact/SZKv2ssjChEjWWsrnKWkqK). On a phone the same
+  pages come one at a time.
+- A ★ set in РЭХА shows apart from the members' stars, and the best take is picked by the members' stars (17:53, a card).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -81,7 +91,8 @@ length, how many marks, and who starred it.
 ### A take's page
 
 The take's name, day, length and number of tracks; a ★ that is yours to put
-on or take off, and the first letters of everyone who starred it.
+on or take off, the first letters of everyone who starred it, and
+**★ at rehearsal** if the take was starred in РЭХА.
 
 Then a lane for each track, as РЭХА's player draws it: the track's name, M
 (mute) and S (solo, only this one), and its waveform with the marks across
@@ -98,10 +109,19 @@ stays in the list. Tapping one moves the playhead to it.
 At the bottom, **Download tracks**: a link per track to its original in
 FLAC, and to its notes as `.mid` where the track recorded MIDI.
 
-### On a computer
+### On a computer and on a phone
 
-The same pages, wider: the lanes get longer, and the list on the first
-screen sits beside the new card rather than under it. No separate design.
+On a computer, a column down the left holds **New** at the top, with how
+many things are new, and then **Songs**: every song with how many takes it
+has and a dot when one of them is new. The rest of the window shows what
+was picked there: the new card, a song's page, or a take, with a path above
+it (Viasna › Viasna 12) to step back to the song. The service opens on
+**New**; with nothing new, on the song played last. On a take, the marks
+and comments sit under the lanes.
+
+On a phone the column is gone and the pages come one at a time: the first
+screen (the new card, then the songs), a song's page, a take, each with a
+back arrow.
 
 ### In the band's chat
 
@@ -138,7 +158,9 @@ files the way it already makes them for the cloud folder
 (`audio/encode.py`). Every MP3 of a take goes first, so the band can listen
 before the originals are up.
 
-The take's ★ in РЭХА counts as the star of the member whose key sent it.
+The ★ set in РЭХА is not anyone's star. In the service the take shows it
+as **★ at rehearsal**, apart from the members' stars, and it does not count
+when the best take is picked.
 
 Old rehearsals go up the same way: their takes' cloud buttons, or **Send
 starred** in History.
@@ -195,8 +217,9 @@ One Access application covers app.reha.stream. Its policies: **Allow** for
 the members' emails, by one-time PIN; **Service Auth** for РЭХА's service
 token. The Worker trusts no request without a valid `Cf-Access-Jwt-Assertion`
 (checked against the team's certs, `aud` and `iss`) and takes the member
-from it. A service token is tied to a member in D1, so РЭХА's ★ has an
-owner. Access's **Bypass** is not used: Cloudflare advises against it.
+from it. A service token stands for a copy of РЭХА, usually the one at the
+rehearsal room, never for a member. Access's **Bypass** is not used:
+Cloudflare advises against it.
 
 ### Uploads
 
@@ -255,30 +278,29 @@ guide, since only the band can use it.
 2. A sign-in lasts a month.
 3. A member's name is asked on the first visit, not set up by Alex.
 4. A take is new for you until you open it; there is no “mark all as seen”.
-5. Songs are listed by their last take, not alphabetically.
-6. A take nobody named goes under **Not named**.
-7. Best take: most stars, newest on a tie; with none, the newest take.
-8. M and S are per person and are not kept.
-9. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
-   answer either way), as a link per file, not one zip.
-10. On a computer the same pages, wider, without their own mockup.
+5. On a computer the service opens on **New**; with nothing new, on the song
+   played last.
+6. Songs are listed by their last take, not alphabetically.
+7. A take nobody named goes under **Not named**.
+8. Best take: most members' stars, newest on a tie; with none, the newest
+   take.
+9. M and S are per person and are not kept.
+10. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
+    answer either way), as a link per file, not one zip.
 11. The chat message every five minutes, takes and comments together; marks
     from РЭХА not posted.
 12. The key is an Access service token made in Cloudflare, not made by the
     service, because the only other way, Bypass, is advised against.
 13. **I have a band service key** sits at the bottom of Settings › Folders.
-14. With a key, takes go either to the cloud folder or to the service, not
-    to both.
-15. The ★ in РЭХА counts as the star of the member whose key sent the take.
-16. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
-17. No mix file: the browser mixes the tracks. With six tracks this saves a
+14. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
+15. No mix file: the browser mixes the tracks. With six tracks this saves a
     seventh of the MP3 space.
-18. MP3s first, FLAC after; a take shows once its MP3s are up.
-19. A take deleted in РЭХА leaves the service.
-20. Parts of 10 MB; an upload unfinished for 7 days starts again.
-21. Closing РЭХА while sending asks first, with its wording above.
-22. Waveforms are made by РЭХА and sent with the take.
-23. The pages are React with the design system's components, as on the
+16. MP3s first, FLAC after; a take shows once its MP3s are up.
+17. A take deleted in РЭХА leaves the service.
+18. Parts of 10 MB; an upload unfinished for 7 days starts again.
+19. Closing РЭХА while sending asks first, with its wording above.
+20. Waveforms are made by РЭХА and sent with the take.
+21. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
-24. The service goes live with a release, like the site.
-25. Nothing about the service on reha.stream or in the guide.
+22. The service goes live with a release, like the site.
+23. Nothing about the service on reha.stream or in the guide.
