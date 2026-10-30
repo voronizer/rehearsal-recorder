@@ -19,8 +19,8 @@ Workers; the service's code is open under FSL, РЭХА stays MIT.
 
 On 30 October, in this thread:
 
-- For his band only (17:04, a card): sign-in by the members' email through
-  Cloudflare Access; no sign-up, payments, limits or marketing.
+- For his band only (17:04, a card): no sign-up, payments, limits or
+  marketing.
 - In parts, each with its own spec and plan (17:08, a card). This is part 1.
   Part 2 is songs with notes, files and Guitar Pro; part 3 is sets; the rest
   of the concept comes after.
@@ -33,7 +33,7 @@ On 30 October, in this thread:
 - The code lives in the РЭХА repository, in `service/`, under FSL (17:16, a
   card).
 - At its own address on reha.stream, with the domain's DNS moved to
-  Cloudflare (17:19, a card): band.reha.stream (17:57, a card).
+  Cloudflare (17:19, a card).
 - A bot tells the band's Telegram chat about new takes and comments (17:20,
   a card).
 - The first screen: what is new since you were last here, then the songs
@@ -54,7 +54,13 @@ On 30 October, in this thread:
   opens on the right (17:52, a card; option Б of
   https://claude.ai/artifact/SZKv2ssjChEjWWsrnKWkqK). On a phone the same
   pages come one at a time.
-- A ★ set in РЭХА shows apart from the members' stars, and the best take is picked by the members' stars (17:53, a card).
+- A ★ set in РЭХА shows apart from the members' stars, and the best take is
+  picked by the members' stars (17:53, a card).
+- At band.reha.stream (17:57, a card).
+- No email code that runs out every month (18:04, in words): each member
+  gets a personal link from Alex, and opening it signs them in for a year
+  (18:09, a card). This replaces sign-in by email through Cloudflare
+  Access, which was in the concept.
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -63,11 +69,23 @@ Everything else below is Claude's call, listed again in
 
 ### Signing in
 
-The first time, the page asks for an email address and sends a code to it
-(Cloudflare Access, one-time PIN). Only the members' addresses get in. A
-sign-in lasts a month. On the first visit the service asks “What should the
-band call you?”; the name and its first letter are what the others see on
-stars and comments.
+Alex sends each member their own link once, in Telegram or however suits
+him. Opening it signs that browser in for a year, and every visit moves the
+year on, so in practice nobody signs in again. The same link works on the
+member's phone and computer. There is no email, code or password.
+
+A link is as good as a key. If it reaches the wrong person, or a phone is
+lost, Alex makes that member a new link: the old one stops working, and so
+does every browser signed in with it.
+
+### Members
+
+A page only Alex sees, at the bottom of the left column (on a phone, at
+the bottom of the first screen). It lists the
+members, each with **Copy link** and **New link**, and has **Add member**,
+which asks for the name the band will see on stars and comments. Below
+them are РЭХА's keys: **Make a key for РЭХА**, and each key with its name
+(“Rehearsal room”) and **Remove**.
 
 ### The first screen
 
@@ -140,9 +158,8 @@ come from РЭХА are not posted on their own: they arrive with their take.
 
 **Settings › Folders** gets one quiet line at the bottom: **I have a band
 service key**. It opens a field for the key. A key holds the service's
-address and the credentials Cloudflare gives for it; it is made once, in
-Cloudflare, by whoever looks after the service (see
-[Setting it up](#setting-it-up)). With a key in, the line becomes the
+address and a secret; Alex makes it on the service's **Members** page.
+With a key in, the line becomes the
 service's address with **Disconnect**, and **Send takes to** offers
 **Cloud folder** or **Band service**, one at a time. Without a key nothing
 else about the service shows anywhere in РЭХА.
@@ -195,7 +212,6 @@ originals are still coming.
 | Worker | the pages and the API, at band.reha.stream | free: 100,000 requests a day |
 | D1 | songs, takes, stars, comments, members, what each member has seen | free |
 | R2 | MP3, FLAC, MIDI, waveforms | first 10 GB free, then $0.015 per GB a month. A two-hour rehearsal on 6 tracks is about 1 GB of MP3 and 3 GB of FLAC, so after a year of weekly rehearsals about $3 a month |
-| Access | sign-in by email, and РЭХА's key | free plan (a limit of 50 users, as read on 25 October) |
 | Cron Trigger | the chat message every five minutes | free: 5 per account |
 
 Workers' free plan allows 10 ms of CPU and 100 MB of body per request. A
@@ -213,13 +229,21 @@ Search Console.
 
 ### Sign-in and the key
 
-One Access application covers band.reha.stream. Its policies: **Allow** for
-the members' emails, by one-time PIN; **Service Auth** for РЭХА's service
-token. The Worker trusts no request without a valid `Cf-Access-Jwt-Assertion`
-(checked against the team's certs, `aud` and `iss`) and takes the member
-from it. A service token stands for a copy of РЭХА, usually the one at the
-rehearsal room, never for a member. Access's **Bypass** is not used:
-Cloudflare advises against it.
+The Worker checks every request itself. A member's link carries a long
+random token, and D1 keeps only its hash. Opening the link starts a session
+in a cookie (HttpOnly, Secure, SameSite=Lax) that lasts a year from the last
+visit, and takes the token out of the address bar. A new link replaces the
+token and ends that member's sessions. Links from the band's chat open
+signed in, since Lax cookies go with a link followed from another app.
+
+РЭХА's key works the same way, sent in a header. It stands for a copy of
+РЭХА, usually the one at the rehearsal room, never for a member.
+
+Cloudflare Access is not used: it keeps a sign-in for a month at most
+(Cloudflare's session management page, read on 30 October).
+
+Alex's own first link comes from a setup secret: opening
+band.reha.stream/setup with it makes him the owner, and works only once.
 
 ### Uploads
 
@@ -257,11 +281,11 @@ Once, by Alex, with step-by-step notes from Claude:
 
 1. A Cloudflare account, and reha.stream added to it; the nameservers changed
    at the registrar.
-2. Zero Trust: the Access application, the members' emails, one service token
-   for each laptop that sends.
-3. A Telegram bot from BotFather, added to the band's group.
-4. Secrets in Cloudflare and in GitHub: the API token for deploying, the
-   bot's token, the chat's id.
+2. A Telegram bot from BotFather, added to the band's group.
+3. Secrets in Cloudflare and in GitHub: the API token for deploying, the
+   bot's token, the chat's id, and the setup secret.
+4. The setup link, for his own link; then the members, their links sent to
+   them, and a key for РЭХА at the rehearsal room.
 
 ## Not in part 1
 
@@ -275,32 +299,34 @@ guide, since only the band can use it.
 
 1. The data keeps a band on every row, so the service could open to other
    bands later without a rewrite.
-2. A sign-in lasts a month.
-3. A member's name is asked on the first visit, not set up by Alex.
-4. A take is new for you until you open it; there is no “mark all as seen”.
-5. On a computer the service opens on **New**; with nothing new, on the song
+2. A sign-in lasts a year from the last visit, so it runs out only for
+   someone who stays away a year.
+3. Alex adds the members and their names, and makes links and РЭХА's keys,
+   on a **Members** page only he sees.
+4. A new link ends the old one and every browser signed in with it.
+5. Alex's first link comes from a setup secret, once.
+6. A take is new for you until you open it; there is no “mark all as seen”.
+7. On a computer the service opens on **New**; with nothing new, on the song
    played last.
-6. Songs are listed by their last take, not alphabetically.
-7. A take nobody named goes under **Not named**.
-8. Best take: most members' stars, newest on a tie; with none, the newest
-   take.
-9. M and S are per person and are not kept.
-10. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
+8. Songs are listed by their last take, not alphabetically.
+9. A take nobody named goes under **Not named**.
+10. Best take: most members' stars, newest on a tie; with none, the newest
+    take.
+11. M and S are per person and are not kept.
+12. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
     answer either way), as a link per file, not one zip.
-11. The chat message every five minutes, takes and comments together; marks
+13. The chat message every five minutes, takes and comments together; marks
     from РЭХА not posted.
-12. The key is an Access service token made in Cloudflare, not made by the
-    service, because the only other way, Bypass, is advised against.
-13. **I have a band service key** sits at the bottom of Settings › Folders.
-14. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
-15. No mix file: the browser mixes the tracks. With six tracks this saves a
+14. **I have a band service key** sits at the bottom of Settings › Folders.
+15. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
+16. No mix file: the browser mixes the tracks. With six tracks this saves a
     seventh of the MP3 space.
-16. MP3s first, FLAC after; a take shows once its MP3s are up.
-17. A take deleted in РЭХА leaves the service.
-18. Parts of 10 MB; an upload unfinished for 7 days starts again.
-19. Closing РЭХА while sending asks first, with its wording above.
-20. Waveforms are made by РЭХА and sent with the take.
-21. The pages are React with the design system's components, as on the
+17. MP3s first, FLAC after; a take shows once its MP3s are up.
+18. A take deleted in РЭХА leaves the service.
+19. Parts of 10 MB; an upload unfinished for 7 days starts again.
+20. Closing РЭХА while sending asks first, with its wording above.
+21. Waveforms are made by РЭХА and sent with the take.
+22. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
-22. The service goes live with a release, like the site.
-23. Nothing about the service on reha.stream or in the guide.
+23. The service goes live with a release, like the site.
+24. Nothing about the service on reha.stream or in the guide.
