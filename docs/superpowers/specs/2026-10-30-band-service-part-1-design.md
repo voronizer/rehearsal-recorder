@@ -64,6 +64,8 @@ On 30 October, in this thread:
 - Each member types their own name (18:16, in words).
 - A link works once and runs out (18:18, in words); a link from Alex lasts
   a day (18:19, a card).
+- The bot writes the moment a take or comment is ready, adding to the same
+  message rather than posting a new one each time; no timer (18:22, a card).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -161,11 +163,22 @@ back arrow.
 
 ### In the band's chat
 
-Every five minutes the service looks for what arrived since its last message
-and, if there is anything, posts one message to the band's Telegram group:
+The bot writes to the band's Telegram group the moment something is ready,
+with no timer. The first take of a rehearsal to be ready (its MP3s up)
+starts a message, and each next take of that rehearsal is added to the same
+message:
 
 > New takes from Thursday, 30 October: Viasna 11, Viasna 12, Pałyn 9
-> Alex on Viasna 12 at 1:42: “The bridge drags here”
+
+Comments go the same way: a member's first comment on a take starts a
+message, and their next ones on that take are added to it:
+
+> Alex on Viasna 12: 1:42 “The bridge drags here”, 2:58 “Fill too long?”
+
+Telegram does not notify anyone when a message is edited, so the chat pings
+once per rehearsal, and once per person and take. A message takes additions
+for three hours; after that the next take or comment starts a new one, so
+nothing is added to a message that has long scrolled away.
 
 Each take and each comment is a link to its place in the service. Marks that
 come from РЭХА are not posted on their own: they arrive with their take.
@@ -230,7 +243,6 @@ originals are still coming.
 | Worker | the pages and the API, at band.reha.stream | free: 100,000 requests a day |
 | D1 | songs, takes, stars, comments, members, what each member has seen | free |
 | R2 | MP3, FLAC, MIDI, waveforms | first 10 GB free, then $0.015 per GB a month. A two-hour rehearsal on 6 tracks is about 1 GB of MP3 and 3 GB of FLAC, so after a year of weekly rehearsals about $3 a month |
-| Cron Trigger | the chat message every five minutes | free: 5 per account |
 
 Workers' free plan allows 10 ms of CPU and 100 MB of body per request. A
 10 MB part is well inside the body limit, and passing a file between R2
@@ -340,8 +352,8 @@ guide, since only the band can use it.
 14. M and S are per person and are not kept.
 15. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
     answer either way), as a link per file, not one zip.
-16. The chat message every five minutes, takes and comments together; marks
-    from РЭХА not posted.
+16. A chat message takes additions for three hours, then a new one starts;
+    marks from РЭХА are not posted on their own.
 17. **I have a band service key** sits at the bottom of Settings › Folders.
 18. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
 19. No mix file: the browser mixes the tracks. With six tracks this saves a
