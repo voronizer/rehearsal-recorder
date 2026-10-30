@@ -2,7 +2,7 @@
 
 A web page where Alex's band listens to its takes after a rehearsal, track by
 track, stars the good ones and talks about them at the moment they happen.
-РЭХА sends the takes there. It opens at app.reha.stream, made for a
+РЭХА sends the takes there. It opens at band.reha.stream, made for a
 computer first and working on a phone too.
 
 ## Alex's picks
@@ -32,8 +32,8 @@ On 30 October, in this thread:
 - In English, like РЭХА (17:15, a card).
 - The code lives in the РЭХА repository, in `service/`, under FSL (17:16, a
   card).
-- At app.reha.stream, with the domain's DNS moved to Cloudflare (17:19, a
-  card).
+- At its own address on reha.stream, with the domain's DNS moved to
+  Cloudflare (17:19, a card): band.reha.stream (17:57, a card).
 - A bot tells the band's Telegram chat about new takes and comments (17:20,
   a card).
 - The first screen: what is new since you were last here, then the songs
@@ -192,7 +192,7 @@ originals are still coming.
 
 | Piece | What it does | Cost for one band |
 |---|---|---|
-| Worker | the pages and the API, at app.reha.stream | free: 100,000 requests a day |
+| Worker | the pages and the API, at band.reha.stream | free: 100,000 requests a day |
 | D1 | songs, takes, stars, comments, members, what each member has seen | free |
 | R2 | MP3, FLAC, MIDI, waveforms | first 10 GB free, then $0.015 per GB a month. A two-hour rehearsal on 6 tracks is about 1 GB of MP3 and 3 GB of FLAC, so after a year of weekly rehearsals about $3 a month |
 | Access | sign-in by email, and РЭХА's key | free plan (a limit of 50 users, as read on 25 October) |
@@ -205,7 +205,7 @@ count.
 
 ### The address
 
-app.reha.stream needs reha.stream's DNS on Cloudflare: a Workers Custom
+band.reha.stream needs reha.stream's DNS on Cloudflare: a Workers Custom
 Domain needs an active Cloudflare zone, and the other way (a CNAME setup)
 is only on the Business plan. The site stays on Vercel: its records move to
 Cloudflare as they are, unproxied, and so does the TXT record for Google
@@ -213,7 +213,7 @@ Search Console.
 
 ### Sign-in and the key
 
-One Access application covers app.reha.stream. Its policies: **Allow** for
+One Access application covers band.reha.stream. Its policies: **Allow** for
 the members' emails, by one-time PIN; **Service Auth** for РЭХА's service
 token. The Worker trusts no request without a valid `Cf-Access-Jwt-Assertion`
 (checked against the team's certs, `aud` and `iss`) and takes the member
