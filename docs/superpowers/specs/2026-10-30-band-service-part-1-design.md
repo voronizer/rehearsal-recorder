@@ -59,7 +59,7 @@ On 30 October, in this thread:
 - At band.reha.stream (17:57, a card).
 - No email code that runs out every month (18:04, in words): each member
   gets a personal link from Alex, and opening it signs them in for a year
-  (18:09, a card). This replaces sign-in by email through Cloudflare
+  (18:09, a card). Each member types their own name (18:16, in words). This replaces sign-in by email through Cloudflare
   Access, which was in the concept.
 
 Everything else below is Claude's call, listed again in
@@ -74,6 +74,11 @@ him. Opening it signs that browser in for a year, and every visit moves the
 year on, so in practice nobody signs in again. The same link works on the
 member's phone and computer. There is no email, code or password.
 
+The first time a link is opened, the service asks “What should the band
+call you?”. The member types their name, and it and its first letter are
+what the others see on stars and comments. They can change it later with
+their name at the bottom of the left column.
+
 A link is as good as a key. If it reaches the wrong person, or a phone is
 lost, Alex makes that member a new link: the old one stops working, and so
 does every browser signed in with it.
@@ -83,7 +88,8 @@ does every browser signed in with it.
 A page only Alex sees, at the bottom of the left column (on a phone, at
 the bottom of the first screen). It lists the
 members, each with **Copy link** and **New link**, and has **Add member**,
-which asks for the name the band will see on stars and comments. Below
+which makes a new link. Until someone opens it and gives a name, it shows
+as “Not opened yet”. Below
 them are РЭХА's keys: **Make a key for РЭХА**, and each key with its name
 (“Rehearsal room”) and **Remove**.
 
@@ -301,32 +307,33 @@ guide, since only the band can use it.
    bands later without a rewrite.
 2. A sign-in lasts a year from the last visit, so it runs out only for
    someone who stays away a year.
-3. Alex adds the members and their names, and makes links and РЭХА's keys,
-   on a **Members** page only he sees.
+3. Alex makes the members' links and РЭХА's keys on a **Members** page only
+   he sees; a link nobody has opened shows as “Not opened yet”.
 4. A new link ends the old one and every browser signed in with it.
 5. Alex's first link comes from a setup secret, once.
-6. A take is new for you until you open it; there is no “mark all as seen”.
-7. On a computer the service opens on **New**; with nothing new, on the song
+6. A member can change their name later, at the bottom of the left column.
+7. A take is new for you until you open it; there is no “mark all as seen”.
+8. On a computer the service opens on **New**; with nothing new, on the song
    played last.
-8. Songs are listed by their last take, not alphabetically.
-9. A take nobody named goes under **Not named**.
-10. Best take: most members' stars, newest on a tie; with none, the newest
+9. Songs are listed by their last take, not alphabetically.
+10. A take nobody named goes under **Not named**.
+11. Best take: most members' stars, newest on a tie; with none, the newest
     take.
-11. M and S are per person and are not kept.
-12. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
+12. M and S are per person and are not kept.
+13. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
     answer either way), as a link per file, not one zip.
-13. The chat message every five minutes, takes and comments together; marks
+14. The chat message every five minutes, takes and comments together; marks
     from РЭХА not posted.
-14. **I have a band service key** sits at the bottom of Settings › Folders.
-15. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
-16. No mix file: the browser mixes the tracks. With six tracks this saves a
+15. **I have a band service key** sits at the bottom of Settings › Folders.
+16. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
+17. No mix file: the browser mixes the tracks. With six tracks this saves a
     seventh of the MP3 space.
-17. MP3s first, FLAC after; a take shows once its MP3s are up.
-18. A take deleted in РЭХА leaves the service.
-19. Parts of 10 MB; an upload unfinished for 7 days starts again.
-20. Closing РЭХА while sending asks first, with its wording above.
-21. Waveforms are made by РЭХА and sent with the take.
-22. The pages are React with the design system's components, as on the
+18. MP3s first, FLAC after; a take shows once its MP3s are up.
+19. A take deleted in РЭХА leaves the service.
+20. Parts of 10 MB; an upload unfinished for 7 days starts again.
+21. Closing РЭХА while sending asks first, with its wording above.
+22. Waveforms are made by РЭХА and sent with the take.
+23. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
-23. The service goes live with a release, like the site.
-24. Nothing about the service on reha.stream or in the guide.
+24. The service goes live with a release, like the site.
+25. Nothing about the service on reha.stream or in the guide.
