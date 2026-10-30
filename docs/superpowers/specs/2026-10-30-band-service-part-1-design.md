@@ -62,7 +62,8 @@ On 30 October, in this thread:
   (18:09, a card). This replaces sign-in by email through Cloudflare
   Access, which was in the concept.
 - Each member types their own name (18:16, in words).
-- A link works once (18:18, in words).
+- A link works once and runs out (18:18, in words); a link from Alex lasts
+  a day (18:19, a card).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -72,9 +73,10 @@ Everything else below is Claude's call, listed again in
 ### Signing in
 
 Alex sends each member their own link, in Telegram or however suits him.
-There is no email, code or password. A link works once: it opens a page
-with **Sign in**, and pressing it signs that browser in and uses the link
-up. The sign-in lasts a year, and every visit moves the year on, so in
+There is no email, code or password. A link lasts a day: one not used by
+then stops working, and Alex makes a new one. A link also works once: it
+opens a page with **Sign in**, and pressing it signs that browser in and
+uses the link up. The sign-in lasts a year, and every visit moves the year on, so in
 practice nobody signs in again. The button is there because Telegram opens
 every link itself to draw its preview, and without it the preview would
 use the link up before the member got to it.
@@ -82,7 +84,7 @@ use the link up before the member got to it.
 To sign in on a second device, the member presses **Sign in on another
 device** at the bottom of the left column. It makes a new one-time link
 for them, to send to themselves or to scan as a QR code, so Alex is not
-needed for it.
+needed for it. That link lasts 15 minutes.
 
 The first time a link is opened, the service asks “What should the band
 call you?”. The member types their name, and it and its first letter are
@@ -98,7 +100,8 @@ A page only Alex sees, at the bottom of the left column (on a phone, at
 the bottom of the first screen). It lists the members, each with **New
 link** and **Sign out everywhere**, and has **Add member**. **Add member**
 and **New link** both make a one-time link to copy and send. A link nobody
-has used yet shows as “Not opened yet”. Below them are РЭХА's keys:
+has used yet shows as “Not opened yet”, and as “Ran out” after a day.
+Below them are РЭХА's keys:
 **Make a key for РЭХА**, and each key with its name (“Rehearsal room”) and
 **Remove**.
 
@@ -246,8 +249,8 @@ Search Console.
 
 The Worker checks every request itself. A link carries a long random
 token, and D1 keeps only its hash. Opening the link (a GET) only shows the
-**Sign in** page; pressing the button (a POST) checks the token, deletes
-it, and starts a session in a cookie (HttpOnly, Secure, SameSite=Lax) that
+**Sign in** page; pressing the button (a POST) checks the token and its
+expiry, deletes it, and starts a session in a cookie (HttpOnly, Secure, SameSite=Lax) that
 lasts a year from the last visit. **Sign out everywhere** deletes all of a
 member's sessions. Links from the band's chat open signed in, since Lax
 cookies go with a link followed from another app.
@@ -323,7 +326,7 @@ guide, since only the band can use it.
 4. A link opens a page with **Sign in** and is used up by the press, so
    Telegram's preview cannot use it up.
 5. A member signs in on another device with a one-time link or QR code they
-   make themselves.
+   make themselves, which lasts 15 minutes.
 6. A lost phone: **Sign out everywhere**, then a new link.
 7. Alex's first link comes from a setup secret, once.
 8. A member can change their name later, at the bottom of the left column.
