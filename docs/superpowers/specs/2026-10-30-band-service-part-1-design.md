@@ -59,8 +59,10 @@ On 30 October, in this thread:
 - At band.reha.stream (17:57, a card).
 - No email code that runs out every month (18:04, in words): each member
   gets a personal link from Alex, and opening it signs them in for a year
-  (18:09, a card). Each member types their own name (18:16, in words). This replaces sign-in by email through Cloudflare
+  (18:09, a card). This replaces sign-in by email through Cloudflare
   Access, which was in the concept.
+- Each member types their own name (18:16, in words).
+- A link works once (18:18, in words).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -69,29 +71,36 @@ Everything else below is Claude's call, listed again in
 
 ### Signing in
 
-Alex sends each member their own link once, in Telegram or however suits
-him. Opening it signs that browser in for a year, and every visit moves the
-year on, so in practice nobody signs in again. The same link works on the
-member's phone and computer. There is no email, code or password.
+Alex sends each member their own link, in Telegram or however suits him.
+There is no email, code or password. A link works once: it opens a page
+with **Sign in**, and pressing it signs that browser in and uses the link
+up. The sign-in lasts a year, and every visit moves the year on, so in
+practice nobody signs in again. The button is there because Telegram opens
+every link itself to draw its preview, and without it the preview would
+use the link up before the member got to it.
+
+To sign in on a second device, the member presses **Sign in on another
+device** at the bottom of the left column. It makes a new one-time link
+for them, to send to themselves or to scan as a QR code, so Alex is not
+needed for it.
 
 The first time a link is opened, the service asks “What should the band
 call you?”. The member types their name, and it and its first letter are
 what the others see on stars and comments. They can change it later with
 their name at the bottom of the left column.
 
-A link is as good as a key. If it reaches the wrong person, or a phone is
-lost, Alex makes that member a new link: the old one stops working, and so
-does every browser signed in with it.
+If a phone is lost, Alex presses **Sign out everywhere** for that member
+and sends them a new link.
 
 ### Members
 
 A page only Alex sees, at the bottom of the left column (on a phone, at
-the bottom of the first screen). It lists the
-members, each with **Copy link** and **New link**, and has **Add member**,
-which makes a new link. Until someone opens it and gives a name, it shows
-as “Not opened yet”. Below
-them are РЭХА's keys: **Make a key for РЭХА**, and each key with its name
-(“Rehearsal room”) and **Remove**.
+the bottom of the first screen). It lists the members, each with **New
+link** and **Sign out everywhere**, and has **Add member**. **Add member**
+and **New link** both make a one-time link to copy and send. A link nobody
+has used yet shows as “Not opened yet”. Below them are РЭХА's keys:
+**Make a key for РЭХА**, and each key with its name (“Rehearsal room”) and
+**Remove**.
 
 ### The first screen
 
@@ -235,15 +244,17 @@ Search Console.
 
 ### Sign-in and the key
 
-The Worker checks every request itself. A member's link carries a long
-random token, and D1 keeps only its hash. Opening the link starts a session
-in a cookie (HttpOnly, Secure, SameSite=Lax) that lasts a year from the last
-visit, and takes the token out of the address bar. A new link replaces the
-token and ends that member's sessions. Links from the band's chat open
-signed in, since Lax cookies go with a link followed from another app.
+The Worker checks every request itself. A link carries a long random
+token, and D1 keeps only its hash. Opening the link (a GET) only shows the
+**Sign in** page; pressing the button (a POST) checks the token, deletes
+it, and starts a session in a cookie (HttpOnly, Secure, SameSite=Lax) that
+lasts a year from the last visit. **Sign out everywhere** deletes all of a
+member's sessions. Links from the band's chat open signed in, since Lax
+cookies go with a link followed from another app.
 
-РЭХА's key works the same way, sent in a header. It stands for a copy of
-РЭХА, usually the one at the rehearsal room, never for a member.
+РЭХА's key is a long random secret too, sent in a header and kept as a
+hash. It stands for a copy of РЭХА, usually the one at the rehearsal room,
+never for a member, and works until Alex removes it.
 
 Cloudflare Access is not used: it keeps a sign-in for a month at most
 (Cloudflare's session management page, read on 30 October).
@@ -308,32 +319,36 @@ guide, since only the band can use it.
 2. A sign-in lasts a year from the last visit, so it runs out only for
    someone who stays away a year.
 3. Alex makes the members' links and РЭХА's keys on a **Members** page only
-   he sees; a link nobody has opened shows as “Not opened yet”.
-4. A new link ends the old one and every browser signed in with it.
-5. Alex's first link comes from a setup secret, once.
-6. A member can change their name later, at the bottom of the left column.
-7. A take is new for you until you open it; there is no “mark all as seen”.
-8. On a computer the service opens on **New**; with nothing new, on the song
-   played last.
-9. Songs are listed by their last take, not alphabetically.
-10. A take nobody named goes under **Not named**.
-11. Best take: most members' stars, newest on a tie; with none, the newest
+   he sees; a link nobody has used shows as “Not opened yet”.
+4. A link opens a page with **Sign in** and is used up by the press, so
+   Telegram's preview cannot use it up.
+5. A member signs in on another device with a one-time link or QR code they
+   make themselves.
+6. A lost phone: **Sign out everywhere**, then a new link.
+7. Alex's first link comes from a setup secret, once.
+8. A member can change their name later, at the bottom of the left column.
+9. A take is new for you until you open it; there is no “mark all as seen”.
+10. On a computer the service opens on **New**; with nothing new, on the song
+    played last.
+11. Songs are listed by their last take, not alphabetically.
+12. A take nobody named goes under **Not named**.
+13. Best take: most members' stars, newest on a tie; with none, the newest
     take.
-12. M and S are per person and are not kept.
-13. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
+14. M and S are per person and are not kept.
+15. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
     answer either way), as a link per file, not one zip.
-14. The chat message every five minutes, takes and comments together; marks
+16. The chat message every five minutes, takes and comments together; marks
     from РЭХА not posted.
-15. **I have a band service key** sits at the bottom of Settings › Folders.
-16. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
-17. No mix file: the browser mixes the tracks. With six tracks this saves a
+17. **I have a band service key** sits at the bottom of Settings › Folders.
+18. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
+19. No mix file: the browser mixes the tracks. With six tracks this saves a
     seventh of the MP3 space.
-18. MP3s first, FLAC after; a take shows once its MP3s are up.
-19. A take deleted in РЭХА leaves the service.
-20. Parts of 10 MB; an upload unfinished for 7 days starts again.
-21. Closing РЭХА while sending asks first, with its wording above.
-22. Waveforms are made by РЭХА and sent with the take.
-23. The pages are React with the design system's components, as on the
+20. MP3s first, FLAC after; a take shows once its MP3s are up.
+21. A take deleted in РЭХА leaves the service.
+22. Parts of 10 MB; an upload unfinished for 7 days starts again.
+23. Closing РЭХА while sending asks first, with its wording above.
+24. Waveforms are made by РЭХА and sent with the take.
+25. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
-24. The service goes live with a release, like the site.
-25. Nothing about the service on reha.stream or in the guide.
+26. The service goes live with a release, like the site.
+27. Nothing about the service on reha.stream or in the guide.
