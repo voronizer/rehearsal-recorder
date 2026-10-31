@@ -1,6 +1,7 @@
 import {
   callCount,
   calls,
+  expectedError,
   expect,
   openApp,
   recordTake,
@@ -267,6 +268,23 @@ test("close anyway closes, keep sending stays", async ({ page }) => {
   await page.getByRole("button", { name: "Close anyway" }).click()
   await expect.poll(() => callCount(page, "close_anyway")).toBe(1)
   await expect(page.getByRole("dialog")).toHaveCount(0)
+})
+
+test("closing with only a take's details left names no size", async ({ page }) => {
+  // A take renamed while offline: its name is still to go, but no files.
+  await openApp(page, { before: "window.__SENDING_LEFT__ = {takes: 1, bytes: 0};" })
+  await closeWindow(page)
+  await expect(page.getByRole("dialog")).toContainText(
+    "Still sending 1 take to the band service. The rest goes the next time РЭХА is open."
+  )
+})
+
+test("a page that cannot tell what is left lets the window close", async ({ page, pageErrors }) => {
+  await openApp(page, { before: "window.__SENDING_LEFT__ = 'broken';" })
+  await closeWindow(page)
+  await expect.poll(() => callCount(page, "close_anyway")).toBe(1)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  expectedError(pageErrors, /sending_left failed/)
 })
 
 test("the keep line sends to the band service as its setting says", async ({ page }) => {

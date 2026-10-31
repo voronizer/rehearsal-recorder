@@ -46,7 +46,7 @@ let cloudQueue = {};
 // window.__SERVICE_KEY__ = 'band.example:secret'. window.__SERVICE_OFFLINE__
 // keeps a key unchecked; window.__SERVICE_REFUSES__ = 'words' turns a key
 // down with them; window.__SENDING_LEFT__ = {takes, bytes} is what is left
-// when the window closes. A take on its way stays queued until the test
+// when the window closes ('broken' makes asking fail). A take on its way stays queued until the test
 // calls window.__serviceUp(n).
 let serviceKey = window.__SERVICE_KEY__ || null;
 let sendTo = serviceKey ? 'service' : 'cloud';
@@ -2922,7 +2922,10 @@ window.__MAKE_API__ = () => ({
     return {ok:true, files: take.tracks.map(t => ({name:t.name, mp3:Boolean(up.up),
       flac:Boolean(up.flac), mid:null}))};
   }),
-  sending_left: track('sending_left', async () => window.__SENDING_LEFT__ || {takes:0, bytes:0}),
+  sending_left: track('sending_left', async () => {
+    if (window.__SENDING_LEFT__ === 'broken') throw new Error('sending_left failed');
+    return window.__SENDING_LEFT__ || {takes:0, bytes:0};
+  }),
   close_anyway: track('close_anyway', async () => ({ok:true})),
   // What updates.py found: __LATEST__ is the newer release a test says is
   // out, and nothing is said while checking is switched off. __REPLACE__

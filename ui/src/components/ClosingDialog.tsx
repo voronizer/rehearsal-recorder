@@ -31,9 +31,15 @@ export function ClosingDialog() {
 
   useEffect(() => {
     window.__rehaClosing = () => {
+      // A page that cannot tell what is left cannot ask either: the window
+      // closes, as it does when the page does not answer at all
+      // (BandService._ask), and the rest goes the next time.
       void api()
         .sending_left()
-        .then((now) => setLeft(now.takes > 0 ? now : null))
+        .then(
+          (now) => setLeft(now.takes > 0 ? now : null),
+          () => api().close_anyway()
+        )
     }
     return () => {
       delete window.__rehaClosing

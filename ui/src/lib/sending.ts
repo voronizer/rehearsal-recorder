@@ -64,5 +64,8 @@ export function trackUp(file: ServiceFile): string {
 /** "Still sending 3 takes to the band service, 1.2 GB left." */
 export function stillSending(takes: number, bytes: number): string {
   const what = takes === 1 ? "1 take" : `${takes} takes`
+  // Nothing to weigh when only a take's details are left (a rename made
+  // while offline): no size, rather than “0 B left”.
+  if (bytes <= 0) return `Still sending ${what} to the band service.`
   return `Still sending ${what} to the band service, ${formatBytes(bytes)} left.`
 }
