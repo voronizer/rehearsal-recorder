@@ -20,7 +20,8 @@ own panel.
 
 **Tech Stack:** Python 3.10+ (urllib with certifi, SQLAlchemy + Alembic,
 libsndfile through `soundfile`), React 19 + Vite 8 + Tailwind 4,
-Cloudflare Workers + D1 + R2, `@cloudflare/vite-plugin`, wrangler 4,
+Cloudflare Workers + D1 + R2 + a Cron Trigger, Hono for the Worker's
+routes, `@cloudflare/vite-plugin`, wrangler 4,
 `@cloudflare/vitest-plugin` with vitest 5, Playwright, the Telegram Bot API.
 
 **Spec:** `docs/superpowers/specs/2026-10-30-band-service-part-1-design.md`
@@ -62,7 +63,7 @@ https://claude.ai/artifact/SZKv2ssjChEjWWsrnKWkqK (option Б), sources in
 - Versions are pinned exactly in `service/package.json`: wrangler 4.156.0,
   `@cloudflare/vite-plugin` 1.66.0, `@cloudflare/vitest-plugin` 1.4.11,
   `@cloudflare/workers-types` 5.20261031.1, vitest 5.0.5,
-  `qrcode-generator` 2.0.4; React, Vite, Tailwind and Playwright at the
+  `hono` 4.13.13, `qrcode-generator` 2.0.4; React, Vite, Tailwind and Playwright at the
   versions `ui/package.json` uses.
 
 ## Review Focus
@@ -248,7 +249,6 @@ seen(member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE,
      PRIMARY KEY (member_id, take_uid))
 chat(id INTEGER PRIMARY KEY, kind TEXT NOT NULL, about TEXT NOT NULL, message_id INTEGER NOT NULL,
      text TEXT NOT NULL, started_at TEXT NOT NULL)
-meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)
 ```
 
 A mark from РЭХА is a `comment` row with `from_reha = 1`, its label and
@@ -382,7 +382,7 @@ git commit -m "Move the cloud folder into a sending package, unchanged"
 **Files:**
 - Create: `service/package.json`, `service/LICENSE` (FSL-1.1-MIT), `service/README.md`, `service/wrangler.jsonc`, `service/vite.config.ts`, `service/vitest.config.ts`, `service/tsconfig.json`, `service/index.html`
 - Create: `service/migrations/0001_init.sql` (the tables in the shared contract)
-- Create: `service/worker/index.ts` (the router), `service/worker/auth.ts`, `service/worker/members.ts`, `service/worker/time.ts`, `service/worker/hash.ts`
+- Create: `service/worker/index.ts` (the Hono app, exported as `{fetch: app.fetch, scheduled}`), `service/worker/auth.ts`, `service/worker/members.ts`, `service/worker/time.ts`, `service/worker/hash.ts`
 - Create: `service/test/apply-migrations.ts`, `service/test/auth.test.ts`, `service/test/members.test.ts`
 
 **Interfaces:**
@@ -390,15 +390,17 @@ git commit -m "Move the cloud folder into a sending package, unchanged"
   random bytes as base64url, 43 characters), `now(): Date` (one place
   tests replace), `signedIn(request, env): Promise<Member | null>` which
   also moves the session's expiry to 365 days from now,
-  `rehaKey(request, env): Promise<boolean>`, `json(data, status=200)`,
-  `route(request, env, ctx)`.
+  `rehaKey(request, env): Promise<boolean>` (both also as Hono middleware,
+  `needMember`, `needOwner` and `needKey`), and `app`, a
+  `Hono<{ Bindings: Env }>` that Tasks 3 and 4 add their routes to.
 - `wrangler.jsonc`: `name: "reha-band"`, `main: "worker/index.ts"`,
   `compatibility_date: "2026-10-15"`, assets with
   `not_found_handling: "single-page-application"`, `binding: "ASSETS"`,
   `run_worker_first: ["/api/*", "/files/*"]`; D1 binding `DB`
   (`database_name: "reha-band"`, `database_id: "local"`,
   `migrations_dir: "migrations"`); R2 binding `FILES`
-  (`bucket_name: "reha-band"`); `workers_dev: true`; no `routes`.
+  (`bucket_name: "reha-band"`); `triggers: {"crons": ["17 4 * * *"]}`
+  (once a day, for emptying the trash); `workers_dev: true`; no `routes`.
 
 Rules the tests pin:
 
@@ -505,9 +507,10 @@ Rules the tests pin:
   not fail the request.
 - The weekday and date come from the rehearsal's `date` as a calendar day,
   with no time zone.
-- `purgeTrash` runs at most once an hour, from `ctx.waitUntil` on
-  `GET /api/feed` and on `PUT /api/reha/takes/:uid`; the last run is in
-  `meta`. There is no Cron trigger.
+- `purgeTrash` runs from the Worker's `scheduled` handler, once a day.
+  Workers Free allows 5 Cron Triggers per account and 10 ms of CPU per
+  run; deleting files costs little CPU, since time spent waiting on R2
+  does not count, and R2 deletes up to 1000 keys in one call.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1157,8 +1160,9 @@ Decisions the spec left open, made here and listed for Alex to check:
 2. A waveform file holds 1200 points per track.
 3. A rehearsal's id in the service is made from its date and its row in
    РЭХА, so РЭХА needs no table for it.
-4. The trash is emptied at most once an hour, when someone opens the
-   service or РЭХА sends, so there is still no timer.
+4. The trash is emptied once a day by a Cron Trigger, Cloudflare's own
+   way of running a job on a schedule (free: 5 per account). A take may
+   stay up to a day longer than 30 days.
 5. A mark from РЭХА is kept as a comment from РЭХА, so it can be answered
    and closed like any comment.
 6. Pasting a key picks **Band service** at once. The service's **Send saved
@@ -1188,3 +1192,6 @@ Decisions the spec left open, made here and listed for Alex to check:
     size.
 15. A member's name is 1 to 40 characters, a comment 1 to 2000.
 16. All of it goes in one pull request.
+17. The Worker's routes are written with Hono, the small router
+    Cloudflare's own examples use on Workers; the pages' few paths need no
+    library.
