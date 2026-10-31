@@ -810,8 +810,11 @@ still gets there.
 
 The band service's panel shows the service's address with **Disconnect**,
 and its own **Send saved takes automatically**. **Disconnect** removes the
-key and puts the group back as it was. Takes still waiting to go up stay on
-this computer.
+key and puts the group back as it was. Whatever is in the band service stays
+there, and РЭХА remembers which takes those are. Connect again with a key
+for the same service, such as a new one made after the old one was removed
+on **Members**: takes that were on their way carry on, and nothing goes up
+twice. A key for another service starts from nothing.
 
 ### What goes up
 
@@ -851,7 +854,9 @@ The background work button at the top right lists each take, such as
 “FLAC: 2 of 6”. A take the service turned down shows in red with the reason,
 and **Retry** sends it again. With no internet nothing fails: the line says
 “No internet: carries on when it is back”, and the sending goes on by itself
-once you are online.
+once you are online. While a take is recording, the sending waits, so the
+recording has the computer to itself: the line says “A take is recording:
+carries on after it”.
 
 Each file goes up in parts, and РЭХА keeps track of which parts arrived. If
 РЭХА closes or the laptop sleeps, it sends only what is missing the next

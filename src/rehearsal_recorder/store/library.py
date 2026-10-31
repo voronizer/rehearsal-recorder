@@ -1865,18 +1865,6 @@ class Library:
             db.flush()
             return self._columns(row)
 
-    def drop_service_row(self, take_id):
-        """A take's band service row out, with its files' rows. The row as it
-        was, or None."""
-        with self._session.begin() as db:
-            row = db.get(ServiceCopy, take_id)
-            if row is None:
-                return None
-            was = self._columns(row)
-            db.execute(ServiceFile.__table__.delete().where(ServiceFile.take_id == take_id))
-            db.delete(row)
-            return was
-
     def service_files(self, take_id, gen):
         """The files made for a take's generation, by name."""
         with self._session() as db:
