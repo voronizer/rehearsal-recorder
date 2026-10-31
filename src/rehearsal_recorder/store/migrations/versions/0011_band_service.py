@@ -7,7 +7,8 @@ Create Date: 2026-10-31
 The band service (docs/superpowers/specs/2026-10-30-band-service-part-1-design.md)
 is a second place takes are sent to, beside the cloud folder. Three tables:
 `service_copy`, a row for each take ever sent, with the name the service
-knows it by and how far it got; `service_file`, each file made for it and
+knows it by and how far it got (kept when the take is taken out of the
+service by hand, so sending it again brings back the same take); `service_file`, each file made for it and
 the parts of its upload that arrived, so a take whose sending was cut short
 goes on from where it stopped; and `service_delete`, the takes still to be
 put in the service's trash. A take's rows go with it.
@@ -38,6 +39,7 @@ def upgrade() -> None:
         sa.Column("mp3_gen", sa.Integer(), nullable=True),
         sa.Column("flac_gen", sa.Integer(), nullable=True),
         sa.Column("error", sa.String(), nullable=True),
+        sa.Column("removed", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.ForeignKeyConstraint(["take_id"], ["take.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("take_id"),
     )

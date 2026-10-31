@@ -7226,9 +7226,11 @@ class Api:
         return todo
 
     def _names_must_wait(self):
-        """Files in use: a take recording, a copy being made, or a take being
-        saved, cropped or recovered. The pass waits for them."""
-        if self._recorder is not None or self._sending.get("cloud").queue.busy():
+        """Files in use: a take recording, a copy being made, files being
+        made for the band service, or a take being saved, cropped or
+        recovered. The pass waits for them."""
+        if (self._recorder is not None or self._sending.get("cloud").queue.busy()
+                or self._sending.get("service").making):
             return True
         return any(e["state"] == "running" and e["kind"] in ("stop", "crop", "recover")
                    for e in self._journal.snapshot())

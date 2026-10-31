@@ -46,16 +46,20 @@ band_service.BandService.RETRY_SEC = 0
 
 
 class Window:
-    """What the module asks of pywebview's window."""
+    """What the module asks of pywebview's window. `answer` is what the page
+    gives back: True when it took the question, None when it has no way to
+    ask (not loaded yet, or broken)."""
 
-    def __init__(self):
+    def __init__(self, answer=True):
         self.asked = threading.Event()
         self.destroyed = threading.Event()
         self.js = []
+        self.answer = answer
 
     def evaluate_js(self, code):
         self.js.append(code)
         self.asked.set()
+        return self.answer
 
     def destroy(self):
         self.destroyed.set()
@@ -243,6 +247,37 @@ def run(tmp, fake):
     drain()
     ok("and then it is up", take(n6)["service"] == {"up": True, "flac": True, "error": None})
 
+    n_lost = keep("Viasna", band=["Drums"])
+    uid_lost = uid_of(n_lost)
+    fake.drop_after_part = 1
+    service().run_next()
+    for staged_file in (band_service.staging_root() / uid_lost / "1").iterdir():
+        staged_file.unlink()
+    drain()
+    ok("a staged file gone from the disk is made again",
+       take(n_lost)["service"] == {"up": True, "flac": True, "error": None})
+
+    n_fault = keep("Kupalle", band=["Drums"])
+    real_make = service_files.make
+
+    def broken(item, dst):
+        raise RuntimeError("disk on fire")
+
+    service_files.make = broken
+    try:
+        service().run_next()
+        raised = None
+    except RuntimeError as e:
+        raised = e
+    service_files.make = real_make
+    failed = [e for e in entries(state="failed") if e["take_number"] == n_fault]
+    ok("an unexpected fault fails the take in red, with Retry",
+       raised is None and failed and "disk on fire" in failed[0]["error"]
+       and take(n_fault)["service"]["error"] is not None)
+    n_after = keep("Palyn", band=["Drums"])
+    drain()
+    ok("and the takes after it still go", take(n_after)["service"]["up"])
+
     print("\n[5] What changes in REHA follows")
     starts = fake.count("start ")
     api.rename_take(folder(), n1, "Kupalle")
@@ -264,6 +299,50 @@ def run(tmp, fake):
     ok("a rename while files go up: the upload goes on, the name follows",
        renamed == [True] and fake.count(f"start {uid7} 1.mp3") == 1
        and fake.takes[uid7]["song"] == "Pałyn" and take(n7)["service"]["up"])
+
+    n_make = keep("Viasna", band=["Drums", "Bass"])
+    uid_make = uid_of(n_make)
+    moved, waits = [], []
+
+    def make_then_rename(item, dst):
+        waits.append(api._names_must_wait())
+        real_make(item, dst)
+        if not moved:
+            moved.append(api.rename_take(folder(), n_make, "Kupalle")["ok"])
+
+    service_files.make = make_then_rename
+    drain()
+    service_files.make = real_make
+    ok("a rename while its files are made: the take still goes, under its new name",
+       moved == [True] and take(n_make)["service"] == {"up": True, "flac": True, "error": None}
+       and fake.takes[uid_make]["song"] == "Kupalle")
+    ok("renaming folders waits while files are made", waits and all(waits))
+
+    n_rec = keep("Palyn", band=["Drums"])
+    uid_rec = uid_of(n_rec)
+    recording = []
+
+    def record_on_part(words):
+        if words.startswith(f"part {uid_rec} 1.mp3 1") and not recording:
+            api._recorder = object()
+            recording.append(True)
+
+    fake.on_call = record_on_part
+    service().run_next()
+    fake.on_call = None
+    ok("a take starting to record stops the sending at the next part",
+       recording == [True] and fake.count(f"part {uid_rec} ") == 1
+       and not take(n_rec)["service"]["up"] and service().run_next() is False)
+    api._recorder = None
+    drain()
+    ok("and it carries on after the take", take(n_rec)["service"]["up"])
+
+    lanes = {"take_number": 1, "tracks": [{"name": "Drums", "file": "a.wav"}, {"name": "Click", "file": None},
+                                          {"name": "Bass", "file": "b.wav"}],
+             "notes": [{"name": "Keys", "file": "k.mid"}]}
+    ok("a take's dialog numbers its files as they are sent",
+       service_files.names(lanes) == {"tracks": {"Drums": 1, "Bass": 2}, "notes": {"Keys": "3.mid"}}
+       and [i["name"] for i in service_files.plan(lanes, {"mid"})] == ["3.mid"])
 
     n8 = keep("Kupalle", seconds=14.0, band=["Drums"])
     uid8 = uid_of(n8)
@@ -294,6 +373,16 @@ def run(tmp, fake):
     drain()
     ok("remove from the band service sends a delete",
        res["ok"] and fake.takes[uid1]["trashed"] and take(n1)["service"] is None)
+    puts = fake.count(f"put {uid1}")
+    api.rename_take(folder(), n1, "Viasna")
+    drain()
+    ok("a removed take stays out when it changes",
+       fake.count(f"put {uid1}") == puts and take(n1)["service"] is None and fake.takes[uid1]["trashed"])
+    again = api.share_take(folder(), n1)
+    drain()
+    ok("sent again after Remove, it is the same take, out of the trash",
+       again["ok"] and uid_of(n1) == uid1 and not fake.takes[uid1]["trashed"]
+       and take(n1)["service"] == {"up": True, "flac": True, "error": None})
 
     print("\n[6] Closing")
     window = Window()
@@ -302,16 +391,32 @@ def run(tmp, fake):
     left = api.sending_left()
     ok("what is left is counted", left["takes"] == 1 and left["bytes"] > 0)
     ok("closing with takes left asks first", api.window_closing() is False)
-    ok("by asking the window", window.asked.wait(5)
-       and window.js == ["window.__rehaClosing && window.__rehaClosing()"])
+    ok("by asking the window", window.asked.wait(5) and window.js == [band_service.CLOSING_JS])
+    ok("a page that asks keeps the window", not window.destroyed.wait(0.3))
+    quiet = Window(answer=None)
+    api._window = quiet
+    ok("a page that cannot ask lets the window close",
+       api.window_closing() is False and quiet.destroyed.wait(5))
+    api._window = window
     api.close_anyway()
     ok("close anyway closes", window.destroyed.wait(5) and api.window_closing() is True)
 
     print("\n[7] Disconnect, and the switch")
-    ok("disconnect forgets the queue",
+    ok("disconnect keeps what is in the service and sends nothing more",
        api.disconnect_service() == {"ok": True} and api.sending_left() == {"takes": 0, "bytes": 0}
-       and uid_of(n10) is None and not band_service.staging_root().exists()
-       and api.get_settings()["service"] is None and api.get_settings()["send_to"] == "cloud")
+       and uid_of(n10) is not None and uid_of(n_make) == uid_make
+       and api.get_settings()["service"] is None and api.get_settings()["send_to"] == "cloud"
+       and service().run_next() is False
+       and not [e for e in entries() if e["state"] in ("waiting", "running")])
+    api.set_service_key(fake.key)
+    drain()
+    ok("a key for the same service carries on from there",
+       take(n10)["service"]["up"] and take(n_make)["service"]["up"] and uid_of(n_make) == uid_make)
+    api.disconnect_service()
+    other = api.set_service_key("127.0.0.1:9:" + fake.key.rpartition(":")[2])
+    ok("a key for another service forgets the old one's takes",
+       other["ok"] and uid_of(n10) is None and uid_of(n_make) is None and take(n_make)["service"] is None)
+    api.disconnect_service()
 
     api.set_service_key(fake.key)
     api.set_cloud_dir(str(tmp / "Drive"))

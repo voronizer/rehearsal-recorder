@@ -37,7 +37,11 @@ PART_BYTES = 10 * 1024 * 1024
 # its FLAC and MP3 together, which is what is left to send of it.
 MADE_PER_WAV_BYTE = 0.7
 NO_KEY = "No band service key"
-CLOSING_JS = "window.__rehaClosing && window.__rehaClosing()"
+# True when the page took the question; false when it has no way to ask
+# (not loaded yet, or broken), and the window closes.
+CLOSING_JS = "window.__rehaClosing ? (window.__rehaClosing(), true) : false"
+# A take's line while a take records: its sending waits.
+RECORDING_STEP = "A take is recording: carries on after it"
 # What a band service is and how to run one, for Settings › Folders.
 SERVICE_HELP_URL = "https://reha.stream/band-service"
 
@@ -51,8 +55,19 @@ def staging_root():
 
 
 class _Changed(Exception):
-    """The take changed under the sending (it went, or was cropped): the
-    pass stops, and the next one sends it as it is now."""
+    """The take changed under the sending (it went, was cropped or renamed,
+    or the key went): the pass stops, and the next one sends it as it is
+    now."""
+
+
+class _Paused(Exception):
+    """A take started recording: the pass stops at its next file or part,
+    and carries on from there once the take is kept."""
+
+
+def _sources(take):
+    """The files a take is made from, as it names them."""
+    return [x.get("file") for x in (take.get("tracks") or []) + (take.get("notes") or [])]
 
 
 class BandService:
@@ -83,6 +98,8 @@ class BandService:
         # Deletions the service turned down: not tried again in this run.
         self._refused = set()
         self._active = None
+        # Files are being made: the names pass waits, since it moves folders.
+        self.making = False
         self._closing_anyway = False
         self._thread = None
         self._wake = threading.Event()
@@ -91,6 +108,9 @@ class BandService:
     @property
     def _lib(self):
         return self.api._lib
+
+    def _keyed(self):
+        return parse_key(self.api._config.get("service_key")) is not None
 
     def _client(self):
         parsed = parse_key(self.api._config.get("service_key"))
@@ -122,6 +142,8 @@ class BandService:
             take = self._lib.take(folder, take_number)
         if not take or take.get("service") is not None or not self._to_go(take):
             return
+        if (self._lib.service_row(folder, take_number) or {}).get("removed"):
+            return  # taken out by hand: it goes only when sent by hand
         self._queue(folder, take_number, take)
 
     def edited(self, folder, take_number, cut_start=None):
@@ -133,6 +155,8 @@ class BandService:
         start of the rehearsal in progress given a ★ or a mark.
         """
         row = self._lib.service_row(folder, take_number)
+        if row is not None and row["removed"]:
+            return  # taken out by hand: nothing of it goes until it is sent again
         if row is None:
             session = self.api._session
             if session is not None and Path(session["folder"]) == Path(folder):
@@ -159,8 +183,8 @@ class BandService:
         Library.take_record has it): the service puts them in its trash."""
         for record in records:
             copy = record.get("service_copy")
-            if not copy:
-                continue
+            if not copy or copy.get("removed"):
+                continue  # never sent, or in the service's trash already
             columns = record.get("take") or {}
             song = record.get("song") or {}
             name = take_name(song.get("title"), columns.get("go"), columns.get("take_number"))
@@ -227,13 +251,22 @@ class BandService:
 
     def remove(self, folder, take_number):
         """Remove from the band service: the take goes to the service's
-        trash, and stops being sent. The take in РЭХА stays as it is."""
+        trash, and stops being sent. The take in РЭХА stays as it is, and
+        keeps the name the service knows it by: sent again, it comes out of
+        the trash with its comments. Its files go again then, since the
+        trash may have been emptied meanwhile."""
         folder = Path(folder)
         take, refused = self._take_or_error(folder, take_number)
         if refused:
             return refused
-        row = self._lib.drop_service_row(take_service_id(self._lib, folder, take_number))
-        if row is not None:
+        row = self._lib.service_row(folder, take_number)
+        if row is not None and not row["removed"]:
+            with self._lock:
+                self._edits[row["take_id"]] = self._edits.get(row["take_id"], 0) + 1
+                self._lib.change_service_row(row["take_id"], lambda r: {
+                    "removed": True, "due": False, "error": None, "sent": None,
+                    "mp3_gen": None, "flac_gen": None})
+            self._lib.drop_service_files(row["take_id"])
             self._to_trash(row["take_id"], row["uid"], take["name"])
         return {"ok": True, "take": self._lib.take(folder, take_number)}
 
@@ -257,15 +290,18 @@ class BandService:
         made = self._lib.service_files(row["take_id"], gen) if row else {}
         mp3_all = row.get("mp3_gen") == gen and gen is not None
         flac_all = row.get("flac_gen") == gen and gen is not None
-        notes = {n["name"]: f"{len(take['tracks']) + i}.mid"
-                 for i, n in enumerate(take.get("notes") or [], 1)}
+        names = service_files.names(take)
+
+        def up(name, whole):
+            return whole or bool((made.get(name) or {}).get("done"))
+
         files = []
-        for i, t in enumerate(take["tracks"], 1):
-            def up(name, whole):
-                return whole or bool((made.get(name) or {}).get("done"))
-            mid = notes.get(t["name"])
-            files.append({"name": t["name"], "mp3": up(f"{i}.mp3", mp3_all),
-                          "flac": up(f"{i}.flac", flac_all),
+        for t in take["tracks"]:
+            i = names["tracks"].get(t["name"])
+            mid = names["notes"].get(t["name"])
+            files.append({"name": t["name"],
+                          "mp3": i is not None and up(f"{i}.mp3", mp3_all),
+                          "flac": i is not None and up(f"{i}.flac", flac_all),
                           "mid": None if mid is None else up(mid, mp3_all)})
         return {"ok": True, "files": files}
 
@@ -274,6 +310,8 @@ class BandService:
     def states(self, folder):
         """What this rehearsal's takes are doing, by take number."""
         out = {}
+        if not self._keyed():
+            return out
         for row in self._lib.service_rows():
             if row["due"] and Path(row["folder"]) == Path(folder):
                 out[row["take_number"]] = "working" if row["take_id"] == self._active else "queued"
@@ -282,7 +320,9 @@ class BandService:
     def left(self):
         """The takes still to send or to put in the trash, and the bytes of
         their files not up yet. A take whose files are not made yet counts
-        what its WAVs will come to."""
+        what its WAVs will come to. Nothing without a key: nothing goes."""
+        if not self._keyed():
+            return {"takes": 0, "bytes": 0}
         takes, size = len(self._deletes()), 0
         for row in self._lib.service_rows():
             if not row["due"]:
@@ -316,8 +356,18 @@ class BandService:
             return True
         window = self.api._window
         if window is not None:
-            threading.Thread(target=window.evaluate_js, args=(CLOSING_JS,), daemon=True).start()
+            threading.Thread(target=self._ask, args=(window,), daemon=True).start()
         return False
+
+    def _ask(self, window):
+        """The page asks whether to close; one that cannot (not loaded yet,
+        or broken) would leave a window nobody can close, so it closes."""
+        try:
+            took = window.evaluate_js(CLOSING_JS)
+        except Exception:  # noqa: BLE001 - any failure of the page's means it cannot ask
+            took = False
+        if not took:
+            self.close_anyway()
 
     def close_anyway(self):
         self._closing_anyway = True
@@ -357,20 +407,38 @@ class BandService:
         except (Refused, Gone) as e:
             return {"ok": False, "error": getattr(e, "words", None) or str(e)}
         config = self.api._config
+        was = config.pop("service_was", None) or address_of(config.get("service_key"))
+        if was is not None and was != address_of(key):
+            self.forget()  # what it knew is another service's
         config["service_key"] = key
         config["send_to"] = self.id
         self.api._write_config()
+        self._wake.set()
         return {"ok": True, "address": address_of(key), **({"unchecked": True} if unchecked else {})}
 
     def disconnect(self):
-        """The key forgotten, and with it everything still to send there;
-        new takes go to the cloud folder again. What is in the service stays
-        there."""
-        self.forget()
+        """
+        The key forgotten; new takes go to the cloud folder again, and
+        nothing goes to the service. What is there stays, and РЭХА keeps
+        knowing which takes those are, and what was still on its way: a key
+        to the same service carries on from there (a new key after the old
+        one was taken off Members). A key to another service forgets it all
+        (set_key). The files made for the sending go: they are made again.
+        """
         config = self.api._config
-        config.pop("service_key", None)
+        address = address_of(config.pop("service_key", None))
+        if address is not None:
+            config["service_was"] = address
         config["send_to"] = "cloud"
         self.api._write_config()
+        with self._lock:
+            entries, self._entries = list(self._entries.values()), {}
+            self._later.clear()
+            self._refused.clear()
+        for entry in entries:
+            entry.discard()
+        self._lib.drop_all_service_files()
+        shutil.rmtree(staging_root(), ignore_errors=True)
         return {"ok": True}
 
     def set_auto(self, on):
@@ -386,9 +454,9 @@ class BandService:
         return {"ok": True, "auto_publish": bool(on)}
 
     def forget(self):
-        """Disconnect: everything still to send, and every line of it, is
-        dropped, and the files made for it. A pass under way stops at its
-        next part, finding its take gone."""
+        """A key to another service: everything РЭХА knew of the old one is
+        dropped, every line of it, and the files made for it. A pass under
+        way stops at its next part, finding its take gone."""
         self._lib.forget_service()
         with self._lock:
             entries, self._entries = list(self._entries.values()), {}
@@ -429,9 +497,17 @@ class BandService:
             return entry
 
     def _queue(self, folder, take_number, take=None):
-        row = self._lib.add_service_row(folder, take_number, str(uuid.uuid4()), due=True, error=None)
+        """The take on its way. One taken out by hand keeps its uid, and if
+        it has not reached the service's trash yet, it is not sent there."""
+        row = self._lib.add_service_row(folder, take_number, str(uuid.uuid4()),
+                                        due=True, error=None, removed=False)
         if row is None:
             return None
+        self._lib.drop_service_delete(row["uid"])
+        with self._lock:
+            gone = self._entries.pop(("delete", row["uid"]), None)
+        if gone is not None and gone.snapshot()["state"] == "waiting":
+            gone.discard()
         self._line(row["take_id"], folder, take_number, take)
         self._wake.set()
         return row
@@ -461,13 +537,14 @@ class BandService:
     def reopen(self):
         """The app has opened: what it still had to send is back in the list
         at once, as waiting."""
-        self._tidy()
+        if self._keyed():
+            self._tidy()
 
     def run_next(self):
         """One take, or one deletion. False when there was nothing to do,
         or not now: while a take records, or before a take that met no
         internet is due to be tried again."""
-        if self.api._recorder is not None or self.api._library is None:
+        if self.api._recorder is not None or self.api._library is None or not self._keyed():
             return False
         self._tidy()
         now = time.monotonic()
@@ -536,11 +613,19 @@ class BandService:
             self._send(row, entry, edits)
         except _Changed:
             pass  # looked at again on the next turn, as it is now
+        except _Paused:
+            entry.start(RECORDING_STEP)
         except Offline as e:
             entry.start(e.step)
             self._later[take_id] = time.monotonic() + self.RETRY_SEC
         except (Refused, service_files.CannotMake, OSError) as e:
             words = getattr(e, "words", None) or str(e)
+            self._lib.change_service_row(take_id, lambda r: {"due": False, "error": words})
+            with self._lock:
+                self._entries.pop(take_id, None)
+            entry.fail(words, retry=self.id)
+        except Exception as e:  # noqa: BLE001 - one take's fault must not stop the takes after it
+            words = f"Could not send it: {e}"
             self._lib.change_service_row(take_id, lambda r: {"due": False, "error": words})
             with self._lock:
                 self._entries.pop(take_id, None)
@@ -551,11 +636,25 @@ class BandService:
         return True
 
     def _check(self, take_id, gen):
-        """The take is still there, at the generation being sent."""
+        """The key is there, no take is recording, and the take is still
+        there, at the generation being sent and not taken out."""
+        if not self._keyed():
+            raise _Changed()
+        if self.api._recorder is not None:
+            raise _Paused()
         row = self._lib.service_row_of(take_id)
-        if row is None or row["gen"] != gen:
+        if row is None or row["gen"] != gen or row["removed"]:
             raise _Changed()
         return row
+
+    def _moved(self, take_id, take):
+        """A file the take named is not on disk. If the take names other
+        files now (a rename moved its folder), the pass stops and the next
+        one reads it again; otherwise the file is gone, and that stands."""
+        row = self._lib.service_row_of(take_id)
+        now = None if row is None else self._lib.take(row["folder"], row["take_number"])
+        if now is None or _sources(now) != _sources(take):
+            raise _Changed()
 
     def _send(self, row, entry, edits):
         lib = self.api._lib
@@ -616,15 +715,28 @@ class BandService:
         """The files of these kinds, made once: one made already, for an
         upload cut short, is the one sent."""
         made = self._lib.service_files(take_id, gen)
+        for name, f in list(made.items()):
+            if not f["done"] and not (staging_root() / f["path"]).exists():
+                # Gone from the disk before it was all up: made again.
+                self._lib.drop_service_file(take_id, gen, name)
+                del made[name]
         todo = [i for i in service_files.plan(take, kinds) if i["name"] not in made]
         if todo:
             entry.start("Making the files")
-        for item in todo:
-            self._check(take_id, gen)
-            path = staging_root() / uid / str(gen) / item["name"]
-            service_files.make(item, path)
-            self._lib.add_service_file(take_id, gen, item["name"], f"{uid}/{gen}/{item['name']}",
-                                       path.stat().st_size)
+        self.making = True
+        try:
+            for item in todo:
+                self._check(take_id, gen)
+                path = staging_root() / uid / str(gen) / item["name"]
+                try:
+                    service_files.make(item, path)
+                except (service_files.CannotMake, OSError):
+                    self._moved(take_id, take)
+                    raise
+                self._lib.add_service_file(take_id, gen, item["name"], f"{uid}/{gen}/{item['name']}",
+                                           path.stat().st_size)
+        finally:
+            self.making = False
         wanted = {i["name"] for i in service_files.plan(take, kinds)}
         return [f for name, f in sorted(self._lib.service_files(take_id, gen).items(),
                                         key=lambda kv: _order(kv[0]))
@@ -669,7 +781,13 @@ class BandService:
                     self._lib.change_service_file(take_id, gen, name, upload_id=upload_id, parts=parts)
                     f.update(upload_id=upload_id, parts=parts)
                 have = {n for n, _ in parts}
-                with open(path, "rb") as fh:
+                try:
+                    fh = open(path, "rb")
+                except FileNotFoundError:
+                    # Gone from the disk meanwhile: made again next time.
+                    self._lib.drop_service_file(take_id, gen, name)
+                    raise _Changed() from None
+                with fh:
                     for number in range(1, count + 1):
                         if number in have:
                             continue
@@ -696,7 +814,3 @@ def _order(name):
     stem, _, kind = name.partition(".")
     return ({"mp3": 0, "peaks": 1, "mid": 2, "flac": 3}.get(kind, 4), int(stem) if stem.isdigit() else 0)
 
-
-def take_service_id(lib, folder, take_number):
-    row = lib.service_row(folder, take_number)
-    return None if row is None else row["take_id"]

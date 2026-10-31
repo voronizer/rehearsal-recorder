@@ -229,7 +229,7 @@ class Library:
 
     @staticmethod
     def _service_data(copy):
-        if copy is None:
+        if copy is None or copy.removed:
             return None
         return {"up": copy.mp3_gen == copy.gen, "flac": copy.flac_gen == copy.gen,
                 "error": copy.error}
@@ -1899,6 +1899,19 @@ class Library:
             for key, value in fields.items():
                 setattr(row, key, value)
             return True
+
+    def drop_service_file(self, take_id, gen, name):
+        """One file's row out: its staged copy is gone, and it is made again."""
+        with self._session.begin() as db:
+            row = db.get(ServiceFile, (take_id, gen, name))
+            if row is not None:
+                db.delete(row)
+
+    def drop_all_service_files(self):
+        """Every file's row out: the key went, and what was made for it is
+        made again if a key to the same service comes back."""
+        with self._session.begin() as db:
+            db.execute(ServiceFile.__table__.delete())
 
     def drop_service_files(self, take_id, keep_gen=None):
         """A take's files' rows out, but those of `keep_gen`."""

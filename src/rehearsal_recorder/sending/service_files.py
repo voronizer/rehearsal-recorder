@@ -46,6 +46,17 @@ def _notes(take):
     return [n for n in take.get("notes") or [] if n.get("file")]
 
 
+def names(take):
+    """
+    Where each part of the take goes, as `plan` names its files:
+    {"tracks": {name: position}, "notes": {name: "<position>.mid"}}. A track
+    with no file has no position, and nothing of it goes.
+    """
+    audio = _audio(take)
+    return {"tracks": {t["name"]: i for i, t in enumerate(audio, 1)},
+            "notes": {n["name"]: f"{len(audio) + i}.mid" for i, n in enumerate(_notes(take), 1)}}
+
+
 def plan(take, kinds):
     """
     The take's files of the kinds asked for, in the order they go up: every

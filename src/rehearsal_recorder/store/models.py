@@ -344,6 +344,10 @@ class ServiceCopy(Base):
     flac_gen: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Why the service turned it down, until it is sent again.
     error: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Taken out of the service by hand (it is in the service's trash): the
+    # row stays for its uid, so sending it again brings back the same take,
+    # comments and all. Nothing about it goes until it is sent again.
+    removed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     take: Mapped[Take] = relationship(back_populates="service_copy")
 
