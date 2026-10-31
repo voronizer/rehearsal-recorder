@@ -74,6 +74,7 @@ On 31 October:
   chosen one's own panel, as part of its own module (15:53, in words).
 - A take removed in РЭХА goes to the service's trash, with its comments
   and stars; the trash is in part 1 (15:57, a card).
+- A take nobody named is just a song without a name yet (16:12, in words).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -132,8 +133,10 @@ the card is not there.
 
 Below it, **Songs**: every song with takes, the most recently played first,
 each with how many takes it has, the day of its last one, its best take and
-that take's stars. A take whose name is not a song (“Take 7”) is under **Not
-named**, last.
+that take's stars. A take nobody named as a song (“Take 7”) is a song
+without a name yet: it stands in **Songs** under its take's name, in date
+order with the rest, and its line says “Not named yet” where a song says
+how many takes it has. Once it is named in РЭХА, it moves into that song.
 
 ### A song's page
 
@@ -419,34 +422,33 @@ nothing in the guide, since only the band can use it.
 9. On a computer the service opens on **New**; with nothing new, on the song
    played last.
 10. Songs are listed by their last take, not alphabetically.
-11. A take nobody named goes under **Not named**.
-12. Best take: most members' stars, newest on a tie; with none, the newest
+11. Best take: most members' stars, newest on a tie; with none, the newest
     take.
-13. M and S are per person and are not kept.
-14. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
+12. M and S are per person and are not kept.
+13. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
     answer either way), as a link per file, not one zip.
-15. A chat message takes additions for three hours, then a new one starts;
+14. A chat message takes additions for three hours, then a new one starts;
     marks from РЭХА are not posted on their own.
-16. **I have a band service key** is the last line of the **Cloud folder**
+15. **I have a band service key** is the last line of the **Cloud folder**
     group; with a key, the group becomes **Sending takes**.
-17. Each panel keeps its own settings, **Send saved takes automatically**
+16. Each panel keeps its own settings, **Send saved takes automatically**
     included.
-18. The cloud folder's code moves into a `sending/` package beside the
+17. The cloud folder's code moves into a `sending/` package beside the
     service's, behind the same calls, before the service is added.
-19. A take's cloud button sends to the service with no dialog; on a sent
+18. A take's cloud button sends to the service with no dialog; on a sent
     take, a dialog with what is up and **Remove from the band service**.
-20. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
-21. No mix file: the browser mixes the tracks. With six tracks this saves a
+19. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
+20. No mix file: the browser mixes the tracks. With six tracks this saves a
     seventh of the MP3 space.
-22. MP3s first, FLAC after; a take shows once its MP3s are up.
-23. A take stays in the trash for 30 days; any member can restore it.
-24. A take sent again from РЭХА comes out of the trash with its comments.
-25. A crop that cuts the start moves the comments back; one in the cut part
+21. MP3s first, FLAC after; a take shows once its MP3s are up.
+22. A take stays in the trash for 30 days; any member can restore it.
+23. A take sent again from РЭХА comes out of the trash with its comments.
+24. A crop that cuts the start moves the comments back; one in the cut part
     stays at 0:00, marked “In the part cut off”.
-26. Parts of 10 MB; an upload unfinished for 7 days starts again.
-27. Closing РЭХА while sending asks first, with its wording above.
-28. Waveforms are made by РЭХА and sent with the take.
-29. The pages are React with the design system's components, as on the
+25. Parts of 10 MB; an upload unfinished for 7 days starts again.
+26. Closing РЭХА while sending asks first, with its wording above.
+27. Waveforms are made by РЭХА and sent with the take.
+28. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
-30. The service goes live with a release, like the site.
-31. Nothing about the service on reha.stream or in the guide.
+29. The service goes live with a release, like the site.
+30. Nothing about the service on reha.stream or in the guide.
