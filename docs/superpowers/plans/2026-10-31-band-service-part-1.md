@@ -994,6 +994,13 @@ git commit -m "Settings: a switch between the cloud folder and a band service"
   migrations apply reha-band --remote` and `wrangler deploy`. The edited
   `wrangler.jsonc` is never committed: it lives only in the job's
   checkout.
+- Later changes to the tables are new files in `service/migrations/`
+  (`0002_….sql` and on), plain SQL. The job applies the ones not applied
+  yet before it deploys, and D1 records them in its `d1_migrations` table.
+  D1 has no way back: undoing a change is another migration. A migration
+  only adds tables and columns, so the Worker still running from the
+  previous release keeps working in the moments before the new one is up.
+  The tests build every database from all the migrations in order.
 - The deploy job, with no `CLOUDFLARE_API_TOKEN` secret, writes a notice
   and succeeds without deploying, so a release made before the service is
   set up is not red.
