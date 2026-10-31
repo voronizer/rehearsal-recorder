@@ -151,15 +151,19 @@ test("after 3 hours a new message starts", async () => {
   vi.setSystemTime(start)
   const { chatEnv, queued } = withBot()
   const fake = fakeTelegram()
-  await deliver(chatEnv, fake, await shown(chatEnv, 11, queued))
+  const eleven = await shown(chatEnv, 11, queued)
+  await deliver(chatEnv, fake, eleven)
 
   vi.setSystemTime(new Date(start.getTime() + 3 * HOUR + 60 * 1000))
-  await deliver(chatEnv, fake, await shown(chatEnv, 12, queued))
+  const twelve = await shown(chatEnv, 12, queued)
+  await deliver(chatEnv, fake, twelve)
 
+  const link = (event: ChatEvent, name: string) =>
+    `<a href="${ORIGIN}/takes/${(event as { take_uid: string }).take_uid}">${name}</a>`
   expect(fake.edited).toEqual([])
-  expect(fake.sent.map((s) => s.text.replace(/<[^>]+>/g, ""))).toEqual([
-    "New takes from Thursday, 30 October: Viasna 11",
-    "New takes from Thursday, 30 October: Viasna 12",
+  expect(fake.sent.map((s) => s.text)).toEqual([
+    `New takes from Thursday, 30 October: ${link(eleven, "Viasna 11")}`,
+    `New takes from Thursday, 30 October: ${link(twelve, "Viasna 12")}`,
   ])
 })
 
