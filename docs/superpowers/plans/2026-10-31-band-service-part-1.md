@@ -8,8 +8,12 @@ with РЭХА sending the takes there and a bot telling the band's Telegram chat
 
 **Architecture:** One Cloudflare Worker in `service/` serves the pages
 (React, built with the design system from `ui/src`) and two JSON APIs: one
-for РЭХА (key in a header) and one for the band (session cookie). D1 holds
-the text, R2 the files. In РЭХА, a new `sending/` package holds two modules
+for РЭХА (key in a header) and one for the band (session cookie). D1,
+Cloudflare's database, holds everything that is not audio: members, songs,
+takes' names and details, stars, marks, comments, who has seen what, links
+and keys (the tables are in “The service's D1 tables” below). R2,
+Cloudflare's file storage, holds each take's files: every track's MP3, FLAC,
+waveform and `.mid`. In РЭХА, a new `sending/` package holds two modules
 behind one interface, the cloud folder (moved, unchanged) and the band
 service (new); Settings › Folders draws a switch and the chosen module's
 own panel.
