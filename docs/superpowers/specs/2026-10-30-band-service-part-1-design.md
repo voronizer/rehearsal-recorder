@@ -83,6 +83,8 @@ On 31 October:
   page has no live service pages in it (16:22, in words).
 - Each module keeps its own **Send saved takes automatically** (16:25, in
   words).
+- The guide gets a section on sending to the band service (16:32, in
+  words, after asking why the spec had left it out).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -528,8 +530,8 @@ deleting a take from the service by hand, uploading without РЭХА,
     the footer, not the top menu.
 31. The page has a story from Alex's band; its **Run your own** steps are
     the ones Alex follows for his own copy, so they are tried first.
-32. The guide gets a section on sending to the band service; what the
-    service is and how to run your own stay on the site's page.
+32. What the service is and how to run your own stay on the site's page,
+    not in the guide's new section.
 33. The service's sending shows in the header's background work list and on
     the take's button, as the cloud folder's does; takes still to send are
     back in the list when РЭХА opens; with no internet a line waits rather
