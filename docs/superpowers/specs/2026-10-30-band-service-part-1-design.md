@@ -140,6 +140,9 @@ record with each question is in
   (18:33).
 - Copies: D1's own history of 7 days and the 30-day trash, nothing more
   (18:33).
+- Sending on its own leaves false starts out, for the band service and the
+  cloud folder alike (19:11, in words; 19:13, a card). A false start ticked
+  on the review screen still goes (19:15, «ок», after Claude explained it).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -356,6 +359,15 @@ component; the **Sending takes** group draws the switch and the chosen
 panel, and nothing else.
 
 ### What goes up
+
+A false start does not go on its own, to the band service or to the cloud
+folder. It is the take the rehearsal screen already greys: shorter than
+the length in Settings (30 seconds unless changed), with no ★ and no
+marks. On the review screen its **Send to the cloud** box (**Send to the
+band service** with the service chosen) starts unticked; ticked by hand,
+the take goes. A false start given a ★ or a mark later, in the rehearsal
+in progress, is no longer one and goes on its own. The cloud button sends
+one whenever it is pressed.
 
 The same three ways as for the cloud folder: a take's cloud button, **Send
 starred**, and the service panel's **Send saved takes automatically**. For the service there is
@@ -692,3 +704,9 @@ service by hand, uploading without РЭХА,
 38. The site's **Run your own** says a band needs a domain of its own on
     Cloudflare, since the letters can only come from one; the workers.dev
     address alone is no longer enough.
+39. A false start given a ★ or a mark goes on its own only in the
+    rehearsal in progress. In an older rehearsal nothing goes on its own,
+    as a change to the balance or the format already leaves them as they
+    are.
+40. A false start that is already in the cloud folder, sent before this
+    rule, stays there and is kept up to date like any other copy.

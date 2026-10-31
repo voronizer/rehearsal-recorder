@@ -459,6 +459,65 @@ git rm src/rehearsal_recorder/cloud.py
 git commit -m "Move the cloud folder into a sending package, unchanged"
 ```
 
+#### False starts stay behind (added 31 October, after Alex's 19:11 and 19:13)
+
+A false start is what the rehearsal screen greys (`isFalseStart` in
+`ui/src/lib/evening.ts`): longer than 0 and shorter than `false_start_sec`
+(30 s unless changed in Settings), no ★, no marks. Sending on its own
+leaves it out, for the cloud folder and for the band service. The take's
+own answer still wins: kept with the review screen's box ticked
+(`cloud_send`), it goes; the cloud button always sends.
+
+**Files:**
+- Modify: `src/rehearsal_recorder/sending/__init__.py`, `src/rehearsal_recorder/sending/cloud_folder.py`, `src/rehearsal_recorder/api.py` (`set_take_star` and the mark calls)
+- Modify: `ui/src/lib/evening.ts`, `ui/src/screens/Review.tsx`
+- Test: `tests/test_engine.py`, `ui/src/lib/evening.test.ts`, the review screen's e2e file
+
+**Interfaces:**
+- Produces, in `sending/__init__.py`: `false_start(take: dict, limit_sec) -> bool`, the same test as `isFalseStart`.
+- `CloudFolder._copy_due(take)`: False while another module is chosen; False on `cloud_skip`; True on `cloud_send`; otherwise `auto_publish` and not `false_start(take, api._false_start_sec())`.
+- `CloudFolder.edited(folder, take_number)` asks `saved` again for a take of the rehearsal in progress, so a false start given a ★ or a mark goes on its own; `set_take_star` and the mark calls (add, update, delete) call `self._sending.edited(folder, take_number)`. Older rehearsals are left as they are (spec Call 39).
+- Task 6's service module asks the same `false_start` for its `due`.
+- `ui/src/lib/evening.ts`: `sendsOnItsOwn(take: {duration_sec, starred?, markers?}, auto: boolean, limitSec: number): boolean`. Review's box starts from it and follows the take's marks until it is touched; `keep_take` gets `send_to_cloud` as the box says whenever it differs from `sendsOnItsOwn`, else null.
+
+- [ ] **Step 7: Write the failing checks**
+
+`tests/test_engine.py` (labels in cp1252):
+
+```python
+ok("a false start is not sent on its own", ...)        # 3 s take, auto on: nothing queued
+ok("a false start ticked on review is sent", ...)      # send_to_cloud=True: queued
+ok("a false start given a star is sent on its own", ...)
+ok("a false start given a mark is sent on its own", ...)
+ok("a take as long as the limit is sent", ...)         # duration == false_start_sec
+ok("the cloud button sends a false start", ...)
+ok("a star in an older rehearsal sends nothing", ...)
+```
+
+`ui/src/lib/evening.test.ts`: `sendsOnItsOwn` false for a 3 s take with
+auto on, true with a mark, false with auto off. The review e2e: a short
+take's box starts unticked, ticks itself when a mark is made, and stays
+as set once clicked.
+
+- [ ] **Step 8: Run them to see them fail**
+
+Run: `python tests/test_engine.py > /tmp/engine.txt 2>&1; grep -n FAIL /tmp/engine.txt` and `cd ui && npx vitest run src/lib/evening.test.ts`
+Expected: FAIL on the new checks only.
+
+- [ ] **Step 9: Write `false_start`, the new `_copy_due` and `edited`, the calls from the star and marks, `sendsOnItsOwn` and the box**
+
+- [ ] **Step 10: Run them again, with the review e2e**
+
+Run: the commands of Step 8, then `cd ui && npm run build && npx playwright test <the review e2e file>` (throwaway config for the container's Chromium)
+Expected: PASS.
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add src/rehearsal_recorder tests/test_engine.py ui/src ui/e2e
+git commit -m "Sending on its own leaves false starts behind"
+```
+
 ---
 
 ### Task 2: The service's frame, its tables, signing in, members and keys
@@ -992,7 +1051,8 @@ How it works:
   the service is chosen and the take is to go: **Send saved takes
   automatically** on and not kept with “not this one”, or kept with “send
   this one” (the take's `cloud_skip` and `cloud_send`, as for the cloud
-  folder). `send` sets `due` at once. `edited` sets `due` only for a take
+  folder), and with neither, not a false start (`sending.false_start`,
+  Task 1's Step 7). `send` sets `due` at once. `edited` sets `due` only for a take
   already in the service, and a crop also adds one to `gen` and `start_sec`
   to `pending_cut`.
 - A due take: make its TakeMeta; make the files of its `gen` that are not
@@ -1136,8 +1196,8 @@ What it shows, word for word:
 - The take's status: “Sending to the band service”, “Waiting for the band
   service”, and “Not in the band service” when it failed.
 - The keep line in Review, service chosen: “Send to the band service”
-  with its box, which starts ticked when the service's **Send saved takes
-  automatically** is on.
+  with its box, which starts as `sendsOnItsOwn` says with the service's
+  **Send saved takes automatically** (Task 1's Step 9).
 - Send starred's title, service chosen: “Send every ★ take to the band
   service”.
 - The background work list: the service's entries as the cloud folder's,
@@ -1328,7 +1388,9 @@ The section says what a key is and where it goes, the **Send takes to**
 switch, what goes up, the take's cloud button and its dialog, following
 the sending in the background list, closing РЭХА while it sends, and
 **Disconnect**; it links to reha.stream/band-service for what the service
-is and how to run your own. Button names in bold; curly double quotes,
+is and how to run your own. Where the guide says what **Send saved takes
+automatically** does, it adds that a false start stays behind unless its
+box is ticked on the review screen; the CHANGELOG item says so too. Button names in bold; curly double quotes,
 straight apostrophes. Checked with the humanizer skill.
 
 - [ ] **Step 1: Write the section and the item**
