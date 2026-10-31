@@ -189,7 +189,9 @@ come from РЭХА are not posted on their own: they arrive with their take.
 
 **Settings › Folders** gets one quiet line at the bottom: **I have a band
 service key**. It opens a field for the key. A key holds the service's
-address and a secret; Alex makes it on the service's **Members** page.
+address and a secret in one line of text, such as
+`band.reha.stream:9fT2kQ…`; Alex makes it on the service's **Members** page.
+It is not a link to open in a browser.
 With a key in, the line becomes the
 service's address with **Disconnect**, and **Send takes to** offers
 **Cloud folder** or **Band service**, one at a time. Without a key nothing
