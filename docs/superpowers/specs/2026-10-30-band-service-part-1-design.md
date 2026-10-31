@@ -67,6 +67,12 @@ On 30 October, in this thread:
 - The bot writes the moment a take or comment is ready, adding to the same
   message rather than posting a new one each time; no timer (18:22, a card).
 
+On 31 October:
+
+- Each feature on its own, so the code does not turn into spaghetti
+  (15:51, in words). One switch for where takes go, and under it the
+  chosen one's own panel, as part of its own module (15:53, in words).
+
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
 
@@ -185,40 +191,59 @@ come from РЭХА are not posted on their own: they arrive with their take.
 
 ## What РЭХА does
 
-### Connecting
+### Settings: one switch, a panel for each
 
-**Settings › Folders** gets one quiet line at the bottom: **I have a band
-service key**. It opens a field for the key. A key holds the service's
-address and a secret in one line of text, such as
-`band.reha.stream:9fT2kQ…`; Alex makes it on the service's **Members** page.
-It is not a link to open in a browser. Without a key nothing else about the
-service shows anywhere in РЭХА.
+Until a key is pasted, **Settings › Folders** has its **Cloud folder** group
+exactly as today, with one quiet line at the bottom: **I have a band
+service key**. Pressing it opens a field for the key. A key is one line of
+text holding the service's address and a secret, such as
+`band.reha.stream:9fT2kQ…`. Alex makes it on the service's **Members**
+page. It is not a link to open in a browser.
 
-With a key in, the **Cloud folder** group in Settings › Folders becomes
-**Sending takes** and starts with **Send takes to**: **Cloud folder** or
-**Band service**, one at a time.
+With a key in, the group is called **Sending takes** and starts with the
+switch **Send takes to**: **Cloud folder** or **Band service**. Under the
+switch is the panel of the one chosen, and only that panel:
 
-- With **Cloud folder** chosen, the group is as it is today: the folder,
-  **Copies are written as**, **Send saved takes automatically** and **What
-  gets sent**.
-- With **Band service** chosen, the folder, **Copies are written as** and
-  **What gets sent** are hidden, since the service always gets the same
-  set. In their place are the service's address with **Disconnect**, and
-  one line on what goes: every track as MP3 and FLAC, MIDI, marks. **Send
-  saved takes automatically** stays and works the same way.
+- **Cloud folder**: today's rows, unchanged: the folder, **Copies are
+  written as**, **Send saved takes automatically** and **What gets sent**.
+- **Band service**: the service's address with **Disconnect**, which
+  removes the key and puts the group back as it was; one sentence on what
+  goes up (every track as MP3 and FLAC, its MIDI, the take's marks), since
+  there is nothing to choose; and its own **Send saved takes
+  automatically**.
 
-The cloud folder's path is kept while the service is chosen, so switching
-back brings everything back as it was.
+Each panel keeps its own settings, so switching back finds the other as it
+was left.
 
-A take's cloud button sends straight to the service, with no dialog. On a
-take that has gone up it opens a small dialog, “Viasna 12 in the band
-service”, which says which files are up and which are still on their way,
-and has **Remove from the band service**.
+### A take's cloud button
+
+The button sends to the one chosen. For the cloud folder it opens today's
+dialog. For the band service it sends at once, with no dialog, since there
+is nothing to choose. On a take that has gone up to the service it opens a
+small dialog, “Viasna 12 in the band service”, which says which files are
+up and which are still on their way, and has **Remove from the band
+service**.
+
+### Two modules, one way in
+
+The cloud folder and the band service are separate modules, and neither
+knows about the other. Both answer the same few calls: send a take, send
+what changed in it, remove it, and say how far it got. A take's cloud
+button, **Send starred** and automatic sending only ever make those calls,
+on whichever module the switch picked.
+
+In РЭХА's Python, the two live side by side in a new `sending/` package,
+one file each, with the calls they share in its `__init__.py`. The cloud
+folder's code moves there from `cloud.py` and from `api.py`
+(`share_take`, `send_starred`, `unshare_take`, `_enqueue_publish`), with
+no change to what it does. In the UI, each module has its own panel
+component; the **Sending takes** group draws the switch and the chosen
+panel, and nothing else.
 
 ### What goes up
 
 The same three ways as for the cloud folder: a take's cloud button, **Send
-starred**, and **Send saved takes automatically**. For the service there is
+starred**, and the service panel's **Send saved takes automatically**. For the service there is
 no choice of what or in which format: each track goes as MP3 for listening
 and FLAC as recorded, plus its `.mid` if it recorded MIDI, plus the take's
 name, rehearsal, length, balance, ★ and marks. РЭХА makes the MP3 and FLAC
@@ -374,20 +399,23 @@ guide, since only the band can use it.
     answer either way), as a link per file, not one zip.
 16. A chat message takes additions for three hours, then a new one starts;
     marks from РЭХА are not posted on their own.
-17. **I have a band service key** sits at the bottom of Settings › Folders.
-18. With the service chosen, the cloud folder's rows are hidden rather than
-    greyed, and the group is renamed **Sending takes**.
-19. A take's cloud button sends to the service with no dialog; on a sent
+17. **I have a band service key** is the last line of the **Cloud folder**
+    group; with a key, the group becomes **Sending takes**.
+18. Each panel keeps its own settings, **Send saved takes automatically**
+    included.
+19. The cloud folder's code moves into a `sending/` package beside the
+    service's, behind the same calls, before the service is added.
+20. A take's cloud button sends to the service with no dialog; on a sent
     take, a dialog with what is up and **Remove from the band service**.
-20. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
-21. No mix file: the browser mixes the tracks. With six tracks this saves a
+21. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
+22. No mix file: the browser mixes the tracks. With six tracks this saves a
     seventh of the MP3 space.
-22. MP3s first, FLAC after; a take shows once its MP3s are up.
-23. A take deleted in РЭХА leaves the service.
-24. Parts of 10 MB; an upload unfinished for 7 days starts again.
-25. Closing РЭХА while sending asks first, with its wording above.
-26. Waveforms are made by РЭХА and sent with the take.
-27. The pages are React with the design system's components, as on the
+23. MP3s first, FLAC after; a take shows once its MP3s are up.
+24. A take deleted in РЭХА leaves the service.
+25. Parts of 10 MB; an upload unfinished for 7 days starts again.
+26. Closing РЭХА while sending asks first, with its wording above.
+27. Waveforms are made by РЭХА and sent with the take.
+28. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
-28. The service goes live with a release, like the site.
-29. Nothing about the service on reha.stream or in the guide.
+29. The service goes live with a release, like the site.
+30. Nothing about the service on reha.stream or in the guide.
