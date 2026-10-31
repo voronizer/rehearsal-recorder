@@ -74,7 +74,8 @@ On 31 October:
   chosen one's own panel, as part of its own module (15:53, in words).
 - A take removed in РЭХА goes to the service's trash, with its comments
   and stars; the trash is in part 1 (15:57, a card).
-- A take nobody named is just a song without a name yet (16:12, in words).
+- A take nobody named simply has no song: its song is empty in the data,
+  as in РЭХА (16:12-16:14, in words).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -133,10 +134,8 @@ the card is not there.
 
 Below it, **Songs**: every song with takes, the most recently played first,
 each with how many takes it has, the day of its last one, its best take and
-that take's stars. A take nobody named as a song (“Take 7”) is a song
-without a name yet: it stands in **Songs** under its take's name, in date
-order with the rest, and its line says “Not named yet” where a song says
-how many takes it has. Once it is named in РЭХА, it moves into that song.
+that take's stars. Takes nobody named as a song (“Take 7”) are under **Not
+named**, last. Once one is named in РЭХА, it moves into that song.
 
 ### A song's page
 
@@ -375,7 +374,9 @@ the browser mixes the tracks with РЭХА's balance.
 `service/` beside `site/`, with its own LICENSE (FSL-1.1-MIT). The pages are
 React, built with the design system's styles and components from `ui/src`,
 the way the site uses them. The Worker and the pages share one build. D1's
-tables are in `service/migrations/`.
+tables are in `service/migrations/`. A take's song may be empty, as in
+РЭХА's own `take.song_id`: that is a take nobody named, and **Not named**
+is only how the list shows such takes.
 
 Tests: the Worker's logic on Cloudflare's own test runner; the pages in
 Playwright on made-up data, as the site does; РЭХА's sending against a fake
