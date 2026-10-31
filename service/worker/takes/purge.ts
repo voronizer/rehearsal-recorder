@@ -6,6 +6,10 @@ import { iso, now } from "../shared/time"
 
 /** A take stays in the trash 30 days. */
 const TRASH_DAYS = 30
+/** Takes deleted in one day's run. Each is a few calls to the files and
+ *  the database, and one run of a Worker may make only so many; the rest
+ *  wait for the next day. */
+const PER_RUN = 20
 const DAY = 24 * 60 * 60 * 1000
 
 /** Deletes the objects under `prefix` that `drop` picks, 1000 to a call. */
@@ -21,7 +25,8 @@ export async function deleteFiles(env: Bindings, prefix: string, drop: (key: str
 
 /**
  * Once a day, from the Cron Trigger: takes in the trash for more than 30
- * days are deleted for good, with their files, comments, stars and seen.
+ * days are deleted for good, with their files, comments, stars and seen,
+ * the longest there first and 20 at most.
  */
 export async function purgeTrash(env: Bindings): Promise<number> {
   const db = database(env)
@@ -30,6 +35,8 @@ export async function purgeTrash(env: Bindings): Promise<number> {
     .select({ uid: take.uid })
     .from(take)
     .where(and(isNotNull(take.trashedAt), lt(take.trashedAt, before)))
+    .orderBy(take.trashedAt)
+    .limit(PER_RUN)
   // One take at a time: its files first, so a take is never left with
   // files nobody can find.
   for (const { uid } of old) {

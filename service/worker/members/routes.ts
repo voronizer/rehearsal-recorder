@@ -105,7 +105,6 @@ export const memberRoutes = newApp()
     async (c) => {
       const target = await find(database(c.env), eq(user.id, c.req.valid("param").id))
       if (!target || target.banned) return fail(c, 404, NO_MEMBER)
-      if (target.role === "admin") return fail(c, 400, "The owner cannot be signed out from here")
       await c.var.auth.api.revokeUserSessions({ body: { userId: target.id }, headers: c.req.raw.headers })
       return c.json({ ok: true as const }, 200)
     }
@@ -123,10 +122,11 @@ export const memberRoutes = newApp()
       if (!target) return fail(c, 404, NO_MEMBER)
       if (target.role === "admin") return fail(c, 400, "The owner cannot be removed")
       // A ban with no end also ends every session. The member stays in the
-      // table, so their stars and comments keep their name.
+      // table, so their stars and comments keep their name. The address
+      // stays on Cloudflare's list, which is the whole account's: other mail
+      // there may go to it.
       if (!target.banned)
         await c.var.auth.api.banUser({ body: { userId: target.id }, headers: c.req.raw.headers })
-      await c.var.parts.addresses.remove(target.email)
       return c.json({ ok: true as const }, 200)
     }
   )

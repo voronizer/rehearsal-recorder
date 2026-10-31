@@ -130,3 +130,14 @@ test("no token: a notice and no deploy", () => {
   assert.deepEqual(asked, [])
   assert.equal(config.d1_databases[0].database_id, "local")
 })
+
+test("an address given as a link stops the deploy, with an example of one's own", () => {
+  let failed
+  try {
+    deploy(ALL_THERE, { SERVICE_DOMAIN: "https://band.example.com/" })
+  } catch (e) {
+    failed = e
+  }
+  assert.equal(failed?.status, 1)
+  assert.match(failed.stdout, /::error::SERVICE_DOMAIN should be an address alone, like band\.example\.com, not https/)
+})

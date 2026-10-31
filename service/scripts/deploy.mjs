@@ -3,8 +3,8 @@
 //
 // It needs CLOUDFLARE_API_TOKEN, and CLOUDFLARE_ACCOUNT_ID when the token
 // reaches more than one account; SERVICE_DOMAIN, when set, is the band's
-// address (band.reha.stream). Without a token it says so and stops, so a
-// release made before the service is set up is not red.
+// address (such as band.example.com). Without a token it says so and
+// stops, so a release made before the service is set up is not red.
 //
 // In order: the database, the bucket and the queue are found, or made when
 // there are none; the database's id and the address are written into
@@ -92,7 +92,7 @@ function main() {
   }
   const domain = (process.env.SERVICE_DOMAIN ?? "").trim()
   if (domain && !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(domain)) {
-    console.log(`::error::SERVICE_DOMAIN should be an address alone, like band.reha.stream, not ${domain}`)
+    console.log(`::error::SERVICE_DOMAIN should be an address alone, like band.example.com, not ${domain}`)
     process.exit(1)
   }
 

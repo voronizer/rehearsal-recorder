@@ -6,14 +6,17 @@ import { parseFrames } from "./mp3"
   frames as it arrives. A WebCodecs AudioDecoder for each track turns its
   frames into sound a few seconds ahead of the playhead, and every piece of
   every track is started at its own sample on one AudioContext's clock, so
-  the tracks cannot drift apart however long the take is. Nothing is held
-  in memory beyond those few seconds.
+  the tracks cannot drift apart however long the take is. Each MP3 is kept
+  as it comes, still compressed (about 4 MB for four minutes at 128 kbps);
+  only the decoded sound is kept to those few seconds.
 
   A seek stops every piece and starts again from the frame at that time,
   ten frames early so the decoder has warmed up by then; that warm-up is not
   heard. Before the first sound every track has a second ready, so they
-  start together. If the file has not come far enough (a slow connection),
-  the playhead waits there and starts again once there is a second more.
+  start together. Each file comes whole, from its start: a seek past what
+  has come so far (a slow connection) waits there, and starts again once
+  there is a second more. The service would send a file from the middle
+  (`Range`), but the player does not ask for that yet.
 */
 
 const FRAME = 1152

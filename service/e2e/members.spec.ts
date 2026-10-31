@@ -14,11 +14,25 @@ test.describe("as Alex", () => {
     await expect(row("dzima@example.com")).toContainText("Dzima")
     await expect(row("dzima@example.com").getByRole("button", { name: "Sign out everywhere" })).toBeVisible()
     await expect(row("dzima@example.com").getByRole("button", { name: "Remove" })).toBeVisible()
+    // The owner cannot be removed, but can sign out on every device.
+    // (Not pressed: it would end this test's own session.)
     await expect(row("alex@example.com").getByRole("button", { name: "Remove" })).toHaveCount(0)
+    await expect(row("alex@example.com").getByRole("button", { name: "Sign out everywhere" })).toBeVisible()
 
     await page.getByLabel("Email address").fill("vera@example.com")
     await page.getByRole("button", { name: "Add member" }).click()
     await expect(row("vera@example.com")).toContainText("Has not confirmed the address yet")
+
+    // Remove asks first; Cancel leaves her in the band.
+    await row("vera@example.com").getByRole("button", { name: "Remove" }).click()
+    const ask = page.getByRole("dialog", { name: "Remove “vera@example.com”?" })
+    await expect(ask).toContainText("Their comments and stars stay")
+    await ask.getByRole("button", { name: "Cancel" }).click()
+    await expect(ask).toHaveCount(0)
+    await expect(row("vera@example.com")).toBeVisible()
+    await row("vera@example.com").getByRole("button", { name: "Remove" }).click()
+    await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click()
+    await expect(row("vera@example.com")).toHaveCount(0)
 
     const keys = page.getByRole("region", { name: "Keys for РЭХА" })
     await expect(keys.getByRole("listitem").filter({ hasText: "Rehearsal room" }).getByRole("button", { name: "Remove" })).toBeVisible()

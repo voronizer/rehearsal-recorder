@@ -34,7 +34,18 @@ const AUTH_PATHS = [
 
 const app = newApp()
 
+/** The settings the service cannot work without (service/README.md, step 7). */
+const NEEDED = ["OWNER_EMAIL", "LETTERS_FROM", "BETTER_AUTH_SECRET"] as const
+
 const requestParts = createMiddleware<AppEnv>(async (c, next) => {
+  // Without them nobody could sign in, or the first to try could become
+  // the owner: say which are missing, to whoever sets the service up.
+  const missing = NEEDED.filter((name) => !c.env[name]?.trim())
+  if (missing.length) {
+    const names = missing.length > 1 ? `${missing.slice(0, -1).join(", ")} and ${missing.at(-1)}` : missing[0]
+    console.error(`The band service's settings lack ${names}`)
+    return fail(c, 500, `The band service is not set up yet: its settings lack ${names}.`)
+  }
   const parts =
     c.env.STAND_INS === "on"
       ? standIns

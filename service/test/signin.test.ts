@@ -186,3 +186,19 @@ test("a member's name is 1 to 40 characters", async () => {
   expect(await (await me(cookie)).json()).toMatchObject({ name: "Alex", owner: true })
   expect((await me()).status).toBe(401)
 })
+
+test("a service missing its settings says which, and lets nobody in", async () => {
+  const { app } = await import("../worker/index")
+  const ctx = { waitUntil: () => {}, passThroughOnException: () => {}, props: {} }
+  const res = await app.request(
+    "/api/auth/email-otp/send-verification-otp",
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: OWNER, type: "sign-in" }) },
+    { ...env, OWNER_EMAIL: "", LETTERS_FROM: " " },
+    ctx as never
+  )
+  expect(res.status).toBe(500)
+  expect(await res.json()).toEqual({
+    error: "The band service is not set up yet: its settings lack OWNER_EMAIL and LETTERS_FROM.",
+  })
+  expect(await letters()).toEqual([])
+})

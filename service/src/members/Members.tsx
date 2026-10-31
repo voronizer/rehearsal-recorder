@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,7 +18,8 @@ import { Note, PageHead } from "../shell/parts"
 
 /**
  * **Members**, the owner's page: who is in the band, with **Sign out
- * everywhere** and **Remove** for each, **Add member**, and РЭХА's keys.
+ * everywhere** for each and **Remove** for each but the owner, **Add
+ * member**, and РЭХА's keys.
  */
 export function Members() {
   const members = useMembers()
@@ -47,6 +49,7 @@ function People({ members }: { members: Member[] }) {
   const remove = useRemoveMember()
   const signOut = useSignOutMember()
   const [email, setEmail] = useState("")
+  const [removing, setRemoving] = useState<Member | null>(null)
   async function submit(e: FormEvent) {
     e.preventDefault()
     await add.mutateAsync(email)
@@ -66,16 +69,16 @@ function People({ members }: { members: Member[] }) {
                 !m.signed_in && <span className="text-xs text-muted-foreground">Has not signed in yet</span>
               )}
             </span>
-            {m.id !== me.data?.id && (
-              <span className="flex gap-2">
-                <Button size="row" variant="outline" disabled={signOut.isPending} onClick={() => signOut.mutate(m.id)}>
-                  Sign out everywhere
-                </Button>
-                <Button size="row" variant="outline" disabled={remove.isPending} onClick={() => remove.mutate(m.id)}>
+            <span className="flex gap-2">
+              <Button size="row" variant="outline" disabled={signOut.isPending} onClick={() => signOut.mutate(m.id)}>
+                Sign out everywhere
+              </Button>
+              {m.id !== me.data?.id && (
+                <Button size="row" variant="outline" disabled={remove.isPending} onClick={() => setRemoving(m)}>
                   Remove
                 </Button>
-              </span>
-            )}
+              )}
+            </span>
           </li>
         ))}
       </ul>
@@ -96,6 +99,20 @@ function People({ members }: { members: Member[] }) {
           </p>
         )}
       </form>
+      {/* Removing cannot be taken back here, but adding the address again
+          brings them back with all they wrote: so the accent, not red. */}
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => !open && setRemoving(null)}
+        title={removing && `Remove “${removing.name || removing.email}”?`}
+        description={
+          removing &&
+          "They are signed out everywhere and can no longer sign in. Their comments and stars stay. Add the address again to bring them back."
+        }
+        actionLabel="Remove"
+        destructive={false}
+        onConfirm={() => removing && remove.mutate(removing.id)}
+      />
     </section>
   )
 }

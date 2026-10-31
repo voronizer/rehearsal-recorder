@@ -89,7 +89,8 @@ test("remove ends the sessions and keeps the comments", async () => {
   expect(res.status).toBe(200)
   expect(await res.json()).toEqual({ ok: true })
   expect((await me(ira.cookie)).status).toBe(401)
-  expect((await addresses()).list["ira@example.com"]).toBeUndefined()
+  // Cloudflare's list is the whole account's: the address may get other mail there.
+  expect((await addresses()).list["ira@example.com"]).toBe(true)
   expect((await members(owner)).map((m) => m.email)).toEqual([OWNER])
   const kept = await env.DB.prepare("SELECT member_id, text FROM comment").first()
   expect(kept).toEqual({ member_id: ira.id, text: "Bass too loud" })
@@ -100,17 +101,20 @@ test("remove ends the sessions and keeps the comments", async () => {
   expect((await members(owner)).map((m) => m.id)).toContain(ira.id)
 })
 
-test("the owner cannot be removed", async () => {
+test("the owner cannot be removed, and can sign out everywhere", async () => {
   const owner = await signInOwner()
+  const phone = await signInOwner()
   const id = (await members(owner))[0].id
 
   const removed = await call(`/api/members/${id}`, { method: "DELETE" }, owner)
   expect(removed.status).toBe(400)
   expect(await removed.json()).toEqual({ error: "The owner cannot be removed" })
-  const signedOut = await post(`/api/members/${id}/signout`, {}, owner)
-  expect(signedOut.status).toBe(400)
-  expect(await signedOut.json()).toEqual({ error: "The owner cannot be signed out from here" })
   expect((await me(owner)).status).toBe(200)
+
+  // A phone left signed in somewhere: the owner ends every session, his own too.
+  expect((await post(`/api/members/${id}/signout`, {}, owner)).status).toBe(200)
+  expect((await me(phone)).status).toBe(401)
+  expect((await me(owner)).status).toBe(401)
 })
 
 test("a key is shown once and works for /api/reha/hello", async () => {

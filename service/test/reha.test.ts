@@ -277,3 +277,24 @@ test("the trash is emptied after 30 days, files and all", async () => {
   expect((await env.FILES.list({ prefix: `takes/${TAKE}/` })).objects).toEqual([])
   expect(await env.DB.prepare("SELECT uid FROM take").all()).toMatchObject({ results: [{ uid: kept }] })
 })
+
+test("a day's emptying of the trash deletes 20 takes at most, the rest the next day", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] })
+  const start = new Date("2025-11-01T12:00:00Z")
+  vi.setSystemTime(start)
+  const r = await reha()
+  for (let n = 1; n <= 22; n++) {
+    const uid = crypto.randomUUID()
+    expect((await r.put(`/api/reha/takes/${uid}`, takeMeta({ number: n, name: `Viasna ${n}` }))).status).toBe(200)
+    expect((await r.del(`/api/reha/takes/${uid}`)).status).toBe(200)
+  }
+  const left = async () => (await env.DB.prepare("SELECT count(*) AS n FROM take").first<{ n: number }>())!.n
+
+  vi.setSystemTime(new Date(start.getTime() + 31 * DAY))
+  expect(await purgeTrash(env as unknown as Bindings)).toBe(20)
+  expect(await left()).toBe(2)
+  vi.setSystemTime(new Date(start.getTime() + 32 * DAY))
+  expect(await purgeTrash(env as unknown as Bindings)).toBe(2)
+  expect(await left()).toBe(0)
+  vi.useRealTimers()
+})

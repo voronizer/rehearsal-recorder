@@ -212,8 +212,10 @@ each with **Sign out everywhere** and **Remove**, and has **Add member**,
 which asks only for the address: the member types their own name the
 first time they sign in. Until then a member shows as their address, with
 “Has not confirmed the address yet” or “Has not signed in yet”. **Remove**
-takes a member out of the band: their address gets no more codes, their
-sign-ins end, and their stars and comments stay under their name.
+asks first, then takes a member out of the band: their address gets no
+more codes, their sign-ins end, and their stars and comments stay under
+their name. Alex's own row has **Sign out everywhere** alone, for a phone
+of his left signed in somewhere; it signs him out here too.
 
 Below them are РЭХА's keys: **Make a key for РЭХА**, and each key with its
 name (“Rehearsal room”) and **Remove**.
@@ -553,9 +555,10 @@ touched.
 
 The service keeps Cloudflare's list of confirmed addresses itself, through
 Cloudflare's API, with a token allowed only that list: **Add member** adds
-the address, which makes Cloudflare send its letter, **Remove** takes it
-off, and **Members** reads from the list whether each address is
-confirmed. Sending Cloudflare's letter again is a remove and an add.
+the address, which makes Cloudflare send its letter, and **Members** reads
+from the list whether each address is confirmed. **Remove** leaves the
+address there: the list is the whole account's, and other mail on the
+account may go to it. Sending Cloudflare's letter again is a remove and an add.
 
 In tests, letters go to a stand-in that keeps them, and the tests read the
 code from there.

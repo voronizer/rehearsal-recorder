@@ -88,8 +88,9 @@ export function authOptions(origin: string, env: Pick<Bindings, "BETTER_AUTH_SEC
         allowedAttempts: 5,
         disableSignUp: true,
         storeOTP: "hashed",
-        // The band may all sign in at once from the rehearsal room's one
-        // address; the plugin's own limit is 3 a minute for each address.
+        // Counted by IP address and path, not by email address, and the band
+        // may all sign in at once from the rehearsal room's one connection;
+        // the plugin's own limit is 3 a minute.
         rateLimit: { window: 60, max: 10 },
         async sendVerificationOTP({ email, otp }) {
           await parts.letters.send(
