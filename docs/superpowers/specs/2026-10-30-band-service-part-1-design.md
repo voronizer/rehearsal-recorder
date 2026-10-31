@@ -146,7 +146,10 @@ record with each question is in
 - The site's page is for a band member: how the service works, what it
   does and why it matters to them, without the setup's technical details
   (31 October, 22:28, in words). The setup steps go to `service/README.md`
-  on GitHub, and the page links there once (22:29, a card).
+  on GitHub, and the page links there once (22:29, a card). The page names
+  nothing of the setup: no Cloudflare, keys or prices, only what a member
+  sees and does (22:44, «для людей надо написать а не для того кто сервис
+  устанавливает»).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -456,11 +459,11 @@ What the page holds, in order:
    site's stories. Alex checks it before it goes live, as with every story.
 3. **How it works**, as a member meets it: where the takes come from,
    signing in, the first page, a song's page, a take's lanes, stars,
-   comments, downloads, the chat's messages and the trash.
-4. **One for your band**: that it runs on the band's own Cloudflare
-   account, what it costs (files up to 10 GB free, then $0.015 per GB a
-   month), that it needs a domain of the band's own, that the code is
-   open, and one link to the setup steps on GitHub.
+   comments, downloads, the chat's messages and the trash. Its last line
+   links to the setup steps on GitHub, for whoever sets one up.
+
+Nothing of the setup is on the page: no Cloudflare, keys, domains or
+prices.
 
 The setup steps are in `service/README.md`, under “Run one for your
 band”: what it needs (a Cloudflare account; a domain of the band's own on

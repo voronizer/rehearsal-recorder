@@ -43,9 +43,9 @@ The drummer listens with the drums soloed, to check the kick, the drummer says. 
 
 ## How it works
 
-РЭХА runs on the laptop that records the rehearsal. Whoever looks after the service gives it a key, a line of text to paste into РЭХА once, and from then on РЭХА sends the takes there by itself. Each track goes up as an MP3 first, so the band can listen before the full-quality files follow. If someone shuts the lid halfway, РЭХА carries on the next time it is open.
+The takes come from РЭХА, on the laptop that records the rehearsal, and it sends them by itself. Each track comes as an MP3 first, so you can listen before the full-quality files follow.
 
-To get in you need only your email address. Whoever looks after the service adds it to the band. Cloudflare, the company whose computers the service runs on, then sends you a letter to check the address is yours: press the button in it, once. Now open the band's page, type your address and press **Send code**. A letter brings six digits; type them and you stay signed in for a year. There is no password to forget, and on a new phone you sign in the same way.
+To get in you need only your email address: whoever set up the service adds it. The first letter you get asks you to confirm the address; press the button in it, once. Then open the band's page, type your address and press **Send code**. A letter brings six digits; type them and you stay signed in for a year. There is no password to forget, and on a new phone you sign in the same way.
 
 The first page shows what is new since you were here, takes and comments. The songs come under it, the one played last on top; on a computer they sit in a column on the left. A song's page opens with the take the band likes best, the one with the most stars, ready to play.
 
@@ -59,8 +59,4 @@ If the band has a group in Telegram, the service's bot writes there when a take 
 
 A take deleted in РЭХА waits in the service's **Trash** for 30 days. Anyone can play it there and press **Restore**. That has already saved one good take from a tidy drummer.
 
-## One for your band
-
-The service runs on your band's own Cloudflare account, so the takes are yours and nobody else's. Cloudflare's free plan is enough for a band, apart from the takes' files: they are free up to 10 GB, then $0.015 per GB a month. After a year of weekly rehearsals that is about $3 a month. You also need a domain of your own, since the sign-in letters come from an address on it. There is nothing to sign up for: whoever looks after the service adds each member's address.
-
-The code is open, beside РЭХА's, and your band may run it, read it and change it. [How to set one up, step by step](https://github.com/voronizer/rehearsal-recorder/blob/main/service/README.md#run-one-for-your-band), on GitHub.
+Want one for your band? Whoever sets it up will find [the steps on GitHub](https://github.com/voronizer/rehearsal-recorder/blob/main/service/README.md#run-one-for-your-band).

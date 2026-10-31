@@ -1,8 +1,9 @@
 import { test, expect } from "./fixtures.ts"
 
 // reha.stream/band-service: what a band service is, how our band uses one
-// and what it does for a band member. The setup steps are in the service's
-// README on GitHub, one link away. Written into its HTML at build time,
+// and what it does for a band member. It is for the band, not for whoever
+// sets the service up: the setup steps are in the service's README on
+// GitHub, one link away. Written into its HTML at build time,
 // like a story; РЭХА's key line links here (SERVICE_HELP_URL).
 
 const PAGE = "/band-service"
@@ -17,7 +18,6 @@ test("the band service page is there and linked from the footer", async ({ page 
   await expect(page.getByRole("heading", { level: 2 })).toHaveText([
     "How we use it",
     "How it works",
-    "One for your band",
   ])
 })
 
@@ -26,12 +26,14 @@ test("the page is in the sitemap", async ({ request }) => {
   expect(xml).toContain("<loc>https://reha.stream/band-service</loc>")
 })
 
-test("the setup steps are on GitHub, one link away, and the cost is on the page", async ({ page }) => {
+test("the page is for the band: the setup is on GitHub, one link away", async ({ page }) => {
   await page.goto(PAGE)
-  const own = page.locator("#one-for-your-band")
-  await expect(own.getByText("$0.015 per GB a month")).toBeVisible()
-  await expect(own.getByRole("link", { name: "How to set one up, step by step" })).toHaveAttribute("href", SETUP)
+  await expect(page.locator("#how-it-works").getByRole("link", { name: "the steps on GitHub" })).toHaveAttribute(
+    "href",
+    SETUP
+  )
   await expect(page.locator(".tale ol, .tale ul")).toHaveCount(0)
+  await expect(page.locator("main")).not.toContainText(/Cloudflare|token|domain/i)
 })
 
 test.describe("with script off", () => {
@@ -40,6 +42,6 @@ test.describe("with script off", () => {
   test("the whole page is in its HTML", async ({ page }) => {
     await page.goto(PAGE)
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("A band service of your own")
-    await expect(page.locator("#one-for-your-band").getByRole("link", { name: "How to set one up, step by step" })).toBeVisible()
+    await expect(page.locator("#how-it-works").getByRole("link", { name: "the steps on GitHub" })).toBeVisible()
   })
 })
