@@ -81,6 +81,8 @@ On 31 October:
 - The key's line explains what a key is, says a band can run a service of
   its own, and links to a page about it on the site (16:19, in words). The
   page has no live service pages in it (16:22, in words).
+- Each module keeps its own **Send saved takes automatically** (16:25, in
+  words).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -476,8 +478,7 @@ deleting a take from the service by hand, uploading without РЭХА,
     marks from РЭХА are not posted on their own.
 15. **I have a band service key** is the last line of the **Cloud folder**
     group; with a key, the group becomes **Sending takes**.
-16. Each panel keeps its own settings, **Send saved takes automatically**
-    included.
+16. Each panel keeps its own settings.
 17. The cloud folder's code moves into a `sending/` package beside the
     service's, behind the same calls, before the service is added.
 18. A take's cloud button sends to the service with no dialog; on a sent
