@@ -87,7 +87,8 @@ from rehearsal_recorder.audio.player import TakePlayer
 from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
 from rehearsal_recorder.midi.notes import read_notes
 from rehearsal_recorder import activity as activitymod
-from rehearsal_recorder import cloud as cloudmod
+from rehearsal_recorder.sending import Sending
+from rehearsal_recorder.sending.cloud_folder import CloudFolder, _shape_of, source_of
 from rehearsal_recorder import holding
 from rehearsal_recorder.names_pass import NamesPass
 from rehearsal_recorder import layouts
@@ -219,28 +220,6 @@ def _cloud_subfolder(cloud, folder):
 # jam - 2026-09-22 19-00", with " (2)" after it when two rehearsals shared a
 # name and a minute. The sweep of emptied folders touches nothing else.
 _REHEARSAL_DIR_NAME = re.compile(r"^.+ - \d{4}-\d{2}-\d{2} \d{2}-\d{2}( \(\d+\))?$")
-
-
-def _shape_of(shared):
-    """What a take has in the cloud folder: "mix", "tracks", "both" or None."""
-    shared = shared or {}
-    parts = {k for k in ("mix", "tracks") if shared.get(k)}
-    return _shape_from(parts)
-
-
-def _shape_from(parts):
-    if parts == {"mix", "tracks"}:
-        return "both"
-    return next(iter(parts), None)
-
-
-def _with(shape, other):
-    """Both shapes at once: an automatic copy adds what the setting asks for
-    to what is already there, and never takes away what somebody sent."""
-    parts = set()
-    for s in (shape, other):
-        parts |= {"mix", "tracks"} if s == "both" else ({s} if s else set())
-    return _shape_from(parts)
 
 
 def _timestamp_suffix(created_at):
@@ -663,24 +642,6 @@ def _folder_within(inner, outer):
     return any(_same_folder(p, outer) for p in inner.parents)
 
 
-def _copy_detail(what, res):
-    """What a finished cloud copy came to, in words: "MP3 of the mix", or
-    "MP3 of the mix, WAV of every track" when they came out differently."""
-    shared = res.get("cloud") or {}
-    mix = (shared.get("mix_format") or "wav").upper()
-    tracks = (shared.get("tracks_format") or "wav").upper()
-    if what == "mix":
-        said = f"{mix} of the mix"
-    elif what == "tracks":
-        said = f"{tracks} of every track"
-    elif mix == tracks:
-        said = f"{mix} of the mix and every track"
-    else:
-        said = f"{mix} of the mix, {tracks} of every track"
-    note = f". {res['note']}" if res.get("note") else ""
-    return f"{said}{note}"
-
-
 def _channels_of(tracks):
     """How many channels these tracks write: a stereo track is two, and a
     track that only records MIDI writes none."""
@@ -825,9 +786,9 @@ class Api:
         # take hears the system going to sleep anyway (platform_support).
         self._awake = KeepAwake()
         self._sleep_watch = SleepWatch(self._laptop_sleeping)
-        self._cloud_queue = cloudmod.PublishQueue(
-            step=self._publish_step, paused=lambda: self._recorder is not None
-        )
+        # Where saved takes are sent: the cloud folder for now. The settings
+        # are read further down, so the switch asks for them each time.
+        self._sending = Sending({"cloud": CloudFolder(self)}, lambda: self._config)
         self._recorder_take_number = None
         self._recorder_temp_dir = None
         # The band the take began with, so that Stop reads the tracks it
@@ -857,10 +818,6 @@ class Api:
         # Long work — cloud copies, crops, a take being saved or recovered —
         # and how far along it is, for the header of every screen.
         self._journal = activitymod.Journal()
-        # The journal entry of each take waiting to be copied, by (folder,
-        # take number): one however many times it is asked for.
-        self._cloud_entries = {}
-        self._cloud_lock = threading.Lock()
         self._window = None
         # Renaming a take's files and putting names right do not run over
         # each other's folders.
@@ -971,7 +928,7 @@ class Api:
         self._window = window
         # Only the real app runs the worker. The suites drive run_next
         # themselves, so nothing races them.
-        self._cloud_queue.start()
+        self._sending.start()
         self._names_pass.start()
         self._sleep_watch.start()
         self._sweep_empty_cloud_dirs_later()
@@ -1021,7 +978,7 @@ class Api:
         except Exception as e:
             print(f"[shutdown] stopping the backing track: {e}")
         self._close_player()
-        self._cloud_queue.stop()
+        self._sending.stop()
         self._names_pass.stop()
         self._updates.stop()
         # A rename the pass had under way finishes before the library closes.
@@ -1569,7 +1526,7 @@ class Api:
         self._write_config()
         # The mix carries the balance, so every copy of this rehearsal's takes
         # is now made from something else.
-        self._enqueue_session_takes()
+        self._sending.get("cloud")._enqueue_session_takes()
         return {"ok": True}
 
     def save_master_volume(self, volume):
@@ -2499,7 +2456,7 @@ class Api:
             # The set it is played by, its titles as they are now, or None.
             "set": here["set"] if here else None,
             "recording": self._recorder is not None,
-            "cloud_queue": self._cloud_queue.states(s["folder"]),
+            "cloud_queue": self._sending.get("cloud").states(s["folder"]),
             # The header's "On disk", measured as History measures a
             # rehearsal. Read when the screen asks, which is after each take.
             "disk_bytes": _folder_bytes(s["folder"]),
@@ -3251,8 +3208,8 @@ class Api:
 
         shutil.rmtree(temp_dir, ignore_errors=True)
         self._cleanup_drafts_dir(temp_dir)
-        self._enqueue_publish(s["folder"], take_number, take=kept)
-        self._retry_failed_publishes()
+        self._sending.saved(s["folder"], take_number, take=kept)
+        self._sending.get("cloud")._retry_failed_publishes()
         self._follow_next()
         return {"ok": True, "take": kept, "ended": ended}
 
@@ -3593,7 +3550,7 @@ class Api:
         # A rescued take is a take. The app dying mid-rehearsal is exactly the
         # case there is no startup sweep for, so this is the only thing that
         # ever sends it.
-        self._enqueue_publish(folder, take_number)
+        self._sending.saved(folder, take_number)
         self._follow_next()
         return {"ok": True, "take": kept, "folder": str(folder), "ended": ended}
 
@@ -4614,10 +4571,10 @@ class Api:
         # it had, whether sending on its own is on or not: the copy follows
         # the take. One that was not is sent only if it is due to be.
         if had:
-            self._queue_copy(folder, take_number, had)
+            self._sending.get("cloud")._queue_copy(folder, take_number, had)
         else:
-            self._enqueue_publish(folder, take_number)
-        self._retry_failed_publishes()
+            self._sending.saved(folder, take_number)
+        self._sending.get("cloud")._retry_failed_publishes()
         return {
             "ok": True,
             "take": self._lib.take(folder, take_number),
@@ -6159,7 +6116,7 @@ class Api:
         if folder is None:
             return
         for n in numbers:
-            self._enqueue_publish(folder, n)
+            self._sending.saved(folder, n)
         self._names_pass.request()
 
     def _back_in(self, folder, was, item):
@@ -6405,7 +6362,7 @@ class Api:
         now = _shape_of(take.get("cloud"))
         if now is not None:
             return {"what": now, "publish": False}
-        coming = int(take["take_number"]) in self._cloud_queue.states(str(folder))
+        coming = int(take["take_number"]) in self._sending.get("cloud").states(str(folder))
         if coming or take.get("cloud_error") or had is None:
             return {"what": had, "publish": had is None}
         return {"what": None, "publish": False}
@@ -6435,9 +6392,9 @@ class Api:
         rows = self._lib.take_record(folder, int(n)) if folder is not None and n is not None else None
         if rows is not None and rows["take"].get("id") == record.get("take_id"):
             if step.get("send"):
-                self._queue_copy(folder, int(n), step["send"])
+                self._sending.get("cloud")._queue_copy(folder, int(n), step["send"])
             elif step.get("publish"):
-                self._enqueue_publish(folder, int(n))
+                self._sending.saved(folder, int(n))
         try:
             holding.update(self._recordings_dir, token,
                            {k: v for k, v in record.items() if k != "cloud"})
@@ -6648,68 +6605,19 @@ class Api:
         return _safe_name(Path(folder).name)
 
     def set_cloud_dir(self, path):
-        folder = Path(path).expanduser()
-        if not folder.is_absolute():
-            return {"ok": False, "error": "A full path is required"}
-        try:
-            folder.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            return {"ok": False, "error": f"Could not open the folder: {e}"}
-        self._config["cloud_dir"] = str(folder)
-        self._write_config()
-        # Nothing of this rehearsal has ever been copied into a folder chosen
-        # a moment ago, whatever the takes still say about the old one.
-        self._enqueue_session_takes()
-        # Here, not on a thread of its own: a folder was picked a moment ago
-        # and the reply waits for it anyway, and a sweep still running when
-        # the first copy lands in the folder must not take it back out.
-        self._sweep_empty_cloud_dirs()
-        return {"ok": True, "cloud_dir": str(folder)}
+        return self._sending.get("cloud").set_dir(path)
 
     def choose_cloud_dir(self):
-        if self._window is None:
-            return {"ok": False, "error": "No window available"}
-        try:
-            import webview
-
-            start = self._cloud_dir or Path.home()
-            picked = self._window.create_file_dialog(
-                webview.FOLDER_DIALOG, directory=str(start)
-            )
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-        if not picked:
-            return {"ok": False, "cancelled": True}
-        return self.set_cloud_dir(picked[0])
+        return self._sending.get("cloud").choose_dir()
 
     def set_cloud_format(self, fmt):
         """What the cloud copies are written as — see audio/encode.py."""
-        chosen = normalize_format(fmt)
-        self._config["cloud_format"] = chosen
-        self._write_config()
-        # Every copy was written in the old format, which is the whole of what
-        # this setting is about.
-        self._enqueue_session_takes()
-        return {"ok": True, "cloud_format": chosen, "encoder": encoder_available()}
+        return self._sending.get("cloud").set_format(fmt)
 
     def set_auto_publish(self, enabled, what=None):
-        """
-        Whether a saved take goes to the cloud folder on its own, and what of
-        it. Turning it on picks up the takes of the rehearsal in progress —
-        the ones recorded before the switch was flipped.
-        """
-        if what is not None and what not in ("mix", "tracks", "both"):
-            return {"ok": False, "error": "Unknown share type"}
-        self._config["auto_publish"] = bool(enabled)
-        if what is not None:
-            self._config["auto_publish_what"] = what
-        self._write_config()
-        self._enqueue_session_takes()
-        return {
-            "ok": True,
-            "auto_publish": self._config["auto_publish"],
-            "auto_publish_what": self._config.get("auto_publish_what") or "mix",
-        }
+        """Whether a saved take goes to the cloud folder on its own, and what
+        of it."""
+        return self._sending.get("cloud").set_auto(enabled, what)
 
     def _false_start_sec(self):
         # The config is a file somebody may edit by hand: a number is held to
@@ -6736,225 +6644,21 @@ class Api:
         return {"ok": True, "false_start_sec": value}
 
     def clear_cloud_dir(self):
-        # Publishing on its own needs somewhere to publish to. Left on, every
-        # take saved afterwards is queued, refused and marked "No cloud folder
-        # chosen", and the list reads as failed when nothing went wrong. The
-        # invariant belongs here rather than in a greyed-out checkbox.
-        self._config.pop("cloud_dir", None)
-        self._config["auto_publish"] = False
-        self._write_config()
-        return {"ok": True}
-
-    def _enqueue_publish(self, folder, take_number, take=None):
-        """
-        Ask for a take to be copied, if it is to go at all: sending is on and
-        the take was not kept with "not this one", or sending is off and it
-        was kept with "send this one" (see keep_take).
-        """
-        if take is None:
-            take = self._take_in(folder, take_number) or {}
-        # One that is in the cloud already is kept up to date there whatever
-        # the setting says: sending on its own decides what goes up, not what
-        # becomes of what is there. Only when it is out of date, though —
-        # "waiting for the cloud" on a take that is fine there would be noise.
-        if not self._copy_due(take):
-            there = _shape_of(take.get("cloud"))
-            if there is None or self._copy_current(folder, take, there):
-                return
-        self._queue_copy(folder, take_number, None, take)
-
-    def _copy_current(self, folder, take, what):
-        """Whether the cloud folder already holds this take as `what`, made
-        the way the settings now say."""
-        return cloudmod.is_current(
-            take, what, self._config.get("volumes", {}),
-            normalize_format(self._config.get("cloud_format")),
-            self._cloud_target(folder))
-
-    def _copy_due(self, take):
-        """Whether sending on its own sends this take: the setting is on and
-        it was not kept with "not this one", or it was kept with "send this
-        one" (see keep_take)."""
-        if take.get("cloud_skip"):
-            return False
-        return bool(self._config.get("auto_publish") or take.get("cloud_send"))
-
-    def _queue_copy(self, folder, take_number, what, take=None):
-        """The queue and the journal together: one waiting entry per take,
-        however many times it is asked for. `what` None is automatic."""
-        key = (str(folder), int(take_number))
-        with self._cloud_lock:
-            if key not in self._cloud_entries:
-                take = take or self._take_in(folder, take_number) or {}
-                name = take.get("name") or f"Take {take_number}"
-                self._cloud_entries[key] = self._journal.begin(
-                    "cloud", f"“{name}” → cloud", str(folder), int(take_number),
-                    waiting=True)
-        self._cloud_queue.enqueue(str(folder), take_number, what)
-
-    def _take_in(self, folder, take_number):
-        """A take's record, or None."""
-        return self._lib.take(folder, take_number)
-
-    def _enqueue_session_takes(self):
-        """
-        Every take of the rehearsal in progress.
-
-        What a copy was made from is mostly settings — the balance, the
-        format, where the copies go — so "that changed" is true of every take
-        ever recorded. Re-publishing all of them because a fader moved would
-        be a storm of mixdowns. The rehearsal in progress is the one the
-        change was made during; older ones keep what they sent, and the share
-        dialog is still there to redo one by hand.
-        """
-        if self._session is None:
-            return
-        for t in self._session_takes():
-            self._enqueue_publish(self._session["folder"], t["take_number"], take=t)
-
-    def _retry_failed_publishes(self):
-        """
-        The realistic failure is a sync folder that is briefly not there. The
-        next saved take sweeps up whatever the rehearsal could not send while
-        it was gone, so the backlog clears itself with no retry loop.
-        """
-        if self._session is None:
-            return
-        for t in self._session_takes():
-            if t.get("cloud_error"):
-                self._enqueue_publish(self._session["folder"], t["take_number"], take=t)
-
-    def _publish_step(self, folder, take_number, what=None):
-        """
-        One take, on the publishing thread. `what` None is an automatic job:
-        it skips a take that is already in the cloud folder in the shape the
-        settings ask for, so a burst of requests costs one mixdown, not
-        several, and leaves nothing in the journal for it. A job asked for by
-        hand copies what it was asked for.
-        """
-        key = (str(folder), int(take_number))
-        with self._cloud_lock:
-            entry = self._cloud_entries.pop(key, None)
-        try:
-            self._publish(folder, take_number, what, entry)
-        except Exception as e:
-            # Whatever went wrong — the library, writing a failure down — the
-            # entry must not be left waiting or running with nothing behind it.
-            if entry is not None:
-                entry.fail(str(e),
-                           retry=what or self._config.get("auto_publish_what") or "mix")
-            raise
-
-    def _publish(self, folder, take_number, what, entry):
-        take = self._lib.take(folder, take_number)
-        if entry is None:
-            name = (take or {}).get("name") or f"Take {take_number}"
-            entry = self._journal.begin(
-                "cloud", f"“{name}” → cloud", str(folder), int(take_number))
-        if what is None:
-            # Asked again here, not only when queued: the setting or the
-            # take's own answer can have changed while it waited.
-            there = _shape_of((take or {}).get("cloud"))
-            due = take is not None and self._copy_due(take)
-            if take is None or (not due and there is None):
-                entry.discard()
-                return
-            # What is there already, and what the setting sends if it sends
-            # this take: a take sent by hand as its tracks too keeps them when
-            # a new balance or format makes it again, and one the setting does
-            # not send is made again as it was, not as the setting would.
-            what = (_with(there, self._config.get("auto_publish_what") or "mix")
-                    if due else there)
-            fmt = normalize_format(self._config.get("cloud_format"))
-            target = self._cloud_target(folder)
-            if cloudmod.is_current(take, what, self._config.get("volumes", {}),
-                                   fmt, target):
-                entry.discard()
-                return
-        entry.start("Starting")
-        try:
-            res = self._copy_to_cloud(str(folder), take_number, what,
-                                      progress=entry.progress)
-        except Exception as e:
-            # A sync folder that vanishes mid-write raises instead of
-            # returning {"ok": False} — that must still land as a recorded,
-            # retryable failure, not a silently stalled take.
-            res = {"ok": False, "error": str(e)}
-        if res.get("ok"):
-            entry.done(_copy_detail(what, res))
-            return
-        error = res.get("error") or "Could not copy the take"
-        entry.fail(error, retry=what)
-        if take is not None:
-            self._record_cloud_error(folder, take_number, error)
-
-    def _record_cloud_error(self, folder, take_number, message):
-        """Why a take is not in the cloud folder, kept with the take."""
-        self._lib.set_cloud_error(folder, take_number, message)
+        return self._sending.get("cloud").clear_dir()
 
     def share_take(self, folder, take_number, what="mix"):
-        """
-        Puts one take on the queue to be copied into the cloud folder, and
-        answers at once. what: "mix" (one stereo file), "tracks" (the
-        originals) or "both". The copying is _copy_to_cloud, on the
-        publishing thread, and reported in the journal — see activity.py.
-        What can be refused now is refused now.
-        """
-        if what not in ("mix", "tracks", "both"):
-            return {"ok": False, "error": "Unknown share type"}
-        if self._cloud_dir is None:
-            return {"ok": False, "error": "No cloud folder chosen", "needs_dir": True}
-        folder = Path(folder)
-        if not self._inside_recordings(folder):
-            return {"ok": False, "error": "Folder is outside the recordings directory"}
-        take = self._lib.take(folder, take_number)
-        if take is None:
-            if not self._lib.has(folder):
-                return {"ok": False, "error": "Rehearsal not found"}
-            return {"ok": False, "error": "Take not found"}
-        if not any(Path(t.get("file", "")).exists() for t in take["tracks"]):
-            return {"ok": False, "error": "The take has no files left on disk"}
-        self._queue_copy(folder, take_number, what, take)
-        return {"ok": True, "queued": True, "take": take}
+        """One take, sent where Settings › Folders says. what: "mix",
+        "tracks" or "both", for the cloud folder."""
+        return self._sending.chosen().send(folder, take_number, what)
 
     def send_starred(self, folder):
-        """
-        Send starred: every ★ take of a rehearsal with nothing of it in the
-        cloud folder and no copy waiting, queued as What gets sent says.
-        A take already there is not sent again, even if the setting has
-        changed since; its share dialog is there for that. A take that cannot
-        be sent (its files gone) is in `failed`, with why.
-        """
-        if self._cloud_dir is None:
-            return {"ok": False, "error": "No cloud folder chosen", "needs_dir": True}
-        folder = Path(folder)
-        if not self._inside_recordings(folder):
-            return {"ok": False, "error": "Folder is outside the recordings directory"}
-        rehearsal = self._lib.rehearsal(folder)
-        if rehearsal is None:
-            return {"ok": False, "error": "Rehearsal not found"}
-        what = self._config.get("auto_publish_what") or "mix"
-        waiting = self._cloud_queue.states(folder)
-        queued, failed = [], []
-        for take in rehearsal["takes"]:
-            n = take["take_number"]
-            if not take.get("starred") or n in waiting or _shape_of(take.get("cloud")):
-                continue
-            res = self.share_take(folder, n, what)
-            if res.get("ok"):
-                queued.append(n)
-            else:
-                failed.append({"take_number": n, "error": res.get("error", "Could not copy")})
-        return {"ok": True, "queued": queued, "failed": failed}
+        """Every ★ take of a rehearsal not sent yet, sent where Settings ›
+        Folders says."""
+        return self._sending.chosen().send_starred(folder)
 
     def retry_cloud(self, entry_id):
         """A failed copy, queued again as the one it was."""
-        entry = self._journal.find(int(entry_id))
-        data = entry.snapshot() if entry else None
-        if not data or data["kind"] != "cloud" or data["state"] != "failed":
-            return {"ok": False, "error": "Nothing to retry"}
-        return self.share_take(data["folder"], data["take_number"],
-                               data["retry"] or "mix")
+        return self._sending.get("cloud").retry(entry_id)
 
     def _copy_to_cloud(self, folder, take_number, what="mix", progress=None):
         """
@@ -7102,7 +6806,7 @@ class Api:
             shared["tracks"] = str(dest)
             shared["tracks_format"] = fmt if came_out <= {fmt} else "wav"
 
-        shared["source"] = cloudmod.source_of(
+        shared["source"] = source_of(
             take, what, volumes, fmt, _safe_name(folder.name)
         )
         # Only the take's cloud fields are written, so a rename that landed
@@ -7127,28 +6831,9 @@ class Api:
         }
 
     def unshare_take(self, folder, take_number):
-        """Removes the cloud copies of a take. The originals are untouched."""
-        folder = Path(folder)
-        if not self._inside_recordings(folder):
-            return {"ok": False, "error": "Folder is outside the recordings directory"}
-        take = self._lib.take(folder, take_number)
-        if take is None:
-            if not self._lib.has(folder):
-                return {"ok": False, "error": "Rehearsal not found"}
-            return {"ok": False, "error": "Take not found"}
-        # A copy on its way would put back what is removed now the moment it
-        # finished — the file in the band's folder, and its record.
-        if self._cloud_queue.states(str(folder)).get(int(take_number)):
-            return {"ok": False, "error":
-                    "This take is still being copied to the cloud. Remove it "
-                    "once the copy has finished."}
-
-        # Not a copy another take names too (two rows naming one file, as an
-        # older version could leave): that file is the other take's as well.
-        others = self._lib.others_cloud_paths(folder, take_number)
-        result = self._remove_shared(self._unused(take.get("cloud"), others))
-        self._lib.set_cloud_copy(folder, take_number, None, None)
-        return {"ok": True, **result}
+        """Takes a take out of where it was sent. The originals are
+        untouched."""
+        return self._sending.chosen().remove(folder, take_number)
 
     def _remove_shared(self, take):
         """
@@ -7218,7 +6903,7 @@ class Api:
         """Whether a copy of this take — or of any take of this rehearsal —
         is waiting or being made. One in flight has read where it writes to,
         so moving its files under it would leave them where nothing points."""
-        states = self._cloud_queue.states(str(folder))
+        states = self._sending.get("cloud").states(str(folder))
         return bool(states) if take_number is None else int(take_number) in states
 
     def _cloud_base(self, take_number, take):
@@ -7245,7 +6930,7 @@ class Api:
             # what was sent; asking for a copy is what records why there is
             # none, and what sends it once the folder is back.
             if requeue:
-                self._enqueue_publish(folder, take_number, take=take)
+                self._sending.saved(folder, take_number, take=take)
             return False, None
         shared = dict(take.get("cloud") or {})
         shape = _shape_of(shared)
@@ -7255,7 +6940,7 @@ class Api:
         if (self._copy_busy(folder, take_number)
                 or not all(p.exists() and _is_inside(p, cloud) for p in parts.values())):
             if requeue:
-                self._queue_copy(folder, take_number, shape, take)
+                self._sending.get("cloud")._queue_copy(folder, take_number, shape, take)
             return False, None
 
         # A copy another take names too is that take's as well, and stays
@@ -7264,7 +6949,7 @@ class Api:
         others = self._lib.others_cloud_paths(folder, take_number)
         if any(self._cloud_in_use(p, others) for p in parts.values()):
             if requeue:
-                self._queue_copy(folder, take_number, shape, take)
+                self._sending.get("cloud")._queue_copy(folder, take_number, shape, take)
             return False, None
 
         def lands(name):
@@ -7295,7 +6980,7 @@ class Api:
                 except OSError:
                     pass
             if requeue:
-                self._queue_copy(folder, take_number, shape, take)
+                self._sending.get("cloud")._queue_copy(folder, take_number, shape, take)
                 return False, None
             return False, str(e)
         shared.update({k: str(p) for k, p in goes_to.items()})
@@ -7321,7 +7006,7 @@ class Api:
             # As in _rename_take_copies: nothing to move, so ask, and let the
             # copy say why it is not there.
             if self._session is not None and _same_folder(self._session["folder"], new_folder):
-                self._enqueue_session_takes()
+                self._sending.get("cloud")._enqueue_session_takes()
             return
         takes = [t for t in (self._lib.rehearsal(new_folder) or {}).get("takes", [])
                  if _shape_of(t.get("cloud"))]
@@ -7352,7 +7037,7 @@ class Api:
                 movable = False
         if not movable:
             for t in takes:
-                self._queue_copy(new_folder, t["take_number"], _shape_of(t["cloud"]), t)
+                self._sending.get("cloud")._queue_copy(new_folder, t["take_number"], _shape_of(t["cloud"]), t)
             return
         target = self._cloud_target(new_folder)
         for t in takes:
@@ -7440,7 +7125,7 @@ class Api:
     def _names_must_wait(self):
         """Files in use: a take recording, a copy being made, or a take being
         saved, cropped or recovered. The pass waits for them."""
-        if self._recorder is not None or self._cloud_queue.busy():
+        if self._recorder is not None or self._sending.get("cloud").queue.busy():
             return True
         return any(e["state"] == "running" and e["kind"] in ("stop", "crop", "recover")
                    for e in self._journal.snapshot())

@@ -1210,7 +1210,7 @@ def main():
     a.set_cloud_format("wav")
 
     print("\n[11c] A cloud copy remembers what it was made from")
-    from rehearsal_recorder import cloud as cloudmod
+    from rehearsal_recorder.sending import cloud_folder as cloudmod
 
     a.set_cloud_format("wav")
     detail = a.get_rehearsal(str(new_folder))
@@ -1444,7 +1444,7 @@ def main():
     c.set_cloud_format("flac")  # a change that re-sends the whole rehearsal
     ok("and a later re-send of the rehearsal leaves it out too",
        1 not in c.session_state()["cloud_queue"])
-    while c._cloud_queue.run_next():
+    while c._sending.get("cloud").queue.run_next():
         pass
     ok("so it never reaches the cloud folder",
        not c.get_rehearsal(str(choice_folder))["takes"][0]["cloud"])
@@ -1453,7 +1453,7 @@ def main():
     keep_one(2, True)
     ok("with sending off, a take kept with 'send this one' is queued",
        c.session_state()["cloud_queue"] == {2: "queued"})
-    while c._cloud_queue.run_next():
+    while c._sending.get("cloud").queue.run_next():
         pass
     sent = c.get_rehearsal(str(choice_folder))["takes"][1]
     ok("and it is sent", Path(sent.get("cloud", {}).get("mix", "")).exists())
@@ -1475,28 +1475,33 @@ def main():
     ok("and is waiting to be published",
        a.session_state()["cloud_queue"] == {1: "queued"})
 
-    a._cloud_queue.run_next()
+    a._sending.get("cloud").queue.run_next()
     folder = Path(a.session_state()["folder"])
     take = a.get_rehearsal(str(folder))["takes"][0]
     ok("the mix is in the cloud folder", Path(take["cloud"]["mix"]).exists())
     ok("the queue is empty afterwards", a.session_state()["cloud_queue"] == {})
     ok("and nothing failed", "cloud_error" not in take)
 
+    # With send_to "service" but no key, the cloud folder is still the one chosen.
+    a._config["send_to"] = "service"
+    ok("no key: the cloud folder is chosen", a._sending.chosen().id == "cloud")
+    a._config.pop("send_to")
+
     # A second pass must not mix it all over again.
-    a._enqueue_publish(folder, 1)
+    a._sending.saved(folder, 1)
     before = Path(take["cloud"]["mix"]).stat().st_mtime_ns
-    a._cloud_queue.run_next()
+    a._sending.get("cloud").queue.run_next()
     after = Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"]).stat().st_mtime_ns
     ok("an unchanged take is not copied twice", before == after)
 
     a.set_auto_publish(False)
-    a._enqueue_publish(folder, 1)
+    a._sending.saved(folder, 1)
     ok("with the setting off nothing is queued",
        a.session_state()["cloud_queue"] == {})
     a.set_auto_publish(True, "mix")
     # Turning it back on with a session in progress re-queues take 1 (already
     # current) — drain that before the next checks so it doesn't interfere.
-    a._cloud_queue.run_next()
+    a._sending.get("cloud").queue.run_next()
 
     # A gap the review caught: a sync folder can vanish mid-write, raising
     # instead of returning {"ok": False}. That must still land as a recorded,
@@ -1512,7 +1517,7 @@ def main():
     try:
         a.keep_take(2, str(solo2), "Boom", 2.0,
                     [{"name": "A", "file": str(solo2 / "two.wav")}], [])
-        a._cloud_queue.run_next()
+        a._sending.get("cloud").queue.run_next()
     finally:
         a._copy_to_cloud = real_copy
     broken = a.get_rehearsal(str(folder))["takes"][1]
@@ -1528,7 +1533,7 @@ def main():
 
     # Drain the backlog (take 3, and the retried take 2) before the next
     # check, which cares only about what happens while recording.
-    while a._cloud_queue.run_next():
+    while a._sending.get("cloud").queue.run_next():
         pass
 
     # Recording wins: the worker must never compete with the audio callback.
@@ -1537,11 +1542,11 @@ def main():
     a.keep_take(4, str(solo4), "Later", 2.0,
                 [{"name": "A", "file": str(solo4 / "four.wav")}], [])
     a._recorder = object()  # sentinel: stands in for an active recorder
-    ok("nothing runs while recording", a._cloud_queue.run_next() is False)
+    ok("nothing runs while recording", a._sending.get("cloud").queue.run_next() is False)
     take4 = a.get_rehearsal(str(folder))["takes"][3]
     ok("and the take was not copied", not take4["cloud"])
     a._recorder = None
-    ok("but once recording stops it publishes", a._cloud_queue.run_next() is True)
+    ok("but once recording stops it publishes", a._sending.get("cloud").queue.run_next() is True)
     take4 = a.get_rehearsal(str(folder))["takes"][3]
     ok("and now it is in the cloud folder", Path(take4["cloud"]["mix"]).exists())
 
@@ -1622,7 +1627,7 @@ def main():
     # Restoring auto-publish above re-queued every take of the still-open
     # session (that is what turning it on does) — drain that before handing
     # off to the next section, which should start from an empty queue.
-    while a._cloud_queue.run_next():
+    while a._sending.get("cloud").queue.run_next():
         pass
 
     print("\n[11g] A rename moves the copy, and a new balance sends it again")
@@ -1641,7 +1646,7 @@ def main():
     ok("a new balance queues the rehearsal's takes",
        queued == {t["take_number"]: "queued" for t in a.session_state()["takes"]}
        and len(queued) > 1)
-    a._cloud_queue.run_next()
+    a._sending.get("cloud").queue.run_next()
     ok("and the take is current again",
        cloudmod.is_current(a.get_rehearsal(str(folder))["takes"][0], "mix",
                            a.get_settings()["volumes"], "wav",
@@ -1651,13 +1656,13 @@ def main():
 
     # [11g] leaves takes queued behind it. Clear them while there is still a
     # cloud folder to publish into, so what follows is about this take alone.
-    while a._cloud_queue.run_next():
+    while a._sending.get("cloud").queue.run_next():
         pass
 
     folder = Path(a.session_state()["folder"])
     a._config.pop("cloud_dir", None)
     a.rename_take(str(folder), 1, "Polyn third")
-    a._cloud_queue.run_next()
+    a._sending.get("cloud").queue.run_next()
     take = a.get_rehearsal(str(folder))["takes"][0]
     ok("the take says why it is not in the cloud",
        "cloud folder" in (take.get("cloud_error") or "").lower())
@@ -1671,8 +1676,8 @@ def main():
                 [{"name": "A", "file": str(solo / "ten.wav")}], [])
     ok("the failed take is queued again alongside the new one",
        a.session_state()["cloud_queue"].get(1) == "queued")
-    a._cloud_queue.run_next()
-    a._cloud_queue.run_next()
+    a._sending.get("cloud").queue.run_next()
+    a._sending.get("cloud").queue.run_next()
     take = a.get_rehearsal(str(folder))["takes"][0]
     ok("a later run puts it there after all", Path(take["cloud"]["mix"]).exists())
     ok("and the complaint is gone", "cloud_error" not in take)
@@ -1681,7 +1686,7 @@ def main():
 
     # [11h] left the rest of its backlog queued. Clear it, so what follows is
     # about this take alone.
-    while a._cloud_queue.run_next():
+    while a._sending.get("cloud").queue.run_next():
         pass
 
     folder = Path(a.session_state()["folder"])
@@ -1693,7 +1698,7 @@ def main():
     ok("and a take copied to the old one no longer counts as current",
        not cloudmod.is_current(a.get_rehearsal(str(folder))["takes"][0], "mix",
                                balance, "wav", a._cloud_target(folder)))
-    while a._cloud_queue.run_next():
+    while a._sending.get("cloud").queue.run_next():
         pass
     take = a.get_rehearsal(str(folder))["takes"][0]
     ok("running the queue puts the copy in the new folder",
@@ -1706,8 +1711,8 @@ def main():
     ok("a copy deleted behind the app's back is not current",
        not cloudmod.is_current(take, "mix", balance, "wav",
                                a._cloud_target(folder)))
-    a._enqueue_publish(folder, 1)
-    a._cloud_queue.run_next()
+    a._sending.saved(folder, 1)
+    a._sending.get("cloud").queue.run_next()
     ok("so it is sent again",
        Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"]).exists())
 
@@ -1728,7 +1733,7 @@ def main():
     ok("changing the format queues the rehearsal's takes",
        a.session_state()["cloud_queue"].get(1) == "queued")
     a.set_cloud_format("wav")
-    while a._cloud_queue.run_next():
+    while a._sending.get("cloud").queue.run_next():
         pass
 
     print("\n[11j] Forgetting the cloud folder stops publishing on its own")
@@ -1739,14 +1744,14 @@ def main():
     ok("the folder is forgotten", a.get_settings()["cloud_dir"] is None)
     ok("and automatic publishing goes with it",
        a.get_settings()["auto_publish"] is False)
-    a._enqueue_publish(folder, 1)
+    a._sending.saved(folder, 1)
     ok("so nothing is queued for nowhere",
        a.session_state()["cloud_queue"] == {})
 
     # Leave the fixture as it was found.
     a.set_cloud_dir(str(moved))
     a.set_auto_publish(True, "mix")
-    while a._cloud_queue.run_next():
+    while a._sending.get("cloud").queue.run_next():
         pass
 
     print("\n[11k] A copy cut off half-written is not left looking like a take")
@@ -1809,8 +1814,8 @@ def main():
 
     for p in left:
         p.unlink()
-    a._enqueue_publish(folder, 1)
-    while a._cloud_queue.run_next():
+    a._sending.saved(folder, 1)
+    while a._sending.get("cloud").queue.run_next():
         pass
     ok("and the next pass puts a whole one there",
        Path(a.get_rehearsal(str(folder))["takes"][0]["cloud"]["mix"]).exists())
@@ -1820,11 +1825,11 @@ def main():
     idle = cloudmod.PublishQueue(step=lambda f, n, what=None: None,
                                  paused=lambda: False)
     idle.start()
-    real_queue, a._cloud_queue = a._cloud_queue, idle
+    real_queue, a._sending.get("cloud").queue = a._sending.get("cloud").queue, idle
     try:
         a.shutdown()
     finally:
-        a._cloud_queue = real_queue
+        a._sending.get("cloud").queue = real_queue
     ok("closing the app stands the worker down", not idle._thread.is_alive())
 
     print("\n[11l] A recovered draft goes to the cloud like any other take")
@@ -1840,7 +1845,7 @@ def main():
     ok("and is waiting to be published",
        a.session_state()["cloud_queue"].get(rescued["take"]["take_number"])
        == "queued")
-    while a._cloud_queue.run_next():
+    while a._sending.get("cloud").queue.run_next():
         pass
     recovered = next(t for t in a.get_rehearsal(str(folder))["takes"]
                      if t["take_number"] == rescued["take"]["take_number"])
@@ -1870,7 +1875,7 @@ def main():
     fc._copy_to_cloud(str(cf), 2, "mix")
 
     def drain_c():
-        while fc._cloud_queue.run_next():
+        while fc._sending.get("cloud").queue.run_next():
             pass
 
     def copy_of(n, where=None):
@@ -1921,7 +1926,7 @@ def main():
        all(Path(v).exists() and Path(v).parent == new_sub
            for n in (1, 2) for k, v in copy_of(n)[1].items() if k in ("mix", "tracks")))
     ok("still current, mixed no more times than before",
-       current(1, "both") and current(2, "mix") and fc._cloud_queue.states(str(cf)) == {})
+       current(1, "both") and current(2, "mix") and fc._sending.get("cloud").queue.states(str(cf)) == {})
 
     cropped = fc.crop_take(str(cf), 1, 0.5, 2.0)
     drain_c()
@@ -2611,7 +2616,7 @@ def main():
                 [{"name": "Gtr", "file": str(draft / "Gtr.wav")}])
     cloud_setting = h._config.pop("cloud_dir")
     h._config["auto_publish"] = True
-    h._publish_step(str(hf), 2)
+    h._sending.get("cloud")._publish_step(str(hf), 2)
     h._config["cloud_dir"], h._config["auto_publish"] = cloud_setting, False
     ok("a cloud error from the publishing step shows in session_state",
        "cloud folder" in (h.session_state()["takes"][1].get("cloud_error") or "").lower())
@@ -4946,14 +4951,14 @@ def main():
                   s43["duration_sec"], s43["tracks"])
     folder43 = a43._session["folder"]
     n43 = s43["take_number"]
-    while a43._cloud_queue.run_next():
+    while a43._sending.get("cloud").queue.run_next():
         pass
     a43.clear_activity()
 
     queued = a43.share_take(str(folder43), n43, "both")
     ok("sharing by hand answers at once, queued",
        queued["ok"] and queued.get("queued") is True
-       and a43._cloud_queue.states(str(folder43)) == {n43: "queued"})
+       and a43._sending.get("cloud").queue.states(str(folder43)) == {n43: "queued"})
     entry43 = a43.activity()["entries"][0]
     ok("and is in the journal, waiting",
        entry43["kind"] == "cloud" and entry43["state"] == "waiting"
@@ -4967,7 +4972,7 @@ def main():
         return real_step(*args, **kwargs)
 
     a43._copy_to_cloud = watching
-    a43._cloud_queue.run_next()
+    a43._sending.get("cloud").queue.run_next()
     a43._copy_to_cloud = real_step
     finished = a43.activity()["entries"][0]
     ok("it runs, rising to the end",
@@ -4978,13 +4983,13 @@ def main():
 
     # Queued automatically, then by hand, before either ran: one job, doing
     # what the hand asked for.
-    a43._cloud_queue.enqueue(str(folder43), n43)
+    a43._sending.get("cloud").queue.enqueue(str(folder43), n43)
     a43.share_take(str(folder43), n43, "tracks")
     ok("a manual request replaces a waiting automatic one",
-       a43._cloud_queue._jobs == [[str(folder43), n43, "tracks"]]
+       a43._sending.get("cloud").queue._jobs == [[str(folder43), n43, "tracks"]]
        and sum(1 for e in a43.activity()["entries"]
                if e["state"] == "waiting") == 1)
-    while a43._cloud_queue.run_next():
+    while a43._sending.get("cloud").queue.run_next():
         pass
 
     # A failure: the cloud folder cannot be written. Journal and take both
@@ -4993,7 +4998,7 @@ def main():
     real_copy = a43._copy_to_cloud
     a43._copy_to_cloud = lambda *a, **k: {"ok": False, "error": "The cloud folder is gone"}
     a43.share_take(str(folder43), n43, "mix")
-    a43._cloud_queue.run_next()
+    a43._sending.get("cloud").queue.run_next()
     failed = a43.activity()["entries"][0]
     ok("a copy that fails is in the journal with why, and can be retried",
        failed["state"] == "failed" and failed["error"] == "The cloud folder is gone"
@@ -5003,8 +5008,8 @@ def main():
     a43._copy_to_cloud = real_copy
     again = a43.retry_cloud(failed["id"])
     ok("retry queues it again", again["ok"] and
-       a43._cloud_queue._jobs == [[str(folder43), n43, "mix"]])
-    a43._cloud_queue.run_next()
+       a43._sending.get("cloud").queue._jobs == [[str(folder43), n43, "mix"]])
+    a43._sending.get("cloud").queue.run_next()
     ok("and a retry that works clears the failure",
        a43.activity()["entries"][0]["state"] == "done"
        and not a43._lib.take(folder43, n43).get("cloud_error"))
@@ -5014,8 +5019,8 @@ def main():
     # An automatic job with nothing to do leaves no trace.
     a43.clear_activity()
     a43.set_auto_publish(True, "mix")
-    a43._enqueue_publish(folder43, n43)
-    a43._cloud_queue.run_next()
+    a43._sending.saved(folder43, n43)
+    a43._sending.get("cloud").queue.run_next()
     ok("an automatic copy that was already current leaves no entry",
        a43.activity()["entries"] == [])
 
@@ -5023,7 +5028,7 @@ def main():
     a43.share_take(str(folder43), n43, "mix")
     real_take = a43._lib.take
     a43._lib.take = lambda *a, **k: None
-    a43._cloud_queue.run_next()
+    a43._sending.get("cloud").queue.run_next()
     a43._lib.take = real_take
     ok("a take gone while it waited fails with its own reason",
        a43.activity()["entries"][0]["state"] == "failed"
@@ -5040,12 +5045,12 @@ def main():
     a43.clear_activity()
     a43._copy_to_cloud = requeue_mid_copy
     a43.share_take(str(folder43), n43, "mix")
-    a43._cloud_queue.run_next()
+    a43._sending.get("cloud").queue.run_next()
     a43._copy_to_cloud = real_copy
     ok("a take re-queued mid-copy waits while the first copy finishes",
        rerun_seen and rerun_seen[0] == ["running", "waiting"]
        and [e["state"] for e in a43.activity()["entries"]] == ["waiting", "done"])
-    while a43._cloud_queue.run_next():
+    while a43._sending.get("cloud").queue.run_next():
         pass
 
     print("\n[44] Nothing is left spinning, and a stop always stops")
@@ -5059,7 +5064,7 @@ def main():
     a44.keep_take(s44["take_number"], s44["temp_dir"], "Polyn",
                   s44["duration_sec"], s44["tracks"])
     folder44, n44 = a44._session["folder"], s44["take_number"]
-    while a44._cloud_queue.run_next():
+    while a44._sending.get("cloud").queue.run_next():
         pass
     a44.clear_activity()
 
@@ -5071,7 +5076,7 @@ def main():
     real_take = a44._lib.take
     a44._lib.take = locked
     try:
-        a44._cloud_queue.run_next()
+        a44._sending.get("cloud").queue.run_next()
     except Exception:
         pass
     finally:
@@ -5082,15 +5087,15 @@ def main():
     # The copy fails, and so does writing the failure down.
     a44.clear_activity()
     a44.share_take(str(folder44), n44, "mix")
-    real_copy, real_record = a44._copy_to_cloud, a44._record_cloud_error
+    real_copy, real_record = a44._copy_to_cloud, a44._sending.get("cloud")._record_cloud_error
     a44._copy_to_cloud = lambda *a, **k: {"ok": False, "error": "The cloud folder is gone"}
-    a44._record_cloud_error = locked
+    a44._sending.get("cloud")._record_cloud_error = locked
     try:
-        a44._cloud_queue.run_next()
+        a44._sending.get("cloud").queue.run_next()
     except Exception:
         pass
     finally:
-        a44._copy_to_cloud, a44._record_cloud_error = real_copy, real_record
+        a44._copy_to_cloud, a44._sending.get("cloud")._record_cloud_error = real_copy, real_record
     ok("a failed copy still says so when its failure cannot be written down",
        [e["state"] for e in a44.activity()["entries"]] == ["failed"])
 
@@ -5123,7 +5128,7 @@ def main():
     a45.keep_take(s45["take_number"], s45["temp_dir"], "Polyn",
                   s45["duration_sec"], s45["tracks"])
     folder45, n45 = a45._session["folder"], s45["take_number"]
-    while a45._cloud_queue.run_next():
+    while a45._sending.get("cloud").queue.run_next():
         pass
 
     # Queued: removing now would be undone the moment the copy runs.
@@ -5141,7 +5146,7 @@ def main():
         return real_copy45(*args, **kwargs)
 
     a45._copy_to_cloud = remove_mid_copy
-    a45._cloud_queue.run_next()
+    a45._sending.get("cloud").queue.run_next()
     a45._copy_to_cloud = real_copy45
     ok("nor one being copied",
        during and during[0]["ok"] is False)
@@ -5162,15 +5167,15 @@ def main():
         encmod._soundfile = real_sf
     ok("tracks that stayed WAV are recorded as WAV",
        plain["ok"] and plain["cloud"]["tracks_format"] == "wav")
-    import rehearsal_recorder.api as apimod45
-    said45 = apimod45._copy_detail("tracks", plain)
+    from rehearsal_recorder.sending import cloud_folder as cloudmod45
+    said45 = cloudmod45._copy_detail("tracks", plain)
     ok("and said to be WAV", said45.startswith("WAV of every track"))
     ok("a mix and tracks that came out differently say so",
-       apimod45._copy_detail("both", {"cloud": {"mix_format": "mp3",
+       cloudmod45._copy_detail("both", {"cloud": {"mix_format": "mp3",
                                                 "tracks_format": "wav"}})
        == "MP3 of the mix, WAV of every track")
     ok("and the same format is said once",
-       apimod45._copy_detail("both", {"cloud": {"mix_format": "mp3",
+       cloudmod45._copy_detail("both", {"cloud": {"mix_format": "mp3",
                                                 "tracks_format": "mp3"}})
        == "MP3 of the mix and every track")
 
@@ -5923,12 +5928,12 @@ def main():
     cloud53.rename(away53)
     cloud_entries53 = sum(e["kind"] == "cloud" for e in p53.activity()["entries"])
     ok("a cloud folder that is not there: nothing is queued, nothing reported renamed",
-       p53._names_pass.run() == 0 and p53._cloud_queue.states(str(jam53)) == {}
+       p53._names_pass.run() == 0 and p53._sending.get("cloud").queue.states(str(jam53)) == {}
        and sum(e["kind"] == "cloud" for e in p53.activity()["entries"]) == cloud_entries53)
     away53.rename(cloud53)
     stale53.unlink()
     ok("a copy the band deleted: nothing is queued, nothing reported renamed",
-       p53._names_pass.run() == 0 and p53._cloud_queue.states(str(jam53)) == {}
+       p53._names_pass.run() == 0 and p53._sending.get("cloud").queue.states(str(jam53)) == {}
        and sum(e["kind"] == "cloud" for e in p53.activity()["entries"]) == cloud_entries53)
     stale53.write_bytes(b"RIFF")
     ok("and once it is there, it is renamed, case or not",
@@ -6040,12 +6045,12 @@ def main():
        unnamed54["ok"] and unnamed54["take"]["song"] is None and unnamed54["take"]["starred"])
     cropped54 = l54.crop_take(str(live54), 1, 0.5, 2.5)
     ok("and cropped", cropped54["ok"] and cropped54["take"]["starred"])
-    queued54 = dict(l54._cloud_queue.states(str(live54)))
+    queued54 = dict(l54._sending.get("cloud").queue.states(str(live54)))
     l54.set_take_star(str(live54), 2, True)
     ok("the kept takes are queued for the cloud, to compare against",
        len(queued54) > 0)
     ok("a star queues no copy for the cloud, and renames nothing on disk",
-       dict(l54._cloud_queue.states(str(live54))) == queued54
+       dict(l54._sending.get("cloud").queue.states(str(live54))) == queued54
        and Path(l54._lib.take(live54, 2)["tracks"][0]["file"]).exists())
     l54.delete_take(str(live54), 1)
     ok("a deleted take is not there to star",
@@ -6433,7 +6438,7 @@ def main():
     ok("with no cloud folder nothing is sent",
        s59.send_starred(live59) == {"ok": False, "error": "No cloud folder chosen",
                                     "needs_dir": True}
-       and s59._cloud_queue._jobs == [])
+       and s59._sending.get("cloud").queue._jobs == [])
 
     cloud59 = tmp59 / "Drive"
     s59.set_cloud_dir(str(cloud59))
@@ -6444,10 +6449,10 @@ def main():
     ok("the starred takes not in the cloud folder are sent",
        sent59 == {"ok": True, "queued": [1], "failed": []})
     ok("as Settings' What gets sent says",
-       [j[1:] for j in s59._cloud_queue._jobs] == [[1, "both"]])
+       [j[1:] for j in s59._sending.get("cloud").queue._jobs] == [[1, "both"]])
     ok("a take already waiting is not sent again",
        s59.send_starred(live59) == {"ok": True, "queued": [], "failed": []}
-       and len(s59._cloud_queue._jobs) == 1)
+       and len(s59._sending.get("cloud").queue._jobs) == 1)
     keep59(5, "Polyn")
     s59.set_take_star(live59, 5, True)
     for track59 in s59._lib.take(live59, 5)["tracks"]:
@@ -6456,7 +6461,7 @@ def main():
        s59.send_starred(live59) == {
            "ok": True, "queued": [],
            "failed": [{"take_number": 5, "error": "The take has no files left on disk"}]}
-       and len(s59._cloud_queue._jobs) == 1)
+       and len(s59._sending.get("cloud").queue._jobs) == 1)
 
     take4_dir59 = Path(s59._lib.take(live59, 4)["tracks"][0]["file"]).parent
     gone59 = s59.delete_takes(live59, [2, 4, 99])
@@ -9342,7 +9347,7 @@ def main():
     # own name, never through encode (which would name it <stem>.wav); the mix has no notes in it, and mixdown is only
     # ever given the WAVs. A copy's record names the notes, so a take that has some reads as changed when its copy
     # was made without them, and a take that has none reads exactly as it always did.
-    from rehearsal_recorder import cloud as cloudmod69
+    from rehearsal_recorder.sending import cloud_folder as cloudmod69
     from rehearsal_recorder.midi.smf import write_mid as write_mid69
 
     def hits69(path, notes):
@@ -9471,8 +9476,8 @@ def main():
     a69._copy_to_cloud = lambda *args, **kwargs: (sent69.append(args), real_copy69(*args, **kwargs))[1]
     try:
         a69.set_auto_publish(True, "tracks")
-        a69._enqueue_publish(folder69, 2)
-        while a69._cloud_queue.run_next():
+        a69._sending.saved(folder69, 2)
+        while a69._sending.get("cloud").queue.run_next():
             pass
         a69.set_auto_publish(False, "mix")
     finally:
@@ -9500,7 +9505,7 @@ def main():
 
     print("  A crop")
     cropped69 = a69.crop_take(str(folder69), 1, 0.5, 1.5)
-    while a69._cloud_queue.run_next():
+    while a69._sending.get("cloud").queue.run_next():
         pass
     take1 = a69._lib.take(folder69, 1)
     dest69 = Path(take1["cloud"].get("tracks") or "")
@@ -10452,7 +10457,7 @@ def main():
     wed72 = past71(q72, "Wednesday", "2026-09-30T19:00:00", ["Polyn"])
     q72.undo_trash(q72.delete_rehearsal(str(wed72)).get("undo"))
     ok("h. Undo of a rehearsal asks for its takes to be copied, when sending is on",
-       q72._cloud_queue.states(str(wed72)) == {1: "queued"})
+       q72._sending.get("cloud").queue.states(str(wed72)) == {1: "queued"})
     q72.set_auto_publish(False, "mix")
 
     print("  an Undo that is refused leaves everything as it is")
@@ -10843,7 +10848,7 @@ def main():
         return bytes71(found[-1]) if found else None
 
     def drain_c(api):
-        while api._cloud_queue.run_next():
+        while api._sending.get("cloud").queue.run_next():
             pass
 
     marks_before = [(0.5, 1, "count-in"), (1.5, 2, "here"), (3.8, 3, "stopped")]
@@ -10909,7 +10914,7 @@ def main():
     ok("c. Undo takes the cropped copy out of the cloud folder",
        not copy2.exists() and copy2 in sent71[mark_c:])
     ok("and asks for the whole take to be copied there again, in the shape it had",
-       cr._cloud_queue.states(str(folder_c)).get(2) == "queued"
+       cr._sending.get("cloud").queue.states(str(folder_c)).get(2) == "queued"
        and cr._lib.take(folder_c, 2)["cloud"] == {})
     drain_c(cr)
     again2 = Path((cr._lib.take(folder_c, 2)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
@@ -11559,7 +11564,7 @@ def main():
     ok("the next start takes the cropped copy out of the cloud folder, and asks for the take as "
        "it was to be copied there",
        not copy25.exists() and copy25 in sent71
-       and cr_v._cloud_queue.states(str(folder_c)).get(25) == "queued"
+       and cr_v._sending.get("cloud").queue.states(str(folder_c)).get(25) == "queued"
        and token25 not in entries71(rec_c))
     drain_c(cr_v)
     again25 = Path((cr_v._lib.take(folder_c, 25)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
@@ -11580,7 +11585,7 @@ def main():
     ok("and its entry waits with that step, which its end does",
        token26 in entries71(rec_c) and isinstance(record_c(token26).get("cloud"), dict)
        and cr_v.end_trash(token26) == {"ok": True} and not copy26.exists()
-       and cr_v._cloud_queue.states(str(folder_c)).get(26) == "queued"
+       and cr_v._sending.get("cloud").queue.states(str(folder_c)).get(26) == "queued"
        and token26 not in entries71(rec_c))
     drain_c(cr_v)
 
@@ -11593,7 +11598,7 @@ def main():
     cr_v.undo_trash(token27)
     ok("a take taken out of the cloud folder since its crop is not sent there again by its Undo",
        length_c(cr_v, folder_c, 27) == 4.0 and cr_v._lib.take(folder_c, 27)["cloud"] == {}
-       and cr_v._cloud_queue.states(str(folder_c)).get(27) is None)
+       and cr_v._sending.get("cloud").queue.states(str(folder_c)).get(27) is None)
     take_c(cr_v, folder_c, 28, "Sneg")
     token28 = cr_v.crop_take(str(folder_c), 28, 1.0, 3.0).get("undo")
     cr_v.share_take(str(folder_c), 28, "mix")
@@ -11604,7 +11609,7 @@ def main():
     cr_v.undo_trash(token28)
     ok("and one sent there since has its cropped copy taken out, and is sent there again",
        not copy28.exists() and copy28 in sent71
-       and cr_v._cloud_queue.states(str(folder_c)).get(28) == "queued")
+       and cr_v._sending.get("cloud").queue.states(str(folder_c)).get(28) == "queued")
     drain_c(cr_v)
     again28 = Path((cr_v._lib.take(folder_c, 28)["cloud"] or {}).get("mix") or tmp_c / "nowhere")
     ok("the take as it was, as a mix", again28.is_file() and wav_frames(again28) == 4 * SR)
@@ -11812,7 +11817,7 @@ def main():
     ok("which does it: the cropped copy out of the cloud folder, the take as it was asked for",
        copy35.is_file() and cr_x.end_trash(token35) == {"ok": True}
        and token35 not in entries71(rec_c) and not copy35.exists()
-       and cr_x._cloud_queue.states(str(folder_c)).get(35) == "queued")
+       and cr_x._sending.get("cloud").queue.states(str(folder_c)).get(35) == "queued")
     drain_c(cr_x)
 
     print("  a crop whose library fails before it starts")
@@ -12160,7 +12165,7 @@ def main():
        and h77._lib.take(gig77, 1)["name"] == h77._lib.take(mon77, 1)["name"] == "Take 1")
 
     def run77():
-        while h77._cloud_queue.run_next():
+        while h77._sending.get("cloud").queue.run_next():
             pass
 
     def copy77(folder, n):
