@@ -1,4 +1,4 @@
-import { exports } from "cloudflare:workers"
+import { env, exports } from "cloudflare:workers"
 import { expect } from "vitest"
 
 export const ORIGIN = "https://band.test"
@@ -144,3 +144,22 @@ export function takeMeta(over: Record<string, unknown> = {}) {
 }
 
 export const TAKE = "0b7e4c1a-9d2f-4e6b-8a3c-5f1d7e9b2a40"
+
+/** A take РЭХА sent whose MP3s are up, so the band sees it. */
+export async function shownTake(
+  over: Record<string, unknown> & { uid?: string; date?: string } = {}
+): Promise<string> {
+  const { putTake, ready } = await import("../worker/takes/store")
+  const uid = over.uid ?? crypto.randomUUID()
+  const { uid: _, date, ...meta } = over
+  const rehearsal = date ? { uid: crypto.randomUUID(), name: "Rehearsal", date } : REHEARSAL
+  const bindings = env as never
+  await putTake(bindings, uid, takeMeta({ rehearsal, ...meta }) as never)
+  await ready(bindings, uid, 1, "mp3", ORIGIN)
+  return uid
+}
+
+/** Gives the member their name, as the page asks them the first time. */
+export async function named(cookie: string, name: string): Promise<void> {
+  expect((await put("/api/me", { name }, cookie)).status).toBe(200)
+}

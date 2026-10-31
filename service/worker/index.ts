@@ -1,5 +1,6 @@
 import { isAPIError } from "better-auth/api"
-import type { Bindings } from "./shared/env"
+import { createMiddleware } from "hono/factory"
+import type { AppEnv, Bindings } from "./shared/env"
 import { fail } from "./shared/errors"
 import { DOC, newApp } from "./shared/openapi"
 import { memberRoutes } from "./members/routes"
@@ -11,6 +12,9 @@ import { standInRoutes, standIns } from "./signin/stand-ins"
 import { rehaRoutes } from "./takes/reha-routes"
 import { purgeTrash } from "./takes/purge"
 import { uploadRoutes } from "./uploads/routes"
+import { bandRoutes } from "./takes/band-routes"
+import { commentRoutes } from "./comments/routes"
+import { fileRoutes } from "./files/routes"
 import { consumeChat } from "./chat/consume"
 import { reportFailure } from "./chat/failures"
 import { botApi, keptTelegram, type KeptMessage } from "./chat/telegram"
@@ -30,7 +34,7 @@ const AUTH_PATHS = [
 
 const app = newApp()
 
-app.use("/api/*", async (c, next) => {
+const requestParts = createMiddleware<AppEnv>(async (c, next) => {
   const parts =
     c.env.STAND_INS === "on"
       ? standIns
@@ -39,6 +43,8 @@ app.use("/api/*", async (c, next) => {
   c.set("auth", makeAuth(c.env, new URL(c.req.url).origin, parts))
   await next()
 })
+app.use("/api/*", requestParts)
+app.use("/files/*", requestParts)
 
 app.on(["GET", "POST"], AUTH_PATHS, (c) => c.var.auth.handler(c.req.raw))
 
@@ -49,7 +55,11 @@ app.openAPIRegistry.registerComponent("securitySchemes", "rehaKey", {
   description: "The secret part of the key, after the last “:”",
 })
 
-const routes = app.route("/", meRoutes).route("/", memberRoutes).route("/", rehaRoutes).route("/", uploadRoutes).route("/", standInRoutes)
+const routes = app.route("/", meRoutes).route("/", memberRoutes).route("/", rehaRoutes).route("/", uploadRoutes)
+  .route("/", bandRoutes)
+  .route("/", commentRoutes)
+  .route("/", fileRoutes)
+  .route("/", standInRoutes)
 
 app.doc31("/api/openapi.json", DOC)
 
