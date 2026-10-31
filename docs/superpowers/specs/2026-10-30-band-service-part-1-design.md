@@ -191,11 +191,29 @@ come from РЭХА are not posted on their own: they arrive with their take.
 service key**. It opens a field for the key. A key holds the service's
 address and a secret in one line of text, such as
 `band.reha.stream:9fT2kQ…`; Alex makes it on the service's **Members** page.
-It is not a link to open in a browser.
-With a key in, the line becomes the
-service's address with **Disconnect**, and **Send takes to** offers
-**Cloud folder** or **Band service**, one at a time. Without a key nothing
-else about the service shows anywhere in РЭХА.
+It is not a link to open in a browser. Without a key nothing else about the
+service shows anywhere in РЭХА.
+
+With a key in, the **Cloud folder** group in Settings › Folders becomes
+**Sending takes** and starts with **Send takes to**: **Cloud folder** or
+**Band service**, one at a time.
+
+- With **Cloud folder** chosen, the group is as it is today: the folder,
+  **Copies are written as**, **Send saved takes automatically** and **What
+  gets sent**.
+- With **Band service** chosen, the folder, **Copies are written as** and
+  **What gets sent** are hidden, since the service always gets the same
+  set. In their place are the service's address with **Disconnect**, and
+  one line on what goes: every track as MP3 and FLAC, MIDI, marks. **Send
+  saved takes automatically** stays and works the same way.
+
+The cloud folder's path is kept while the service is chosen, so switching
+back brings everything back as it was.
+
+A take's cloud button sends straight to the service, with no dialog. On a
+take that has gone up it opens a small dialog, “Viasna 12 in the band
+service”, which says which files are up and which are still on their way,
+and has **Remove from the band service**.
 
 ### What goes up
 
@@ -357,15 +375,19 @@ guide, since only the band can use it.
 16. A chat message takes additions for three hours, then a new one starts;
     marks from РЭХА are not posted on their own.
 17. **I have a band service key** sits at the bottom of Settings › Folders.
-18. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
-19. No mix file: the browser mixes the tracks. With six tracks this saves a
+18. With the service chosen, the cloud folder's rows are hidden rather than
+    greyed, and the group is renamed **Sending takes**.
+19. A take's cloud button sends to the service with no dialog; on a sent
+    take, a dialog with what is up and **Remove from the band service**.
+20. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
+21. No mix file: the browser mixes the tracks. With six tracks this saves a
     seventh of the MP3 space.
-20. MP3s first, FLAC after; a take shows once its MP3s are up.
-21. A take deleted in РЭХА leaves the service.
-22. Parts of 10 MB; an upload unfinished for 7 days starts again.
-23. Closing РЭХА while sending asks first, with its wording above.
-24. Waveforms are made by РЭХА and sent with the take.
-25. The pages are React with the design system's components, as on the
+22. MP3s first, FLAC after; a take shows once its MP3s are up.
+23. A take deleted in РЭХА leaves the service.
+24. Parts of 10 MB; an upload unfinished for 7 days starts again.
+25. Closing РЭХА while sending asks first, with its wording above.
+26. Waveforms are made by РЭХА and sent with the take.
+27. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
-26. The service goes live with a release, like the site.
-27. Nothing about the service on reha.stream or in the guide.
+28. The service goes live with a release, like the site.
+29. Nothing about the service on reha.stream or in the guide.
