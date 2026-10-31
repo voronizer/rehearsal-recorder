@@ -102,7 +102,15 @@ what the others see on stars and comments. They can change it later with
 their name at the bottom of the left column.
 
 If a phone is lost, Alex presses **Sign out everywhere** for that member
-and sends them a new link.
+and sends them a new link. A member is also signed out if they stay away a
+whole year or clear their browser's data; then they ask Alex for a new
+link too.
+
+Alex himself gets in with the setup secret, a password he sets once in
+Cloudflare. band.reha.stream/setup asks for it and signs that browser in
+as Alex. It works whenever he needs it: the first time, after a lost phone,
+or after a year away. Cloudflare does not show a secret again once it is
+set, so if Alex forgets it, he sets a new one there.
 
 ### Members
 
@@ -339,8 +347,9 @@ never for a member, and works until Alex removes it.
 Cloudflare Access is not used: it keeps a sign-in for a month at most
 (Cloudflare's session management page, read on 30 October).
 
-Alex's own first link comes from a setup secret: opening
-band.reha.stream/setup with it makes him the owner, and works only once.
+Alex signs in at band.reha.stream/setup with the setup secret, kept as a
+Worker secret. The first time, that makes him the owner; after that it
+only signs him in again.
 
 ### Uploads
 
@@ -381,8 +390,8 @@ Once, by Alex, with step-by-step notes from Claude:
 2. A Telegram bot from BotFather, added to the band's group.
 3. Secrets in Cloudflare and in GitHub: the API token for deploying, the
    bot's token, the chat's id, and the setup secret.
-4. The setup link, for his own link; then the members, their links sent to
-   them, and a key for РЭХА at the rehearsal room.
+4. band.reha.stream/setup with the setup secret; then the members, their
+   links sent to them, and a key for РЭХА at the rehearsal room.
 
 ## Not in part 1
 
@@ -403,7 +412,8 @@ nothing in the guide, since only the band can use it.
 4. A member signs in on another device with a one-time link or QR code they
    make themselves, which lasts 15 minutes.
 5. A lost phone: **Sign out everywhere**, then a new link.
-6. Alex's first link comes from a setup secret, once.
+6. Alex signs in with the setup secret at band.reha.stream/setup, any
+   time; a forgotten secret is replaced in Cloudflare.
 7. A member can change their name later, at the bottom of the left column.
 8. A take is new for you until you open it; there is no “mark all as seen”.
 9. On a computer the service opens on **New**; with nothing new, on the song
