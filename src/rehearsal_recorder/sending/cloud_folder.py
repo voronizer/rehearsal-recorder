@@ -385,19 +385,25 @@ class CloudFolder:
                 return
         self._queue_copy(folder, take_number, None, take)
 
-    def edited(self, folder, take_number, cut_start=0.0):
+    def edited(self, folder, take_number, cut_start=None):
         """
         A take of the rehearsal in progress is asked about again: a false
         start given a ★ or a mark is not one any more, and goes on its own.
         Older rehearsals keep what they sent, as they do when the balance or
         the format changes. Nothing else to do here: a copy carries no name,
         ★ or marks of its own, and a rename and a crop already look after
-        the copies where they happen.
+        the copies where they happen (a crop, `cut_start` not None, sends
+        its copy in the shape it had).
         """
+        if cut_start is not None:
+            return
         session = self.api._session
         if session is None or Path(session["folder"]) != Path(folder):
             return
-        self.saved(folder, take_number)
+        take = self._take_in(folder, take_number) or {}
+        if _shape_of(take.get("cloud")) is not None:
+            return  # there already, and kept so where it changes
+        self.saved(folder, take_number, take)
 
     def deleted(self, records):
         """Nothing to do: deleting a take already takes its copies out of the

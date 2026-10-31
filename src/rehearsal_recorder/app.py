@@ -632,6 +632,9 @@ def main():
                     )
 
             api.attach_window(window)
+            # Takes still going to the band service are asked about before
+            # the window closes (Api.window_closing).
+            window.events.closing += api.window_closing
             # pywebview exposes the API again on each navigation. Install
             # it before replacing the startup page with the real UI.
             window._js_api = api

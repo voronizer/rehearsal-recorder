@@ -84,7 +84,9 @@ export const uploadRoutes = newApp()
         query: z.object({ gen: z.coerce.number().int().min(1), name: z.string() }),
         body: {
           required: true,
-          content: { "application/octet-stream": { schema: z.string().openapi({ format: "binary" }) } },
+          // Bytes as they are: OpenAPI 3.1 says so by the media type alone,
+          // and a string schema would ask for text.
+          content: { "application/octet-stream": { schema: z.any().openapi({ description: "The part's bytes" }) } },
         },
       },
       responses: {

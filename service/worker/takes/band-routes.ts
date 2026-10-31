@@ -126,7 +126,7 @@ export const bandRoutes = newApp()
       path: "/api/songs/{id}",
       description: "A song's page; `not-named` for the takes nobody named.",
       middleware: [needMember] as const,
-      request: { params: z.object({ id: z.union([z.literal("not-named"), z.coerce.number().int()]) }) },
+      request: { params: z.object({ id: z.union([z.literal("not-named"), z.coerce.number().int().min(1)]) }) },
       responses: {
         200: json(
           z.object({

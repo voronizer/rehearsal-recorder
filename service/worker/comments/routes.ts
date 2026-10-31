@@ -76,7 +76,7 @@ export const commentRoutes = newApp()
       description: "Closed when the place is fixed: greyed, and kept in the list.",
       middleware: [needMember] as const,
       request: {
-        params: z.object({ id: z.coerce.number().int() }),
+        params: z.object({ id: z.coerce.number().int().min(1) }),
         body: body(z.object({ closed: z.boolean() })),
       },
       responses: { 200: json(Ok), ...errors(400, 401, 404) },

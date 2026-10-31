@@ -89,6 +89,8 @@ from rehearsal_recorder.midi.notes import read_notes
 from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder.sending import Sending
 from rehearsal_recorder.sending.cloud_folder import CloudFolder, _shape_of, source_of
+from rehearsal_recorder.sending.band_service import NO_KEY, BandService
+from rehearsal_recorder.sending.service_client import parse_key
 from rehearsal_recorder import holding
 from rehearsal_recorder.names_pass import NamesPass
 from rehearsal_recorder import layouts
@@ -786,9 +788,11 @@ class Api:
         # take hears the system going to sleep anyway (platform_support).
         self._awake = KeepAwake()
         self._sleep_watch = SleepWatch(self._laptop_sleeping)
-        # Where saved takes are sent: the cloud folder for now. The settings
-        # are read further down, so the switch asks for them each time.
-        self._sending = Sending({"cloud": CloudFolder(self)}, lambda: self._config)
+        # Where saved takes are sent: the cloud folder or the band service.
+        # The settings are read further down, so the switch asks for them
+        # each time.
+        self._sending = Sending({"cloud": CloudFolder(self), "service": BandService(self)},
+                                lambda: self._config)
         self._recorder_take_number = None
         self._recorder_temp_dir = None
         # The band the take began with, so that Stop reads the tracks it
@@ -914,6 +918,9 @@ class Api:
         # below, which leaves alone a rehearsal something of which is waiting.
         # One that can do neither is kept, and said once.
         self._end_all(at_start=True)
+        # What the band service still had to send is in the list at once.
+        if self._library is not None:
+            self._sending.get("service").reopen()
 
         # Clear out leftovers from previous runs (rehearsal started, nothing
         # recorded, app closed).
@@ -1161,6 +1168,10 @@ class Api:
             "cloud_formats": CLOUD_FORMATS_INFO,
             "auto_publish": bool(self._config.get("auto_publish", False)),
             "auto_publish_what": self._config.get("auto_publish_what") or "mix",
+            # Settings › Folders: where new takes go ("cloud" or "service"),
+            # and the band service, None with no key.
+            "send_to": self._sending.chosen().id,
+            "service": self._sending.get("service").settings(),
             # The set picked beside Start rehearsal, kept until another is
             # picked; one deleted since reads as none.
             "next_set": self._next_set(),
@@ -3872,6 +3883,7 @@ class Api:
 
             # The copies in the cloud folder are named after the take.
             self._rename_take_copies(folder, take_number, updated)
+            self._sending.edited(folder, int(take_number))
             return {"ok": True, "take": updated}
 
     @_follows
@@ -3896,6 +3908,8 @@ class Api:
             self._names_pass.request_takes(
                 done["takes"],
                 f"Renaming {done['from']} to {done['title']} · {_takes(done['takes'])}")
+        for folder, take_number, _ in done["takes"]:
+            self._sending.edited(folder, take_number)
         return {"ok": True, "title": done["title"], "goes": len(done["takes"])}
 
     @_follows
@@ -3916,6 +3930,8 @@ class Api:
             self._names_pass.request_takes(
                 done["takes"],
                 f"Merging {done['from']} into {done['into']} · {_takes(done['takes'])}")
+            for folder, take_number, _ in done["takes"]:
+                self._sending.edited(folder, take_number)
         if not dry_run:
             # The merged song's backing track, when the target kept its own.
             for copy in done.get("trash") or []:
@@ -4011,11 +4027,15 @@ class Api:
         if folder != original:
             self._move_rehearsal_copies(original, folder)
 
+        takes = self._lib.rehearsal(folder)["takes"]
+        # The band service shows each take under its rehearsal's name.
+        for take in takes:
+            self._sending.edited(folder, take["take_number"])
         return {
             "ok": True,
             "folder": str(folder),
             "name": display_name,
-            "takes": self._lib.rehearsal(folder)["takes"],
+            "takes": takes,
         }
 
     # ---------- stars ----------
@@ -4579,6 +4599,9 @@ class Api:
         else:
             self._sending.saved(folder, take_number)
         self._sending.get("cloud")._retry_failed_publishes()
+        # A take in the band service goes there again cropped, its comments
+        # moved back by what came off the start.
+        self._sending.edited(folder, int(take_number), cut_start=float(span["start"]))
         return {
             "ok": True,
             "take": self._lib.take(folder, take_number),
@@ -5821,6 +5844,12 @@ class Api:
         result = holding.send_on(self._recordings_dir, token, move_to_trash)
         if not result.get("ok"):
             return result
+        # Its Undo has passed: a take that was in the band service goes to
+        # the service's trash too.
+        if record.get("kind") in ("take", "takes"):
+            self._sending.deleted(record.get("takes") or [])
+        elif record.get("kind") == "rehearsal":
+            self._sending.deleted((record.get("rehearsal") or {}).get("takes") or [])
         if shared:
             # Asked again now, not before the files went: the copy worker
             # runs outside _files_lock, and a copy it finished meanwhile may
@@ -6349,6 +6378,10 @@ class Api:
         except Exception as e:  # noqa: BLE001 - the Undo is done; the rest waits
             self._kept(token, str(e))
         if take is not None:
+            # The take as it was goes to the band service again. Its comments
+            # stay where the crop moved them: the service only moves them
+            # back, never on.
+            self._sending.edited(folder, n, cut_start=-float(record.get("start") or 0.0))
             return {"ok": True, "kind": "crop", "folder": str(folder), "take_numbers": [n]}
         return {"ok": True, "kind": "crop", "temp_dir": str(where["temp_dir"])}
 
@@ -6661,8 +6694,62 @@ class Api:
         return self._sending.chosen().send_starred(folder)
 
     def retry_cloud(self, entry_id):
-        """A failed copy, queued again as the one it was."""
+        """A failed copy or sending, queued again as the one it was, by the
+        place its line is for."""
+        entry = self._journal.find(int(entry_id))
+        kind = (entry.snapshot() if entry else {}).get("kind")
+        if kind == "service":
+            return self._sending.get("service").retry(entry_id)
         return self._sending.get("cloud").retry(entry_id)
+
+    # ---------- the band service ----------
+
+    def set_service_key(self, key):
+        """Settings › Folders: the key from the band service's Members
+        page (BandService.set_key)."""
+        return self._sending.get("service").set_key(key)
+
+    def disconnect_service(self):
+        return self._sending.get("service").disconnect()
+
+    def set_service_auto_publish(self, on):
+        """Whether a saved take goes to the band service on its own."""
+        return self._sending.get("service").set_auto(on)
+
+    def set_send_to(self, which):
+        """Settings › Folders' switch: where new takes go, "cloud" or
+        "service". The service needs its key first."""
+        if which not in ("cloud", "service"):
+            return {"ok": False, "error": "Takes go to the cloud folder or the band service"}
+        if which == "service" and parse_key(self._config.get("service_key")) is None:
+            return {"ok": False, "error": NO_KEY}
+        self._config["send_to"] = which
+        self._write_config()
+        return {"ok": True, "send_to": which}
+
+    def service_take(self, folder, take_number):
+        """What of a take is in the band service, track by track, for its
+        dialog."""
+        return self._sending.get("service").take_files(folder, take_number)
+
+    def sending_left(self):
+        """What is still to send, everywhere: {"takes", "bytes"}."""
+        out = {"takes": 0, "bytes": 0}
+        for module in self._sending.all():
+            left = module.left()
+            out["takes"] += left["takes"]
+            out["bytes"] += left["bytes"]
+        return out
+
+    def window_closing(self):
+        """pywebview's closing handler (app.py): True lets the window
+        close. With takes still to send, the interface asks first."""
+        return self._sending.get("service").window_closing(self.sending_left())
+
+    def close_anyway(self):
+        """The close dialog's Close anyway: what is left goes next time
+        the app opens."""
+        return self._sending.get("service").close_anyway()
 
     def _copy_to_cloud(self, folder, take_number, what="mix", progress=None):
         """

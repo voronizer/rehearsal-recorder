@@ -415,11 +415,15 @@
                 },
                 "initial": {
                   "type": "string"
+                },
+                "name": {
+                  "type": "string"
                 }
               },
               "required": [
                 "member_id",
-                "initial"
+                "initial",
+                "name"
               ]
             }
           },
@@ -1821,8 +1825,7 @@
           "content": {
             "application/octet-stream": {
               "schema": {
-                "type": "string",
-                "format": "binary"
+                "description": "The part's bytes"
               }
             }
           }
@@ -2077,17 +2080,12 @@
                   ]
                 },
                 {
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                },
-                {
-                  "type": "null"
+                  "type": "integer",
+                  "minimum": 1
                 }
               ]
             },
-            "required": false,
+            "required": true,
             "name": "id",
             "in": "path"
           }
@@ -2538,12 +2536,10 @@
         "parameters": [
           {
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ]
+              "type": "integer",
+              "minimum": 1
             },
-            "required": false,
+            "required": true,
             "name": "id",
             "in": "path"
           }

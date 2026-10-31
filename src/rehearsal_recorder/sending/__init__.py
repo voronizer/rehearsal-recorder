@@ -36,7 +36,9 @@ class Module(Protocol):
 
     def saved(self, folder, take_number, take=None) -> None: ...
 
-    def edited(self, folder, take_number, cut_start=0.0) -> None: ...
+    # `cut_start`: None when the take's audio stays as it was; for a crop,
+    # what it took off the start (0.0 when it cut only the end).
+    def edited(self, folder, take_number, cut_start=None) -> None: ...
 
     def remove(self, folder, take_number) -> dict: ...
 
@@ -84,7 +86,7 @@ class Sending:
         for module in self.all():
             module.saved(folder, take_number, take=take)
 
-    def edited(self, folder, take_number, cut_start=0.0):
+    def edited(self, folder, take_number, cut_start=None):
         for module in self.all():
             module.edited(folder, take_number, cut_start=cut_start)
 
