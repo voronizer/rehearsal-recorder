@@ -76,6 +76,8 @@ On 31 October:
   and stars; the trash is in part 1 (15:57, a card).
 - A take nobody named simply has no song: its song is empty in the data,
   as in РЭХА (16:12-16:14, in words).
+- Asked again whether the choice of cloud folder or service should show to
+  everyone: no, only after a key (16:17, a card).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
