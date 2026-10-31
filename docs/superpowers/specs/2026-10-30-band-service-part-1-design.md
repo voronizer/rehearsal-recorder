@@ -5,6 +5,8 @@ track, stars the good ones and talks about them at the moment they happen.
 РЭХА sends the takes there. It opens at band.reha.stream, made for a
 computer first and working on a phone too.
 
+Alex approved this spec on 31 October at 16:33 («пиши», after «ок»).
+
 ## Alex's picks
 
 From the concept of 24 October (/mnt/project-files/band-service/concept.md),
