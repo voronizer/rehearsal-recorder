@@ -72,6 +72,8 @@ On 31 October:
 - Each feature on its own, so the code does not turn into spaghetti
   (15:51, in words). One switch for where takes go, and under it the
   chosen one's own panel, as part of its own module (15:53, in words).
+- A take removed in РЭХА goes to the service's trash, with its comments
+  and stars; the trash is in part 1 (15:57, a card).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -167,6 +169,18 @@ On a phone the column is gone and the pages come one at a time: the first
 screen (the new card, then the songs), a song's page, a take, each with a
 back arrow.
 
+### Trash
+
+A take removed in РЭХА, by deleting it there or with **Remove from the band
+service**, is not deleted in the service. It goes to **Trash**, at the
+bottom of the left column (on a phone, at the bottom of the first screen),
+with its files, comments and stars. Anyone in the band can open it there,
+listen, and press **Restore**, which puts it back in its song as it was.
+After 30 days in the trash a take is deleted for good, files and all.
+
+If РЭХА sends a take again while it is in the trash, it comes out of the
+trash with its comments.
+
 ### In the band's chat
 
 The bot writes to the band's Telegram group the moment something is ready,
@@ -222,7 +236,8 @@ dialog. For the band service it sends at once, with no dialog, since there
 is nothing to choose. On a take that has gone up to the service it opens a
 small dialog, “Viasna 12 in the band service”, which says which files are
 up and which are still on their way, and has **Remove from the band
-service**.
+service**, which moves the take to the service's **Trash** (see
+[Trash](#trash)).
 
 ### Two modules, one way in
 
@@ -262,7 +277,12 @@ starred** in History.
 
 What changes a take in РЭХА after it went up follows it there, as with the
 cloud folder: a rename, a song renamed, a crop (its files go again), a ★, a
-mark added, changed or removed. A take deleted in РЭХА leaves the service.
+mark added, changed or removed. A take deleted in РЭХА goes to the
+service's **Trash**, with its comments and stars.
+
+A crop that cuts the start moves the take's comments back by the same
+amount, so each stays at its moment in the music. A comment that was in the
+part cut off stays, at 0:00, marked “In the part cut off”.
 
 ### When the sending is cut short
 
@@ -368,9 +388,9 @@ Once, by Alex, with step-by-step notes from Claude:
 
 Songs' notes, files, Guitar Pro and status (part 2). Sets (part 3). Comparing
 two takes, loop and slow-down, links for people outside the band, email,
-trash, deleting in the service, uploading without РЭХА, **Download all**,
-comping. Nothing on reha.stream, which is about РЭХА; and nothing in the
-guide, since only the band can use it.
+deleting a take from the service by hand, uploading without РЭХА,
+**Download all**, comping. Nothing on reha.stream, which is about РЭХА; and
+nothing in the guide, since only the band can use it.
 
 ## Calls to review
 
@@ -411,11 +431,14 @@ guide, since only the band can use it.
 22. No mix file: the browser mixes the tracks. With six tracks this saves a
     seventh of the MP3 space.
 23. MP3s first, FLAC after; a take shows once its MP3s are up.
-24. A take deleted in РЭХА leaves the service.
-25. Parts of 10 MB; an upload unfinished for 7 days starts again.
-26. Closing РЭХА while sending asks first, with its wording above.
-27. Waveforms are made by РЭХА and sent with the take.
-28. The pages are React with the design system's components, as on the
+24. A take stays in the trash for 30 days; any member can restore it.
+25. A take sent again from РЭХА comes out of the trash with its comments.
+26. A crop that cuts the start moves the comments back; one in the cut part
+    stays at 0:00, marked “In the part cut off”.
+27. Parts of 10 MB; an upload unfinished for 7 days starts again.
+28. Closing РЭХА while sending asks first, with its wording above.
+29. Waveforms are made by РЭХА and sent with the take.
+30. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
-29. The service goes live with a release, like the site.
-30. Nothing about the service on reha.stream or in the guide.
+31. The service goes live with a release, like the site.
+32. Nothing about the service on reha.stream or in the guide.
