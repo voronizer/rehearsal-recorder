@@ -4,7 +4,8 @@ description: Your band's own page for its takes, on your phone the same evening.
 
 <!-- reha.stream/band-service: the page a band member is sent. A chapter
      for each thing the service does for them, each with a picture of the
-     service on a phone, then how to start. Nothing about setting it up:
+     service on a phone, or on a computer where that is where it is used,
+     then how to start. Nothing about setting it up:
      those steps are in service/README.md, one link away.
 
      A picture is ![what to look at](its-name), its files
@@ -50,9 +51,9 @@ Every take the band sends is there, by song, including the Viasna from three wee
 
 ## Take your track home
 
-Download it as it was recorded and work on your part in a recording program.
+At home, download the tracks as they were recorded and open them in your recording program, the DAW, on the computer. Then record new takes of your part over the band as it played that night.
 
-![Download tracks, at the end of each take's page: every track in FLAC, the full-quality file РЭХА recorded](downloads)
+![A take's page on a computer: Download tracks gives each track in FLAC, the full-quality file РЭХА recorded](downloads)
 
 ## How to start
 

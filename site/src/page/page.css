@@ -314,13 +314,16 @@ body {
 .chap-body > p.joke { font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; margin-block: 8px; max-width: 26ch; }
 .tale-get .cta { justify-content: flex-start; }
 /* The band service's page: its steps, numbered, and its pictures of the
-   service on a phone, a phone's width at most, the screen's corners round. */
+   service: on a phone, a phone's width at most, the screen's corners round;
+   on a computer, the column's width. */
 .chap-steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 16px; }
 .chap-steps li { counter-increment: step; display: grid; grid-template-columns: 2rem minmax(0, 1fr); font-size: 1.25rem; line-height: 1.55; text-wrap: pretty; }
 .chap-steps li::before { content: counter(step); font-family: var(--page-mono); font-size: 0.9rem; line-height: 2.2; color: var(--page-muted); }
-.phone-shot { margin: 8px 0; display: grid; gap: 12px; justify-items: start; }
-.phone-shot img { display: block; width: min(100%, 320px); height: auto; border-radius: 28px; box-shadow: 0 0 0 1px var(--page-line), 0 18px 48px -24px rgb(0 0 0 / 0.35); }
-.phone-shot figcaption { max-width: 32rem; color: var(--page-muted); font-size: 0.95rem; line-height: 1.5; text-wrap: pretty; }
+.phone-shot, .computer-shot { margin: 8px 0; display: grid; gap: 12px; justify-items: start; }
+.phone-shot img, .computer-shot img { display: block; height: auto; box-shadow: 0 0 0 1px var(--page-line), 0 18px 48px -24px rgb(0 0 0 / 0.35); }
+.phone-shot img { width: min(100%, 320px); border-radius: 28px; }
+.computer-shot img { width: 100%; border-radius: 10px; }
+.phone-shot figcaption, .computer-shot figcaption { max-width: 32rem; color: var(--page-muted); font-size: 0.95rem; line-height: 1.5; text-wrap: pretty; }
 @media (max-width: 719px) { .chap-body > p, .chap-steps li { font-size: 1rem; } }
 @media (min-width: 1000px) {
   .tale { max-width: calc(15rem + 56px + 40rem); }

@@ -34,12 +34,14 @@ for (const theme of ["light", "dark"] as const) {
   test(`each picture of the service comes in, in the ${theme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme })
     await page.goto(PAGE)
-    const pictures = page.locator(".phone-shot img")
-    await expect(pictures).toHaveCount(7)
-    for (const img of await pictures.all()) {
+    await expect(page.locator(".phone-shot img")).toHaveCount(6)
+    // Downloading is for the recording program at home: that one is a computer.
+    await expect(page.locator("#take-your-track-home .computer-shot img")).toHaveCount(1)
+    for (const img of await page.locator("figure img").all()) {
       await img.scrollIntoViewIfNeeded()
       await expect(img).toHaveJSProperty("complete", true)
-      expect(await img.evaluate((el: HTMLImageElement, theme) => [el.naturalWidth, el.currentSrc.includes(`-${theme}-`)], theme)).toEqual([780, true])
+      // Sharp: at least as many pixels as the page gives it.
+      expect(await img.evaluate((el: HTMLImageElement, theme) => [el.naturalWidth >= el.width, el.currentSrc.includes(`-${theme}-`)], theme)).toEqual([true, true])
     }
     // The caption names what to look at, and is the picture's name for a screen reader.
     await expect(page.getByRole("img", { name: /^Viasna 12 with S pressed on the guitar's lane/ })).toBeVisible()
@@ -67,6 +69,6 @@ test.describe("with script off", () => {
     await page.goto(PAGE)
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("A band service of your own")
     await expect(page.locator("#how-to-start").getByRole("link", { name: "the steps on GitHub" })).toBeVisible()
-    await expect(page.locator(".phone-shot img")).toHaveCount(7)
+    await expect(page.locator("figure img")).toHaveCount(7)
   })
 })

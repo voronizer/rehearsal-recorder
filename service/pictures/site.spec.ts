@@ -4,20 +4,28 @@ import { as, pictured } from "./seed"
 
 /*
   The pictures on reha.stream/band-service: the service's own pages on a
-  phone, in the light and in the dark, over the band in seed.ts. They check
-  nothing.
+  phone, or on a computer where that is where it is used, in the light and
+  in the dark, over the band in seed.ts. They check nothing.
 
       npm run pictures
 
-  writes site/src/stories/band-service/<picture>-<light|dark>.webp. Run it
+  writes site/src/stories/band-service/<picture>-<light|dark>.webp, and
+  sizes.json, each picture's size as the page shows it. Run it
   after changing anything the pictures show, and look at them before
   committing.
 */
 
 const OUT = new URL("../../site/src/stories/band-service/", import.meta.url)
 const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+// The size of the app's own mockups.
+const COMPUTER = { viewport: { width: 1180, height: 820 }, deviceScaleFactor: 1 }
 
-type Shot = { who: Parameters<typeof as>[0] | null; path: () => string; then?: (page: Page) => Promise<void> }
+type Shot = {
+  who: Parameters<typeof as>[0] | null
+  path: () => string
+  then?: (page: Page) => Promise<void>
+  on?: typeof PHONE | typeof COMPUTER
+}
 
 /** Puts `heading` near the top of the screen, under the bar. */
 const scrollTo = (heading: string) => async (page: Page) => {
@@ -43,16 +51,13 @@ const SHOTS: Record<string, Shot> = {
   },
   song: { who: "paulik", path: () => `/songs/${pictured().songs["Viasna"]}` },
   "three-weeks-ago": { who: "paulik", path: () => `/takes/${pictured().takes["Viasna 3"]}?at=104` },
-  // A take nobody has written on yet, so its page ends on the screen.
-  downloads: {
-    who: "paulik",
-    path: () => `/takes/${pictured().takes["Kupalle 2"]}`,
-    then: scrollTo("Download tracks"),
-  },
+  // On the computer at home, for the recording program. A take nobody has
+  // written on yet, so its page ends on the screen.
+  downloads: { who: "paulik", path: () => `/takes/${pictured().takes["Kupalle 2"]}`, on: COMPUTER },
   "sign-in": {
     who: null,
     path: () => "/signin",
-    then: (page) => page.getByLabel("Email address").fill("paulik@example.com"),
+    then: (page) => page.getByLabel("Email address").fill("you@example.com"),
   },
 }
 
@@ -78,11 +83,16 @@ async function webp(browser: Browser, png: Buffer): Promise<Buffer> {
   return Buffer.from(data, "base64")
 }
 
+test.beforeAll(() => {
+  const sizes = Object.fromEntries(Object.entries(SHOTS).map(([name, shot]) => [name, (shot.on ?? PHONE).viewport]))
+  writeFileSync(new URL("sizes.json", OUT), `${JSON.stringify(sizes, null, 2)}\n`)
+})
+
 for (const [name, shot] of Object.entries(SHOTS)) {
   for (const theme of ["light", "dark"] as const) {
     test(`${name} ${theme}`, async ({ browser }) => {
       const context = await browser.newContext({
-        ...PHONE,
+        ...(shot.on ?? PHONE),
         baseURL: "http://localhost:8799",
         colorScheme: theme,
         reducedMotion: "reduce",

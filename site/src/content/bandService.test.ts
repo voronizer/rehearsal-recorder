@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import md from "../../content/band-service.md?raw"
+import sizes from "../stories/band-service/sizes.json"
 import { parseBandService } from "./bandService"
 
 // The page as site/content/band-service.md has it, small: the lines are
@@ -84,10 +85,13 @@ describe("the band service's page", () => {
     ])
     const steps = page.chapters.at(-1)!.blocks.find((b) => b.kind === "steps")
     expect(steps?.kind === "steps" && steps.steps.length).toBe(4)
-    // Each picture in both themes, as `npm run pictures` in service/ takes them.
+    // Each picture in both themes, with its size, as `npm run pictures` in
+    // service/ takes them.
     const files = Object.keys(import.meta.glob("../stories/band-service/*.webp"))
     for (const block of page.chapters.flatMap((c) => c.blocks))
-      if (block.kind === "picture")
+      if (block.kind === "picture") {
         for (const theme of ["light", "dark"]) expect(files).toContain(`../stories/band-service/${block.name}-${theme}.webp`)
+        expect(sizes).toHaveProperty(block.name)
+      }
   })
 })
