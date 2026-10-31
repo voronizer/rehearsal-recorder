@@ -4,23 +4,24 @@ import { BASE, confirm, HEADERS, signIn } from "../e2e/band"
 import { member, reha } from "../e2e/seed"
 
 /*
-  The band the pictures on reha.stream/band-service show: four people and a
+  The band the pictures on reha.stream/band-service show: four people, named
+  as in Alex's band (the parts and what they write are made up), and a
   month of Thursday rehearsals, the last one this week, so the dates on the
   pictures read as they would on the evening. Made through the service's own
   routes, as in the page tests (e2e/seed.ts), but with takes of a song's
   length and waveforms shaped like a band's.
 
   Who plays what, and who sees what:
-    Dzima    drums.
+    Vik      drums.
     Alex     bass; the owner.
-    Paŭlik   guitar. The pictures of a take and a song are his: he has
+    Ivan     guitar. The pictures of a take and a song are his: he has
              heard everything, and wrote on Viasna 12.
     Ira      vocals. The first page is hers: she has not opened this
              week's takes yet, and the others wrote on takes she had heard.
 */
 
 export const STATE = new URL("./.state/", import.meta.url)
-export const as = (who: "alex" | "paulik" | "ira" | "dzima") => new URL(`${who}.json`, STATE).pathname
+export const as = (who: "alex" | "ivan" | "ira" | "vik") => new URL(`${who}.json`, STATE).pathname
 export type Pictured = { takes: Record<string, string>; songs: Record<string, number> }
 export const pictured = (): Pictured => JSON.parse(readFileSync(new URL("band.json", STATE), "utf-8"))
 
@@ -121,10 +122,10 @@ export default async function seed() {
   await signIn(owner, "alex@example.com")
   await owner.put("/api/me", { data: { name: "Alex" } })
   await owner.storageState({ path: as("alex") })
-  const dzima = await member(owner, "dzima@example.com", "Dzima", as("dzima"))
-  const paulik = await member(owner, "paulik@example.com", "Paŭlik", as("paulik"))
+  const vik = await member(owner, "vik@example.com", "Vik", as("vik"))
+  const ivan = await member(owner, "ivan@example.com", "Ivan", as("ivan"))
   const ira = await member(owner, "ira@example.com", "Ira", as("ira"))
-  const band = [owner, dzima, paulik, ira]
+  const band = [owner, vik, ivan, ira]
 
   const { key } = (await (await owner.post("/api/keys", { data: { name: "Rehearsal room" } })).json()) as { key: string }
   const send = reha(owner, key)
@@ -182,22 +183,22 @@ export default async function seed() {
   for (const api of band) await see(api, Object.keys(takes))
   await star(ira, "Viasna 3")
   await star(owner, "Viasna 3")
-  await star(dzima, "Viasna 8")
+  await star(vik, "Viasna 8")
   await star(ira, "Pałyn 2")
   // Written after Ira had heard those takes: new for her.
-  await say(dzima, "Viasna 8", 130, "Let's take this bit faster next time.")
+  await say(vik, "Viasna 8", 130, "Let's take this bit faster next time.")
   await say(owner, "Kupalle 1", 280, "The ending is long. Two bars less?")
 
   // This week's rehearsal. Ira has not opened it yet; the others have.
   const now = TAKES.filter((t) => t.back === 0)
   for (const [n, t] of now.entries()) await sendTake(t, earlier.length + n)
   const tonight = now.map((t) => `${t.song} ${t.number}`)
-  for (const api of [owner, dzima, paulik]) await see(api, tonight)
-  const drags = await say(paulik, "Viasna 12", 102, "The bridge drags here.")
-  await say(dzima, "Viasna 12", 102, "Not the drums. I soloed them.", drags)
+  for (const api of [owner, vik, ivan]) await see(api, tonight)
+  const drags = await say(ivan, "Viasna 12", 102, "The bridge drags here.")
+  await say(vik, "Viasna 12", 102, "Not the drums. I soloed them.", drags)
   await say(owner, "Viasna 12", 102, "It's the bass. Sorry.", drags)
   await say(owner, "Viasna 12", 231, "Let's end all together on four.")
-  for (const api of [dzima, paulik, owner]) await star(api, "Viasna 12")
+  for (const api of [vik, ivan, owner]) await star(api, "Viasna 12")
 
   const feed = (await (await owner.get("/api/feed")).json()) as { songs: { id: number; title: string }[] }
   const songs = Object.fromEntries(feed.songs.map((s) => [s.title, s.id]))

@@ -714,10 +714,11 @@ service by hand, uploading without РЭХА,
 29. The service goes live with a release, like the site.
 30. The page is reha.stream/band-service, linked from РЭХА's key line and
     the footer, not the top menu.
-31. The pictures' band: four made-up people (Dzima on drums, Alex on bass,
-    Paŭlik on guitar, Ira singing), a month of Thursdays dated back from
-    the day the pictures are taken, and comments in the spirit of the
-    site's stories; a phone 390 px wide; the setup steps the page links
+31. The pictures' band: four people named as in Alex's band (Vik on
+    drums, Alex on bass, Ivan on guitar, Ira singing; the parts are made
+    up), a month of Thursdays dated back from the day the pictures are
+    taken, and comments in the spirit of the site's stories; a phone 390 px
+    wide, and a computer 1180×820 for downloading the tracks; the setup steps the page links
     to are the ones Alex follows for his own copy, so they are tried first.
 32. What the service is stays on the site's page, and how to run your own
     in `service/README.md`, not in the guide's new section.

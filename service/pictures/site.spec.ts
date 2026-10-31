@@ -40,20 +40,20 @@ const scrollTo = (heading: string) => async (page: Page) => {
 const SHOTS: Record<string, Shot> = {
   "new-takes": { who: "ira", path: () => "/" },
   lanes: {
-    who: "paulik",
+    who: "ivan",
     path: () => `/takes/${pictured().takes["Viasna 12"]}?at=102`,
     then: (page) => page.getByRole("button", { name: "Solo Guitar" }).click(),
   },
   comments: {
-    who: "paulik",
+    who: "ivan",
     path: () => `/takes/${pictured().takes["Viasna 12"]}?at=102`,
     then: scrollTo("Marks and comments"),
   },
-  song: { who: "paulik", path: () => `/songs/${pictured().songs["Viasna"]}` },
-  "three-weeks-ago": { who: "paulik", path: () => `/takes/${pictured().takes["Viasna 3"]}?at=104` },
+  song: { who: "ivan", path: () => `/songs/${pictured().songs["Viasna"]}` },
+  "three-weeks-ago": { who: "ivan", path: () => `/takes/${pictured().takes["Viasna 3"]}?at=104` },
   // On the computer at home, for the recording program. A take nobody has
   // written on yet, so its page ends on the screen.
-  downloads: { who: "paulik", path: () => `/takes/${pictured().takes["Kupalle 2"]}`, on: COMPUTER },
+  downloads: { who: "ivan", path: () => `/takes/${pictured().takes["Kupalle 2"]}`, on: COMPUTER },
   "sign-in": {
     who: null,
     path: () => "/signin",
