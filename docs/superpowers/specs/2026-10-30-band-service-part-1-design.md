@@ -7,8 +7,8 @@ computer first and working on a phone too.
 
 Alex approved this spec on 31 October at 16:33 («пиши», after «ок»). At
 18:01 he reopened how the service is built; the answers of 18:08-18:33
-changed sign-in to email and are folded in below, waiting for his «ок»
-again.
+changed sign-in to email and are folded in below; he approved this
+version at 18:43 («ок»).
 
 ## Alex's picks
 
