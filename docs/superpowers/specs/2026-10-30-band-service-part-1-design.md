@@ -78,6 +78,8 @@ On 31 October:
   as in РЭХА (16:12-16:14, in words).
 - Asked again whether the choice of cloud folder or service should show to
   everyone: no, only after a key (16:17, a card).
+- The key's line explains what a key is, says a band can run a service of
+  its own, and links to a page about it on the site (16:19, in words).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -221,9 +223,19 @@ come from РЭХА are not posted on their own: they arrive with their take.
 
 Until a key is pasted, **Settings › Folders** has its **Cloud folder** group
 exactly as today, with one quiet line at the bottom: **I have a band
-service key**. Pressing it opens a field for the key. A key is one line of
-text holding the service's address and a secret, such as
-`band.reha.stream:9fT2kQ…`. Alex makes it on the service's **Members**
+service key**. Pressing it opens a field for the key, and above the field a
+few words on what it is, for anyone who has not heard of a band service:
+
+> A band service is a private web page where your band listens to its
+> takes track by track, stars the good ones and talks about them. Whoever
+> runs it gives you a key to paste here. You can run one for your own band
+> too: **How it works**.
+
+**How it works** opens the service's page on reha.stream (see
+[On reha.stream](#on-rehastream)).
+
+A key is one line of text holding the service's address and a secret, such
+as `band.reha.stream:9fT2kQ…`. Alex makes it on the service's **Members**
 page. It is not a link to open in a browser.
 
 With a key in, the group is called **Sending takes** and starts with the
@@ -311,6 +323,32 @@ A take whose MP3s are not all up yet is not shown in the service. One whose
 FLAC is still on its way is shown, and its **Download tracks** says which
 originals are still coming.
 
+## On reha.stream
+
+A page at reha.stream/band-service tells what a band service is and how a
+band runs its own. It is linked from the key's few words in РЭХА and from
+the site's footer, not from the top menu, since most people who use РЭХА
+will never need it.
+
+What the page holds, in order:
+
+1. What it is, in a few lines, beside the service's real pages on made-up
+   data, the way the site shows РЭХА.
+2. A story from Alex's band of how they use it, in the manner of the
+   site's stories. Alex checks it before it goes live, as with every story.
+3. **Run your own**: what it needs (a Cloudflare account; a Telegram bot,
+   only for the chat messages), what it costs (files up to 10 GB free, then
+   $0.015 per GB a month), and the steps one by one: put the service's code
+   on Cloudflare, set its secrets, open /setup, add the members, make a key
+   for РЭХА. A band's own domain is not needed: Cloudflare gives every copy
+   a free address on workers.dev.
+4. That the code is open, under FSL, with a link to it.
+
+The steps are written so a musician can follow them. They are the same
+steps Alex follows to set up his band's copy (see
+[Setting it up](#setting-it-up)), so they are tried for real before the
+page goes live.
+
 ## How it is built
 
 ### Cloudflare
@@ -380,6 +418,10 @@ tables are in `service/migrations/`. A take's song may be empty, as in
 РЭХА's own `take.song_id`: that is a take nobody named, and **Not named**
 is only how the list shows such takes.
 
+Nothing in the code names band.reha.stream or Alex's band. The address,
+the bot and the chat come from each copy's own settings, so another band
+can run its own copy unchanged.
+
 Tests: the Worker's logic on Cloudflare's own test runner; the pages in
 Playwright on made-up data, as the site does; РЭХА's sending against a fake
 service in pytest. They run in `checks.yml`.
@@ -389,7 +431,8 @@ the workflow.
 
 ## Setting it up
 
-Once, by Alex, with step-by-step notes from Claude:
+Once, by Alex, following the **Run your own** steps of the site's page,
+plus the move of reha.stream's DNS for the band.reha.stream address:
 
 1. A Cloudflare account, and reha.stream added to it; the nameservers changed
    at the registrar.
@@ -404,8 +447,7 @@ Once, by Alex, with step-by-step notes from Claude:
 Songs' notes, files, Guitar Pro and status (part 2). Sets (part 3). Comparing
 two takes, loop and slow-down, links for people outside the band, email,
 deleting a take from the service by hand, uploading without РЭХА,
-**Download all**, comping. Nothing on reha.stream, which is about РЭХА; and
-nothing in the guide, since only the band can use it.
+**Download all**, comping.
 
 ## Calls to review
 
@@ -454,4 +496,8 @@ nothing in the guide, since only the band can use it.
 28. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
 29. The service goes live with a release, like the site.
-30. Nothing about the service on reha.stream or in the guide.
+30. The page is reha.stream/band-service, linked from РЭХА's key line and
+    the footer, not the top menu.
+31. The page has a story from Alex's band; its **Run your own** steps are
+    the ones Alex follows for his own copy, so they are tried first.
+32. Nothing in the guide: the key's few words and the site's page cover it.
