@@ -150,6 +150,13 @@ record with each question is in
   nothing of the setup: no Cloudflare, keys or prices, only what a member
   sees and does (22:44, «для людей надо написать а не для того кто сервис
   устанавливает»).
+- The page is one Alex can send to someone in the band, so that they see
+  what the service gives them and how to use it (22:46, in words). A list
+  of what it does is not that (22:50, in words): it shows what a member
+  gets after a rehearsal. No story (22:51, a card); six such things, as
+  Claude drafted them (22:52, «да»), each a numbered chapter with a big
+  picture of the service, then how to start (22:56, a card). The pictures
+  are taken by a script of the real service (22:57, a card).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -447,20 +454,27 @@ cloud, one line adds that the same goes for the band service.
 
 ## On reha.stream
 
-A page at reha.stream/band-service tells a band member what a band service
-is, what it does for them and how it works. It is linked from the key's few words in РЭХА and from
-the site's footer, not from the top menu, since most people who use РЭХА
-will never need it.
+A page at reha.stream/band-service is the one Alex sends to someone in the
+band: what the service gives them after a rehearsal, and how to start. It
+is linked from the key's few words in РЭХА and from the site's footer, not
+from the top menu, since most people who use РЭХА will never need it.
 
 What the page holds, in order:
 
-1. What it is, in a few lines of text.
-2. A story from Alex's band of how they use it, in the manner of the
-   site's stories. Alex checks it before it goes live, as with every story.
-3. **How it works**, as a member meets it: where the takes come from,
-   signing in, the first page, a song's page, a take's lanes, stars,
-   comments, downloads, the chat's messages and the trash. Its last line
-   links to the setup steps on GitHub, for whoever sets one up.
+1. What it is, in two sentences.
+2. A numbered chapter for each thing it gives a member, each with a
+   picture of the service on a phone whose caption says what to look at:
+   the takes on your phone the same evening; your own part, alone or
+   muted; a comment at the second; the take the band is aiming for;
+   nothing lost, the trash included; your track to take home.
+3. **How to start**: four steps, from the letter that asks to confirm
+   the address to telling the band what to call you, a picture of the
+   sign-in page, and a last line that links to the setup steps on GitHub,
+   for whoever sets one up.
+
+The pictures are the service's own pages, taken by `npm run pictures` in
+`service/` over a made-up band, in the light and in the dark; the page
+shows the one for the visitor's theme.
 
 Nothing of the setup is on the page: no Cloudflare, keys, domains or
 prices.
@@ -697,8 +711,11 @@ service by hand, uploading without РЭХА,
 29. The service goes live with a release, like the site.
 30. The page is reha.stream/band-service, linked from РЭХА's key line and
     the footer, not the top menu.
-31. The page has a story from Alex's band; the setup steps it links to
-    are the ones Alex follows for his own copy, so they are tried first.
+31. The pictures' band: four made-up people (Dzima on drums, Alex on bass,
+    Paŭlik on guitar, Ira singing), a month of Thursdays dated back from
+    the day the pictures are taken, and comments in the spirit of the
+    site's stories; a phone 390 px wide; the setup steps the page links
+    to are the ones Alex follows for his own copy, so they are tried first.
 32. What the service is stays on the site's page, and how to run your own
     in `service/README.md`, not in the guide's new section.
 33. The service's sending shows in the header's background work list and on
