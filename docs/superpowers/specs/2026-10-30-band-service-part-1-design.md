@@ -326,6 +326,21 @@ A take whose MP3s are not all up yet is not shown in the service. One whose
 FLAC is still on its way is shown, and its **Download tracks** says which
 originals are still coming.
 
+### Seeing what is on its way
+
+The service's sending shows where the cloud folder's shows today. The
+background work button in the header counts it (“2 working · 64%”), and
+its list has a line for each take, such as “Viasna 12” → band service,
+with a bar and what is left: “MP3s: 4 of 6”, then “FLAC: 2 of 6”. Takes
+waiting their turn are listed as **Waiting**. The take's own button says
+“Sending to the band service” or “Waiting for the band service”.
+
+When РЭХА is opened again, the takes it still has to send are back in the
+list at once, as waiting. With no internet a line does not fail, since
+there is nothing to press: it says “No internet: carries on when it is
+back”. A take the service turns down fails in red with the reason, as a
+cloud copy does today.
+
 ## On reha.stream
 
 A page at reha.stream/band-service tells what a band service is and how a
@@ -502,3 +517,7 @@ deleting a take from the service by hand, uploading without РЭХА,
 31. The page has a story from Alex's band; its **Run your own** steps are
     the ones Alex follows for his own copy, so they are tried first.
 32. Nothing in the guide: the key's few words and the site's page cover it.
+33. The service's sending shows in the header's background work list and on
+    the take's button, as the cloud folder's does; takes still to send are
+    back in the list when РЭХА opens; with no internet a line waits rather
+    than fails.
