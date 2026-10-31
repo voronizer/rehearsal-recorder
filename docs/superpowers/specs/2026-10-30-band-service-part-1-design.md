@@ -79,7 +79,8 @@ On 31 October:
 - Asked again whether the choice of cloud folder or service should show to
   everyone: no, only after a key (16:17, a card).
 - The key's line explains what a key is, says a band can run a service of
-  its own, and links to a page about it on the site (16:19, in words).
+  its own, and links to a page about it on the site (16:19, in words). The
+  page has no live service pages in it (16:22, in words).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -332,8 +333,7 @@ will never need it.
 
 What the page holds, in order:
 
-1. What it is, in a few lines, beside the service's real pages on made-up
-   data, the way the site shows РЭХА.
+1. What it is, in a few lines of text.
 2. A story from Alex's band of how they use it, in the manner of the
    site's stories. Alex checks it before it goes live, as with every story.
 3. **Run your own**: what it needs (a Cloudflare account; a Telegram bot,
