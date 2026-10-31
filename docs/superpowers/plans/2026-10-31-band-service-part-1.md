@@ -21,7 +21,7 @@ own panel.
 **Tech Stack:** Python 3.10+ (urllib with certifi, SQLAlchemy + Alembic,
 libsndfile through `soundfile`), React 19 + Vite 8 + Tailwind 4,
 Cloudflare Workers + D1 + R2 + a Cron Trigger, Hono for the Worker's
-routes, `@cloudflare/vite-plugin`, wrangler 4,
+routes, Drizzle ORM for D1 (drizzle-kit makes the migrations), `@cloudflare/vite-plugin`, wrangler 4,
 `@cloudflare/vitest-plugin` with vitest 5, Playwright, the Telegram Bot API.
 
 **Spec:** `docs/superpowers/specs/2026-10-30-band-service-part-1-design.md`
@@ -63,7 +63,8 @@ https://claude.ai/artifact/SZKv2ssjChEjWWsrnKWkqK (option Б), sources in
 - Versions are pinned exactly in `service/package.json`: wrangler 4.156.0,
   `@cloudflare/vite-plugin` 1.66.0, `@cloudflare/vitest-plugin` 1.4.11,
   `@cloudflare/workers-types` 5.20261031.1, vitest 5.0.5,
-  `hono` 4.13.13, `qrcode-generator` 2.0.4; React, Vite, Tailwind and Playwright at the
+  `hono` 4.13.13, `drizzle-orm` 0.45.4, `drizzle-kit` 0.31.11,
+  `qrcode-generator` 2.0.4; React, Vite, Tailwind and Playwright at the
   versions `ui/package.json` uses.
 
 ## Review Focus
@@ -222,7 +223,14 @@ What the service does with them:
 | `GET /files/<uid>/<gen>/<name>` | the file from R2, with `Range`; `?download=1` names it “Viasna 12 - Bass.flac” |
 | Owner only: `GET /api/members`, `POST /api/members`, `POST /api/members/:id/link`, `POST /api/members/:id/signout`, `GET /api/keys`, `POST /api/keys` `{"name"}`, `DELETE /api/keys/:id` | lists; a new link `{"url", "expires_at"}`; a new key `{"key"}` shown once |
 
-### The service's D1 tables (`service/migrations/0001_init.sql`)
+### The service's D1 tables
+
+The tables are written as a Drizzle schema in `service/worker/schema.ts`,
+the one place they are described, as РЭХА's are in `store/models.py`.
+`npx drizzle-kit generate` makes the SQL migration from it into
+`service/migrations/`. Every query goes through Drizzle; a change of
+several rows that must happen together goes through `db.batch([...])`, which
+D1 runs as one transaction. The tables the schema makes:
 
 ```sql
 member(id INTEGER PRIMARY KEY, name TEXT, owner INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)
@@ -381,7 +389,8 @@ git commit -m "Move the cloud folder into a sending package, unchanged"
 
 **Files:**
 - Create: `service/package.json`, `service/LICENSE` (FSL-1.1-MIT), `service/README.md`, `service/wrangler.jsonc`, `service/vite.config.ts`, `service/vitest.config.ts`, `service/tsconfig.json`, `service/index.html`
-- Create: `service/migrations/0001_init.sql` (the tables in the shared contract)
+- Create: `service/worker/schema.ts` (the Drizzle schema of the tables in the shared contract), `service/worker/db.ts` (`database(env)`: `drizzle(env.DB, { schema })`), `service/drizzle.config.ts` (`dialect: "sqlite"`, `schema: "./worker/schema.ts"`, `out: "./migrations"`)
+- Create: `service/migrations/0000_…sql`, made by `npx drizzle-kit generate`, with its `meta/` snapshot
 - Create: `service/worker/index.ts` (the Hono app, exported as `{fetch: app.fetch, scheduled}`), `service/worker/auth.ts`, `service/worker/members.ts`, `service/worker/time.ts`, `service/worker/hash.ts`
 - Create: `service/test/apply-migrations.ts`, `service/test/auth.test.ts`, `service/test/members.test.ts`
 
@@ -994,9 +1003,10 @@ git commit -m "Settings: a switch between the cloud folder and a band service"
   migrations apply reha-band --remote` and `wrangler deploy`. The edited
   `wrangler.jsonc` is never committed: it lives only in the job's
   checkout.
-- Later changes to the tables are new files in `service/migrations/`
-  (`0002_….sql` and on), plain SQL. The job applies the ones not applied
-  yet before it deploys, and D1 records them in its `d1_migrations` table.
+- A later change to the tables is made in `worker/schema.ts`; `npx
+  drizzle-kit generate` writes the next migration from the difference, as
+  Alembic's autogenerate does for РЭХА, and both go in one commit. The
+  job applies the migrations not applied yet before it deploys, and D1 records them in its `d1_migrations` table.
   D1 has no way back: undoing a change is another migration. A migration
   only adds tables and columns, so the Worker still running from the
   previous release keeps working in the moments before the new one is up.
@@ -1202,3 +1212,6 @@ Decisions the spec left open, made here and listed for Alex to check:
 17. The Worker's routes are written with Hono, the small router
     Cloudflare's own examples use on Workers; the pages' few paths need no
     library.
+18. The tables are a Drizzle schema, drizzle-kit makes the migrations
+    from it, and Wrangler applies them. Prisma also works with D1, but it
+    brings much more code into a Worker that has 10 ms of CPU a request.
