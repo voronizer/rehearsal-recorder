@@ -28,6 +28,7 @@ from rehearsal_recorder.audio.encode import (
     available as encoder_available,
     normalize_format,
 )
+from rehearsal_recorder.sending import false_start
 
 
 def source_of(take, what, volumes, fmt, target):
@@ -385,9 +386,18 @@ class CloudFolder:
         self._queue_copy(folder, take_number, None, take)
 
     def edited(self, folder, take_number, cut_start=0.0):
-        """Nothing to do: a copy carries no name, ★ or marks of its own, and
-        a rename and a crop already look after the copies where they
-        happen."""
+        """
+        A take of the rehearsal in progress is asked about again: a false
+        start given a ★ or a mark is not one any more, and goes on its own.
+        Older rehearsals keep what they sent, as they do when the balance or
+        the format changes. Nothing else to do here: a copy carries no name,
+        ★ or marks of its own, and a rename and a crop already look after
+        the copies where they happen.
+        """
+        session = self.api._session
+        if session is None or Path(session["folder"]) != Path(folder):
+            return
+        self.saved(folder, take_number)
 
     def deleted(self, records):
         """Nothing to do: deleting a take already takes its copies out of the
@@ -403,16 +413,20 @@ class CloudFolder:
             self.api._cloud_target(folder))
 
     def _copy_due(self, take):
-        """Whether sending on its own sends this take: the setting is on and
-        it was not kept with "not this one", or it was kept with "send this
-        one" (see keep_take). Never while the switch in Settings › Folders
-        picks another place: the copies already here are still kept up to
-        date, and nothing new comes."""
-        if self.api._sending.chosen().id != self.id:
+        """Whether sending on its own sends this take: it was kept with "send
+        this one" (see keep_take), or the setting is on, it was not kept with
+        "not this one" and it is not a false start. Never while the switch in
+        Settings › Folders picks another place: the copies already here are
+        still kept up to date, and nothing new comes."""
+        api = self.api
+        if api._sending.chosen().id != self.id:
             return False
         if take.get("cloud_skip"):
             return False
-        return bool(self.api._config.get("auto_publish") or take.get("cloud_send"))
+        if take.get("cloud_send"):
+            return True
+        return (bool(api._config.get("auto_publish"))
+                and not false_start(take, api._false_start_sec()))
 
     def _queue_copy(self, folder, take_number, what, take=None):
         """The queue and the journal together: one waiting entry per take,

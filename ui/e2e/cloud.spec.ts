@@ -52,8 +52,9 @@ async function sentAs(page: Page) {
 
 test("saving a take says whether it goes to the cloud, take by take", async ({ page }) => {
   await openApp(page, {
+    // The limit at its lowest, so the fake's 6 s takes are not false starts.
     before: `window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';
-      window.__AUTO_PUBLISH__ = {on: true, what: 'mix'};`,
+      window.__AUTO_PUBLISH__ = {on: true, what: 'mix'}; window.__FALSE_START__ = 5;`,
   })
   await startRehearsal(page)
   await recordTake(page, 1)

@@ -4027,7 +4027,8 @@ class Api:
         take with no song can have one. Set, not toggled, so a second click
         that lands before the first one's answer asks for the same thing
         again instead of undoing it. Nothing on disk or in the cloud folder
-        follows a star.
+        follows a star, except that a false start given one in the rehearsal
+        in progress is not one any more, and goes on its own (sending/).
         """
         folder = Path(folder)
         if not self._inside_recordings(folder):
@@ -4037,6 +4038,7 @@ class Api:
         take = self._lib.set_starred(folder, int(take_number), bool(starred))
         if take is None:
             return {"ok": False, "error": "Take not found"}
+        self._sending.edited(folder, int(take_number))
         return {"ok": True, "take": take}
 
     # ---------- labels ----------
@@ -4158,6 +4160,8 @@ class Api:
         markers = self._lib.edit_markers(folder, take_number, fn)
         if markers is None:
             return {"ok": False, "error": "Take not found"}
+        # A false start given a mark is not one any more (sending/).
+        self._sending.edited(folder, int(take_number))
         return {"ok": True, "markers": markers}
 
     # ---------- cropping ----------

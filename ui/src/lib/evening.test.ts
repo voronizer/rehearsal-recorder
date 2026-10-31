@@ -5,6 +5,7 @@ import {
   falseStarts,
   isFalseStart,
   lengthLabel,
+  sendsOnItsOwn,
   starredToSend,
   takesLine,
 } from "./evening"
@@ -71,6 +72,22 @@ describe("isFalseStart", () => {
     // An imported take with no length on record is stored as 0 s: clearing
     // it would trash a real recording.
     expect(isFalseStart(take(4, null, 0), 30)).toBe(false)
+  })
+})
+
+describe("sendsOnItsOwn", () => {
+  it("leaves a false start behind", () => {
+    expect(sendsOnItsOwn(take(4, null, 3), true, 30)).toBe(false)
+  })
+  it("sends a short take with a mark", () => {
+    const marked = { ...take(4, null, 3), markers: [{ at: 1, label_id: 1, note: "" }] }
+    expect(sendsOnItsOwn(marked, true, 30)).toBe(true)
+  })
+  it("sends a take as long as the limit", () => {
+    expect(sendsOnItsOwn(take(4, null, 30), true, 30)).toBe(true)
+  })
+  it("sends nothing with the setting off", () => {
+    expect(sendsOnItsOwn(take(4, null, 200), false, 30)).toBe(false)
   })
 })
 

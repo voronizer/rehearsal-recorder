@@ -111,6 +111,7 @@ import numpy as np  # noqa: E402
 import rehearsal_recorder.api as _api_at_start  # noqa: E402
 from rehearsal_recorder.api import _is_inside  # noqa: E402
 from rehearsal_recorder.audio.player import TakePlayer  # noqa: E402
+from rehearsal_recorder.sending import cloud_folder as _cloud_folder  # noqa: E402
 
 SR = 48000
 problems = []
@@ -165,6 +166,13 @@ def fresh_api(tmp, midi_threads=False):
 
 def main():
     tmp = Path(tempfile.mkdtemp())
+
+    # The suite records takes of a second or two, and every one of those is
+    # a false start, which sending on its own leaves behind. The checks of
+    # sending are about everything else, so they run without that rule;
+    # [91] puts it back and checks it.
+    real_false_start = _cloud_folder.false_start
+    _cloud_folder.false_start = lambda take, limit_sec: False
 
     print("\n[1] Mixing")
     write_wav(tmp / "A.wav", 1000)
@@ -14606,6 +14614,50 @@ def main():
        {t["name"]: t.get("icon") for t in draft90(8, {})["tracks"]}
        == {"Drums": "percussion", "Bass": "bass"})
     a90.finish_rehearsal()
+
+    print("\n[91] False starts stay behind")
+    # A false start is what the rehearsal screen greys: shorter than the
+    # setting, with no star and no marks. Sending on its own leaves it out.
+    _cloud_folder.false_start = real_false_start
+    root91 = Path(tempfile.mkdtemp())
+    _, a91 = fresh_api(root91)
+    a91.set_cloud_dir(str(root91 / "Cloud"))
+    a91.set_cloud_format("wav")
+    a91.set_auto_publish(True, "mix")
+    a91.start_rehearsal("Evening", None, SR, [{"name": "A", "channel": 1}], 16)
+    folder91 = a91._session["folder"]
+    limit91 = a91.get_settings()["false_start_sec"]
+    cloud91 = a91._sending.get("cloud")
+
+    def keep91(number, seconds, markers=None, send=None):
+        d = root91 / f"draft {number}"
+        write_wav(d / "A.wav", 1000)
+        return a91.keep_take(number, str(d), f"Polyn {number}", seconds,
+                             [{"name": "A", "file": str(d / "A.wav")}],
+                             markers or [], send)
+
+    keep91(1, 3.0)
+    ok("a false start is not sent on its own", 1 not in cloud91.states(folder91))
+    keep91(2, 3.0, send=True)
+    ok("a false start ticked on review is sent", 2 in cloud91.states(folder91))
+    keep91(3, float(limit91))
+    ok("a take as long as the limit is sent", 3 in cloud91.states(folder91))
+    keep91(4, 3.0, markers=[{"at": 1.0, "note": ""}])
+    ok("a short take with a mark is sent", 4 in cloud91.states(folder91))
+    a91.set_take_star(folder91, 1, True)
+    ok("a false start given a star is sent on its own", 1 in cloud91.states(folder91))
+    keep91(5, 3.0)
+    a91.add_take_marker(folder91, 5, 1.0)
+    ok("a false start given a mark is sent on its own", 5 in cloud91.states(folder91))
+    keep91(6, 3.0)
+    ok("the cloud button sends a false start",
+       a91.share_take(folder91, 6, "mix")["ok"] and 6 in cloud91.states(folder91))
+    while cloud91.queue.run_next():
+        pass
+    keep91(7, 3.0)
+    a91.finish_rehearsal()
+    a91.set_take_star(folder91, 7, True)
+    ok("a star in an older rehearsal sends nothing", 7 not in cloud91.states(folder91))
 
     print("\n" + "=" * 60)
     if problems:

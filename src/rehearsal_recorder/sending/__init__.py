@@ -14,6 +14,19 @@ already holds, and only the chosen one sends anything new.
 from typing import Protocol
 
 
+def false_start(take, limit_sec):
+    """
+    Whether a take is a false start, as the rehearsal screen greys it
+    (isFalseStart in ui/src/lib/evening.ts): longer than nothing, shorter than
+    the setting, with no ★ and no marks. Sending on its own leaves one out,
+    whichever module sends; the take's own answer on the review screen, or a
+    press of its cloud button, still sends it.
+    """
+    seconds = float(take.get("duration_sec") or 0)
+    return (0 < seconds < float(limit_sec)
+            and not take.get("starred") and not take.get("markers"))
+
+
 class Module(Protocol):
     id: str  # "cloud" or "service"
 

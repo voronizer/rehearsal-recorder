@@ -422,7 +422,8 @@ test.describe("on the screen after a take", () => {
 
   test("Undo brings back the cloud answer it was left with", async ({ page }) => {
     await openApp(page, {
-      before: `window.__CLOUD_DIR__ = '/cloud'; window.__AUTO_PUBLISH__ = {on: true, what: 'mix'};`,
+      // The limit at its lowest, so the fake's 6 s take is not a false start.
+      before: `window.__CLOUD_DIR__ = '/cloud'; window.__AUTO_PUBLISH__ = {on: true, what: 'mix'}; window.__FALSE_START__ = 5;`,
     })
     await startRehearsal(page)
     await recordTake(page)

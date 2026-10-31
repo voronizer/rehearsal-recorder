@@ -33,13 +33,27 @@ export function takesLine(f: EveningFacts): string {
 /** A false start: shorter than the limit set in Settings, with no ★ and no
  *  marks. A take somebody starred or marked was worth something, and one of
  *  0 s is one whose length was never known (an old one imported). */
-export function isFalseStart(take: Take, limitSec: number): boolean {
+export function isFalseStart(
+  take: Pick<Take, "duration_sec" | "starred" | "markers">,
+  limitSec: number
+): boolean {
   return (
     take.duration_sec > 0 &&
     take.duration_sec < limitSec &&
     !take.starred &&
     !take.markers?.length
   )
+}
+
+/** Whether sending on its own sends this take, left to the setting: the
+ *  setting is on and the take is not a false start, as Python decides it
+ *  (sending/__init__.py). */
+export function sendsOnItsOwn(
+  take: Pick<Take, "duration_sec" | "starred" | "markers">,
+  auto: boolean,
+  limitSec: number
+): boolean {
+  return auto && !isFalseStart(take, limitSec)
 }
 
 /** The evening's false starts, in the order they were played. */
