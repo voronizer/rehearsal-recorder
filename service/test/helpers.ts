@@ -79,3 +79,68 @@ export async function member(owner: string, email: string): Promise<{ id: string
 }
 
 export const me = (cookie?: string) => call("/api/me", {}, cookie)
+
+export async function makeKey(owner: string, name = "Rehearsal room"): Promise<string> {
+  const res = await post("/api/keys", { name }, owner)
+  expect(res.status).toBe(200)
+  const { key } = (await res.json()) as { key: string }
+  return key
+}
+
+/** A request from РЭХА with the key as pasted, `<host>:<secret>`. */
+export function fromReha(
+  path: string,
+  key: string,
+  version: string | null = "0.17.0",
+  init: { method?: string; json?: unknown; bytes?: Uint8Array<ArrayBuffer> } = {}
+): Promise<Response> {
+  const headers = new Headers({ "x-api-key": key.slice(key.lastIndexOf(":") + 1) })
+  if (version !== null) headers.set("X-Reha-Version", version)
+  let body: BodyInit | undefined
+  if (init.json !== undefined) {
+    headers.set("Content-Type", "application/json")
+    body = JSON.stringify(init.json)
+  } else if (init.bytes !== undefined) {
+    headers.set("Content-Type", "application/octet-stream")
+    body = init.bytes
+  }
+  return exports.default.fetch(new Request(ORIGIN + path, { method: init.method ?? "GET", headers, body }))
+}
+
+/** РЭХА with a fresh key, for the routes it calls. */
+export async function reha() {
+  const key = await makeKey(await signInOwner())
+  return {
+    get: (path: string) => fromReha(path, key),
+    put: (path: string, json: unknown) => fromReha(path, key, "0.17.0", { method: "PUT", json }),
+    post: (path: string, json: unknown) => fromReha(path, key, "0.17.0", { method: "POST", json }),
+    del: (path: string) => fromReha(path, key, "0.17.0", { method: "DELETE" }),
+    part: (path: string, bytes: Uint8Array<ArrayBuffer>) => fromReha(path, key, "0.17.0", { method: "PUT", bytes }),
+  }
+}
+
+export const REHEARSAL = { uid: "6f1c2a7e-5b3d-5c8e-9a41-2d7b6e0f3c19", name: "Thursday", date: "2025-10-30" }
+
+/** A take's details as РЭХА sends them, with two tracks. */
+export function takeMeta(over: Record<string, unknown> = {}) {
+  return {
+    rehearsal: REHEARSAL,
+    number: 12,
+    name: "Viasna 12",
+    song: "Viasna",
+    duration_sec: 312.48,
+    gen: 1,
+    cut_start: 0,
+    starred: false,
+    balance: { Bass: 0.8 },
+    tracks: [
+      { position: 1, name: "Bass", icon: "bass", files: ["1.mp3", "1.flac", "1.peaks"] },
+      { position: 2, name: "Drums", icon: "drums", files: ["2.mp3", "2.flac", "2.peaks"] },
+    ],
+    notes: [{ position: 3, name: "Keys", file: "3.mid" }],
+    marks: [],
+    ...over,
+  }
+}
+
+export const TAKE = "0b7e4c1a-9d2f-4e6b-8a3c-5f1d7e9b2a40"

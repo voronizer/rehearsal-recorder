@@ -36,6 +36,11 @@ export const body = <T extends z.ZodType>(schema: T) => ({
 
 export const Ok = z.object({ ok: z.literal(true) }).openapi("Ok")
 
+/** What РЭХА sends with every request; its key goes in `x-api-key`. */
+export const RehaHeaders = z.object({
+  "x-reha-version": z.string().openapi({ example: "0.17.0" }),
+})
+
 /**
  * A feature's routes. What comes in is checked by the routes' zod schemas;
  * what fails a check is answered 400 with the schema's own words.

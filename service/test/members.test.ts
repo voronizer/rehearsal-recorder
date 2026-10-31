@@ -1,27 +1,12 @@
-import { env, exports } from "cloudflare:workers"
+import { env } from "cloudflare:workers"
 import { expect, test } from "vitest"
 import { app } from "../worker/index"
 import { MIN_REHA_VERSION, tooOld } from "../worker/shared/version"
-import { OWNER, addresses, call, confirm, me, member, post, signIn, signInOwner } from "./helpers"
+import { OWNER, addresses, call, confirm, fromReha, makeKey, me, member, post, signIn, signInOwner } from "./helpers"
 
 type Member = { id: string; email: string; name: string; confirmed: boolean; signed_in: boolean }
 
 const members = async (owner: string) => (await (await call("/api/members", {}, owner)).json()) as Member[]
-
-async function makeKey(owner: string, name = "Rehearsal room"): Promise<string> {
-  const res = await post("/api/keys", { name }, owner)
-  expect(res.status).toBe(200)
-  const { key } = (await res.json()) as { key: string }
-  return key
-}
-
-/** A request from РЭХА with the key as pasted, `<host>:<secret>`. */
-function fromReha(path: string, key: string, version: string | null = "0.17.0") {
-  const secret = key.slice(key.lastIndexOf(":") + 1)
-  const headers: Record<string, string> = { "x-api-key": secret }
-  if (version !== null) headers["X-Reha-Version"] = version
-  return exports.default.fetch(new Request(`https://band.test${path}`, { headers }))
-}
 
 test("only the owner sees members", async () => {
   const owner = await signInOwner()

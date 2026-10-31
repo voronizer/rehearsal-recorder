@@ -9,6 +9,12 @@ import { cloudflareLetters } from "./signin/letters"
 import { meRoutes } from "./signin/routes"
 import { standInRoutes, standIns } from "./signin/stand-ins"
 import { rehaRoutes } from "./takes/reha-routes"
+import { purgeTrash } from "./takes/purge"
+import { uploadRoutes } from "./uploads/routes"
+import { consumeChat } from "./chat/consume"
+import { reportFailure } from "./chat/failures"
+import { botApi, keptTelegram, type KeptMessage } from "./chat/telegram"
+import type { ChatEvent } from "./chat/tell"
 
 /**
  * better-auth's routes the pages use. Its others (passwords, changing an
@@ -43,7 +49,7 @@ app.openAPIRegistry.registerComponent("securitySchemes", "rehaKey", {
   description: "The secret part of the key, after the last “:”",
 })
 
-const routes = app.route("/", meRoutes).route("/", memberRoutes).route("/", rehaRoutes).route("/", standInRoutes)
+const routes = app.route("/", meRoutes).route("/", memberRoutes).route("/", rehaRoutes).route("/", uploadRoutes).route("/", standInRoutes)
 
 app.doc31("/api/openapi.json", DOC)
 
@@ -53,17 +59,27 @@ app.onError((err, c) => {
   if (err instanceof NoAddressToken) return fail(c, 400, NO_TOKEN)
   if (isAPIError(err) && err.statusCode >= 400 && err.statusCode < 500)
     return c.json({ error: err.message }, err.statusCode as 400)
-  console.error(err)
+  c.executionCtx.waitUntil(reportFailure(c.env, `${c.req.method} ${c.req.routePath}`, err))
   return fail(c, 500, "Something went wrong in the band service")
 })
+
+/** With STAND_INS on, the bot's messages are kept here instead. */
+const keptMessages: KeptMessage[] = []
 
 export { app }
 export type AppType = typeof routes
 
 export default {
   fetch: app.fetch,
-  async scheduled() {},
-  async queue(batch) {
-    batch.ackAll()
+  async scheduled(_controller, env) {
+    try {
+      await purgeTrash(env)
+    } catch (e) {
+      await reportFailure(env, "emptying the trash", e)
+    }
+  },
+  async queue(batch, env) {
+    const telegram = env.STAND_INS === "on" ? keptTelegram(keptMessages) : botApi(env.TELEGRAM_BOT_TOKEN ?? "")
+    await consumeChat(batch as MessageBatch<ChatEvent>, env, telegram)
   },
 } satisfies ExportedHandler<Bindings>
