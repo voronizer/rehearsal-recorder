@@ -5,7 +5,10 @@ track, stars the good ones and talks about them at the moment they happen.
 РЭХА sends the takes there. It opens at band.reha.stream, made for a
 computer first and working on a phone too.
 
-Alex approved this spec on 31 October at 16:33 («пиши», after «ок»).
+Alex approved this spec on 31 October at 16:33 («пиши», after «ок»). At
+18:01 he reopened how the service is built; the answers of 18:08-18:33
+changed sign-in to email and are folded in below, waiting for his «ок»
+again.
 
 ## Alex's picks
 
@@ -62,10 +65,11 @@ On 30 October, in this thread:
 - No email code that runs out every month (18:04, in words): each member
   gets a personal link from Alex, and opening it signs them in for a year
   (18:09, a card). This replaces sign-in by email through Cloudflare
-  Access, which was in the concept.
+  Access, which was in the concept. (Replaced on 31 October by sign-in by
+  email with a code, below.)
 - Each member types their own name (18:16, in words).
 - A link works once and runs out (18:18, in words); a link from Alex lasts
-  a day (18:19, a card).
+  a day (18:19, a card). (Replaced on 31 October, with the links.)
 - The bot writes the moment a take or comment is ready, adding to the same
   message rather than posting a new one each time; no timer (18:22, a card).
 
@@ -88,6 +92,55 @@ On 31 October:
 - The guide gets a section on sending to the band service (16:32, in
   words, after asking why the spec had left it out).
 
+On 31 October, how it is built, in rounds of questions (18:01-18:33; the
+record with each question is in
+/mnt/project-files/band-service/part-1/architecture.md):
+
+- The server part in TypeScript: Hono for the routes, Drizzle ORM for D1
+  (18:08, «1 - ок»).
+- Only the band's own copy; checks run locally on made-up data (18:08).
+- РЭХА sends its version with each request; the service only ever adds,
+  and a РЭХА too old for it is told “Update РЭХА to send takes here”
+  (18:08).
+- The bot's messages go through Cloudflare Queues and are tried again when
+  Telegram fails (18:08).
+- РЭХА's files go through the Worker (18:16, «остальное -ок», after asking
+  whether the Worker's limits hold).
+- The code in `service/` is laid out by feature (18:16).
+- The pages get their data through Hono RPC, and zod checks what comes in
+  (18:16).
+- The service describes its API in OpenAPI made from the same zod schemas,
+  and РЭХА's tests check each of its requests against it (18:16).
+- Page tests run against the real Worker on the computer, with a made-up
+  band (18:16).
+- Sign-in by email, through better-auth, a ready-made library (18:16-18:18,
+  in words: «почта мне кажется это нормально», «если уже есть готовое -
+  нахрена изобретать велосипед?»). This replaces the personal links of 30
+  October. Asked about his «без кода который через месяц дохнет» of 30
+  October, Claude answered that it was about Cloudflare Access, and a
+  sign-in here still lasts a year from the last visit.
+- The letter holds a code of 6 digits; it lasts 10 minutes and stops
+  working after 5 wrong tries (18:26).
+- Alex signs in by email too: his address in the Worker's settings makes
+  him the owner. There is no setup secret (18:26).
+- No links from Alex and no **Sign in on another device**: a member signs
+  in on any device with their address. **Sign out everywhere** stays
+  (18:26).
+- РЭХА's key comes from better-auth's API Key plugin (18:26).
+- Cloudflare's Workers Logs are on, and the bot writes to Alex alone when
+  the server fails (18:26).
+- Letters go through Cloudflare's free sending, which sends only to
+  confirmed addresses (18:29, «а», after asking whether everyone gets a
+  mailbox on Cloudflare: no). reha.stream gets no mail today, so turning
+  on Cloudflare's mail for it touches nothing (18:31).
+- The service puts a member's address on Cloudflare's list itself, and
+  **Members** shows whether the member has confirmed it (18:33).
+- The pages use TanStack Router and TanStack Query (18:33).
+- The player gets its files through the Worker, which checks the sign-in
+  (18:33).
+- Copies: D1's own history of 7 days and the 30-day trash, nothing more
+  (18:33).
+
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
 
@@ -95,46 +148,58 @@ Everything else below is Claude's call, listed again in
 
 ### Signing in
 
-Alex sends each member their own link, in Telegram or however suits him.
-There is no email, code or password. A link lasts a day: one not used by
-then stops working, and Alex makes a new one. A link also works once: it
-opens a page with **Sign in**, and pressing it signs that browser in and
-uses the link up. The sign-in lasts a year, and every visit moves the year on, so in
-practice nobody signs in again. The button is there because Telegram opens
-every link itself to draw its preview, and without it the preview would
-use the link up before the member got to it.
+A member signs in with their email address. On band.reha.stream they type
+it and press **Send code**. A letter brings a code of six digits, and they
+type it on the same page. A code lasts 10 minutes and stops working after
+5 wrong tries; **Send code** again sends a new one. There is no password.
 
-To sign in on a second device, the member presses **Sign in on another
-device** at the bottom of the left column. It makes a new one-time link
-for them, to send to themselves or to scan as a QR code, so Alex is not
-needed for it. That link lasts 15 minutes.
+The sign-in lasts a year, and every visit moves the year on, so in
+practice nobody signs in again. On a second device, a new phone, or a
+browser whose data was cleared, the member signs in the same way, without
+Alex.
 
-The first time a link is opened, the service asks “What should the band
+The letter holds a code, not a link, for two reasons. A phone's mail app
+often opens a link in its own built-in browser, and the sign-in would stay
+there, unknown to Safari or Chrome. And a mail filter at work may open a
+link before the member does. A code is typed wherever the member is, so
+reading the letter on the phone and signing in on the computer works too.
+
+Only addresses in the band get a code. The page answers the same for any
+address (“If this address is in the band, a code is on its way”), so it
+tells a stranger nothing about who is in the band.
+
+Cloudflare sends letters only to addresses that have confirmed they want
+them (see [Letters](#letters)). When a member is added, Cloudflare sends
+them a letter of its own with **Verify email address**, and they press it
+once. If they press **Send code** before that, the page says “First
+confirm your address: look for a letter from Cloudflare, then press Send
+code again”, and Cloudflare's letter is sent again.
+
+The first time a member signs in, the service asks “What should the band
 call you?”. The member types their name, and it and its first letter are
 what the others see on stars and comments. They can change it later with
 their name at the bottom of the left column.
 
-If a phone is lost, Alex presses **Sign out everywhere** for that member
-and sends them a new link. A member is also signed out if they stay away a
-whole year or clear their browser's data; then they ask Alex for a new
-link too.
+If a phone is lost, Alex presses **Sign out everywhere** for that member,
+and they sign in again on the new phone.
 
-Alex himself gets in with the setup secret, a password he sets once in
-Cloudflare. band.reha.stream/setup asks for it and signs that browser in
-as Alex. It works whenever he needs it: the first time, after a lost phone,
-or after a year away. Cloudflare does not show a secret again once it is
-set, so if Alex forgets it, he sets a new one there.
+Alex signs in the same way. His address is in the Worker's settings, and
+whoever signs in with it is the owner: they see **Members**. The first
+time, his address goes through Cloudflare's confirmation like anyone's.
 
 ### Members
 
 A page only Alex sees, at the bottom of the left column (on a phone, at
-the bottom of the first screen). It lists the members, each with **New
-link** and **Sign out everywhere**, and has **Add member**. **Add member**
-and **New link** both make a one-time link to copy and send. A link nobody
-has used yet shows as “Not opened yet”, and as “Ran out” after a day.
-Below them are РЭХА's keys:
-**Make a key for РЭХА**, and each key with its name (“Rehearsal room”) and
-**Remove**.
+the bottom of the first screen). It lists the members by name and address,
+each with **Sign out everywhere** and **Remove**, and has **Add member**,
+which asks only for the address: the member types their own name the
+first time they sign in. Until then a member shows as their address, with
+“Has not confirmed the address yet” or “Has not signed in yet”. **Remove**
+takes a member out of the band: their address gets no more codes, their
+sign-ins end, and their stars and comments stay under their name.
+
+Below them are РЭХА's keys: **Make a key for РЭХА**, and each key with its
+name (“Rehearsal room”) and **Remove**.
 
 ### The first screen
 
@@ -223,6 +288,10 @@ nothing is added to a message that has long scrolled away.
 
 Each take and each comment is a link to its place in the service. Marks that
 come from РЭХА are not posted on their own: they arrive with their take.
+
+When something fails on the server, the bot writes to Alex alone, never to
+the band: what failed and when. The same failure is told once an hour at
+most, so a broken piece does not flood his chat.
 
 ## What РЭХА does
 
@@ -369,12 +438,14 @@ What the page holds, in order:
 1. What it is, in a few lines of text.
 2. A story from Alex's band of how they use it, in the manner of the
    site's stories. Alex checks it before it goes live, as with every story.
-3. **Run your own**: what it needs (a Cloudflare account; a Telegram bot,
-   only for the chat messages), what it costs (files up to 10 GB free, then
-   $0.015 per GB a month), and the steps one by one: put the service's code
-   on Cloudflare, set its secrets, open /setup, add the members, make a key
-   for РЭХА. A band's own domain is not needed: Cloudflare gives every copy
-   a free address on workers.dev.
+3. **Run your own**: what it needs (a Cloudflare account; a domain of the
+   band's own on Cloudflare, since the sign-in letters can only come from
+   one; a Telegram bot, only for the chat messages), what it costs (files
+   up to 10 GB free, then $0.015 per GB a month; the domain is paid to
+   whoever sells it), and the steps one by one: put the service's code on
+   Cloudflare, turn on Cloudflare's mail for the domain, set the settings
+   and secrets, sign in with your own address, add the members, make a key
+   for РЭХА.
 4. That the code is open, under FSL, with a link to it.
 
 The steps are written so a musician can follow them. They are the same
@@ -391,6 +462,9 @@ page goes live.
 | Worker | the pages and the API, at band.reha.stream | free: 100,000 requests a day |
 | D1 | songs, takes, stars, comments, members, what each member has seen | free |
 | R2 | MP3, FLAC, MIDI, waveforms | first 10 GB free, then $0.015 per GB a month. A two-hour rehearsal on 6 tracks is about 1 GB of MP3 and 3 GB of FLAC, so after a year of weekly rehearsals about $3 a month |
+| Queues | the bot's messages, tried again when Telegram fails | free: 10,000 operations a day |
+| Email | the sign-in codes | free to confirmed addresses, up to 200 of them |
+| Workers Logs | what the Worker did, for finding a fault | free: 200,000 lines a day, kept 3 days |
 
 Workers' free plan allows 10 ms of CPU and 100 MB of body per request. A
 10 MB part is well inside the body limit, and passing a file between R2
@@ -407,24 +481,47 @@ Search Console.
 
 ### Sign-in and the key
 
-The Worker checks every request itself. A link carries a long random
-token, and D1 keeps only its hash. Opening the link (a GET) only shows the
-**Sign in** page; pressing the button (a POST) checks the token and its
-expiry, deletes it, and starts a session in a cookie (HttpOnly, Secure, SameSite=Lax) that
-lasts a year from the last visit. **Sign out everywhere** deletes all of a
+better-auth does the sign-in, with its email code plugin (`emailOTP`) and
+its Drizzle adapter on D1. Sign-up is off: a code goes only to an address
+in the members' table or to the owner's address from the Worker's
+settings. A session lives in a cookie (HttpOnly, Secure, SameSite=Lax) and
+in D1, and lasts a year from the last visit: better-auth moves its end on
+once a day of use. **Sign out everywhere** and **Remove** end all of a
 member's sessions. Links from the band's chat open signed in, since Lax
-cookies go with a link followed from another app.
+cookies go with a link followed from another app. better-auth counts
+sign-in tries in D1, since a Worker keeps nothing in memory between
+requests.
 
-РЭХА's key is a long random secret too, sent in a header and kept as a
-hash. It stands for a copy of РЭХА, usually the one at the rehearsal room,
-never for a member, and works until Alex removes it.
+РЭХА's key comes from better-auth's API Key plugin: a long random secret,
+sent in a header and kept only as a hash. It stands for a copy of РЭХА,
+usually the one at the rehearsal room, never for a member, and works until
+Alex removes it.
 
 Cloudflare Access is not used: it keeps a sign-in for a month at most
 (Cloudflare's session management page, read on 30 October).
 
-Alex signs in at band.reha.stream/setup with the setup secret, kept as a
-Worker secret. The first time, that makes him the owner; after that it
-only signs him in again.
+### Letters
+
+Cloudflare's Email Service sends them through the Worker's `send_email`
+binding. On the free plan it sends only to confirmed addresses, free and
+uncounted, up to 200 in an account; any address at all needs the paid
+plan, $5 a month (Cloudflare's pricing and limits pages, read on 31
+October). Sending is still in beta there.
+
+Letters come from an address on the band's domain, set in the Worker's
+settings (band@reha.stream for Alex's copy). For that, Cloudflare's mail
+(Email Routing) is turned on for reha.stream, which puts its MX records in
+reha.stream's DNS. reha.stream gets no mail today, so nothing else is
+touched.
+
+The service keeps Cloudflare's list of confirmed addresses itself, through
+Cloudflare's API, with a token allowed only that list: **Add member** adds
+the address, which makes Cloudflare send its letter, **Remove** takes it
+off, and **Members** reads from the list whether each address is
+confirmed. Sending Cloudflare's letter again is a remove and an add.
+
+In tests, letters go to a stand-in that keeps them, and the tests read the
+code from there.
 
 ### Uploads
 
@@ -442,22 +539,59 @@ draws them for its player (`audio/waveform.py`), as a small file per track,
 so the phone never decodes a whole take to draw it. There is no mix file:
 the browser mixes the tracks with РЭХА's balance.
 
+The files reach the player through the Worker, which checks the sign-in
+for each file and hands it from R2 in pieces (`Range`). So a file is never
+open to someone who has only its address.
+
+### Copies
+
+D1 keeps its own history: the database can be put back to any minute of
+the last 7 days, at no cost (Cloudflare's Time Travel page). The files in
+R2 have no copy; a take removed in РЭХА waits 30 days in the trash. Nothing
+more is kept.
+
+### When something fails
+
+Workers Logs are on, so Cloudflare keeps 3 days of what the Worker did. A
+failure on the server also goes to Alex through the bot (see
+[In the band's chat](#in-the-bands-chat)). The bot can write to him only
+after he has written to it once, so the setup has him send it /start, and
+his Telegram id goes in the Worker's settings.
+
 ### Code
 
-`service/` beside `site/`, with its own LICENSE (FSL-1.1-MIT). The pages are
-React, built with the design system's styles and components from `ui/src`,
-the way the site uses them. The Worker and the pages share one build. D1's
-tables are in `service/migrations/`. A take's song may be empty, as in
-РЭХА's own `take.song_id`: that is a take nobody named, and **Not named**
-is only how the list shows such takes.
+`service/` beside `site/`, with its own LICENSE (FSL-1.1-MIT), in
+TypeScript. Inside, a folder for each feature (sign-in, members, takes,
+comments, uploads, files, chat), each with its own routes, logic and
+queries; the tables' Drizzle schema is one file. The Worker's routes are
+Hono, and zod checks everything that comes in.
+
+The pages are React, built with the design system's styles and components
+from `ui/src`, the way the site uses them, with TanStack Router for the
+pages' addresses and TanStack Query for their data. They call the Worker
+through Hono RPC, whose types come from the routes themselves, so a page
+that no longer matches its route does not build. The Worker and the pages
+share one build.
+
+From the same zod schemas the Worker serves a description of its API in
+OpenAPI, and РЭХА's tests check every request РЭХА makes against it. РЭХА
+sends its version with each request; the service only ever adds fields,
+and answers a РЭХА too old for it with “Update РЭХА to send takes here”.
+
+D1's tables are made by Drizzle's migrations in `service/migrations/`,
+which only ever add. A take's song may be empty, as in РЭХА's own
+`take.song_id`: that is a take nobody named, and **Not named** is only how
+the list shows such takes.
 
 Nothing in the code names band.reha.stream or Alex's band. The address,
-the bot and the chat come from each copy's own settings, so another band
-can run its own copy unchanged.
+the letters' sender, the owner, the bot and the chat come from each copy's
+own settings, so another band can run its own copy unchanged.
 
 Tests: the Worker's logic on Cloudflare's own test runner; the pages in
-Playwright on made-up data, as the site does; РЭХА's sending against a fake
-service in pytest. They run in `checks.yml`.
+Playwright against the real Worker run on the computer, with a made-up
+band in its database; РЭХА's sending in pytest, against a fake service
+checked by the OpenAPI description. There is no test copy of the service
+on Cloudflare. They run in `checks.yml`.
 
 It goes live with a release, as the site does, and can be sent by hand from
 the workflow.
@@ -469,32 +603,42 @@ plus the move of reha.stream's DNS for the band.reha.stream address:
 
 1. A Cloudflare account, and reha.stream added to it; the nameservers changed
    at the registrar.
-2. A Telegram bot from BotFather, added to the band's group.
-3. Secrets in Cloudflare and in GitHub: the API token for deploying, the
-   bot's token, the chat's id, and the setup secret.
-4. band.reha.stream/setup with the setup secret; then the members, their
-   links sent to them, and a key for РЭХА at the rehearsal room.
+2. Cloudflare's mail (Email Routing) turned on for reha.stream.
+3. A Telegram bot from BotFather, added to the band's group; Alex sends it
+   /start once.
+4. Settings and secrets in Cloudflare and in GitHub: the API token for
+   deploying, the token for the list of addresses, the bot's token, the
+   chat's id, Alex's Telegram id, his address, and the letters' sender.
+5. Alex signs in at band.reha.stream with his address (confirming it to
+   Cloudflare the first time); then he adds the members and makes a key for
+   РЭХА at the rehearsal room.
 
 ## Not in part 1
 
 Songs' notes, files, Guitar Pro and status (part 2). Sets (part 3). Comparing
-two takes, loop and slow-down, links for people outside the band, email,
-deleting a take from the service by hand, uploading without РЭХА,
+two takes, loop and slow-down, links for people outside the band, letters
+about new takes or comments (the chat has those), deleting a take from the
+service by hand, uploading without РЭХА,
 **Download all**, comping.
 
 ## Calls to review
 
 1. A sign-in lasts a year from the last visit, so it runs out only for
    someone who stays away a year.
-2. Alex makes the members' links and РЭХА's keys on a **Members** page only
-   he sees; a link nobody has used shows as “Not opened yet”.
-3. A link opens a page with **Sign in** and is used up by the press, so
-   Telegram's preview cannot use it up.
-4. A member signs in on another device with a one-time link or QR code they
-   make themselves, which lasts 15 minutes.
-5. A lost phone: **Sign out everywhere**, then a new link.
-6. Alex signs in with the setup secret at band.reha.stream/setup, any
-   time; a forgotten secret is replaced in Cloudflare.
+2. Alex adds members by address and makes РЭХА's keys on a **Members**
+   page only he sees; a member shows “Has not confirmed the address yet” or
+   “Has not signed in yet” until they have.
+3. The sign-in page answers the same for any address, so it tells a
+   stranger nothing about who is in the band.
+4. **Send code** for an address in the band that Cloudflare has not had
+   confirmed yet sends Cloudflare's letter again, with a line saying so;
+   this covers Alex's own address the first time too. The letter goes again
+   by taking the address off the list and adding it back: to be checked on
+   the first real setup.
+5. **Remove** on **Members** takes a member out of the band: no more codes,
+   their sign-ins end, their stars and comments stay under their name.
+6. The bot tells Alex of a failure on the server once an hour at most for
+   the same failure.
 7. A member can change their name later, at the bottom of the left column.
 8. A take is new for you until you open it; there is no “mark all as seen”.
 9. On a computer the service opens on **New**; with nothing new, on the song
@@ -538,3 +682,13 @@ deleting a take from the service by hand, uploading without РЭХА,
     the take's button, as the cloud folder's does; takes still to send are
     back in the list when РЭХА opens; with no internet a line waits rather
     than fails.
+34. Letters come from an address set in the Worker's settings
+    (band@reha.stream for Alex's copy).
+35. Alex's Telegram id goes in the Worker's settings, and he sends the bot
+    /start once, since a bot can write only to someone who wrote to it
+    first.
+36. In tests, letters go to a stand-in the tests read the code from.
+37. better-auth keeps its count of sign-in tries in D1.
+38. The site's **Run your own** says a band needs a domain of its own on
+    Cloudflare, since the letters can only come from one; the workers.dev
+    address alone is no longer enough.
