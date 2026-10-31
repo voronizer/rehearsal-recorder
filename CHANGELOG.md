@@ -5,6 +5,23 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **A band service.** РЭХА can send takes to a band service: a private web
+  page where your band plays each take track by track, stars the good ones
+  and comments at a moment of it. Paste the key its owner gives you under
+  **I have a band service key** in **Settings › Folders**; then **Send
+  takes to** switches between the cloud folder and the band service. Every
+  track goes up as MP3 and as FLAC, the MP3s first. Sending that is cut
+  short carries on from where it stopped, and closing РЭХА while it sends
+  asks first. How to run one for your own band:
+  [reha.stream/band-service](https://reha.stream/band-service).
+- **False starts stay behind.** **Send saved takes automatically** no longer
+  sends a false start: a take shorter than 30 seconds (or the length set in
+  **Settings › Folders**) with no ★ and no marks. Its box on the screen after
+  the take starts unticked. Tick it, or give the take a ★ or a mark, and it
+  goes.
+
 ## 0.16.1
 
 - **A take plays without clicks right after Stop.** A take played straight
