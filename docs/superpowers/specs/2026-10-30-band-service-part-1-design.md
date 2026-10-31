@@ -394,51 +394,49 @@ nothing in the guide, since only the band can use it.
 
 ## Calls to review
 
-1. The data keeps a band on every row, so the service could open to other
-   bands later without a rewrite.
-2. A sign-in lasts a year from the last visit, so it runs out only for
+1. A sign-in lasts a year from the last visit, so it runs out only for
    someone who stays away a year.
-3. Alex makes the members' links and РЭХА's keys on a **Members** page only
+2. Alex makes the members' links and РЭХА's keys on a **Members** page only
    he sees; a link nobody has used shows as “Not opened yet”.
-4. A link opens a page with **Sign in** and is used up by the press, so
+3. A link opens a page with **Sign in** and is used up by the press, so
    Telegram's preview cannot use it up.
-5. A member signs in on another device with a one-time link or QR code they
+4. A member signs in on another device with a one-time link or QR code they
    make themselves, which lasts 15 minutes.
-6. A lost phone: **Sign out everywhere**, then a new link.
-7. Alex's first link comes from a setup secret, once.
-8. A member can change their name later, at the bottom of the left column.
-9. A take is new for you until you open it; there is no “mark all as seen”.
-10. On a computer the service opens on **New**; with nothing new, on the song
-    played last.
-11. Songs are listed by their last take, not alphabetically.
-12. A take nobody named goes under **Not named**.
-13. Best take: most members' stars, newest on a tie; with none, the newest
+5. A lost phone: **Sign out everywhere**, then a new link.
+6. Alex's first link comes from a setup secret, once.
+7. A member can change their name later, at the bottom of the left column.
+8. A take is new for you until you open it; there is no “mark all as seen”.
+9. On a computer the service opens on **New**; with nothing new, on the song
+   played last.
+10. Songs are listed by their last take, not alphabetically.
+11. A take nobody named goes under **Not named**.
+12. Best take: most members' stars, newest on a tie; with none, the newest
     take.
-14. M and S are per person and are not kept.
-15. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
+13. M and S are per person and are not kept.
+14. **Download tracks** is in part 1 (Claude offered it at 17:12, with no
     answer either way), as a link per file, not one zip.
-16. A chat message takes additions for three hours, then a new one starts;
+15. A chat message takes additions for three hours, then a new one starts;
     marks from РЭХА are not posted on their own.
-17. **I have a band service key** is the last line of the **Cloud folder**
+16. **I have a band service key** is the last line of the **Cloud folder**
     group; with a key, the group becomes **Sending takes**.
-18. Each panel keeps its own settings, **Send saved takes automatically**
+17. Each panel keeps its own settings, **Send saved takes automatically**
     included.
-19. The cloud folder's code moves into a `sending/` package beside the
+18. The cloud folder's code moves into a `sending/` package beside the
     service's, behind the same calls, before the service is added.
-20. A take's cloud button sends to the service with no dialog; on a sent
+19. A take's cloud button sends to the service with no dialog; on a sent
     take, a dialog with what is up and **Remove from the band service**.
-21. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
-22. No mix file: the browser mixes the tracks. With six tracks this saves a
+20. For the service, РЭХА sends a fixed set: MP3, FLAC and MIDI, no choice.
+21. No mix file: the browser mixes the tracks. With six tracks this saves a
     seventh of the MP3 space.
-23. MP3s first, FLAC after; a take shows once its MP3s are up.
-24. A take stays in the trash for 30 days; any member can restore it.
-25. A take sent again from РЭХА comes out of the trash with its comments.
-26. A crop that cuts the start moves the comments back; one in the cut part
+22. MP3s first, FLAC after; a take shows once its MP3s are up.
+23. A take stays in the trash for 30 days; any member can restore it.
+24. A take sent again from РЭХА comes out of the trash with its comments.
+25. A crop that cuts the start moves the comments back; one in the cut part
     stays at 0:00, marked “In the part cut off”.
-27. Parts of 10 MB; an upload unfinished for 7 days starts again.
-28. Closing РЭХА while sending asks first, with its wording above.
-29. Waveforms are made by РЭХА and sent with the take.
-30. The pages are React with the design system's components, as on the
+26. Parts of 10 MB; an upload unfinished for 7 days starts again.
+27. Closing РЭХА while sending asks first, with its wording above.
+28. Waveforms are made by РЭХА and sent with the take.
+29. The pages are React with the design system's components, as on the
     site; the service's tests run in `checks.yml` with the rest.
-31. The service goes live with a release, like the site.
-32. Nothing about the service on reha.stream or in the guide.
+30. The service goes live with a release, like the site.
+31. Nothing about the service on reha.stream or in the guide.
