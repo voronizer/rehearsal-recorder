@@ -96,10 +96,9 @@ const KEYS = ["date", "description"] as const
 const LINK = /\]\((\/stories\/[^)\s]*)\)/g
 const CHAT = /^>\s*\*\*([^*:]+):\*\*\s+(.+?)\s*\\?$/
 
-/** A story's file, read. `dir` is where the file is, for the errors. */
-export function parseStory(file: string, md: string, dir = "site/content/stories/"): StoryDoc {
+export function parseStory(file: string, md: string): StoryDoc {
   const fail = (line: number, what: string): never => {
-    throw new Error(`${dir}${file}:${line}: ${what}`)
+    throw new Error(`site/content/stories/${file}:${line}: ${what}`)
   }
   // A comment's lines stay, blank, so every line keeps its number.
   const text = md

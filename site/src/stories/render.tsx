@@ -45,7 +45,7 @@ export function storyPages(): { meta: PageMeta; body: string }[] {
         kind: "website",
         jsonLd: null,
       },
-      body: renderToStaticMarkup(<BandServicePage page={bandService} byline={stories.byline} />),
+      body: renderToStaticMarkup(<BandServicePage page={bandService} />),
     },
   ]
 }

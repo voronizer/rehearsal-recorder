@@ -1,62 +1,68 @@
 ---
-date: 2026-10-31
-description: A private page for your band, where everyone hears each take track by track, stars the good ones and comments at the second it went wrong. How our band uses it, and what it does for each of you.
+description: Your band's own page for its takes, on your phone the same evening. What it gives each of you, and how to start.
 ---
 
-<!-- reha.stream/band-service, written like a story (site/content/stories/)
-     with its chapters, chats and big lines. It is for a band member: the
-     setup steps are in service/README.md, one link away. РЭХА's key line
-     in Settings › Folders links here (SERVICE_HELP_URL in
+<!-- reha.stream/band-service: the page a band member is sent. A chapter
+     for each thing the service does for them, each with a picture of the
+     service on a phone, then how to start. Nothing about setting it up:
+     those steps are in service/README.md, one link away.
+
+     A picture is ![what to look at](its-name), its files
+     site/src/stories/band-service/<its-name>-light.webp and -dark.webp,
+     taken by `npm run pictures` in service/ (service/pictures/).
+
+     РЭХА's key line in Settings › Folders links here (SERVICE_HELP_URL in
      sending/band_service.py). -->
 
 # A band service of your own
 
-A band service is a private web page for your band, at its own address. РЭХА sends it the takes from your rehearsals, and the band listens on a phone or a computer, each take track by track, with a lane for each of you.
+A band service is your band's own page for its takes. РЭХА sends them there from the rehearsal, and only the band gets in.
 
-Anyone in the band can star a take and leave a comment at a second of it. Nobody outside the band gets in: each of you signs in with your email address and a code from a letter.
+## The takes are on your phone the same evening
 
-## How we use it
+Listen on the way home, while you still remember what you meant to play.
 
-For a long time our good takes went to a cloud folder. They got there quickly, and then we talked about them in the band's chat.
+![The first page on Ira's phone: this Thursday's takes she has not heard yet, and what the band wrote on takes she had](new-takes)
 
-> **Guitarist:** In Viasna, the bit after the second chorus. Is that me?\
-> **Me:** Which Viasna?\
-> **Guitarist:** Thursday's. The good one. Around two minutes in. Or three.\
-> **Drummer:** It's me. It's always me.\
-> **Singer:** There are four Viasnas from Thursday.
+## Hear your own part
 
-A take in the folder was one file, the mix. You could not hear the guitar on its own, and nobody could point at a second of it.
+Each of you has a lane of your own in every take. Play yours alone to hear what you really did, or mute it and practise along with the band as it played that night.
 
-Now the takes go to our band service. On Thursday night the bot writes in our group: “New takes from Thursday, 29 October: Viasna 11, Viasna 12, Pałyn 9”. On the bus home the guitarist opens Viasna 12, presses S on the guitar's lane to hear it alone, and stops at 1:42.
+![Viasna 12 with S pressed on the guitar's lane: the guitar plays alone, and the other lanes are crossed out until S is pressed again](lanes)
 
-> **Guitarist:** 1:42. The bridge drags here.\
-> **Drummer:** Not the drums. I soloed them.\
-> **Me:** It's the bass. Sorry.
+## Point at the second
 
-**We still argue. Now we argue about 1:42.**
+Instead of “the bit after the second chorus” in the chat, you write at 1:42, and everyone hears the same moment. The comment stays with the take instead of getting lost among the memes.
 
-Anyone can answer a comment, and close it once the place is fixed. A mark, the note you pin to a moment of a take in РЭХА, comes along with its take, so the whole band sees what we said in the room.
+![A comment at 1:42 with the answers under it. Tap a comment to put the playhead on its second](comments)
 
-On Sunday the singer goes through the week and stars the takes worth keeping. A song's page puts the take with the most stars on top, so before the next rehearsal everyone knows which Viasna we are aiming for.
+## Know which take you're aiming for
 
-The drummer listens with the drums soloed, to check the kick, the drummer says. We think it's the fills.
+The band stars the good ones, and a song opens on the favourite. You come to the next rehearsal knowing the tempo and the ending everyone agreed on.
 
-## How it works
+![Viasna's page: the take with the most stars on top, ready to play. The letters by the star are who starred it](song)
 
-The takes come from РЭХА, on the laptop that records the rehearsal, and it sends them by itself. Each track comes as an MP3 first, so you can listen before the full-quality files follow.
+## Nothing gets lost
 
-To get in you need only your email address: whoever set up the service adds it. The first letter you get asks you to confirm the address; press the button in it, once. Then open the band's page, type your address and press **Send code**. A letter brings six digits; type them and you stay signed in for a year. There is no password to forget, and on a new phone you sign in the same way.
+Every take the band sends is there, by song, including the Viasna from three weeks ago when the bridge finally worked. A take deleted in РЭХА waits in the **Trash** for 30 days, and anyone in the band can press **Restore**.
 
-The first page shows what is new since you were here, takes and comments. The songs come under it, the one played last on top; on a computer they sit in a column on the left. A song's page opens with the take the band likes best, the one with the most stars, ready to play.
+![Viasna 3, from three weeks before, and what the band said about its bridge](three-weeks-ago)
 
-A take has a lane for each track, and one ▶ plays them all together, with the balance set in РЭХА's player. M mutes a lane and S plays it alone, so you can finally hear what the bass is doing.
+## Take your track home
 
-**The bass is fine. Please stop soloing the bass.**
+Download it as it was recorded and work on your part in a recording program.
 
-Give a take your ★, or take it back: everyone sees who starred what. Pause where something happens and press **Comment at 1:42**, or whatever second you stopped at. **Download tracks** gives you each track as it was recorded, for when you want your part in a recording program.
+![Download tracks, at the end of each take's page: every track in FLAC, the full-quality file РЭХА recorded](downloads)
 
-If the band has a group in Telegram, the service's bot writes there when a take is ready. Takes from the next three hours join that same message, so the group's phones buzz once an evening. Each take's name is a link straight to it.
+## How to start
 
-A take deleted in РЭХА waits in the service's **Trash** for 30 days. Anyone can play it there and press **Restore**. That has already saved one good take from a tidy drummer.
+1. Whoever set up the band's service adds your email address. A letter comes asking you to confirm it: press the button in it. You do this once.
+2. Open the band's page from the link you were sent, type your address and press **Send code**.
+3. A letter brings six digits. Type them in.
+4. Tell the band what to call you.
+
+![The band's page asks for nothing but your email address](sign-in)
+
+You stay signed in for a year, and there is no password to forget. On a new phone you sign in the same way.
 
 Want one for your band? Whoever sets it up will find [the steps on GitHub](https://github.com/voronizer/rehearsal-recorder/blob/main/service/README.md#run-one-for-your-band).

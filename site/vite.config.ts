@@ -1,5 +1,5 @@
 /// <reference types="vitest/config" />
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -123,6 +123,7 @@ function seo(): Plugin {
 function stories(): Plugin {
   const render = fileURLToPath(new URL("./src/stories/render.tsx", import.meta.url))
   let pages: { meta: PageMeta; body: string }[] = []
+  let pictures: { fileName: string; source: Uint8Array }[] = []
   let ssr = false
   return {
     name: "site-stories",
@@ -139,9 +140,17 @@ function stories(): Plugin {
           configFile: fileURLToPath(import.meta.url),
           logLevel: "warn",
           ssr: { noExternal: true },
-          build: { ssr: render, outDir: out, emptyOutDir: true, copyPublicDir: false },
+          build: { ssr: render, outDir: out, emptyOutDir: true, copyPublicDir: false, ssrEmitAssets: true },
         })
         pages = (await import(pathToFileURL(join(out, "render.js")).href)).storyPages()
+        // The pictures the pages show (the band service's), under the
+        // names the pages were written with.
+        const dir = join(out, "assets")
+        pictures = existsSync(dir)
+          ? readdirSync(dir)
+              .filter((f) => f.endsWith(".webp"))
+              .map((f) => ({ fileName: `assets/${f}`, source: readFileSync(join(dir, f)) }))
+          : []
       } finally {
         rmSync(out, { recursive: true, force: true })
       }
@@ -158,6 +167,7 @@ function stories(): Plugin {
           if (meta.path === "/stories") template.source = page
           else this.emitFile({ type: "asset", fileName: `${meta.path.slice(1)}.html`, source: page })
         }
+        for (const p of pictures) if (!bundle[p.fileName]) this.emitFile({ type: "asset", ...p })
         const paths = ["/", ...pages.map((p) => p.meta.path)]
         this.emitFile({ type: "asset", fileName: "sitemap.xml", source: sitemapXml(paths) })
       },

@@ -64,7 +64,7 @@ const peaks = (seed: number) =>
   })
 
 /** РЭХА with a key, as its sending module calls the service. */
-function reha(api: APIRequestContext, key: string) {
+export function reha(api: APIRequestContext, key: string) {
   const headers = { "x-api-key": key.slice(key.lastIndexOf(":") + 1), "X-Reha-Version": "0.17.0" }
   const ok = async (res: Awaited<ReturnType<APIRequestContext["fetch"]>>) => {
     if (!res.ok()) throw new Error(`${res.url()}: ${res.status()} ${await res.text()}`)
@@ -86,7 +86,8 @@ function reha(api: APIRequestContext, key: string) {
   }
 }
 
-async function member(owner: APIRequestContext, email: string, name: string, file: string) {
+/** The owner adds a member, who confirms, signs in and is named; their sign-in is kept in `file`. */
+export async function member(owner: APIRequestContext, email: string, name: string, file: string) {
   await addMember(owner, email)
   const api = await request.newContext({ baseURL: BASE, extraHTTPHeaders: HEADERS })
   await confirm(api, email)

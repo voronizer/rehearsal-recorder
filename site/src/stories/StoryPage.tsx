@@ -8,7 +8,7 @@ import { REPO } from "../page/links"
 import { Chat } from "./Chat"
 import { StoryCard } from "./StoryCard"
 
-export function Blocks({ blocks }: { blocks: StoryBlock[] }) {
+function Blocks({ blocks }: { blocks: StoryBlock[] }) {
   return blocks.map((block, i) => {
     if (block.kind === "chat") return <Chat key={i} lines={block.lines} />
     return (
