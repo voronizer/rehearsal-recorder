@@ -1,0 +1,35 @@
+{
+  "name": "reha-band-service",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "FSL-1.1-MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "types": "wrangler types",
+    "openapi": "node scripts/openapi.mjs",
+    "migrations": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@better-auth/api-key": "1.7.14",
+    "@hono/zod-openapi": "1.6.3",
+    "better-auth": "1.7.14",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.14",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.66.0",
+    "@cloudflare/vitest-plugin": "1.4.11",
+    "auth": "1.7.14",
+    "drizzle-kit": "0.31.11",
+    "esbuild": "0.28.2",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "5.0.5",
+    "wrangler": "4.156.0"
+  }
+}
