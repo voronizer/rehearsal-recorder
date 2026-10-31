@@ -19,7 +19,8 @@ import { rise, scrollBehavior } from "@/lib/motion"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
 import { SetCard } from "@/components/NextTakeSongs"
-import type { RehearsalSet, Song, SongChoices, Take } from "@/lib/api"
+import type { RehearsalSet, SendTo, Song, SongChoices, Take } from "@/lib/api"
+import { isUp, sendButton, sendError, upLabel, type SendState } from "@/lib/sending"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 const NOT_NAMED = "Not named"
@@ -40,9 +41,6 @@ export type OverviewPlayback = {
   duration: number
 }
 
-function inCloud(take: Take): boolean {
-  return Boolean(take.cloud?.mix || take.cloud?.tracks)
-}
 
 /**
  * What an open rehearsal shows before a take is picked: every song, every take
@@ -80,6 +78,7 @@ export function RehearsalOverview({
   takes,
   songs,
   cloudStates,
+  sendTo = "cloud",
   playback,
   onPlay,
   onOpen,
@@ -98,7 +97,9 @@ export function RehearsalOverview({
 }: {
   takes: Take[]
   songs: Song[]
-  cloudStates?: Record<number, "queued" | "working">
+  cloudStates?: Record<number, SendState>
+  /** Where takes go: the cloud button's words and the status are its. */
+  sendTo?: SendTo
   /** The take loaded from here, or null. */
   playback: OverviewPlayback | null
   onPlay: (take: Take) => void
@@ -238,6 +239,7 @@ export function RehearsalOverview({
                     falseStart={falseStartSec !== undefined && isFalseStart(t, falseStartSec)}
                     longest={longest}
                     cloudState={cloudStates?.[t.take_number]}
+                    sendTo={sendTo}
                     here={playback?.take === t.take_number ? playback : null}
                     onPlay={onPlay}
                     onOpen={onOpen}
@@ -318,6 +320,7 @@ export function TakeRow({
   falseStart = false,
   longest,
   cloudState,
+  sendTo = "cloud",
   here,
   missing = false,
   where,
@@ -334,7 +337,8 @@ export function TakeRow({
   /** Drawn grey, its bar dashed, and said to be one after its length. */
   falseStart?: boolean
   longest: number
-  cloudState?: "queued" | "working"
+  cloudState?: SendState
+  sendTo?: SendTo
   here: OverviewPlayback | null
   missing?: boolean
   where?: string
@@ -351,12 +355,13 @@ export function TakeRow({
   const labels = useLabels()
   const why = useId()
   const open = onOpen ?? onPlay
-  const status = takeCloudStatus(take, cloudState)
+  const status = takeCloudStatus(take, cloudState, sendTo)
   // Why the copy failed, when it did and nothing is on its way, and the take
   // is on disk: a row that is not found says that, not this, and the bar's
   // description points only at what is drawn.
-  const error = status && !missing && !cloudState ? take.cloud_error : undefined
-  const shared = inCloud(take)
+  const error = status && !missing && !cloudState ? sendError(take, sendTo) : undefined
+  const shared = isUp(take, sendTo)
+  const button = sendButton(take, sendTo)
   const starred = take.starred ?? false
   const length = take.duration_sec || here?.duration || 0
   const along = (at: number) =>
@@ -494,7 +499,7 @@ export function TakeRow({
             {shared && (
               <CloudCheck
                 data-in-cloud
-                aria-label="In the cloud folder"
+                aria-label={upLabel(sendTo)}
                 className="size-3.5 shrink-0 text-signal"
               />
             )}
@@ -567,9 +572,7 @@ export function TakeRow({
                     <Button
                       variant="ghost"
                       size="icon-row"
-                      aria-label={
-                        shared ? `Cloud copies of ${take.name}` : `Copy ${take.name} to the cloud`
-                      }
+                      aria-label={button.label}
                       onClick={() => onShare(take)}
                       className="text-muted-foreground hover:text-foreground"
                     >
@@ -577,7 +580,7 @@ export function TakeRow({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {shared ? "In the cloud folder" : "Copy this take to the cloud folder"}
+                    {button.tip}
                   </TooltipContent>
                 </Tooltip>
               )}

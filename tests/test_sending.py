@@ -141,6 +141,8 @@ def run(tmp, fake):
     uid1 = uid_of(n1)
     ok("a saved take is waiting for the band service",
        uid1 is not None and [e["state"] for e in entries()] == ["waiting"])
+    ok("and the rehearsal screen says so",
+       api.session_state()["service_queue"] == {n1: "queued"})
     drain()
     up = fake.names_of(uid1, 1)
     ok("a saved take goes when automatic sending is on",

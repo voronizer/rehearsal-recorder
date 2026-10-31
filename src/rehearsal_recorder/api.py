@@ -89,7 +89,7 @@ from rehearsal_recorder.midi.notes import read_notes
 from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder.sending import Sending
 from rehearsal_recorder.sending.cloud_folder import CloudFolder, _shape_of, source_of
-from rehearsal_recorder.sending.band_service import NO_KEY, BandService
+from rehearsal_recorder.sending.band_service import NO_KEY, SERVICE_HELP_URL, BandService
 from rehearsal_recorder.sending.service_client import parse_key
 from rehearsal_recorder import holding
 from rehearsal_recorder.names_pass import NamesPass
@@ -2468,6 +2468,7 @@ class Api:
             "set": here["set"] if here else None,
             "recording": self._recorder is not None,
             "cloud_queue": self._sending.get("cloud").states(s["folder"]),
+            "service_queue": self._sending.get("service").states(s["folder"]),
             # The header's "On disk", measured as History measures a
             # rehearsal. Read when the screen asks, which is after each take.
             "disk_bytes": _folder_bytes(s["folder"]),
@@ -6745,6 +6746,17 @@ class Api:
         """pywebview's closing handler (app.py): True lets the window
         close. With takes still to send, the interface asks first."""
         return self._sending.get("service").window_closing(self.sending_left())
+
+    def open_service_help(self):
+        """How a band service works, on reha.stream, in the browser: the
+        window would open it in itself, as open_releases says."""
+        import webbrowser
+
+        try:
+            webbrowser.open(SERVICE_HELP_URL)
+            return {"ok": True}
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "error": str(e)}
 
     def close_anyway(self):
         """The close dialog's Close anyway: what is left goes next time

@@ -20,7 +20,8 @@ import { SongTab, type TabGo } from "@/components/SongTab"
 import { useKey } from "@/hooks/useSpacebar"
 import { useRowEdges } from "@/hooks/useRowEdges"
 import { lastPlayed, neighbour, songTabs, type SongTab as Tab } from "@/lib/songTabs"
-import type { SongGo, Take } from "@/lib/api"
+import { isUp, sendButton, sendStatus, type SendState } from "@/lib/sending"
+import type { SendTo, SongGo, Take } from "@/lib/api"
 
 /**
  * `selected` is the take object captured at click time, kept only so the
@@ -40,16 +41,14 @@ export function liveTake(takes: Take[], selected: Take | null): Take | null {
  * A pending upload or an error, in words — something to notice at a glance,
  * not something you have to open the take to find out. Shared by the pills
  * and the rehearsal overview's chips, which stand in for the pills while no
- * take is open.
+ * take is open. `place` is where takes go (lib/sending.ts).
  */
 export function takeCloudStatus(
   take: Take,
-  cloudState?: "queued" | "working"
+  cloudState?: SendState,
+  place: SendTo = "cloud"
 ): string | null {
-  if (cloudState) {
-    return cloudState === "working" ? "Copying to the cloud" : "Waiting for the cloud"
-  }
-  return take.cloud_error ? "Not in the cloud" : null
+  return sendStatus(take, cloudState, place)
 }
 
 /** "Take 2 Polyn 2", ", starred" when it is, then the status if there is one.
@@ -80,6 +79,7 @@ export function TakeStrip({
   onDelete,
   onStar,
   cloudStates,
+  sendTo = "cloud",
   emptyHint,
 }: {
   takes: Take[]
@@ -102,11 +102,15 @@ export function TakeStrip({
   onShare?: (take: Take) => void
   onDelete?: (take: Take) => void
   onStar?: (take: Take, starred: boolean) => void
-  cloudStates?: Record<number, "queued" | "working">
+  /** The takes on their way to where takes go, by number. */
+  cloudStates?: Record<number, SendState>
+  /** Where takes go: the cloud button's words and the status are its. */
+  sendTo?: SendTo
   emptyHint?: string
 }) {
   const live = liveTake(takes, selected)
-  const isShared = Boolean(live?.cloud?.mix || live?.cloud?.tracks)
+  const isShared = live !== null && isUp(live, sendTo)
+  const button = live && sendButton(live, sendTo)
   const tabs = songTabs(takes)
   // A go here is in this rehearsal when it carries no folder, or this one.
   const isOpenGo = (go: TabGo) =>
@@ -215,6 +219,7 @@ export function TakeStrip({
                 expanded={expanded}
                 isOpenGo={isOpenGo}
                 cloudStates={cloudStates}
+                sendTo={sendTo}
                 onPick={() => onSelect(lastPlayed(tab))}
                 onRow={(go) => (open ? onGo(go.take, go.folder) : onSelect(go.take))}
                 onToggle={() => onExpandedChange(!expanded)}
@@ -247,11 +252,7 @@ export function TakeStrip({
                   variant="ghost"
                   size="icon-row"
                   // One icon whatever the take's state: the colour says it.
-                  aria-label={
-                    isShared
-                      ? `Cloud copies of ${live.name}`
-                      : `Copy ${live.name} to the cloud`
-                  }
+                  aria-label={button?.label}
                   onClick={() => onShare(live)}
                   className={cn(
                     isShared
@@ -263,7 +264,7 @@ export function TakeStrip({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {isShared ? "In the cloud folder" : "Copy this take to the cloud folder"}
+                {button?.tip}
               </TooltipContent>
             </Tooltip>
           )}

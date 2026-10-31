@@ -8,7 +8,7 @@ import { Whole, WholeTip, useCut } from "@/components/ui/whole"
 import { useKeysOn } from "@/lib/keys"
 import { labelOf, useLabels } from "@/lib/labels"
 import { formatMMSS } from "@/lib/format"
-import type { Take } from "@/lib/api"
+import type { SendTo, Take } from "@/lib/api"
 import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 /** One go in a tab: the take, and the rehearsal it is in when the tab's goes
@@ -136,6 +136,7 @@ export function SongTab({
   expanded,
   isOpenGo,
   cloudStates,
+  sendTo = "cloud",
   onPick,
   onRow,
   onToggle,
@@ -152,6 +153,8 @@ export function SongTab({
   /** The copies running for this rehearsal's takes; another rehearsal's go
    *  has none here. */
   cloudStates?: CloudStates
+  /** Where takes go, whose words the status is in. */
+  sendTo?: SendTo
   onPick: () => void
   onRow: (go: TabGo) => void
   onToggle: () => void
@@ -182,7 +185,11 @@ export function SongTab({
   const [text, cut] = useCut<HTMLSpanElement>()
 
   const statusOf = (go: TabGo) =>
-    takeCloudStatus(go.take, go.folder === undefined ? cloudStates?.[go.take.take_number] : undefined)
+    takeCloudStatus(
+      go.take,
+      go.folder === undefined ? cloudStates?.[go.take.take_number] : undefined,
+      sendTo
+    )
   const status = statusOf(shown)
 
   // Every other go's line, unseen, on top of the one shown: the tab is as

@@ -2,7 +2,7 @@ import { useId, useState } from "react"
 import { CloudUpload, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { api, type Take } from "@/lib/api"
+import { api, type SendTo, type Take } from "@/lib/api"
 import { falseStarts, starredToSend } from "@/lib/evening"
 import { wentTo } from "@/lib/deletion"
 import { notify } from "@/lib/notices"
@@ -17,7 +17,8 @@ const OFF =
 
 /**
  * The evening's two buttons, over its takes: Send starred copies every ★
- * take not yet in the cloud folder, as Settings' What gets sent says;
+ * take not yet in the cloud folder, as Settings' What gets sent says, or
+ * sends it to the band service when that is where takes go;
  * Clear false starts moves the takes too short to be anything to the Trash,
  * at once, with Undo. Each says how many it would act on, and when that is
  * none, why: in a tip under the mouse, and as the button's description for
@@ -31,6 +32,7 @@ export function EveningActions({
   takes,
   falseStartSec,
   cloudDir,
+  sendTo = "cloud",
   waiting,
   onChanged,
   onDeleted,
@@ -39,6 +41,8 @@ export function EveningActions({
   takes: Take[]
   falseStartSec: number
   cloudDir: string | null
+  /** Where takes go: the band service needs no folder. */
+  sendTo?: SendTo
   /** Takes waiting for the cloud folder, by number. */
   waiting?: Record<number, unknown>
   onChanged: () => void
@@ -50,18 +54,23 @@ export function EveningActions({
   const sendWhyId = useId()
   const clearWhyId = useId()
 
-  const toSend = starredToSend(takes, waiting)
+  const service = sendTo === "service"
+  const toSend = starredToSend(takes, waiting, sendTo)
   const onTheWay = takes.some((t) => t.starred && t.take_number in (waiting ?? {}))
-  const sendWhy = !cloudDir
+  const there = service ? "the band service" : "the cloud folder"
+  const ready = service || Boolean(cloudDir)
+  const sendWhy = !ready
     ? "Choose a cloud folder in Settings"
     : !takes.some((t) => t.starred)
       ? "No take has ★"
       : toSend.length > 0
-        ? "Copy every ★ take to the cloud folder, as set in Settings › Folders"
+        ? service
+          ? "Send every ★ take to the band service"
+          : "Copy every ★ take to the cloud folder, as set in Settings › Folders"
         : onTheWay
-          ? "Every ★ take is in the cloud folder or on its way"
-          : "Every ★ take is in the cloud folder"
-  const sendOff = !cloudDir || toSend.length === 0 || sending
+          ? `Every ★ take is in ${there} or on its way`
+          : `Every ★ take is in ${there}`
+  const sendOff = !ready || toSend.length === 0 || sending
 
   const starts = falseStarts(takes, falseStartSec)
   // While they are being moved, the count still has them.

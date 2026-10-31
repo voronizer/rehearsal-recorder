@@ -23,7 +23,8 @@ function isActive(e: ActivityEntry) {
  * is and "2 working · 64%"; once it has finished and nobody has looked,
  * "Done", or "1 failed" in red. Looked at, just an icon until Clear. Pressed,
  * the list: what is running with a bar each, what finished with what it came
- * to, and Retry on a cloud copy that failed.
+ * to, and Retry on a cloud copy that failed or a take the band service
+ * turned down.
  *
  * Escape closes the list and nothing else: Radix gives its content
  * role="dialog", which useEscape (hooks/useSpacebar.ts) already leaves alone.
@@ -153,7 +154,7 @@ function Running({ entry, recording }: { entry: ActivityEntry; recording: boolea
   const pct = Math.round(entry.fraction * 100)
   const waiting = entry.state === "waiting"
   const step = waiting
-    ? recording && entry.kind === "cloud"
+    ? recording && (entry.kind === "cloud" || entry.kind === "service")
       ? "After the take"
       : "Waiting"
     : (entry.step ?? "Working")
@@ -192,7 +193,7 @@ function Finished({ entry }: { entry: ActivityEntry }) {
           </div>
         )}
       </div>
-      {failed && entry.kind === "cloud" && (
+      {failed && (entry.kind === "cloud" || (entry.kind === "service" && entry.retry)) && (
         <Button
           variant="outline"
           size="row"
@@ -201,10 +202,11 @@ function Finished({ entry }: { entry: ActivityEntry }) {
             if (!res.ok) {
               // Refused — the rehearsal was renamed or the take deleted since
               // it failed. Said in the same slot as the failure it retried.
+              const name = entry.title.replace(/ → (cloud|band service)$/, "")
               notify({
-                key: `cloud:${entry.folder}:${entry.take_number}`,
+                key: `${entry.kind}:${entry.folder}:${entry.take_number}`,
                 kind: "error",
-                text: `Could not copy ${entry.title.replace(/ → cloud$/, "")} again: ${
+                text: `Could not ${entry.kind === "service" ? "send" : "copy"} ${name} again: ${
                   res.error ?? "it was refused"
                 }`,
               })

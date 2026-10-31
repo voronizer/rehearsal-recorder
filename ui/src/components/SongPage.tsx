@@ -5,7 +5,7 @@ import { PlayButton } from "@/components/ui/play-button"
 import { useCut, WholeTip } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
 import { useKeysOn } from "@/lib/keys"
-import type { Label, Marker, Signature, SongDetail, SongGo } from "@/lib/api"
+import type { Label, Marker, SendTo, Signature, SongDetail, SongGo } from "@/lib/api"
 import { formatDayIn } from "@/lib/format"
 import { labelOf, markText, useLabels } from "@/lib/labels"
 import { rise } from "@/lib/motion"
@@ -62,6 +62,7 @@ export function SongPage({
   onRenameSong,
   onForgetName,
   onChanged,
+  sendTo,
 }: {
   page: SongDetail
   playback: PlacedPlayback | null
@@ -76,6 +77,8 @@ export function SongPage({
   onShare: (take: PlacedTake) => void
   onDelete: (take: PlacedTake) => void
   onOpenRehearsal: (folder: string) => void
+  /** Where takes go: the cloud button's words are its. */
+  sendTo?: SendTo
   onRenameSong: () => void
   onForgetName: (name: string) => void
   /** The song was changed on its page: the list and the page are read
@@ -132,6 +135,7 @@ export function SongPage({
               onStar={(t, on) => onStar(placed(go.folder, t), on)}
               onShare={(t) => onShare(placed(go.folder, t))}
               onDelete={(t) => onDelete(placed(go.folder, t))}
+              sendTo={sendTo}
             />
           ))}
         </div>
@@ -177,6 +181,7 @@ export function SongPage({
           onShare={onShare}
           onDelete={onDelete}
           onOpenRehearsal={onOpenRehearsal}
+          sendTo={sendTo}
         />
       ),
     })

@@ -5,7 +5,7 @@ import { Item } from "@/components/ui/item"
 import { MarkTick } from "@/components/ui/mark"
 import { useCut, WholeTip } from "@/components/ui/whole"
 import { cn } from "@/lib/utils"
-import type { Label, Take } from "@/lib/api"
+import type { Label, SendTo, Take } from "@/lib/api"
 import { formatDayIn, takesLabel } from "@/lib/format"
 import { labelOf, useLabels } from "@/lib/labels"
 import { motionOff } from "@/lib/motion"
@@ -39,6 +39,8 @@ type Handlers = {
   onShare: (take: PlacedTake) => void
   onDelete: (take: PlacedTake) => void
   onOpenRehearsal: (folder: string) => void
+  /** Where takes go: the cloud button's words are its. */
+  sendTo?: SendTo
 }
 
 /**
@@ -117,6 +119,7 @@ function RungRow({
   onShare,
   onDelete,
   onOpenRehearsal,
+  sendTo,
 }: {
   rung: Rung
   open: boolean
@@ -211,6 +214,7 @@ function RungRow({
             onStar={(t, starred) => onStar(at(t), starred)}
             onShare={(t) => onShare(at(t))}
             onDelete={(t) => onDelete(at(t))}
+            sendTo={sendTo}
           />
         ))}
         <Button

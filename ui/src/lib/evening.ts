@@ -1,4 +1,4 @@
-import type { Take } from "@/lib/api"
+import type { SendTo, Take } from "@/lib/api"
 import { formatDuration, songsLabel } from "@/lib/format"
 
 /** What the header says about an evening, counted from its takes. */
@@ -62,9 +62,17 @@ export function falseStarts(takes: Take[], limitSec: number): Take[] {
 }
 
 /** What Send starred would queue: the ★ takes with no copy in the cloud
- *  folder and none waiting for one. */
-export function starredToSend(takes: Take[], waiting: Record<number, unknown> = {}): Take[] {
+ *  folder and none waiting for one; or, with the band service chosen, the
+ *  ones never sent there (sending/band_service.py's send_starred). */
+export function starredToSend(
+  takes: Take[],
+  waiting: Record<number, unknown> = {},
+  place: SendTo = "cloud"
+): Take[] {
   return takes.filter(
-    (t) => t.starred && !t.cloud?.mix && !t.cloud?.tracks && !(t.take_number in waiting)
+    (t) =>
+      t.starred &&
+      !(t.take_number in waiting) &&
+      (place === "service" ? !t.service : !t.cloud?.mix && !t.cloud?.tracks)
   )
 }

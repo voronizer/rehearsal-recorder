@@ -42,6 +42,32 @@ let rescans = 0;
 // take happens to reuse that dummy path.
 let fileDurations = {};
 let cloudQueue = {};
+// The band service (sending/band_service.py). A page starts connected with
+// window.__SERVICE_KEY__ = 'band.example:secret'. window.__SERVICE_OFFLINE__
+// keeps a key unchecked; window.__SERVICE_REFUSES__ = 'words' turns a key
+// down with them; window.__SENDING_LEFT__ = {takes, bytes} is what is left
+// when the window closes. A take on its way stays queued until the test
+// calls window.__serviceUp(n).
+let serviceKey = window.__SERVICE_KEY__ || null;
+let sendTo = serviceKey ? 'service' : 'cloud';
+let serviceAuto = Boolean(window.__SERVICE_AUTO__);
+let serviceQueue = {};
+const serviceAddress = () => serviceKey && serviceKey.slice(0, serviceKey.lastIndexOf(':'));
+function toService(take) {
+  take.service = {up:false, flac:false, error:null};
+  serviceQueue = {...serviceQueue, [take.take_number]: 'queued'};
+  window.__ACTIVITY__ = [...(window.__ACTIVITY__ || []), {
+    id: 800 + take.take_number, kind:'service', title:`“${take.name}” → band service`,
+    folder: session ? session.folder : null, take_number:take.take_number, state:'waiting',
+    fraction:0, step:null, error:null, detail:null, retry:null, seen:false}];
+}
+window.__serviceUp = (n, flac = true) => {
+  const take = session && session.takes.find(t => t.take_number === n);
+  if (take) take.service = {up:true, flac, error:null};
+  const {[n]: _gone, ...rest} = serviceQueue;
+  serviceQueue = rest;
+  window.__ACTIVITY__ = (window.__ACTIVITY__ || []).filter(e => !(e.kind === 'service' && e.take_number === n));
+};
 let checkState = {running:false};
 // A rehearsal whose folder is gone — set to null once it is relocated or
 // removed from history, the way the real database would stop listing it.
@@ -1970,7 +1996,8 @@ window.__MAKE_API__ = () => ({
        next_take_name:suggestName(), next_take_go:nextTake().go,
        next_take_default:suggestName(undefined, false),
        last_attempt:lastAttempt(session.takes, song, before), set,
-       recording:false, cloud_queue:cq, disk_bytes:48000000 * session.takes.length}));
+       recording:false, cloud_queue:cq, service_queue:serviceQueue,
+       disk_bytes:48000000 * session.takes.length}));
   },
   finish_rehearsal: track('finish_rehearsal', async () => {
     const r = {ok:true, folder:session.folder, take_count:session.takes.length};
@@ -2133,7 +2160,13 @@ window.__MAKE_API__ = () => ({
     session.takes.push(take);
     if (n === takeCounter) nextName = null;
     metroFollow();
-    cloudQueue = {...cloudQueue, [n]: 'queued'};
+    // Where it goes, as Python's modules decide (sending/): the band
+    // service's automatic sending leaves a false start behind.
+    if (sendTo === 'service') {
+      const limit = readCfg().false_start_sec ?? window.__FALSE_START__ ?? 30;
+      const falseStart = dur > 0 && dur < limit && !take.markers.length;
+      if (_cloud === true || (_cloud !== false && serviceAuto && !falseStart)) toService(take);
+    } else cloudQueue = {...cloudQueue, [n]: 'queued'};
     return {ok:true, take, ended};
   }),
   discard_take: track('discard_take', async (dir) => {
@@ -2757,6 +2790,11 @@ window.__MAKE_API__ = () => ({
   }),
   share_take: track('share_take', async (folder, n, what) => {
     await held('share_take');
+    if (sendTo === 'service') {
+      const take = (session ? session.takes : []).find(t => t.take_number === n);
+      if (take) toService(take);
+      return JSON.parse(JSON.stringify({ok:true, queued:true, take}));
+    }
     if (!cloudDir) return {ok:false, error:'No cloud folder chosen', needs_dir:true};
     const take = (session ? session.takes : []).find(t => t.take_number === n);
     const shared = cloudShare(what);
@@ -2771,6 +2809,12 @@ window.__MAKE_API__ = () => ({
   // older rehearsal's waits in the activity list, as Python's queue has it.
   // __UNSENDABLE__ lists take numbers whose files are gone.
   send_starred: track('send_starred', async (folder) => {
+    if (sendTo === 'service') {
+      const takes = session && folder === session.folder ? session.takes : [];
+      const queued = [];
+      for (const t of takes) if (t.starred && !t.service) { toService(t); queued.push(t.take_number); }
+      return {ok:true, queued, failed:[]};
+    }
     if (!cloudDir) return {ok:false, error:'No cloud folder chosen', needs_dir:true};
     const live = session && folder === session.folder;
     const takes = live ? session.takes : pastRehearsal(folder).takes;
@@ -2794,6 +2838,10 @@ window.__MAKE_API__ = () => ({
   unshare_take: track('unshare_take', async (folder, n) => {
     await held('unshare_take');
     const take = (session ? session.takes : []).find(t => t.take_number === n);
+    if (take && sendTo === 'service') {
+      take.service = null;
+      return {ok:true, take: JSON.parse(JSON.stringify(take))};
+    }
     if (take) take.cloud = {};
     return JSON.parse(JSON.stringify({ok:true, removed:[], trashed:true}));
   }),
@@ -2837,6 +2885,45 @@ window.__MAKE_API__ = () => ({
   show_file: track('show_file', async () => ({ok:true})),
   show_rehearsal_folder: track('show_rehearsal_folder', async () => ({ok:true})),
   open_releases: track('open_releases', async (_latest) => ({ok:true})),
+  open_service_help: track('open_service_help', async () => ({ok:true})),
+
+  set_service_key: track('set_service_key', async (key) => {
+    await held('set_service_key');
+    key = String(key || '').trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9.-]*(:\d+)?:\S+$/.test(key))
+      return {ok:false, error:'This is not a band service key'};
+    if (window.__SERVICE_REFUSES__) return {ok:false, error:window.__SERVICE_REFUSES__};
+    serviceKey = key;
+    sendTo = 'service';
+    return {ok:true, address:serviceAddress(), ...(window.__SERVICE_OFFLINE__ ? {unchecked:true} : {})};
+  }),
+  disconnect_service: track('disconnect_service', async () => {
+    serviceKey = null;
+    sendTo = 'cloud';
+    serviceQueue = {};
+    for (const t of session ? session.takes : []) t.service = null;
+    return {ok:true};
+  }),
+  set_service_auto_publish: track('set_service_auto_publish', async (on) => {
+    serviceAuto = Boolean(on);
+    return {ok:true, auto_publish:serviceAuto};
+  }),
+  set_send_to: track('set_send_to', async (which) => {
+    if (which !== 'cloud' && which !== 'service')
+      return {ok:false, error:'Takes go to the cloud folder or the band service'};
+    if (which === 'service' && !serviceKey) return {ok:false, error:'No band service key'};
+    sendTo = which;
+    return {ok:true, send_to:which};
+  }),
+  service_take: track('service_take', async (folder, n) => {
+    const take = (session ? session.takes : []).find(t => t.take_number === n);
+    if (!take) return {ok:false, error:'Take not found'};
+    const up = take.service || {};
+    return {ok:true, files: take.tracks.map(t => ({name:t.name, mp3:Boolean(up.up),
+      flac:Boolean(up.flac), mid:null}))};
+  }),
+  sending_left: track('sending_left', async () => window.__SENDING_LEFT__ || {takes:0, bytes:0}),
+  close_anyway: track('close_anyway', async () => ({ok:true})),
   // What updates.py found: __LATEST__ is the newer release a test says is
   // out, and nothing is said while checking is switched off. __REPLACE__
   // false is a copy that cannot replace itself where it is; __INSTALL__ is
@@ -2923,6 +3010,8 @@ window.__MAKE_API__ = () => ({
     output_channels: outputDevice.channels || [1, 2],
     cloud_format: cloudFormat,
     auto_publish: autoPublish.on, auto_publish_what: autoPublish.what,
+    send_to: sendTo,
+    service: serviceKey ? {address:serviceAddress(), auto_publish:serviceAuto} : null,
     false_start_sec: readCfg().false_start_sec ?? window.__FALSE_START__ ?? 30,
     cloud_formats:[
       {id:'wav', label:'As recorded', hint:'Exactly the files on disk.'},

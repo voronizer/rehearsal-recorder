@@ -116,6 +116,9 @@ export function Review({
     what: ShareWhat
     format: string
     falseStartSec: number
+    /** The band service's Send saved takes automatically, when takes go
+     *  there instead (Settings › Folders' switch); null when they do not. */
+    service: { auto: boolean } | null
   } | null>(null)
   // The box as somebody set it. A take brought back by Undo keeps the
   // answer it had.
@@ -133,6 +136,8 @@ export function Review({
           what: s.auto_publish_what,
           format: s.cloud_format,
           falseStartSec: s.false_start_sec,
+          service:
+            s.send_to === "service" && s.service ? { auto: s.service.auto_publish } : null,
         })
       })
       .catch(() => {
@@ -144,11 +149,14 @@ export function Review({
   }, [])
   const [editing, setEditing] = useState<Marker | null>(null)
   // What the setting does with this take as it now is, and so the box.
+  // A take can go somewhere: to the band service, or to a cloud folder that
+  // is set.
+  const goes = Boolean(cloud?.service || cloud?.dir)
   const onItsOwn =
-    Boolean(cloud?.dir) &&
+    goes &&
     sendsOnItsOwn(
       { duration_sec: take.duration_sec, markers },
-      cloud?.auto ?? false,
+      (cloud?.service ? cloud.service.auto : cloud?.auto) ?? false,
       cloud?.falseStartSec ?? 0
     )
   const send = chosen ?? onItsOwn
@@ -202,7 +210,7 @@ export function Review({
       // Only an answer that differs from what the setting does with this
       // take is sent: one that agrees leaves the take following the
       // setting, even if it changes.
-      cloud?.dir && send !== onItsOwn ? send : null,
+      goes && send !== onItsOwn ? send : null,
       // The .mid files stop_take made, kept beside the audio.
       take.notes
     )
@@ -308,7 +316,7 @@ export function Review({
       <Cloud className="size-4" />
       &nbsp;
     </p>
-  ) : cloud.dir ? (
+  ) : cloud.service || cloud.dir ? (
     <label
       htmlFor="send-to-cloud"
       data-cloud-line={send ? "on" : "off"}
@@ -328,7 +336,11 @@ export function Review({
       />
       <Cloud className="size-4 shrink-0" />
       <Whole
-        text={`Send to the cloud: ${WHAT_GOES[cloud.what]}, ${cloud.format.toUpperCase()}`}
+        text={
+          cloud.service
+            ? "Send to the band service"
+            : `Send to the cloud: ${WHAT_GOES[cloud.what]}, ${cloud.format.toUpperCase()}`
+        }
         className="min-w-0 truncate"
       />
     </label>

@@ -38,6 +38,8 @@ PART_BYTES = 10 * 1024 * 1024
 MADE_PER_WAV_BYTE = 0.7
 NO_KEY = "No band service key"
 CLOSING_JS = "window.__rehaClosing && window.__rehaClosing()"
+# What a band service is and how to run one, for Settings › Folders.
+SERVICE_HELP_URL = "https://reha.stream/band-service"
 
 
 def staging_root():

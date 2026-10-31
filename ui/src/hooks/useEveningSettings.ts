@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react"
-import { api } from "@/lib/api"
+import { api, type SendTo } from "@/lib/api"
 
-/** What sorting an evening goes by, from Settings. */
-export type EveningSettings = { falseStartSec: number; cloudDir: string | null }
+/** What sorting an evening goes by, from Settings, and where its takes go
+ *  (Settings › Folders' switch). */
+export type EveningSettings = { falseStartSec: number; cloudDir: string | null; sendTo: SendTo }
 
 // The last read, so a screen mounted again (the rehearsal screen, after
 // every take) draws its false starts and buttons at once rather than a
@@ -15,7 +16,11 @@ export function reloadEveningSettings(): Promise<void> {
   return api()
     .get_settings()
     .then((s) => {
-      known = { falseStartSec: s.false_start_sec ?? 30, cloudDir: s.cloud_dir }
+      known = {
+        falseStartSec: s.false_start_sec ?? 30,
+        cloudDir: s.cloud_dir,
+        sendTo: s.send_to === "service" && s.service ? "service" : "cloud",
+      }
       for (const show of screens) show(known)
     })
     // Without them the overview draws no false starts and no buttons.
