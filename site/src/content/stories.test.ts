@@ -238,7 +238,7 @@ describe("readStories", () => {
 // The site's own stories, as the pages will show them.
 describe("the site's stories", () => {
   const all = stories.list.flatMap((s) => s.chapters.flatMap((c) => c.blocks))
-  const words = all.flatMap((b) => (b.kind === "chat" ? b.lines.map((l) => l.text) : b.kind === "steps" ? b.items : [b.text]))
+  const words = all.flatMap((b) => (b.kind === "chat" ? b.lines.map((l) => l.text) : [b.text]))
 
   it("has the four stories, in the order they were written", () => {
     expect(stories.list.map((s) => [s.slug, s.title, s.description, s.date])).toEqual([

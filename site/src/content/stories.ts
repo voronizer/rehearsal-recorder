@@ -11,13 +11,11 @@ export type Who = (typeof WHO)[number]
 
 /** A line of a chat, its words inline Markdown. */
 export type ChatLine = { who: Who; text: string }
-/** A paragraph, a joke said big (without its **), the band arguing, or
- *  numbered steps, each inline Markdown (only where parseStory allows them). */
+/** A paragraph, a joke said big (without its **), or the band arguing. */
 export type StoryBlock =
   | { kind: "text"; text: string }
   | { kind: "joke"; text: string }
   | { kind: "chat"; lines: ChatLine[] }
-  | { kind: "steps"; items: string[] }
 /** The opening comes first, with no id and no title. */
 export type Chapter = { id: string | null; title: string | null; blocks: StoryBlock[] }
 export type StoryDoc = {
@@ -80,7 +78,7 @@ export function cardChat(story: StoryDoc): ChatLine[] {
 export function readingMinutes(story: StoryDoc): number {
   const words = story.chapters
     .flatMap((c) => c.blocks)
-    .flatMap((b) => (b.kind === "chat" ? b.lines.map((l) => l.text) : b.kind === "steps" ? b.items : [b.text]))
+    .flatMap((b) => (b.kind === "chat" ? b.lines.map((l) => l.text) : [b.text]))
     .join(" ")
     .split(/\s+/)
     .filter(Boolean).length
@@ -98,17 +96,8 @@ const KEYS = ["date", "description"] as const
 const LINK = /\]\((\/stories\/[^)\s]*)\)/g
 const CHAT = /^>\s*\*\*([^*:]+):\*\*\s+(.+?)\s*\\?$/
 
-/**
- * A story's file, read. `steps` lets it have numbered steps (`1. `, each
- * wrapping onto indented lines under it), which a story has none of: the
- * band service's page is written like a story and has them. `dir` is where
- * the file is, for the errors.
- */
-export function parseStory(
-  file: string,
-  md: string,
-  { steps = false, dir = "site/content/stories/" }: { steps?: boolean; dir?: string } = {}
-): StoryDoc {
+/** A story's file, read. `dir` is where the file is, for the errors. */
+export function parseStory(file: string, md: string, dir = "site/content/stories/"): StoryDoc {
   const fail = (line: number, what: string): never => {
     throw new Error(`${dir}${file}:${line}: ${what}`)
   }
@@ -150,7 +139,6 @@ export function parseStory(
   const links: string[] = []
   let paragraph: string[] = []
   let chat: ChatLine[] | null = null
-  let list: string[] | null = null
   const blocks = () => chapters[chapters.length - 1].blocks
   const close = () => {
     if (paragraph.length) {
@@ -163,11 +151,6 @@ export function parseStory(
     if (chat) {
       blocks().push({ kind: "chat", lines: chat })
       chat = null
-    }
-    if (list) {
-      for (const item of list) for (const m of item.matchAll(LINK)) links.push(m[1])
-      blocks().push({ kind: "steps", items: list })
-      list = null
     }
   }
 
@@ -186,15 +169,10 @@ export function parseStory(
       const id = chapterId(name)
       if (chapters.some((c) => c.id === id)) fail(n, `two chapters are #${id}`)
       chapters.push({ id, title: name, blocks: [], line: n })
-    } else if (steps && /^\d+\. /.test(line)) {
-      if (paragraph.length || chat) close()
-      list = [...(list ?? []), line.replace(/^\d+\. /, "").trim()]
-    } else if (list && /^\s+\S/.test(line)) {
-      list[list.length - 1] += ` ${line.trim()}`
     } else if (/^([-*]|\d+\.) /.test(line)) {
-      fail(n, steps ? "steps go 1. 2. 3., nothing else is a list" : "no lists in a story: write it as sentences")
+      fail(n, "no lists in a story: write it as sentences")
     } else if (line.startsWith(">")) {
-      if (paragraph.length || list) close()
+      if (paragraph.length) close()
       const m = CHAT.exec(line)
       if (!m) fail(n, "a chat line goes > **Name:** what they say")
       const [, who, said] = m!
@@ -202,7 +180,7 @@ export function parseStory(
       for (const l of said.matchAll(LINK)) links.push(l[1])
       chat = [...(chat ?? []), { who: who as Who, text: said }]
     } else {
-      if (chat || list) close()
+      if (chat) close()
       paragraph.push(line.trim())
     }
   }

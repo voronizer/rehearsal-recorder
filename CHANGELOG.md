@@ -14,7 +14,7 @@ opening.
   takes to** switches between the cloud folder and the band service. Every
   track goes up as MP3 and as FLAC, the MP3s first. Sending that is cut
   short carries on from where it stopped, and closing РЭХА while it sends
-  asks first. How to run one for your own band:
+  asks first. What it does for the band, and how to get one:
   [reha.stream/band-service](https://reha.stream/band-service).
 - **False starts stay behind.** **Send saved takes automatically** no longer
   sends a false start: a take shorter than 30 seconds (or the length set in

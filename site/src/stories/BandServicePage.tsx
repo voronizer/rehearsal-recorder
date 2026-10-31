@@ -7,7 +7,8 @@ import { Blocks } from "./StoryPage"
 
 /**
  * reha.stream/band-service: what a band service is, how our band uses one,
- * how to run your own and where its code is. Laid out as a story is, each
+ * what it does for each of us, and a link to the setup steps on GitHub
+ * (service/README.md). Laid out as a story is, each
  * chapter with its number and name beside it, and written whole at build
  * time (render.tsx). No downloads at the end: the page is for a band that
  * has РЭХА already, and the closing block has them.

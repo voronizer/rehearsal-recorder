@@ -313,12 +313,7 @@ body {
 /* A joke, said big: a size under a chapter's name. */
 .chap-body > p.joke { font-size: clamp(1.3rem, 2vw, 1.6rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; text-wrap: balance; margin-block: 8px; max-width: 26ch; }
 .tale-get .cta { justify-content: flex-start; }
-/* The band service's steps, numbered the way the chapters are. */
-.steps-list { margin: 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 20px; }
-.steps-list li { counter-increment: step; display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); font-size: 1.25rem; line-height: 1.6; text-wrap: pretty; overflow-wrap: anywhere; }
-.steps-list li::before { content: counter(step); font-family: var(--page-mono); font-size: 0.875rem; color: var(--page-muted); line-height: 2.3; }
-.chap-body code { font-family: var(--page-mono); font-size: 0.85em; overflow-wrap: anywhere; }
-@media (max-width: 719px) { .chap-body > p, .steps-list li { font-size: 1rem; } .steps-list li::before { line-height: 1.85; } }
+@media (max-width: 719px) { .chap-body > p { font-size: 1rem; } }
 @media (min-width: 1000px) {
   .tale { max-width: calc(15rem + 56px + 40rem); }
   .chap { grid-template-columns: 15rem minmax(0, 40rem); gap: 56px; }

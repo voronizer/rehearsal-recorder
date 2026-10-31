@@ -781,7 +781,8 @@ also sends the ones that could not go before.
 
 A band service is a private web page where your band listens to its takes
 track by track, stars the good ones and comments on them. Whoever runs it
-gives you a key, and РЭХА sends the takes there. What a band service is, and how to run one for your own band, is on
+gives you a key, and РЭХА sends the takes there. What a band service does,
+and how to get one for your band, is on
 [reha.stream/band-service](https://reha.stream/band-service).
 
 ### The key

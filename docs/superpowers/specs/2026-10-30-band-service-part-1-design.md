@@ -143,6 +143,10 @@ record with each question is in
 - Sending on its own leaves false starts out, for the band service and the
   cloud folder alike (19:11, in words; 19:13, a card). A false start ticked
   on the review screen still goes (19:15, «ок», after Claude explained it).
+- The site's page is for a band member: how the service works, what it
+  does and why it matters to them, without the setup's technical details
+  (31 October, 22:28, in words). The setup steps go to `service/README.md`
+  on GitHub, and the page links there once (22:29, a card).
 
 Everything else below is Claude's call, listed again in
 [Calls to review](#calls-to-review).
@@ -433,15 +437,15 @@ each button does, so it gets a section, “Sending takes to a band
 service”, after “Sending takes to the cloud”. It says what a key is and
 where it goes, the **Send takes to** switch, what goes up, the take's
 cloud button and its dialog, following the sending, closing РЭХА while it
-sends, and **Disconnect**. What the service is and how to run your own
-stay on reha.stream/band-service, and the section links there. Where the
+sends, and **Disconnect**. What the service is stays on
+reha.stream/band-service, and the section links there. Where the
 guide says what a rename, a crop or a delete does to the copy in the
 cloud, one line adds that the same goes for the band service.
 
 ## On reha.stream
 
-A page at reha.stream/band-service tells what a band service is and how a
-band runs its own. It is linked from the key's few words in РЭХА and from
+A page at reha.stream/band-service tells a band member what a band service
+is, what it does for them and how it works. It is linked from the key's few words in РЭХА and from
 the site's footer, not from the top menu, since most people who use РЭХА
 will never need it.
 
@@ -450,20 +454,24 @@ What the page holds, in order:
 1. What it is, in a few lines of text.
 2. A story from Alex's band of how they use it, in the manner of the
    site's stories. Alex checks it before it goes live, as with every story.
-3. **Run your own**: what it needs (a Cloudflare account; a domain of the
-   band's own on Cloudflare, since the sign-in letters can only come from
-   one; a Telegram bot, only for the chat messages), what it costs (files
-   up to 10 GB free, then $0.015 per GB a month; the domain is paid to
-   whoever sells it), and the steps one by one: put the service's code on
-   Cloudflare, turn on Cloudflare's mail for the domain, set the settings
-   and secrets, sign in with your own address, add the members, make a key
-   for РЭХА.
-4. That the code is open, under FSL, with a link to it.
+3. **How it works**, as a member meets it: where the takes come from,
+   signing in, the first page, a song's page, a take's lanes, stars,
+   comments, downloads, the chat's messages and the trash.
+4. **One for your band**: that it runs on the band's own Cloudflare
+   account, what it costs (files up to 10 GB free, then $0.015 per GB a
+   month), that it needs a domain of the band's own, that the code is
+   open, and one link to the setup steps on GitHub.
 
-The steps are written so a musician can follow them. They are the same
-steps Alex follows to set up his band's copy (see
-[Setting it up](#setting-it-up)), so they are tried for real before the
-page goes live.
+The setup steps are in `service/README.md`, under “Run one for your
+band”: what it needs (a Cloudflare account; a domain of the band's own on
+Cloudflare, since the sign-in letters can only come from one; a GitHub
+account; a Telegram bot, only for the chat messages), what it costs, and
+the steps one by one: put the service's code on Cloudflare, turn on
+Cloudflare's mail for the domain, set the settings and secrets, sign in
+with your own address, add the members, make a key for РЭХА. They are
+written so a musician can follow them, and they are the same steps Alex
+follows to set up his band's copy (see [Setting it up](#setting-it-up)),
+so they are tried for real before the page goes live.
 
 ## How it is built
 
@@ -610,7 +618,7 @@ the workflow.
 
 ## Setting it up
 
-Once, by Alex, following the **Run your own** steps of the site's page,
+Once, by Alex, following the setup steps in `service/README.md`,
 plus the move of reha.stream's DNS for the band.reha.stream address:
 
 1. A Cloudflare account, and reha.stream added to it; the nameservers changed
@@ -686,10 +694,10 @@ service by hand, uploading without РЭХА,
 29. The service goes live with a release, like the site.
 30. The page is reha.stream/band-service, linked from РЭХА's key line and
     the footer, not the top menu.
-31. The page has a story from Alex's band; its **Run your own** steps are
-    the ones Alex follows for his own copy, so they are tried first.
-32. What the service is and how to run your own stay on the site's page,
-    not in the guide's new section.
+31. The page has a story from Alex's band; the setup steps it links to
+    are the ones Alex follows for his own copy, so they are tried first.
+32. What the service is stays on the site's page, and how to run your own
+    in `service/README.md`, not in the guide's new section.
 33. The service's sending shows in the header's background work list and on
     the take's button, as the cloud folder's does; takes still to send are
     back in the list when РЭХА opens; with no internet a line waits rather
@@ -701,7 +709,7 @@ service by hand, uploading without РЭХА,
     first.
 36. In tests, letters go to a stand-in the tests read the code from.
 37. better-auth keeps its count of sign-in tries in D1.
-38. The site's **Run your own** says a band needs a domain of its own on
+38. The setup steps say a band needs a domain of its own on
     Cloudflare, since the letters can only come from one; the workers.dev
     address alone is no longer enough.
 39. A false start given a ★ or a mark goes on its own only in the
