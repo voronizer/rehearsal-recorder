@@ -341,6 +341,18 @@ there is nothing to press: it says “No internet: carries on when it is
 back”. A take the service turns down fails in red with the reason, as a
 cloud copy does today.
 
+### In the guide
+
+The guide (`docs/using-it.md`) describes every row in Settings and what
+each button does, so it gets a section, “Sending takes to a band
+service”, after “Sending takes to the cloud”. It says what a key is and
+where it goes, the **Send takes to** switch, what goes up, the take's
+cloud button and its dialog, following the sending, closing РЭХА while it
+sends, and **Disconnect**. What the service is and how to run your own
+stay on reha.stream/band-service, and the section links there. Where the
+guide says what a rename, a crop or a delete does to the copy in the
+cloud, one line adds that the same goes for the band service.
+
 ## On reha.stream
 
 A page at reha.stream/band-service tells what a band service is and how a
@@ -516,7 +528,8 @@ deleting a take from the service by hand, uploading without РЭХА,
     the footer, not the top menu.
 31. The page has a story from Alex's band; its **Run your own** steps are
     the ones Alex follows for his own copy, so they are tried first.
-32. Nothing in the guide: the key's few words and the site's page cover it.
+32. The guide gets a section on sending to the band service; what the
+    service is and how to run your own stay on the site's page.
 33. The service's sending shows in the header's background work list and on
     the take's button, as the cloud folder's does; takes still to send are
     back in the list when РЭХА opens; with no internet a line waits rather
