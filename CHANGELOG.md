@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.17.0
 
 - **A band service.** РЭХА can send takes to a band service: a private web
   page where your band plays each take track by track, stars the good ones
