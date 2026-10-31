@@ -12,7 +12,8 @@
 #   4. Once both zips are attached, site and site · deploy put the website
 #      (reha.stream) up for that release, unless it is a pre-release: the
 #      page's buttons download the latest release, which a pre-release is
-#      not.
+#      not. service · deploy puts the band service up at the same moment,
+#      on the same terms.
 #
 # By hand (Actions -> Release -> Run workflow), it asks what to do:
 #   Rehearse the builds    both builds, left as workflow artifacts; nothing
@@ -22,6 +23,10 @@
 #                          something on in the Vercel project (only a
 #                          deployment made after that serves it), or when
 #                          setting up the domain.
+#   Put the service up again
+#                          the latest release's band service, to Cloudflare
+#                          again, without building the apps: when setting it
+#                          up, or after changing SERVICE_DOMAIN.
 #
 # Nothing is built from a Linux machine and hoped for: a Mac build is made on
 # a Mac and a Windows build on Windows, because that is the only way either
@@ -43,6 +48,7 @@ on:
         options:
           - Rehearse the builds
           - Put the site up again
+          - Put the service up again
         default: Rehearse the builds
 
 permissions:
@@ -242,3 +248,69 @@ jobs:
           url=$(npx --yes vercel@65.2.0 deploy site --prod --token "$VERCEL_TOKEN")
           echo "Deployed $TAG to $url"
           echo "The site for $TAG is at $url" >> "$GITHUB_STEP_SUMMARY"
+
+  # The band service (service/) on the owner's Cloudflare account, for the
+  # same release as the site and after the same builds; or by hand, for the
+  # latest release. service/scripts/deploy.mjs does the work: it makes the
+  # database, the bucket and the queue the first time, applies the
+  # migrations not applied yet and puts the Worker up. It needs the
+  # repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, and the
+  # repository variable SERVICE_DOMAIN for the band's own address; without
+  # the token it says the service is not set up and succeeds, so a release
+  # made before then is not red. One deploy at a time, and none is cut short.
+  service:
+    name: service · deploy
+    needs: [build-macos, build-windows]
+    if: >-
+      !cancelled() && (
+        (github.event_name == 'release' && !github.event.release.prerelease &&
+         needs.build-macos.result == 'success' && needs.build-windows.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && inputs.what == 'Put the service up again'))
+    runs-on: ubuntu-latest
+    concurrency:
+      group: reha-band
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      # As the site's job does: by hand this runs on a branch, so the
+      # service and the interface it draws with are put back as they were
+      # at the latest release.
+      - name: Which release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          tag="$TAG"
+          if [ -z "$tag" ]; then
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+            git fetch --quiet --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+            if ! git cat-file -e "refs/tags/$tag:service/scripts/deploy.mjs" 2>/dev/null; then
+              echo "::error::$tag has no band service to put up: it came before the service did."
+              exit 1
+            fi
+            git restore --source="refs/tags/$tag" --worktree -- service ui
+          fi
+          echo "The band service is for $tag."
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            service/package-lock.json
+
+      - name: Install
+        working-directory: service
+        run: |
+          (cd ../ui && npm ci)
+          npm ci
+
+      - name: Deploy
+        working-directory: service
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SERVICE_DOMAIN: ${{ vars.SERVICE_DOMAIN }}
+        run: npm run deploy

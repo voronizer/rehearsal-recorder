@@ -1,14 +1,15 @@
 # Tests
 
 ```bash
+pip install openapi-core==0.23.1     # once: test_sending.py needs it
 python tests/run_all.py              # the Python suites
 cd ui && npm test                    # the interface, what needs no browser
 cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
 The seventeen Python suites cover audio, storage, platform behaviour, MIDI,
-the tempo counter, shared controls and sending takes to a band service. Interface tests run as unit and browser
-suites.
+the tempo counter, shared controls and sending takes to a band service.
+Interface tests run as unit and browser suites.
 
 ## test_control_api.py: shared controls
 
