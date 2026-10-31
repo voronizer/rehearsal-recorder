@@ -26,6 +26,7 @@
       "dest": "/stories/$1.html",
       "caseSensitive": true
     },
+    { "src": "^/band-service/?$", "dest": "/band-service.html", "caseSensitive": true },
     { "handle": "filesystem" },
     { "src": "^/(?!_vercel/).*$", "status": 404, "dest": "/404.html" }
   ]

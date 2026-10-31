@@ -1,4 +1,4 @@
-import { CHANGES, GUIDE, RELEASES } from "./links"
+import { BAND_SERVICE, CHANGES, GUIDE, RELEASES } from "./links"
 
 export function Footer() {
   return (
@@ -6,6 +6,7 @@ export function Footer() {
       <span>reha.stream · MIT license</span>
       <nav aria-label="More">
         <a href={GUIDE}>Guide</a>
+        <a href={BAND_SERVICE}>Band service</a>
         <a href={CHANGES}>Changelog</a>
         <a href={RELEASES}>Releases</a>
       </nav>

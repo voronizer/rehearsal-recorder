@@ -26,7 +26,9 @@
 #   Put the service up again
 #                          the latest release's band service, to Cloudflare
 #                          again, without building the apps: when setting it
-#                          up, or after changing SERVICE_DOMAIN.
+#                          up, or after changing SERVICE_DOMAIN. With no
+#                          release that has the service (in a fork, say),
+#                          the branch's.
 #
 # Nothing is built from a Linux machine and hoped for: a Mac build is made on
 # a Mac and a Windows build on Windows, because that is the only way either
@@ -275,7 +277,9 @@ jobs:
 
       # As the site's job does: by hand this runs on a branch, so the
       # service and the interface it draws with are put back as they were
-      # at the latest release.
+      # at the latest release. A fork has no releases of its own, and a
+      # release from before the service has none to put up: then it is the
+      # branch's, as reha.stream's site page tells a band running its own.
       - name: Which release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -283,15 +287,17 @@ jobs:
         run: |
           tag="$TAG"
           if [ -z "$tag" ]; then
-            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-            git fetch --quiet --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
-            if ! git cat-file -e "refs/tags/$tag:service/scripts/deploy.mjs" 2>/dev/null; then
-              echo "::error::$tag has no band service to put up: it came before the service did."
-              exit 1
+            tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)
+            if [ -n "$tag" ]; then
+              git fetch --quiet --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+              if git cat-file -e "refs/tags/$tag:service/scripts/deploy.mjs" 2>/dev/null; then
+                git restore --source="refs/tags/$tag" --worktree -- service ui
+              else
+                tag=""
+              fi
             fi
-            git restore --source="refs/tags/$tag" --worktree -- service ui
           fi
-          echo "The band service is for $tag."
+          echo "The band service is from ${tag:-the branch $GITHUB_REF_NAME}."
 
       - uses: actions/setup-node@v7
         with:

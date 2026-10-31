@@ -36,7 +36,7 @@ The pages use the interface's components and React from `../ui`, so run
 A published release puts the service up, after the apps are built, in the
 job `service · deploy` (`.github/workflows/release.yml`). By hand, **Run
 workflow** with **Put the service up again** puts up the latest release's
-service. The job runs `npm run deploy`, which is `scripts/deploy.mjs`:
+service, or the branch's when no release has it (in a fork). The job runs `npm run deploy`, which is `scripts/deploy.mjs`:
 
 1. It finds the database `reha-band`, the bucket `reha-band` and the queue
    `reha-band-chat` on the account, and makes any that is missing.

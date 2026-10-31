@@ -8,9 +8,21 @@ import { REPO } from "../page/links"
 import { Chat } from "./Chat"
 import { StoryCard } from "./StoryCard"
 
-function Blocks({ blocks }: { blocks: StoryBlock[] }) {
+export function Blocks({ blocks }: { blocks: StoryBlock[] }) {
   return blocks.map((block, i) => {
     if (block.kind === "chat") return <Chat key={i} lines={block.lines} />
+    if (block.kind === "steps")
+      return (
+        // role="list": Safari stops reading a list as one once its numbers
+        // are drawn by the page rather than the browser.
+        <ol key={i} className="steps-list" role="list">
+          {block.items.map((item, n) => (
+            <li key={n}>
+              <Inline text={item} />
+            </li>
+          ))}
+        </ol>
+      )
     return (
       <p key={i} className={block.kind === "joke" ? "joke" : undefined}>
         <Inline text={block.text} />
