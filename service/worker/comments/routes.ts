@@ -59,7 +59,9 @@ export const commentRoutes = newApp()
         // Replies hang off the first comment of their thread.
         parentId = parent.parentId ?? parent.id
         moment = parent.at
-      } else if (at > t.durationSec) return fail(c, 400, AT)
+      } else if (t.gen === t.shownGen && at > t.durationSec) return fail(c, 400, AT)
+      // While a newer generation is on its way, the length on record is its
+      // own, and the band still hears the older one: no end to check then.
       const [made] = await db
         .insert(comment)
         .values({ takeUid: uid, parentId, memberId: c.var.member.id, at: moment, text, createdAt: iso() })

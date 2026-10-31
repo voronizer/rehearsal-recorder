@@ -16,8 +16,9 @@ export const TakeMeta = z
     duration_sec: z.number().min(0),
     /** 1, and one more for each crop. */
     gen: z.int().min(1),
-    /** What the crops since the generation the service shows took off the start. */
-    cut_start: z.number().min(0),
+    /** What the crops since the generation the service shows took off the
+     *  start; below 0 when a crop was undone and the start put back. */
+    cut_start: z.number(),
     starred: z.boolean(),
     balance: z.record(z.string(), z.number()),
     tracks: z.array(

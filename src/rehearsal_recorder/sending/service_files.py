@@ -99,7 +99,8 @@ def meta(take, rehearsal, labels, volumes, gen, cut_start):
         "song": take.get("song") or None,
         "duration_sec": round(float(take.get("duration_sec") or 0), 2),
         "gen": int(gen),
-        "cut_start": round(max(0.0, float(cut_start or 0)), 2),
+        # Below 0 when a crop was undone and the start put back.
+        "cut_start": round(float(cut_start or 0), 2),
         "starred": bool(take.get("starred")),
         "balance": {t["name"]: float(volumes.get(t["name"], 1.0)) for t in audio},
         "tracks": [{"position": i, "name": t["name"], "icon": t.get("icon"),

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers"
 import { expect, test, vi } from "vitest"
 import type { Bindings } from "../worker/shared/env"
+import { commentView } from "../worker/comments/view"
 import { purgeTrash } from "../worker/takes/purge"
 import { TAKE, reha, takeMeta } from "./helpers"
 
@@ -173,6 +174,44 @@ test("a comment in the cut part stays at 0:00, marked", async () => {
   expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ gen: 2, cut_start: 10 }))).status).toBe(200)
   expect((await r.post(`/api/reha/takes/${TAKE}/ready`, { gen: 2, what: "mp3" })).status).toBe(200)
   expect((await comments())[0]).toMatchObject({ at: 0, cut_off: 1, text: "Count-in too fast" })
+})
+
+test("an undone crop moves the comments on", async () => {
+  const r = await reha()
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta())).status).toBe(200)
+  expect((await r.post(`/api/reha/takes/${TAKE}/ready`, { gen: 1, what: "mp3" })).status).toBe(200)
+  await comment(30, "Fill too long?")
+
+  // The start put back: the new generation begins 4 s before the one the band hears.
+  const marks = [{ at: 1, label: "Count", colour: "grey", note: "Sticks" }]
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ gen: 2, cut_start: -4, marks }))).status).toBe(200)
+  expect((await r.post(`/api/reha/takes/${TAKE}/ready`, { gen: 2, what: "mp3" })).status).toBe(200)
+  expect((await comments()).map((c) => [c.at, c.text, c.cut_off])).toEqual([
+    [1, "Sticks", 0],
+    [34, "Fill too long?", 0],
+  ])
+})
+
+test("a mark before the start of the take the band hears shows at 0:00", () => {
+  const row = { id: 1, takeUid: TAKE, parentId: null, memberId: null, at: -3, text: "Sticks", label: "Count", colour: "grey" }
+  const view = commentView({ ...row, fromReha: true, closed: false, cutOff: false, createdAt: "", name: null, email: null })
+  expect(view.at).toBe(0)
+})
+
+test("a mark a hundredth away after a crop is the same mark, its replies stay", async () => {
+  const r = await reha()
+  const marks = [{ at: 2, label: "Fix", colour: "red", note: "Too fast" }]
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ marks }))).status).toBe(200)
+  expect((await r.post(`/api/reha/takes/${TAKE}/ready`, { gen: 1, what: "mp3" })).status).toBe(200)
+  const fix = (await comments())[0]
+  await comment(2, "Agreed", fix.id as number)
+
+  // РЭХА rounds the crop and the mark to hundredths each: 1.66 + 0.33 is 1.99.
+  const moved = [{ at: 1.66, label: "Fix", colour: "red", note: "Too fast" }]
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ gen: 2, cut_start: 0.33, marks: moved }))).status).toBe(200)
+  const now = await comments()
+  expect(now.map((c) => c.text)).toEqual(["Too fast", "Agreed"])
+  expect(now[0].id).toBe(fix.id)
 })
 
 test("marks from REHA replace the earlier ones, replies stay", async () => {

@@ -343,6 +343,9 @@ def run(tmp, fake):
     ok("a take's dialog numbers its files as they are sent",
        service_files.names(lanes) == {"tracks": {"Drums": 1, "Bass": 2}, "notes": {"Keys": "3.mid"}}
        and [i["name"] for i in service_files.plan(lanes, {"mid"})] == ["3.mid"])
+    undone = service_files.meta({**lanes, "name": "Take 1", "duration_sec": 20.0}, {
+        "id": 1, "created_at": "2025-10-30 19:00:00", "name": "Thursday"}, [], {}, 3, -4.0)
+    ok("a crop undone sends the start put back as a crop below 0", undone["cut_start"] == -4.0)
 
     n8 = keep("Kupalle", seconds=14.0, band=["Drums"])
     uid8 = uid_of(n8)

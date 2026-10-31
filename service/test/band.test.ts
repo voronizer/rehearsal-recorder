@@ -161,6 +161,14 @@ test("a reply takes its parent's moment", async () => {
   expect((await post(`/api/takes/${uid}/comments`, { at: 1, text: "x", parent_id: 9999 }, owner)).status).toBe(400)
 })
 
+test("while a crop is on its way, a comment goes by the take the band hears", async () => {
+  const owner = await signInOwner()
+  const uid = await shownTake({ duration_sec: 300 })
+  // The cropped generation's MP3s are not up yet: the band still hears all 300 s.
+  await putTake(bindings, uid, takeMeta({ gen: 2, cut_start: 0, duration_sec: 200 }) as never)
+  expect((await post(`/api/takes/${uid}/comments`, { at: 250, text: "The end drags" }, owner)).status).toBe(200)
+})
+
 test("a removed member's comments keep their name", async () => {
   const owner = await signInOwner()
   const ira = await member(owner, "ira@example.com")

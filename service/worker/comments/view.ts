@@ -26,7 +26,9 @@ type CommentRowDb = typeof comment.$inferSelect & { name: string | null; email: 
 
 export const commentView = (c: CommentRowDb): z.infer<typeof CommentView> => ({
   id: c.id,
-  at: c.at,
+  // A mark from a newer generation whose start was put back can be before
+  // the start of the one the band still hears: it shows at 0:00 till then.
+  at: Math.max(0, c.at),
   text: c.text,
   author: c.fromReha || c.name === null ? null : shownName(c.name, c.email ?? ""),
   initial: c.fromReha || c.name === null ? null : initial(c.name, c.email ?? ""),

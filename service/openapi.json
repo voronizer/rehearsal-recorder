@@ -152,8 +152,7 @@
             "minimum": 1
           },
           "cut_start": {
-            "type": "number",
-            "minimum": 0
+            "type": "number"
           },
           "starred": {
             "type": "boolean"

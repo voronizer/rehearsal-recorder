@@ -58,9 +58,20 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
     .select({ id: comment.id, at: comment.at })
     .from(comment)
     .where(and(eq(comment.takeUid, uid), eq(comment.fromReha, true), isNull(comment.parentId)))
-  const byKey = new Map(kept.map((c) => [markKey(c.at), c.id]))
+  // A mark is the same mark a hundredth away: РЭХА rounds the crop and the
+  // mark each, so one moved by a crop can land a hundredth off. The exact
+  // moment goes first, so two marks a hundredth apart keep their own.
+  const free = new Map(kept.map((c) => [markKey(c.at), c.id]))
   const marks = meta.marks.map((m) => ({ ...m, at: m.at + cut }))
-  const wanted = new Set(marks.map((m) => markKey(m.at)))
+  const matched = new Map<number, number>()
+  for (const near of [0, -1, 1])
+    marks.forEach((m, i) => {
+      const key = markKey(m.at) + near
+      const id = free.get(key)
+      if (matched.has(i) || id === undefined) return
+      matched.set(i, id)
+      free.delete(key)
+    })
 
   await db.batch([
     db
@@ -71,9 +82,9 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
       .insert(take)
       .values({ uid, ...fields })
       .onConflictDoUpdate({ target: take.uid, set: fields }),
-    ...kept.filter((c) => !wanted.has(markKey(c.at))).map((c) => db.delete(comment).where(eq(comment.id, c.id))),
-    ...marks.map((m) => {
-      const id = byKey.get(markKey(m.at))
+    ...[...free.values()].map((id) => db.delete(comment).where(eq(comment.id, id))),
+    ...marks.map((m, i) => {
+      const id = matched.get(i)
       const row = { text: m.note, label: m.label, colour: m.colour }
       return id !== undefined
         ? db.update(comment).set(row).where(eq(comment.id, id))
