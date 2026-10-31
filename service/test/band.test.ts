@@ -7,7 +7,7 @@ import { call, member, named, post, shownTake, signInOwner, takeMeta } from "./h
 
 const bindings = env as unknown as Bindings
 
-type TakeRow = { uid: string; name: string; stars: { member_id: string; initial: string }[]; starred_at_rehearsal: boolean; is_new: boolean }
+type TakeRow = { uid: string; name: string; stars: { member_id: string; initial: string; name: string }[]; starred_at_rehearsal: boolean; is_new: boolean }
 type SongRow = { id: number | "not-named"; title: string; takes: number; last_date: string; best: TakeRow | null; has_new: boolean }
 type Feed = {
   new: { takes: TakeRow[]; comments: { id: number; take_name: string; author: string | null; text: string }[] }
@@ -119,6 +119,8 @@ test("the best take is the most starred, newest on a tie", async () => {
   expect((await song(owner, id)).best!.uid).toBe(one)
   await unstar(owner, one)
   expect((await song(owner, id)).best!.uid).toBe(two)
+  // The page says who starred it, by name; Ira has given none yet.
+  expect((await song(owner, id)).best!.stars).toEqual([{ member_id: ira.id, initial: "I", name: "ira@example.com" }])
   expect((await song(owner, id)).takes.map((t) => [t.name, t.stars.length])).toEqual([
     ["Viasna 3", 0],
     ["Viasna 2", 1],

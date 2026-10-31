@@ -4,7 +4,7 @@
     "lib": ["es2024", "dom", "dom.iterable"],
     "module": "es2022",
     "moduleResolution": "bundler",
-    "types": ["@cloudflare/vitest-plugin/types"],
+    "types": ["@cloudflare/vitest-plugin/types", "vite/client", "node"],
     "jsx": "react-jsx",
     "strict": true,
     "noEmit": true,
@@ -12,7 +12,17 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    // The interface's components, its React and its icons, as the pages
+    // import them: see vite.config.ts.
+    "paths": {
+      "@/*": ["../ui/src/*"],
+      "react": ["../ui/node_modules/@types/react"],
+      "react/*": ["../ui/node_modules/@types/react/*"],
+      "react-dom": ["../ui/node_modules/@types/react-dom"],
+      "react-dom/*": ["../ui/node_modules/@types/react-dom/*"],
+      "lucide-react": ["../ui/node_modules/lucide-react"]
+    }
   },
-  "include": ["worker", "test", "src", "scripts", "*.ts"]
+  "include": ["worker", "test", "src", "e2e", "scripts", "*.ts"]
 }

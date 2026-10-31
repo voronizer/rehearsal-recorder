@@ -11,11 +11,15 @@
     "test": "vitest run",
     "types": "wrangler types",
     "openapi": "node scripts/openapi.mjs",
-    "migrations": "drizzle-kit generate"
+    "migrations": "drizzle-kit generate",
+    "e2e:serve": "rm -rf .wrangler/e2e && CLOUDFLARE_ENV=test vite build && wrangler d1 migrations apply reha-band --local --persist-to .wrangler/e2e && wrangler dev --persist-to .wrangler/e2e --port 8799",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@better-auth/api-key": "1.7.14",
     "@hono/zod-openapi": "1.6.3",
+    "@tanstack/react-query": "5.105.0",
+    "@tanstack/react-router": "1.170.46",
     "better-auth": "1.7.14",
     "drizzle-orm": "0.45.4",
     "hono": "4.13.14",
@@ -24,9 +28,13 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.66.0",
     "@cloudflare/vitest-plugin": "1.4.11",
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "26.6.5",
     "auth": "1.7.14",
     "drizzle-kit": "0.31.11",
     "esbuild": "0.28.2",
+    "tailwindcss": "4.3.3",
     "typescript": "~7.0.2",
     "vite": "^8.3.4",
     "vitest": "5.0.5",

@@ -9,7 +9,7 @@ export const initial = (name: string, email: string) => (Array.from((name || ema
 /** The name the band sees for a member: their own, or their address until they give one. */
 export const shownName = (name: string, email: string) => name || email
 
-const Star = z.object({ member_id: z.string(), initial: z.string() })
+const Star = z.object({ member_id: z.string(), initial: z.string(), name: z.string() })
 
 export const TakeRow = z
   .object({
@@ -104,9 +104,12 @@ export async function takeRows(db: Database, me: string, where?: SQL): Promise<L
       .groupBy(comment.takeUid),
     db.select({ takeUid: seen.takeUid }).from(seen).where(eq(seen.memberId, me)),
   ])
-  const starsOf = new Map<string, { member_id: string; initial: string }[]>()
+  const starsOf = new Map<string, z.infer<typeof Star>[]>()
   for (const s of stars)
-    starsOf.set(s.takeUid, [...(starsOf.get(s.takeUid) ?? []), { member_id: s.memberId, initial: initial(s.name, s.email) }])
+    starsOf.set(s.takeUid, [
+      ...(starsOf.get(s.takeUid) ?? []),
+      { member_id: s.memberId, initial: initial(s.name, s.email), name: shownName(s.name, s.email) },
+    ])
   const marksOf = new Map(marks.map((m) => [m.takeUid, Number(m.count)]))
   const opened = new Set(mine.map((s) => s.takeUid))
   return takes

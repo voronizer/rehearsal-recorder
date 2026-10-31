@@ -1,0 +1,10 @@
+/* The band service's pages, in the interface's own styles. */
+@import "../../ui/src/index.css";
+/* The interface's components the pages draw, for Tailwind to find their classes. */
+@source "../../ui/src/components/ui";
+
+body {
+  background: var(--panel);
+  /* A web page: words can be copied, the key for РЭХА above all. */
+  user-select: text;
+}
