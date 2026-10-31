@@ -6,29 +6,42 @@
 listens to its takes track by track, stars them and comments at a moment,
 with РЭХА sending the takes there and a bot telling the band's Telegram chat.
 
-**Architecture:** One Cloudflare Worker in `service/` serves the pages
-(React, built with the design system from `ui/src`) and two JSON APIs: one
-for РЭХА (key in a header) and one for the band (session cookie). D1,
-Cloudflare's database, holds everything that is not audio: members, songs,
-takes' names and details, stars, marks, comments, who has seen what, links
-and keys (the tables are in “The service's D1 tables” below). R2,
-Cloudflare's file storage, holds each take's files: every track's MP3, FLAC,
-waveform and `.mid`. In РЭХА, a new `sending/` package holds two modules
-behind one interface, the cloud folder (moved, unchanged) and the band
-service (new); Settings › Folders draws a switch and the chosen module's
-own panel.
+**Architecture:** One Cloudflare Worker in `service/`, in TypeScript,
+serves the pages and the API. Its code is a folder per feature (sign-in,
+members, takes, comments, uploads, files, chat). The routes are Hono with
+zod schemas (`@hono/zod-openapi`): the same schemas check what comes in,
+give the pages their types through Hono RPC, and make the OpenAPI
+description that РЭХА's tests check every request against. better-auth
+signs members in with a 6-digit code by email, keeps their sessions, makes
+the owner an admin and makes РЭХА's keys. D1, Cloudflare's database, holds
+everything that is not audio, through Drizzle; R2, Cloudflare's file
+storage, holds each take's files: every track's MP3, FLAC, waveform and
+`.mid`. Letters go through Cloudflare's Email Service to addresses on
+Cloudflare's confirmed list, which the service keeps itself through
+Cloudflare's API. The bot's messages go through a Cloudflare Queue, so a
+Telegram failure is tried again. The pages are React with the design
+system from `ui/src`, TanStack Router and TanStack Query. In РЭХА, a new
+`sending/` package holds two modules behind one interface, the cloud
+folder (moved, unchanged) and the band service (new); Settings › Folders
+draws a switch and the chosen module's own panel.
 
 **Tech Stack:** Python 3.10+ (urllib with certifi, SQLAlchemy + Alembic,
-libsndfile through `soundfile`), React 19 + Vite 8 + Tailwind 4,
-Cloudflare Workers + D1 + R2 + a Cron Trigger, Hono for the Worker's
-routes, Drizzle ORM for D1 (drizzle-kit makes the migrations), `@cloudflare/vite-plugin`, wrangler 4,
-`@cloudflare/vitest-plugin` with vitest 5, Playwright, the Telegram Bot API.
+libsndfile through `soundfile`; `openapi-core` in the tests only), React 19
++ Vite 8 + Tailwind 4, TanStack Router and TanStack Query, Cloudflare
+Workers + D1 + R2 + Queues + Email Service + a Cron Trigger, Hono with
+`@hono/zod-openapi` and zod 4, better-auth with its emailOTP, admin and API
+Key plugins, Drizzle ORM (drizzle-kit makes the migrations),
+`@cloudflare/vite-plugin`, wrangler 4, `@cloudflare/vitest-plugin` with
+vitest 5, Playwright, the Telegram Bot API.
 
 **Spec:** `docs/superpowers/specs/2026-10-30-band-service-part-1-design.md`
-(approved 31 October, 16:33). Mockups of the pages:
-https://claude.ai/artifact/SZKv2ssjChEjWWsrnKWkqK (option Б), sources in
-`/mnt/project-files/band-service/part-1/mockup-src/`. The playback test of
-24 October: `/mnt/project-files/band-service/playback-test/index.html`.
+(approved 31 October at 16:33, and again with sign-in by email at 18:43).
+The architecture rounds, each question with Alex's answer:
+`/mnt/project-files/band-service/part-1/architecture.md`. Mockups of the
+pages: https://claude.ai/artifact/SZKv2ssjChEjWWsrnKWkqK (option Б),
+sources in `/mnt/project-files/band-service/part-1/mockup-src/`. The
+playback test of 24 October:
+`/mnt/project-files/band-service/playback-test/index.html`.
 
 ## Global Constraints
 
@@ -45,49 +58,64 @@ https://claude.ai/artifact/SZKv2ssjChEjWWsrnKWkqK (option Б), sources in
   The pull request body ends with plain “Generated with Claude Code”.
 - `service/` carries its own `LICENSE`, FSL-1.1-MIT, with Alex as the
   licensor. РЭХА stays MIT.
-- Nothing in the code names band.reha.stream, reha.stream as the service's
-  address, or Alex's band. The address, the bot and the chat come from each
-  copy's own settings.
+- Nothing in the code names band.reha.stream, reha.stream, Alex's address
+  or Alex's band. The address, the letters' sender, the owner, the bot and
+  the chat come from each copy's own settings.
 - Each feature is its own module with its own settings panel; a switch
-  picks the module; no rows hidden by conditions.
-- Values the spec fixes: a link lasts 24 hours and works once; a link made
-  with **Sign in on another device** lasts 15 minutes; a session lasts 365
-  days from the last visit; a take stays in the trash 30 days; a chat
-  message takes additions for 3 hours; a part is 10 MiB (10,485,760 bytes),
-  the last part of a file may be smaller; the cookie is HttpOnly, Secure,
-  SameSite=Lax; links' tokens, sessions and РЭХА's keys are kept only as
-  SHA-256 hashes.
+  picks the module; no rows hidden by conditions. In `service/`, each
+  feature is its own folder with its routes, logic and queries; only the
+  Drizzle schema is shared, in one file.
+- Use the library's own way before writing one's own: better-auth for
+  sign-in, sessions, the owner's rights and keys; Drizzle for every query;
+  zod for every check of what comes in.
+- Values the spec fixes: a code is 6 digits, lasts 10 minutes and dies
+  after 5 wrong tries; a session lasts 365 days from the last visit, moved
+  on at most once a day; a take stays in the trash 30 days; a chat message
+  takes additions for 3 hours; the same failure is told to Alex at most
+  once an hour; a part is 10 MiB (10,485,760 bytes), the last part of a
+  file may be smaller; the cookie is HttpOnly, Secure, SameSite=Lax;
+  РЭХА's keys are kept only as hashes.
 - For the service РЭХА sends each track as MP3 and FLAC, its `.mid` where it
   recorded notes, and a waveform file. No mix file. Every MP3 of a take
   goes before any FLAC.
 - Versions are pinned exactly in `service/package.json`: wrangler 4.156.0,
   `@cloudflare/vite-plugin` 1.66.0, `@cloudflare/vitest-plugin` 1.4.11,
-  `@cloudflare/workers-types` 5.20261031.1, vitest 5.0.5,
-  `hono` 4.13.13, `drizzle-orm` 0.45.4, `drizzle-kit` 0.31.11,
-  `qrcode-generator` 2.0.4; React, Vite, Tailwind and Playwright at the
-  versions `ui/package.json` uses.
+  `@cloudflare/workers-types` 5.20261031.1, vitest 5.0.5, `hono` 4.13.14,
+  `@hono/zod-openapi` 1.6.3, `zod` 4.6.7, `drizzle-orm` 0.45.4,
+  `drizzle-kit` 0.31.11, `better-auth` 1.7.14, `@better-auth/api-key`
+  1.7.14, `auth` (better-auth's CLI) 1.7.14, `@tanstack/react-router`
+  1.170.46, `@tanstack/react-query` 5.105.0; React, Vite, Tailwind and
+  Playwright at the versions `ui/package.json` uses. In РЭХА's tests,
+  `openapi-core` 0.23.1, never in РЭХА itself.
 
 ## Review Focus
 
-1. РЭХА is closed or the laptop sleeps between a part arriving and РЭХА
-   writing its etag down. Expected: that part is sent again under the same
-   number, R2 keeps the later one, and the file completes. (Task 6,
-   `test_sending.py`: “part sent twice”.)
-2. РЭХА is opened again after a cut-short upload. Expected: the bytes sent
-   are the very bytes sent before, because the MP3 and FLAC files made for
-   the upload are kept on disk until their upload completes and are never
-   made again for the same generation. (Task 6: “staged file reused”.)
-3. Telegram draws a preview of a sign-in link the moment Alex pastes it.
-   Expected: the link still works for the member, since a GET never uses a
-   link up. (Task 2: “GET keeps the link”.)
-4. A take is renamed, starred or cropped while its files are going up.
-   Expected: the upload goes on; the rename and ★ follow in the next PUT; a
-   crop starts a new generation, and the service plays the old files until
-   the new MP3s are all up, then shifts the comments. (Tasks 3 and 6.)
-5. A take is deleted in РЭХА and brought back with **Undo** before its
+1. РЭХА's key meets the API Key plugin's own default limit of 10 requests
+   a day, and the upload of a rehearsal (about 450 requests) stops after
+   ten. Expected: keys are made with the plugin's rate limit off, and 30
+   requests in a row with one key all pass. (Task 2: “a key is not
+   limited”.)
+2. РЭХА is closed or the laptop sleeps between a part arriving and РЭХА
+   writing its etag down, then РЭХА opens again. Expected: that part is
+   sent again under the same number, R2 keeps the later one, the bytes are
+   the very bytes sent before (the MP3 and FLAC made for the upload stay on
+   disk until it completes and are never made again for the same
+   generation), and the file completes. (Task 6: “part sent twice”,
+   “staged file reused”.)
+3. A take is deleted in РЭХА and brought back with **Undo** before its
    notice ends. Expected: nothing happens in the service; only a deletion
    whose Undo time passed moves the take to the service's trash. (Task 6:
    “undo keeps it”.)
+4. A member types “ Ira@Gmail.com ” while Alex added “ira@gmail.com”.
+   Expected: the same member, everywhere: the code, the members' table,
+   Cloudflare's list. Addresses are trimmed and lower-cased on the way in.
+   (Task 2: “an address is the same whatever its case”.)
+5. A member is removed while their tab is open, or presses **Send code**
+   twice. Expected: the removed member's next request answers 401 and the
+   page goes to sign-in, while their stars and comments stay under their
+   name; of two codes only the newer one works. (Task 2: “remove ends the
+   sessions and keeps the comments”, “a newer code replaces the older”;
+   Task 5: “a removed member is sent to sign-in”.)
 
 ---
 
@@ -108,9 +136,10 @@ The cloud folder's keys (`cloud_dir`, `cloud_format`, `auto_publish`,
 `auto_publish_what`) stay as they are and mean what they mean today.
 
 A key is split at its last `:`. The address part is a host name, with an
-optional `:port`; the secret is 43 characters of base64url (32 random bytes).
-The service is reached at `https://<address>`, or `http://<address>` when
-the host is `localhost` or `127.0.0.1` (tests and `wrangler dev`).
+optional `:port`; the secret is the key better-auth's API Key plugin made,
+which has no `:` in it. The service is reached at `https://<address>`, or
+`http://<address>` when the host is `localhost` or `127.0.0.1` (tests and
+`wrangler dev`).
 
 `get_settings()` adds:
 `"send_to": "cloud" | "service"`,
@@ -141,9 +170,23 @@ The interface's activity entries gain `kind: "service"`.
 
 ### РЭХА → the service
 
-Every call carries `Authorization: Bearer <secret>`. Bodies are JSON
-except a part. An error is a 4xx with `{"error": "<words a musician
-reads>"}`; an upload R2 no longer has is a 404 with `"gone": true`.
+Every call carries `x-api-key: <secret>` (the API Key plugin's header) and
+`X-Reha-Version: <РЭХА's version>`, such as `0.17.0`. Bodies are JSON
+except a part, which is `application/octet-stream`. An error is a 4xx with
+`{"error": "<words a musician reads>"}`; an upload R2 no longer has is a
+404 with `"gone": true`. A РЭХА older than the service's
+`MIN_REHA_VERSION` (a constant in `service/worker/shared/version.ts`), or
+a request with no version, gets 426 with `{"error": "Update РЭХА to send
+takes here"}`. `MIN_REHA_VERSION` is `"0.0.0"` to begin with: the service
+only ever adds fields, so it goes up only when a change cannot work with
+an older РЭХА. Versions compare by their leading `X.Y.Z`, so
+`0.17.1.dev4+gabc` (a clone between releases) counts as 0.17.1, and
+`unknown` (a clone never installed, running the code as it is now) is
+never too old.
+
+Every route below is described in `/api/openapi.json`, made from the same
+zod schemas that check it; `service/openapi.json` is that file, kept in
+the repository for РЭХА's tests.
 
 | Call | Body | Answer |
 |---|---|---|
@@ -203,15 +246,21 @@ What the service does with them:
   the older generations' objects.
 - DELETE puts the take in the trash: `trashed_at` is now.
 
+
 ### The band's API (session cookie), for the pages
+
+Signing in goes through better-auth's own routes under `/api/auth/*`,
+called from the pages through better-auth's React client with
+`emailOTPClient()`: `emailOtp.sendVerificationOtp({email, type:
+"sign-in"})`, `signIn.emailOtp({email, otp})`, `signOut()`. Everything
+else goes through Hono RPC (`hc<AppType>`), wrapped in TanStack Query.
 
 | Call | Answer |
 |---|---|
-| `POST /api/signin` `{"token"}` | sets the session cookie; `{"ok": true, "needs_name": bool}`; a used, unknown or old link: 410 `{"error": "This link has been used or has run out. Ask for a new one."}` |
-| `POST /api/setup` `{"secret"}` | the owner signed in; wrong secret 403 |
-| `GET /api/me` | `{"id", "name", "owner": bool}`; no session 401 |
+| `emailOtp.sendVerificationOtp` | `{"success": true}` for any address; for an address in the band that Cloudflare has not had confirmed, 400 with code `CONFIRM_FIRST` and the message “First confirm your address: look for a letter from Cloudflare, then press Send code again” |
+| `signIn.emailOtp` | sets the session cookie; a wrong or old code as better-auth answers it, shown as “That code does not work. Press Send code for a new one.” |
+| `GET /api/me` | `{"id", "name", "owner": bool}`; `name` is `""` until the member gives one; no session 401 |
 | `PUT /api/me` `{"name"}` | `{"ok": true}` |
-| `POST /api/me/device-link` | `{"url", "expires_at"}` |
 | `GET /api/feed` | `{"new": {"takes": [TakeRow], "comments": [CommentRow]}, "new_count": int, "songs": [SongRow], "not_named": SongRow \| null, "start": {"kind": "new" \| "song", "id"}}` |
 | `GET /api/songs/:id` (`not-named` for takes with no song) | `{"song", "best": TakeRow \| null, "takes": [TakeRow]}` |
 | `GET /api/takes/:uid` | the take with tracks, peaks keys, members' stars, `starred_at_rehearsal`, comments with replies, files with what is still coming |
@@ -221,24 +270,29 @@ What the service does with them:
 | `PATCH /api/comments/:id` `{"closed": bool}` | `{"ok": true}` |
 | `GET /api/trash`, `POST /api/trash/:uid/restore` | the trashed takes; `{"ok": true}` |
 | `GET /files/<uid>/<gen>/<name>` | the file from R2, with `Range`; `?download=1` names it “Viasna 12 - Bass.flac” |
-| Owner only: `GET /api/members`, `POST /api/members`, `POST /api/members/:id/link`, `POST /api/members/:id/signout`, `GET /api/keys`, `POST /api/keys` `{"name"}`, `DELETE /api/keys/:id` | lists; a new link `{"url", "expires_at"}`; a new key `{"key"}` shown once |
+| Owner only: `GET /api/members` | `[{"id", "email", "name", "confirmed": bool, "signed_in": bool}]` |
+| Owner only: `POST /api/members` `{"email"}` | the member; the address goes on Cloudflare's list |
+| Owner only: `POST /api/members/:id/signout` | `{"ok": true}`, every session of theirs ended |
+| Owner only: `DELETE /api/members/:id` | `{"ok": true}`: **Remove** |
+| Owner only: `GET /api/keys`, `POST /api/keys` `{"name"}`, `DELETE /api/keys/:id` | the keys by name; a new key `{"key": "<host>:<secret>"}` shown once; `{"ok": true}` |
 
 ### The service's D1 tables
 
-The tables are written as a Drizzle schema in `service/worker/schema.ts`,
-the one place they are described, as РЭХА's are in `store/models.py`.
-`npx drizzle-kit generate` makes the SQL migration from it into
-`service/migrations/`. Every query goes through Drizzle; a change of
-several rows that must happen together goes through `db.batch([...])`, which
-D1 runs as one transaction. The tables the schema makes:
+The tables are written as a Drizzle schema in
+`service/worker/shared/schema.ts`, the one place they are described, as
+РЭХА's are in `store/models.py`. `npx drizzle-kit generate` makes the SQL
+migration from it into `service/migrations/`. Every query goes through
+Drizzle; a change of several rows that must happen together goes through
+`db.batch([...])`, which D1 runs as one transaction.
+
+better-auth's tables come first, written exactly as `npx auth@1.7.14
+generate` prints them for Drizzle and SQLite with the plugins in use:
+`user` (with the admin plugin's `role`, `banned`, `banReason`,
+`banExpires`), `session` (with `impersonatedBy`), `account`,
+`verification`, `apikey` and `rateLimit`. A member is a `user` row; their
+`name` is `""` until they type it. Then the service's own:
 
 ```sql
-member(id INTEGER PRIMARY KEY, name TEXT, owner INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)
-link(hash TEXT PRIMARY KEY, member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE,
-     expires_at TEXT NOT NULL, created_at TEXT NOT NULL)
-session(hash TEXT PRIMARY KEY, member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE,
-        expires_at TEXT NOT NULL)
-reha_key(id INTEGER PRIMARY KEY, name TEXT NOT NULL, hash TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL)
 rehearsal(uid TEXT PRIMARY KEY, name TEXT NOT NULL, date TEXT NOT NULL)
 song(id INTEGER PRIMARY KEY, title TEXT NOT NULL UNIQUE COLLATE NOCASE)
 take(uid TEXT PRIMARY KEY, rehearsal_uid TEXT NOT NULL REFERENCES rehearsal(uid), number INTEGER NOT NULL,
@@ -247,27 +301,49 @@ take(uid TEXT PRIMARY KEY, rehearsal_uid TEXT NOT NULL REFERENCES rehearsal(uid)
      notes TEXT NOT NULL, gen INTEGER NOT NULL, shown_gen INTEGER, flac_gen INTEGER,
      pending_cut REAL NOT NULL DEFAULT 0, shown_at TEXT, trashed_at TEXT, updated_at TEXT NOT NULL)
 comment(id INTEGER PRIMARY KEY, take_uid TEXT NOT NULL REFERENCES take(uid) ON DELETE CASCADE,
-        parent_id INTEGER REFERENCES comment(id) ON DELETE CASCADE, member_id INTEGER REFERENCES member(id),
+        parent_id INTEGER REFERENCES comment(id) ON DELETE CASCADE, member_id TEXT REFERENCES user(id),
         at REAL NOT NULL, text TEXT NOT NULL, label TEXT, colour TEXT, from_reha INTEGER NOT NULL DEFAULT 0,
         closed INTEGER NOT NULL DEFAULT 0, cut_off INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)
 star(take_uid TEXT NOT NULL REFERENCES take(uid) ON DELETE CASCADE,
-     member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE, PRIMARY KEY (take_uid, member_id))
-seen(member_id INTEGER NOT NULL REFERENCES member(id) ON DELETE CASCADE,
+     member_id TEXT NOT NULL REFERENCES user(id), PRIMARY KEY (take_uid, member_id))
+seen(member_id TEXT NOT NULL REFERENCES user(id),
      take_uid TEXT NOT NULL REFERENCES take(uid) ON DELETE CASCADE, seen_at TEXT NOT NULL,
      PRIMARY KEY (member_id, take_uid))
 chat(id INTEGER PRIMARY KEY, kind TEXT NOT NULL, about TEXT NOT NULL, message_id INTEGER NOT NULL,
      text TEXT NOT NULL, started_at TEXT NOT NULL)
+failure_notice(what TEXT PRIMARY KEY, told_at TEXT NOT NULL)
 ```
 
 A mark from РЭХА is a `comment` row with `from_reha = 1`, its label and
 colour, `member_id` null and its note as `text`: one thing with a comment,
-as the concept has it, so it can be answered and closed too.
+as the concept has it, so it can be answered and closed too. A member is
+never deleted, only banned by **Remove**, so their stars and comments keep
+their name.
 
-### The service's settings (Worker secrets, set in Cloudflare)
+### The service's settings
 
-`SETUP_SECRET` (required), `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
-(both optional; without them nothing is posted). Bindings: `DB` (D1),
-`FILES` (R2), `ASSETS`.
+Set on the Worker in Cloudflare. `wrangler.jsonc` has `keep_vars: true`,
+so a deploy leaves them as they are.
+
+| Name | Kind | Meaning |
+|---|---|---|
+| `BETTER_AUTH_SECRET` | secret, required | better-auth signs its cookies with it |
+| `OWNER_EMAIL` | variable, required | the owner's address; the first code asked for it makes the owner |
+| `LETTERS_FROM` | variable, required | the letters' sender, on a domain with Cloudflare's mail on |
+| `CF_ACCOUNT_ID`, `CF_ADDRESSES_TOKEN` | variable, secret | for Cloudflare's list of confirmed addresses; the token may only edit that list. Without them **Add member** answers “Add the Cloudflare token for addresses first” |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `OWNER_TELEGRAM_ID` | secret, variables | the bot, the band's chat and Alex for failures; without the token nothing is posted |
+
+Bindings: `DB` (D1), `FILES` (R2), `ASSETS`, `LETTERS` (`send_email`, no
+fixed destination), `CHAT` (a queue, `reha-band-chat`, that the same
+Worker consumes with `max_batch_size: 10`, `max_concurrency: 1`,
+`max_retries: 5`). `observability.enabled: true` keeps Workers Logs.
+
+`wrangler.jsonc` also has an environment `test`, used only by `wrangler
+dev --env test` for the page tests: `STAND_INS: "on"`, `OWNER_EMAIL:
+"alex@example.com"`, `LETTERS_FROM: "band@example.com"`, a made-up
+`BETTER_AUTH_SECRET`. With `STAND_INS` on, letters, Cloudflare's list and
+Telegram go to stand-ins that keep what they get in memory, and the routes
+`/api/stand-ins/*` read them; with it off those routes answer 404.
 
 ---
 
@@ -388,90 +464,166 @@ git commit -m "Move the cloud folder into a sending package, unchanged"
 ### Task 2: The service's frame, its tables, signing in, members and keys
 
 **Files:**
-- Create: `service/package.json`, `service/LICENSE` (FSL-1.1-MIT), `service/README.md`, `service/wrangler.jsonc`, `service/vite.config.ts`, `service/vitest.config.ts`, `service/tsconfig.json`, `service/index.html`
-- Create: `service/worker/schema.ts` (the Drizzle schema of the tables in the shared contract), `service/worker/db.ts` (`database(env)`: `drizzle(env.DB, { schema })`), `service/drizzle.config.ts` (`dialect: "sqlite"`, `schema: "./worker/schema.ts"`, `out: "./migrations"`)
+- Create: `service/package.json`, `service/LICENSE` (FSL-1.1-MIT), `service/README.md`, `service/wrangler.jsonc`, `service/vite.config.ts`, `service/vitest.config.ts`, `service/tsconfig.json`, `service/index.html`, `service/drizzle.config.ts` (`dialect: "sqlite"`, `schema: "./worker/shared/schema.ts"`, `out: "./migrations"`), `service/worker-configuration.d.ts` (made by `npx wrangler types`)
+- Create: `service/worker/index.ts` (the `OpenAPIHono` app, exported as `{fetch: app.fetch, scheduled, queue}`, and `export type AppType`)
+- Create: `service/worker/shared/` `schema.ts`, `db.ts` (`database(env)`: `drizzle(env.DB, { schema })`), `time.ts`, `version.ts`, `errors.ts`, `openapi.ts` (serves `/api/openapi.json`)
+- Create: `service/worker/signin/` `auth.ts`, `letters.ts`, `addresses.ts`, `guards.ts`, `routes.ts` (`/api/me`), `stand-ins.ts`
+- Create: `service/worker/members/routes.ts` (members and keys)
 - Create: `service/migrations/0000_…sql`, made by `npx drizzle-kit generate`, with its `meta/` snapshot
-- Create: `service/worker/index.ts` (the Hono app, exported as `{fetch: app.fetch, scheduled}`), `service/worker/auth.ts`, `service/worker/members.ts`, `service/worker/time.ts`, `service/worker/hash.ts`
-- Create: `service/test/apply-migrations.ts`, `service/test/auth.test.ts`, `service/test/members.test.ts`
+- Create: `service/scripts/openapi.mjs` (writes `service/openapi.json`), `service/openapi.json`
+- Create: `service/test/apply-migrations.ts`, `service/test/signin.test.ts`, `service/test/members.test.ts`, `service/test/openapi.test.ts`
 
 **Interfaces:**
-- Produces: `sha256Hex(text): Promise<string>`, `newToken(): string` (32
-  random bytes as base64url, 43 characters), `now(): Date` (one place
-  tests replace), `signedIn(request, env): Promise<Member | null>` which
-  also moves the session's expiry to 365 days from now,
-  `rehaKey(request, env): Promise<boolean>` (both also as Hono middleware,
-  `needMember`, `needOwner` and `needKey`), and `app`, a
-  `Hono<{ Bindings: Env }>` that Tasks 3 and 4 add their routes to.
+- Produces, in `signin/auth.ts`: `makeAuth(env: Env, origin: string,
+  parts: {letters: Letters, addresses: AddressList})`, built per request
+  (bindings exist only inside a request), with `baseURL: origin`,
+  `secret: env.BETTER_AUTH_SECRET`, `database: drizzleAdapter(db,
+  {provider: "sqlite", schema})`, `session: {expiresIn: 365 days,
+  updateAge: 1 day}`, `rateLimit: {enabled: true, storage: "database"}`,
+  and the plugins `emailOTP({otpLength: 6, expiresIn: 600,
+  allowedAttempts: 5, disableSignUp: true, sendVerificationOTP})`,
+  `admin()` and `apiKey({rateLimit: {enabled: false}})`. Codes are kept
+  hashed if the plugin's reference offers it (`storeOTP`); check it there.
+- Produces, in `signin/letters.ts`: `interface Letters { send(to: string,
+  subject: string, text: string): Promise<void> }`, `cloudflareLetters(env)`
+  through `env.LETTERS.send({to, from: env.LETTERS_FROM, subject, text})`,
+  and `keptLetters` (the stand-in).
+- Produces, in `signin/addresses.ts`: `interface AddressList { add(email):
+  Promise<void>; remove(email): Promise<void>; confirmed(emails: string[]):
+  Promise<Set<string>> }`, `cloudflareAddresses(env)` through
+  `https://api.cloudflare.com/client/v4/accounts/<CF_ACCOUNT_ID>/email/routing/addresses`
+  (POST `{email}`; GET, page by page, where an address is confirmed when
+  its `verified` is set; DELETE `/<id>`), and `keptAddresses` (the
+  stand-in, which confirms an address when
+  `POST /api/stand-ins/confirm {email}` says so, or at once when added with
+  `?confirmed=1`). Check the field names against Cloudflare's API
+  reference before writing.
+- Produces, in `signin/guards.ts`: `normaliseEmail(s: string): string`
+  (trimmed, lower-cased), and the Hono middleware `needMember` (sets
+  `c.var.member` from `auth.api.getSession`, or 401), `needOwner` (role
+  `admin`, or 403) and `needKey` (checks `x-api-key` with
+  `auth.api.verifyApiKey`, or 401; checks `X-Reha-Version` with
+  `tooOld(version: string | undefined, min: string): boolean` from
+  `shared/version.ts`, or 426).
+- Produces: `now(): Date` in `shared/time.ts` (one place tests replace),
+  and `app`, the `OpenAPIHono<{ Bindings: Env }>` that Tasks 3 and 4 add
+  their routes to. Each feature folder exports a sub-app built by chained
+  `.openapi(createRoute(…), handler)` calls, and `index.ts` mounts them
+  with `app.route()`, so `AppType` carries every route for `hc`.
+  better-auth's handler is mounted at `/api/auth/*`.
 - `wrangler.jsonc`: `name: "reha-band"`, `main: "worker/index.ts"`,
   `compatibility_date: "2026-10-15"`, assets with
   `not_found_handling: "single-page-application"`, `binding: "ASSETS"`,
   `run_worker_first: ["/api/*", "/files/*"]`; D1 binding `DB`
   (`database_name: "reha-band"`, `database_id: "local"`,
   `migrations_dir: "migrations"`); R2 binding `FILES`
-  (`bucket_name: "reha-band"`); `triggers: {"crons": ["17 4 * * *"]}`
-  (once a day, for emptying the trash); `workers_dev: true`; no `routes`.
+  (`bucket_name: "reha-band"`); `send_email: [{"name": "LETTERS"}]`; the
+  queue `reha-band-chat` as producer `CHAT` and as consumer, with the
+  values in the shared contract; `triggers: {"crons": ["17 4 * * *"]}`
+  (once a day, for emptying the trash); `observability: {"enabled":
+  true}`; `keep_vars: true`; `workers_dev: true`; no `routes`; the
+  environment `test` from the shared contract.
+
+Before better-auth sees a request to
+`/api/auth/email-otp/send-verification-otp`, a middleware makes the
+owner's user (`role: "admin"`, `name: ""`) when the address is
+`OWNER_EMAIL` and no user has it yet: with `disableSignUp`, better-auth may
+not call `sendVerificationOTP` for an address it does not know. The page
+trims and lower-cases the address before sending it, and the service
+normalises it again wherever it takes one. Then `sendVerificationOTP({email,
+otp, type})` decides:
+
+- Not a user, or a banned user: send nothing and return, so the answer is
+  the same as for a member.
+- A user whose address `addresses.confirmed` does not hold: `remove` and
+  `add` it again (Cloudflare then sends its letter again; the spec's Call
+  4 has this checked on the first real setup) and throw `APIError` 400
+  with code `CONFIRM_FIRST` and the words in the shared contract.
+- Otherwise `letters.send(email, "<otp> is your code for <host>", "Your
+  code is <otp>. It works for 10 minutes.\n\nIf you did not ask for it,
+  you can ignore this letter.")`.
 
 Rules the tests pin:
 
-- A link's GET is the page's (the SPA answers it); only `POST /api/signin`
-  uses a link up. It deletes the link row with `DELETE … RETURNING`, so two
-  presses at once sign in one browser, not two.
-- A link older than 24 hours is refused with the 410 words, and the
-  Members page shows “Ran out” for it; one not used yet shows “Not opened
-  yet”.
-- `POST /api/setup` compares the secret in constant time. The first time,
-  it makes the owner (`owner = 1`, no name); after that it signs the owner
-  in again.
-- A member's first sign-in answers `needs_name: true` until `PUT /api/me`
-  gives a name; the name is 1 to 40 characters after trimming.
-- **Sign out everywhere** deletes all the member's sessions and links.
-- A device link lasts 15 minutes and belongs to the member who made it.
-- РЭХА's key is shown once, as `<host>:<secret>`, where `<host>` is the
-  request's own host; only its hash is kept.
+- **Add member** makes a `user` with `role: "user"` and `name: ""`, and
+  `add`s the address. A second **Add member** with the same address, in
+  any case, answers 409 “This address is already in the band”.
+- **Sign out everywhere** is `auth.api.revokeUserSessions`. **Remove** is
+  `auth.api.banUser` with no end, which also ends every session, then
+  `addresses.remove`. Neither works on the owner.
+- `GET /api/members` lists every member but the banned ones, with
+  `confirmed` from `addresses.confirmed` (one call for the whole list) and
+  `signed_in` from the user's `emailVerified`.
+- A key is made with `auth.api.createApiKey({body: {name, userId: <the
+  owner's id>}})`, no end, no limit, and shown once as
+  `<host>:<key>`, where `<host>` is the request's own host.
+- A member's first sign-in leaves `name` `""` until `PUT /api/me` gives
+  one; the name is 1 to 40 characters after trimming.
+- `/api/stand-ins/*` answers 404 unless `STAND_INS` is `"on"`.
 
 - [ ] **Step 1: Write the failing tests**
 
-`service/test/auth.test.ts`, each against `exports.default.fetch` with
-migrations applied:
+`service/test/signin.test.ts`, each against `exports.default.fetch` with
+migrations applied and the stand-ins passed in:
 
 ```ts
-test("GET keeps the link", …)            // GET /signin/<t> then POST /api/signin {token: t} → 200
-test("a link works once", …)             // second POST → 410, body.error as in the contract
-test("a link runs out after a day", …)   // now() + 24 h + 1 s → 410
-test("two presses at once sign in one", …) // Promise.all of two POSTs → one 200, one 410
-test("the session moves on with each visit", …) // expiry after GET /api/me is now() + 365 days
-test("setup makes the owner, then signs in again", …)
-test("a wrong setup secret is refused", …) // 403
-test("sign out everywhere ends every session", …)
-test("a device link lasts 15 minutes", …)
+test("the owner's first code makes the owner", …)        // owner gets role admin, name ""
+test("a member gets a code and signs in", …)              // the stand-in's letter holds 6 digits
+test("an address not in the band gets the same answer and no letter", …)
+test("an address is the same whatever its case", …)      // " Ira@Gmail.com " finds ira@gmail.com
+test("an unconfirmed address is told to confirm first", …) // 400 CONFIRM_FIRST; remove then add on the list
+test("a code runs out after 10 minutes", …)              // now() + 10 min + 1 s
+test("five wrong codes kill it", …)
+test("a newer code replaces the older", …)
+test("the session moves on with a visit a day later", …) // expiry = visit + 365 days
+test("a banned member gets no code", …)
 ```
 
 `service/test/members.test.ts`:
 
 ```ts
-test("only the owner sees members", …)   // a member → 403
-test("a new member's link shows Not opened yet, then Ran out", …)
+test("only the owner sees members", …)                   // a member gets 403
+test("add member puts the address on the list", …)
+test("the same address twice is refused", …)             // 409, any case
+test("members show who has confirmed and signed in", …)
+test("sign out everywhere ends every session", …)
+test("remove ends the sessions and keeps the comments", …)
+test("the owner cannot be removed", …)
 test("a key is shown once and works for /api/reha/hello", …)
-test("a removed key no longer works", …) // 401
+test("a key is not limited", …)                          // 30 requests in a row, all 200
+test("a removed key no longer works", …)                 // 401
+test("a request with no version is told to update", …)  // 426 with the words
+test("versions compare by their release", …)            // tooOld("0.16.1","0.17.0") true; "0.17.1.dev4+gabc" and "unknown" false
+test("stand-in routes are not there without STAND_INS", …)
+```
+
+`service/test/openapi.test.ts`:
+
+```ts
+test("openapi.json in the repository is what the Worker serves", …)
 ```
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `cd service && npm ci && npx vitest run test/auth.test.ts test/members.test.ts`
+Run: `cd service && npm ci && npx vitest run test/signin.test.ts test/members.test.ts test/openapi.test.ts`
 Expected: FAIL, the routes do not exist yet.
 
-- [ ] **Step 3: Write the frame, the tables and the routes**
+- [ ] **Step 3: Write the frame, the tables, better-auth's set-up and the routes**
+
+better-auth's tables go into `schema.ts` as `npx auth@1.7.14 generate
+--config worker/signin/auth.ts` prints them; the service's own follow. Then
+`npx drizzle-kit generate`, `npm run openapi`.
 
 - [ ] **Step 4: Run the tests again**
 
-Run: `cd service && npx vitest run test/auth.test.ts test/members.test.ts`
+Run: `cd service && npx vitest run test/signin.test.ts test/members.test.ts test/openapi.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add service
-git commit -m "Band service: its frame, tables, sign-in, members and keys"
+git commit -m "Band service: its frame, tables, sign-in by email, members and keys"
 ```
 
 ---
@@ -479,19 +631,25 @@ git commit -m "Band service: its frame, tables, sign-in, members and keys"
 ### Task 3: The service's side for РЭХА, and the band's chat
 
 **Files:**
-- Create: `service/worker/reha.ts` (the `/api/reha/*` routes), `service/worker/takes.ts` (upserting a take, switching generations, the comment shift), `service/worker/chat.ts`, `service/worker/purge.ts`
+- Create: `service/worker/takes/` `reha-routes.ts` (`PUT` and `DELETE /api/reha/takes/:uid`, `ready`, `hello`), `store.ts` (upserting a take, switching generations, the comment shift), `purge.ts`
+- Create: `service/worker/uploads/routes.ts` (the three file routes)
+- Create: `service/worker/chat/` `tell.ts` (puts events on the queue), `consume.ts` (the queue's consumer), `telegram.ts` (the Bot API, and the stand-in), `failures.ts`
 - Create: `service/test/reha.test.ts`, `service/test/chat.test.ts`
 
 **Interfaces:**
-- Consumes: Task 2's `rehaKey`, `json`, `now`.
-- Produces: `putTake(env, uid, meta: TakeMeta)`,
-  `ready(env, uid, gen, what)`, `trash(env, uid)`,
-  `shiftComments(env, uid, cutStart)`,
-  `tellChat(env, event: ChatEvent, origin: string, api = telegram)` where
-  `ChatEvent = {kind: "take", take_uid} | {kind: "comment", comment_id}`
-  and `telegram = {send(text): Promise<number>, edit(messageId, text): Promise<void>}`,
-  `purgeTrash(env)` deleting takes trashed more than 30 days ago with
-  their R2 objects (by listing `takes/<uid>/`).
+- Consumes: Task 2's `needKey`, `now`, `database`, `app`.
+- Produces: `putTake(env, uid, meta: TakeMeta)`, `ready(env, uid, gen,
+  what)`, `trash(env, uid)`, `shiftComments(env, uid, cutStart)`;
+  `tellChat(env, event: ChatEvent)` where `ChatEvent = {kind: "take",
+  take_uid} | {kind: "comment", comment_id} | {kind: "failure", what:
+  string, detail: string}`, which only puts the event on `env.CHAT`;
+  `consumeChat(batch, env, telegram)` with `telegram = {send(chatId, text):
+  Promise<number>, edit(chatId, messageId, text): Promise<void>}`;
+  `reportFailure(env, what, error)`, called from `app.onError`, the
+  `scheduled` handler and the queue's own errors, which logs the error and
+  calls `tellChat` with `{kind: "failure"}`; `purgeTrash(env)` deleting
+  takes trashed more than 30 days ago with their R2 objects (by listing
+  `takes/<uid>/`).
 
 Rules the tests pin:
 
@@ -502,18 +660,25 @@ Rules the tests pin:
   first time), applies `pending_cut` for a newer generation, deletes older
   generations' objects, and calls `tellChat` with `{kind: "take"}` once per
   take, the first time it is shown.
-- The chat, through `ctx.waitUntil`: the first shown take of a rehearsal
-  sends “New takes from Thursday, 30 October: Viasna 11” and keeps the
-  message id in `chat` (`kind = "takes"`, `about` = the rehearsal's uid);
-  each next one within 3 hours of `started_at` edits it to add “, Viasna
-  12”. A member's first comment on a take sends “Alex on Viasna 12: 1:42
-  “The bridge drags here””; their next ones on it within 3 hours are added
-  as “, 2:58 “Fill too long?””. Each take and each comment is a link
-  (`<a href>`, `parse_mode: "HTML"`, previews off) to its place:
-  `<origin>/takes/<uid>` and `<origin>/takes/<uid>?at=<seconds>`. Marks
-  from РЭХА are never posted. Without `TELEGRAM_BOT_TOKEN` and
-  `TELEGRAM_CHAT_ID` nothing is sent. A Telegram error is logged and does
-  not fail the request.
+- The consumer handles one batch at a time (`max_concurrency: 1`), so the
+  edits of one message stay in order. The first shown take of a rehearsal
+  sends “New takes from Thursday, 30 October: Viasna 11” to
+  `TELEGRAM_CHAT_ID` and keeps the message id in `chat` (`kind = "takes"`,
+  `about` = the rehearsal's uid); each next one within 3 hours of
+  `started_at` edits it to add “, Viasna 12”. A member's first comment on
+  a take sends “Alex on Viasna 12: 1:42 “The bridge drags here””; their
+  next ones on it within 3 hours are added as “, 2:58 “Fill too long?””.
+  Each take and each comment is a link (`<a href>`, `parse_mode: "HTML"`,
+  previews off) to its place: `<origin>/takes/<uid>` and
+  `<origin>/takes/<uid>?at=<seconds>`. Marks from РЭХА are never posted.
+- A Telegram error retries the message (`message.retry()`), up to the
+  queue's 5 tries; a send that worked is never sent again, because the
+  `chat` row is written before the message is acknowledged.
+- A failure goes to `OWNER_TELEGRAM_ID` alone: “The band service failed:
+  <what> at <time>. <detail>”, where `what` is the route or the job. The
+  same `what` is told once an hour at most, by `failure_notice`.
+- Without `TELEGRAM_BOT_TOKEN` nothing is sent, and without
+  `OWNER_TELEGRAM_ID` no failure is told.
 - The weekday and date come from the rehearsal's `date` as a calendar day,
   with no time zone.
 - `purgeTrash` runs from the Worker's `scheduled` handler, once a day.
@@ -538,15 +703,19 @@ test("songs match by title, case-blind", …)
 test("the trash is emptied after 30 days, files and all", …)
 ```
 
-`service/test/chat.test.ts`, with a fake `telegram` that records calls:
+`service/test/chat.test.ts`, calling `consumeChat` with a fake `telegram`
+that records calls, and checking that `tellChat` puts events on the queue:
 
 ```ts
+test("a shown take goes on the queue", …)
 test("the first take of a rehearsal starts a message", …)
-expect(fake.sent[0]).toContain("New takes from Thursday, 30 October: ")
+expect(fake.sent[0].text).toContain("New takes from Thursday, 30 October: ")
 test("the next take within 3 hours is added to it", …)
 test("after 3 hours a new message starts", …)
 test("comments go per person and take", …)
 test("marks from REHA are not posted", …)
+test("a telegram error is tried again, a sent message is not sent twice", …)
+test("a failure is told to the owner alone, once an hour", …)
 test("without a bot token nothing is sent", …)
 ```
 
@@ -555,11 +724,11 @@ test("without a bot token nothing is sent", …)
 Run: `cd service && npx vitest run test/reha.test.ts test/chat.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Write `reha.ts`, `takes.ts`, `chat.ts`, `purge.ts`**
+- [ ] **Step 3: Write the takes, uploads and chat folders, and `npm run openapi`**
 
 - [ ] **Step 4: Run the tests again**
 
-Run: `cd service && npx vitest run test/reha.test.ts test/chat.test.ts`
+Run: `cd service && npx vitest run test/reha.test.ts test/chat.test.ts test/openapi.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -574,17 +743,18 @@ git commit -m "Band service: takes from REHA, uploads, trash and the band's chat
 ### Task 4: The service's side for the band
 
 **Files:**
-- Create: `service/worker/band.ts` (feed, songs, takes, stars, seen, comments, trash, restore), `service/worker/files.ts` (`/files/*`)
+- Create: `service/worker/takes/band-routes.ts` (feed, songs, a take's page, stars, seen, trash, restore), `service/worker/comments/routes.ts`, `service/worker/files/routes.ts` (`/files/*`)
 - Create: `service/test/band.test.ts`, `service/test/files.test.ts`
 
 **Interfaces:**
-- Consumes: Task 2's `signedIn`; Task 3's `tellChat`, `purgeTrash`.
-- Produces the band's API in the shared contract, and these row shapes,
-  which Task 5 renders:
+- Consumes: Task 2's `needMember`, `app`; Task 3's `tellChat`, `purgeTrash`.
+- Produces the band's API in the shared contract, every route with
+  `createRoute` and zod schemas, and these row shapes, which Task 5
+  renders through the types Hono RPC gives it:
 
 ```ts
 type TakeRow = { uid: string; name: string; song_id: number | null; date: string;
-  duration_sec: number; marks: number; stars: { member_id: number; initial: string }[];
+  duration_sec: number; marks: number; stars: { member_id: string; initial: string }[];
   starred_at_rehearsal: boolean; is_new: boolean }
 type SongRow = { id: number | "not-named"; title: string; takes: number; last_date: string;
   best: TakeRow | null; has_new: boolean }
@@ -608,6 +778,8 @@ Rules the tests pin:
   last.
 - A comment: `at` from 0 to the take's length, text 1 to 2000 characters;
   a reply's `at` is its parent's. `tellChat({kind: "comment"})` on each.
+- A removed member's stars and comments still show with their name and
+  initial.
 - A take's page lists the files as `{name, mp3, flac, mid}` and says which
   FLAC are still coming (`flac_gen` below `shown_gen`).
 - `/files/*` needs a session, answers `Range` with 206, and with
@@ -625,6 +797,7 @@ test("songs come by their last take, not named last", …)
 test("the best take is the most starred, newest on a tie", …)
 test("the star at rehearsal does not count for the best take", …)
 test("a reply takes its parent's moment", …)
+test("a removed member's comments keep their name", …)
 test("files need a session and answer a range", …)
 test("a download is named after the take and the track", …)
 test("restore puts a take back in its song", …)
@@ -635,11 +808,11 @@ test("restore puts a take back in its song", …)
 Run: `cd service && npx vitest run test/band.test.ts test/files.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Write `band.ts` and `files.ts`**
+- [ ] **Step 3: Write the routes, then `npm run openapi`**
 
 - [ ] **Step 4: Run the tests again**
 
-Run: `cd service && npx vitest run test/band.test.ts test/files.test.ts`
+Run: `cd service && npx vitest run test/band.test.ts test/files.test.ts test/openapi.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -658,15 +831,14 @@ Start from the mockups in `/mnt/project-files/band-service/part-1/mockup-src/`
 design system's components the way the pages should.
 
 **Files:**
-- Create: `service/src/main.tsx`, `service/src/router.ts` (paths, no library), `service/src/api.ts` (the band's API, typed), `service/src/service.css` (Tailwind with `@source` for `../ui/src`)
-- Create: `service/src/pages/` `Shell.tsx` (left column on a computer, one page at a time on a phone, under 768 px), `First.tsx` (New since you were here, Songs), `Song.tsx`, `Take.tsx`, `Comments.tsx`, `Downloads.tsx`, `Trash.tsx`, `Members.tsx`, `SignIn.tsx`, `Setup.tsx`, `Name.tsx`, `DeviceLink.tsx` (with a QR code from `qrcode-generator`)
-- Create: `service/src/player/mp3.ts` (frames of an MP3), `service/src/player/player.ts`
-- Create: `service/e2e/fixtures.ts` (a made-up band: songs Viasna, Pałyn, Kupalle; members Alex, Dzima, Ira, Paŭlik; `page.route` answers for every call), `service/e2e/*.spec.ts`, `service/playwright.config.ts`
-- Create: `service/src/player/mp3.test.ts`
+- Create: `service/src/main.tsx`, `service/src/routes.tsx` (TanStack Router, routes written in code, no router plugin), `service/src/api.ts` (`hc<AppType>("/")` and a TanStack Query hook per call), `service/src/auth.ts` (better-auth's React client with `emailOTPClient()`), `service/src/service.css` (Tailwind with `@source` for `../ui/src`)
+- Create, a folder per feature: `service/src/shell/Shell.tsx` (left column on a computer, one page at a time on a phone, under 768 px), `service/src/signin/SignIn.tsx`, `service/src/signin/Name.tsx`, `service/src/members/Members.tsx`, `service/src/feed/First.tsx` (New since you were here, Songs), `service/src/songs/Song.tsx`, `service/src/takes/Take.tsx`, `service/src/takes/Comments.tsx`, `service/src/takes/Downloads.tsx`, `service/src/takes/player/mp3.ts` (frames of an MP3), `service/src/takes/player/player.ts`, `service/src/trash/Trash.tsx`
+- Create: `service/e2e/seed.ts`, `service/e2e/*.spec.ts`, `service/playwright.config.ts`, `service/test/fixtures/` (six short MP3 tracks made by `make_tracks.py` from the playback test)
+- Create: `service/src/takes/player/mp3.test.ts`
 
 **Interfaces:**
-- Consumes: Task 4's API and row shapes; Task 2's `/api/me`, members and
-  keys.
+- Consumes: `AppType` from `worker/index.ts` (a type-only import, so no
+  Worker code reaches the pages); the band's API; better-auth's client.
 - Produces: `parseFrames(bytes: Uint8Array): {frames: Uint8Array[],
   samplesPerFrame: number, sampleRate: number}`;
   `class Player { constructor(tracks: {url, channels, gain}[]); play(at);
@@ -681,31 +853,56 @@ source and starts again from the frame at that time. A browser whose
 `AudioDecoder` cannot decode MP3 shows, in place of ▶: “This browser cannot
 play the takes. Try Chrome, Edge or Safari, updated.”
 
+Data: a star, a seen, a comment and a closed comment are TanStack Query
+mutations that invalidate the take and the feed. A 401 from any call sends
+the page to `/signin` with the path it was on, and back there after
+signing in.
+
 Paths: `/` (the first screen; on a computer it opens on **New**, or with
-nothing new on the song played last), `/songs/:id`, `/takes/:uid`
-(`?at=` puts the playhead there), `/trash`, `/members`, `/signin/:token`,
-`/setup`, `/name`.
+nothing new on the song played last), `/songs/$id`, `/takes/$uid`
+(`?at=` puts the playhead there), `/trash`, `/members`, `/signin`,
+`/name`.
+
+Sign-in, on `/signin`: the address field and **Send code**; then “If this
+address is in the band, a code is on its way”, the code field and **Sign
+in**. A `CONFIRM_FIRST` answer shows its words in place of the code field.
+A first sign-in goes to `/name` with “What should the band call you?”.
 
 Words, exactly as the spec has them: **New since you were here**,
 **Songs**, **Not named**, **All takes**, **★ at rehearsal**, **Marks and
-comments**, **Comment at 1:42**, **Download tracks**, **Sign in**,
-**Sign in on another device**, “What should the band call you?”,
-**Sign out everywhere**, **Members**, **New link**, **Add member**,
-“Not opened yet”, “Ran out”, **Make a key for РЭХА**, **Remove**,
-**Trash**, **Restore**, “In the part cut off”.
+comments**, **Comment at 1:42**, **Download tracks**, **Send code**,
+**Sign in**, “What should the band call you?”, **Sign out everywhere**,
+**Members**, **Add member**, “Has not confirmed the address yet”, “Has not
+signed in yet”, **Make a key for РЭХА**, **Remove**, **Trash**,
+**Restore**, “In the part cut off”.
+
+The page tests run against the real Worker: `playwright.config.ts` starts
+`npm run build`, then `wrangler d1 migrations apply reha-band --local --env
+test --persist-to .wrangler/e2e` on a fresh folder, then `wrangler dev
+--env test --persist-to .wrangler/e2e --port 8799`. `e2e/seed.ts`, run once
+in Playwright's global set-up, makes a made-up band through the service's
+own routes only: the owner (alex@example.com) asks for a code and reads it
+from `/api/stand-ins/letters`; adds Dzima, Ira and Paŭlik, confirmed in the
+stand-in; makes a key; sends takes of the songs Viasna, Pałyn and Kupalle
+through the РЭХА routes with the fixture MP3s; and signs the members in to
+star and comment.
 
 - [ ] **Step 1: Write the failing tests**
 
-`service/src/player/mp3.test.ts`:
+`service/src/takes/player/mp3.test.ts`:
 
 ```ts
-test("an MP3's frames are found and counted", …) // a short MP3 made with lame-free fixture bytes in test/fixtures/
+test("an MP3's frames are found and counted", …) // a fixture MP3 in test/fixtures/
 expect(parseFrames(bytes).samplesPerFrame).toBe(1152)
 ```
 
 `service/e2e/` (titles in cp1252):
 
 ```ts
+test("sign in with a code, then the band asks for a name", …)
+test("an address not in the band gets the same answer", …)
+test("an unconfirmed address is told to confirm first", …)
+test("a removed member is sent to sign-in", …)
 test("the first screen shows what is new, then the songs", …)
 test("with nothing new the new card is not there", …)
 test("a take shows the path back to its song", …)          // Viasna > Viasna 12
@@ -713,36 +910,35 @@ test("a computer keeps the songs on the left", …)       // 1180x820 and 960x68
 test("a phone shows one page at a time with a back arrow", …) // 390x844
 test("a song page puts the best take on top", …)
 test("a take page has a lane per track with M and S", …)
+test("a star shows at once and stays after a reload", …)
 test("a comment is written at the playhead", …)
 test("a closed comment is greyed and stays", …)
 test("the star at rehearsal shows apart", …)
 test("download tracks says which originals are still coming", …)
-test("sign in needs a press, then asks for a name", …)
-test("a used link says to ask for a new one", …)
-test("members, links and keys are only for the owner", …)
+test("members show who has not confirmed or signed in yet", …)
+test("members and keys are only for the owner", …)
 test("trash lists takes and restores them", …)
 test("light and dark themes both draw", …)
 ```
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `cd service && npx vitest run src/player/mp3.test.ts && npx playwright test`
+Run: `cd service && npx vitest run src/takes/player/mp3.test.ts && npx playwright test`
 Expected: FAIL.
 
 - [ ] **Step 3: Write the pages and the player**
 
 - [ ] **Step 4: Run the tests again**
 
-Run: `cd service && npx vitest run src/player/mp3.test.ts && npm run build && npx playwright test`
+Run: `cd service && npx vitest run src/takes/player/mp3.test.ts && npx playwright test`
 Expected: PASS.
 
 - [ ] **Step 5: Play a real take by hand in the container's Chromium**
 
-Run `npx wrangler dev` with a take uploaded by `test/fixtures/upload.mjs`
-(six MP3 tracks made by `make_tracks.py` from the playback test), open it,
-press ▶, and check that the time moves and the tracks stay together while
-seeking. Expected: they do. Say in the ledger that real devices (Mac,
-iPhone, Windows) are still to be checked by Alex.
+With the page tests' `wrangler dev` still up, open a seeded take, press ▶,
+and check that the time moves and the tracks stay together while seeking.
+Expected: they do. Say in the ledger that real devices (Mac, iPhone,
+Windows) are still to be checked by Alex.
 
 - [ ] **Step 6: Commit**
 
@@ -772,9 +968,11 @@ git commit -m "Band service: the pages and the player"
   `put_take(uid, meta)`, `start_file(uid, gen, name, size) -> upload_id`,
   `put_part(uid, upload_id, number, gen, name, data) -> etag`,
   `finish_file(uid, upload_id, gen, name, parts)`,
-  `ready(uid, gen, what)`, `delete_take(uid)`; it raises `Offline` for a
-  network error or a timeout (60 s), `Gone` for a 404 with `gone`, and
-  `Refused(words)` for any other 4xx.
+  `ready(uid, gen, what)`, `delete_take(uid)`. Every request carries
+  `x-api-key: <secret>` and `X-Reha-Version: <rehearsal_recorder.__version__>`.
+  It raises `Offline` for a network error or a timeout (60 s), `Gone` for
+  a 404 with `gone`, and `Refused(words)` for any other 4xx, the 426
+  “Update РЭХА to send takes here” among them.
 
 РЭХА's tables (migration 0011, revises 0010):
 
@@ -842,8 +1040,14 @@ How it works:
 
 `tests/fake_band_service.py`: an `http.server` in a thread that keeps
 takes, uploads and parts in memory, answers the contract, and can be told
-to drop the connection for the next N calls, to forget an upload, or to
-refuse with words.
+to drop the connection for the next N calls, to forget an upload, to
+refuse with words, or to answer 426. It checks every request against
+`service/openapi.json` with `openapi-core` 0.23.1
+(`OpenAPI.from_file_path`, then `validate_request` through a small adapter
+for `http.server`'s request), answers a request that does not match with
+400 and what did not match, and keeps each such line in `fake.mismatches`.
+Without `openapi-core` installed, `test_sending.py` stops at once with
+“pip install openapi-core==0.23.1”, never skips.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -871,6 +1075,8 @@ ok("closing with takes left asks first", api.window_closing() is False)
 ok("close anyway closes", …)
 ok("disconnect forgets the queue", …)
 ok("the cloud folder sends nothing new while the service is chosen", …)
+ok("an old REHA is told to update", entry["state"] == "failed" and entry["error"] == "Update РЭХА to send takes here")
+ok("every request matches the service's description", fake.mismatches == [])   # last, after all the above
 ```
 
 - [ ] **Step 2: Run them to see them fail**
@@ -882,7 +1088,7 @@ Expected: FAIL (no module, no calls).
 
 - [ ] **Step 4: Run the tests again, and the suites the changed code touches**
 
-Run: `python tests/test_sending.py && python tests/test_store.py && python tests/test_engine.py > /tmp/engine.txt 2>&1; tail -3 /tmp/engine.txt`
+Run: `pip install openapi-core==0.23.1` once, then `python tests/test_sending.py && python tests/test_store.py && python tests/test_engine.py > /tmp/engine.txt 2>&1; tail -3 /tmp/engine.txt`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -987,46 +1193,49 @@ git commit -m "Settings: a switch between the cloud folder and a band service"
 ### Task 8: CI and going live
 
 **Files:**
-- Modify: `.github/workflows/checks.yml` (an output `service`: true for `service/*`, `ui/*` and `checks.yml`; a job `service` that runs `npm ci`, `npm run typecheck`, `npx vitest run`, `npm run build`, the browser install and `npx playwright test` in `service/`)
+- Modify: `.github/workflows/checks.yml` (an output `service`: true for `service/*`, `ui/*` and `checks.yml`; a job `service` that runs `npm ci`, `npm run typecheck`, `npx vitest run`, `npm run build`, the browser install and `npx playwright test` in `service/`; the app jobs pass `also: openapi-core==0.23.1` to `./.github/actions/app`, and the `app` output is also true for `service/openapi.json`)
 - Modify: `.github/workflows/release.yml` (a job `service · deploy` after both builds, not on a pre-release, and a choice “Put the service up again” for running it by hand)
-- Create: `service/scripts/deploy.mjs`
-- Modify: `service/README.md` (what the job needs)
+- Create: `service/scripts/deploy.mjs`, `service/scripts/deploy.test.mjs`
+- Modify: `service/README.md` (what the job needs), `tests/README.md` (`pip install openapi-core==0.23.1` before `run_all.py`)
 
 **Interfaces:**
 - `deploy.mjs` reads `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and the
   optional `SERVICE_DOMAIN`. It finds the D1 database `reha-band` with
   `wrangler d1 list --json`, creating it with `wrangler d1 create
-  reha-band` when there is none, and the R2 bucket `reha-band` the same
-  way; writes the database's id into `wrangler.jsonc` and, when
-  `SERVICE_DOMAIN` is set, `routes: [{"pattern": <domain>,
-  "custom_domain": true}]`; then runs `npm run build`, `wrangler d1
-  migrations apply reha-band --remote` and `wrangler deploy`. The edited
-  `wrangler.jsonc` is never committed: it lives only in the job's
-  checkout.
-- A later change to the tables is made in `worker/schema.ts`; `npx
+  reha-band` when there is none; the R2 bucket `reha-band` and the queue
+  `reha-band-chat` the same way; writes the database's id into
+  `wrangler.jsonc` and, when `SERVICE_DOMAIN` is set, `routes:
+  [{"pattern": <domain>, "custom_domain": true}]`; then runs `npm run
+  build`, `wrangler d1 migrations apply reha-band --remote` and `wrangler
+  deploy`. The edited `wrangler.jsonc` is never committed: it lives only
+  in the job's checkout. The Worker's settings are not touched: Alex sets
+  them in Cloudflare, and `keep_vars: true` keeps them through a deploy.
+- A later change to the tables is made in `worker/shared/schema.ts`; `npx
   drizzle-kit generate` writes the next migration from the difference, as
-  Alembic's autogenerate does for РЭХА, and both go in one commit. The
-  job applies the migrations not applied yet before it deploys, and D1 records them in its `d1_migrations` table.
-  D1 has no way back: undoing a change is another migration. A migration
-  only adds tables and columns, so the Worker still running from the
-  previous release keeps working in the moments before the new one is up.
-  The tests build every database from all the migrations in order.
+  Alembic's autogenerate does for РЭХА, and both go in one commit. The job
+  applies the migrations not applied yet before it deploys, and D1 records
+  them in its `d1_migrations` table. D1 has no way back: undoing a change
+  is another migration, and D1's Time Travel can put the whole database
+  back to a minute of the last 7 days. A migration only adds tables and
+  columns, so the Worker still running from the previous release keeps
+  working in the moments before the new one is up. The tests build every
+  database from all the migrations in order.
 - The deploy job, with no `CLOUDFLARE_API_TOKEN` secret, writes a notice
   and succeeds without deploying, so a release made before the service is
   set up is not red.
 - GitHub: secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; the
-  repository variable `SERVICE_DOMAIN`. The Worker's own secrets are set in
-  Cloudflare (the shared contract).
+  repository variable `SERVICE_DOMAIN`.
 
 - [ ] **Step 1: Check the deploy script without Cloudflare**
 
 `service/scripts/deploy.test.mjs` runs `deploy.mjs` with a fake `wrangler`
-on `PATH` that records its arguments and prints a made-up `d1 list`.
+on `PATH` that records its arguments and prints made-up lists.
 
 ```js
 test("the database id and the domain go into the config", …)
 test("no domain keeps workers.dev only", …)
-test("a missing database is created first", …)
+test("a missing database, bucket or queue is made first", …)
+test("no token: a notice and no deploy", …)
 ```
 
 Run: `cd service && node --test scripts/deploy.test.mjs`
@@ -1041,7 +1250,7 @@ Expected: every check green, the new `service` job among them.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add .github service/scripts service/README.md
+git add .github service/scripts service/README.md tests/README.md
 git commit -m "CI: check the band service, and put it up with a release"
 ```
 
@@ -1061,16 +1270,21 @@ What the page holds, in this order (spec, “On reha.stream”):
 2. A story from Alex's band of how they use it, first person, in the
    manner of the site's stories. Every made-up detail is listed in the
    pull request for Alex to check before it goes live.
-3. **Run your own**: what it needs (a Cloudflare account; a Telegram bot,
-   only for the chat's messages), what it costs (files up to 10 GB free,
-   then $0.015 per GB a month), and the steps one by one, for a musician:
-   make a GitHub account and fork РЭХА's repository; make a Cloudflare
-   account and an API token (the permissions named one by one); put the
-   token and the account id in the fork's secrets; run **Put the service
-   up again** in the fork's Actions; set `SETUP_SECRET` (and the bot's two,
-   if wanted) in Cloudflare; open `/setup` at the address Cloudflare gave
-   (on workers.dev); add the members and send them their links; make a key
-   and paste it into РЭХА. A band's own domain is not needed.
+3. **Run your own**: what it needs (a Cloudflare account; a domain of the
+   band's own on Cloudflare, since the sign-in letters can only come from
+   one, while the service itself can stay on its workers.dev address; a
+   Telegram bot, only for the chat's messages), what it costs (files up
+   to 10 GB free, then $0.015 per GB a month; the domain is paid to whoever
+   sells it), and the steps one by one, for a musician: make a GitHub
+   account and fork РЭХА's repository; make a Cloudflare account, add the
+   domain to it and turn on its mail (Email Routing); make two API tokens,
+   one for deploying and one for the list of addresses (the permissions
+   named one by one); put the first token and the account id in the fork's
+   secrets; run **Put the service up again** in the fork's Actions; set the
+   Worker's settings in Cloudflare (each named, with what it is for); open
+   the service's address, press **Send code**, confirm Cloudflare's letter,
+   and sign in with the code; add the members; make a key and paste it into
+   РЭХА.
 4. That the code is open, under FSL, with a link to `service/` on GitHub.
 
 The words are checked with the humanizer skill before the commit.
@@ -1141,14 +1355,24 @@ the steps one at a time and waits for each:
    unproxied (the site's records for Vercel and the TXT record for Google
    Search Console); the nameservers changed at the registrar; the site
    checked on reha.stream.
-2. A Telegram bot from BotFather, added to the band's group; the chat's id.
-3. An API token in Cloudflare; GitHub secrets `CLOUDFLARE_API_TOKEN` and
+2. Cloudflare's mail (Email Routing) turned on for reha.stream.
+3. A Telegram bot from BotFather, added to the band's group; the chat's
+   id; Alex sends the bot /start, and his own Telegram id.
+4. Two API tokens in Cloudflare: one for deploying, one that may only edit
+   Email Routing addresses. GitHub secrets `CLOUDFLARE_API_TOKEN` and
    `CLOUDFLARE_ACCOUNT_ID`, the variable `SERVICE_DOMAIN` set to
    band.reha.stream; **Put the service up again** run in Actions.
-4. `SETUP_SECRET`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` set on the
-   Worker in Cloudflare.
-5. band.reha.stream/setup; the members added and their links sent; a key
-   made and pasted into РЭХА at the rehearsal room.
+5. The Worker's settings in Cloudflare, as the shared contract lists them,
+   with `OWNER_EMAIL` his address and `LETTERS_FROM` band@reha.stream.
+6. Alex opens band.reha.stream, presses **Send code**, confirms
+   Cloudflare's letter, presses **Send code** again and signs in; adds the
+   members; makes a key and pastes it into РЭХА at the rehearsal room.
+7. Two things only a real account shows, checked then: that a sign-in and
+   an upload part each stay under the free plan's 10 ms of CPU (Workers
+   Logs show the CPU time of each request), and that taking an unconfirmed
+   address off Cloudflare's list and adding it back sends Cloudflare's
+   letter again (the spec's Call 4). If either fails, Claude says so and
+   proposes the fix before anything else.
 
 Whatever in the site's **Run your own** steps turns out wrong while Alex
 follows them is fixed on the page before it goes live.
@@ -1160,7 +1384,8 @@ follows them is fixed on the page before it goes live.
 - Task 1 comes before Tasks 6 and 7.
 - Tasks 2, 3, 4 and 5 come in that order and need nothing from РЭХА's side
   but the shared contract, so they can run beside Tasks 1, 6 and 7 in their
-  own worktree.
+  own worktree. Task 6's fake service reads `service/openapi.json`, so
+  Task 6 starts once Task 4 has committed it.
 - Task 9 needs nothing else and can run beside either line.
 - Task 8 comes after Task 5; Task 10 after Task 7; Task 11 after the
   release.
@@ -1169,7 +1394,8 @@ follows them is fixed on the page before it goes live.
 
 ## Calls made in this plan
 
-Decisions the spec left open, made here and listed for Alex to check:
+Decisions neither the spec nor the architecture rounds made, made here and
+listed for Alex to check:
 
 1. Files are named by the track's place in the take. A crop makes a new
    generation of them; the service plays the old files until the new MP3s
@@ -1190,18 +1416,22 @@ Decisions the spec left open, made here and listed for Alex to check:
 8. Words the spec did not give: “Not in the band service” on a take that
    failed; “Send every ★ take to the band service” on **Send starred**; the
    panel's sentence on what goes up; “Making the files” while the MP3 and
-   FLAC files are made.
+   FLAC files are made; “That code does not work. Press Send code for a new
+   one.”; “This address is already in the band”; “Add the Cloudflare token
+   for addresses first”; the letter's subject “<code> is your code for
+   <host>” and its two lines; the failure message to Alex.
 9. A take being sent goes on being sent if the switch moves back to the
    cloud folder. **Disconnect** stops it and forgets it.
 10. A browser that cannot decode MP3 through WebCodecs gets a message,
     not a slower way of playing.
 11. РЭХА's sending is tested in the repository's own style of Python suite
-    (`tests/test_sending.py`, run by `run_all.py`), against a fake service;
-    the repository has no pytest.
-12. The release job finds or makes the D1 database and the R2 bucket,
-    both called `reha-band`, and takes the address from the GitHub
-    variable `SERVICE_DOMAIN`. A release made before the service is set up
-    skips the deploy instead of failing.
+    (`tests/test_sending.py`, run by `run_all.py`), against a fake service
+    that checks every request against `service/openapi.json` with
+    `openapi-core`; the repository has no pytest.
+12. The release job finds or makes the D1 database, the R2 bucket and the
+    queue, called `reha-band` and `reha-band-chat`, and takes the address
+    from the GitHub variable `SERVICE_DOMAIN`. A release made before the
+    service is set up skips the deploy instead of failing.
 13. **Run your own** on the site goes through a fork of the repository on
     GitHub and its Actions, the same way Alex's copy is put up, so the
     steps are tried for real.
@@ -1209,9 +1439,35 @@ Decisions the spec left open, made here and listed for Alex to check:
     size.
 15. A member's name is 1 to 40 characters, a comment 1 to 2000.
 16. All of it goes in one pull request.
-17. The Worker's routes are written with Hono, the small router
-    Cloudflare's own examples use on Workers; the pages' few paths need no
-    library.
-18. The tables are a Drizzle schema, drizzle-kit makes the migrations
-    from it, and Wrangler applies them. Prisma also works with D1, but it
-    brings much more code into a Worker that has 10 ms of CPU a request.
+17. better-auth is built anew for each request, since a Worker's bindings
+    exist only inside one; its address is the request's own.
+18. Signing in uses better-auth's own routes and React client, so its
+    limits on tries apply; everything else goes through Hono RPC.
+19. The owner's row is made the first time a code is asked for
+    `OWNER_EMAIL`, with better-auth's admin role. **Remove** is the admin
+    plugin's ban with no end, so the member's row, stars and comments stay;
+    neither **Remove** nor **Sign out everywhere** works on the owner.
+20. РЭХА's keys belong to the owner's user, have no end and no limit on
+    requests; РЭХА sends one in `x-api-key`, the plugin's own header.
+21. РЭХА sends its version in `X-Reha-Version`; the lowest the service
+    takes is a constant in its code, `MIN_REHA_VERSION`, starting at
+    0.0.0, so no РЭХА is turned away today. A clone run from source counts
+    by its release number, and one never installed (“unknown”) always
+    passes, since Alex runs main from source.
+22. The chat's queue is read one batch at a time, so the edits of one
+    message stay in order; a failure is told to Alex once an hour at most
+    for the same route or job, kept in a small table.
+23. The page tests use stand-ins for letters, Cloudflare's list and
+    Telegram, switched on only in `wrangler.jsonc`'s `test` environment;
+    their reading routes answer 404 everywhere else. The made-up band is
+    made through the service's own routes, so the seed tests them too.
+24. `service/openapi.json` is kept in the repository, and a service test
+    fails when it is not what the Worker serves.
+25. The pages' routes are written in code, not made by TanStack's router
+    plugin from file names; there are seven of them.
+26. The settings are kept through a deploy by `keep_vars: true`, so Alex
+    sets them once, in Cloudflare.
+27. An unconfirmed address in the band is told to confirm first, which
+    tells a stranger who types it that it is in the band. The spec asks
+    for that line; it holds only until the member presses Cloudflare's
+    button.
