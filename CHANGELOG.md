@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.18.0
 
 - **A home for the band in the band service.** The service opens on
   **Home**: each song with its best take, the latest marks and the takes the
