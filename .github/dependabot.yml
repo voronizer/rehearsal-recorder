@@ -27,6 +27,27 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
+  # The band service and the website keep lockfiles of their own. Their
+  # pull requests run only their own checks, and the website's gets no
+  # preview on Vercel (checks.yml).
+  - package-ecosystem: "npm"
+    directory: "/service"
+    schedule:
+      interval: "weekly"
+    groups:
+      service:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/site"
+    schedule:
+      interval: "weekly"
+    groups:
+      site:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
   # Quiet while requirements.txt names packages without versions — there is
   # no constraint to raise. It starts working the day anything is pinned.
   - package-ecosystem: "pip"
