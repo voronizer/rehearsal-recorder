@@ -14,10 +14,10 @@ import { member, reha } from "../e2e/seed"
   Who plays what, and who sees what:
     Vik      drums.
     Alex     bass; the owner.
-    Ivan     guitar. The pictures of a take and a song are his: he has
-             heard everything, and wrote on Viasna 12.
+    Ivan     guitar. The pictures of a take, a song and the marks are
+             his: he has heard everything, and marked Viasna 12.
     Ira      vocals. The first page is hers: she has not opened this
-             week's takes yet, and the others wrote on takes she had heard.
+             week's takes yet, and the others marked takes she had heard.
 */
 
 export const STATE = new URL("./.state/", import.meta.url)
@@ -121,6 +121,8 @@ export default async function seed() {
   await confirm(owner, "alex@example.com")
   await signIn(owner, "alex@example.com")
   await owner.put("/api/me", { data: { name: "Alex" } })
+  // A name for the pictures' band, made up for them.
+  await owner.put("/api/band", { data: { name: "Kapela" } })
   await owner.storageState({ path: as("alex") })
   const vik = await member(owner, "vik@example.com", "Vik", as("vik"))
   const ivan = await member(owner, "ivan@example.com", "Ivan", as("ivan"))
@@ -165,11 +167,17 @@ export default async function seed() {
     for (const k of tracks) await send.file(uid, `${k.position}.flac`, "fLaC made up")
     await send.post(`/api/reha/takes/${uid}/ready`, { gen: 1, what: "flac" })
   }
-  const say = async (api: APIRequestContext, take: string, at: number, text: string, parent_id?: number) => {
-    const res = await api.post(`/api/takes/${takes[take]}/comments`, { data: { at, text, parent_id } })
-    if (!res.ok()) throw new Error(`comment: ${res.status()} ${await res.text()}`)
-    return ((await res.json()) as { id: number }).id
+  const labels = (await (await owner.get("/api/labels")).json()) as { id: number; name: string }[]
+  const label = (name: string) => labels.find((l) => l.name === name)!.id
+  const ok = async (res: Awaited<ReturnType<APIRequestContext["fetch"]>>) => {
+    if (!res.ok()) throw new Error(`${res.url()}: ${res.status()} ${await res.text()}`)
+    return (await res.json()) as { id: number }
   }
+  /** A mark at `at` with one of the band's four labels. */
+  const mark = async (api: APIRequestContext, take: string, at: number, name: string, note: string) =>
+    (await ok(await api.post(`/api/takes/${takes[take]}/marks`, { data: { at, label_id: label(name), note } }))).id
+  /** A comment under a mark. */
+  const talk = (api: APIRequestContext, id: number, text: string) => api.post(`/api/marks/${id}/comments`, { data: { text } }).then(ok)
   const see = async (api: APIRequestContext, names: string[]) => {
     for (const name of names) await api.post(`/api/takes/${takes[name]}/seen`)
   }
@@ -178,30 +186,30 @@ export default async function seed() {
   // The three rehearsals before this week's, heard by everyone.
   const earlier = TAKES.filter((t) => t.back > 0)
   for (const [n, t] of earlier.entries()) await sendTake(t, n)
-  const bridge = await say(ira, "Viasna 3", 104, "The bridge, finally! Let's play it like this every time.")
-  await say(owner, "Viasna 3", 104, "Same tempo next week, then.", bridge)
+  const bridge = await mark(ira, "Viasna 3", 104, "Keep this", "The bridge, finally! Let's play it like this every time.")
+  await talk(owner, bridge, "Same tempo next week, then.")
   for (const api of band) await see(api, Object.keys(takes))
   await star(ira, "Viasna 3")
   await star(owner, "Viasna 3")
   await star(vik, "Viasna 8")
   await star(ira, "Pałyn 2")
   // Written after Ira had heard those takes: new for her.
-  await say(vik, "Viasna 8", 130, "Let's take this bit faster next time.")
-  await say(owner, "Kupalle 1", 280, "The ending is long. Two bars less?")
+  await mark(vik, "Viasna 8", 130, "Do again", "Let's take this bit faster next time.")
+  await mark(owner, "Kupalle 1", 280, "Note", "The ending is long. Two bars less?")
 
   // This week's rehearsal. Ira has not opened it yet; the others have.
   const now = TAKES.filter((t) => t.back === 0)
   for (const [n, t] of now.entries()) await sendTake(t, earlier.length + n)
   const tonight = now.map((t) => `${t.song} ${t.number}`)
   for (const api of [owner, vik, ivan]) await see(api, tonight)
-  const drags = await say(ivan, "Viasna 12", 102, "The bridge drags here.")
-  await say(vik, "Viasna 12", 102, "Not the drums. I soloed them.", drags)
-  await say(owner, "Viasna 12", 102, "It's the bass. Sorry.", drags)
-  await say(owner, "Viasna 12", 231, "Let's end all together on four.")
+  const drags = await mark(ivan, "Viasna 12", 102, "Went wrong", "The bridge drags here.")
+  await talk(vik, drags, "Not the drums. I soloed them.")
+  await talk(owner, drags, "It's the bass. Sorry.")
+  await mark(owner, "Viasna 12", 231, "Do again", "Let's end all together on four.")
   for (const api of [vik, ivan, owner]) await star(api, "Viasna 12")
 
-  const feed = (await (await owner.get("/api/feed")).json()) as { songs: { id: number; title: string }[] }
-  const songs = Object.fromEntries(feed.songs.map((s) => [s.title, s.id]))
+  const list = (await (await owner.get("/api/songs")).json()) as { songs: { id: number; title: string }[] }
+  const songs = Object.fromEntries(list.songs.map((s) => [s.title, s.id]))
   writeFileSync(new URL("band.json", STATE), JSON.stringify({ takes, songs } satisfies Pictured, null, 2))
   for (const api of band) await api.dispose()
 }

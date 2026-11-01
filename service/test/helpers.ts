@@ -145,6 +145,13 @@ export function takeMeta(over: Record<string, unknown> = {}) {
 
 export const TAKE = "0b7e4c1a-9d2f-4e6b-8a3c-5f1d7e9b2a40"
 
+const rehearsals = new Map<string, string>()
+/** One rehearsal a day. */
+const rehearsalOn = (date: string) => {
+  if (!rehearsals.has(date)) rehearsals.set(date, crypto.randomUUID())
+  return rehearsals.get(date)!
+}
+
 /** A take РЭХА sent whose MP3s are up, so the band sees it. */
 export async function shownTake(
   over: Record<string, unknown> & { uid?: string; date?: string } = {}
@@ -152,7 +159,7 @@ export async function shownTake(
   const { putTake, ready } = await import("../worker/takes/store")
   const uid = over.uid ?? crypto.randomUUID()
   const { uid: _, date, ...meta } = over
-  const rehearsal = date ? { uid: crypto.randomUUID(), name: "Rehearsal", date } : REHEARSAL
+  const rehearsal = date ? { uid: rehearsalOn(date), name: "Rehearsal", date } : REHEARSAL
   const bindings = env as never
   await putTake(bindings, uid, takeMeta({ rehearsal, ...meta }) as never)
   await ready(bindings, uid, 1, "mp3", ORIGIN)
@@ -163,3 +170,46 @@ export async function shownTake(
 export async function named(cookie: string, name: string): Promise<void> {
   expect((await put("/api/me", { name }, cookie)).status).toBe(200)
 }
+
+export const patch = (path: string, body: unknown, cookie?: string) =>
+  call(path, { method: "PATCH", body: JSON.stringify(body) }, cookie)
+
+export const del = (path: string, cookie?: string, body?: unknown) =>
+  call(path, { method: "DELETE", ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, cookie)
+
+/** A route's answer as JSON, after checking it said 200. */
+export async function read<T = any>(path: string, cookie?: string): Promise<T> {
+  const res = await call(path, {}, cookie)
+  expect(res.status, `GET ${path}`).toBe(200)
+  return (await res.json()) as T
+}
+
+/** What a change answered: its status, and its JSON. */
+export async function answer<T = any>(res: Promise<Response>): Promise<{ status: number; body: T }> {
+  const r = await res
+  return { status: r.status, body: (await r.json().catch(() => null)) as T }
+}
+
+/** The member opened the take. */
+export const open = async (cookie: string, uid: string) =>
+  expect((await post(`/api/takes/${uid}/seen`, {}, cookie)).status).toBe(200)
+
+export const starIt = async (cookie: string, uid: string) =>
+  expect((await post(`/api/takes/${uid}/star`, {}, cookie)).status).toBe(200)
+
+/** A member's mark on a take; the first label unless `label_id` says. */
+export async function markAt(cookie: string, uid: string, at: number, note: string, label_id?: number) {
+  const res = await post(`/api/takes/${uid}/marks`, { at, note, label_id }, cookie)
+  expect(res.status, await res.clone().text()).toBe(200)
+  return (await res.json()) as { id: number; at: number; note: string; label_id: number }
+}
+
+export async function commentOn(cookie: string, mark: number, text: string) {
+  const res = await post(`/api/marks/${mark}/comments`, { text }, cookie)
+  expect(res.status, await res.clone().text()).toBe(200)
+  return (await res.json()) as { id: number; text: string }
+}
+
+/** The band's labels, in their order. */
+export const labelsOf = (cookie: string) =>
+  read<{ id: number; name: string; colour: string; position: number; marks: number }[]>("/api/labels", cookie)

@@ -10,6 +10,7 @@ const WORDS: Record<number, string> = {
   403: "Only the owner can do this",
   404: "Not there",
   409: "Already there",
+  413: "Too big",
   426: "РЭХА is too old for the service",
 }
 

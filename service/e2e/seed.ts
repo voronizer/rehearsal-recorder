@@ -10,11 +10,13 @@ import { addMember, as, BASE, confirm, HEADERS, signIn, STATE, type Band } from 
   playwright.config.ts), and each changes only what no other test reads.
 
   Who reads what:
-    Paŭlik   only the first screen's test; he opened Viasna 12 before the
-             others wrote on it, so its comments are new for him.
+    Paŭlik   only Home's tests; he opened Viasna 12 before the others
+             marked it, so its marks are new for him.
     Ira      stars Pałyn 3, which nobody else stars.
-    Dzima    writes on Pałyn 9 and closes Ira's comment on Kupalle 2.
-    Alex     the owner's pages, the trash, and pages only looked at.
+    Dzima    marks Pałyn 9, and comments on, closes and opens again
+             Ira's mark on Kupalle 2.
+    Alex     the owner's pages, labels, songs, the trash, and pages only
+             looked at.
 */
 
 const REHEARSALS = {
@@ -158,22 +160,24 @@ export default async function seed() {
   // Deleted in РЭХА: it waits in the trash.
   await send.del(`/api/reha/takes/${takes["Viasna 4"]}`)
 
-  // Paŭlik opens Viasna 12 before the others write on it.
+  // Paŭlik opens Viasna 12 before the others mark it.
   await paulik.post(`/api/takes/${takes["Viasna 12"]}/seen`)
-  const say = async (api: APIRequestContext, take: string, at: number, text: string, parent_id?: number) => {
-    const res = await api.post(`/api/takes/${takes[take]}/comments`, { data: { at, text, parent_id } })
-    if (!res.ok()) throw new Error(`comment: ${res.status()} ${await res.text()}`)
-    return ((await res.json()) as { id: number }).id
+  const ok = async (res: Awaited<ReturnType<APIRequestContext["fetch"]>>) => {
+    if (!res.ok()) throw new Error(`${res.url()}: ${res.status()} ${await res.text()}`)
+    return (await res.json()) as { id: number }
   }
-  const drags = await say(dzima, "Viasna 12", 4, "The bridge drags here")
-  await say(owner, "Viasna 12", 4, "It's us waiting for the vocal. Let's count it in.", drags)
-  await say(ira, "Viasna 12", 7.5, "Fill too long?")
-  await say(ira, "Kupalle 2", 3, "Too quiet here")
+  const mark = async (api: APIRequestContext, take: string, at: number, note: string) =>
+    (await ok(await api.post(`/api/takes/${takes[take]}/marks`, { data: { at, note } }))).id
+  const drags = await mark(dzima, "Viasna 12", 4, "The bridge drags here")
+  await ok(await owner.post(`/api/marks/${drags}/comments`, { data: { text: "It's us waiting for the vocal. Let's count it in." } }))
+  await mark(ira, "Viasna 12", 7.5, "Fill too long?")
+  await mark(ira, "Kupalle 2", 3, "Too quiet here")
   await dzima.post(`/api/takes/${takes["Viasna 11"]}/star`)
   await ira.post(`/api/takes/${takes["Viasna 11"]}/star`)
 
-  const feed = (await (await owner.get("/api/feed")).json()) as { songs: { id: number; title: string }[] }
-  const songs = Object.fromEntries(feed.songs.map((s) => [s.title, s.id]))
-  writeFileSync(new URL("band.json", STATE), JSON.stringify({ takes, songs } satisfies Band, null, 2))
+  const list = (await (await owner.get("/api/songs")).json()) as { songs: { id: number; title: string }[] }
+  const songs = Object.fromEntries(list.songs.map((s) => [s.title, s.id]))
+  const rehearsals = { first: REHEARSALS.first.uid, second: REHEARSALS.second.uid }
+  writeFileSync(new URL("band.json", STATE), JSON.stringify({ takes, songs, rehearsals } satisfies Band, null, 2))
   for (const api of [owner, dzima, ira, paulik]) await api.dispose()
 }

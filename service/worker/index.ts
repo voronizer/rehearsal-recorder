@@ -12,8 +12,14 @@ import { standInRoutes, standIns } from "./signin/stand-ins"
 import { rehaRoutes } from "./takes/reha-routes"
 import { purgeTrash } from "./takes/purge"
 import { uploadRoutes } from "./uploads/routes"
-import { bandRoutes } from "./takes/band-routes"
-import { commentRoutes } from "./comments/routes"
+import { takeRoutes } from "./takes/band-routes"
+import { bandRoutes } from "./band/routes"
+import { homeRoutes } from "./home/routes"
+import { labelRoutes } from "./labels/routes"
+import { markRoutes } from "./marks/routes"
+import { rehearsalRoutes } from "./rehearsals/routes"
+import { songFileRoutes } from "./songs/files"
+import { songRoutes } from "./songs/routes"
 import { fileRoutes } from "./files/routes"
 import { consumeChat } from "./chat/consume"
 import { reportFailure } from "./chat/failures"
@@ -66,9 +72,21 @@ app.openAPIRegistry.registerComponent("securitySchemes", "rehaKey", {
   description: "The secret part of the key, after the last “:”",
 })
 
-const routes = app.route("/", meRoutes).route("/", memberRoutes).route("/", rehaRoutes).route("/", uploadRoutes)
+// The band's picture and a song's files come before a take's files, whose
+// path would take theirs.
+const routes = app
+  .route("/", meRoutes)
+  .route("/", memberRoutes)
+  .route("/", rehaRoutes)
+  .route("/", uploadRoutes)
   .route("/", bandRoutes)
-  .route("/", commentRoutes)
+  .route("/", homeRoutes)
+  .route("/", rehearsalRoutes)
+  .route("/", songRoutes)
+  .route("/", songFileRoutes)
+  .route("/", labelRoutes)
+  .route("/", markRoutes)
+  .route("/", takeRoutes)
   .route("/", fileRoutes)
   .route("/", standInRoutes)
 

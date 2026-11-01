@@ -669,8 +669,10 @@ class BandService:
         rehearsal = {"id": ref.get("id"), "created_at": ref.get("created_at", ""),
                      "name": (lib.rehearsal(folder) or {}).get("name", "")}
         cut = float(row["pending_cut"] or 0)
+        # The song's tempo as it is now: the band service keeps it for the song.
+        tempo = lib.song_tempos().get(take.get("song") or "", (None, None))[0]
         meta = service_files.meta(take, rehearsal, lib.labels(),
-                                  self.api._config.get("volumes", {}), gen, cut)
+                                  self.api._config.get("volumes", {}), gen, cut, tempo)
         client.put_take(uid, meta)
 
         mp3s = len(service_files.plan(take, {"mp3"}))

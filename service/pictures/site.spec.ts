@@ -29,7 +29,7 @@ type Shot = {
 
 /** Puts `heading` near the top of the screen, under the bar. */
 const scrollTo = (heading: string) => async (page: Page) => {
-  await page.getByRole("heading", { name: heading }).evaluate((el) => {
+  await page.getByRole("heading", { name: heading, exact: true }).evaluate((el) => {
     el.scrollIntoView({ block: "start" })
     // Whichever scrolls, the page or its main part, makes room for the bar.
     el.closest("main")?.scrollBy(0, -64)
@@ -44,16 +44,18 @@ const SHOTS: Record<string, Shot> = {
     path: () => `/takes/${pictured().takes["Viasna 12"]}?at=102`,
     then: (page) => page.getByRole("button", { name: "Solo Guitar" }).click(),
   },
-  comments: {
+  mark: {
     who: "ivan",
     path: () => `/takes/${pictured().takes["Viasna 12"]}?at=102`,
-    then: scrollTo("Marks and comments"),
+    // The lanes with the mark on them, then the mark with the band's talk under it.
+    then: scrollTo("Tracks"),
   },
+  colours: { who: "ivan", path: () => "/marks" },
   song: { who: "ivan", path: () => `/songs/${pictured().songs["Viasna"]}` },
   "three-weeks-ago": { who: "ivan", path: () => `/takes/${pictured().takes["Viasna 3"]}?at=104` },
-  // On the computer at home, for the recording program. A take nobody has
-  // written on yet, so its page ends on the screen.
-  downloads: { who: "ivan", path: () => `/takes/${pictured().takes["Kupalle 2"]}`, on: COMPUTER },
+  // On the computer at home, for the recording program: the lanes, and every
+  // track to download under them.
+  downloads: { who: "ivan", path: () => `/takes/${pictured().takes["Kupalle 2"]}`, on: COMPUTER, then: scrollTo("Tracks") },
   "sign-in": {
     who: null,
     path: () => "/signin",
@@ -105,6 +107,8 @@ for (const [name, shot] of Object.entries(SHOTS)) {
       await page.waitForFunction(() =>
         [...document.querySelectorAll('[data-testid="wave"] svg')].every((svg) => svg.querySelector("rect"))
       )
+      // Every track's own waveform in, too.
+      await page.waitForLoadState("networkidle")
       await page.evaluate(() => document.fonts.ready)
       await shot.then?.(page)
       await page.waitForTimeout(300)

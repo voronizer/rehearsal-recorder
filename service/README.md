@@ -1,8 +1,8 @@
 # The band service
 
 A private web page at the band's own address, where the band listens to its
-takes track by track, stars them and comments at a moment. РЭХА sends the
-takes there with a key the owner makes on the **Members** page.
+takes track by track, stars them and marks a moment to talk about. РЭХА
+sends the takes there with a key the owner makes on the **Members** page.
 
 It is one Cloudflare Worker: the pages and the API, with D1 (Cloudflare's
 database) for everything but audio and R2 (Cloudflare's file storage) for
@@ -26,7 +26,7 @@ You need three things:
   repository there, and the service is put up from it.
 
 A Telegram bot is only needed if you want the band's group to hear about
-new takes and comments.
+new takes, marks and comments.
 
 It costs nothing on Cloudflare's free plan except the files: they are free
 up to 10 GB, then $0.015 per GB a month. A two-hour rehearsal on six tracks
@@ -83,8 +83,8 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
    **Email Routing Addresses** set to **Edit**. Then open **Workers &
    Pages**, then **reha-band**, then **Settings › Variables and Secrets**,
    and add each of these as a secret:
-   - `OWNER_EMAIL`: your own address. Whoever signs in with it is the owner
-     and sees **Members**.
+   - `OWNER_EMAIL`: your own address. Whoever signs in with it is the owner:
+     they add the band's members and make keys for РЭХА on **Members**.
    - `LETTERS_FROM`: the address the letters come from, on your domain,
      such as band@example.com.
    - `BETTER_AUTH_SECRET`: 40 or so random letters and digits that nobody
@@ -123,8 +123,8 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
 11. On **Members**, press **Add member** for each of the band's addresses.
     Cloudflare sends each of them its letter; once they have pressed the
     button in it, they sign in the same way, with their own address.
-12. On **Members**, under **Where РЭХА runs**, type “Rehearsal room” or
-    wherever the laptop lives, press **Make a key for РЭХА** and copy the
+12. On **Members**, under **Keys for РЭХА**, type where the laptop lives,
+    such as “Rehearsal room”, press **Make a key for РЭХА** and copy the
     key: it is shown only once. In РЭХА, open **Settings › Folders**, press
     **I have a band service key**, paste it and press **Connect**.
 

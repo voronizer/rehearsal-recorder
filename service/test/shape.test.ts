@@ -1,0 +1,85 @@
+import { env } from "cloudflare:workers"
+import { eq } from "drizzle-orm"
+import { expect, test } from "vitest"
+import { database } from "../worker/shared/db"
+import type { Bindings } from "../worker/shared/env"
+import { take } from "../worker/shared/schema"
+import { FILL } from "../worker/takes/shape"
+import { putTake, ready } from "../worker/takes/store"
+import { ORIGIN, read, REHEARSAL, shownTake, signInOwner, takeMeta } from "./helpers"
+
+const bindings = env as unknown as Bindings
+
+type Row = { uid: string; shape: number[] }
+const rows = async (cookie: string) => (await read<{ takes: Row[] }>(`/api/rehearsals/${(await read<{ uid: string }[]>("/api/rehearsals", cookie))[0].uid}`, cookie)).takes
+
+/** РЭХА's peaks for one track: 1200 values, `first` in the first half and `second` after. */
+const peaks = (uid: string, gen: number, position: number, first: number, second: number) =>
+  bindings.FILES.put(
+    `takes/${uid}/${gen}/${position}.peaks`,
+    JSON.stringify({ peaks: Array.from({ length: 1200 }, (_, i) => (i < 600 ? first : second)) })
+  )
+
+test("a list's wave joins the take's tracks, the loudest at each moment, scaled to its peak", async () => {
+  const owner = await signInOwner()
+  const uid = crypto.randomUUID()
+  await putTake(bindings, uid, takeMeta() as never)
+  await peaks(uid, 1, 1, 0.5, 0)
+  await peaks(uid, 1, 2, 0.1, 0.25)
+  await ready(bindings, uid, 1, "mp3", ORIGIN)
+
+  const [row] = await rows(owner)
+  expect(row.shape).toHaveLength(120)
+  expect(row.shape[0]).toBe(1)
+  expect(row.shape[119]).toBe(0.5)
+})
+
+test("a take from before part 2 gets its wave the first time a list needs it", async () => {
+  const owner = await signInOwner()
+  const uid = await shownTake()
+  await database(bindings).update(take).set({ shape: null }).where(eq(take.uid, uid))
+  await peaks(uid, 1, 1, 0.2, 0.4)
+
+  expect((await rows(owner))[0].shape[119]).toBe(1)
+  const [kept] = await database(bindings).select({ shape: take.shape }).from(take).where(eq(take.uid, uid))
+  expect(kept.shape).toHaveLength(120)
+})
+
+test("a take with no peaks has a flat wave", async () => {
+  const owner = await signInOwner()
+  await shownTake()
+  expect((await rows(owner))[0].shape).toEqual([])
+})
+
+test("a take's page has the same wave as its row", async () => {
+  const owner = await signInOwner()
+  const uid = await shownTake()
+  await database(bindings).update(take).set({ shape: null }).where(eq(take.uid, uid))
+  await peaks(uid, 1, 1, 0.2, 0.4)
+
+  const page = await read<{ shape: number[] }>(`/api/takes/${uid}`, owner)
+  expect(page.shape).toHaveLength(120)
+  expect(page.shape[119]).toBe(1)
+})
+
+test("part 1's takes get their waves a few at a time, so one list does not read every take's peaks", async () => {
+  const owner = await signInOwner()
+  const uids: string[] = []
+  for (let i = 0; i < FILL + 2; i++) {
+    const uid = await shownTake({ number: i + 1 })
+    await peaks(uid, 1, 1, 0.2, 0.4)
+    uids.push(uid)
+  }
+  await database(bindings).update(take).set({ shape: null })
+  const kept = async () =>
+    (await database(bindings).select({ shape: take.shape }).from(take)).filter((t) => t.shape !== null).length
+
+  // One request: the rehearsal's page.
+  const page = () => read<{ takes: Row[] }>(`/api/rehearsals/${REHEARSAL.uid}`, owner)
+  const first = await page()
+  expect(await kept()).toBe(FILL)
+  // The rest are drawn flat for now, and the next list makes theirs.
+  expect(first.takes.filter((r) => r.shape.length === 0)).toHaveLength(2)
+  await page()
+  expect(await kept()).toBe(FILL + 2)
+})
