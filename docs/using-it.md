@@ -201,7 +201,7 @@ remembers which take was the good one. None of this has to be done:
   dashed, its name and length are grey, and it says **false start**.
   **Clear false starts**, at the head of the songs, moves them all to the
   Trash (the Recycle Bin on Windows) at once, and their copies in the cloud
-  go with them; **Undo** brings them back. See [Undo](#undo). How short a
+  go with them, as do the ones in a band service; **Undo** brings them back. See [Undo](#undo). How short a
   false start is can be changed in **Settings › Folders**, from 5 to 120
   seconds.
 - **Send starred**, beside it, sends every ★ take that is not in the
@@ -355,11 +355,14 @@ The bottom left says whether this take goes to your cloud folder: “Send to
 the cloud: the mix, FLAC”, with a box in front. The line names what would be
 sent and in which format, as you set them (see [Sending takes to the
 cloud](#sending-takes-to-the-cloud)), and the box starts ticked when **Send
-saved takes automatically** is on. Tick it to send this take, or untick it
-to leave it on this computer; the setting stays as it is. The box lets go of
+saved takes automatically** is on. A false start's box starts unticked (a
+take shorter than 30 seconds with no ★ and no marks), and a ★ or a mark ticks
+it. Tick it to send this take, or untick it to leave it on this computer; the
+setting stays as it is. The box lets go of
 the keyboard as soon as you change it, so Space still saves the take. With
 no cloud folder, the line says “Stays on this computer: no cloud folder is
-set”.
+set”. With the band service chosen, it says “Send to the band service” (see
+[Sending takes to a band service](#sending-takes-to-a-band-service)).
 
 You can listen, add marks and crop the take here, before you save it (see
 [Listening back](#listening-back)). The marks are saved with the take.
@@ -431,6 +434,8 @@ A few things about cropping:
 - If the take was already in the cloud folder, its copy there is made again
   from the cropped take, as the mix, the tracks or both, whatever was there
   before. This happens whether automatic sending is on or not.
+- If the take was in the band service, its files go up again from the
+  cropped take, and the band's comments move with the music.
 - Once the notice has gone, the take as it was is in the Trash, as one
   folder named after the take with “(before crop)” after it. To get the
   audio back then, move its files back into the take's folder. The app
@@ -533,8 +538,9 @@ that is open in the player, it starts again from the beginning.
 To rename a song, use the pencil after its title on its page in History.
 Every take is renamed, with its folder on disk and its copies in the cloud
 folder; the files follow in the background, and the list of work in the
-background says so (see [Following the copies](#following-the-copies)). A
-title that differs only in capitals respells the song. Here a number at the
+background says so (see [Following the copies](#following-the-copies)).
+Takes in the band service get the new name too. A title that differs only in
+capitals respells the song. Here a number at the
 end is part of the title: “Opus 5” is the whole of it. “Take 4” cannot be a
 song's title, since it is what a take with no song is called.
 
@@ -701,9 +707,12 @@ There are three ways to send takes:
   is not in the cloud folder yet and not already waiting to be sent. When
   there is nothing to send, pointing at it says why.
 - Automatically: tick **Send saved takes automatically** in **Settings ›
-  Folders**. Every take is then copied after you save it. Nothing is copied
-  while a take is recording. This setting needs a cloud folder, and it turns
-  off if you remove the folder.
+  Folders**. Every take is then copied after you save it, apart from false
+  starts: a take shorter than 30 seconds with no ★ and no marks stays on this
+  computer unless you tick its box on the screen after the take (see [Keep
+  the take or not](#keep-the-take-or-not)). Nothing is copied while a take is
+  recording. This setting needs a cloud folder, and it turns off if you
+  remove the folder.
 
 You can send one of three things. By hand you choose each time; for
 **Send starred** and for automatic sending you choose once in **Settings ›
@@ -756,6 +765,9 @@ rehearsal, however it was sent, and whether automatic sending is on or not:
   **Undo** brings them back with it. A rehearsal's folder in the cloud goes
   once nothing is left in it.
 
+A take in a band service follows it the same way (see [Sending takes to a
+band service](#sending-takes-to-a-band-service)).
+
 If you move a fader, or change the format or the cloud folder, the takes of
 the rehearsal in progress are sent again with the change. Takes of older
 rehearsals keep the copies they have; send one again by hand if you want it
@@ -764,6 +776,99 @@ redone.
 If the cloud folder is not available, for example because the Drive app is
 signed out or a drive is unplugged, the take says so. The next take you save
 also sends the ones that could not go before.
+
+## Sending takes to a band service
+
+A band service is a private web page where your band listens to its takes
+track by track, stars the good ones and comments on them. Whoever runs it
+gives you a key, and РЭХА sends the takes there. What a band service does,
+and how to get one for your band, is on
+[reha.stream/band-service](https://reha.stream/band-service).
+
+### The key
+
+A key is one line of text: the service's address and a secret, such as
+`band.reha.stream:9fT2kQ…`. It is not a link to open in a browser. Whoever
+runs the service makes it on the service's **Members** page and gives it to
+you.
+
+In **Settings › Folders**, press **I have a band service key** at the bottom
+of the **Cloud folder** group. A few words say what a band service is, and
+**How it works** opens its page on reha.stream. Paste the key into the field
+and press **Connect**. If the key does not work, the reason shows under the
+field. If the service cannot be reached just then, РЭХА keeps the key and
+says “Not checked yet: the band service could not be reached.”
+
+### Where takes go
+
+With a key in, the group is called **Sending takes** and starts with **Send
+takes to**: **Cloud folder** or **Band service**. Connecting picks **Band
+service**. Under the switch is the panel of the one you chose, and only that
+one. Each keeps its own settings, so switching back finds the other as you
+left it. The switch decides where new takes go; a take already on its way
+still gets there.
+
+The band service's panel shows the service's address with **Disconnect**,
+and its own **Send saved takes automatically**. **Disconnect** removes the
+key and puts the group back as it was. Whatever is in the band service stays
+there, and РЭХА remembers which takes those are. Connect again with a key
+for the same service, such as a new one made after the old one was removed
+on **Members**: takes that were on their way carry on, and nothing goes up
+twice. A key for another service starts from nothing.
+
+### What goes up
+
+There is nothing to choose. Each track goes up as MP3 to listen to and as
+FLAC as recorded, with its notes as `.mid` if it recorded MIDI, and the take
+goes with its name, ★ and marks. All of a take's MP3s go first, so the band
+can listen before the FLAC files are up.
+
+Takes are sent the same three ways as to the cloud folder:
+
+- By hand: the cloud button on a take sends it at once, with no dialog.
+- The starred ones: **Send starred** sends every ★ take of the rehearsal that
+  is not in the band service yet.
+- Automatically: **Send saved takes automatically**, in the band service's
+  panel, sends every take you save, between takes. False starts stay on
+  this computer unless you tick their box on the screen after the take.
+
+On a take that is in the band service, the cloud button opens a dialog,
+*“Viasna 12” in the band service*. It lists each track with what of it is up,
+“MP3 and FLAC” or “MP3, FLAC on its way”. **Remove from the band service**
+moves the take to the service's **Trash**, where the band can still play it
+and put it back for 30 days. The take on this computer stays as it is.
+
+What you change in РЭХА follows the take there: a new name for the take or
+its song, a crop (its files go up again), a ★, a mark. A take you delete
+goes to the service's **Trash** once its **Undo** notice has gone, with the
+band's comments and stars.
+
+### Following the sending
+
+Each take says where it is: “Waiting for the band service”, “Sending to the
+band service”, a green cloud with a tick once it is there, or “Not in the
+band service” if the service turned it down; pointing at it then says why.
+
+The background work button at the top right lists each take, such as
+*“Viasna 12” → band service*, with how far it got: “MP3s: 4 of 6”, then
+“FLAC: 2 of 6”. A take the service turned down shows in red with the reason,
+and **Retry** sends it again. With no internet nothing fails: the line says
+“No internet: carries on when it is back”, and the sending goes on by itself
+once you are online. While a take is recording, the sending waits, so the
+recording has the computer to itself: the line says “A take is recording:
+carries on after it”.
+
+Each file goes up in parts, and РЭХА keeps track of which parts arrived. If
+РЭХА closes or the laptop sleeps, it sends only what is missing the next
+time it is open or awake. Nothing has to be pressed.
+
+### Closing РЭХА while it sends
+
+Closing the window while takes are still going up asks first: “Still
+sending 3 takes to the band service, 1.2 GB left. The rest goes the next
+time РЭХА is open.” **Keep sending** leaves the window open, and **Close
+anyway** closes it. A laptop with its lid shut cannot ask, so РЭХА carries
+on when it wakes.
 
 ## Recording quality
 

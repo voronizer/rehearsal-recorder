@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+dist/
+.dev.vars*
+e2e/.state/
+pictures/.state/
+test-results/
+playwright-report/

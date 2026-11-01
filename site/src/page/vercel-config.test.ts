@@ -41,6 +41,7 @@ const BUILT = new Set([
   "/404.html",
   "/stories.html",
   ...STORIES.map((name) => `/stories/${name}.html`),
+  "/band-service.html",
   "/og.png",
   "/robots.txt",
   "/sitemap.xml",
@@ -126,6 +127,12 @@ describe("vercel-config.json", () => {
     const route = before.find((r) => r.dest === "/stories/$1.html")
     const names = /\(([^)]*)\)/.exec(route?.src ?? "")?.[1].split("|") ?? []
     expect(names.sort()).toEqual([...STORIES].sort())
+  })
+  it("serves the band service page at its address, with or without a slash", () => {
+    for (const path of ["/band-service", "/band-service/"]) expect(served(path)).toEqual({ file: "/band-service.html" })
+    for (const path of ["/Band-service", "/band-service/x", "/band-servicex"]) {
+      expect(served(path)).toMatchObject({ status: 404, dest: "/404.html" })
+    }
   })
   it("answers a story that is not there with the 404 page", () => {
     // A story's name in other letters too: the route would send it to a file

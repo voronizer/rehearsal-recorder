@@ -1,0 +1,55 @@
+// The band service: one Worker for the pages and the API. A copy's own
+// address, sender, owner, bot and chat are set on the Worker in Cloudflare,
+// never here; keep_vars leaves them as they are through a deploy.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "reha-band",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "keep_vars": true,
+  "observability": { "enabled": true },
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/files/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "reha-band", "database_id": "local", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "reha-band" }],
+  "send_email": [{ "name": "LETTERS" }],
+  "queues": {
+    "producers": [{ "binding": "CHAT", "queue": "reha-band-chat" }],
+    "consumers": [
+      { "queue": "reha-band-chat", "max_batch_size": 10, "max_concurrency": 1, "max_retries": 5 }
+    ]
+  },
+  // Once a day: the trash is emptied of takes older than 30 days.
+  "triggers": { "crons": ["17 4 * * *"] },
+  "env": {
+    // Only for the page tests (wrangler dev --env test) and the Worker's own
+    // tests: letters, Cloudflare's list and Telegram go to stand-ins.
+    "test": {
+      "vars": {
+        "STAND_INS": "on",
+        "OWNER_EMAIL": "alex@example.com",
+        "LETTERS_FROM": "band@example.com",
+        "BETTER_AUTH_SECRET": "made-up-secret-for-tests-only-0123456789abcdef"
+      },
+      "d1_databases": [
+        { "binding": "DB", "database_name": "reha-band", "database_id": "local", "migrations_dir": "migrations" }
+      ],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "reha-band" }],
+      "send_email": [{ "name": "LETTERS" }],
+      "queues": {
+        "producers": [{ "binding": "CHAT", "queue": "reha-band-chat" }],
+        "consumers": [
+          { "queue": "reha-band-chat", "max_batch_size": 10, "max_concurrency": 1, "max_retries": 5 }
+        ]
+      },
+      "triggers": { "crons": [] }
+    }
+  }
+}

@@ -37,14 +37,17 @@ runs:
 
     # `pip install -e .` rather than requirements.txt on purpose: it reads
     # the same list through pyproject.toml, and it means every run also
-    # checks that the package metadata still installs.
+    # checks that the package metadata still installs. openapi-core is for
+    # the suites alone: test_sending.py checks every request РЭХА makes of
+    # the band service against service/openapi.json. The app never imports
+    # it, so no build carries it.
     - name: Install
       shell: bash
       env:
         ALSO: ${{ inputs.also }}
       run: |
         python -m pip install --upgrade pip
-        pip install -e . $ALSO
+        pip install -e . openapi-core==0.23.1 $ALSO
 
     - name: Run every suite
       shell: bash

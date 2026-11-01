@@ -29,6 +29,7 @@ import { useKeysOn } from "@/lib/keys"
 import { endedByPython, offerCropUndo } from "@/lib/trash"
 import { useRunning, watching } from "@/lib/activity"
 import { useLabels } from "@/lib/labels"
+import { sendsOnItsOwn } from "@/lib/evening"
 
 /**
  * Right after stopping: listen and decide the take's fate. Until it is saved
@@ -104,19 +105,25 @@ export function Review({
   const labels = useLabels()
 
   // Whether this take goes to the cloud folder, said before it is saved and
-  // turnable for this one take: a false start kept anyway need not go up,
-  // and the one good take can, with sending off. It starts from the setting
-  // every time — a choice made for one take is not a new setting.
+  // turnable for this one take: a false start can go up all the same, and
+  // the one good take can, with sending off. It starts from what the setting
+  // does with this take every time — a choice made for one take is not a
+  // new setting — and the setting leaves a false start behind, so the box
+  // follows the take's marks until somebody sets it.
   const [cloud, setCloud] = useState<{
     dir: string | null
     auto: boolean
     what: ShareWhat
     format: string
+    falseStartSec: number
+    /** The band service's Send saved takes automatically, when takes go
+     *  there instead (Settings › Folders' switch); null when they do not. */
+    service: { auto: boolean } | null
   } | null>(null)
-  const [send, setSend] = useState(kept?.send ?? false)
+  // The box as somebody set it. A take brought back by Undo keeps the
+  // answer it had.
+  const [chosen, setChosen] = useState<boolean | undefined>(kept?.send)
   const cloudBox = useRef<HTMLButtonElement>(null)
-  // A take brought back by Undo keeps the answer it had.
-  const keptSend = useRef(kept?.send)
   useEffect(() => {
     let alive = true
     void api()
@@ -128,8 +135,10 @@ export function Review({
           auto: s.auto_publish,
           what: s.auto_publish_what,
           format: s.cloud_format,
+          falseStartSec: s.false_start_sec,
+          service:
+            s.send_to === "service" && s.service ? { auto: s.service.auto_publish } : null,
         })
-        setSend(keptSend.current ?? (Boolean(s.cloud_dir) && s.auto_publish))
       })
       .catch(() => {
         /* the bar has said so; the take still saves by the setting */
@@ -139,6 +148,18 @@ export function Review({
     }
   }, [])
   const [editing, setEditing] = useState<Marker | null>(null)
+  // What the setting does with this take as it now is, and so the box.
+  // A take can go somewhere: to the band service, or to a cloud folder that
+  // is set.
+  const goes = Boolean(cloud?.service || cloud?.dir)
+  const onItsOwn =
+    goes &&
+    sendsOnItsOwn(
+      { duration_sec: take.duration_sec, markers },
+      (cloud?.service ? cloud.service.auto : cloud?.auto) ?? false,
+      cloud?.falseStartSec ?? 0
+    )
+  const send = chosen ?? onItsOwn
   // The columns in the header have given way to the title, which then says
   // them in its tip.
   const [columnsGone, setColumnsGone] = useState(false)
@@ -186,9 +207,10 @@ export function Review({
       take.duration_sec,
       take.tracks,
       markers,
-      // Only an answer that differs from the setting is sent: one that
-      // agrees leaves the take following the setting, even if it changes.
-      cloud?.dir && send !== cloud.auto ? send : null,
+      // Only an answer that differs from what the setting does with this
+      // take is sent: one that agrees leaves the take following the
+      // setting, even if it changes.
+      goes && send !== onItsOwn ? send : null,
       // The .mid files stop_take made, kept beside the audio.
       take.notes
     )
@@ -294,7 +316,7 @@ export function Review({
       <Cloud className="size-4" />
       &nbsp;
     </p>
-  ) : cloud.dir ? (
+  ) : cloud.service || cloud.dir ? (
     <label
       htmlFor="send-to-cloud"
       data-cloud-line={send ? "on" : "off"}
@@ -305,7 +327,7 @@ export function Review({
         id="send-to-cloud"
         checked={send}
         onCheckedChange={(on) => {
-          setSend(on === true)
+          setChosen(on === true)
           // Focus left on the box would give it the next Space, which on
           // this screen means Save take.
           cloudBox.current?.blur()
@@ -314,7 +336,11 @@ export function Review({
       />
       <Cloud className="size-4 shrink-0" />
       <Whole
-        text={`Send to the cloud: ${WHAT_GOES[cloud.what]}, ${cloud.format.toUpperCase()}`}
+        text={
+          cloud.service
+            ? "Send to the band service"
+            : `Send to the cloud: ${WHAT_GOES[cloud.what]}, ${cloud.format.toUpperCase()}`
+        }
         className="min-w-0 truncate"
       />
     </label>

@@ -25,7 +25,7 @@ import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/ConfirmDialog"
 import { RenameSongDialog } from "@/components/RenameSongDialog"
 import { NewSongDialog } from "@/components/backing/NewSongDialog"
-import { ShareDialog } from "@/components/ShareDialog"
+import { useTakeSending } from "@/components/sending/useTakeSending"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useAfter } from "@/hooks/useAfter"
 import { useSongChoices } from "@/hooks/useSongChoices"
@@ -149,7 +149,6 @@ export function HistoryScreen({
     takeToRename?.folder,
     takeToRename?.take_number
   )
-  const [takeToShare, setTakeToShare] = useState<PlacedTake | null>(null)
   const [markerEdit, setMarkerEdit] = useState<{
     take: PlacedTake
     marker: Marker
@@ -175,21 +174,24 @@ export function HistoryScreen({
     player,
   } = useTakeStripPlayer<PlacedTake>(byPlace)
   const evening = useEveningSettings()
-  // This rehearsal's takes on their way to the cloud folder: Send starred
-  // does not count them again.
+  // Where takes go, and so what the cloud button does and what it says.
+  const sendTo = evening?.sendTo ?? "cloud"
+  // This rehearsal's takes on their way there: Send starred does not count
+  // them again.
   const { entries } = useActivity()
   const cloudWaiting = Object.fromEntries(
     entries
       .filter(
         (e) =>
-          e.kind === "cloud" &&
+          e.kind === sendTo &&
           (e.state === "waiting" || e.state === "running") &&
           e.folder === opened?.folder &&
           e.take_number !== null
       )
       .map((e) => [e.take_number as number, e.state])
   )
-  // Said in the rows as on the rehearsal screen: "Waiting for the cloud".
+  // Said in the rows as on the rehearsal screen: "Waiting for the cloud",
+  // "Waiting for the band service".
   const cloudStates = Object.fromEntries(
     Object.entries(cloudWaiting).map(([n, state]) => [
       n,
@@ -483,6 +485,17 @@ export function HistoryScreen({
     await reopen(folder)
     void refresh()
   }
+
+  // A take's cloud button, by where takes go (useTakeSending).
+  const sending = useTakeSending<PlacedTake>(
+    sendTo,
+    (take) => take.folder,
+    (take) => {
+      void reopen(take.folder)
+      if (songsShown.current) void loadSongs()
+      if (marksShown.current) loadMarks()
+    }
+  )
 
   // The chosen one in the list stays in view as ↑ and ↓ go past the edge.
   useEffect(() => {
@@ -988,16 +1001,7 @@ export function HistoryScreen({
         }}
       />
 
-      <ShareDialog
-        take={takeToShare}
-        folder={takeToShare?.folder ?? ""}
-        onOpenChange={(open) => !open && setTakeToShare(null)}
-        onDone={() => {
-          if (takeToShare) void reopen(takeToShare.folder)
-          if (songsShown.current) void loadSongs()
-          if (marksShown.current) loadMarks()
-        }}
-      />
+      {sending.dialogs}
     </>
   )
 
@@ -1059,7 +1063,8 @@ export function HistoryScreen({
                 : void openGo(placed(folder, take), "keep")
             }
             onRename={(take) => setTakeToRename(here(take))}
-            onShare={(take) => setTakeToShare(here(take))}
+            onShare={(take) => sending.share(here(take))}
+            sendTo={sendTo}
             onDelete={(take) => void deleteTake(here(take))}
             onStar={(take, starred) => void starTake(here(take), starred)}
             emptyHint={NO_TAKES}
@@ -1229,7 +1234,8 @@ export function HistoryScreen({
                   onOpenAt={(take, at) => void openGo(take, at)}
                   onRename={setTakeToRename}
                   onStar={(take, starred) => void starTake(take, starred)}
-                  onShare={setTakeToShare}
+                  onShare={sending.share}
+                  sendTo={sendTo}
                   onDelete={(take) => void deleteTake(take)}
                   onOpenRehearsal={openRehearsal}
                   onRenameSong={() =>
@@ -1381,6 +1387,7 @@ export function HistoryScreen({
                     takes={opened.takes}
                     songs={opened.songs ?? []}
                     cloudStates={cloudStates}
+                    sendTo={sendTo}
                     playback={
                       // Only a take of this rehearsal plays here: take 1 of
                       // another is not this one's take 1.
@@ -1400,7 +1407,7 @@ export function HistoryScreen({
                     onOpenAt={(take, at) => openAt(placed(opened.folder, take), at)}
                     onRename={(take) => setTakeToRename(placed(opened.folder, take))}
                     onStar={(take, starred) => void starTake(placed(opened.folder, take), starred)}
-                    onShare={(take) => setTakeToShare(placed(opened.folder, take))}
+                    onShare={(take) => sending.share(placed(opened.folder, take))}
                     onDelete={(take) => void deleteTake(placed(opened.folder, take))}
                     onOpenSong={(title) => void openSong(title)}
                     falseStartSec={evening?.falseStartSec}
@@ -1413,6 +1420,7 @@ export function HistoryScreen({
                           takes={opened.takes}
                           falseStartSec={evening.falseStartSec}
                           cloudDir={evening.cloudDir}
+                          sendTo={sendTo}
                           waiting={cloudWaiting}
                           onChanged={() => void changed(opened.folder)}
                           onDeleted={(gone) =>

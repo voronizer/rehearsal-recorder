@@ -157,6 +157,9 @@ export type Take = {
   cloud?: CloudShare
   /** Why this take is not in the cloud folder, if something went wrong. */
   cloud_error?: string
+  /** What of this take is in the band service: null when it was never
+   *  sent there. */
+  service?: ServiceState | null
   /** What the metronome showed when Record was pressed, in its own count
    *  (eighths a minute in 6/8); null when it showed none. A take from before
    *  the metronome has none. */
@@ -348,6 +351,8 @@ export type SessionState =
       recording: boolean
       /** Takes the app is copying to the cloud folder right now. */
       cloud_queue?: Record<number, "queued" | "working">
+      /** And the takes waiting for the band service, or going there. */
+      service_queue?: Record<number, "queued" | "working">
       /** How much of the disk the rehearsal's folder uses, for the header. */
       disk_bytes?: number
     }
@@ -795,9 +800,33 @@ export type DiskEstimate = {
 }
 
 /** One piece of long work — see activity.py. */
+/** Where new takes go: Settings › Folders' switch. */
+export type SendTo = "cloud" | "service"
+
+export type ServiceSettings = {
+  /** Where the service is, as the key says it. */
+  address: string
+  /** Send saved takes automatically, the service's own. */
+  auto_publish: boolean
+}
+
+/** A take in the band service. */
+export type ServiceState = {
+  /** Its MP3s are up: the band can listen to it. */
+  up: boolean
+  /** Its FLACs are up too. */
+  flac: boolean
+  /** Why the service turned it down, if it did. */
+  error: string | null
+}
+
+/** One track of a take in the band service; `mid` null for a track with
+ *  no notes. */
+export type ServiceFile = { name: string; mp3: boolean; flac: boolean; mid: boolean | null }
+
 export type ActivityEntry = {
   id: number
-  kind: "cloud" | "crop" | "stop" | "recover" | "names"
+  kind: "cloud" | "service" | "crop" | "stop" | "recover" | "names"
   title: string
   folder: string | null
   take_number: number | null
@@ -806,7 +835,8 @@ export type ActivityEntry = {
   step: string | null
   error: string | null
   detail: string | null
-  /** What to copy again, on a failed cloud copy. */
+  /** What to copy again, on a failed cloud copy; "service" on a take the
+   *  band service turned down. */
   retry: string | null
   seen: boolean
 }
@@ -1071,6 +1101,10 @@ export type Settings = MetronomeSettings & BackingSettings & {
   cloud_formats: { id: CloudFormat; label: string; hint: string }[]
   auto_publish: boolean
   auto_publish_what: ShareWhat
+  /** Where new takes go. "service" only with a band service key. */
+  send_to: SendTo
+  /** The band service, null with no key. */
+  service: ServiceSettings | null
   /** A take shorter than this, with no ★ and no marks, is a false start. */
   false_start_sec: number
   /** Whether the app asks GitHub if a newer version is out — updates.py. */
@@ -1328,6 +1362,23 @@ type PyApi = {
   >
   /** Seconds, kept within 5 to 120. */
   set_false_start(seconds: number): Promise<Ok<{ false_start_sec?: number }>>
+  /** The key from the band service's Members page. Kept once the service
+   *  knows it, or `unchecked` when it could not be reached; new takes go
+   *  there from then on. */
+  set_service_key(key: string): Promise<Ok<{ address?: string; unchecked?: boolean }>>
+  /** The key forgotten, and what was still to send there. */
+  disconnect_service(): Promise<Ok>
+  set_service_auto_publish(on: boolean): Promise<Ok<{ auto_publish?: boolean }>>
+  /** Settings › Folders' switch. The service needs its key first. */
+  set_send_to(which: SendTo): Promise<Ok<{ send_to?: SendTo }>>
+  /** What of a take is in the band service, track by track. */
+  service_take(folder: string, takeNumber: number): Promise<Ok<{ files?: ServiceFile[] }>>
+  /** What is still to send to the band service. */
+  sending_left(): Promise<{ takes: number; bytes: number }>
+  /** The close dialog's Close anyway. */
+  close_anyway(): Promise<Ok>
+  /** How a band service works, on reha.stream, in the browser. */
+  open_service_help(): Promise<Ok>
 
   delete_take(folder: string, takeNumber: number): Promise<DeleteResult>
   /** Each as delete_take does it, all with one Undo (null when none went);
@@ -1695,6 +1746,7 @@ const ANSWERS_WITH_A_VALUE = new Set<keyof PyApi>([
   "get_settings",
   "startup_problems",
   "under_the_hood",
+  "sending_left",
 ])
 
 let guarded: { raw: PyApi; proxy: PyApi } | null = null

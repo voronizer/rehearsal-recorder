@@ -279,12 +279,13 @@ test("the new pages count their visits with Vercel's scripts", async ({ page }) 
   }
 })
 
-test("the sitemap names the six pages", async ({ request }) => {
+test("the sitemap names the seven pages", async ({ request }) => {
   const xml = await (await request.get("/sitemap.xml")).text()
   expect([...xml.matchAll(/<loc>([^<]*)<\/loc>/g)].map((m) => m[1])).toEqual([
     "https://reha.stream/",
     "https://reha.stream/stories",
     ...STORIES.map(([slug]) => `https://reha.stream/stories/${slug}`),
+    "https://reha.stream/band-service",
   ])
 })
 

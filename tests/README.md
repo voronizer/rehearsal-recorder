@@ -1,14 +1,15 @@
 # Tests
 
 ```bash
+pip install openapi-core==0.23.1     # once: test_sending.py needs it
 python tests/run_all.py              # the Python suites
 cd ui && npm test                    # the interface, what needs no browser
 cd ui && npm run build && npm run test:e2e   # the interface in a browser
 ```
 
-The fourteen Python suites cover audio, storage, platform behaviour, MIDI,
-the tempo counter and shared controls. Interface tests run as unit and browser
-suites.
+The seventeen Python suites cover audio, storage, platform behaviour, MIDI,
+the tempo counter, shared controls and sending takes to a band service.
+Interface tests run as unit and browser suites.
 
 ## test_control_api.py: shared controls
 
@@ -294,6 +295,28 @@ and bar 1 within 0.02 s and on its hit, not ahead of it; held chords with no
 beat; no signature counted as 4/4. Then the take's track: silence before the
 file and after it, 24- and 16-bit within a step of the file. Run with
 `python tests/test_backing.py`.
+
+## test_sending.py: the band service
+
+Sending takes to a band's own service (`sending/band_service.py`), through
+the Api, against `tests/fake_band_service.py`: a small server on a thread that
+keeps takes and uploads in memory and checks every request against
+`service/openapi.json`, the description the real service makes of itself. A
+request that does not match is answered 400, and the last check fails if any
+came. The fake can drop a call unanswered, keep a part and drop its answer,
+forget its uploads, refuse with words or say РЭХА is too old.
+
+Checked: a take of six tracks sent as six MP3s, six waveforms and six FLACs,
+the MP3s first; a false start left at home; a part whose answer never came
+sent again under its number; the app closed in the middle and opened again,
+its waiting take back in the list and nothing made twice; no internet; a lost
+upload started again; a refusal shown in red and kept, and Retry; a rename
+before and during sending; a crop as a new generation with its cut; a
+deletion and its Undo; Remove from the band service; the close dialog and
+Close anyway; disconnect; the cloud folder sending nothing new while the
+service is chosen; an old РЭХА told to update. The parts are 16 KiB here, so
+a short take has several. Needs `pip install openapi-core==0.23.1`; without
+it the suite stops at once and says so. Run with `python tests/test_sending.py`.
 
 ## The interface: in ui/, in TypeScript
 

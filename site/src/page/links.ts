@@ -8,5 +8,8 @@ export const releaseNotes = (tag: string) => `${RELEASES}/tag/${tag}`
 export const GUIDE = `${REPO}/blob/main/docs/using-it.md`
 export const CHANGES = `${REPO}/blob/main/CHANGELOG.md`
 export const NEW_ISSUE = `${REPO}/issues/new/choose`
+// The band service's page on this site; РЭХА's key line links to it too
+// (SERVICE_HELP_URL in src/rehearsal_recorder/sending/band_service.py).
+export const BAND_SERVICE = "/band-service"
 // Victor Baikov's controller: its parts, wiring, firmware and case.
 export const CONTROLLER = "https://github.com/viktor-baikov/reha-controller"

@@ -20,10 +20,18 @@
 #                                                builds and puts it up
 #                                                (.github/actions/site, this
 #                                                file)
+#   service                                      for service/ and ui/ (its
+#                                                pages draw with the
+#                                                interface's components);
+#                                                service/openapi.json also
+#                                                runs the app's, whose
+#                                                tests check РЭХА's requests
+#                                                against it
 #
 # A change to this file runs all of them, and so does a pull request git
 # cannot read the diff of. A push to main runs the app's checks, as it
-# always has; by hand, the app's and the site's. A job that is not needed
+# always has, and the service's; by hand, the app's, the site's and the
+# service's. A job that is not needed
 # shows as skipped under its own name: none of them is a matrix, since
 # GitHub shows a skipped matrix job under its unexpanded name instead. main
 # requires none of these checks today (its ruleset only stops it being
@@ -61,6 +69,7 @@ jobs:
       app: ${{ steps.changes.outputs.app }}
       site: ${{ steps.changes.outputs.site }}
       preview: ${{ steps.changes.outputs.preview }}
+      service: ${{ steps.changes.outputs.service }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -76,29 +85,32 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
         run: |
-          app=false site=false preview=false
+          app=false site=false preview=false service=false
           # Each path whole, never quoted (-z), and a moved file as both
           # its old path and its new one (--no-renames): a file moved from
           # ui/ into site/ still runs the app's checks.
           list=$(mktemp)
           if [ "$EVENT" != pull_request ]; then
-            app=true
+            app=true service=true
             if [ "$EVENT" = workflow_dispatch ]; then site=true; fi
           elif ! git diff --no-renames --name-only -z HEAD^1 HEAD > "$list"; then
             echo "::warning::Could not tell what this pull request changes, so every check runs."
-            app=true site=true preview=true
+            app=true site=true preview=true service=true
           else
             while IFS= read -r -d '' f; do
               case "$f" in
                 site/*|.github/actions/site/*) site=true preview=true ;;
-                .github/workflows/checks.yml)  app=true site=true preview=true ;;
-                ui/*|CHANGELOG.md)             app=true site=true ;;
+                .github/workflows/checks.yml)  app=true site=true preview=true service=true ;;
+                ui/*)                          app=true site=true service=true ;;
+                CHANGELOG.md)                  app=true site=true ;;
+                service/openapi.json)          app=true service=true ;;
+                service/*)                     service=true ;;
                 *)                             app=true ;;
               esac
             done < "$list"
           fi
-          echo "app=$app site=$site preview=$preview"
-          { echo "app=$app"; echo "site=$site"; echo "preview=$preview"; } >> "$GITHUB_OUTPUT"
+          echo "app=$app site=$site preview=$preview service=$service"
+          { echo "app=$app"; echo "site=$site"; echo "preview=$preview"; echo "service=$service"; } >> "$GITHUB_OUTPUT"
 
   # The app's Python suites on the two systems it is actually used on. They
   # need no sound card, screen or microphone (PortAudio is stubbed where the
@@ -283,6 +295,63 @@ jobs:
         with:
           name: site-playwright-report
           path: site/playwright-report/
+          if-no-files-found: ignore
+
+  # The band service (service/): the Worker's tests inside the Workers
+  # runtime, the deploy script against a stand-in Wrangler, the build, and
+  # its pages in a browser against the Worker run on this machine, with
+  # stand-ins for letters and Telegram. Its pages import the interface's
+  # components and React from ui/, so ui/ is installed first.
+  service:
+    name: service
+    needs: changes
+    if: needs.changes.outputs.service == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: service
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            ui/package-lock.json
+            service/package-lock.json
+
+      - name: Install
+        run: |
+          (cd ../ui && npm ci)
+          npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Vitest
+        run: npx vitest run
+
+      - name: The deploy script
+        run: npm run test:deploy
+
+      - name: Build
+        run: npm run build
+
+      # As in the interface's jobs: the apt step sometimes hangs.
+      - name: Install the browser
+        timeout-minutes: 10
+        run: npx playwright install --with-deps --only-shell chromium
+
+      - name: Playwright
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: service-playwright-report
+          path: service/playwright-report/
           if-no-files-found: ignore
 
   # A pull request's build on Vercel as a preview, never production: the

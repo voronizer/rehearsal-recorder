@@ -59,6 +59,11 @@ const CLOUD =
   "window.__CLOUD_DIR__ = '/Users/alex/Google Drive/Band';" +
   " window.__AUTO_PUBLISH__ = {on: true, what: 'mix'};"
 
+/** The fake's takes are 6 s, false starts under the 30 s the setting starts
+ *  at, which sending on its own leaves behind. With the limit at its lowest
+ *  they are takes like any other. */
+const LONG_ENOUGH = " window.__FALSE_START__ = 5;"
+
 /** A new song with a name of 111 characters. */
 const LONG =
   "Last song of the night that we wrote in the van on the way back from the festival, with a new bridge at the end"
@@ -310,7 +315,7 @@ test("Save take is the footer's 56 px button and Discard 40", async ({ page }) =
 })
 
 test("the cloud line holds its room before the settings answer", async ({ page }) => {
-  await openApp(page, { before: CLOUD })
+  await openApp(page, { before: CLOUD + LONG_ENOUGH })
   await startRehearsal(page)
   await page.getByRole("button", { name: /Record take 1/ }).click()
   // The screen asks for the settings as it comes up; they are held there.
@@ -347,7 +352,7 @@ test("the cloud line holds its room before the settings answer", async ({ page }
 })
 
 test("the cloud box is a checkbox, and Space after ticking it saves the take", async ({ page }) => {
-  await openApp(page, { before: CLOUD })
+  await openApp(page, { before: CLOUD + LONG_ENOUGH })
   await startRehearsal(page)
   await recordTake(page)
   await expect(cloudBox(page)).toBeChecked()
@@ -357,6 +362,32 @@ test("the cloud box is a checkbox, and Space after ticking it saves the take", a
   await page.keyboard.press("Space")
   await expect.poll(() => callCount(page, "keep_take")).toBe(1)
   expect((await calls(page, "keep_take"))[0].args[6]).toBe(false)
+})
+
+test("a false start's cloud box starts unticked, and a mark ticks it", async ({ page }) => {
+  await openApp(page, { before: CLOUD })
+  await startRehearsal(page)
+  await recordTake(page)
+  await expect(cloudBox(page)).not.toBeChecked()
+  // M makes a mark and opens its note, which covers the screen until saved.
+  await page.keyboard.press("m")
+  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(cloudBox(page)).toBeChecked()
+  await page.getByRole("button", { name: /Save take/ }).click()
+  await expect.poll(() => callCount(page, "keep_take")).toBe(1)
+  // Ticked as the setting does it for a marked take: left to the setting.
+  expect((await calls(page, "keep_take"))[0].args[6]).toBeNull()
+})
+
+test("a false start ticked by hand is sent", async ({ page }) => {
+  await openApp(page, { before: CLOUD })
+  await startRehearsal(page)
+  await recordTake(page)
+  await cloudBox(page).click()
+  await expect(cloudBox(page)).toBeChecked()
+  await page.keyboard.press("Space")
+  await expect.poll(() => callCount(page, "keep_take")).toBe(1)
+  expect((await calls(page, "keep_take"))[0].args[6]).toBe(true)
 })
 
 test("the player's groups rise in, 40 ms apart", async ({ page }) => {

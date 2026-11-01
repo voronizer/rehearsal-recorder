@@ -12,7 +12,7 @@ import { EveningActions } from "@/components/EveningActions"
 import { RunningLine } from "@/components/RunningLine"
 import { TakePlayer } from "@/components/TakePlayer"
 import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/ConfirmDialog"
-import { ShareDialog } from "@/components/ShareDialog"
+import { useTakeSending } from "@/components/sending/useTakeSending"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { useEveningSettings } from "@/hooks/useEveningSettings"
@@ -101,7 +101,6 @@ export function Rehearsal({
     session.folder,
     toRename?.take_number
   )
-  const [toShare, setToShare] = useState<Take | null>(null)
   const [markerEdit, setMarkerEdit] = useState<{
     take: Take
     marker: Marker
@@ -109,6 +108,11 @@ export function Rehearsal({
   const [renamingRehearsal, setRenamingRehearsal] = useState(false)
   const [finishing, setFinishing] = useState(false)
   const evening = useEveningSettings()
+  // Where takes go, and so what the cloud button does and the words it and
+  // the takes' status say. The cloud folder until the setting is read.
+  const sendTo = evening?.sendTo ?? "cloud"
+  const sendStates = sendTo === "service" ? session.service_queue : session.cloud_queue
+  const sending = useTakeSending<Take>(sendTo, () => session.folder, () => onChanged())
 
   // The next take's name as the field last settled on it, against the
   // session's name at the time: once Python has it, the session says the
@@ -292,7 +296,9 @@ export function Rehearsal({
 
   // While takes are being copied the only thing that changes is on the Python
   // side, so ask — but only until the queue drains.
-  const inFlight = Object.keys(session.cloud_queue ?? {}).length > 0
+  const inFlight =
+    Object.keys(session.cloud_queue ?? {}).length > 0 ||
+    Object.keys(session.service_queue ?? {}).length > 0
   useEffect(() => {
     if (!inFlight) return
     const id = setInterval(() => onChanged(), 1500)
@@ -590,10 +596,11 @@ export function Rehearsal({
           onSelect={select}
           onGo={move}
           onRename={setToRename}
-          onShare={setToShare}
+          onShare={sending.share}
           onDelete={(take) => void deleteTake(take)}
           onStar={starTake}
-          cloudStates={session.cloud_queue}
+          cloudStates={sendStates}
+          sendTo={sendTo}
           emptyHint={`Press Record take${spaceKeys ? " or Space" : ""}. Each take shows up here, ready to play.`}
         />
         )}
@@ -633,9 +640,10 @@ export function Rehearsal({
               onOpenAt={openAt}
               onRename={setToRename}
               onStar={starTake}
-              onShare={setToShare}
+              onShare={sending.share}
               onDelete={(take) => void deleteTake(take)}
-              cloudStates={session.cloud_queue}
+              cloudStates={sendStates}
+              sendTo={sendTo}
               falseStartSec={evening?.falseStartSec}
               folder={session.folder}
               onName={(take, title) => void renameTake(take, title)}
@@ -646,7 +654,8 @@ export function Rehearsal({
                     takes={session.takes}
                     falseStartSec={evening.falseStartSec}
                     cloudDir={evening.cloudDir}
-                    waiting={session.cloud_queue}
+                    sendTo={sendTo}
+                    waiting={sendStates}
                     onChanged={onChanged}
                     onDeleted={(gone) => gone.forEach(forget)}
                   />
@@ -689,12 +698,7 @@ export function Rehearsal({
         }}
       />
 
-      <ShareDialog
-        take={toShare}
-        folder={session.folder}
-        onOpenChange={(open) => !open && setToShare(null)}
-        onDone={onChanged}
-      />
+      {sending.dialogs}
 
       <PromptDialog
         open={renamingRehearsal}

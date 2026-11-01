@@ -22,8 +22,8 @@ from rehearsal_recorder.audio.click import SIGNATURE_RULE, SIGNATURES, tempo_ran
 from rehearsal_recorder.midi import rules
 from rehearsal_recorder.store.db import MIGRATIONS, open_engine
 from rehearsal_recorder.store.models import (
-    AUDIO_FILE, BACKING_FILE, NOTES_FILE, CloudCopy, Label, Marker, Rehearsal, Song, SongName, SongSet,
-    Take, TakeFile, Track,
+    AUDIO_FILE, BACKING_FILE, NOTES_FILE, CloudCopy, Label, Marker, Rehearsal, ServiceCopy, ServiceDelete,
+    ServiceFile, Song, SongName, SongSet, Take, TakeFile, Track,
 )
 from rehearsal_recorder.store.names import UNNAMED_TAKE, legacy_song, split_go, take_name
 
@@ -140,6 +140,7 @@ _WITH_TAKES = (
     selectinload(Rehearsal.takes).selectinload(Take.files),
     selectinload(Rehearsal.takes).selectinload(Take.markers),
     selectinload(Rehearsal.takes).selectinload(Take.cloud_copy),
+    selectinload(Rehearsal.takes).selectinload(Take.service_copy),
 )
 
 # A take read as a go at its song (goes_of, goes_before), and their order:
@@ -147,7 +148,7 @@ _WITH_TAKES = (
 _AS_GO = (
     selectinload(Take.rehearsal).selectinload(Rehearsal.tracks), selectinload(Take.song),
     selectinload(Take.files), selectinload(Take.markers),
-    selectinload(Take.cloud_copy),
+    selectinload(Take.cloud_copy), selectinload(Take.service_copy),
 )
 _GO_ORDER = (Rehearsal.created_at.desc(), Rehearsal.id, Take.take_number)
 
@@ -227,6 +228,13 @@ class Library:
         }
 
     @staticmethod
+    def _service_data(copy):
+        if copy is None or copy.removed:
+            return None
+        return {"up": copy.mp3_gen == copy.gen, "flac": copy.flac_gen == copy.gen,
+                "error": copy.error}
+
+    @staticmethod
     def _cloud_dict(copy, cloud):
         if copy is None or cloud is None:
             return {}
@@ -297,6 +305,11 @@ class Library:
                 {"at": m.at, "label_id": m.label_id, "note": m.note} for m in take.markers
             ],
             "cloud": self._copy_data(take.cloud_copy),
+            # What of it is in the band service: None when it was never sent
+            # there; "up" once the MP3s of its audio as it is now are all up,
+            # "flac" once its FLAC files are too, and "error" why the service
+            # turned it down.
+            "service": self._service_data(take.service_copy),
             "cloud_skip": take.cloud_skip,
             "cloud_send": take.cloud_send,
             # Whether its Backing track opens heard: the song's, as the band
@@ -1256,6 +1269,7 @@ class Library:
                 db, folder, take_number,
                 selectinload(Take.song), selectinload(Take.files),
                 selectinload(Take.markers), selectinload(Take.cloud_copy),
+                selectinload(Take.service_copy),
             )
             data = None if row is None else self._take_data(Path(folder), row)
         return self._take_out(data, self._cloud_dir())
@@ -1449,6 +1463,11 @@ class Library:
             "markers": [self._columns(m, "id", "take_id") for m in row.markers],
             "cloud_copy": (None if row.cloud_copy is None
                            else self._columns(row.cloud_copy, "take_id")),
+            # So an Undo brings back what the band service knows it by, and
+            # the files made for it, and an end tells the service it went.
+            "service_copy": (None if row.service_copy is None
+                             else self._columns(row.service_copy, "take_id")),
+            "service_files": [self._columns(f, "take_id") for f in row.service_files],
         }
 
     def take_record(self, folder, take_number):
@@ -1461,7 +1480,8 @@ class Library:
                 db, folder, int(take_number),
                 selectinload(Take.rehearsal), selectinload(Take.song),
                 selectinload(Take.files), selectinload(Take.markers),
-                selectinload(Take.cloud_copy),
+                selectinload(Take.cloud_copy), selectinload(Take.service_copy),
+                selectinload(Take.service_files),
             )
             return None if row is None else self._take_record(row)
 
@@ -1541,8 +1561,25 @@ class Library:
             markers=self._marks_back(db, record.get("markers") or []),
             cloud_copy=(None if copy is None
                         else CloudCopy(**self._known(CloudCopy, copy, "take_id"))),
+            service_copy=self._service_back(db, record.get("service_copy")),
+            service_files=([ServiceFile(**self._known(ServiceFile, f, "take_id"))
+                            for f in record.get("service_files") or []]
+                           if record.get("service_copy") else []),
         ))
         db.flush()
+
+    @staticmethod
+    def _service_back(db, copy):
+        """A take's band service row as its record has it, and no longer on
+        the list of takes to put in the service's trash: an Undo that came
+        after the end of its notice after all (_end runs at quit and at
+        start) brings it back before the service is told."""
+        if not copy:
+            return None
+        gone = db.get(ServiceDelete, copy.get("uid"))
+        if gone is not None:
+            db.delete(gone)
+        return ServiceCopy(**Library._known(ServiceCopy, copy, "take_id"))
 
     @staticmethod
     def _cloud_named(db, copy):
@@ -1756,6 +1793,143 @@ class Library:
                 return False
             row.cloud_error = message
             return True
+
+    # ---------- the band service ----------
+    #
+    # What sending/band_service.py keeps about each take it sends there. A
+    # take's rows are its own: they go with it, and come back with its Undo
+    # (take_record). The takes still to be put in the service's trash are kept
+    # by the name the service knows them by, since their take is gone.
+
+    def _service_out(self, row, take_number, folder):
+        return {**self._columns(row), "take_number": take_number,
+                "folder": str(self._folder(folder))}
+
+    def service_rows(self):
+        """Every take's band service row, in the order the takes were
+        recorded, each with its take's "folder" and "take_number"."""
+        with self._session() as db:
+            rows = db.execute(
+                select(ServiceCopy, Take.take_number, Rehearsal.folder)
+                .join(Take, ServiceCopy.take_id == Take.id)
+                .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+                .order_by(Rehearsal.created_at, Rehearsal.id, Take.take_number)
+            ).all()
+            return [self._service_out(*r) for r in rows]
+
+    def service_row(self, folder, take_number):
+        """The take's band service row, with "take_id", or None."""
+        with self._session() as db:
+            row = self._find_take(db, folder, int(take_number), selectinload(Take.service_copy))
+            if row is None or row.service_copy is None:
+                return None
+            return self._columns(row.service_copy)
+
+    def service_row_of(self, take_id):
+        """A band service row by its take's id, with the take's "folder" and
+        "take_number", or None."""
+        with self._session() as db:
+            found = db.execute(
+                select(ServiceCopy, Take.take_number, Rehearsal.folder)
+                .join(Take, ServiceCopy.take_id == Take.id)
+                .join(Rehearsal, Take.rehearsal_id == Rehearsal.id)
+                .where(ServiceCopy.take_id == take_id)
+            ).first()
+            return None if found is None else self._service_out(*found)
+
+    def add_service_row(self, folder, take_number, uid, **fields):
+        """The take's band service row, made with `uid` when it has none, and
+        `fields` set on it either way. The row as it is now, or None without
+        the take."""
+        with self._session.begin() as db:
+            take = self._find_take(db, folder, int(take_number), selectinload(Take.service_copy))
+            if take is None:
+                return None
+            if take.service_copy is None:
+                take.service_copy = ServiceCopy(uid=uid, gen=1, pending_cut=0.0, due=False)
+            for key, value in fields.items():
+                setattr(take.service_copy, key, value)
+            db.flush()
+            return self._columns(take.service_copy)
+
+    def change_service_row(self, take_id, change):
+        """`change(row)` gives the fields to set on a band service row, from
+        the row as it is, in one transaction: two threads never lose each
+        other's change. The row as it is now, or None when it is gone."""
+        with self._session.begin() as db:
+            row = db.get(ServiceCopy, take_id)
+            if row is None:
+                return None
+            for key, value in (change(self._columns(row)) or {}).items():
+                setattr(row, key, value)
+            db.flush()
+            return self._columns(row)
+
+    def service_files(self, take_id, gen):
+        """The files made for a take's generation, by name."""
+        with self._session() as db:
+            rows = db.scalars(select(ServiceFile).where(
+                ServiceFile.take_id == take_id, ServiceFile.gen == gen))
+            return {r.name: self._columns(r) for r in rows}
+
+    def add_service_file(self, take_id, gen, name, path, size):
+        """A file made for a take's generation, nothing of it sent yet."""
+        with self._session.begin() as db:
+            db.merge(ServiceFile(take_id=take_id, gen=gen, name=name, path=path, size=int(size),
+                                 upload_id=None, parts=[], done=False))
+
+    def change_service_file(self, take_id, gen, name, **fields):
+        """Sets `fields` on one file's row; False when it is gone."""
+        with self._session.begin() as db:
+            row = db.get(ServiceFile, (take_id, gen, name))
+            if row is None:
+                return False
+            for key, value in fields.items():
+                setattr(row, key, value)
+            return True
+
+    def drop_service_file(self, take_id, gen, name):
+        """One file's row out: its staged copy is gone, and it is made again."""
+        with self._session.begin() as db:
+            row = db.get(ServiceFile, (take_id, gen, name))
+            if row is not None:
+                db.delete(row)
+
+    def drop_all_service_files(self):
+        """Every file's row out: the key went, and what was made for it is
+        made again if a key to the same service comes back."""
+        with self._session.begin() as db:
+            db.execute(ServiceFile.__table__.delete())
+
+    def drop_service_files(self, take_id, keep_gen=None):
+        """A take's files' rows out, but those of `keep_gen`."""
+        with self._session.begin() as db:
+            query = ServiceFile.__table__.delete().where(ServiceFile.take_id == take_id)
+            if keep_gen is not None:
+                query = query.where(ServiceFile.gen != keep_gen)
+            db.execute(query)
+
+    def service_deletes(self):
+        """[{"uid", "name"}]: the takes still to go to the service's trash."""
+        with self._session() as db:
+            return [{"uid": r.uid, "name": r.name} for r in db.scalars(select(ServiceDelete))]
+
+    def add_service_delete(self, uid, name):
+        with self._session.begin() as db:
+            db.merge(ServiceDelete(uid=uid, name=name or ""))
+
+    def drop_service_delete(self, uid):
+        with self._session.begin() as db:
+            row = db.get(ServiceDelete, uid)
+            if row is not None:
+                db.delete(row)
+
+    def forget_service(self):
+        """Everything the band service's sending kept: the key was taken
+        away, and what it still had to send goes with it."""
+        with self._session.begin() as db:
+            for model in (ServiceFile, ServiceCopy, ServiceDelete):
+                db.execute(model.__table__.delete())
 
     # ---------- sets ----------
     #

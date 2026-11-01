@@ -3,7 +3,7 @@ Every Python suite, one command:
 
     python tests/run_all.py
 
-Sixteen of them, because they answer different questions and need different
+Seventeen of them, because they answer different questions and need different
 things to be true:
 
     test_control_api.py shared control API and JSON bridge without MIDI.
@@ -126,6 +126,15 @@ things to be true:
                        or a pickup, pads with no beat), and written into a
                        take as its Backing track.
 
+    test_sending.py    sending takes to a band service (sending/band_service.py)
+                       against a fake service that checks every request
+                       against service/openapi.json: a take sent part by
+                       part, MP3s before FLAC, a part whose answer never
+                       came, a close in the middle, no internet, a lost
+                       upload, a refusal and Retry, a rename, a crop, a
+                       deletion and its Undo, the close dialog, disconnect.
+                       Needs openapi-core 0.23.1.
+
 The interface's tests are in ui/, beside the code they test: `npm test` and
 `npm run test:e2e` there. See tests/README.md.
 
@@ -151,7 +160,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SUITES = ("test_control_api.py", "test_controller_browse.py", "test_controller_diagnostics.py", "test_controller_extensions.py", "test_controller_recovery.py", "test_controller.py", "test_transport.py", "test_engine.py", "test_platform.py", "test_store.py", "test_ports.py",
-          "test_midi.py", "test_click.py", "test_tempo.py", "test_drift.py", "test_backing.py")
+          "test_midi.py", "test_click.py", "test_tempo.py", "test_drift.py", "test_backing.py",
+          "test_sending.py")
 
 # Four times the longest any suite has taken (test_engine, 145 s on CI's Mac).
 LIMIT = 600

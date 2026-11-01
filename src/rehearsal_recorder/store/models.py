@@ -194,6 +194,14 @@ class Take(Base):
         back_populates="take", cascade="all, delete-orphan",
         passive_deletes=True, uselist=False,
     )
+    service_copy: Mapped["ServiceCopy | None"] = relationship(
+        back_populates="take", cascade="all, delete-orphan",
+        passive_deletes=True, uselist=False,
+    )
+    service_files: Mapped[list["ServiceFile"]] = relationship(
+        back_populates="take", cascade="all, delete-orphan",
+        passive_deletes=True, order_by="ServiceFile.name",
+    )
 
 
 class TakeFile(Base):
@@ -306,3 +314,78 @@ class CloudCopy(Base):
     source: Mapped[dict] = mapped_column(JSON, default=dict)
 
     take: Mapped[Take] = relationship(back_populates="cloud_copy")
+
+
+class ServiceCopy(Base):
+    """
+    What of a take is in the band service, or on its way there (migration
+    0011; sending/band_service.py). No row: it was never sent.
+    """
+
+    __tablename__ = "service_copy"
+
+    take_id: Mapped[int] = mapped_column(
+        ForeignKey("take.id", ondelete="CASCADE"), primary_key=True
+    )
+    # The take's name in the service, made when it is first sent and kept
+    # for good: a rename, a crop or a restart never changes it.
+    uid: Mapped[str] = mapped_column(String)
+    # 1, and one more each time its audio changes (a crop).
+    gen: Mapped[int] = mapped_column(Integer, default=1)
+    # Seconds the crops since the generation the service shows took off the
+    # start, which the service moves the comments back by.
+    pending_cut: Mapped[float] = mapped_column(Float, default=0.0)
+    # Whether something of it is still to go: its files, or its details.
+    due: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The details last sent in full (the TakeMeta), None before.
+    sent: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # The generation whose MP3s, and whose FLAC files, are all up.
+    mp3_gen: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    flac_gen: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Why the service turned it down, until it is sent again.
+    error: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Taken out of the service by hand (it is in the service's trash): the
+    # row stays for its uid, so sending it again brings back the same take,
+    # comments and all. Nothing about it goes until it is sent again.
+    removed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    take: Mapped[Take] = relationship(back_populates="service_copy")
+
+
+class ServiceFile(Base):
+    """
+    One file made for the band service (an MP3, a FLAC, a waveform or a
+    .mid) and how far its upload got: kept until the take's generation is
+    all up, so a file is never made twice, and a part that arrived is never
+    sent again under another number.
+    """
+
+    __tablename__ = "service_file"
+
+    take_id: Mapped[int] = mapped_column(
+        ForeignKey("take.id", ondelete="CASCADE"), primary_key=True
+    )
+    gen: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # As the service names it: "1.mp3", "1.flac", "1.peaks", "2.mid".
+    name: Mapped[str] = mapped_column(String, primary_key=True)
+    # Relative to the band service's own folder beside the settings.
+    path: Mapped[str] = mapped_column(String)
+    size: Mapped[int] = mapped_column(Integer)
+    # The upload the service gave it, None before it is asked for one.
+    upload_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # [[number, etag], ...] of the parts that arrived.
+    parts: Mapped[list] = mapped_column(JSON, default=list)
+    done: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    take: Mapped[Take] = relationship(back_populates="service_files")
+
+
+class ServiceDelete(Base):
+    """A take to be put in the band service's trash: deleted in РЭХА, or
+    removed from the service by hand, and not yet told."""
+
+    __tablename__ = "service_delete"
+
+    uid: Mapped[str] = mapped_column(String, primary_key=True)
+    # Its name as it was, for its line in the list of background work.
+    name: Mapped[str] = mapped_column(String, default="")

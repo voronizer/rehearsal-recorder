@@ -3,11 +3,15 @@
 // The words are in the HTML, so a crawler that runs no script reads them all.
 import { renderToStaticMarkup } from "react-dom/server"
 import { articleJsonLd, pageUrl, type PageMeta } from "../content/seo"
+import { BAND_SERVICE } from "../page/links"
+import { BandServicePage } from "./BandServicePage"
 import { stories } from "./content"
+import { bandService } from "./service"
 import { StoriesPage } from "./StoriesPage"
 import { StoryPage } from "./StoryPage"
 
-/** The page of stories, then each story, in order. */
+/** The page of stories, then each story, in order, then the band service's
+ *  page, which is laid out like one. */
 export function storyPages(): { meta: PageMeta; body: string }[] {
   return [
     {
@@ -33,5 +37,15 @@ export function storyPages(): { meta: PageMeta; body: string }[] {
         body: renderToStaticMarkup(<StoryPage story={story} stories={stories} />),
       }
     }),
+    {
+      meta: {
+        path: BAND_SERVICE,
+        title: `${bandService.title} · РЭХА`,
+        description: bandService.description,
+        kind: "website",
+        jsonLd: null,
+      },
+      body: renderToStaticMarkup(<BandServicePage page={bandService} />),
+    },
   ]
 }
