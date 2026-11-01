@@ -21,6 +21,9 @@ export default defineConfig(async () => {
             name: "worker",
             include: ["test/**/*.test.ts"],
             setupFiles: ["./test/apply-migrations.ts"],
+            // A test that signs in several members runs in half a second
+            // here, but took 5.4 s on a busy CI runner, past the default 5 s.
+            testTimeout: 15_000,
           },
         },
         { test: { name: "pages", include: ["src/**/*.test.ts"], environment: "node" } },
