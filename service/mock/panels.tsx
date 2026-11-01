@@ -14,7 +14,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Toggle } from "@/components/ui/toggle"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 import { useAt, usePanel, usePlayer } from "./context"
 import { isNew } from "./data"
@@ -314,15 +313,23 @@ function MarkDraft({ uid, at, done }: { uid: string; at: number; done: () => voi
       <span className="text-muted-foreground">
         A mark at <span className="tnum text-foreground">{fmt(at)}</span>
       </span>
-      <ToggleGroup type="single" variant="outline" value={label} onValueChange={(v) => v && setLabel(v)} className="flex-wrap">
-        {data.labels.map((l, i) => (
-          <ToggleGroupItem key={l.name} value={String(i)} className="gap-1.5">
-            <Diamond colour={l.colour} />
-            {l.name}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
-      <Input autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="What is it about?" />
+      {/* A list, as РЭХА picks a label (Settings › Marks): the band may have many labels. */}
+      <div className="flex gap-2">
+        <Select value={label} onValueChange={setLabel}>
+          <SelectTrigger aria-label="Label" className="w-auto shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {data.labels.map((l, i) => (
+              <SelectItem key={l.name} value={String(i)}>
+                <Diamond colour={l.colour} />
+                {l.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="What is it about?" />
+      </div>
       <div className="flex gap-2">
         <Button size="row" onClick={() => (addMark(uid, at, Number(label), note.trim()), done())}>
           Add mark
