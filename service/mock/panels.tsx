@@ -32,8 +32,8 @@ import {
   type Mark,
   type Song,
 } from "./data"
-import { Play } from "./Home"
-import { Diamond, Dot, Group, Groups, Props, Rows, StarButton, TakeLink, TakeName, Tile, Wave } from "./parts"
+import { Dot, Group, Groups, Play, Props, rehaLabel, Rows, StarButton, TakeLine, TakeLink, TakeName, Tile, Wave } from "./parts"
+import { LabelDot } from "@/components/ui/mark"
 
 export const KEYS = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"].flatMap((n) => [`${n} major`, `${n} minor`])
 
@@ -87,18 +87,7 @@ export function BestTake({ song, big }: { song: Song; big?: boolean }) {
   const data = useData()
   const best = bestOf(data, song.title)
   if (!best) return <p className="text-muted-foreground">No takes yet. They come from РЭХА under the title “{song.title}”.</p>
-  return (
-    <Tile>
-      <div className="flex items-center gap-3">
-        <Play uid={best.take.uid} className={big ? "size-12" : undefined} />
-        <Wave uid={best.take.uid} height={big ? 96 : 48} className="flex-1" />
-        <StarButton take={best.take} />
-      </div>
-      <p className="text-muted-foreground">
-        <TakeLink uid={best.take.uid} className="text-foreground" /> · {fmt(best.take.len)}
-      </p>
-    </Tile>
-  )
+  return <TakeLine take={best.take} marks={big} />
 }
 
 export function Notes({ song }: { song: Song }) {
@@ -175,7 +164,7 @@ export function SongPanel({ id }: { id: string }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-2">
-        <h2 className="flex-1 truncate text-xl font-semibold">{g.title}</h2>
+        <h2 className="flex-1 truncate text-lg font-semibold">{g.title}</h2>
         <Button asChild variant="outline" size="row">
           <Link to="/songs/$id" params={{ id }} onClick={close}>
             Song's page
@@ -252,17 +241,17 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
   const label = data.labels[mark.label]
   const who = mark.fromReha ? "Set in РЭХА" : memberOf(data, mark.by)?.name
   const comments = compact ? mark.comments.slice(-1) : mark.comments
+  // РЭХА's mark line (components/ui/mark.tsx): the label's dot, the time, the
+  // words; the label's name only when nothing is written (its colour says it).
   return (
-    <div className={cn("grid grid-cols-[0.625rem_2.25rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1", mark.closed && "opacity-60")}>
-      <Diamond colour={label.colour} className="translate-y-[-1px]" />
-      <button type="button" className="tnum text-left text-muted-foreground hover:text-foreground" onClick={() => (compact ? open({ kind: "take", uid: mark.take }) : p.seek(mark.take, mark.at))}>
-        {fmt(mark.at)}
+    <div className={cn("grid grid-cols-[0.5rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1 text-sm", mark.closed && "opacity-60")}>
+      <LabelDot colour={rehaLabel(label, mark.label).colour} />
+      <button type="button" className="flex min-w-0 items-baseline gap-2 text-left" onClick={() => (compact ? open({ kind: "take", uid: mark.take }) : p.seek(mark.take, mark.at))}>
+        <span className="tnum shrink-0 text-muted-foreground">{fmt(mark.at)}</span>
+        <span className="min-w-0">{mark.note || label.name}</span>
       </button>
-      <button type="button" className="text-left" onClick={() => compact && open({ kind: "take", uid: mark.take })}>
-        {mark.note}
-      </button>
-      <span className="col-start-3 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-        {take && <TakeLink uid={mark.take} short={take === "short"} className="text-foreground" />}
+      <span className="col-start-2 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+        {take && <TakeLink uid={mark.take} short={take === "short"} />}
         {take && <span>·</span>}
         <span>
           {who} · {mark.when}
@@ -270,7 +259,7 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
         {isNew(data, mark.id) && !isNew(data, mark.take) && <Dot />}
       </span>
       {comments.map((c) => (
-        <p key={c.id} className="col-start-3 mt-1">
+        <p key={c.id} className="col-start-2 mt-1">
           <span className="text-xs text-muted-foreground">{memberOf(data, c.by)?.name}: </span>
           {c.text}
         </p>
@@ -278,7 +267,7 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
       {!compact &&
         (reply !== null ? (
           <form
-            className="col-start-3 mt-1 flex gap-2"
+            className="col-start-2 mt-1 flex gap-2"
             onSubmit={(e) => {
               e.preventDefault()
               if (reply.trim()) addComment(mark.id, reply.trim())
@@ -291,7 +280,7 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
             </Button>
           </form>
         ) : (
-          <span className="col-start-3 flex gap-4 text-xs">
+          <span className="col-start-2 flex gap-4 text-xs">
             <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setReply("")}>
               Comment
             </button>
@@ -309,7 +298,7 @@ function MarkDraft({ uid, at, done }: { uid: string; at: number; done: () => voi
   const [label, setLabel] = useState("0")
   const [note, setNote] = useState("")
   return (
-    <Tile className="rounded-xl ring-1 ring-primary/40">
+    <Tile boxed className="border-primary/40">
       <span className="text-muted-foreground">
         A mark at <span className="tnum text-foreground">{fmt(at)}</span>
       </span>
@@ -322,7 +311,7 @@ function MarkDraft({ uid, at, done }: { uid: string; at: number; done: () => voi
           <SelectContent>
             {data.labels.map((l, i) => (
               <SelectItem key={l.name} value={String(i)}>
-                <Diamond colour={l.colour} />
+                <LabelDot colour={rehaLabel(l, i).colour} />
                 {l.name}
               </SelectItem>
             ))}
@@ -371,7 +360,7 @@ export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-2">
-        <h2 className="flex min-w-0 flex-1 items-center gap-2 text-xl font-semibold">
+        <h2 className="flex min-w-0 flex-1 items-center gap-2 text-lg font-semibold">
           <TakeName take={t} />
         </h2>
         <StarButton take={t} who />
@@ -387,15 +376,15 @@ export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
       </div>
       <Groups>
         <Group>
-          <Tile>
+          <div className="flex flex-col gap-2">
+            <Wave uid={uid} height={64} />
             <div className="flex items-center gap-3">
               <Play uid={uid} />
-              <span className="tnum w-20 shrink-0 text-xs text-muted-foreground">
+              <span className="tnum text-xs text-muted-foreground">
                 {fmt(at)} / {fmt(t.len)}
               </span>
-              <Wave uid={uid} height={56} className="flex-1" />
             </div>
-          </Tile>
+          </div>
         </Group>
         <Group title="Tracks" hint="4" fold="closed">
           <Lanes uid={uid} />

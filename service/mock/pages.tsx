@@ -24,24 +24,13 @@ import {
   useData,
   type Take,
 } from "./data"
-import { Play } from "./Home"
 import { MarkItem, TakeMarks, Lanes } from "./panels"
 import { Avatar } from "./Shell"
-import { Columns, Dot, Group, Groups, Page, Rows, StarButton, TakeLink, TakeName, Tile, Wave, takesN } from "./parts"
+import { Columns, Dot, Group, Groups, Page, Play, Rows, StarButton, TakeLine, TakeLink, TakeName, Tile, Wave, takesN } from "./parts"
 
-/** A take in a list: ▶, its name, its wave with the marks, its length, the stars. */
-export function TakeRow({ take, short }: { take: Take; short?: boolean }) {
-  const wide = useWide()
-  return (
-    <div className="flex items-center gap-3">
-      <Play uid={take.uid} />
-      <TakeLink uid={take.uid} short={short} className={short ? "w-12 shrink-0" : "w-28 shrink-0"} />
-      {wide !== "phone" && <Wave uid={take.uid} height={28} className="flex-1" />}
-      {wide === "phone" && <span className="flex-1" />}
-      <span className="tnum w-10 shrink-0 text-right text-xs text-muted-foreground">{fmt(take.len)}</span>
-      <StarButton take={take} />
-    </div>
-  )
+/** A take in a list: РЭХА's take bar (parts.tsx TakeLine). `marks`: its marks under it. */
+export function TakeRow({ take, marks }: { take: Take; short?: boolean; marks?: boolean }) {
+  return <TakeLine take={take} marks={marks} />
 }
 
 // ---------- Rehearsals ----------
@@ -157,7 +146,7 @@ export function Rehearsal() {
               {ts
                 .filter((t) => t.song === s)
                 .map((t) => (
-                  <TakeRow key={t.uid} take={t} short={!!s} />
+                  <TakeRow key={t.uid} take={t} marks />
                 ))}
             </Rows>
           </Group>
@@ -436,7 +425,7 @@ export function Members() {
               </Rows>
             )}
             {newKey && (
-              <Tile className="ring-1 ring-primary/40">
+              <Tile boxed className="border-primary/40">
                 <span>Paste this key into РЭХА now, under “I have a band service key”. It is shown only this once.</span>
                 <code className="font-mono text-xs break-all">{newKey}</code>
               </Tile>
@@ -468,8 +457,9 @@ export function Trash() {
   const [back, setBack] = useState<string | null>(null)
   return (
     <Page title="Trash" sub="Takes removed in РЭХА wait here for 30 days, then they are deleted for good. Anyone in the band can put one back.">
-      {back && <Tile className="ring-1 ring-primary/40">{back}</Tile>}
+      {back && <Tile boxed className="border-primary/40">{back}</Tile>}
       {data.trash.length ? (
+        <Group>
         <Rows>
           {data.trash.map((t) => {
             const take = takeOf(data, t.uid)
@@ -496,6 +486,7 @@ export function Trash() {
             )
           })}
         </Rows>
+        </Group>
       ) : (
         <p className="text-muted-foreground">The trash is empty.</p>
       )}
@@ -531,7 +522,7 @@ export function TakePage() {
       sub={`${dayOf(data, t.day).long} · ${fmt(t.len)} · 4 tracks`}
     >
       {trashed && (
-        <Tile className="ring-1 ring-warn/40">
+        <Tile boxed className="border-warn/50">
           <span>In the Trash. Deleted for good in {trashed.left} days.</span>
           <Button variant="outline" size="row" className="self-start" onClick={() => restore(uid)}>
             Restore
@@ -542,12 +533,10 @@ export function TakePage() {
         main={
           <Groups>
             <Group>
-              <Tile>
-                <div className="flex items-center gap-3">
-                  <Play uid={uid} className="size-12" />
-                  <Wave uid={uid} height={64} className="flex-1" />
-                </div>
-              </Tile>
+              <div className="flex items-center gap-4">
+                <Play uid={uid} className="size-12" />
+                <Wave uid={uid} height={72} className="flex-1" />
+              </div>
             </Group>
             <Group title="Tracks" hint="4">
               <Lanes uid={uid} />

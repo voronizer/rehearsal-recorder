@@ -1,9 +1,8 @@
 import { Link, useParams } from "@tanstack/react-router"
 import { ChevronLeft } from "lucide-react"
 import { bestOf, dayOf, fmt, rehearsalsOf, songOf, takesOf, useData } from "./data"
-import { Play } from "./Home"
 import { AddFile, BestTake, Files, Notes, StatusMenu } from "./panels"
-import { Columns, Group, Groups, Page, Rows, StarButton, TakeLink, Wave, takesN } from "./parts"
+import { Columns, Group, Groups, Page, TakeLine, takesN } from "./parts"
 
 /** A song's takes by rehearsal, newest first. */
 export function AllTakes({ title }: { title: string }) {
@@ -14,20 +13,14 @@ export function AllTakes({ title }: { title: string }) {
     <div className="flex flex-col gap-3">
       {days.map((d, i) => (
         <Group key={d} small title={dayOf(data, d).long} hint={takesN(ts.filter((t) => t.day === d).length)} fold={i === 0 ? "open" : "closed"}>
-          <Rows>
+          <div className="flex flex-col gap-1">
             {ts
               .filter((t) => t.day === d)
               .reverse()
               .map((t) => (
-                <div key={t.uid} className="flex items-center gap-3">
-                  <Play uid={t.uid} />
-                  <TakeLink uid={t.uid} short className="w-12 shrink-0" />
-                  <Wave uid={t.uid} height={28} className="flex-1" />
-                  <span className="tnum w-10 shrink-0 text-right text-xs text-muted-foreground">{fmt(t.len)}</span>
-                  <StarButton take={t} />
-                </div>
+                <TakeLine key={t.uid} take={t} />
               ))}
-          </Rows>
+          </div>
         </Group>
       ))}
     </div>

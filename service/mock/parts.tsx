@@ -1,28 +1,54 @@
-import { Children, Fragment, type ReactNode } from "react"
+import { Children, createContext, Fragment, useContext, type ReactNode } from "react"
 import { ChevronRight, Star } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { useAt, usePanel, usePlayer, useWide } from "./context"
-import { isNew, marksOf, memberOf, takeOf, toggleStar, useData, type Take } from "./data"
+import { fmt, isNew, marksOf, memberOf, takeOf, toggleStar, useData, type Label, type Take } from "./data"
+import { LabelDot, MarkTick } from "@/components/ui/mark"
+import { PlayButton } from "@/components/ui/play-button"
+import { TAKE_FILLS } from "@/lib/takeScale"
+import type { Label as RehaLabel, LabelColour } from "@/lib/api"
 
 /** "1 take", "3 takes". */
 export const takesN = (n: number) => `${n} take${n === 1 ? "" : "s"}`
 
-// ---------- groups ----------
+// ---------- groups, as РЭХА's pages: one card, its parts split by a line ----------
 
-/** A screen's or a panel's groups, one under another. */
+/** Where a group is drawn: on the page (it makes its own card), in a card, or in the panel. */
+type Surface = "page" | "card" | "panel"
+const SurfaceCtx = createContext<Surface>("page")
+export const InPanel = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="panel">{children}</SurfaceCtx.Provider>
+
+/**
+ * A screen's or a panel's groups. On a page: one card (bg-card, the large
+ * corner) with the groups as its parts, a line between them, as a song's
+ * page in РЭХА. In a card or the panel: the parts and lines alone.
+ */
 export function Groups({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("flex flex-col gap-8", className)}>{Children.toArray(children).filter(Boolean)}</div>
+  const surface = useContext(SurfaceCtx)
+  const wide = useWide()
+  const items = Children.toArray(children).filter(Boolean)
+  const parts = items.map((c, i) => (
+    <div key={i} className={cn(surface === "panel" ? "py-5" : "py-6", i > 0 && "border-t", surface !== "page" && "first:pt-0 last:pb-0")}>
+      {c}
+    </div>
+  ))
+  if (surface !== "page") return <div className={cn("flex flex-col", className)}>{parts}</div>
+  // On a phone the card would only take width from the rows: the parts and lines alone.
+  return (
+    <SurfaceCtx.Provider value="card">
+      <div className={cn("flex flex-col", wide !== "phone" && "rounded-xl bg-card px-6", className)}>{parts}</div>
+    </SurfaceCtx.Provider>
+  )
 }
 
 /**
- * One group: a heading, an optional hint after it and an action at its
- * right, then its rows as tiles. `fold` makes the heading a row that folds
- * the group away: for long lists and for what is seldom needed. "closed"
- * starts it folded; the hint then says what is inside. `small` is a group
- * inside a group, such as one rehearsal among a song's takes.
+ * One group: its heading (РЭХА's 14 px semibold), a count or hint after it in
+ * grey, an action at its right, then what it holds. `fold` makes the heading
+ * fold the group away, for long lists and what is seldom needed; "closed"
+ * starts folded. `small` is a group in a group, such as one rehearsal among a
+ * song's takes. Straight on a page it makes a card of its own.
  */
 export function Group({
   title,
@@ -39,31 +65,40 @@ export function Group({
   small?: boolean
   children: ReactNode
 }) {
+  const surface = useContext(SurfaceCtx)
+  if (surface === "page")
+    return (
+      <Groups>
+        <Group title={title} hint={hint} action={action} fold={fold} small={small}>
+          {children}
+        </Group>
+      </Groups>
+    )
   if (!title) return <section className="flex flex-col gap-3">{children}</section>
   const heading = (
     <>
-      <h2 className={small ? "text-sm text-muted-foreground" : "text-base font-semibold"}>{title}</h2>
-      {hint && <span className={cn("truncate text-muted-foreground", small && "text-sm")}>{hint}</span>}
+      <h2 className={cn("text-sm", small ? "font-medium" : "font-semibold")}>{title}</h2>
+      {hint && <span className="truncate text-sm text-muted-foreground">{hint}</span>}
     </>
   )
   if (fold)
     return (
       <Collapsible defaultOpen={fold === "open"} className="group/fold flex flex-col">
-        <div className={cn("flex items-center gap-2", small ? "min-h-7" : "min-h-8")}>
+        <div className="flex min-h-8 items-center gap-2">
           <CollapsibleTrigger asChild>
-            <button type="button" className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 pl-1 text-left outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50">
+            <button type="button" className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 pl-1 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
               <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/fold:rotate-90" />
               {heading}
             </button>
           </CollapsibleTrigger>
           <span className="hidden group-data-[state=open]/fold:contents">{action}</span>
         </div>
-        <CollapsibleContent className={cn("flex flex-col gap-3", small ? "pt-2" : "pt-3")}>{children}</CollapsibleContent>
+        <CollapsibleContent className="flex flex-col gap-3 pt-2">{children}</CollapsibleContent>
       </Collapsible>
     )
   return (
     <section className="flex flex-col gap-3">
-      <div className={cn("flex items-center gap-2", small ? "min-h-7" : "min-h-8")}>
+      <div className="flex min-h-8 items-center gap-2">
         {heading}
         <span className="flex-1" />
         {action}
@@ -73,17 +108,13 @@ export function Group({
   )
 }
 
-/** Rows of a list: each row a soft tile, a hair apart. */
+/** Rows of a list, as РЭХА's: no box of their own; a row lights up under the pointer. */
 export function Rows({ children, className }: { children: ReactNode; className?: string }) {
   const items = Children.toArray(children).filter(Boolean)
   return (
     <div role="list" className={cn("flex flex-col gap-0.5", className)}>
       {items.map((c, i) => (
-        <div
-          role="listitem"
-          key={i}
-          className={cn("bg-muted/60 px-4 py-3", i === 0 ? "rounded-t-xl" : "rounded-t-sm", i === items.length - 1 ? "rounded-b-xl" : "rounded-b-sm")}
-        >
+        <div role="listitem" key={i} className="-mx-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/60">
           {c}
         </div>
       ))}
@@ -91,9 +122,9 @@ export function Rows({ children, className }: { children: ReactNode; className?:
   )
 }
 
-/** Something that is not a list, such as the notes: a tile of its own. */
-export function Tile({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("flex flex-col gap-3 rounded-xl bg-muted/60 p-4", className)}>{children}</div>
+/** Something that is not a list. `boxed`: a form or a notice, framed in a line. */
+export function Tile({ children, className, boxed }: { children: ReactNode; className?: string; boxed?: boolean }) {
+  return <div className={cn("flex flex-col gap-3", boxed && "rounded-lg border p-4", className)}>{children}</div>
 }
 
 /** Two columns on a wide screen; one under another in a small window and on a phone. */
@@ -117,10 +148,10 @@ export function Columns({ main, side, sideWidth = "20rem" }: { main: ReactNode; 
 /** A page: its heading and the line under it, then its groups. */
 export function Page({ title, sub, head, children }: { title?: ReactNode; sub?: ReactNode; head?: ReactNode; children: ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-[72rem] flex-col gap-8">
+    <div className="mx-auto flex w-full max-w-[72rem] flex-col gap-6">
       <header className="flex flex-col gap-1">
         {head}
-        {title && <h1 className="text-2xl font-semibold text-balance">{title}</h1>}
+        {title && <h1 className="text-xl font-semibold text-balance">{title}</h1>}
         {sub && <p className="text-muted-foreground">{sub}</p>}
       </header>
       {children}
@@ -153,14 +184,12 @@ export function Diamond({ colour, className }: { colour: string; className?: str
   return <span aria-hidden="true" className={cn("inline-block size-2.5 shrink-0 rotate-45 rounded-[2px]", className)} style={{ background: colour }} />
 }
 
-/** "Viasna 12": the song's title and the take's number in a pill. */
+/** "Viasna 12", as РЭХА writes a take: the song's title, then the number a shade lighter. `short`: the number alone. */
 export function TakeName({ take, short, className }: { take: Take; short?: boolean; className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5", className)}>
+    <span className={cn("inline-flex items-baseline gap-1", className)}>
       {!(short && take.song) && (take.song ?? "Take")}
-      <Badge variant="secondary" className="tnum h-5 rounded-md px-1.5 text-xs font-normal">
-        {take.n}
-      </Badge>
+      <span className="tnum text-muted-foreground">{take.n}</span>
     </span>
   )
 }
@@ -231,7 +260,80 @@ export function StarButton({ take, who }: { take: Take; who?: boolean }) {
   )
 }
 
-// ---------- the wave ----------
+// ---------- a take as РЭХА draws it in a list ----------
+
+/** A take's ▶: the accent while it plays. */
+export function Play({ uid, className }: { uid: string; className?: string }) {
+  const data = useData()
+  const p = usePlayer()
+  const t = takeOf(data, uid)
+  return <PlayButton look={p.uid === uid && p.playing ? "playing" : "idle"} name={`${t.song ?? "Take"} ${t.n}`} onClick={() => p.play(uid)} className={className} />
+}
+
+/** Our label in РЭХА's shape, for its dot and tick. */
+export function rehaLabel(l: Label, i: number): RehaLabel {
+  const c = l.colour.match(/--label-(\w+)/)?.[1] ?? "grey"
+  return { id: i, name: l.name, colour: (c === "orange" ? "blue" : c) as LabelColour, marks: 0 }
+}
+
+// As РЭХА's rehearsal overview (RehearsalOverview.tsx): the longest take's bar takes this share of the row.
+const BAR_SHARE = 88
+
+/**
+ * One take as a row, as РЭХА's rehearsal overview and song page draw it:
+ * ▶, its bar to scale with its marks as ticks (green-edged when it has
+ * stars), its length, your star. Pressing the bar opens the take's panel.
+ * `marks` lists its marks under it, each a line that plays from there.
+ */
+export function TakeLine({ take, marks, after }: { take: Take; marks?: boolean; after?: ReactNode }) {
+  const data = useData()
+  const p = usePlayer()
+  const { open } = usePanel()
+  const at = useAt(take.uid)
+  const longest = Math.max(...data.takes.map((t) => t.len))
+  const ms = marksOf(data, take.uid)
+  const along = (s: number) => Math.min(98.5, Math.max(1, (s / take.len) * 100))
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3">
+        <Play uid={take.uid} />
+        <div className="flex min-w-0 items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => open({ kind: "take", uid: take.uid })}
+            className={cn(
+              "relative flex h-8 min-w-24 flex-[1_1_6rem] items-center overflow-hidden rounded-sm border px-2.5 text-left text-sm whitespace-nowrap transition-colors",
+              take.stars.length ? `${TAKE_FILLS.starred} hover:from-signal/15 hover:to-signal/15` : `${TAKE_FILLS.rest} hover:bg-accent`,
+            )}
+            style={{ maxWidth: `${(take.len / longest) * BAR_SHARE}%` }}
+          >
+            {ms.map((k) => (
+              <MarkTick key={k.id} colour={rehaLabel(data.labels[k.label], k.label).colour} at={along(k.at)} className="inset-y-[5px]" />
+            ))}
+            <span className="relative -mx-1 min-w-0 truncate rounded-sm px-1 [background:inherit]">
+              <TakeName take={take} />
+            </span>
+            {p.uid === take.uid && <span aria-hidden className="absolute inset-y-0 left-0 bg-primary/20" style={{ width: `${(at / take.len) * 100}%` }} />}
+          </button>
+          <span className="tnum shrink-0 text-sm text-muted-foreground">{fmt(take.len)}</span>
+          {isNew(data, take.uid) && <Dot />}
+          {after}
+        </div>
+        <StarButton take={take} />
+      </div>
+      {marks &&
+        ms.map((k) => (
+          <button key={k.id} type="button" onClick={() => p.seek(take.uid, k.at)} className="ml-9 flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-accent/60">
+            <LabelDot colour={rehaLabel(data.labels[k.label], k.label).colour} />
+            <span className="tnum shrink-0 text-muted-foreground">{fmt(k.at)}</span>
+            <span className="truncate">{k.note || data.labels[k.label].name}</span>
+          </button>
+        ))}
+    </div>
+  )
+}
+
+// ---------- the wave: only in the player ----------
 
 const N = 110
 function bars(seed: string) {
@@ -247,7 +349,11 @@ function bars(seed: string) {
   return out
 }
 
-/** A take's wave in its well; the marks on it in their colours; the playhead in blue. Press to play from there. */
+/**
+ * A take's wave, straight on what holds it (no well of its own: a well in a
+ * tile read as a sausage); the part played darker, as in РЭХА's player; the
+ * marks in their colours; the playhead in blue. Press to play from there.
+ */
 export function Wave({ uid, seed, height = 40, className }: { uid: string; seed?: string; height?: number; className?: string }) {
   const data = useData()
   const p = usePlayer()
@@ -256,16 +362,24 @@ export function Wave({ uid, seed, height = 40, className }: { uid: string; seed?
   const b = bars(seed ?? uid)
   return (
     <div
-      className={cn("relative min-w-0 cursor-pointer rounded-md p-[3px]", "bg-background", className)}
+      className={cn("relative min-w-0 cursor-pointer py-[3px]", className)}
       style={{ height }}
       onClick={(e) => {
         const r = e.currentTarget.getBoundingClientRect()
         p.seek(uid, Math.round(((e.clientX - r.left) / r.width) * t.len))
       }}
     >
-      <svg viewBox={`0 0 ${N} 100`} preserveAspectRatio="none" className="size-full text-muted-foreground/55" aria-hidden="true">
+      <svg viewBox={`0 0 ${N} 100`} preserveAspectRatio="none" className="size-full" aria-hidden="true">
         {b.map((v, i) => (
-          <rect key={i} x={i + 0.2} y={50 - v * 46} width={0.6} height={v * 92} rx={0.3} fill="currentColor" />
+          <rect
+            key={i}
+            x={i + 0.2}
+            y={50 - v * 46}
+            width={0.6}
+            height={v * 92}
+            rx={0.3}
+            className={p.uid === uid && (i + 1) / N <= at / t.len ? "fill-foreground/70" : "fill-muted-foreground/45"}
+          />
         ))}
       </svg>
       {marksOf(data, uid).map((k) => (

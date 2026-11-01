@@ -9,7 +9,7 @@ import { useAccount, useAt, usePanel, usePlayer, useWide } from "./context"
 import { dayOf, fmt, memberOf, takeOf, useData } from "./data"
 import { SongPanel, TakePanel } from "./panels"
 import { LabelsPanel, NewSongPanel, StatusesPanel } from "./more"
-import { StarButton, TakeLink } from "./parts"
+import { InPanel, StarButton, TakeLink } from "./parts"
 
 const NAV: [string, string, LucideIcon][] = [
   ["/", "Home", House],
@@ -125,15 +125,17 @@ function PanelView() {
     <aside
       key={JSON.stringify(panel)}
       className={cn(
-        "absolute inset-y-0 right-0 z-20 flex flex-col overflow-y-auto border-l bg-background p-5 shadow-lg animate-in slide-in-from-right duration-200",
+        "absolute inset-y-0 right-0 z-20 flex flex-col overflow-y-auto border-l bg-panel p-5 text-sm shadow-lg animate-in slide-in-from-right duration-200",
         wide === "phone" ? "w-full border-l-0" : "w-[28rem] max-w-[calc(100%-3rem)]",
       )}
     >
-      {panel.kind === "take" && <TakePanel uid={panel.uid} markAt={panel.markAt} />}
-      {panel.kind === "song" && <SongPanel id={panel.id} />}
-      {panel.kind === "labels" && <LabelsPanel />}
-      {panel.kind === "statuses" && <StatusesPanel />}
-      {panel.kind === "new-song" && <NewSongPanel />}
+      <InPanel>
+        {panel.kind === "take" && <TakePanel uid={panel.uid} markAt={panel.markAt} />}
+        {panel.kind === "song" && <SongPanel id={panel.id} />}
+        {panel.kind === "labels" && <LabelsPanel />}
+        {panel.kind === "statuses" && <StatusesPanel />}
+        {panel.kind === "new-song" && <NewSongPanel />}
+      </InPanel>
     </aside>
   )
 }
@@ -187,7 +189,7 @@ export function Shell() {
           <span className={cn("truncate font-semibold", !data.bandName && "text-muted-foreground")}>{data.bandName || "Band name"}</span>
         </header>
         <div className="relative min-h-0 flex-1">
-          <main className="h-full overflow-y-auto bg-background px-4 py-5">
+          <main className="h-full overflow-y-auto bg-background px-4 py-5 text-sm">
             <Outlet />
           </main>
           <PanelView />
@@ -207,7 +209,7 @@ export function Shell() {
     <div className="flex h-full flex-col">
       <div className="relative flex min-h-0 flex-1">
         <Side />
-        <main className="min-w-0 flex-1 overflow-y-auto bg-background px-8 py-8">
+        <main className="min-w-0 flex-1 overflow-y-auto bg-background px-8 py-8 text-sm">
           <Outlet />
         </main>
         <PanelView />

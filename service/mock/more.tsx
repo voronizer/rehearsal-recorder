@@ -15,7 +15,7 @@ function PanelHead({ title }: { title: string }) {
   const { close } = usePanel()
   return (
     <div className="flex items-center gap-2">
-      <h2 className="flex-1 text-xl font-semibold">{title}</h2>
+      <h2 className="flex-1 text-lg font-semibold">{title}</h2>
       <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
         <X />
       </Button>

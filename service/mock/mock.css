@@ -1,6 +1,7 @@
 /* The interface's own styles, as service/src/service.css takes them. */
 @import "../../ui/src/index.css";
 @source "../../ui/src/components/ui";
+@source "../../ui/src/lib";
 @source "./";
 
 body {

@@ -1,19 +1,11 @@
-import { PlayButton } from "@/components/ui/play-button"
-import { usePanel, usePlayer } from "./context"
-import { bestOf, fmt, isNew, takeOf, takesOf, lastOf, useData, type Mark } from "./data"
+import { usePanel } from "./context"
+import { bestOf, isNew, takesOf, lastOf, useData, type Mark } from "./data"
 import { FirstDay } from "./more"
 import { MarkItem } from "./panels"
-import { Columns, Dot, Group, Groups, Page, Rows, StarButton, TakeLink, Wave } from "./parts"
+import { Columns, Group, Groups, Page, Rows, TakeLine } from "./parts"
+export { Play } from "./parts"
 
-/** A take's ▶: the accent while it plays. */
-export function Play({ uid, className }: { uid: string; className?: string }) {
-  const data = useData()
-  const p = usePlayer()
-  const t = takeOf(data, uid)
-  return <PlayButton look={p.uid === uid && p.playing ? "playing" : "idle"} name={`${t.song ?? "Take"} ${t.n}`} onClick={() => p.play(uid)} className={className} />
-}
-
-/** A song on Home: a line about it, its best take to play, and what that take is. One edge for all text. */
+/** A song on Home, as a song in РЭХА's list: its title, a grey line about it, then its best take as a bar. */
 function SongRow({ id }: { id: string }) {
   const data = useData()
   const { open } = usePanel()
@@ -22,33 +14,24 @@ function SongRow({ id }: { id: string }) {
   const ts = takesOf(data, g.title)
   const unheard = ts.filter((t) => isNew(data, t.uid))
   return (
-    <div className="grid grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5">
-      <span />
+    <div className="flex flex-col gap-2">
       <div className="flex min-w-0 items-baseline gap-2">
-        <button type="button" className="font-semibold underline-offset-4 hover:underline" onClick={() => open({ kind: "song", id })}>
+        <button type="button" className="font-medium underline-offset-4 hover:underline" onClick={() => open({ kind: "song", id })}>
           {g.title}
         </button>
-        <span className="truncate text-muted-foreground">
-          {ts.length} takes · {lastOf(data, g.title)}
+        <span className="truncate text-xs text-muted-foreground">
+          {ts.length} takes · last {lastOf(data, g.title)}
+          {unheard.length > 0 && (
+            <>
+              {" · "}
+              <button type="button" className="text-primary hover:underline" onClick={() => open({ kind: "take", uid: unheard[0].uid })}>
+                {unheard.length} not heard yet
+              </button>
+            </>
+          )}
         </span>
-        <span className="flex-1" />
-        {unheard.length > 0 && (
-          <button type="button" className="flex shrink-0 items-center gap-1.5 self-center text-xs text-primary hover:underline" onClick={() => open({ kind: "take", uid: unheard[0].uid })}>
-            <Dot />
-            {unheard.length} not heard yet
-          </button>
-        )}
       </div>
-      <Play uid={best.take.uid} />
-      <div className="flex min-w-0 items-center gap-2">
-        <Wave uid={best.take.uid} className="flex-1" />
-        <StarButton take={best.take} />
-      </div>
-      <span />
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <TakeLink uid={best.take.uid} short className="text-foreground" />
-        {best.why === "most stars" ? "the band likes it best" : best.why} · {fmt(best.take.len)}
-      </p>
+      <TakeLine take={best.take} />
     </div>
   )
 }
@@ -74,11 +57,11 @@ export function Home() {
       <Columns
         main={
           <Group title="Songs" hint="with their best take">
-            <Rows>
+            <div className="flex flex-col gap-5">
               {songs.map((g) => (
                 <SongRow key={g.id} id={g.id} />
               ))}
-            </Rows>
+            </div>
           </Group>
         }
         side={
@@ -91,16 +74,11 @@ export function Home() {
               </Rows>
             </Group>
             <Group title="The band's favourites">
-              <Rows>
+              <div className="flex flex-col gap-1">
                 {favourites.map((t) => (
-                  <div key={t.uid} className="flex items-center gap-3">
-                    <Play uid={t.uid} />
-                    <TakeLink uid={t.uid} />
-                    <span className="flex-1" />
-                    <StarButton take={takeOf(data, t.uid)} />
-                  </div>
+                  <TakeLine key={t.uid} take={t} />
                 ))}
-              </Rows>
+              </div>
             </Group>
           </Groups>
         }
