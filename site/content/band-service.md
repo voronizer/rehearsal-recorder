@@ -23,7 +23,7 @@ A band service is your band's own page for its takes. РЭХА sends them there 
 
 Listen on the way home, while you still remember what you meant to play.
 
-![The first page on Ira's phone: this Thursday's takes she has not heard yet, and what the band wrote on takes she had](new-takes)
+![Home on Ira's phone: how many takes she has not heard yet, each song with its best take, and the band's latest marks](new-takes)
 
 ## Hear your own part
 
@@ -33,21 +33,27 @@ Each of you has a lane of your own in every take. Play yours alone to hear what 
 
 ## Point at the second
 
-Instead of “the bit after the second chorus” in the chat, you write at 1:42, and everyone hears the same moment. The comment stays with the take instead of getting lost among the memes.
+Instead of “the bit after the second chorus” in the chat, you put a mark at 1:42, and everyone hears the same moment. The band talks under the mark, and the talk stays with the take instead of getting lost among the memes.
 
-![A comment at 1:42 with the answers under it. Tap a comment to put the playhead on its second](comments)
+![Viasna 12 with a mark at 1:42 on every lane, and the band's talk under it. Tap a mark's time to put the playhead there](mark)
+
+## Green to keep, red to fix
+
+A mark has a label, and each label its colour: green for what to keep, red for what went wrong, amber for what to do again, grey for a plain note. Marks set in РЭХА come here too, under the same labels. **Marks** lists the open ones by song, so on the way to Thursday's rehearsal Ivan sees what is still to fix. Once a place is fixed, anyone presses **Close**.
+
+![Marks on Ivan's phone: the open marks on Viasna, each with its label's colour, and the talk under them](colours)
 
 ## Know which take you're aiming for
 
 The band stars the good ones, and a song opens on the favourite. You come to the next rehearsal knowing the tempo and the ending everyone agreed on.
 
-![Viasna's page: the take with the most stars on top, ready to play. The letters by the star are who starred it](song)
+![Viasna's page: the take with the most stars on top, ready to play, with its marks under it](song)
 
 ## Nothing gets lost
 
 Every take the band sends is there, by song, including the Viasna from three weeks ago when the bridge finally worked. A take deleted in РЭХА waits in the **Trash** for 30 days, and anyone in the band can press **Restore**.
 
-![Viasna 3, from three weeks before, and what the band said about its bridge](three-weeks-ago)
+![Viasna 3, from three weeks before, with the band's mark on its bridge and what they said about it](three-weeks-ago)
 
 ## Take your track home
 

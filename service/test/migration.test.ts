@@ -57,9 +57,11 @@ test("part 1's comments become marks and comments under them", async () => {
     { id: 4, parent_id: 3, label_id: null, text: "Two bars less", from_reha: 0, closed: 0 },
     { id: 5, parent_id: null, label_id: id("Note"), text: "Too loud", from_reha: 0, closed: 0 },
   ])
+  // Part 1's columns stay, unused: the Worker of the release before keeps
+  // working in the moments between the migration and the new Worker.
   const columns = (await rows("PRAGMA table_info(comment)")).map((c) => c.name)
-  expect(columns).not.toContain("label")
-  expect(columns).not.toContain("colour")
+  expect(columns).toContain("label")
+  expect(columns).toContain("colour")
 })
 
 test("songs get the first status, and the band starts with its statuses and no name", async () => {

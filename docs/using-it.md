@@ -435,7 +435,7 @@ A few things about cropping:
   from the cropped take, as the mix, the tracks or both, whatever was there
   before. This happens whether automatic sending is on or not.
 - If the take was in the band service, its files go up again from the
-  cropped take, and the band's comments move with the music.
+  cropped take, and the band's marks move with the music.
 - Once the notice has gone, the take as it was is in the Trash, as one
   folder named after the take with “(before crop)” after it. To get the
   audio back then, move its files back into the take's folder. The app
@@ -780,9 +780,9 @@ also sends the ones that could not go before.
 ## Sending takes to a band service
 
 A band service is a private web page where your band listens to its takes
-track by track, stars the good ones and comments on them. Whoever runs it
-gives you a key, and РЭХА sends the takes there. What a band service does,
-and how to get one for your band, is on
+track by track, stars the good ones and marks the moments to talk about.
+Whoever runs it gives you a key, and РЭХА sends the takes there. What a band
+service does, and how to get one for your band, is on
 [reha.stream/band-service](https://reha.stream/band-service).
 
 ### The key
@@ -839,9 +839,11 @@ moves the take to the service's **Trash**, where the band can still play it
 and put it back for 30 days. The take on this computer stays as it is.
 
 What you change in РЭХА follows the take there: a new name for the take or
-its song, a crop (its files go up again), a ★, a mark. A take you delete
-goes to the service's **Trash** once its **Undo** notice has gone, with the
-band's comments and stars.
+its song, a crop (its files go up again), a ★, a mark. Each take also
+carries its song's tempo, when the song has one (see [A song's
+tempo](#a-songs-tempo)), and the song's page in the service shows it. A
+take you delete goes to the service's **Trash** once its **Undo** notice
+has gone, with the band's marks and stars.
 
 ### Following the sending
 

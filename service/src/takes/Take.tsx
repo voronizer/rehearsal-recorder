@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
 import { Back, Columns, Group, Groups, Note, Page, Tile } from "../shell/parts"
+import { useSize } from "../shell/size"
 import { clock, count, longDay } from "../shell/words"
 import { Downloads } from "./Downloads"
 import { CANNOT_PLAY, usePlayer } from "./player/one"
@@ -53,7 +54,18 @@ function InTrash({ uid }: { uid: string }) {
 
 function TakeView({ take }: { take: TakePage }) {
   const p = usePlayer()
+  const size = useSize()
   const song = take.song
+  const player = (
+    <Group>
+      {p.supported === false ? <p className="text-muted-foreground">{CANNOT_PLAY}</p> : <TakePlayer take={take} height={72} />}
+    </Group>
+  )
+  const tracks = (
+    <Group title="Tracks" hint={String(take.tracks.length)}>
+      <Lanes take={take} />
+    </Group>
+  )
   return (
     <Page
       head={song ? <Back to="/songs/$id" params={{ id: String(song.id) }} label={song.title} /> : <Back to="/songs" label="Songs" />}
@@ -74,25 +86,31 @@ function TakeView({ take }: { take: TakePage }) {
       sub={`${longDay(take.date)} · ${clock(take.duration_sec)} · ${count(take.tracks.length, "track")}`}
     >
       {take.trashed_at && <InTrash uid={take.uid} />}
-      <Columns
-        main={
-          <Groups>
-            <Group>
-              {p.supported === false ? <p className="text-muted-foreground">{CANNOT_PLAY}</p> : <TakePlayer take={take} height={72} />}
-            </Group>
-            <Group title="Tracks" hint={String(take.tracks.length)}>
-              <Lanes take={take} />
-            </Group>
-            <Downloads take={take} />
-          </Groups>
-        }
-        sideWidth="minmax(0,0.8fr)"
-        side={
-          <Groups>
-            <TakeMarks take={take} />
-          </Groups>
-        }
-      />
+      {size === "wide" ? (
+        <Columns
+          main={
+            <Groups>
+              {player}
+              {tracks}
+              <Downloads take={take} />
+            </Groups>
+          }
+          sideWidth="minmax(0,0.8fr)"
+          side={
+            <Groups>
+              <TakeMarks take={take} />
+            </Groups>
+          }
+        />
+      ) : (
+        // One under another: the marks before the downloads, which are for the computer at home.
+        <Groups>
+          {player}
+          {tracks}
+          <TakeMarks take={take} />
+          <Downloads take={take} />
+        </Groups>
+      )}
     </Page>
   )
 }

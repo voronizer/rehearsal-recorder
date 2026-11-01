@@ -284,6 +284,8 @@ export const take = sqliteTable(
  * moment of a take with a label and a note, from РЭХА or set here. A row
  * with a parent is a comment under that mark.
  */
+// Part 1's `label` and `colour` are still in the table, unused: a migration
+// only adds, so the Worker before keeps working while the new one goes up.
 export const comment = sqliteTable(
   "comment",
   {

@@ -5,6 +5,29 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **A home for the band in the band service.** The service opens on
+  **Home**: each song with its best take, the latest marks and the takes the
+  band likes most. **Rehearsals**, **Songs**, **Marks**, **Members** and
+  **Trash** sit in a column on the left (on a phone, the button at the top
+  left opens them), and one player runs along the bottom. Every list draws
+  a take as its wave with its marks on it: press the wave to jump to that
+  moment.
+- **Marks in the band service.** A mark is a moment of a take with a label
+  and a note, as in РЭХА. The band sets marks, talks under them and closes
+  one once the place is fixed. The labels are the band's own: rename,
+  recolour or add them under **Labels**. Marks set in РЭХА arrive under the
+  label of the same name. The comments from before become marks with the
+  label Note, their answers under them.
+- **Songs in the band service.** A song has a status, a key, notes and
+  files, such as its chart or a Guitar Pro file. **New song** adds one
+  before its first take. РЭХА now sends a song's tempo with each take, and
+  the song shows it.
+- **The band's name and picture.** The owner sets them on **Members**; they
+  show at the top of every page and on the sign-in page. **Sign out**, under
+  your name, ends this sign-in.
+
 ## 0.17.1
 
 - **A band service on Cloudflare takes the key.** **Connect** could answer

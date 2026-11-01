@@ -66,6 +66,6 @@ WHERE `parent_id` IS NULL AND `from_reha` = 1;--> statement-breakpoint
 UPDATE `comment` SET `label_id` = (SELECT `id` FROM `label` ORDER BY `position` LIMIT 1)
 WHERE `parent_id` IS NULL AND `label_id` IS NULL;--> statement-breakpoint
 UPDATE `song` SET `status_id` = (SELECT `id` FROM `status` ORDER BY `position` LIMIT 1),
-  `created_at` = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');--> statement-breakpoint
-ALTER TABLE `comment` DROP COLUMN `label`;--> statement-breakpoint
-ALTER TABLE `comment` DROP COLUMN `colour`;
+  `created_at` = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');
+-- Part 1's `label` and `colour` stay, unused, so part 1's Worker keeps
+-- working in the moments before part 2's is up (service/README.md).

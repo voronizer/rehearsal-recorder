@@ -20,12 +20,13 @@ test("the band service page is there and linked from the footer", async ({ page 
     "The takes are on your phone the same evening",
     "Hear your own part",
     "Point at the second",
+    "Green to keep, red to fix",
     "Know which take you're aiming for",
     "Nothing gets lost",
     "Take your track home",
     "How to start",
   ])
-  await expect(page.locator(".chap-head .n")).toHaveText(["1", "2", "3", "4", "5", "6"])
+  await expect(page.locator(".chap-head .n")).toHaveText(["1", "2", "3", "4", "5", "6", "7"])
   await expect(page.locator("#how-to-start .chap-steps li")).toHaveCount(4)
   await expect(page.locator("#how-to-start .chap-steps li").last()).toBeVisible()
 })
@@ -34,7 +35,7 @@ for (const theme of ["light", "dark"] as const) {
   test(`each picture of the service comes in, in the ${theme}`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: theme })
     await page.goto(PAGE)
-    await expect(page.locator(".phone-shot img")).toHaveCount(6)
+    await expect(page.locator(".phone-shot img")).toHaveCount(7)
     // Downloading is for the recording program at home: that one is a computer.
     await expect(page.locator("#take-your-track-home .computer-shot img")).toHaveCount(1)
     for (const img of await page.locator("figure img").all()) {
@@ -69,6 +70,6 @@ test.describe("with script off", () => {
     await page.goto(PAGE)
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("A band service of your own")
     await expect(page.locator("#how-to-start").getByRole("link", { name: "the steps on GitHub" })).toBeVisible()
-    await expect(page.locator("figure img")).toHaveCount(7)
+    await expect(page.locator("figure img")).toHaveCount(8)
   })
 })

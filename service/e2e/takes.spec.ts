@@ -55,6 +55,24 @@ test.describe("as Alex", () => {
   })
 })
 
+test.describe("as Alex on a phone", () => {
+  test.use({ storageState: as("alex"), viewport: { width: 390, height: 844 } })
+
+  test("a take page puts the marks before the downloads, each mark with its colour", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
+    const main = page.getByRole("main")
+    const marks = main.getByRole("region", { name: "Marks" })
+    const files = main.getByRole("region", { name: "Download tracks" })
+    const top = async (l: typeof marks) => (await l.boundingBox())!.y
+    expect(await top(marks)).toBeLessThan(await top(files))
+    // The dot that says the label: it has a size, not only a title.
+    const dot = marks.locator("[data-mark]").first().locator("span[title] > *")
+    const box = (await dot.boundingBox())!
+    expect(box.width).toBeGreaterThan(0)
+    expect(box.height).toBeGreaterThan(0)
+  })
+})
+
 test.describe("as Ira", () => {
   test.use({ storageState: as("ira") })
 

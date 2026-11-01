@@ -191,7 +191,7 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
   // words; the label's name only when nothing is written (its colour says it).
   return (
     <div data-mark={mark.id} data-closed={mark.closed} className={cn("grid grid-cols-[0.5rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1 text-sm", mark.closed && "opacity-60")}>
-      <span title={label.name}>
+      <span title={label.name} className="flex">
         <LabelDot colour={label.colour} />
       </span>
       <button
