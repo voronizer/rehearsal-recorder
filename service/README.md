@@ -48,7 +48,9 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
    “Non-Cloudflare MX records exist”, the domain already gets mail
    somewhere else, and this would take that mail over: sort it out first.
 4. Turn on R2, Cloudflare's file storage: open **R2** in the menu on the
-   left and turn it on. Without it the service cannot be put up.
+   left and turn it on. Cloudflare asks for a card or PayPal first, even
+   though the first 10 GB are free. Without R2 the service cannot be put
+   up.
 5. Make the token that puts the service up. A token is a long password for
    one job, and Cloudflare shows it only once, so have step 6 open in
    another tab. On the **Account API Tokens** page, press **Create Token**
