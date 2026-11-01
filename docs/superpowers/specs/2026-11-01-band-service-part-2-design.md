@@ -77,6 +77,7 @@ All on 1 November 2026, in the thread «Сделать сервис для св�
 - 19:30 A take stops being new for you when you open it or play it.
 - 19:31 Before anything arrives, the owner's Home lists four steps.
 - 19:36 One PR for everything below.
+- 19:55 Every list draws a take as its wave, not a bar (“везде”).
 
 ## What the band sees
 
@@ -97,8 +98,8 @@ time, a line of where it is (press to move there), the take's length,
 with a new mark at the moment the button was pressed. The bar shows once
 the band has a take.
 
-Pressing a take's bar in any list, or its name, opens the take's panel; a
-song's name opens the song's panel. The panel comes from the right, the
+Pressing a take's name in any list opens the take's panel, and pressing
+its wave plays it from there; a song's name opens the song's panel. The panel comes from the right, the
 full height above the player, 28 rem wide, with no veil, so the page under
 it stays live. ✕ or Esc closes it, and so does moving to another section.
 
@@ -175,11 +176,11 @@ Ready, Archive.
 
 ### A take
 
-Every list draws a take as РЭХА's rehearsal overview does: ▶, a bar as
-long as the take ran (the longest take of the band fills 88 % of the row),
-its marks as ticks in their colours, the take's name with its number a
-shade lighter (“Viasna 12”), a green edge when a member starred it, the
-played part washed blue. Then its length, a dot if you have not heard it,
+Every list draws a take as a row: ▶, the take's name with its number a
+shade lighter (“Viasna 12”), then its wave as long as the take ran (the
+longest take of the band fills 88 % of the row, as РЭХА's bars do), its
+marks on it as diamonds in their colours, the played part darker. The wave
+is green when a member starred the take. Then its length, a dot if you have not heard it,
 and your ★ with the count. Who starred shows on the take's panel and page,
 and in a tooltip on the count.
 
@@ -287,7 +288,7 @@ Marks from РЭХА are still not posted on their own.
 page titles 20 px, group headings 14 px semibold with a grey count. On a
 page the groups are one card with a line between them; in a panel, the
 parts and lines alone. Rows have no box: a row lights up under the pointer.
-Waves are only in the player. Light and dark follow the viewer's system, as
+Every take is drawn as its wave, in lists and in the player. Light and dark follow the viewer's system, as
 in part 1.
 
 ## What РЭХА does
@@ -326,6 +327,9 @@ One migration, `0001`, after part 1's `0000_first`.
   parent is a mark, a row with a parent is a comment under it. It gains
   `label_id`, `updated_at`; `label` and `colour` go once copied. `closed`
   belongs to the mark.
+- `take` gains `shape`: the wave a list draws, its tracks' peaks joined
+  into 120 values. It is made when a take is shown; a take from part 1
+  gets it the first time a list needs it.
 
 ### Part 1's comments and marks
 
@@ -362,8 +366,7 @@ mark or comment; any member for the rest.
 The pages are rebuilt in `service/src` on the prototype's structure, a
 module per section (`home/`, `rehearsals/`, `songs/`, `marks/`,
 `members/`, `trash/`, `takes/`, `shell/`). They use РЭХА's components and
-lib from `ui/src` as the prototype does: the take bar's fills and mark
-ticks, the mark dot, the play button, folds, menus, lists. The player of
+lib from `ui/src` as the prototype does: the mark dot, the play button, folds, menus, lists. The player of
 part 1 (`takes/player/`) stays and becomes the one player of the frame.
 
 The prototype's code is not shipped: `service/mock/` leaves the branch
@@ -413,7 +416,7 @@ marks. Folds that remember being folded.
 15. The take's number is a shade lighter after the song's title, as РЭХА
     writes it. This replaces the grey pill picked at 17:18, after the look
     moved to РЭХА's at 19:14.
-16. A take's bar is green-edged when any member starred it.
+16. A starred take's wave is green; РЭХА's bar has a green edge instead.
 17. Which groups fold and which start folded (Rehearsals' month, a
     rehearsal's songs and Marks' songs open; a song's older rehearsals,
     the last status and Tracks in the panel folded; Keys for РЭХА folded
@@ -426,3 +429,7 @@ marks. Folds that remember being folded.
     until you open that take again.
 23. The prototype's Latest marks leave out closed marks and show them all;
     the build follows item 13.
+24. In a list the take's name opens its panel and its wave plays from
+    where you press; the bar opened the panel.
+25. A list's wave is the take's tracks joined (the loudest of them at each
+    moment), kept on the take; the small columns on Rehearsals stay.

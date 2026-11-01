@@ -5,7 +5,7 @@ import { MarkItem } from "./panels"
 import { Columns, Group, Groups, Page, Rows, TakeLine } from "./parts"
 export { Play } from "./parts"
 
-/** A song on Home, as a song in РЭХА's list: its title, a grey line about it, then its best take as a bar. */
+/** A song on Home, as a song in РЭХА's list: its title, a grey line about it, then its best take's wave. */
 function SongRow({ id }: { id: string }) {
   const data = useData()
   const { open } = usePanel()

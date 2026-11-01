@@ -1,13 +1,12 @@
-import { Children, createContext, Fragment, useContext, type ReactNode } from "react"
+import { Children, createContext, Fragment, useContext, type CSSProperties, type ReactNode } from "react"
 import { ChevronRight, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { useAt, usePanel, usePlayer, useWide } from "./context"
 import { fmt, isNew, marksOf, memberOf, takeOf, toggleStar, useData, type Label, type Take } from "./data"
-import { LabelDot, MarkTick } from "@/components/ui/mark"
+import { LabelDot } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
-import { TAKE_FILLS } from "@/lib/takeScale"
 import type { Label as RehaLabel, LabelColour } from "@/lib/api"
 
 /** "1 take", "3 takes". */
@@ -276,23 +275,21 @@ export function rehaLabel(l: Label, i: number): RehaLabel {
   return { id: i, name: l.name, colour: (c === "orange" ? "blue" : c) as LabelColour, marks: 0 }
 }
 
-// As РЭХА's rehearsal overview (RehearsalOverview.tsx): the longest take's bar takes this share of the row.
+// As РЭХА's rehearsal overview (RehearsalOverview.tsx): the longest take's wave takes this share of the row.
 const BAR_SHARE = 88
 
 /**
- * One take as a row, as РЭХА's rehearsal overview and song page draw it:
- * ▶, its bar to scale with its marks as ticks (green-edged when it has
- * stars), its length, your star. Pressing the bar opens the take's panel.
- * `marks` lists its marks under it, each a line that plays from there.
+ * One take as a row: ▶, its name (opens the take's panel), its wave to
+ * scale with its marks (green when it has stars; press it to play from
+ * there), its length, your star. `marks` lists its marks under it, each a
+ * line that plays from there.
  */
 export function TakeLine({ take, marks, after }: { take: Take; marks?: boolean; after?: ReactNode }) {
   const data = useData()
   const p = usePlayer()
   const { open } = usePanel()
-  const at = useAt(take.uid)
   const longest = Math.max(...data.takes.map((t) => t.len))
   const ms = marksOf(data, take.uid)
-  const along = (s: number) => Math.min(98.5, Math.max(1, (s / take.len) * 100))
   return (
     <div className="flex flex-col gap-0.5">
       <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3">
@@ -301,23 +298,17 @@ export function TakeLine({ take, marks, after }: { take: Take; marks?: boolean; 
           <button
             type="button"
             onClick={() => open({ kind: "take", uid: take.uid })}
-            className={cn(
-              "relative flex h-8 min-w-24 flex-[1_1_6rem] items-center overflow-hidden rounded-sm border px-2.5 text-left text-sm whitespace-nowrap transition-colors",
-              take.stars.length ? `${TAKE_FILLS.starred} hover:from-signal/15 hover:to-signal/15` : `${TAKE_FILLS.rest} hover:bg-accent`,
-            )}
-            style={{ maxWidth: `${(take.len / longest) * BAR_SHARE}%` }}
+            title={`${take.song ?? "Take"} ${take.n}`}
+            className="w-24 shrink-0 truncate rounded-sm text-left text-sm hover:underline"
           >
-            {ms.map((k) => (
-              <MarkTick key={k.id} colour={rehaLabel(data.labels[k.label], k.label).colour} at={along(k.at)} className="inset-y-[5px]" />
-            ))}
-            <span className="relative -mx-1 min-w-0 truncate rounded-sm px-1 [background:inherit]">
-              <TakeName take={take} />
-            </span>
-            {p.uid === take.uid && <span aria-hidden className="absolute inset-y-0 left-0 bg-primary/20" style={{ width: `${(at / take.len) * 100}%` }} />}
+            <TakeName take={take} />
           </button>
-          <span className="tnum shrink-0 text-sm text-muted-foreground">{fmt(take.len)}</span>
-          {isNew(data, take.uid) && <Dot />}
-          {after}
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <Wave uid={take.uid} height={28} starred={take.stars.length > 0} className="min-w-12" style={{ width: `${(take.len / longest) * BAR_SHARE}%` }} />
+            <span className="tnum shrink-0 text-sm text-muted-foreground">{fmt(take.len)}</span>
+            {isNew(data, take.uid) && <Dot />}
+            {after}
+          </div>
         </div>
         <StarButton take={take} />
       </div>
@@ -333,7 +324,7 @@ export function TakeLine({ take, marks, after }: { take: Take; marks?: boolean; 
   )
 }
 
-// ---------- the wave: only in the player ----------
+// ---------- the wave: in the player and in every list ----------
 
 const N = 110
 function bars(seed: string) {
@@ -354,7 +345,22 @@ function bars(seed: string) {
  * tile read as a sausage); the part played darker, as in РЭХА's player; the
  * marks in their colours; the playhead in blue. Press to play from there.
  */
-export function Wave({ uid, seed, height = 40, className }: { uid: string; seed?: string; height?: number; className?: string }) {
+export function Wave({
+  uid,
+  seed,
+  height = 40,
+  starred,
+  className,
+  style,
+}: {
+  uid: string
+  seed?: string
+  height?: number
+  /** A take with stars: its wave in РЭХА's green, as its bar had a green edge. */
+  starred?: boolean
+  className?: string
+  style?: CSSProperties
+}) {
   const data = useData()
   const p = usePlayer()
   const at = useAt(uid)
@@ -363,7 +369,7 @@ export function Wave({ uid, seed, height = 40, className }: { uid: string; seed?
   return (
     <div
       className={cn("relative min-w-0 cursor-pointer py-[3px]", className)}
-      style={{ height }}
+      style={{ ...style, height }}
       onClick={(e) => {
         const r = e.currentTarget.getBoundingClientRect()
         p.seek(uid, Math.round(((e.clientX - r.left) / r.width) * t.len))
@@ -378,7 +384,15 @@ export function Wave({ uid, seed, height = 40, className }: { uid: string; seed?
             width={0.6}
             height={v * 92}
             rx={0.3}
-            className={p.uid === uid && (i + 1) / N <= at / t.len ? "fill-foreground/70" : "fill-muted-foreground/45"}
+            className={
+              p.uid === uid && (i + 1) / N <= at / t.len
+                ? starred
+                  ? "fill-signal"
+                  : "fill-foreground/70"
+                : starred
+                  ? "fill-signal/55"
+                  : "fill-muted-foreground/45"
+            }
           />
         ))}
       </svg>

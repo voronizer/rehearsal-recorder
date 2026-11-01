@@ -28,7 +28,7 @@ import { MarkItem, TakeMarks, Lanes } from "./panels"
 import { Avatar } from "./Shell"
 import { Columns, Dot, Group, Groups, Page, Play, Rows, StarButton, TakeLine, TakeLink, TakeName, Tile, Wave, takesN } from "./parts"
 
-/** A take in a list: РЭХА's take bar (parts.tsx TakeLine). `marks`: its marks under it. */
+/** A take in a list: its wave (parts.tsx TakeLine). `marks`: its marks under it. */
 export function TakeRow({ take, marks }: { take: Take; short?: boolean; marks?: boolean }) {
   return <TakeLine take={take} marks={marks} />
 }
