@@ -541,11 +541,7 @@ export function TakePage() {
             <Group title="Tracks" hint="4">
               <Lanes uid={uid} />
             </Group>
-            <TakeMarks uid={uid} />
-          </Groups>
-        }
-        side={
-          <Group title="Download tracks" hint="FLAC, as РЭХА recorded them">
+            <Group title="Download tracks" hint="FLAC, as РЭХА recorded them">
             <Rows>
               {["Drums", "Bass", "Guitar", "Vocals"].map((tr) => (
                 <div key={tr} className="flex items-center gap-2">
@@ -561,7 +557,15 @@ export function TakePage() {
                 </div>
               ))}
             </Rows>
-          </Group>
+            </Group>
+          </Groups>
+        }
+        // Alex's pick B (17:40Z): tracks and downloads on the left, marks on the right.
+        sideWidth="minmax(0,0.8fr)"
+        side={
+          <Groups>
+            <TakeMarks uid={uid} />
+          </Groups>
         }
       />
     </Page>
