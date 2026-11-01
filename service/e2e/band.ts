@@ -13,9 +13,10 @@ export const as = (who: "alex" | "dzima" | "ira" | "paulik") => new URL(`${who}.
 export type Band = {
   takes: Record<string, string>
   songs: Record<string, number>
+  rehearsals: { first: string; second: string }
 }
 
-/** The ids the seed made: a take's uid by its name, a song's id by its title. */
+/** The ids the seed made: a take's uid by its name, a song's id by its title, the two rehearsals. */
 export const band = (): Band => JSON.parse(readFileSync(new URL("band.json", STATE), "utf-8"))
 
 /** A browser's requests, as the band's own page sends them. */

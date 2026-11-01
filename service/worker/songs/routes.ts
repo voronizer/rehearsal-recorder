@@ -5,6 +5,7 @@ import { isOrder, ORDER } from "../labels/routes"
 import { database, type Database } from "../shared/db"
 import { fail } from "../shared/errors"
 import type { Bindings } from "../shared/env"
+import { KEYS } from "../shared/keys"
 import { body, errors, json, newApp, Ok } from "../shared/openapi"
 import { song, songFile, status, take } from "../shared/schema"
 import { iso } from "../shared/time"
@@ -12,9 +13,6 @@ import { needMember } from "../signin/guards"
 import { deleteFiles } from "../takes/purge"
 import { bare, best, bestWhy, takeRows, TakeRow, type Loaded } from "../takes/rows"
 import { FileView, fileViews } from "./files"
-
-/** The 24 keys a song can be in. */
-export const KEYS = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"].flatMap((n) => [`${n} major`, `${n} minor`])
 
 const TITLE = "A song's title is 1 to 100 characters"
 const STATUS = "A status's name is 1 to 40 characters"

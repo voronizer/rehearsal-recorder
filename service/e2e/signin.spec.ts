@@ -21,7 +21,7 @@ test("sign in with a code, then the band asks for a name", async ({ page, reques
   await page.getByLabel("Your name").fill("Hanna")
   await page.getByRole("button", { name: "Save" }).click()
   await expect(page).toHaveURL(/\/trash$/)
-  await expect(page.getByRole("link", { name: "Hanna" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Hanna" })).toBeVisible()
 })
 
 test("an address not in the band gets the same answer", async ({ page, request }) => {

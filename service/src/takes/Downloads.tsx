@@ -1,3 +1,4 @@
+import { Group, Rows } from "../shell/parts"
 import type { TakePage } from "../api"
 
 const link = "rounded-md border px-2 py-1 text-xs hover:bg-accent"
@@ -10,17 +11,12 @@ const link = "rounded-md border px-2 py-1 text-xs hover:bg-accent"
 export function Downloads({ take }: { take: TakePage }) {
   const file = (position: number, kind: string) => `/files/${take.uid}/${take.gen}/${position}.${kind}?download=1`
   return (
-    <section aria-labelledby="downloads" className="flex flex-col gap-2">
-      <h2 id="downloads" className="px-1 text-sm font-semibold">
-        Download tracks
-      </h2>
-      {take.flac_coming && (
-        <p className="px-1 text-xs text-muted-foreground">The originals are still coming from РЭХА. For now, each track is an MP3.</p>
-      )}
-      <ul className="flex flex-col rounded-xl bg-card">
-        {take.files.map((f, i) => (
-          <li key={f.position} className={`flex items-center gap-3 px-4 py-2 ${i > 0 ? "border-t" : ""}`}>
-            <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
+    <Group title="Download tracks" hint={take.flac_coming ? undefined : "FLAC, as РЭХА recorded them"}>
+      {take.flac_coming && <p className="text-muted-foreground">The originals are still coming from РЭХА. For now, each track is an MP3.</p>}
+      <Rows>
+        {take.files.map((f) => (
+          <div key={f.position} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate">{f.name}</span>
             {f.flac ? (
               <a className={link} href={file(f.position, "flac")} aria-label={`${f.name} FLAC`}>
                 FLAC
@@ -37,9 +33,9 @@ export function Downloads({ take }: { take: TakePage }) {
                 MIDI
               </a>
             )}
-          </li>
+          </div>
         ))}
-      </ul>
-    </section>
+      </Rows>
+    </Group>
   )
 }

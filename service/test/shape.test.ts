@@ -49,3 +49,14 @@ test("a take with no peaks has a flat wave", async () => {
   await shownTake()
   expect((await rows(owner))[0].shape).toEqual([])
 })
+
+test("a take's page has the same wave as its row", async () => {
+  const owner = await signInOwner()
+  const uid = await shownTake()
+  await database(bindings).update(take).set({ shape: null }).where(eq(take.uid, uid))
+  await peaks(uid, 1, 1, 0.2, 0.4)
+
+  const page = await read<{ shape: number[] }>(`/api/takes/${uid}`, owner)
+  expect(page.shape).toHaveLength(120)
+  expect(page.shape[119]).toBe(1)
+})

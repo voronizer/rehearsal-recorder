@@ -8,6 +8,7 @@ import { rehearsal, seen, song, star, take, user } from "../shared/schema"
 import { iso } from "../shared/time"
 import { needMember } from "../signin/guards"
 import { bare, initial, shownName, takeRows, TakeRow } from "./rows"
+import { fillShapes } from "./shape"
 
 const NO_TAKE = "No such take"
 
@@ -22,6 +23,8 @@ const TakePage = z
     rehearsal: z.object({ uid: z.string(), name: z.string(), date: z.string() }),
     song: z.object({ id: z.number(), title: z.string() }).nullable(),
     duration_sec: z.number(),
+    /** Its wave, as a list draws it (takes/shape.ts). */
+    shape: z.array(z.number()),
     /** The generation the band hears; the files' paths carry it. */
     gen: z.number(),
     balance: z.record(z.string(), z.number()),
@@ -69,6 +72,8 @@ export const takeRoutes = newApp()
       const t = await shown(db, uid, true)
       if (!t) return fail(c, 404, NO_TAKE)
       const gen = t.shownGen!
+      const filled = { ...t, gen }
+      await fillShapes(c.env, db, [filled])
       const [[[r], songs, stars], marks] = await Promise.all([
         db.batch([
           db.select().from(rehearsal).where(eq(rehearsal.uid, t.rehearsalUid)),
@@ -107,6 +112,7 @@ export const takeRoutes = newApp()
           rehearsal: r,
           song: songs[0] ? { id: songs[0].id, title: songs[0].title } : null,
           duration_sec: t.durationSec,
+          shape: filled.shape ?? [],
           gen,
           balance: t.balance,
           tracks: t.tracks

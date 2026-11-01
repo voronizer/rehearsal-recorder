@@ -30,3 +30,16 @@ export const count = (n: number, one: string, many = `${one}s`) => `${n} ${n ===
 
 /** A take's or a song's name in a label, in curly quotes (design system B8). */
 export const quoted = (name: string) => `“${name}”`
+
+/** A day without its weekday: "8 October", with the year if it is not this one. */
+export function dayMonth(date: string, now = new Date()): string {
+  const [y, m, d] = date.split("-").map(Number)
+  if (!y || !m || !d) return ""
+  return `${d} ${MONTHS[m - 1]}${y === now.getFullYear() ? "" : ` ${y}`}`
+}
+
+/** A month's heading: "October 2026". */
+export function month(date: string): string {
+  const [y, m] = date.split("-").map(Number)
+  return y && m ? `${MONTHS[m - 1]} ${y}` : ""
+}

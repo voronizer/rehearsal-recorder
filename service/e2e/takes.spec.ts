@@ -7,7 +7,7 @@ test.describe("as Alex", () => {
   test("a take page has a lane per track with M and S", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
     await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 6 tracks$/)).toBeVisible()
-    const lanes = page.getByRole("group")
+    const lanes = page.getByRole("main").getByRole("group")
     await expect(lanes).toHaveCount(6)
     for (const [i, name] of ["Drums", "Bass", "Guitar", "Keys", "Vocals", "Shaker"].entries())
       await expect(lanes.nth(i)).toHaveAccessibleName(name)
@@ -28,11 +28,12 @@ test.describe("as Alex", () => {
 
   test("a take plays and its time moves", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
-    const clock = page.getByTestId("clock")
+    const main = page.getByRole("main")
+    const clock = main.getByTestId("clock")
     await expect(clock).toHaveText("0:00 / 0:10")
-    await page.getByRole("button", { name: "Play “Viasna 12”" }).click()
+    await main.getByRole("button", { name: "Play “Viasna 12”" }).click()
     await expect(clock).toHaveText("0:02 / 0:10", { timeout: 10_000 })
-    await page.getByRole("button", { name: "Pause “Viasna 12”" }).click()
+    await main.getByRole("button", { name: "Pause “Viasna 12”" }).click()
     // Tapping a lane moves the playhead there.
     const lane = page.getByRole("group", { name: "Drums" }).getByTestId("wave")
     const box = (await lane.boundingBox())!
@@ -59,45 +60,56 @@ test.describe("as Ira", () => {
 
   test("a star shows at once and stays after a reload", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 3"]}`)
-    const star = page.getByRole("button", { name: "Star “Pałyn 3”" })
+    const main = page.getByRole("main")
+    const star = main.getByRole("button", { name: "Star “Pałyn 3”" })
     await expect(star).toHaveAttribute("aria-pressed", "false")
     await star.click()
-    await expect(star).toHaveAttribute("aria-pressed", "true")
-    await expect(page.getByLabel("Starred by Ira")).toBeVisible()
+    await expect(main.getByRole("button", { name: "Take back your star from “Pałyn 3”" })).toHaveAttribute("aria-pressed", "true")
+    await expect(main.getByTitle("Starred by Ira")).toBeVisible()
     await page.reload()
-    await expect(page.getByRole("button", { name: "Star “Pałyn 3”" })).toHaveAttribute("aria-pressed", "true")
-    await expect(page.getByLabel("Starred by Ira")).toBeVisible()
+    await expect(page.getByRole("main").getByRole("button", { name: "Take back your star from “Pałyn 3”" })).toBeVisible()
+    await expect(page.getByRole("main").getByTitle("Starred by Ira")).toBeVisible()
   })
 })
 
 test.describe("as Dzima", () => {
   test.use({ storageState: as("dzima") })
 
-  test("a comment is written at the playhead", async ({ page }) => {
+  test("Mark in the bar sets a mark where the take is", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 9"]}?at=5`)
-    await page.getByRole("button", { name: "Comment at 0:05" }).click()
-    await page.getByLabel("Your comment at 0:05").fill("Bass comes in late")
-    await page.getByRole("button", { name: "Save" }).click()
-    const list = page.getByRole("region", { name: "Marks and comments" })
-    const mine = list.getByRole("listitem").filter({ hasText: "Bass comes in late" })
+    const bar = page.getByLabel("Player")
+    await expect(bar.getByTestId("bar-time")).toHaveText("0:05")
+    await bar.getByRole("button", { name: "Mark" }).click()
+    const panel = page.getByLabel("Panel")
+    await expect(panel).toContainText("A mark at 0:05")
+    await panel.getByLabel("Note").fill("Bass comes in late")
+    await panel.getByRole("button", { name: "Add mark" }).click()
+    const mine = panel.locator("[data-mark]").filter({ hasText: "Bass comes in late" })
     await expect(mine).toContainText("0:05")
     await expect(mine).toContainText("Dzima")
     await page.reload()
-    await expect(page.getByRole("listitem").filter({ hasText: "Bass comes in late" })).toContainText("0:05")
+    await expect(page.getByRole("main").locator("[data-mark]").filter({ hasText: "Bass comes in late" })).toContainText("0:05")
   })
 
-  test("a closed comment is greyed and stays", async ({ page }) => {
+  test("a mark gets a comment, is closed and opened again", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
-    const list = page.getByRole("region", { name: "Marks and comments" })
-    // A mark from РЭХА and Ira's comment, in time order.
-    await expect(list.getByRole("listitem")).toHaveCount(2)
-    await expect(list.getByRole("listitem").nth(0)).toContainText("Count it in")
-    await expect(list.getByRole("listitem").nth(0)).toContainText("Again · mark from РЭХА")
-    const quiet = list.getByRole("listitem").filter({ hasText: "Too quiet here" })
-    await quiet.getByRole("button", { name: "Close" }).click()
+    const marks = page.getByRole("main").getByRole("region", { name: "Marks" }).locator("[data-mark]")
+    // A mark from РЭХА and Ira's, by their moment. РЭХА's follows РЭХА: no Edit or Delete.
+    await expect(marks).toHaveCount(2)
+    await expect(marks.nth(0)).toContainText("Count it in")
+    await expect(marks.nth(0)).toContainText("Set in РЭХА")
+    await expect(marks.nth(0).getByRole("button", { name: "Edit" })).toHaveCount(0)
+
+    const quiet = marks.filter({ hasText: "Too quiet here" })
+    await quiet.getByRole("button", { name: "Comment", exact: true }).click()
+    await quiet.getByLabel("Your comment").fill("Turn the vocal up")
+    await quiet.getByRole("button", { name: "Send" }).click()
+    await expect(quiet).toContainText("Dzima: Turn the vocal up")
+    await quiet.getByRole("button", { name: "Close", exact: true }).click()
     await expect(quiet).toHaveAttribute("data-closed", "true")
-    await expect(quiet.getByRole("button", { name: "Reopen" })).toBeVisible()
+    await quiet.getByRole("button", { name: "Open again" }).click()
+    await expect(quiet).toHaveAttribute("data-closed", "false")
     await page.reload()
-    await expect(page.getByRole("listitem").filter({ hasText: "Too quiet here" })).toHaveAttribute("data-closed", "true")
+    await expect(page.locator("[data-mark]").filter({ hasText: "Too quiet here" })).toContainText("Dzima: Turn the vocal up")
   })
 })

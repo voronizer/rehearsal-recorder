@@ -30,7 +30,7 @@ export function Name() {
     <Frame>
       <div className="flex flex-col gap-1">
         <h1 className="text-lg font-semibold">What should the band call you?</h1>
-        <p className="text-sm text-muted-foreground">The others see it on your stars and comments.</p>
+        <p className="text-sm text-muted-foreground">The others see it on your stars, marks and comments.</p>
       </div>
       <form onSubmit={submit} className="flex flex-col gap-2">
         <Label htmlFor="name">Your name</Label>

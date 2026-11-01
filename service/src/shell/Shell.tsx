@@ -1,111 +1,112 @@
-import { Link, Outlet, useLocation, useMatch } from "@tanstack/react-router"
-import { Trash2, Users } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Outlet, useRouterState } from "@tanstack/react-router"
+import { Menu } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useFeed, useMe, useTake, type Feed } from "../api"
-import { Dot } from "./parts"
-import { useWide } from "./useWide"
+import { useFrame, useMe } from "../api"
+import { LabelsPanel } from "../marks/LabelsPanel"
+import { NewSongPanel } from "../songs/NewSongPanel"
+import { SongPanel } from "../songs/parts"
+import { StatusesPanel } from "../songs/StatusesPanel"
+import { PlayerProvider } from "../takes/player/one"
+import { TakePanel } from "../takes/TakePanel"
+import { PanelProvider, usePanel } from "./panel"
+import { InPanel } from "./parts"
+import { PhoneBar, PlayerBar } from "./PlayerBar"
+import { BandName, Side } from "./Side"
+import { useSize } from "./size"
 
-const row = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm hover:bg-accent"
-const active = "bg-secondary font-medium hover:bg-secondary"
+/** The panel from the right, as the app's Sheet: 28 rem, over the page, no veil, so the page stays live. */
+function PanelView() {
+  const { panel } = usePanel()
+  const size = useSize()
+  if (!panel) return null
+  return (
+    <aside
+      key={JSON.stringify(panel)}
+      aria-label="Panel"
+      className={cn(
+        "absolute inset-y-0 right-0 z-20 flex flex-col overflow-y-auto border-l bg-panel p-5 text-sm shadow-lg animate-in slide-in-from-right duration-200",
+        size === "phone" ? "w-full border-l-0" : "w-[28rem] max-w-[calc(100%-3rem)]"
+      )}
+    >
+      <InPanel>
+        {panel.kind === "take" && <TakePanel uid={panel.uid} markAt={panel.markAt} />}
+        {panel.kind === "song" && <SongPanel id={panel.id} />}
+        {panel.kind === "labels" && <LabelsPanel />}
+        {panel.kind === "statuses" && <StatusesPanel />}
+        {panel.kind === "new-song" && <NewSongPanel />}
+      </InPanel>
+    </aside>
+  )
+}
 
 /**
- * The band's pages. On a computer a column down the left holds **New**,
- * then every song, then the trash, the owner's **Members** and your name;
- * the rest of the window is the page picked there. On a phone the column is
- * gone and the pages come one at a time.
+ * The band's pages in their frame: the column of sections down the left,
+ * the page, the panel over it from the right, the player along the bottom
+ * once the band has a take. On a phone the column hides behind ☰.
  */
-export function Shell() {
-  const wide = useWide()
-  const me = useMe()
-  if (me.isPending) return null
-  if (!wide)
+function Frame() {
+  const size = useSize()
+  const bar = !!useFrame().data?.has_takes
+  const { close } = usePanel()
+  const [menu, setMenu] = useState(false)
+  // A panel belongs to the page it was opened on.
+  const path = useRouterState({ select: (s) => s.location.pathname })
+  useEffect(() => {
+    close()
+    setMenu(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path])
+  if (size === "phone")
     return (
-      <div className="min-h-full">
-        <Outlet />
+      <div className="flex h-full flex-col">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-panel px-2">
+          <Button variant="ghost" size="icon" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(true)}>
+            <Menu className="size-5" />
+          </Button>
+          <BandName small />
+        </header>
+        <div className="relative min-h-0 flex-1">
+          <main className="h-full overflow-y-auto bg-background px-4 py-5 text-sm">
+            <Outlet />
+          </main>
+          <PanelView />
+          {menu && (
+            <div className="absolute inset-0 z-30 flex">
+              <div className="animate-in slide-in-from-left duration-200">
+                <Side onGo={() => setMenu(false)} />
+              </div>
+              <button type="button" aria-label="Close the menu" className="flex-1 bg-black/30" onClick={() => setMenu(false)} />
+            </div>
+          )}
+        </div>
+        {bar && <PhoneBar />}
       </div>
     )
   return (
-    <div className="flex h-full">
-      <aside className="flex w-52 shrink-0 flex-col overflow-y-auto border-r bg-card">
-        <p className="px-5 pt-4 text-sm font-semibold">РЭХА</p>
-        <SongSide />
-        <span className="flex-1" />
-        <Bottom className="p-3" />
-      </aside>
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <Outlet />
-      </main>
+    <div className="flex h-full flex-col">
+      <div className="relative flex min-h-0 flex-1">
+        <Side />
+        <main className={cn("min-w-0 flex-1 overflow-y-auto bg-background text-sm", size === "wide" ? "p-8" : "px-6 py-6")}>
+          <Outlet />
+        </main>
+        <PanelView />
+      </div>
+      {bar && <PlayerBar />}
     </div>
   )
 }
 
-/** The song a take page shows, so its row stays picked in the column. */
-function useOpenSong(): Feed["songs"][number]["id"] | undefined {
-  const match = useMatch({ from: "/band/takes/$uid", shouldThrow: false })
-  const take = useTake(match?.params.uid ?? "")
-  if (!match) return undefined
-  return take.data ? (take.data.song?.id ?? "not-named") : undefined
-}
-
-/** The column's songs: the new things first, then every song. */
-function SongSide() {
-  const feed = useFeed()
-  const open = useOpenSong()
-  const songs = [...(feed.data?.songs ?? []), ...(feed.data?.not_named ? [feed.data.not_named] : [])]
-  const count = feed.data?.new_count ?? 0
-  return (
-    <nav aria-label="Songs" className="flex flex-col gap-1 p-3">
-      <Link to="/" activeOptions={{ exact: true }} className={row} activeProps={{ className: active }}>
-        {count > 0 && <Dot />}
-        <span className="flex-1">New</span>
-        {count > 0 && <span className="text-xs text-muted-foreground tnum">{count}</span>}
-      </Link>
-      <p className="px-2.5 pt-3 pb-1 text-xs font-semibold text-muted-foreground">Songs</p>
-      {songs.map((s) => (
-        <Link
-          key={s.id}
-          to="/songs/$id"
-          params={{ id: String(s.id) }}
-          className={cn(row, open === s.id && active)}
-          activeProps={{ className: active }}
-          aria-current={open === s.id ? "page" : undefined}
-        >
-          <span className="min-w-0 flex-1 truncate">{s.title}</span>
-          {s.has_new && <Dot />}
-          <span className="text-xs text-muted-foreground tnum">{s.takes}</span>
-        </Link>
-      ))}
-    </nav>
-  )
-}
-
-/** The trash, the owner's page of members, and your name, to change it. */
-export function Bottom({ className }: { className?: string }) {
+/** The shell: one player and one panel for every page inside it. */
+export function Shell() {
   const me = useMe()
-  const location = useLocation()
+  if (me.isPending) return null
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <Link to="/trash" className={row} activeProps={{ className: active }}>
-        <Trash2 aria-hidden="true" className="size-4 text-muted-foreground" />
-        Trash
-      </Link>
-      {me.data?.owner && (
-        <Link to="/members" className={row} activeProps={{ className: active }}>
-          <Users aria-hidden="true" className="size-4 text-muted-foreground" />
-          Members
-        </Link>
-      )}
-      {me.data && (
-        <Link to="/name" search={{ redirect: location.href }} className={cn(row, "text-muted-foreground")}>
-          <span
-            aria-hidden="true"
-            className="flex size-5 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-foreground"
-          >
-            {(Array.from(me.data.name.trim())[0] ?? "?").toUpperCase()}
-          </span>
-          <span className="min-w-0 flex-1 truncate">{me.data.name}</span>
-        </Link>
-      )}
-    </div>
+    <PlayerProvider>
+      <PanelProvider>
+        <Frame />
+      </PanelProvider>
+    </PlayerProvider>
   )
 }

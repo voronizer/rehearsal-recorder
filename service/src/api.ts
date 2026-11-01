@@ -1,13 +1,14 @@
-import { QueryCache, QueryClient, MutationCache, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, QueryCache, QueryClient, MutationCache, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { hc, type InferResponseType } from "hono/client"
 // Only the routes' types: no Worker code reaches the pages.
 import type { AppType } from "../worker/index"
 
 /*
   The band's API, through Hono's client: its types come from the Worker's
-  routes, so a page that no longer matches a route does not build. Each call
-  has a TanStack Query hook. A star, a seen take, a comment and a closed one
-  are mutations that refresh the take and the feed.
+  routes, so a page that no longer matches a route does not build. Each
+  read has a TanStack Query hook. A change (a star, a mark, a song's key)
+  reads the band's pages again once the service has it: the band is small,
+  and every page then shows the same.
 */
 
 export const client = hc<AppType>("/")
@@ -39,14 +40,30 @@ export async function data<R extends Answer>(call: Promise<R>): Promise<Body<R>>
   return (await res.json()) as Body<R>
 }
 
-export type Feed = InferResponseType<typeof client.api.feed.$get, 200>
-export type TakeRow = NonNullable<Feed["songs"][number]["best"]>
-export type SongPage = InferResponseType<(typeof client.api.songs)[":id"]["$get"], 200>
-export type TakePage = InferResponseType<(typeof client.api.takes)[":uid"]["$get"], 200>
-export type Comment = TakePage["comments"][number]
 export type Me = InferResponseType<typeof client.api.me.$get, 200>
+export type Band = InferResponseType<typeof client.api.band.$get, 200>
+export type Frame = InferResponseType<typeof client.api.frame.$get, 200>
+export type Home = InferResponseType<typeof client.api.home.$get, 200>
+export type HomeSong = Home["songs"][number]
+export type Mark = Home["latest_marks"][number]
+export type MarkComment = Mark["comments"][number]
+export type TakeRow = Home["favourites"][number]
+export type FirstSteps = NonNullable<Home["steps"]>
+export type RehearsalItem = InferResponseType<typeof client.api.rehearsals.$get, 200>[number]
+export type RehearsalPage = InferResponseType<(typeof client.api.rehearsals)[":uid"]["$get"], 200>
+export type SongList = InferResponseType<typeof client.api.songs.$get, 200>
+export type SongItem = SongList["songs"][number]
+export type Status = SongList["statuses"][number]
+export type SongPage = InferResponseType<(typeof client.api.songs)[":id"]["$get"], 200>
+export type SongFile = SongPage["files"][number]
+export type TakePage = InferResponseType<(typeof client.api.takes)[":uid"]["$get"], 200>
+export type MarkList = InferResponseType<typeof client.api.marks.$get, 200>
+export type Label = InferResponseType<typeof client.api.labels.$get, 200>[number]
+export type Person = InferResponseType<typeof client.api.people.$get, 200>[number]
 export type Member = InferResponseType<typeof client.api.members.$get, 200>[number]
 export type Key = InferResponseType<typeof client.api.keys.$get, 200>[number]
+export type Trashed = InferResponseType<typeof client.api.trash.$get, 200>[number]
+export type Show = "open" | "closed" | "all"
 
 /** Where the page goes when the session is gone; set by routes.tsx. */
 let onSignedOut = () => {}
@@ -69,39 +86,34 @@ export const queryClient = new QueryClient({
   },
 })
 
-const keys = {
-  me: ["me"] as const,
-  feed: ["feed"] as const,
-  song: (id: string) => ["song", id] as const,
-  take: (uid: string) => ["take", uid] as const,
-  trash: ["trash"] as const,
-  members: ["members"] as const,
-  keys: ["keys"] as const,
-}
-
 /** The member signed in; the shell reads it before a page opens, to ask a new member for a name. */
-export const meQuery = queryOptions({ queryKey: keys.me, queryFn: () => data(client.api.me.$get()) })
-
+export const meQuery = queryOptions({ queryKey: ["me"], queryFn: () => data(client.api.me.$get()) })
 export const useMe = () => useQuery(meQuery)
 
-export const useFeed = () => useQuery({ queryKey: keys.feed, queryFn: () => data(client.api.feed.$get()) })
+/** The band's name and picture: the sign-in page shows them too. */
+export const useBand = () => useQuery({ queryKey: ["band"], queryFn: () => data(client.api.band.$get()) })
+export const useFrame = () => useQuery({ queryKey: ["frame"], queryFn: () => data(client.api.frame.$get()) })
+export const useHome = () => useQuery({ queryKey: ["home"], queryFn: () => data(client.api.home.$get()) })
+export const useRehearsals = () => useQuery({ queryKey: ["rehearsals"], queryFn: () => data(client.api.rehearsals.$get()) })
+export const useRehearsal = (uid: string) =>
+  useQuery({ queryKey: ["rehearsal", uid], queryFn: () => data(client.api.rehearsals[":uid"].$get({ param: { uid } })) })
+export const useSongs = () => useQuery({ queryKey: ["songs"], queryFn: () => data(client.api.songs.$get()) })
+export const useSong = (id: number) =>
+  useQuery({ queryKey: ["song", id], queryFn: () => data(client.api.songs[":id"].$get({ param: { id: String(id) } })) })
+/** The Marks section; while another switch is read, the last one stays, so the page does not jump. */
+export const useMarks = (show: Show) =>
+  useQuery({ queryKey: ["marks", show], placeholderData: keepPreviousData, queryFn: () => data(client.api.marks.$get({ query: { show } })) })
+export const useLabels = () => useQuery({ queryKey: ["labels"], queryFn: () => data(client.api.labels.$get()) })
+export const usePeople = () => useQuery({ queryKey: ["people"], queryFn: () => data(client.api.people.$get()) })
+export const useTrash = () => useQuery({ queryKey: ["trash"], queryFn: () => data(client.api.trash.$get()) })
+export const useMembers = () => useQuery({ queryKey: ["members"], queryFn: () => data(client.api.members.$get()) })
+export const useKeys = () => useQuery({ queryKey: ["keys"], queryFn: () => data(client.api.keys.$get()) })
 
-export const useSong = (id: string) =>
-  useQuery({ queryKey: keys.song(id), queryFn: () => data(client.api.songs[":id"].$get({ param: { id } })) })
+export const takeQuery = (uid: string) =>
+  queryOptions({ queryKey: ["take", uid], queryFn: () => data(client.api.takes[":uid"].$get({ param: { uid } })) })
 
 /** A take's page; nothing is asked for while `uid` is "". */
-export const useTake = (uid: string) =>
-  useQuery({
-    queryKey: keys.take(uid),
-    enabled: uid !== "",
-    queryFn: () => data(client.api.takes[":uid"].$get({ param: { uid } })),
-  })
-
-export const useTrash = () => useQuery({ queryKey: keys.trash, queryFn: () => data(client.api.trash.$get()) })
-
-export const useMembers = () => useQuery({ queryKey: keys.members, queryFn: () => data(client.api.members.$get()) })
-
-export const useKeys = () => useQuery({ queryKey: keys.keys, queryFn: () => data(client.api.keys.$get()) })
+export const useTake = (uid: string) => useQuery({ ...takeQuery(uid), enabled: uid !== "" })
 
 /** A track's waveform, as РЭХА drew it: never changes for a generation. */
 export const usePeaks = (path: string) =>
@@ -116,82 +128,87 @@ export const usePeaks = (path: string) =>
     },
   })
 
-/** After a change to a take: the take, its song, the feed and the trash are read again. */
-function useRefresh() {
-  const qc = useQueryClient()
-  return (uid?: string) =>
-    Promise.all([
-      uid ? qc.invalidateQueries({ queryKey: keys.take(uid) }) : null,
-      qc.invalidateQueries({ queryKey: keys.feed }),
-      qc.invalidateQueries({ queryKey: ["song"] }),
-      qc.invalidateQueries({ queryKey: keys.trash }),
-    ])
-}
-
-/** ★ on or off, shown at once, before the service answers. */
-export function useStar(uid: string) {
-  const qc = useQueryClient()
-  const refresh = useRefresh()
-  return useMutation({
-    mutationFn: (on: boolean) =>
-      data(on ? client.api.takes[":uid"].star.$post({ param: { uid } }) : client.api.takes[":uid"].star.$delete({ param: { uid } })),
-    onMutate: async (on) => {
-      await qc.cancelQueries({ queryKey: keys.take(uid) })
-      const before = qc.getQueryData<TakePage>(keys.take(uid))
-      const me = qc.getQueryData<Me>(keys.me)
-      if (before && me) {
-        const others = before.stars.filter((s) => s.member_id !== me.id)
-        const mine = { member_id: me.id, initial: (Array.from(me.name.trim())[0] ?? "?").toUpperCase(), name: me.name }
-        qc.setQueryData<TakePage>(keys.take(uid), {
-          ...before,
-          starred_by_me: on,
-          stars: on ? [...others, mine].sort((a, b) => a.name.localeCompare(b.name)) : others,
-        })
-      }
-      return { before }
-    },
-    onError: (_e, _on, saved) => {
-      if (saved?.before) qc.setQueryData(keys.take(uid), saved.before)
-    },
-    onSettled: () => refresh(uid),
-  })
-}
-
-/** The member opened the take: it and its comments are no longer new for them. */
-export function useSeen(uid: string) {
+/**
+ * A change to the band: once the service has it, every page of the band is
+ * read again (not who you are, and not the waveforms, which never change).
+ */
+export function useChange<T, R = unknown>(call: (arg: T) => Promise<R>) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => data(client.api.takes[":uid"].seen.$post({ param: { uid } })),
-    onSuccess: () =>
-      Promise.all([qc.invalidateQueries({ queryKey: keys.feed }), qc.invalidateQueries({ queryKey: ["song"] })]),
+    mutationFn: call,
+    onSuccess: () => qc.invalidateQueries({ predicate: (q) => !["me", "peaks"].includes(String(q.queryKey[0])) }),
   })
 }
 
-export function useComment(uid: string) {
-  const refresh = useRefresh()
-  return useMutation({
-    mutationFn: (json: { at: number; text: string; parent_id?: number }) =>
-      data(client.api.takes[":uid"].comments.$post({ param: { uid }, json })),
-    onSuccess: () => refresh(uid),
-  })
+const id = (n: number) => ({ id: String(n) })
+
+/** ★ on or off. */
+export const useStar = () =>
+  useChange(({ uid, on }: { uid: string; on: boolean }) =>
+    data(on ? client.api.takes[":uid"].star.$post({ param: { uid } }) : client.api.takes[":uid"].star.$delete({ param: { uid } }))
+  )
+
+/** The member opened or played the take: it and its marks are no longer new for them. */
+export const useSeen = () => useChange((uid: string) => data(client.api.takes[":uid"].seen.$post({ param: { uid } })))
+
+export const useAddMark = () =>
+  useChange(({ uid, ...json }: { uid: string; at: number; label_id?: number; note: string }) =>
+    data(client.api.takes[":uid"].marks.$post({ param: { uid }, json }))
+  )
+export const useChangeMark = () =>
+  useChange(({ id: n, ...json }: { id: number; label_id?: number; note?: string; closed?: boolean }) =>
+    data(client.api.marks[":id"].$patch({ param: id(n), json }))
+  )
+export const useDeleteMark = () => useChange((n: number) => data(client.api.marks[":id"].$delete({ param: id(n) })))
+export const useAddComment = () =>
+  useChange(({ mark, text }: { mark: number; text: string }) =>
+    data(client.api.marks[":id"].comments.$post({ param: id(mark), json: { text } }))
+  )
+export const useChangeComment = () =>
+  useChange(({ id: n, text }: { id: number; text: string }) => data(client.api.comments[":id"].$patch({ param: id(n), json: { text } })))
+export const useDeleteComment = () => useChange((n: number) => data(client.api.comments[":id"].$delete({ param: id(n) })))
+
+export const useAddLabel = () =>
+  useChange((json: { name: string; colour: Label["colour"] }) => data(client.api.labels.$post({ json })))
+export const useChangeLabel = () =>
+  useChange(({ id: n, ...json }: { id: number; name?: string; colour?: Label["colour"] }) =>
+    data(client.api.labels[":id"].$patch({ param: id(n), json }))
+  )
+export const useOrderLabels = () => useChange((ids: number[]) => data(client.api.labels.order.$put({ json: { ids } })))
+export const useDeleteLabel = () =>
+  useChange(({ id: n, to }: { id: number; to?: number }) => data(client.api.labels[":id"].$delete({ param: id(n), json: { to } })))
+
+export const useAddSong = () => useChange((title: string) => data(client.api.songs.$post({ json: { title } })))
+export const useChangeSong = () =>
+  useChange(({ id: n, ...json }: { id: number; status_id?: number; key?: string | null; notes?: string }) =>
+    data(client.api.songs[":id"].$patch({ param: id(n), json }))
+  )
+export const useAddStatus = () => useChange((name: string) => data(client.api.statuses.$post({ json: { name } })))
+export const useChangeStatus = () =>
+  useChange(({ id: n, name }: { id: number; name: string }) => data(client.api.statuses[":id"].$patch({ param: id(n), json: { name } })))
+export const useOrderStatuses = () => useChange((ids: number[]) => data(client.api.statuses.order.$put({ json: { ids } })))
+export const useDeleteStatus = () =>
+  useChange(({ id: n, to }: { id: number; to?: number }) => data(client.api.statuses[":id"].$delete({ param: id(n), json: { to } })))
+
+/** Sends a file as the request's body, as the service's file routes take it. */
+async function send(path: string, method: "POST" | "PUT", file: File, headers: Record<string, string> = {}) {
+  return data(fetch(path, { method, body: file, headers: { "Content-Type": file.type || "application/octet-stream", ...headers } }))
 }
 
-export function useCloseComment(uid: string) {
-  const refresh = useRefresh()
-  return useMutation({
-    mutationFn: ({ id, closed }: { id: number; closed: boolean }) =>
-      data(client.api.comments[":id"].$patch({ param: { id: String(id) }, json: { closed } })),
-    onSuccess: () => refresh(uid),
-  })
-}
+export const useAddFile = () =>
+  useChange(({ song, file }: { song: number; file: File }) =>
+    send(`/api/songs/${song}/files`, "POST", file, { "x-file-name": encodeURIComponent(file.name) })
+  )
+export const useDeleteFile = () =>
+  useChange(({ song, file }: { song: number; file: number }) =>
+    data(client.api.songs[":id"].files[":file"].$delete({ param: { id: String(song), file: String(file) } }))
+  )
 
-export function useRestore() {
-  const refresh = useRefresh()
-  return useMutation({
-    mutationFn: (uid: string) => data(client.api.trash[":uid"].restore.$post({ param: { uid } })),
-    onSuccess: (_d, uid) => refresh(uid),
-  })
-}
+export const useNameBand = () => useChange((name: string) => data(client.api.band.$put({ json: { name } })))
+export const useBandPicture = () =>
+  useChange((file: File | null) => (file ? send("/api/band/picture", "PUT", file) : data(client.api.band.picture.$delete())))
+
+export const useRestore = () => useChange((uid: string) => data(client.api.trash[":uid"].restore.$post({ param: { uid } })))
 
 export function useSaveName() {
   const qc = useQueryClient()
@@ -201,23 +218,8 @@ export function useSaveName() {
   })
 }
 
-function useMembersChange<T>(call: (arg: T) => Promise<unknown>) {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: call,
-    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: keys.members }), qc.invalidateQueries({ queryKey: keys.keys })]),
-  })
-}
-
-export const useAddMember = () =>
-  useMembersChange((email: string) => data(client.api.members.$post({ json: { email } })))
-
-export const useRemoveMember = () =>
-  useMembersChange((id: string) => data(client.api.members[":id"].$delete({ param: { id } })))
-
-export const useSignOutMember = () =>
-  useMembersChange((id: string) => data(client.api.members[":id"].signout.$post({ param: { id } })))
-
-export const useMakeKey = () => useMembersChange((name: string) => data(client.api.keys.$post({ json: { name } })))
-
-export const useRemoveKey = () => useMembersChange((id: string) => data(client.api.keys[":id"].$delete({ param: { id } })))
+export const useAddMember = () => useChange((email: string) => data(client.api.members.$post({ json: { email } })))
+export const useRemoveMember = () => useChange((m: string) => data(client.api.members[":id"].$delete({ param: { id: m } })))
+export const useSignOutMember = () => useChange((m: string) => data(client.api.members[":id"].signout.$post({ param: { id: m } })))
+export const useMakeKey = () => useChange((name: string) => data(client.api.keys.$post({ json: { name } })))
+export const useRemoveKey = () => useChange((k: string) => data(client.api.keys[":id"].$delete({ param: { id: k } })))

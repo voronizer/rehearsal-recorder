@@ -1071,6 +1071,12 @@
           "duration_sec": {
             "type": "number"
           },
+          "shape": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
           "gen": {
             "type": "number"
           },
@@ -1198,6 +1204,7 @@
           "rehearsal",
           "song",
           "duration_sec",
+          "shape",
           "gen",
           "balance",
           "tracks",

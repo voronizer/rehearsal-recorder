@@ -31,6 +31,30 @@ const LEAD_SEC = 0.1
 
 export type PlayerTrack = { url: string; gain: number }
 
+/*
+  One AudioContext for every take, made and woken by the first press of a
+  ▶. A take pressed in a list plays once its page has come, after the
+  press: a browser lets that context sound then, where a new one made
+  outside the press would stay silent on an iPhone.
+*/
+let sound: AudioContext | null = null
+
+/** Wakes the service's sound; called from a press, before a take's page has come. */
+export function wakeSound(): AudioContext {
+  if (!sound) {
+    try {
+      // On an iPhone, so the take is heard with the ring switch on silent.
+      const session = (navigator as { audioSession?: { type: string } }).audioSession
+      if (session) session.type = "playback"
+    } catch {
+      // Not there: nothing to set.
+    }
+    sound = new AudioContext({ latencyHint: "playback" })
+  }
+  void sound.resume()
+  return sound
+}
+
 type Source = {
   frames: Uint8Array[]
   sampleRate: number
@@ -110,6 +134,7 @@ export class Player {
   private fetching: AbortController | null = null
   private context: AudioContext | null = null
   private gains: GainNode[] = []
+  private master: GainNode | null = null
   private muted = new Set<number>()
   private solo: number | null = null
   private lanes: Lane[] = []
@@ -196,25 +221,19 @@ export class Player {
     this.mix()
   }
 
-  /** Lets go of the files, the decoders and the sound. */
+  /** Lets go of the files and the decoders; the sound stays for the next take. */
   close(): void {
     this.halt()
     this.fetching?.abort()
-    void this.context?.close()
+    this.master?.disconnect()
     this.context = null
   }
 
   private open() {
-    try {
-      // On an iPhone, so the take is heard with the ring switch on silent.
-      const session = (navigator as { audioSession?: { type: string } }).audioSession
-      if (session) session.type = "playback"
-    } catch {
-      // Not there: nothing to set.
-    }
-    this.context = new AudioContext({ latencyHint: "playback" })
+    this.context = wakeSound()
     const master = this.context.createGain()
     master.connect(this.context.destination)
+    this.master = master
     this.gains = this.tracks.map(() => {
       const g = this.context!.createGain()
       g.connect(master)
