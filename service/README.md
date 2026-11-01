@@ -41,59 +41,89 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
    gives you two nameservers: put them in place of the old ones, where you
    bought the domain. It can take a few hours before Cloudflare says the
    domain is active.
-3. Turn on Cloudflare's mail for the domain: open the domain's **Email
-   Routing**, turn it on, and let Cloudflare add the records it asks for.
-   Nothing else on the domain changes.
-4. Make two API tokens in Cloudflare, on the **Account API tokens** page.
-   A token is a long password for one job. The first one puts the service
-   up: start it from the template **Edit Cloudflare Workers**, and make
-   sure it has **D1**, **Workers R2 Storage** and **Queues**, each set to
-   **Edit**, and **Workers Routes** set to **Edit** on your domain. The
-   second lets the service keep Cloudflare's list of addresses it may send
-   letters to, and nothing else: give it **Email Routing Addresses** set to
-   **Edit**, and that alone.
-5. In your fork on GitHub, open **Settings › Secrets and variables ›
-   Actions** and press **New repository secret**. Add
-   `CLOUDFLARE_API_TOKEN`, the first token, and `CLOUDFLARE_ACCOUNT_ID`,
-   your account's id
+3. Turn on Cloudflare's mail for the domain. In the menu on the left, open
+   **Compute › Email Service › Email Routing**, press **Onboard Domain**,
+   pick your domain and press **Done**. Cloudflare adds the records mail
+   needs, and the rest of the domain stays as it is. If it says
+   “Non-Cloudflare MX records exist”, the domain already gets mail
+   somewhere else, and this would take that mail over: sort it out first.
+4. Turn on R2, Cloudflare's file storage: open **R2** in the menu on the
+   left and turn it on. Cloudflare asks for a card or PayPal first, even
+   though the first 10 GB are free. Without R2 the service cannot be put
+   up.
+5. Make the token that puts the service up. A token is a long password for
+   one job, and Cloudflare shows it only once, so have step 6 open in
+   another tab. On the **Account API Tokens** page, press **Create Token**
+   and pick the template **Edit Cloudflare Workers**. Press the pencil on
+   the policy for your account and tick **Edit** for **D1** and for
+   **Queues**, which the template lacks. Leave the rest as it is, **No
+   expiration** too: a token that runs out would one day stop the service
+   being put up, with no warning. Press **Review token**, then **Create
+   token**, and copy the token. Cloudflare also shows an Access Key ID, a
+   Secret Access Key and an S3 endpoint; the service needs none of them.
+6. In your fork on GitHub, open **Settings › Secrets and variables ›
+   Actions**. Press **New repository secret** and add
+   `CLOUDFLARE_API_TOKEN`, the token, then `CLOUDFLARE_ACCOUNT_ID`, your
+   account's id
    ([where Cloudflare shows it](https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/)).
    To have the service at an address on your domain, such as
-   band.example.com, add that address under **Variables** as
-   `SERVICE_DOMAIN`. Without it the service answers on workers.dev.
-6. Put the service up: in your fork, open **Actions**. GitHub keeps a
+   band.example.com, open the **Variables** tab, press **New repository
+   variable** and add that address as `SERVICE_DOMAIN`. It must be a
+   variable: the job does not look for it among the secrets. Without it
+   the service answers on workers.dev.
+7. Put the service up: in your fork, open **Actions**. GitHub keeps a
    fork's workflows off until you press **I understand my workflows, go
    ahead and enable them**. Then pick **Release**, press **Run workflow**,
    choose **Put the service up again** and press **Run workflow** again.
    When the run turns green, the service is up.
-7. Give the service its settings in Cloudflare: open **Workers & Pages**,
-   then **reha-band**, then **Settings › Variables and Secrets**, and add
-   each of these as a secret:
+8. Give the service its settings in Cloudflare. First make a second token,
+   which lets the service keep Cloudflare's list of addresses it may send
+   letters to, and nothing else: on **Account API Tokens**, press **Create
+   Token** without a template and give it one policy for your account,
+   **Email Routing Addresses** set to **Edit**. Then open **Workers &
+   Pages**, then **reha-band**, then **Settings › Variables and Secrets**,
+   and add each of these as a secret:
    - `OWNER_EMAIL`: your own address. Whoever signs in with it is the owner
      and sees **Members**.
    - `LETTERS_FROM`: the address the letters come from, on your domain,
      such as band@example.com.
    - `BETTER_AUTH_SECRET`: 40 or so random letters and digits that nobody
-     ever types. It signs the band's sign-ins.
+     ever types. It signs the band's sign-ins. On a Mac,
+     `openssl rand -hex 20` in Terminal makes one.
    - `CF_ACCOUNT_ID`: your account's id again.
    - `CF_ADDRESSES_TOKEN`: the second token.
-8. This step is for the band's group in Telegram; skip it if you have
-   none. Make a bot with @BotFather, which gives you its token, and add
-   the bot to the group. Write /start in the group, and to the bot in a
-   chat of its own. Then open
-   `https://api.telegram.org/bot<the token>/getUpdates` in a browser: each
-   chat's id is the number after `"chat":{"id":`, and the group's starts
-   with a minus. Add three more secrets: `TELEGRAM_BOT_TOKEN`,
-   `TELEGRAM_CHAT_ID`, the group's id, and `OWNER_TELEGRAM_ID`, your own.
-   When something on the server fails, the bot tells you alone.
-9. Open the service's address. Type your own address and press **Send
-   code**. The first time, Cloudflare sends a letter of its own: press
-   **Verify email address** in it, then **Send code** again. Type the six
-   digits from the service's letter, and tell it what the band should call
-   you.
-10. On **Members**, press **Add member** for each of the band's addresses.
+
+   Cloudflare then asks you to update your Wrangler configuration. There is
+   nothing to do: a deploy keeps these settings.
+9. This step is for the band's group in Telegram; skip it if you have
+   none. Write `/newbot` to @BotFather and give the bot a name and a
+   username that ends in `bot`; BotFather answers with the bot's token.
+   Add the bot to the group: tap the group's name, then **Add Members**,
+   and find the bot by its username. The group then says the bot “has no
+   access to messages”, which is right: it only writes there. In the
+   group, send `/start@` with the bot's username, such as
+   `/start@band_reha_bot`. A plain /start never reaches a bot that does
+   not read the group. Write the bot anything in a chat of its own too.
+   Then open `https://api.telegram.org/bot<the token>/getUpdates` in a
+   browser: each chat's id is the number after `"chat":{"id":`. The
+   group's id starts with a minus: copy it with the minus. Add three
+   more secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, the group's id,
+   and `OWNER_TELEGRAM_ID`, your own. When something on the server fails,
+   the bot tells you alone.
+
+   That page's address holds the bot's token, so never share a picture of
+   it. If you did, `/revoke` in BotFather gives the bot a new token and
+   stops the old one.
+10. Open the service's address. Type your own address and press **Send
+    code**. The first time, Cloudflare sends a letter of its own: press
+    **Verify email address** in it, then **Send code** again. Type the six
+    digits from the service's letter, and tell it what the band should
+    call you. If no letter comes within a minute, press **Send code** once
+    more.
+11. On **Members**, press **Add member** for each of the band's addresses.
     Cloudflare sends each of them its letter; once they have pressed the
     button in it, they sign in the same way, with their own address.
-11. On **Members**, under **Where РЭХА runs**, type “Rehearsal room” or
+12. On **Members**, under **Where РЭХА runs**, type “Rehearsal room” or
     wherever the laptop lives, press **Make a key for РЭХА** and copy the
     key: it is shown only once. In РЭХА, open **Settings › Folders**, press
     **I have a band service key**, paste it and press **Connect**.
@@ -103,7 +133,7 @@ From then on, takes go to the band service. **Send takes to** in
 folder whenever you like.
 
 For a newer service later, press **Sync fork** on your fork's page, then
-run **Put the service up again** as in step 6.
+run **Put the service up again** as in step 7.
 
 ## Working on it
 
