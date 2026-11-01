@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from "drizzle-orm"
 import { tellChat } from "../chat/tell"
 import { database } from "../shared/db"
 import type { Bindings } from "../shared/env"
+import { firstStatus, labelFor } from "../labels/match"
 import { comment, rehearsal, song, take } from "../shared/schema"
 import { iso } from "../shared/time"
 import type { TakeMeta } from "./meta"
@@ -10,16 +11,21 @@ import { deleteFiles } from "./purge"
 /** A mark's moment as a key: marks match by `at` rounded to 0.01 s. */
 const markKey = (at: number) => Math.round(at * 100)
 
-/** The song with this title, whatever its case, made if there is none. */
-async function songId(env: Bindings, title: string | null): Promise<number | null> {
+/**
+ * The song with this title, whatever its case, made with the first status
+ * if there is none. A tempo РЭХА sent is the song's now: it is the song's
+ * as РЭХА keeps it, whichever take carries it.
+ */
+async function songId(env: Bindings, title: string | null, tempo: number | null | undefined): Promise<number | null> {
   if (title === null) return null
   const db = database(env)
-  await db.insert(song).values({ title }).onConflictDoNothing()
-  const [row] = await db
-    .select({ id: song.id })
-    .from(song)
-    .where(sql`${song.title} = ${title} COLLATE NOCASE`)
-    .limit(1)
+  await db
+    .insert(song)
+    .values({ title, statusId: await firstStatus(db), createdAt: iso() })
+    .onConflictDoNothing()
+  const named = sql`${song.title} = ${title} COLLATE NOCASE`
+  if (tempo !== undefined) await db.update(song).set({ tempo }).where(named)
+  const [row] = await db.select({ id: song.id }).from(song).where(named).limit(1)
   return row.id
 }
 
@@ -41,7 +47,7 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
   const fields = {
     rehearsalUid: meta.rehearsal.uid,
     number: meta.number,
-    songId: await songId(env, meta.song),
+    songId: await songId(env, meta.song, meta.tempo),
     name: meta.name,
     durationSec: meta.duration_sec,
     starredAtRehearsal: meta.starred,
@@ -62,7 +68,8 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
   // mark each, so one moved by a crop can land a hundredth off. The exact
   // moment goes first, so two marks a hundredth apart keep their own.
   const free = new Map(kept.map((c) => [markKey(c.at), c.id]))
-  const marks = meta.marks.map((m) => ({ ...m, at: m.at + cut }))
+  const marks = []
+  for (const m of meta.marks) marks.push({ ...m, at: m.at + cut, labelId: await labelFor(db, m.label, m.colour) })
   const matched = new Map<number, number>()
   for (const near of [0, -1, 1])
     marks.forEach((m, i) => {
@@ -85,7 +92,7 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
     ...[...free.values()].map((id) => db.delete(comment).where(eq(comment.id, id))),
     ...marks.map((m, i) => {
       const id = matched.get(i)
-      const row = { text: m.note, label: m.label, colour: m.colour }
+      const row = { text: m.note, labelId: m.labelId }
       return id !== undefined
         ? db.update(comment).set(row).where(eq(comment.id, id))
         : db.insert(comment).values({ ...row, takeUid: uid, at: m.at, fromReha: true, createdAt: iso() })

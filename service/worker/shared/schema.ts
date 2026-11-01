@@ -173,14 +173,77 @@ export const rehearsal = sqliteTable("rehearsal", {
   date: text("date").notNull(),
 })
 
+/** The band: one row, id 1. */
+export const band = sqliteTable("band", {
+  id: integer("id").primaryKey(),
+  name: text("name").notNull().default(""),
+  /** When the picture was put in R2 at band/picture; null with none. */
+  pictureAt: text("picture_at"),
+})
+
+/**
+ * The band's labels for marks, in their order. `colour` is one of РЭХА's
+ * eight (labels/match.ts). `was` holds the names a label had before it was
+ * renamed here, so marks РЭХА still sends under one of them find it.
+ */
+export const label = sqliteTable(
+  "label",
+  {
+    id: integer("id").primaryKey(),
+    name: text("name").notNull(),
+    colour: text("colour").notNull(),
+    position: integer("position").notNull(),
+    was: text("was", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  },
+  (table) => [uniqueIndex("label_name_nocase").on(sql`${table.name} COLLATE NOCASE`)]
+)
+
+/** Where a song stands with the band, in the order Songs groups them. */
+export const status = sqliteTable(
+  "status",
+  {
+    id: integer("id").primaryKey(),
+    name: text("name").notNull(),
+    position: integer("position").notNull(),
+  },
+  (table) => [uniqueIndex("status_name_nocase").on(sql`${table.name} COLLATE NOCASE`)]
+)
+
 export const song = sqliteTable(
   "song",
   {
     id: integer("id").primaryKey(),
     title: text("title").notNull(),
+    /** Every song has one; null only for a moment, read as the first status. */
+    statusId: integer("status_id").references(() => status.id),
+    /** One of the 24 keys, “E minor”, or null. */
+    key: text("key"),
+    /** Beats per minute as РЭХА keeps it for the song, or null. */
+    tempo: real("tempo"),
+    notes: text("notes").notNull().default(""),
+    createdAt: text("created_at"),
   },
   // Songs match by title whatever its case.
   (table) => [uniqueIndex("song_title_nocase").on(sql`${table.title} COLLATE NOCASE`)]
+)
+
+/** A song's file in R2, at songs/<song id>/<file id>. */
+export const songFile = sqliteTable(
+  "song_file",
+  {
+    id: integer("id").primaryKey(),
+    songId: integer("song_id")
+      .notNull()
+      .references(() => song.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** "gp", "pdf", "picture" or "other": what pressing it does. */
+    kind: text("kind").notNull(),
+    type: text("type").notNull(),
+    size: integer("size").notNull(),
+    memberId: text("member_id").references(() => user.id),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("song_file_song_idx").on(table.songId)]
 )
 
 export const take = sqliteTable(
@@ -214,6 +277,11 @@ export const take = sqliteTable(
   (table) => [index("take_rehearsal_idx").on(table.rehearsalUid), index("take_song_idx").on(table.songId)]
 )
 
+/**
+ * Marks and the comments under them. A row with no parent is a mark: a
+ * moment of a take with a label and a note, from РЭХА or set here. A row
+ * with a parent is a comment under that mark.
+ */
 export const comment = sqliteTable(
   "comment",
   {
@@ -226,15 +294,20 @@ export const comment = sqliteTable(
     }),
     /** Null for a mark from РЭХА. */
     memberId: text("member_id").references(() => user.id),
+    /** A comment's is its mark's. */
     at: real("at").notNull(),
+    /** A mark's note, or a comment's words. */
     text: text("text").notNull(),
-    label: text("label"),
-    colour: text("colour"),
+    /** A mark's label; null for a comment. */
+    labelId: integer("label_id").references(() => label.id),
     fromReha: integer("from_reha", { mode: "boolean" }).notNull().default(false),
+    /** A mark's: the place is fixed. */
     closed: integer("closed", { mode: "boolean" }).notNull().default(false),
     /** It was in the part a crop cut off, and stays at 0:00. */
     cutOff: integer("cut_off", { mode: "boolean" }).notNull().default(false),
     createdAt: text("created_at").notNull(),
+    /** When its writer last changed it; null if never. */
+    updatedAt: text("updated_at"),
   },
   (table) => [index("comment_take_idx").on(table.takeUid)]
 )
@@ -269,7 +342,7 @@ export const seen = sqliteTable(
 /** The band chat's messages that may still take additions. */
 export const chat = sqliteTable("chat", {
   id: integer("id").primaryKey(),
-  /** "takes" (about a rehearsal) or "comments" (a member's on one take). */
+  /** "takes" (about a rehearsal), "marks" (a member's on one take) or "comments" (a member's under one mark). */
   kind: text("kind").notNull(),
   about: text("about").notNull(),
   messageId: integer("message_id").notNull(),

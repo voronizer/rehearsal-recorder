@@ -14,7 +14,7 @@ const takeRow = () =>
 
 const comments = async () =>
   (
-    await env.DB.prepare("SELECT id, parent_id, at, text, label, colour, from_reha, cut_off FROM comment ORDER BY at, id").all()
+    await env.DB.prepare("SELECT id, parent_id, at, text, label_id, from_reha, cut_off FROM comment ORDER BY at, id").all()
   ).results
 
 async function addMember() {
@@ -25,14 +25,28 @@ async function addMember() {
   return id
 }
 
+/** A member's mark with the first label, or with `parent` their comment under that mark. */
 async function comment(at: number, text: string, parent: number | null = null) {
   const member = await addMember()
   await env.DB.prepare(
-    "INSERT INTO comment (take_uid, parent_id, member_id, at, text, created_at) VALUES (?, ?, ?, ?, ?, '2025-10-30T21:00:00.000Z')"
+    `INSERT INTO comment (take_uid, parent_id, member_id, at, text, label_id, created_at)
+     VALUES (?, ?, ?, ?, ?, CASE WHEN ?2 IS NULL THEN (SELECT id FROM label ORDER BY position LIMIT 1) END, '2025-10-30T21:00:00.000Z')`
   )
     .bind(TAKE, parent, member, at, text)
     .run()
 }
+
+const labels = async () =>
+  (await env.DB.prepare("SELECT id, name, colour, position, was FROM label ORDER BY position").all<Record<string, unknown>>()).results
+
+const labelOf = async (text: string) => {
+  const row = await env.DB.prepare("SELECT label.name, label.colour FROM comment JOIN label ON label.id = comment.label_id WHERE comment.text = ?")
+    .bind(text)
+    .first<{ name: string; colour: string }>()
+  return row
+}
+
+const songRow = () => env.DB.prepare("SELECT tempo FROM song WHERE title = 'Viasna'").first<{ tempo: number | null }>()
 
 const bytes = (n: number, fill: number) => new Uint8Array(n).fill(fill)
 
@@ -222,7 +236,8 @@ test("marks from REHA replace the earlier ones, replies stay", async () => {
   ]
   expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ marks }))).status).toBe(200)
   const fix = (await comments()).find((c) => c.text === "Too fast")!
-  expect(fix).toMatchObject({ at: 10, label: "Fix", colour: "#e5484d", from_reha: 1 })
+  expect(fix).toMatchObject({ at: 10, from_reha: 1 })
+  expect(await labelOf("Too fast")).toEqual({ name: "Fix", colour: "grey" })
   await comment(10, "Agreed", fix.id as number)
 
   const again = [
@@ -238,6 +253,68 @@ test("marks from REHA replace the earlier ones, replies stay", async () => {
   ])
   expect(now.find((c) => c.text === "Much too fast")!.id).toBe(fix.id)
   expect(now.find((c) => c.text === "Agreed")!.parent_id).toBe(fix.id)
+})
+
+test("a mark from REHA gets the band's label of that name, whatever colour it sends", async () => {
+  const r = await reha()
+  const marks = [{ at: 10, label: "keep this", colour: "red", note: "This solo" }]
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ marks }))).status).toBe(200)
+  expect(await labelOf("This solo")).toEqual({ name: "Keep this", colour: "green" })
+  expect((await labels()).length).toBe(4)
+})
+
+test("a label renamed in the service still gets marks sent under its old name", async () => {
+  const r = await reha()
+  await env.DB.prepare(`UPDATE label SET name = 'Good', was = '["Keep this","Nice"]' WHERE name = 'Keep this'`).run()
+  const marks = [
+    { at: 10, label: "Keep this", colour: "green", note: "Solo" },
+    { at: 20, label: "NICE", colour: "green", note: "Ending" },
+  ]
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ marks }))).status).toBe(200)
+  expect(await labelOf("Solo")).toEqual({ name: "Good", colour: "green" })
+  expect(await labelOf("Ending")).toEqual({ name: "Good", colour: "green" })
+  expect((await labels()).length).toBe(4)
+})
+
+test("a mark under a label the band has not got adds it at the end, in REHA's colour", async () => {
+  const r = await reha()
+  const marks = [
+    { at: 10, label: "Count", colour: "teal", note: "Sticks" },
+    { at: 20, label: "Odd", colour: "#3e63dd", note: "Hm" },
+    { at: 30, label: "", colour: "red", note: "No label" },
+  ]
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ marks }))).status).toBe(200)
+  expect((await labels()).map((l) => [l.name, l.colour, l.position])).toEqual([
+    ["Note", "grey", 0],
+    ["Keep this", "green", 1],
+    ["Went wrong", "red", 2],
+    ["Do again", "amber", 3],
+    ["Count", "teal", 4],
+    ["Odd", "grey", 5],
+  ])
+  // A mark with no label's name gets the first label, as in РЭХА.
+  expect(await labelOf("No label")).toEqual({ name: "Note", colour: "grey" })
+})
+
+test("the tempo sent with a take is its song's; a take without one leaves it", async () => {
+  const r = await reha()
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 120 }))).status).toBe(200)
+  expect(await songRow()).toEqual({ tempo: 120 })
+  const other = crypto.randomUUID()
+  expect((await r.put(`/api/reha/takes/${other}`, takeMeta({ number: 13, name: "Viasna 13" }))).status).toBe(200)
+  expect(await songRow()).toEqual({ tempo: 120 })
+  expect((await r.put(`/api/reha/takes/${other}`, takeMeta({ number: 13, name: "Viasna 13", tempo: null }))).status).toBe(200)
+  expect(await songRow()).toEqual({ tempo: null })
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 0 }))).status).toBe(400)
+})
+
+test("a song made by a take gets the first status", async () => {
+  const r = await reha()
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ song: "Zorka", name: "Zorka 1", number: 1 }))).status).toBe(200)
+  const row = await env.DB.prepare(
+    "SELECT status.name, song.notes, song.created_at FROM song JOIN status ON status.id = song.status_id WHERE title = 'Zorka'"
+  ).first<{ name: string; notes: string; created_at: string }>()
+  expect(row).toMatchObject({ name: "Learning", notes: "", created_at: expect.any(String) })
 })
 
 test("songs match by title, case-blind", async () => {

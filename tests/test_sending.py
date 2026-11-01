@@ -171,6 +171,13 @@ def run(tmp, fake):
     n_short = keep("Palyn", seconds=2.0)
     ok("a false start stays at home", take(n_short)["service"] is None and uid_of(n_short) is None)
 
+    ok("a song with no tempo sends none", "tempo" in meta and meta["tempo"] is None)
+    # A song of its own, so the other songs' take numbers stay as they are.
+    api._lib.set_song_tempo(api._lib.add_song("Zorka")["id"], 120, "4/4")
+    n_tempo = keep("Zorka")
+    drain()
+    ok("its details carry the song's tempo", fake.takes[uid_of(n_tempo)]["tempo"] == 120)
+
     print("\n[3] Cut short")
     n2 = keep("Kupalle", band=["Drums"])
     uid2 = uid_of(n2)

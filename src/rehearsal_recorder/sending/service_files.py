@@ -77,12 +77,13 @@ def plan(take, kinds):
     return out
 
 
-def meta(take, rehearsal, labels, volumes, gen, cut_start):
+def meta(take, rehearsal, labels, volumes, gen, cut_start, tempo=None):
     """
     The take's details as PUT /api/reha/takes/:uid takes them. `rehearsal`
     is {"id", "created_at", "name"}; `labels` the labels by id, for the
     marks' words and colours; `volumes` the faders by track name, which are
-    the balance the band hears the take at.
+    the balance the band hears the take at; `tempo` the song's tempo, None
+    when it has none.
     """
     audio = _audio(take)
     by_id = {label["id"]: label for label in labels}
@@ -109,6 +110,7 @@ def meta(take, rehearsal, labels, volumes, gen, cut_start):
         "notes": [{"position": len(audio) + i, "name": n["name"], "file": f"{len(audio) + i}.mid"}
                   for i, n in enumerate(_notes(take), 1)],
         "marks": marks,
+        "tempo": None if tempo is None else float(tempo),
     }
 
 

@@ -245,6 +245,14 @@
                 "note"
               ]
             }
+          },
+          "tempo": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0,
+            "maximum": 999
           }
         },
         "required": [
