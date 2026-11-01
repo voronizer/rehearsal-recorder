@@ -39,6 +39,37 @@ test("a press on a wave plays the take from there", async ({ page }) => {
   await expect(bar.getByRole("button", { name: "Viasna 11", exact: true })).toBeVisible()
   await expect(bar.getByTestId("bar-time")).toHaveText(/^0:0[56]$/, { timeout: 10_000 })
   await bar.getByRole("button", { name: "Pause “Viasna 11”" }).click()
+  // Paused, the same take's wave plays it again from where it is pressed.
+  await wave.click({ position: { x: box.width * 0.2, y: box.height / 2 } })
+  await expect(bar.getByRole("button", { name: "Pause “Viasna 11”" })).toBeVisible()
+  await bar.getByRole("button", { name: "Pause “Viasna 11”" }).click()
+})
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+
+  test("a wave in a list lets a finger scroll, and a tap plays it", async ({ page }) => {
+    await page.goto(`/rehearsals/${band().rehearsals.second}`)
+    const wave = page.locator('[data-take="Viasna 11"]').getByTestId("wave")
+    await expect(wave).not.toHaveCSS("touch-action", "none")
+    await wave.tap()
+    const bar = page.getByLabel("Player")
+    await expect(bar.getByRole("button", { name: "Pause “Viasna 11”" })).toBeVisible()
+    await bar.getByRole("button", { name: "Pause “Viasna 11”" }).click()
+  })
+})
+
+test("Esc in a list inside a panel closes the list, not the panel", async ({ page }) => {
+  await page.goto("/songs")
+  await page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Pałyn", exact: true }).click()
+  const panel = page.getByLabel("Panel")
+  await panel.getByRole("combobox", { name: "Key" }).click()
+  await expect(page.getByRole("listbox")).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("listbox")).toHaveCount(0)
+  await expect(panel).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(panel).toHaveCount(0)
 })
 
 test("a computer's windows fit every section", async ({ page }) => {

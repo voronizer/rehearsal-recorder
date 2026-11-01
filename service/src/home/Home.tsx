@@ -45,7 +45,8 @@ function news(unheard: number, marks: number) {
 export function Home() {
   const home = useHome()
   const frame = useFrame()
-  if (home.error) return <Note>{home.error.message}</Note>
+  const error = home.error ?? frame.error
+  if (error) return <Note>{error.message}</Note>
   if (!home.data || !frame.data) return null
   const h = home.data
   if (!frame.data.has_takes) return <FirstDay steps={h.steps} />

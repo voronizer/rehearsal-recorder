@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react"
-import { ArrowDown, ArrowUp, Check, Trash2, X } from "lucide-react"
+import { Check, GripVertical, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -34,8 +34,7 @@ export function EditRow({
   swatches,
   onColour,
   onName,
-  onUp,
-  onDown,
+  handleRef,
   canDelete,
   onDelete,
   others,
@@ -49,8 +48,8 @@ export function EditRow({
   swatches?: Swatch[]
   onColour?: (value: string) => void
   onName: (v: string) => void
-  onUp?: () => void
-  onDown?: () => void
+  /** Where the row is dragged by, from SortableList. */
+  handleRef: (el: Element | null) => void
   canDelete: boolean
   onDelete: (to?: number) => void
   others: { id: number; name: string; swatch?: ReactNode }[]
@@ -66,16 +65,17 @@ export function EditRow({
     else setText(name)
   }
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 py-1.5">
       <div className="flex items-center gap-1.5">
-        <span className="flex flex-col">
-          <button type="button" aria-label={`Move “${name}” up`} disabled={!onUp} onClick={onUp} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
-            <ArrowUp className="size-3.5" />
-          </button>
-          <button type="button" aria-label={`Move “${name}” down`} disabled={!onDown} onClick={onDown} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
-            <ArrowDown className="size-3.5" />
-          </button>
-        </span>
+        {/* As in РЭХА's Settings › Marks: drag by the grip, or Space on it and the arrows. */}
+        <button
+          ref={handleRef}
+          type="button"
+          aria-label={`Move ${name}`}
+          className="flex h-8 w-5 shrink-0 cursor-grab touch-none items-center justify-center text-muted-foreground hover:text-foreground"
+        >
+          <GripVertical className="size-4" />
+        </button>
         {swatch && (
           <Button variant="ghost" size="icon-row" aria-label={`Colour of “${name}”`} aria-expanded={palette} onClick={() => setPalette(!palette)}>
             {swatch}
@@ -142,10 +142,9 @@ export function EditRow({
   )
 }
 
-/** The list with `id` moved one place up (-1) or down (1). */
-export const moved = (ids: number[], id: number, by: -1 | 1) => {
-  const i = ids.indexOf(id)
-  const out = [...ids]
-  ;[out[i], out[i + by]] = [out[i + by], out[i]]
-  return out
+/** The list with `id` put at place `to`, as SortableList drops it. */
+export const placed = <T extends { id: number }>(items: T[], id: number, to: number): T[] => {
+  const next = items.filter((x) => x.id !== id)
+  next.splice(to, 0, items.find((x) => x.id === id)!)
+  return next
 }

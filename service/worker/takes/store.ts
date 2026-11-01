@@ -1,8 +1,8 @@
-import { and, eq, isNull, sql } from "drizzle-orm"
+import { and, eq, gt, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { tellChat } from "../chat/tell"
 import { database } from "../shared/db"
 import type { Bindings } from "../shared/env"
-import { firstStatus, labelFor } from "../labels/match"
+import { firstStatus, labelsFor } from "../labels/match"
 import { comment, rehearsal, song, take } from "../shared/schema"
 import { iso } from "../shared/time"
 import type { TakeMeta } from "./meta"
@@ -14,10 +14,12 @@ const markKey = (at: number) => Math.round(at * 100)
 
 /**
  * The song with this title, whatever its case, made with the first status
- * if there is none. A tempo РЭХА sent is the song's now: it is the song's
- * as РЭХА keeps it, whichever take carries it.
+ * if there is none. The song's tempo is the one its newest take carries
+ * (the latest rehearsal, then the highest number): an older take sent
+ * again, from a computer whose РЭХА has an old tempo, leaves it.
  */
-async function songId(env: Bindings, title: string | null, tempo: number | null | undefined): Promise<number | null> {
+async function songId(env: Bindings, uid: string, meta: TakeMeta): Promise<number | null> {
+  const { song: title, tempo } = meta
   if (title === null) return null
   const db = database(env)
   await db
@@ -25,15 +27,30 @@ async function songId(env: Bindings, title: string | null, tempo: number | null 
     .values({ title, statusId: await firstStatus(db), createdAt: iso() })
     .onConflictDoNothing()
   const named = sql`${song.title} = ${title} COLLATE NOCASE`
-  if (tempo !== undefined) await db.update(song).set({ tempo }).where(named)
   const [row] = await db.select({ id: song.id }).from(song).where(named).limit(1)
+  if (tempo === undefined) return row.id
+  const { date } = meta.rehearsal
+  const [newer] = await db
+    .select({ uid: take.uid })
+    .from(take)
+    .innerJoin(rehearsal, eq(take.rehearsalUid, rehearsal.uid))
+    .where(
+      and(
+        eq(take.songId, row.id),
+        ne(take.uid, uid),
+        or(gt(rehearsal.date, date), and(eq(rehearsal.date, date), gt(take.number, meta.number)))
+      )
+    )
+    .limit(1)
+  if (!newer) await db.update(song).set({ tempo }).where(eq(song.id, row.id))
   return row.id
 }
 
 /**
  * A take РЭХА sent: made or brought up to date, with its rehearsal and song.
  * A take in the trash comes out of it. Marks from РЭХА replace the earlier
- * ones, matched by their moment, so replies to a mark still there stay.
+ * ones, matched by their moment, so replies to a mark still there stay; a
+ * mark РЭХА no longer sends goes, unless the band talked under it.
  *
  * While a newer generation is on its way, the band still hears the older
  * one, so every comment stays in the older one's time: the new marks are
@@ -48,7 +65,7 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
   const fields = {
     rehearsalUid: meta.rehearsal.uid,
     number: meta.number,
-    songId: await songId(env, meta.song, meta.tempo),
+    songId: await songId(env, uid, meta),
     name: meta.name,
     durationSec: meta.duration_sec,
     starredAtRehearsal: meta.starred,
@@ -65,12 +82,18 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
     .select({ id: comment.id, at: comment.at })
     .from(comment)
     .where(and(eq(comment.takeUid, uid), eq(comment.fromReha, true), isNull(comment.parentId)))
+  // A mark the band talked under stays when РЭХА stops sending it, with the talk.
+  const talkedUnder = new Set(
+    (await db.selectDistinct({ id: comment.parentId }).from(comment).where(and(eq(comment.takeUid, uid), isNotNull(comment.parentId)))).map(
+      (c) => c.id
+    )
+  )
   // A mark is the same mark a hundredth away: РЭХА rounds the crop and the
   // mark each, so one moved by a crop can land a hundredth off. The exact
   // moment goes first, so two marks a hundredth apart keep their own.
   const free = new Map(kept.map((c) => [markKey(c.at), c.id]))
-  const marks = []
-  for (const m of meta.marks) marks.push({ ...m, at: m.at + cut, labelId: await labelFor(db, m.label, m.colour) })
+  const labelIds = await labelsFor(db, meta.marks)
+  const marks = meta.marks.map((m, i) => ({ ...m, at: m.at + cut, labelId: labelIds[i] }))
   const matched = new Map<number, number>()
   for (const near of [0, -1, 1])
     marks.forEach((m, i) => {
@@ -90,7 +113,7 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
       .insert(take)
       .values({ uid, ...fields })
       .onConflictDoUpdate({ target: take.uid, set: fields }),
-    ...[...free.values()].map((id) => db.delete(comment).where(eq(comment.id, id))),
+    ...[...free.values()].filter((id) => !talkedUnder.has(id)).map((id) => db.delete(comment).where(eq(comment.id, id))),
     ...marks.map((m, i) => {
       const id = matched.get(i)
       const row = { text: m.note, labelId: m.labelId }

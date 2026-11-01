@@ -3,6 +3,7 @@
 /* The interface's components the pages draw, for Tailwind to find their classes. */
 @source "../../ui/src/components/ui";
 @source "../../ui/src/components/ConfirmDialog.tsx";
+@source "../../ui/src/components/SortableList.tsx";
 @source "../../ui/src/lib";
 
 body {

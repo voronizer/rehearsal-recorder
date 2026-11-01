@@ -179,6 +179,7 @@ export const useDeleteLabel = () =>
   useChange(({ id: n, to }: { id: number; to?: number }) => data(client.api.labels[":id"].$delete({ param: id(n), json: { to } })))
 
 export const useAddSong = () => useChange((title: string) => data(client.api.songs.$post({ json: { title } })))
+export const useDeleteSong = () => useChange((n: number) => data(client.api.songs[":id"].$delete({ param: id(n) })))
 export const useChangeSong = () =>
   useChange(({ id: n, ...json }: { id: number; status_id?: number; key?: string | null; notes?: string }) =>
     data(client.api.songs[":id"].$patch({ param: id(n), json }))

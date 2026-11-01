@@ -1,7 +1,8 @@
 import { createRoute, z } from "@hono/zod-openapi"
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm"
+import { and, asc, eq, isNull, sql } from "drizzle-orm"
 import { database } from "../shared/db"
 import { fail } from "../shared/errors"
+import { same } from "../shared/names"
 import { body, errors, json, newApp, Ok } from "../shared/openapi"
 import { comment, label } from "../shared/schema"
 import { needMember } from "../signin/guards"
@@ -20,7 +21,6 @@ export const LabelView = z
   .openapi("Label")
 
 const taken = (name: string) => `There is already a label called “${name}”.`
-const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
 /** `ids` is `all` in some order, each once. */
 export const isOrder = (ids: number[], all: number[]) =>
@@ -85,11 +85,7 @@ export const labelRoutes = newApp()
       if (!row) return fail(c, 404, NO_LABEL)
       let was = row.was
       if (name !== undefined && name !== row.name) {
-        const [clash] = await db
-          .select()
-          .from(label)
-          .where(and(ne(label.id, id), sql`${label.name} = ${name} COLLATE NOCASE`))
-          .limit(1)
+        const clash = (await db.select().from(label)).find((l) => l.id !== id && same(l.name, name))
         if (clash) return fail(c, 409, taken(clash.name))
         was = [...was.filter((w) => !same(w, name) && !same(w, row.name)), row.name]
       }

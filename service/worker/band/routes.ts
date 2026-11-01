@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi"
-import { and, eq, isNotNull, isNull, max, sql } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, max, ne, sql } from "drizzle-orm"
 import { database, type Database } from "../shared/db"
 import { fail } from "../shared/errors"
 import { body, errors, json, newApp, Ok } from "../shared/openapi"
@@ -58,7 +58,8 @@ export const bandRoutes = newApp()
       const live = and(isNotNull(take.shownGen), isNull(take.trashedAt))
       const [row, [members], [marks], [takes]] = await Promise.all([
         theBand(db),
-        db.select({ n: sql<number>`count(*)` }).from(user).where(sql`coalesce(${user.banned}, 0) = 0`),
+        // As People shows them: signed in, with a name.
+        db.select({ n: sql<number>`count(*)` }).from(user).where(and(ne(user.name, ""), sql`coalesce(${user.banned}, 0) = 0`)),
         db
           .select({ n: sql<number>`count(*)` })
           .from(comment)

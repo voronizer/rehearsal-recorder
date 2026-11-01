@@ -77,6 +77,12 @@ test("a new song: its title once in any case, the first status, and its own pane
   expect(page.song).toMatchObject({ title: "Kupalle", takes: 0, best: null, best_why: null, notes: "", length: null })
   expect(page.song.status_id).toBe((await songs(owner)).statuses[0].id)
   expect((await post("/api/songs", { title: "" }, owner)).status).toBe(400)
+  // Any case in any alphabet, as the band types it.
+  expect((await post("/api/songs", { title: "Łaŭka" }, owner)).status).toBe(200)
+  expect(await answer(post("/api/songs", { title: "łaŭka" }, owner))).toEqual({
+    status: 409,
+    body: { error: "There is already a song called “Łaŭka”." },
+  })
 })
 
 test("any member sets a song's status, key and notes; a key is one of the 24", async () => {
@@ -165,6 +171,24 @@ test("a song's files: up, served as each kind wants, and deleted", async () => {
   expect((await del(`/api/songs/${id}/files/${shown[0].id}`, owner)).status).toBe(200)
   expect((await song(owner, id)).files.length).toBe(3)
   expect((await call(shown[0].url, {}, owner)).status).toBe(404)
+})
+
+test("a file the band cannot open in a tab downloads, whatever type the browser said", async () => {
+  const owner = await signInOwner()
+  const id = (await answer(post("/api/songs", { title: "Viasna" }, owner))).body.id
+  const page = new TextEncoder().encode("<p>hi</p>")
+  expect((await upload(owner, id, "notes.html", "text/html", page)).status).toBe(200)
+  // A name the browser did not encode is kept as it came.
+  const odd = call(`/api/songs/${id}/files`, { method: "POST", body: page, headers: { "X-File-Name": "100% loud.txt" } }, owner)
+  expect((await odd).status).toBe(200)
+  const files = (await song(owner, id)).files
+  expect(files.map((f) => f.name)).toEqual(["notes.html", "100% loud.txt"])
+  for (const f of files) {
+    const res = await call(f.url, {}, owner)
+    expect(res.headers.get("Content-Type")).toBe("application/octet-stream")
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff")
+    expect(res.headers.get("Content-Disposition")).toMatch(/^attachment;/)
+  }
 })
 
 test("a file over 50 MB is refused before it is kept", async () => {

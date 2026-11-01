@@ -8,7 +8,7 @@ import { Back, Columns, Group, Groups, Note, Page, Tile } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, count, longDay } from "../shell/words"
 import { Downloads } from "./Downloads"
-import { CANNOT_PLAY, usePlayer } from "./player/one"
+import { CANNOT_PLAY, useHeardAgain, usePlayer } from "./player/one"
 import { StarButton, TakeName } from "./parts"
 import { Lanes, TakePlayer } from "./TakePanel"
 
@@ -22,6 +22,7 @@ export function Take() {
   const { at, mark, comment } = useSearch({ from: "/band/takes/$uid" })
   const take = useTake(uid)
   const p = usePlayer()
+  useHeardAgain(take.data)
   const ready = !!take.data
   useEffect(() => {
     if (!ready) return

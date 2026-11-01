@@ -52,3 +52,20 @@ test("a label renamed shows on its marks", async ({ page }) => {
   await page.goto(`/takes/${band().takes["Viasna 12"]}`)
   await expect(page.getByRole("main").getByRole("region", { name: "Marks" }).locator("[data-mark]").first()).toContainText("Great")
 })
+
+test("a label dragged by its grip to the top is the first", async ({ page }) => {
+  await page.goto("/marks")
+  await page.getByRole("button", { name: "Labels" }).click()
+  const panel = page.getByLabel("Panel")
+  const names = panel.getByRole("textbox", { name: "Name" })
+  await expect(names.first()).toHaveValue("Note")
+  const target = (await names.first().boundingBox())!
+  await panel.getByRole("button", { name: "Move Do again" }).hover()
+  await page.mouse.down()
+  await page.mouse.move(target.x + 20, target.y + 2, { steps: 12 })
+  await page.mouse.up()
+  await expect.poll(() => names.evaluateAll((els) => els.slice(0, 2).map((e) => (e as HTMLInputElement).value))).toEqual(["Do again", "Note"])
+  await page.reload()
+  await page.getByRole("button", { name: "Labels" }).click()
+  await expect(names.first()).toHaveValue("Do again")
+})

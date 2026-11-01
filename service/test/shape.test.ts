@@ -4,8 +4,9 @@ import { expect, test } from "vitest"
 import { database } from "../worker/shared/db"
 import type { Bindings } from "../worker/shared/env"
 import { take } from "../worker/shared/schema"
+import { FILL } from "../worker/takes/shape"
 import { putTake, ready } from "../worker/takes/store"
-import { ORIGIN, read, shownTake, signInOwner, takeMeta } from "./helpers"
+import { ORIGIN, read, REHEARSAL, shownTake, signInOwner, takeMeta } from "./helpers"
 
 const bindings = env as unknown as Bindings
 
@@ -59,4 +60,26 @@ test("a take's page has the same wave as its row", async () => {
   const page = await read<{ shape: number[] }>(`/api/takes/${uid}`, owner)
   expect(page.shape).toHaveLength(120)
   expect(page.shape[119]).toBe(1)
+})
+
+test("part 1's takes get their waves a few at a time, so one list does not read every take's peaks", async () => {
+  const owner = await signInOwner()
+  const uids: string[] = []
+  for (let i = 0; i < FILL + 2; i++) {
+    const uid = await shownTake({ number: i + 1 })
+    await peaks(uid, 1, 1, 0.2, 0.4)
+    uids.push(uid)
+  }
+  await database(bindings).update(take).set({ shape: null })
+  const kept = async () =>
+    (await database(bindings).select({ shape: take.shape }).from(take)).filter((t) => t.shape !== null).length
+
+  // One request: the rehearsal's page.
+  const page = () => read<{ takes: Row[] }>(`/api/rehearsals/${REHEARSAL.uid}`, owner)
+  const first = await page()
+  expect(await kept()).toBe(FILL)
+  // The rest are drawn flat for now, and the next list makes theirs.
+  expect(first.takes.filter((r) => r.shape.length === 0)).toHaveLength(2)
+  await page()
+  expect(await kept()).toBe(FILL + 2)
 })

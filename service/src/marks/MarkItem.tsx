@@ -149,6 +149,10 @@ function CommentLine({ comment }: { comment: MarkComment }) {
   )
 }
 
+/** What deleting a mark takes with it. */
+const goesWith = (comments: number) =>
+  comments === 0 ? "It cannot be brought back." : comments === 1 ? "Its comment goes with it." : `Its ${comments} comments go with it.`
+
 /**
  * A mark: its colour, its moment and what it says on one line; who set it
  * and when under that; the comments under that, all on one edge. `take`
@@ -260,7 +264,7 @@ export function MarkItem({ mark, take, compact }: { mark: Mark; take?: "full" | 
         open={deleting}
         onOpenChange={setDeleting}
         title={deleting ? `Delete the mark at ${clock(mark.at)}?` : null}
-        description={deleting ? (mark.comments.length ? "Its comments go with it." : "It cannot be brought back.") : null}
+        description={deleting ? goesWith(mark.comments.length) : null}
         actionLabel="Delete mark"
         onConfirm={() => remove.mutate(mark.id)}
       />

@@ -12,13 +12,14 @@ opening.
   band likes most. **Rehearsals**, **Songs**, **Marks**, **Members** and
   **Trash** sit in a column on the left (on a phone, the button at the top
   left opens them), and one player runs along the bottom. Every list draws
-  a take as its wave with its marks on it: press the wave to jump to that
-  moment.
+  a take as its wave with its marks on it: press the wave to play from
+  there.
 - **Marks in the band service.** A mark is a moment of a take with a label
   and a note, as in РЭХА. The band sets marks, talks under them and closes
   one once the place is fixed. The labels are the band's own: rename,
-  recolour or add them under **Labels**. Marks set in РЭХА arrive under the
-  label of the same name. The comments from before become marks with the
+  recolour, reorder or add them under **Labels**. Marks set in РЭХА arrive
+  under the label of the same name; one the band talked under stays even
+  if it is deleted in РЭХА. The comments from before become marks with the
   label Note, their answers under them.
 - **Songs in the band service.** A song has a status, a key, notes and
   files, such as its chart or a Guitar Pro file. **New song** adds one

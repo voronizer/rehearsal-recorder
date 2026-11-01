@@ -259,6 +259,24 @@ test("marks from REHA replace the earlier ones, replies stay", async () => {
   expect(now.find((c) => c.text === "Agreed")!.parent_id).toBe(fix.id)
 })
 
+test("a mark REHA no longer sends goes, unless the band talked under it", async () => {
+  const r = await reha()
+  const marks = [
+    { at: 10, label: "Went wrong", colour: "red", note: "Drags" },
+    { at: 20, label: "Note", colour: "grey", note: "Count in" },
+  ]
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ marks }))).status).toBe(200)
+  const drags = (await comments()).find((c) => c.text === "Drags")!
+  await comment(10, "It's the bass", drags.id as number)
+
+  // Both deleted in РЭХА (or moved: a moved mark is a new one).
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ marks: [] }))).status).toBe(200)
+  expect((await comments()).map((c) => [c.text, c.from_reha])).toEqual([
+    ["Drags", 1],
+    ["It's the bass", 0],
+  ])
+})
+
 test("a mark from REHA gets the band's label of that name, whatever colour it sends", async () => {
   const r = await reha()
   const marks = [{ at: 10, label: "keep this", colour: "red", note: "This solo" }]
@@ -300,6 +318,20 @@ test("a mark under a label the band has not got adds it at the end, in REHA's co
   expect(await labelOf("No label")).toEqual({ name: "Note", colour: "grey" })
 })
 
+test("two takes sent at once under a new label make it once, and both marks get it", async () => {
+  const r = await reha()
+  const one = crypto.randomUUID()
+  const marks = (note: string) => [{ at: 10, label: "Count in", colour: "teal", note }]
+  const sent = await Promise.all([
+    r.put(`/api/reha/takes/${TAKE}`, takeMeta({ marks: marks("Sticks") })),
+    r.put(`/api/reha/takes/${one}`, takeMeta({ number: 13, name: "Viasna 13", marks: marks("Clicks") })),
+  ])
+  expect(sent.map((s) => s.status)).toEqual([200, 200])
+  expect((await labels()).filter((l) => l.name === "Count in")).toHaveLength(1)
+  expect(await labelOf("Sticks")).toEqual({ name: "Count in", colour: "teal" })
+  expect(await labelOf("Clicks")).toEqual({ name: "Count in", colour: "teal" })
+})
+
 test("the tempo sent with a take is its song's; a take without one leaves it", async () => {
   const r = await reha()
   expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 120 }))).status).toBe(200)
@@ -310,6 +342,23 @@ test("the tempo sent with a take is its song's; a take without one leaves it", a
   expect((await r.put(`/api/reha/takes/${other}`, takeMeta({ number: 13, name: "Viasna 13", tempo: null }))).status).toBe(200)
   expect(await songRow()).toEqual({ tempo: null })
   expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 0 }))).status).toBe(400)
+})
+
+test("the song's tempo is its newest take's: an older take sent again leaves it", async () => {
+  const r = await reha()
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 120 }))).status).toBe(200)
+  // A take from the week before, sent again from a laptop whose РЭХА still has the old tempo.
+  const before = { uid: crypto.randomUUID(), name: "Thursday", date: "2025-10-23" }
+  const older = crypto.randomUUID()
+  expect((await r.put(`/api/reha/takes/${older}`, takeMeta({ rehearsal: before, number: 3, name: "Viasna 3", tempo: 96 }))).status).toBe(200)
+  expect(await songRow()).toEqual({ tempo: 120 })
+  // An earlier take of the same evening is older too.
+  const earlier = crypto.randomUUID()
+  expect((await r.put(`/api/reha/takes/${earlier}`, takeMeta({ number: 11, name: "Viasna 11", tempo: 96 }))).status).toBe(200)
+  expect(await songRow()).toEqual({ tempo: 120 })
+  // The newest take sent again with a new tempo moves it.
+  expect((await r.put(`/api/reha/takes/${TAKE}`, takeMeta({ tempo: 132 }))).status).toBe(200)
+  expect(await songRow()).toEqual({ tempo: 132 })
 })
 
 test("a song made by a take gets the first status", async () => {

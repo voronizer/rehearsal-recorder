@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs"
 import { expect, test } from "@playwright/test"
 import { as, band } from "./band"
 
@@ -80,4 +81,72 @@ test("the star at rehearsal shows apart", async ({ page }) => {
   const best = page.getByRole("region", { name: "Best take" })
   await expect(best).toContainText("latest, no stars yet")
   await expect(best.locator("[data-take]")).toHaveAttribute("data-take", "Kupalle 2")
+})
+
+test("a file and a song with no takes go only after asking", async ({ page }) => {
+  await page.goto("/songs")
+  await page.getByRole("button", { name: "New song" }).click()
+  const panel = page.getByLabel("Panel")
+  await panel.getByLabel("Title").fill("Kalyhanka")
+  await panel.getByRole("button", { name: "Add song" }).click()
+  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Kalyhanka")
+  await panel.locator('input[type="file"]').setInputFiles({ name: "words.txt", mimeType: "text/plain", buffer: Buffer.from("la la") })
+  await expect(panel.getByRole("link", { name: /words\.txt/ })).toBeVisible()
+
+  await panel.getByRole("button", { name: "Remove words.txt" }).click()
+  const ask = page.getByRole("dialog")
+  await expect(ask).toContainText("Remove “words.txt”?")
+  await ask.getByRole("button", { name: "Cancel" }).click()
+  await expect(panel.getByRole("link", { name: /words\.txt/ })).toBeVisible()
+  await panel.getByRole("button", { name: "Remove words.txt" }).click()
+  await ask.getByRole("button", { name: "Remove file" }).click()
+  await expect(panel.getByRole("link", { name: /words\.txt/ })).toHaveCount(0)
+
+  await panel.getByRole("button", { name: "What to do with Kalyhanka" }).click()
+  await page.getByRole("menuitem", { name: "Delete song" }).click()
+  await expect(ask).toContainText("Delete “Kalyhanka”?")
+  await ask.getByRole("button", { name: "Delete song" }).click()
+  await expect(panel).toHaveCount(0)
+  await expect(page.getByRole("main").getByRole("button", { name: "Kalyhanka", exact: true })).toHaveCount(0)
+
+  // A song with takes has no such menu: its title comes from РЭХА. Its row opens by keyboard too.
+  await page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Pałyn", exact: true }).focus()
+  await page.keyboard.press("Enter")
+  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Pałyn")
+  await expect(panel.getByRole("button", { name: "What to do with Pałyn" })).toHaveCount(0)
+})
+
+test("a status dragged by its grip moves its group on Songs", async ({ page }) => {
+  await page.goto("/songs")
+  await page.getByRole("button", { name: "Statuses" }).click()
+  const panel = page.getByLabel("Panel")
+  const names = panel.getByRole("textbox", { name: "Name" })
+  await expect(names.first()).toHaveValue("Learning")
+  const target = (await names.first().boundingBox())!
+  await panel.getByRole("button", { name: "Move Archive" }).hover()
+  await page.mouse.down()
+  await page.mouse.move(target.x + 20, target.y + 2, { steps: 12 })
+  await page.mouse.up()
+  await expect.poll(() => names.evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value))).toEqual(["Archive", "Learning", "Ready"])
+  // Put back, for the tests after.
+  const learning = (await names.nth(1).boundingBox())!
+  const archive = (await names.first().boundingBox())!
+  await panel.getByRole("button", { name: "Move Archive" }).hover()
+  await page.mouse.down()
+  await page.mouse.move(archive.x + 20, learning.y + learning.height * 3, { steps: 12 })
+  await page.mouse.up()
+  await expect.poll(() => names.evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value))).toEqual(["Learning", "Ready", "Archive"])
+})
+
+test("a file over 50 MB is refused before it is sent", async ({ page }, info) => {
+  const big = info.outputPath("big.pdf")
+  writeFileSync(big, Buffer.alloc(50 * 1024 * 1024 + 1))
+  await page.goto("/songs")
+  await page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Pałyn", exact: true }).click()
+  const panel = page.getByLabel("Panel")
+  const sent: string[] = []
+  page.on("request", (r) => r.method() === "POST" && r.url().includes("/files") && sent.push(r.url()))
+  await panel.locator('input[type="file"]').setInputFiles(big)
+  await expect(panel.getByRole("alert")).toHaveText("A file is up to 50 MB")
+  expect(sent).toEqual([])
 })

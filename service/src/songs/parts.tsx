@@ -1,6 +1,7 @@
 import { useRef, useState } from "react"
 import { Link } from "@tanstack/react-router"
-import { ChevronDown, ChevronRight, X } from "lucide-react"
+import { ChevronDown, ChevronRight, Ellipsis, X } from "lucide-react"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -13,7 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { KEYS } from "../../worker/shared/keys"
-import { useAddFile, useChangeSong, useDeleteFile, useSong, useSongs, type SongFile, type SongPage } from "../api"
+import { MAX_FILE, TOO_BIG } from "../../worker/songs/limits"
+import { useAddFile, useChangeSong, useDeleteFile, useDeleteSong, useSong, useSongs, type SongFile, type SongPage } from "../api"
 import { Group, Groups, Note, Props, Rows, Tile } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock } from "../shell/words"
@@ -131,8 +133,10 @@ const KIND: Record<SongFile["kind"], [string, string]> = {
 /** The song's files: a Guitar Pro file downloads, a PDF or a picture opens in a new tab. */
 export function Files({ song, files }: { song: Song; files: SongFile[] }) {
   const remove = useDeleteFile()
+  const [removing, setRemoving] = useState<SongFile | null>(null)
   if (!files.length) return <p className="text-muted-foreground">No files yet: the song's chart, words, a Guitar Pro file.</p>
   return (
+    <>
     <Rows>
       {files.map((f) => (
         <div key={f.id} className="flex items-center gap-3">
@@ -150,12 +154,26 @@ export function Files({ song, files }: { song: Song; files: SongFile[] }) {
               {f.added_by && ` · added by ${f.added_by}`}
             </span>
           </a>
-          <Button variant="ghost" size="icon-row" aria-label={`Remove ${f.name}`} disabled={remove.isPending} onClick={() => remove.mutate({ song: song.id, file: f.id })}>
+          <Button variant="ghost" size="icon-row" aria-label={`Remove ${f.name}`} disabled={remove.isPending} onClick={() => setRemoving(f)}>
             <X className="text-muted-foreground" />
           </Button>
         </div>
       ))}
     </Rows>
+    {remove.error && (
+      <p role="alert" className="text-destructive">
+        {remove.error.message}
+      </p>
+    )}
+    <ConfirmDialog
+      open={removing !== null}
+      onOpenChange={(open) => !open && setRemoving(null)}
+      title={removing && `Remove “${removing.name}”?`}
+      description={removing && "It goes for the whole band, for good."}
+      actionLabel="Remove file"
+      onConfirm={() => removing && remove.mutate({ song: song.id, file: removing.id })}
+    />
+    </>
   )
 }
 
@@ -163,11 +181,13 @@ export function Files({ song, files }: { song: Song; files: SongFile[] }) {
 export function AddFile({ song }: { song: Song }) {
   const pick = useRef<HTMLInputElement>(null)
   const add = useAddFile()
+  const [tooBig, setTooBig] = useState(false)
+  const error = tooBig ? TOO_BIG : add.error?.message
   return (
     <span className="flex items-center gap-2">
-      {add.error && (
+      {error && (
         <span role="alert" className="text-xs text-destructive">
-          {add.error.message}
+          {error}
         </span>
       )}
       <input
@@ -178,13 +198,57 @@ export function AddFile({ song }: { song: Song }) {
         onChange={(e) => {
           const file = e.target.files?.[0]
           e.target.value = ""
-          if (file) add.mutate({ song: song.id, file })
+          if (!file) return
+          // Said here, before minutes of sending what the service would refuse.
+          setTooBig(file.size > MAX_FILE)
+          if (file.size <= MAX_FILE) add.mutate({ song: song.id, file })
         }}
       />
       <Button variant="outline" size="row" disabled={add.isPending} onClick={() => pick.current?.click()}>
         {add.isPending ? "Adding…" : "Add a file"}
       </Button>
     </span>
+  )
+}
+
+/**
+ * ⋯ › **Delete song**, for a song with no takes: one made by **New song**
+ * by mistake. A song with takes has its title from РЭХА and stays.
+ */
+export function SongMenu({ song, onGone }: { song: Song; onGone: () => void }) {
+  const remove = useDeleteSong()
+  const [asking, setAsking] = useState(false)
+  if (song.takes > 0) return null
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon-row" aria-label={`What to do with ${song.title}`}>
+            <Ellipsis />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setAsking(true)}>Delete song</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {remove.error && (
+        <span role="alert" className="text-xs text-destructive">
+          {remove.error.message}
+        </span>
+      )}
+      <ConfirmDialog
+        open={asking}
+        onOpenChange={setAsking}
+        title={asking ? `Delete “${song.title}”?` : null}
+        description={asking ? "Its notes and files go with it." : null}
+        actionLabel="Delete song"
+        // Away from the song first, so its panel or page does not ask for it once it is gone.
+        onConfirm={() => {
+          onGone()
+          remove.mutate(song.id)
+        }}
+      />
+    </>
   )
 }
 
@@ -199,6 +263,7 @@ export function SongPanel({ id }: { id: number }) {
     <div className="flex flex-col gap-6" aria-label={song.title}>
       <div className="flex items-center gap-2">
         <h2 className="flex-1 truncate text-lg font-semibold">{song.title}</h2>
+        <SongMenu song={song} onGone={close} />
         <Button asChild variant="outline" size="row">
           <Link to="/songs/$id" params={{ id: String(id) }} onClick={close}>
             Song's page

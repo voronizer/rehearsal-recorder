@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -7,6 +8,13 @@ import { usePanel } from "../shell/panel"
 import { useSize } from "../shell/size"
 import { clock, count, day } from "../shell/words"
 import { Play, TakeLine, TakeLink } from "../takes/parts"
+
+/** Enter or Space on a row that works as a button. */
+const press = (act: () => void) => (e: KeyboardEvent) => {
+  if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return
+  e.preventDefault()
+  act()
+}
 
 const COLS = "grid-cols-[minmax(0,1fr)_6rem_4rem_4rem_4rem_6rem_minmax(8rem,1fr)]"
 
@@ -28,7 +36,7 @@ function SongLine({ song }: { song: SongItem }) {
   )
   if (size === "wide")
     return (
-      <div role="button" tabIndex={0} aria-label={song.title} className={cn("grid cursor-pointer items-center gap-3", COLS)} onClick={() => open({ kind: "song", id: song.id })}>
+      <div role="button" tabIndex={0} aria-label={song.title} className={cn("grid cursor-pointer items-center gap-3", COLS)} onClick={() => open({ kind: "song", id: song.id })} onKeyDown={press(() => open({ kind: "song", id: song.id }))}>
         {name}
         <span>{song.key}</span>
         <span className="tnum">{song.tempo ? Math.round(song.tempo) : ""}</span>
@@ -39,7 +47,7 @@ function SongLine({ song }: { song: SongItem }) {
       </div>
     )
   return (
-    <div role="button" tabIndex={0} aria-label={song.title} className="flex cursor-pointer items-center gap-3" onClick={() => open({ kind: "song", id: song.id })}>
+    <div role="button" tabIndex={0} aria-label={song.title} className="flex cursor-pointer items-center gap-3" onClick={() => open({ kind: "song", id: song.id })} onKeyDown={press(() => open({ kind: "song", id: song.id }))}>
       <span className="min-w-0 flex-1">
         {name}
         <span className="block truncate text-xs text-muted-foreground">

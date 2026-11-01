@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { as } from "./band"
+import { as, asMember, band } from "./band"
 
 // Paŭlik opened Viasna 12 before the others marked it; nothing else.
 test.use({ storageState: as("paulik") })
@@ -55,4 +55,40 @@ test("not heard yet opens the first take not heard, and opening it hears it", as
   await expect(viasna).toContainText("1 not heard yet")
   // Opening a take's panel does not play it.
   await expect(page.getByLabel("Player")).toContainText(NOTHING)
+})
+
+test("a mark set after you heard a take is new until you open the take again", async ({ page }) => {
+  const sub = page.getByRole("main").locator("p").filter({ hasText: /not heard yet|new mark|heard every take/ }).first()
+  const fresh = async () => Number(/(\d+) new marks?/.exec((await sub.textContent()) ?? "")?.[1] ?? 0)
+  const favourite = page.getByRole("region", { name: "The band's favourites" }).getByRole("button", { name: "Viasna 11", exact: true })
+  const panel = page.getByLabel("Panel")
+  await page.goto("/")
+  await favourite.click()
+  await expect(panel).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(sub).toBeVisible()
+  const before = await fresh()
+
+  const dzima = await asMember("dzima")
+  const set = await dzima.post(`/api/takes/${band().takes["Viasna 11"]}/marks`, { data: { at: 3, note: "Late again" } })
+  expect(set.ok()).toBe(true)
+  const { id } = (await set.json()) as { id: number }
+  const sections = page.getByRole("navigation", { name: "Sections" })
+  await sections.getByRole("link", { name: "Songs" }).click()
+  await sections.getByRole("link", { name: "Home" }).click()
+  await expect.poll(fresh).toBe(before + 1)
+
+  // Opened again in the same tab, with no reload.
+  await favourite.click()
+  await expect(panel).toBeVisible()
+  await expect.poll(fresh).toBe(before)
+  // Gone again, so the tests after count the seed's marks.
+  expect((await dzima.delete(`/api/marks/${id}`)).ok()).toBe(true)
+  await dzima.dispose()
+})
+
+test("home says so when the service cannot answer", async ({ page }) => {
+  await page.route("**/api/frame", (r) => r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Something went wrong in the band service" }) }))
+  await page.goto("/")
+  await expect(page.getByRole("main")).toContainText("Something went wrong in the band service")
 })

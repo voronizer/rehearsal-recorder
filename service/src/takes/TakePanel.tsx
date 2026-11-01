@@ -8,7 +8,7 @@ import { TakeMarks } from "../marks/MarkItem"
 import { Group, Groups, Note, Rows } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock } from "../shell/words"
-import { usePlayer, useTime } from "./player/one"
+import { useHeardAgain, usePlayer, useTime } from "./player/one"
 import { Play, StarButton, TakeName, Wave } from "./parts"
 
 /** A track's own wave from РЭХА's 1200 numbers, at the 120 a lane draws. */
@@ -23,7 +23,7 @@ function TrackWave({ take, peaks, heard }: { take: TakePage; peaks: string; hear
         return top
       })
     : []
-  return <Wave take={{ ...take, shape: joined }} height={26} className={cn("flex-1", !heard && "opacity-40")} />
+  return <Wave take={{ ...take, shape: joined }} height={26} moves className={cn("flex-1", !heard && "opacity-40")} />
 }
 
 /**
@@ -59,7 +59,7 @@ export function TakePlayer({ take, height = 64 }: { take: TakePage; height?: num
   const at = useTime(take.uid)
   return (
     <div className="flex flex-col gap-2">
-      <Wave take={take} height={height} starred={take.stars.length > 0} />
+      <Wave take={take} height={height} starred={take.stars.length > 0} moves />
       <div className="flex items-center gap-3">
         <Play take={take} />
         <span data-testid="clock" className="tnum text-xs text-muted-foreground">
@@ -74,6 +74,7 @@ export function TakePlayer({ take, height = 64 }: { take: TakePage; height?: num
 export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
   const { close } = usePanel()
   const take = useTake(uid)
+  useHeardAgain(take.data)
   if (take.error) return <Note>{take.error.message}</Note>
   if (!take.data) return null
   const t = take.data

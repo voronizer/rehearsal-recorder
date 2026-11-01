@@ -106,7 +106,18 @@ test.describe("as Dzima", () => {
     await expect(mine).toContainText("0:05")
     await expect(mine).toContainText("Dzima")
     await page.reload()
-    await expect(page.getByRole("main").locator("[data-mark]").filter({ hasText: "Bass comes in late" })).toContainText("0:05")
+    const kept = page.getByRole("main").locator("[data-mark]").filter({ hasText: "Bass comes in late" })
+    await expect(kept).toContainText("0:05")
+    // Deleting your mark says what goes with it.
+    await kept.getByRole("button", { name: "Comment", exact: true }).click()
+    await kept.getByLabel("Your comment").fill("Or the drums are early")
+    await kept.getByRole("button", { name: "Send" }).click()
+    await expect(kept).toContainText("Or the drums are early")
+    // The mark's own Delete comes after its comments'.
+    await kept.getByRole("button", { name: "Delete", exact: true }).last().click()
+    const ask = page.getByRole("dialog")
+    await expect(ask).toContainText("Its comment goes with it.")
+    await ask.getByRole("button", { name: "Cancel" }).click()
   })
 
   test("a mark gets a comment, is closed and opened again", async ({ page }) => {

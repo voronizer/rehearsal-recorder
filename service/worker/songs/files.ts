@@ -8,10 +8,8 @@ import { song, songFile, user } from "../shared/schema"
 import { iso } from "../shared/time"
 import { needMember } from "../signin/guards"
 import { shownName } from "../takes/rows"
+import { MAX_FILE, TOO_BIG } from "./limits"
 
-/** A song's file is up to 50 MB. */
-export const MAX_FILE = 50 * 1024 * 1024
-const TOO_BIG = "A file is up to 50 MB"
 const NO_FILE = "No such file"
 
 /** What pressing a file does: a Guitar Pro file downloads, a PDF or picture opens in a tab. */
@@ -23,7 +21,16 @@ export function kindOf(name: string): "gp" | "pdf" | "picture" | "other" {
   return "other"
 }
 
-/** The type it is served with: what the browser sent, or what its name says. */
+/** The name as the page sent it, encoded; a name sent bare is kept as it came. */
+const decoded = (name: string) => {
+  try {
+    return decodeURIComponent(name)
+  } catch {
+    return name
+  }
+}
+
+/** The type a file that opens in a tab is served with, by its name. */
 const TYPES: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif" }
 
 export const FileView = z
@@ -89,7 +96,7 @@ export const songFileRoutes = newApp()
     async (c) => {
       const db = database(c.env)
       const { id } = c.req.valid("param")
-      const name = decodeURIComponent(c.req.valid("header")["x-file-name"]).trim().slice(0, 200)
+      const name = decoded(c.req.valid("header")["x-file-name"]).trim().slice(0, 200)
       if (!name) return fail(c, 400, "A file needs its name")
       const size = sizeOf(c)
       if (size === null) return fail(c, 400, "Send the file's size")
@@ -97,7 +104,8 @@ export const songFileRoutes = newApp()
       const [s] = await db.select({ id: song.id }).from(song).where(eq(song.id, id)).limit(1)
       if (!s) return fail(c, 404, "No such song")
       const ext = name.toLowerCase().split(".").at(-1) ?? ""
-      const type = TYPES[ext] ?? c.req.header("Content-Type") ?? "application/octet-stream"
+      // Only the kinds that open in a tab keep a type; the rest download as bytes.
+      const type = TYPES[ext] ?? "application/octet-stream"
       const [made] = await db
         .insert(songFile)
         .values({ songId: id, name, kind: kindOf(name), type, size, memberId: c.var.member.id, createdAt: iso() })
@@ -157,6 +165,7 @@ export const songFileRoutes = newApp()
       headers.set("Content-Type", row.type)
       headers.set("Content-Length", String(object.size))
       headers.set("Cache-Control", "private, max-age=3600")
+      headers.set("X-Content-Type-Options", "nosniff")
       headers.set("Content-Disposition", disposition(row.kind === "pdf" || row.kind === "picture" ? "inline" : "attachment", row.name))
       return new Response(object.body, { status: 200, headers })
     }

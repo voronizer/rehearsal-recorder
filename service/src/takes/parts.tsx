@@ -116,19 +116,22 @@ function bars(shape: number[]): number[] {
 
 /**
  * A take's wave: the part played darker, its marks as diamonds in their
- * colours, the playhead. Press it to play from there. A starred take's wave
- * is green, as РЭХА's bar has a green edge.
+ * colours, the playhead. Press it to play from there; in a take's player
+ * (`moves`) a press only moves the playhead, as in РЭХА. A starred take's
+ * wave is green, as РЭХА's bar has a green edge.
  */
 export function Wave({
   take,
   height = 40,
   starred,
+  moves,
   className,
   style,
 }: {
   take: TakeLike
   height?: number
   starred?: boolean
+  moves?: boolean
   className?: string
   style?: CSSProperties
 }) {
@@ -142,11 +145,14 @@ export function Wave({
   return (
     <div
       data-testid="wave"
-      className={cn("relative min-w-0 cursor-pointer touch-none py-[3px]", className)}
+      className={cn("relative min-w-0 cursor-pointer py-[3px]", className)}
       style={{ ...style, height }}
-      onPointerDown={(e) => {
+      // A press, not a touch: a finger landing on a wave still scrolls the list.
+      onClick={(e) => {
         const r = e.currentTarget.getBoundingClientRect()
-        p.seek(take.uid, Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * take.duration_sec)
+        const to = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * take.duration_sec
+        if (moves) p.seek(take.uid, to)
+        else p.play(take.uid, to)
       }}
     >
       <svg viewBox={`0 0 ${n} 100`} preserveAspectRatio="none" className="size-full" aria-hidden="true">

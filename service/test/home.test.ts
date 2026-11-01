@@ -151,7 +151,11 @@ test("the band's name and picture: Alex sets them, the sign-in page shows them",
 
 test("the frame: how many members, open marks, and the longest take", async () => {
   const owner = await signInOwner()
+  await named(owner, "Alex")
   const ira = await member(owner, "ira@example.com")
+  await named(ira.cookie, "Ira")
+  // Added, but not signed in with a name yet: not counted, as People does not show them.
+  await member(owner, "ivan@example.com")
   const uid = await shownTake({ duration_sec: 312 })
   await shownTake({ number: 2, name: "Viasna 2", duration_sec: 100 })
   const m = await markAt(ira.cookie, uid, 10, "x")

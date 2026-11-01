@@ -1,9 +1,11 @@
 import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Plus } from "lucide-react"
+import { SortableList } from "@/components/SortableList"
 import { Button } from "@/components/ui/button"
 import { useAddStatus, useChangeStatus, useDeleteStatus, useOrderStatuses, useSongs } from "../api"
-import { EditRow, moved, PanelHead } from "../shell/EditList"
-import { Group, Groups, Rows } from "../shell/parts"
+import { EditRow, PanelHead, placed } from "../shell/EditList"
+import { Group, Groups } from "../shell/parts"
 import { count } from "../shell/words"
 
 /** Where a song stands with the band: the band's own list, changed by anyone in it. */
@@ -15,7 +17,16 @@ export function StatusesPanel() {
   const remove = useDeleteStatus()
   const [added, setAdded] = useState<number | null>(null)
   const [failed, setFailed] = useState<{ id: number; error: string } | null>(null)
-  const ids = statuses.map((s) => s.id)
+  const qc = useQueryClient()
+  // In place at once, so the row stays where it was dropped while the order is saved.
+  const move = (id: number, to: number) => {
+    const next = placed(statuses, id, to)
+    qc.setQueryData(["songs"], (old: object | undefined) => old && { ...old, statuses: next })
+    order.mutate(
+      next.map((s) => s.id),
+      { ...said(id), onError: (e: Error) => (setFailed({ id, error: e.message }), void qc.invalidateQueries({ queryKey: ["songs"] })) }
+    )
+  }
   const said = (id: number) => ({ onError: (e: Error) => setFailed({ id, error: e.message }), onSuccess: () => setFailed(null) })
   return (
     <div className="flex flex-col gap-6">
@@ -26,24 +37,23 @@ export function StatusesPanel() {
       </p>
       <Groups>
         <Group>
-          <Rows>
-            {statuses.map((s, i) => (
+          <SortableList items={statuses} label="Statuses" onMove={move}>
+            {(s, handleRef) => (
               <EditRow
                 key={`${s.id}-${s.name}`}
+                handleRef={handleRef}
                 focus={s.id === added}
                 name={s.name}
                 used={s.songs > 0}
                 count={count(s.songs, "song")}
                 onName={(name) => change.mutate({ id: s.id, name }, said(s.id))}
-                onUp={i > 0 ? () => order.mutate(moved(ids, s.id, -1)) : undefined}
-                onDown={i < statuses.length - 1 ? () => order.mutate(moved(ids, s.id, 1)) : undefined}
                 canDelete={statuses.length > 1}
                 onDelete={(to) => remove.mutate({ id: s.id, to }, said(s.id))}
                 others={statuses.filter((o) => o.id !== s.id).map((o) => ({ id: o.id, name: o.name }))}
                 error={failed?.id === s.id ? failed.error : undefined}
               />
-            ))}
-          </Rows>
+            )}
+          </SortableList>
           <Button
             variant="outline"
             size="row"

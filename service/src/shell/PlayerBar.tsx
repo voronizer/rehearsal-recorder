@@ -23,11 +23,11 @@ function BarPlay({ take }: { take: TakePage | undefined }) {
   )
 }
 
-/** **Mark**: the playing take's panel, with a new mark at this moment. */
+/** **Mark**: the playing take's panel, with a new mark at this moment. A take in the trash takes none. */
 function MarkHere({ take, at }: { take: TakePage | undefined; at: number }) {
   const { open } = usePanel()
   return (
-    <Button variant="outline" size="row" disabled={!take} onClick={() => take && open({ kind: "take", uid: take.uid, markAt: at })}>
+    <Button variant="outline" size="row" disabled={!take || !!take.trashed_at} onClick={() => take && open({ kind: "take", uid: take.uid, markAt: at })}>
       Mark
     </Button>
   )

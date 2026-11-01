@@ -1,11 +1,13 @@
 import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { Plus } from "lucide-react"
+import { SortableList } from "@/components/SortableList"
 import { Button } from "@/components/ui/button"
 import { colourName, firstFreeColour, LABEL_COLOURS, labelLook } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 import { useAddLabel, useChangeLabel, useDeleteLabel, useLabels, useOrderLabels, type Label } from "../api"
-import { EditRow, moved, PanelHead } from "../shell/EditList"
-import { Group, Groups, Rows } from "../shell/parts"
+import { EditRow, PanelHead, placed } from "../shell/EditList"
+import { Group, Groups } from "../shell/parts"
 import { count } from "../shell/words"
 import { colourCss, Diamond } from "../takes/parts"
 
@@ -20,7 +22,16 @@ export function LabelsPanel() {
   const remove = useDeleteLabel()
   const [added, setAdded] = useState<number | null>(null)
   const [failed, setFailed] = useState<{ id: number; error: string } | null>(null)
-  const ids = labels.map((l) => l.id)
+  const qc = useQueryClient()
+  // In place at once, so the row stays where it was dropped while the order is saved.
+  const move = (id: number, to: number) => {
+    const next = placed(labels, id, to)
+    qc.setQueryData(["labels"], next)
+    order.mutate(
+      next.map((l) => l.id),
+      { ...said(id), onError: (e: Error) => (setFailed({ id, error: e.message }), void qc.invalidateQueries({ queryKey: ["labels"] })) }
+    )
+  }
   const said = (id: number) => ({ onError: (e: Error) => setFailed({ id, error: e.message }), onSuccess: () => setFailed(null) })
   return (
     <div className="flex flex-col gap-6">
@@ -32,10 +43,11 @@ export function LabelsPanel() {
       </p>
       <Groups>
         <Group>
-          <Rows>
-            {labels.map((l, i) => (
+          <SortableList items={labels} label="Labels" onMove={move}>
+            {(l, handleRef) => (
               <EditRow
                 key={`${l.id}-${l.name}`}
+                handleRef={handleRef}
                 focus={l.id === added}
                 name={l.name}
                 used={l.marks > 0}
@@ -48,15 +60,13 @@ export function LabelsPanel() {
                 }))}
                 onColour={(colour) => change.mutate({ id: l.id, colour: colour as Label["colour"] }, said(l.id))}
                 onName={(name) => change.mutate({ id: l.id, name }, said(l.id))}
-                onUp={i > 0 ? () => order.mutate(moved(ids, l.id, -1)) : undefined}
-                onDown={i < labels.length - 1 ? () => order.mutate(moved(ids, l.id, 1)) : undefined}
                 canDelete={labels.length > 1}
                 onDelete={(to) => remove.mutate({ id: l.id, to }, said(l.id))}
                 others={labels.filter((o) => o.id !== l.id).map((o) => ({ id: o.id, name: o.name, swatch: diamond(o) }))}
                 error={failed?.id === l.id ? failed.error : undefined}
               />
-            ))}
-          </Rows>
+            )}
+          </SortableList>
           <Button
             variant="outline"
             size="row"

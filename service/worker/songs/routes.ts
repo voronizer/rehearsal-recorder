@@ -1,9 +1,10 @@
 import { createRoute, z } from "@hono/zod-openapi"
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm"
+import { and, asc, eq, isNull, sql } from "drizzle-orm"
 import { firstStatus } from "../labels/match"
 import { isOrder, ORDER } from "../labels/routes"
 import { database, type Database } from "../shared/db"
 import { fail } from "../shared/errors"
+import { same } from "../shared/names"
 import type { Bindings } from "../shared/env"
 import { KEYS } from "../shared/keys"
 import { body, errors, json, newApp, Ok } from "../shared/openapi"
@@ -85,13 +86,7 @@ export async function songItems(env: Bindings, me: string) {
 }
 
 const titleTaken = async (db: Database, title: string, except?: number) =>
-  (
-    await db
-      .select({ title: song.title })
-      .from(song)
-      .where(and(sql`${song.title} = ${title} COLLATE NOCASE`, except === undefined ? undefined : ne(song.id, except)))
-      .limit(1)
-  )[0]
+  (await db.select({ id: song.id, title: song.title }).from(song)).find((s) => s.id !== except && same(s.title, title))
 
 /** The Songs section, a song, its status, key and notes, and the band's statuses. */
 export const songRoutes = newApp()
@@ -232,7 +227,7 @@ export const songRoutes = newApp()
       const db = database(c.env)
       const { name } = c.req.valid("json")
       const all = await db.select().from(status).orderBy(asc(status.position))
-      const clash = all.find((s) => s.name.toLowerCase() === name.toLowerCase())
+      const clash = all.find((s) => same(s.name, name))
       if (clash) return fail(c, 409, `There is already a status called “${clash.name}”.`)
       const [made] = await db
         .insert(status)
@@ -256,7 +251,7 @@ export const songRoutes = newApp()
       const { name } = c.req.valid("json")
       const all = await db.select().from(status)
       if (!all.some((s) => s.id === id)) return fail(c, 404, NO_STATUS)
-      const clash = all.find((s) => s.id !== id && s.name.toLowerCase() === name.toLowerCase())
+      const clash = all.find((s) => s.id !== id && same(s.name, name))
       if (clash) return fail(c, 409, `There is already a status called “${clash.name}”.`)
       await db.update(status).set({ name }).where(eq(status.id, id))
       return c.json({ ok: true as const }, 200)

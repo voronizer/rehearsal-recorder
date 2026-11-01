@@ -86,3 +86,15 @@ test("deleting a label with marks says which label they get; the last label stay
   const rows = await env.DB.prepare("SELECT count(*) AS n FROM comment WHERE label_id IS NULL AND parent_id IS NULL").first<{ n: number }>()
   expect(rows!.n).toBe(0)
 })
+
+test("a name in any case clashes, in any alphabet, whether new or renamed", async () => {
+  const owner = await signInOwner()
+  const made = (await answer(post("/api/labels", { name: "Ціха", colour: "teal" }, owner))).body
+  expect((await post("/api/labels", { name: "ЦІХА", colour: "red" }, owner)).status).toBe(409)
+  const other = (await answer(post("/api/labels", { name: "Loud", colour: "red" }, owner))).body
+  expect(await answer(patch(`/api/labels/${other.id}`, { name: "ціха" }, owner))).toEqual({
+    status: 409,
+    body: { error: "There is already a label called “Ціха”." },
+  })
+  expect(made.name).toBe("Ціха")
+})

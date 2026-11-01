@@ -16,6 +16,10 @@ type Surface = "page" | "card" | "panel"
 const SurfaceCtx = createContext<Surface>("page")
 export const InPanel = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="panel">{children}</SurfaceCtx.Provider>
 
+/** A child's own key, so a row keeps its state when one is added above it; its place when it has none. */
+const keyOf = (c: ReturnType<typeof Children.toArray>[number], i: number) =>
+  (typeof c === "object" && c !== null && "key" in c && c.key !== null ? c.key : i)
+
 /**
  * A screen's or a panel's groups. On a page: one card with the groups as
  * its parts, a line between them. In a card or the panel: the parts and
@@ -26,7 +30,7 @@ export function Groups({ children, className }: { children: ReactNode; className
   const size = useSize()
   const items = Children.toArray(children).filter(Boolean)
   const parts = items.map((c, i) => (
-    <div key={i} className={cn(surface === "panel" ? "py-5" : "py-6", i > 0 && "border-t", surface !== "page" && "first:pt-0 last:pb-0")}>
+    <div key={keyOf(c, i)} className={cn(surface === "panel" ? "py-5" : "py-6", i > 0 && "border-t", surface !== "page" && "first:pt-0 last:pb-0")}>
       {c}
     </div>
   ))
@@ -112,7 +116,7 @@ export function Rows({ children, className }: { children: ReactNode; className?:
   return (
     <div role="list" className={cn("flex flex-col gap-0.5", className)}>
       {items.map((c, i) => (
-        <div role="listitem" key={i} className="-mx-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/60">
+        <div role="listitem" key={keyOf(c, i)} className="-mx-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/60">
           {c}
         </div>
       ))}

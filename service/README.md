@@ -123,8 +123,8 @@ that comes to about $3 a month. The domain you pay for to whoever sells it.
 11. On **Members**, press **Add member** for each of the band's addresses.
     Cloudflare sends each of them its letter; once they have pressed the
     button in it, they sign in the same way, with their own address.
-12. On **Members**, under **Where РЭХА runs**, type “Rehearsal room” or
-    wherever the laptop lives, press **Make a key for РЭХА** and copy the
+12. On **Members**, under **Keys for РЭХА**, type where the laptop lives,
+    such as “Rehearsal room”, press **Make a key for РЭХА** and copy the
     key: it is shown only once. In РЭХА, open **Settings › Folders**, press
     **I have a band service key**, paste it and press **Connect**.
 

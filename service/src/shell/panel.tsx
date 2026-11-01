@@ -19,7 +19,14 @@ export function PanelProvider({ children }: { children: ReactNode }) {
   const [panel, setPanel] = useState<Panel>(null)
   const player = usePlayer()
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setPanel(null)
+    // Not when Esc closed something inside the panel first (a list, a menu, a
+    // question), or leaves a box being typed in.
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return
+      const t = e.target as HTMLElement | null
+      if (t?.closest("input, textarea, select, [contenteditable=true]")) return
+      setPanel(null)
+    }
     window.addEventListener("keydown", esc)
     return () => window.removeEventListener("keydown", esc)
   }, [])

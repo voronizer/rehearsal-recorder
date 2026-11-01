@@ -54,8 +54,8 @@ type PlayerApi = {
   seek: (uid: string, at: number) => void
   /** Puts a take in the player at `at` without playing, unless one plays. */
   cue: (uid: string, at: number) => void
-  /** The take is heard or opened: it is no longer new for you. */
-  heard: (uid: string) => void
+  /** The take is heard or opened: it is no longer new for you. Told once a page load, unless `again`. */
+  heard: (uid: string, again?: boolean) => void
   muted: number[]
   solo: number | null
   mute: (i: number) => void
@@ -88,8 +88,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const key = take.data ? `${take.data.uid}/${take.data.gen}` : ""
 
   const heard = useCallback(
-    (u: string) => {
-      if (once.current.has(u)) return
+    (u: string, again = false) => {
+      if (once.current.has(u) && !again) return
       once.current.add(u)
       seen.mutate(u)
     },
@@ -205,3 +205,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 }
 
 export const CANNOT_PLAY = "This browser cannot play the takes. Try Chrome, Edge or Safari, updated."
+
+/**
+ * A take's page or panel that shows marks new for you hears the take again,
+ * so they stop being new without a reload: a mark set after you heard it.
+ */
+export function useHeardAgain(take: { uid: string; marks: { is_new: boolean }[] } | undefined) {
+  const p = usePlayer()
+  const fresh = !!take?.marks.some((m) => m.is_new)
+  useEffect(() => {
+    if (take && fresh) p.heard(take.uid, true)
+    // Once each time something new shows up on it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [take?.uid, fresh])
+}

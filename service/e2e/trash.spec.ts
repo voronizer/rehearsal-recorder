@@ -3,6 +3,13 @@ import { as, band } from "./band"
 
 test.use({ storageState: as("alex") })
 
+test("a take in the trash cannot be marked from the bar", async ({ page }) => {
+  await page.goto(`/takes/${band().takes["Viasna 4"]}?at=2`)
+  const bar = page.getByLabel("Player")
+  await expect(bar.getByTestId("bar-time")).toHaveText("0:02")
+  await expect(bar.getByRole("button", { name: "Mark" })).toBeDisabled()
+})
+
 test("trash lists takes and restores them", async ({ page }) => {
   await page.goto("/")
   await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Trash" }).click()

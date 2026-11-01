@@ -40,11 +40,20 @@ export async function makeShape(files: R2Bucket, t: Tracked): Promise<number[]> 
   return peak > 0 ? out.map((v) => Math.round((v / peak) * 100) / 100) : out.map(() => 0)
 }
 
-/** Makes and keeps the waves of shown takes that have none yet: part 1's takes. */
+/** How many of part 1's takes one request makes waves for: each reads every track's peaks from R2. */
+export const FILL = 10
+
+/**
+ * Makes and keeps the waves of shown takes that have none yet: part 1's
+ * takes, FILL of them a request so a list stays within the Worker's limits.
+ * The rest are drawn flat this time and get theirs on the next lists.
+ */
 export async function fillShapes(env: Bindings, db: Database, takes: (Tracked & { shape: number[] | null })[]) {
   const missing = takes.filter((t) => t.shape === null)
   if (!missing.length) return
-  const made = await Promise.all(missing.map((t) => makeShape(env.FILES, t)))
-  await db.batch(made.map((shape, i) => db.update(take).set({ shape }).where(eq(take.uid, missing[i].uid))) as never)
-  missing.forEach((t, i) => (t.shape = made[i]))
+  const now = missing.slice(0, FILL)
+  const made = await Promise.all(now.map((t) => makeShape(env.FILES, t)))
+  await db.batch(made.map((shape, i) => db.update(take).set({ shape }).where(eq(take.uid, now[i].uid))) as never)
+  now.forEach((t, i) => (t.shape = made[i]))
+  for (const t of missing.slice(FILL)) t.shape = []
 }
