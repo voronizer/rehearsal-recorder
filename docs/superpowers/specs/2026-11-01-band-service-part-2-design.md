@@ -13,7 +13,7 @@ time, is in /mnt/project-files/band-service/look/decisions-log.md. Where this
 spec and the prototype differ, this spec wins; each such place is said
 below.
 
-This spec waits for Alex's «ок».
+Alex approved this spec on 1 November at 19:45 («ок»).
 
 ## Alex's picks
 
