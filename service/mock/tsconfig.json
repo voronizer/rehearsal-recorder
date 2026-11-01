@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "paths": {
+      "@/*": ["../../ui/src/*"],
+      "react": ["../../ui/node_modules/@types/react"],
+      "react/*": ["../../ui/node_modules/@types/react/*"],
+      "react-dom": ["../../ui/node_modules/@types/react-dom"],
+      "react-dom/*": ["../../ui/node_modules/@types/react-dom/*"],
+      "lucide-react": ["../../ui/node_modules/lucide-react"]
+    }
+  },
+  "include": ["./**/*.ts", "./**/*.tsx"]
+}
