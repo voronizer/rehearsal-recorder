@@ -1,9 +1,12 @@
 import { env } from "cloudflare:workers"
 import { expect, test, vi } from "vitest"
 import type { Bindings } from "../worker/shared/env"
-import { commentView } from "../worker/comments/view"
+import { eq } from "drizzle-orm"
+import { loadMarks } from "../worker/marks/view"
+import { database } from "../worker/shared/db"
+import { take } from "../worker/shared/schema"
 import { purgeTrash } from "../worker/takes/purge"
-import { TAKE, reha, takeMeta } from "./helpers"
+import { TAKE, reha, shownTake, takeMeta } from "./helpers"
 
 const MiB = 1024 * 1024
 const PART = 10 * MiB
@@ -206,10 +209,11 @@ test("an undone crop moves the comments on", async () => {
   ])
 })
 
-test("a mark before the start of the take the band hears shows at 0:00", () => {
-  const row = { id: 1, takeUid: TAKE, parentId: null, memberId: null, at: -3, text: "Sticks", label: "Count", colour: "grey" }
-  const view = commentView({ ...row, fromReha: true, closed: false, cutOff: false, createdAt: "", name: null, email: null })
-  expect(view.at).toBe(0)
+test("a mark before the start of the take the band hears shows at 0:00", async () => {
+  await shownTake({ uid: TAKE })
+  await comment(-3, "Sticks")
+  const [mark] = await loadMarks(database(env as unknown as Bindings), "nobody", eq(take.uid, TAKE))
+  expect(mark.at).toBe(0)
 })
 
 test("a mark a hundredth away after a crop is the same mark, its replies stay", async () => {

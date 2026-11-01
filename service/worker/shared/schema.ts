@@ -273,6 +273,8 @@ export const take = sqliteTable(
     shownAt: text("shown_at"),
     trashedAt: text("trashed_at"),
     updatedAt: text("updated_at").notNull(),
+    /** The wave a list draws (takes/shape.ts); null until it is made. */
+    shape: text("shape", { mode: "json" }).$type<number[]>(),
   },
   (table) => [index("take_rehearsal_idx").on(table.rehearsalUid), index("take_song_idx").on(table.songId)]
 )

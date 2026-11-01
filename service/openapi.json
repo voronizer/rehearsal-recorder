@@ -104,6 +104,33 @@
           "created_at"
         ]
       },
+      "Person": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "initial": {
+            "type": "string"
+          },
+          "me": {
+            "type": "boolean"
+          },
+          "owner": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "initial",
+          "me",
+          "owner"
+        ]
+      },
       "TakeMeta": {
         "type": "object",
         "properties": {
@@ -287,105 +314,152 @@
           "error"
         ]
       },
-      "Feed": {
+      "Band": {
         "type": "object",
         "properties": {
-          "new": {
+          "name": {
+            "type": "string"
+          },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "picture"
+        ]
+      },
+      "Frame": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Band"
+          },
+          {
             "type": "object",
             "properties": {
-              "takes": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/TakeRow"
-                }
+              "members": {
+                "type": "number"
               },
-              "comments": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/CommentRow"
-                }
+              "open_marks": {
+                "type": "number"
+              },
+              "longest": {
+                "type": "number"
+              },
+              "has_takes": {
+                "type": "boolean"
               }
             },
             "required": [
-              "takes",
-              "comments"
+              "members",
+              "open_marks",
+              "longest",
+              "has_takes"
             ]
+          }
+        ]
+      },
+      "Home": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "$ref": "#/components/schemas/FirstSteps"
           },
-          "new_count": {
+          "unheard": {
+            "type": "number"
+          },
+          "new_marks": {
             "type": "number"
           },
           "songs": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SongRow"
+              "$ref": "#/components/schemas/HomeSong"
             }
           },
-          "not_named": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/SongRow"
-              },
-              {
-                "type": [
-                  "object",
-                  "null"
-                ]
-              }
-            ]
+          "latest_marks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Mark"
+            }
           },
-          "start": {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "new"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "song"
-                    ]
-                  },
-                  "id": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": [
-                          "not-named"
-                        ]
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "kind",
-                  "id"
-                ]
-              }
-            ]
+          "favourites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TakeRow"
+            }
           }
         },
         "required": [
-          "new",
-          "new_count",
+          "steps",
+          "unheard",
+          "new_marks",
           "songs",
-          "not_named",
-          "start"
+          "latest_marks",
+          "favourites"
+        ]
+      },
+      "FirstSteps": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "named": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "boolean"
+          },
+          "members": {
+            "type": "boolean"
+          },
+          "rehearsal": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "named",
+          "key",
+          "members",
+          "rehearsal"
+        ]
+      },
+      "HomeSong": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "takes": {
+            "type": "number"
+          },
+          "last_date": {
+            "type": "string"
+          },
+          "unheard": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "best": {
+            "$ref": "#/components/schemas/TakeRow"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "takes",
+          "last_date",
+          "unheard",
+          "best"
         ]
       },
       "TakeRow": {
@@ -397,11 +471,17 @@
           "name": {
             "type": "string"
           },
+          "number": {
+            "type": "number"
+          },
           "song_id": {
             "type": [
               "number",
               "null"
             ]
+          },
+          "rehearsal_uid": {
+            "type": "string"
           },
           "date": {
             "type": "string"
@@ -409,29 +489,22 @@
           "duration_sec": {
             "type": "number"
           },
+          "shape": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
           "marks": {
-            "type": "number"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarkTick"
+            }
           },
           "stars": {
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "member_id": {
-                  "type": "string"
-                },
-                "initial": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "member_id",
-                "initial",
-                "name"
-              ]
+              "$ref": "#/components/schemas/Star"
             }
           },
           "starred_at_rehearsal": {
@@ -444,31 +517,77 @@
         "required": [
           "uid",
           "name",
+          "number",
           "song_id",
+          "rehearsal_uid",
           "date",
           "duration_sec",
+          "shape",
           "marks",
           "stars",
           "starred_at_rehearsal",
           "is_new"
         ]
       },
-      "CommentRow": {
+      "MarkTick": {
         "type": "object",
         "properties": {
           "id": {
             "type": "number"
           },
-          "take_uid": {
+          "at": {
+            "type": "number"
+          },
+          "label_id": {
+            "type": "number"
+          },
+          "note": {
             "type": "string"
           },
-          "take_name": {
+          "closed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "label_id",
+          "note",
+          "closed"
+        ]
+      },
+      "Star": {
+        "type": "object",
+        "properties": {
+          "member_id": {
             "type": "string"
+          },
+          "initial": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_id",
+          "initial",
+          "name"
+        ]
+      },
+      "Mark": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
           },
           "at": {
             "type": "number"
           },
-          "text": {
+          "label_id": {
+            "type": "number"
+          },
+          "note": {
             "type": "string"
           },
           "author": {
@@ -477,58 +596,294 @@
               "null"
             ]
           },
-          "label": {
+          "initial": {
             "type": [
               "string",
               "null"
             ]
           },
-          "colour": {
+          "member_id": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "from_reha": {
+            "type": "boolean"
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "cut_off": {
+            "type": "boolean"
           },
           "created_at": {
             "type": "string"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mine": {
+            "type": "boolean"
+          },
+          "is_new": {
+            "type": "boolean"
+          },
+          "take": {
+            "type": "object",
+            "properties": {
+              "uid": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "number": {
+                "type": "number"
+              },
+              "song_id": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "song_title": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "date": {
+                "type": "string"
+              },
+              "duration_sec": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "uid",
+              "name",
+              "number",
+              "song_id",
+              "song_title",
+              "date",
+              "duration_sec"
+            ]
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            }
           }
         },
         "required": [
           "id",
-          "take_uid",
-          "take_name",
           "at",
-          "text",
+          "label_id",
+          "note",
           "author",
-          "label",
-          "colour",
-          "created_at"
+          "initial",
+          "member_id",
+          "from_reha",
+          "closed",
+          "cut_off",
+          "created_at",
+          "updated_at",
+          "mine",
+          "is_new",
+          "take",
+          "comments"
         ]
       },
-      "SongRow": {
+      "Comment": {
         "type": "object",
         "properties": {
           "id": {
-            "anyOf": [
-              {
+            "type": "number"
+          },
+          "author": {
+            "type": "string"
+          },
+          "initial": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mine": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "author",
+          "initial",
+          "member_id",
+          "text",
+          "created_at",
+          "updated_at",
+          "mine"
+        ]
+      },
+      "RehearsalItem": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Rehearsal"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "songs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "not_named": {
+                "type": "boolean"
+              },
+              "takes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uid": {
+                      "type": "string"
+                    },
+                    "duration_sec": {
+                      "type": "number"
+                    },
+                    "starred": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "uid",
+                    "duration_sec",
+                    "starred"
+                  ]
+                }
+              },
+              "starred": {
                 "type": "number"
               },
-              {
-                "type": "string",
-                "enum": [
-                  "not-named"
-                ]
+              "marks": {
+                "type": "number"
+              },
+              "has_new": {
+                "type": "boolean"
               }
+            },
+            "required": [
+              "songs",
+              "not_named",
+              "takes",
+              "starred",
+              "marks",
+              "has_new"
             ]
+          }
+        ]
+      },
+      "Rehearsal": {
+        "type": "object",
+        "properties": {
+          "uid": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uid",
+          "name",
+          "date"
+        ]
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "number"
+          },
+          "songs": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "position",
+          "songs"
+        ]
+      },
+      "SongItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
           },
           "title": {
             "type": "string"
           },
+          "status_id": {
+            "type": "number"
+          },
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tempo": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "takes": {
             "type": "number"
           },
+          "rehearsals": {
+            "type": "number"
+          },
           "last_date": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "length": {
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "best": {
             "allOf": [
@@ -543,17 +898,122 @@
               }
             ]
           },
+          "best_why": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "most stars",
+              "latest",
+              null
+            ]
+          },
           "has_new": {
             "type": "boolean"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
           "id",
           "title",
+          "status_id",
+          "key",
+          "tempo",
           "takes",
+          "rehearsals",
           "last_date",
+          "length",
           "best",
-          "has_new"
+          "best_why",
+          "has_new",
+          "created_at"
+        ]
+      },
+      "SongFile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "gp",
+              "pdf",
+              "picture",
+              "other"
+            ]
+          },
+          "size": {
+            "type": "number"
+          },
+          "added_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "size",
+          "added_by",
+          "created_at",
+          "url"
+        ]
+      },
+      "Label": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "colour": {
+            "type": "string",
+            "enum": [
+              "grey",
+              "red",
+              "amber",
+              "green",
+              "teal",
+              "blue",
+              "violet",
+              "pink"
+            ]
+          },
+          "position": {
+            "type": "number"
+          },
+          "marks": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "colour",
+          "position",
+          "marks"
         ]
       },
       "TakePage": {
@@ -681,28 +1141,10 @@
           "starred_at_rehearsal": {
             "type": "boolean"
           },
-          "comments": {
+          "marks": {
             "type": "array",
             "items": {
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Comment"
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "replies": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Comment"
-                      }
-                    }
-                  },
-                  "required": [
-                    "replies"
-                  ]
-                }
-              ]
+              "$ref": "#/components/schemas/Mark"
             }
           },
           "files": {
@@ -762,80 +1204,10 @@
           "stars",
           "starred_by_me",
           "starred_at_rehearsal",
-          "comments",
+          "marks",
           "files",
           "flac_coming",
           "trashed_at"
-        ]
-      },
-      "Comment": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "number"
-          },
-          "at": {
-            "type": "number"
-          },
-          "text": {
-            "type": "string"
-          },
-          "author": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "initial": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "member_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "label": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "colour": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "from_reha": {
-            "type": "boolean"
-          },
-          "closed": {
-            "type": "boolean"
-          },
-          "cut_off": {
-            "type": "boolean"
-          },
-          "created_at": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "at",
-          "text",
-          "author",
-          "initial",
-          "member_id",
-          "label",
-          "colour",
-          "from_reha",
-          "closed",
-          "cut_off",
-          "created_at"
         ]
       }
     },
@@ -1322,6 +1694,36 @@
           },
           "404": {
             "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/people": {
+      "get": {
+        "description": "The band as every member sees it: who has a name, the owner first. No addresses.",
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Person"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
             "content": {
               "application/json": {
                 "schema": {
@@ -2047,15 +2449,97 @@
         }
       }
     },
-    "/api/feed": {
+    "/api/band": {
       "get": {
+        "description": "The band's name and picture, for the sign-in page too: no sign-in needed.",
         "responses": {
           "200": {
             "description": "Done",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Feed"
+                  "$ref": "#/components/schemas/Band"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "description": "The band's name, by the owner.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 60
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only the owner can do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/frame": {
+      "get": {
+        "description": "What the column and the player bar show: members, open marks, the longest take.",
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Frame"
                 }
               }
             }
@@ -2073,24 +2557,376 @@
         }
       }
     },
-    "/api/songs/{id}": {
+    "/api/band/picture": {
+      "put": {
+        "description": "**Add a picture**: PNG, JPEG or WebP, up to 5 MB, as the body.",
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only the owner can do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Too big",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only the owner can do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/band/picture": {
       "get": {
-        "description": "A song's page; `not-named` for the takes nobody named.",
+        "description": "The band's picture, shown on the sign-in page too.",
+        "responses": {
+          "200": {
+            "description": "The picture",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/home": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Home"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rehearsals": {
+      "get": {
+        "description": "Every rehearsal with a take the band hears, newest first.",
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RehearsalItem"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rehearsals/{uid}": {
+      "get": {
+        "description": "A rehearsal's page: its takes in the order played; the page groups them by song.",
         "parameters": [
           {
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": [
-                    "not-named"
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uid",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rehearsal": {
+                      "$ref": "#/components/schemas/Rehearsal"
+                    },
+                    "takes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TakeRow"
+                      }
+                    }
+                  },
+                  "required": [
+                    "rehearsal",
+                    "takes"
                   ]
-                },
-                {
-                  "type": "integer",
-                  "minimum": 1
                 }
-              ]
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/songs": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "statuses": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Status"
+                      }
+                    },
+                    "songs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SongItem"
+                      }
+                    },
+                    "not_named": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TakeRow"
+                      }
+                    }
+                  },
+                  "required": [
+                    "statuses",
+                    "songs",
+                    "not_named"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "**New song**, before its first take, with the first status.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "title"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/songs/{id}": {
+      "get": {
+        "description": "A song's panel and page: its facts, notes, files and takes.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
             },
             "required": true,
             "name": "id",
@@ -2106,39 +2942,19 @@
                   "type": "object",
                   "properties": {
                     "song": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "anyOf": [
-                            {
-                              "type": "number"
-                            },
-                            {
-                              "type": "string",
-                              "enum": [
-                                "not-named"
-                              ]
-                            }
-                          ]
-                        },
-                        "title": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "title"
-                      ]
-                    },
-                    "best": {
                       "allOf": [
                         {
-                          "$ref": "#/components/schemas/TakeRow"
+                          "$ref": "#/components/schemas/SongItem"
                         },
                         {
-                          "type": [
-                            "object",
-                            "null"
+                          "type": "object",
+                          "properties": {
+                            "notes": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "notes"
                           ]
                         }
                       ]
@@ -2148,12 +2964,18 @@
                       "items": {
                         "$ref": "#/components/schemas/TakeRow"
                       }
+                    },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SongFile"
+                      }
                     }
                   },
                   "required": [
                     "song",
-                    "best",
-                    "takes"
+                    "takes",
+                    "files"
                   ]
                 }
               }
@@ -2161,6 +2983,1505 @@
           },
           "401": {
             "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "description": "A song's status, key and notes. Its title comes from РЭХА.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status_id": {
+                    "type": "integer"
+                  },
+                  "key": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "C major",
+                      "C minor",
+                      "C♯ major",
+                      "C♯ minor",
+                      "D major",
+                      "D minor",
+                      "E♭ major",
+                      "E♭ minor",
+                      "E major",
+                      "E minor",
+                      "F major",
+                      "F minor",
+                      "F♯ major",
+                      "F♯ minor",
+                      "G major",
+                      "G minor",
+                      "A♭ major",
+                      "A♭ minor",
+                      "A major",
+                      "A minor",
+                      "B♭ major",
+                      "B♭ minor",
+                      "B major",
+                      "B minor",
+                      null
+                    ]
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 10000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "**Delete song**: only a song with no takes, the trash's included.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/statuses": {
+      "post": {
+        "description": "**New status**, at the end.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/statuses/{id}": {
+      "patch": {
+        "description": "A status's new name: its songs follow.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "Deletes a status; its songs get the status `to`.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "to": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/statuses/order": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "required": [
+                  "ids"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/songs/{id}/files": {
+      "post": {
+        "description": "**Add a file**: the file itself is the body, its name in `x-file-name`, up to 50 MB.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true,
+            "name": "x-file-name",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongFile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Too big",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/songs/{id}/files/{file}": {
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "file",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files/songs/{id}/{file}": {
+      "get": {
+        "description": "A PDF or a picture opens in the browser; any other file downloads.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "file",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/labels": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Label"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "**New label**, at the end.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "colour": {
+                    "type": "string",
+                    "enum": [
+                      "grey",
+                      "red",
+                      "amber",
+                      "green",
+                      "teal",
+                      "blue",
+                      "violet",
+                      "pink"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "colour"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Label"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/labels/{id}": {
+      "patch": {
+        "description": "A new name or colour. The old name is kept, so marks РЭХА sends under it find the label.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "colour": {
+                    "type": "string",
+                    "enum": [
+                      "grey",
+                      "red",
+                      "amber",
+                      "green",
+                      "teal",
+                      "blue",
+                      "violet",
+                      "pink"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "Deletes a label. Its marks get the label `to`, which also keeps its names.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "to": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/labels/order": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "required": [
+                  "ids"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/marks": {
+      "get": {
+        "description": "The Marks section: open, closed or all, with how many of each.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed",
+                "all"
+              ],
+              "default": "open"
+            },
+            "required": false,
+            "name": "show",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "counts": {
+                      "type": "object",
+                      "properties": {
+                        "open": {
+                          "type": "number"
+                        },
+                        "closed": {
+                          "type": "number"
+                        },
+                        "all": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "open",
+                        "closed",
+                        "all"
+                      ]
+                    },
+                    "marks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Mark"
+                      }
+                    }
+                  },
+                  "required": [
+                    "counts",
+                    "marks"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/takes/{uid}/marks": {
+      "post": {
+        "description": "**Add mark**: at a moment, with a label (the first when none is said) and a note.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uid",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "label_id": {
+                    "type": "integer"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "at",
+                  "note"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mark"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/marks/{id}": {
+      "patch": {
+        "description": "A mark's label and note, by who set it; **Close** and **Open again**, by anyone.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label_id": {
+                    "type": "integer"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "closed": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only the owner can do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "Deletes a mark and the comments under it, by who set it.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only the owner can do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/marks/{id}/comments": {
+      "post": {
+        "description": "**Comment** under a mark.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/comments/{id}": {
+      "patch": {
+        "description": "A comment's words, by who wrote it.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not as the service expects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only the owner can do this",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "description": "Deletes a comment, by who wrote it.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Only the owner can do this",
             "content": {
               "application/json": {
                 "schema": {
@@ -2313,7 +4634,7 @@
     },
     "/api/takes/{uid}/seen": {
       "post": {
-        "description": "The member opened the take: it and its comments are no longer new for them.",
+        "description": "The member opened or played the take: it and its marks are no longer new for them.",
         "parameters": [
           {
             "schema": {
@@ -2424,168 +4745,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Ok"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Not signed in, or the key does not work",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not there",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/takes/{uid}/comments": {
-      "post": {
-        "description": "**Comment at 1:42**. A reply takes its parent's moment.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "required": true,
-            "name": "uid",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number",
-                    "minimum": 0
-                  },
-                  "text": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 2000
-                  },
-                  "parent_id": {
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "at",
-                  "text"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Done",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Comment"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Not as the service expects",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Not signed in, or the key does not work",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not there",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/comments/{id}": {
-      "patch": {
-        "description": "Closed when the place is fixed: greyed, and kept in the list.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "required": true,
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "closed": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "closed"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Done",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Ok"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Not as the service expects",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

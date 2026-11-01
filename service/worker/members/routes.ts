@@ -1,11 +1,12 @@
 import { createRoute, z } from "@hono/zod-openapi"
 import { isAPIError } from "better-auth/api"
-import { desc, eq } from "drizzle-orm"
+import { and, desc, eq, ne, sql } from "drizzle-orm"
 import { database, type Database } from "../shared/db"
 import { fail } from "../shared/errors"
 import { body, errors, json, newApp, Ok } from "../shared/openapi"
 import { user } from "../shared/schema"
-import { needOwner } from "../signin/guards"
+import { needMember, needOwner } from "../signin/guards"
+import { initial } from "../takes/rows"
 
 const EMAIL = "This is not an email address"
 const ALREADY = "This address is already in the band"
@@ -25,6 +26,10 @@ const Member = z
     signed_in: z.boolean(),
   })
   .openapi("Member")
+
+const Person = z
+  .object({ id: z.string(), name: z.string(), initial: z.string(), me: z.boolean(), owner: z.boolean() })
+  .openapi("Person")
 
 const Key = z.object({ id: z.string(), name: z.string(), created_at: z.string() }).openapi("Key")
 
@@ -183,5 +188,25 @@ export const memberRoutes = newApp()
         throw e
       }
       return c.json({ ok: true as const }, 200)
+    }
+  )
+  .openapi(
+    createRoute({
+      method: "get",
+      path: "/api/people",
+      description: "The band as every member sees it: who has a name, the owner first. No addresses.",
+      middleware: [needMember] as const,
+      responses: { 200: json(z.array(Person)), ...errors(401) },
+    }),
+    async (c) => {
+      const rows = await database(c.env)
+        .select()
+        .from(user)
+        .where(and(ne(user.name, ""), sql`coalesce(${user.banned}, 0) = 0`))
+        .orderBy(desc(eq(user.role, "admin")), user.createdAt)
+      return c.json(
+        rows.map((r) => ({ id: r.id, name: r.name, initial: initial(r.name, ""), me: r.id === c.var.member.id, owner: r.role === "admin" })),
+        200
+      )
     }
   )

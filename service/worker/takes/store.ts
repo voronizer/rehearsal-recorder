@@ -7,6 +7,7 @@ import { comment, rehearsal, song, take } from "../shared/schema"
 import { iso } from "../shared/time"
 import type { TakeMeta } from "./meta"
 import { deleteFiles } from "./purge"
+import { makeShape } from "./shape"
 
 /** A mark's moment as a key: marks match by `at` rounded to 0.01 s. */
 const markKey = (at: number) => Math.round(at * 100)
@@ -137,6 +138,7 @@ export async function ready(
     return "done"
   }
   if (row.shownGen !== null && gen <= row.shownGen) return "done"
+  const shape = await makeShape(env.FILES, { uid, gen, tracks: row.tracks })
   await db.batch([
     shiftComments(env, uid, row.pendingCut),
     db
@@ -146,6 +148,7 @@ export async function ready(
         shownAt: row.shownAt ?? iso(),
         pendingCut: 0,
         flacGen: row.flacGen === gen ? gen : null,
+        shape,
       })
       .where(eq(take.uid, uid)),
   ])

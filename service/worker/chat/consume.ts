@@ -1,7 +1,7 @@
 import { and, desc, eq, gte, sql } from "drizzle-orm"
 import { database, type Database } from "../shared/db"
 import type { Bindings } from "../shared/env"
-import { chat, comment, rehearsal, take, user } from "../shared/schema"
+import { chat, comment, label, rehearsal, take, user } from "../shared/schema"
 import { iso, now } from "../shared/time"
 import { reportFailure, tellOwner } from "./failures"
 import type { Telegram } from "./telegram"
@@ -15,7 +15,7 @@ const LONGEST = 4096
 /** wrangler.jsonc's max_retries is 5: the first try and five more. */
 const LAST_TRY = 6
 
-type Thread = { kind: "takes" | "comments"; about: string; head: string; item: string }
+type Thread = { kind: "takes" | "marks" | "comments"; about: string; head: string; item: string }
 
 /**
  * Adds `item` to the thread's message while it is open, or starts a new
@@ -66,23 +66,48 @@ async function takeShown(db: Database, uid: string, origin: string): Promise<Thr
   }
 }
 
-/** A member's comment: their message on that take. Marks from РЭХА are not posted. */
-async function commented(db: Database, id: number, origin: string): Promise<Thread | null> {
+/** A comment or mark row with its take and writer, or null when the band should not hear of it. */
+async function said(db: Database, id: number) {
   const [row] = await db
-    .select({ comment, take, member: user })
+    .select({ comment, take, member: user, label: label.name })
     .from(comment)
     .innerJoin(take, eq(comment.takeUid, take.uid))
     .innerJoin(user, eq(comment.memberId, user.id))
+    .leftJoin(label, eq(comment.labelId, label.id))
     .where(eq(comment.id, id))
     .limit(1)
-  if (!row || row.comment.fromReha || row.take.shownGen === null || row.take.trashedAt) return null
+  return !row || row.comment.fromReha || row.take.shownGen === null || row.take.trashedAt ? null : row
+}
+
+const place = (at: number) => Math.round(at * 100) / 100
+
+/** A member's mark: their message on that take. Marks from РЭХА are not posted. */
+async function marked(db: Database, id: number, origin: string): Promise<Thread | null> {
+  const row = await said(db, id)
+  if (!row) return null
   const page = `${origin}/takes/${row.take.uid}`
-  const at = Math.round(row.comment.at * 100) / 100
+  const { at, text } = row.comment
   return {
-    kind: "comments",
+    kind: "marks",
     about: `${row.member.id}:${row.take.uid}`,
     head: `${escape(row.member.name || row.member.email)} on ${link(page, row.take.name)}: `,
-    item: link(`${page}?at=${at}`, `${clock(row.comment.at)} “${row.comment.text}”`),
+    item: link(`${page}?at=${place(at)}&mark=${id}`, `${clock(at)} ${text ? `“${text}”` : (row.label ?? "")}`.trim()),
+  }
+}
+
+/** A member's comment under a mark: their message on that mark. */
+async function commented(db: Database, id: number, origin: string): Promise<Thread | null> {
+  const row = await said(db, id)
+  if (!row) return null
+  // A comment event queued before marks had comments under them: a mark.
+  const parent = row.comment.parentId
+  if (parent === null) return marked(db, id, origin)
+  const page = `${origin}/takes/${row.take.uid}`
+  return {
+    kind: "comments",
+    about: `${row.member.id}:mark:${parent}`,
+    head: `${escape(row.member.name || row.member.email)} on ${link(page, row.take.name)} at ${clock(row.comment.at)}: `,
+    item: link(`${page}?at=${place(row.comment.at)}&comment=${id}`, `“${row.comment.text}”`),
   }
 }
 
@@ -93,7 +118,9 @@ async function handle(event: ChatEvent, env: Bindings, telegram: Telegram) {
   const thread =
     event.kind === "take"
       ? await takeShown(db, event.take_uid, event.origin)
-      : await commented(db, event.comment_id, event.origin)
+      : event.kind === "mark"
+        ? await marked(db, event.mark_id, event.origin)
+        : await commented(db, event.comment_id, event.origin)
   if (thread) await post(db, telegram, env.TELEGRAM_CHAT_ID, thread)
 }
 

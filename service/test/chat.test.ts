@@ -76,22 +76,36 @@ async function shown(chatEnv: Bindings, number: number, queued: ChatEvent[]): Pr
   return queued[queued.length - 1]
 }
 
-async function memberComment(take: string, name: string, at: number, text: string, fromReha = false) {
-  let member: string | null = null
-  if (!fromReha) {
-    member = (await env.DB.prepare("SELECT id FROM user WHERE name = ?").bind(name).first<{ id: string }>())?.id ?? null
-    if (!member) {
-      member = crypto.randomUUID()
-      await env.DB.prepare("INSERT INTO user (id, name, email, email_verified) VALUES (?, ?, ?, 1)")
-        .bind(member, name, `${name.toLowerCase()}@example.com`)
-        .run()
-    }
+async function memberId(name: string) {
+  let member = (await env.DB.prepare("SELECT id FROM user WHERE name = ?").bind(name).first<{ id: string }>())?.id
+  if (!member) {
+    member = crypto.randomUUID()
+    await env.DB.prepare("INSERT INTO user (id, name, email, email_verified) VALUES (?, ?, ?, 1)")
+      .bind(member, name, `${name.toLowerCase()}@example.com`)
+      .run()
   }
+  return member
+}
+
+/** A mark set by `name` (or from РЭХА), with the first label: its event as the queue gets it. */
+async function memberMark(take: string, name: string, at: number, note: string, fromReha = false) {
+  const member = fromReha ? null : await memberId(name)
   const row = await env.DB.prepare(
-    `INSERT INTO comment (take_uid, member_id, at, text, from_reha, created_at)
-     VALUES (?, ?, ?, ?, ?, '2025-10-30T21:00:00.000Z') RETURNING id`
+    `INSERT INTO comment (take_uid, member_id, at, text, from_reha, label_id, created_at)
+     VALUES (?, ?, ?, ?, ?, (SELECT id FROM label ORDER BY position LIMIT 1), '2025-10-30T21:00:00.000Z') RETURNING id`
   )
-    .bind(take, member, at, text, fromReha ? 1 : 0)
+    .bind(take, member, at, note, fromReha ? 1 : 0)
+    .first<{ id: number }>()
+  return { kind: "mark", mark_id: row!.id, origin: ORIGIN } as ChatEvent
+}
+
+/** A comment by `name` under a mark. */
+async function memberComment(mark: number, name: string, text: string) {
+  const row = await env.DB.prepare(
+    `INSERT INTO comment (take_uid, parent_id, member_id, at, text, created_at)
+     SELECT take_uid, id, ?, at, ?, '2025-10-30T21:05:00.000Z' FROM comment WHERE id = ? RETURNING id`
+  )
+    .bind(await memberId(name), text, mark)
     .first<{ id: number }>()
   return { kind: "comment", comment_id: row!.id, origin: ORIGIN } as ChatEvent
 }
@@ -167,22 +181,47 @@ test("after 3 hours a new message starts", async () => {
   ])
 })
 
-test("comments go per person and take", async () => {
+test("a member's marks on a take go in one message", async () => {
   const { chatEnv, queued } = withBot()
   const fake = fakeTelegram()
   const take = (await shown(chatEnv, 12, queued)) as { take_uid: string }
-  const link = (at: number) => `${ORIGIN}/takes/${take.take_uid}?at=${at}`
+  const page = `${ORIGIN}/takes/${take.take_uid}`
 
-  await deliver(chatEnv, fake, await memberComment(take.take_uid, "Alex", 102, "The bridge drags here"))
-  await deliver(chatEnv, fake, await memberComment(take.take_uid, "Alex", 178, "Fill too long?"))
-  await deliver(chatEnv, fake, await memberComment(take.take_uid, "Ira", 60, "Bass & drums <together>"))
+  const first = await memberMark(take.take_uid, "Ira", 102, "The bridge drags here")
+  const second = await memberMark(take.take_uid, "Ira", 178, "")
+  await deliver(chatEnv, fake, first)
+  await deliver(chatEnv, fake, second)
+  await deliver(chatEnv, fake, await memberMark(take.take_uid, "Alex", 60, "Bass & drums <together>"))
+  const id = (e: ChatEvent) => (e as { mark_id: number }).mark_id
 
   expect(fake.sent.map((s) => s.text)).toEqual([
-    `Alex on <a href="${ORIGIN}/takes/${take.take_uid}">Viasna 12</a>: <a href="${link(102)}">1:42 “The bridge drags here”</a>`,
-    `Ira on <a href="${ORIGIN}/takes/${take.take_uid}">Viasna 12</a>: <a href="${link(60)}">1:00 “Bass &amp; drums &lt;together&gt;”</a>`,
+    `Ira on <a href="${page}">Viasna 12</a>: <a href="${page}?at=102&amp;mark=${id(first)}">1:42 “The bridge drags here”</a>`,
+    expect.stringMatching(/^Alex on .*1:00 “Bass &amp; drums &lt;together&gt;”<\/a>$/),
   ])
+  // A mark with no note says its label.
   expect(fake.edited.map((e) => e.text)).toEqual([
-    `${fake.sent[0].text}, <a href="${link(178)}">2:58 “Fill too long?”</a>`,
+    `${fake.sent[0].text}, <a href="${page}?at=178&amp;mark=${id(second)}">2:58 Note</a>`,
+  ])
+})
+
+test("comments under a mark go one message per person and mark", async () => {
+  const { chatEnv, queued } = withBot()
+  const fake = fakeTelegram()
+  const take = (await shown(chatEnv, 12, queued)) as { take_uid: string }
+  const page = `${ORIGIN}/takes/${take.take_uid}`
+  const mark = (await memberMark(take.take_uid, "Ira", 178, "Fill too long?")) as { mark_id: number }
+
+  const keep = await memberComment(mark.mark_id, "Ivan", "Keep it. I'll start it two bars later.")
+  const again = await memberComment(mark.mark_id, "Ivan", "Keep it. I'll start it two bars later.")
+  await deliver(chatEnv, fake, keep, again)
+  const id = (e: ChatEvent) => (e as { comment_id: number }).comment_id
+
+  expect(fake.sent.map((s) => s.text)).toEqual([
+    `Ivan on <a href="${page}">Viasna 12</a> at 2:58: <a href="${page}?at=178&amp;comment=${id(keep)}">“Keep it. I'll start it two bars later.”</a>`,
+  ])
+  // The same words twice are two comments, both posted.
+  expect(fake.edited.map((e) => e.text)).toEqual([
+    `${fake.sent[0].text}, <a href="${page}?at=178&amp;comment=${id(again)}">“Keep it. I'll start it two bars later.”</a>`,
   ])
 })
 
@@ -191,7 +230,7 @@ test("marks from REHA are not posted", async () => {
   const fake = fakeTelegram()
   const take = (await shown(chatEnv, 12, queued)) as { take_uid: string }
 
-  const result = await deliver(chatEnv, fake, await memberComment(take.take_uid, "", 42, "Too fast", true))
+  const result = await deliver(chatEnv, fake, await memberMark(take.take_uid, "", 42, "Too fast", true))
   expect(result.explicitAcks.length).toBe(1)
   expect(fake.sent).toEqual([])
 })

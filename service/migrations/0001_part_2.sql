@@ -41,6 +41,7 @@ ALTER TABLE `song` ADD `key` text;--> statement-breakpoint
 ALTER TABLE `song` ADD `tempo` real;--> statement-breakpoint
 ALTER TABLE `song` ADD `notes` text DEFAULT '' NOT NULL;--> statement-breakpoint
 ALTER TABLE `song` ADD `created_at` text;--> statement-breakpoint
+ALTER TABLE `take` ADD `shape` text;--> statement-breakpoint
 -- What the band starts with: no name yet, РЭХА's four labels, three statuses.
 INSERT INTO `band` (`id`, `name`) VALUES (1, '');--> statement-breakpoint
 INSERT INTO `status` (`name`, `position`) VALUES ('Learning', 0), ('Ready', 1), ('Archive', 2);--> statement-breakpoint

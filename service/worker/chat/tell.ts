@@ -6,6 +6,7 @@ import type { Bindings } from "../shared/env"
  */
 export type ChatEvent =
   | { kind: "take"; take_uid: string; origin: string }
+  | { kind: "mark"; mark_id: number; origin: string }
   | { kind: "comment"; comment_id: number; origin: string }
   | { kind: "failure"; what: string; detail: string; at: string }
 
