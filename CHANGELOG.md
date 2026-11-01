@@ -5,6 +5,13 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **A band service on Cloudflare takes the key.** **Connect** could answer
+  “The band service said no (403)” to a key that was right. Cloudflare's
+  browser check, on for a new domain, turned РЭХА away because it called
+  itself Python. РЭХА now sends its own name.
+
 ## 0.17.0
 
 - **A band service.** РЭХА can send takes to a band service: a private web

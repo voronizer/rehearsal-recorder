@@ -25,6 +25,7 @@ from test_engine import SR, fresh_api, write_wav  # noqa: E402 - stubs sounddevi
 
 from fake_band_service import FakeBandService  # noqa: E402
 
+from rehearsal_recorder import __version__  # noqa: E402
 from rehearsal_recorder.sending import band_service, service_files  # noqa: E402
 
 problems = []
@@ -437,6 +438,9 @@ def run(tmp, fake):
        entry.get("state") == "failed" and entry.get("error") == "Update РЭХА to send takes here")
 
     ok("every request matches the service's description", fake.mismatches == [])
+    # Cloudflare's Browser Integrity Check turns away Python-urllib/3.x.
+    ok("REHA names itself in every request, not as Python",
+       fake.user_agents == {f"Reha/{__version__}"})
     if fake.mismatches:
         print("\n".join("    " + m for m in fake.mismatches[:5]))
 

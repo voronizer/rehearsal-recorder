@@ -60,6 +60,8 @@ class FakeBandService:
         # "delete <uid>".
         self.order = []
         self.mismatches = []
+        # Every User-Agent a request came with.
+        self.user_agents = set()
         # The next N calls are dropped unanswered.
         self.drop = 0
         # The next N parts are kept, then their connection dropped
@@ -138,6 +140,7 @@ class FakeBandService:
         headers = {k: v for k, v in h.headers.items()}
 
         with self._lock:
+            self.user_agents.add(h.headers.get("User-Agent"))
             if self.drop > 0:
                 self.drop -= 1
                 return self._hang_up(h)
