@@ -113,8 +113,10 @@ class ServiceClient:
         return self._call("DELETE", f"/api/reha/takes/{uid}")
 
     def _call(self, method, path, body=None, raw=None):
+        # A name of its own: Cloudflare's Browser Integrity Check, on by
+        # default, turns away urllib's "Python-urllib/3.x" with a 403.
         headers = {"x-api-key": self._secret, "X-Reha-Version": __version__,
-                   "Accept": "application/json"}
+                   "User-Agent": f"Reha/{__version__}", "Accept": "application/json"}
         data = None
         if raw is not None:
             data = bytes(raw)

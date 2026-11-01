@@ -8,6 +8,7 @@ import {
   confirm,
   letters,
   me,
+  member,
   post,
   sendCode,
   sessionCookie,
@@ -201,4 +202,26 @@ test("a service missing its settings says which, and lets nobody in", async () =
     error: "The band service is not set up yet: its settings lack OWNER_EMAIL and LETTERS_FROM.",
   })
   expect(await letters()).toEqual([])
+})
+
+test("better-auth's own routes for keys, admin and passwords are not open", async () => {
+  const owner = await signInOwner()
+  const { id, cookie } = await member(owner, "vera@example.com")
+  const tries: [string, unknown][] = [
+    ["/api/auth/api-key/create", { name: "Mine" }],
+    ["/api/auth/api-key/list", undefined],
+    ["/api/auth/admin/set-role", { userId: id, role: "admin" }],
+    ["/api/auth/admin/unban-user", { userId: id }],
+    ["/api/auth/admin/list-users", undefined],
+    ["/api/auth/sign-up/email", { email: "eve@example.com", password: "a-long-password", name: "Eve" }],
+    ["/api/auth/sign-in/email", { email: OWNER, password: "a-long-password" }],
+    ["/api/auth/change-email", { newEmail: "eve@example.com" }],
+  ]
+  for (const who of [owner, cookie])
+    for (const [path, body] of tries) {
+      const res = body === undefined ? await call(path, {}, who) : await post(path, body, who)
+      expect(res.status, path).toBe(404)
+    }
+  expect(await (await call("/api/keys", {}, owner)).json()).toEqual([])
+  expect(await userRow("vera@example.com")).toMatchObject({ role: "user" })
 })
