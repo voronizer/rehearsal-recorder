@@ -96,18 +96,19 @@ runs:
     # addresses Web Analytics and Speed Insights load their scripts from
     # (/_vercel/insights/, /_vercel/speed-insights/): a build uploaded
     # ready-made (vercel deploy --prebuilt, until 0.11.1) served neither.
+    # Written with Node, since Playwright's image has no jq.
     - name: Lay out the build for Vercel
       shell: bash
       run: |
         mkdir -p site/vercel-upload
         cp -R site/dist/. site/vercel-upload/
-        routes='[]'
-        if [ -f site/vercel-config.json ]; then
-          routes=$(jq '.routes' site/vercel-config.json)
-        fi
-        jq -n --argjson routes "$routes" \
-          '{framework: null, installCommand: "", buildCommand: "", outputDirectory: ".", routes: $routes}' \
-          > site/vercel-upload/vercel.json
+        node -e '
+        const fs = require("fs")
+        const config = "site/vercel-config.json"
+        const routes = fs.existsSync(config) ? JSON.parse(fs.readFileSync(config, "utf8")).routes ?? null : []
+        const out = { framework: null, installCommand: "", buildCommand: "", outputDirectory: ".", routes }
+        fs.writeFileSync("site/vercel-upload/vercel.json", JSON.stringify(out, null, 2) + "\n")
+        '
 
     - uses: actions/upload-artifact@v7
       with:
