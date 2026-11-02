@@ -28,21 +28,25 @@ const KEPT = 16
  * notice, and the taps on the button count all the same.
  *
  * T is one of the player's keys: with those off in Settings › Keys it does
- * nothing, and the button shows no chip (B9).
+ * nothing, and the button shows no chip (B9). A second Tap on the same
+ * screen (`withKey` false: the gear's, while the row has no room for its
+ * own) leaves T to the first, so a press counts once.
  */
 export function TapButton({
   signature,
   onTempo,
   onError,
   disabled = false,
+  withKey = true,
 }: {
   signature: Signature
   onTempo: (tempo: number) => void
   /** Python could not open the band's pads for the tapping: its words. */
   onError?: (text: string) => void
   disabled?: boolean
+  withKey?: boolean
 }) {
-  const keys = useKeysOn("player")
+  const keys = useKeysOn("player") && withKey
   const taps = useRef<number[]>([])
   const live = useRef({ signature, onTempo, onError })
   useLayoutEffect(() => {
@@ -113,7 +117,7 @@ export function TapButton({
     if (!timer.current) timer.current = window.setTimeout(hearPads, PADS_POLL_MS)
   }
 
-  useKey("t", tap, !disabled && !still)
+  useKey("t", tap, withKey && !disabled && !still)
 
   return (
     <Button

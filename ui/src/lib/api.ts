@@ -1608,6 +1608,12 @@ type PyApi = {
    *  appeared) is asked with a file of null, for its icon: it is answered
    *  "Notes file not found". */
   take_notes(files: (TrackFile | { name: string; file: null; icon?: string })[]): Promise<TakeNotes[]>
+  /** Each take's wave for the lists, in the order asked (lib/shapes): 120
+   *  values in 0..1, [] for a take with nothing to draw, null for one that
+   *  is not there. One not made yet is made from the take's files, and kept. */
+  take_shapes(
+    items: { folder: string; take_number: number }[]
+  ): Promise<Ok<{ shapes: (number[] | null)[] }>>
   /** The band's tempo through a take, bar by bar, for the drift line on
    *  Master: counted from the drums (their .mid, else their audio) or the mix,
    *  against the aim Python finds from the take's own meter and its song.

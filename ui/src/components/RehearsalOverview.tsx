@@ -4,9 +4,10 @@ import { StarButton } from "@/components/StarButton"
 import { SongPills } from "@/components/SongPills"
 import { useSongChoices } from "@/hooks/useSongChoices"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { LabelDot, MarkLine, MarkTick } from "@/components/ui/mark"
+import { Button, OPENS } from "@/components/ui/button"
+import { LabelDot, MarkLine } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
+import { TakeWave } from "@/components/ui/take-wave"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { playLook } from "@/lib/playLook"
 import { cn } from "@/lib/utils"
@@ -14,7 +15,7 @@ import { useKeysOn } from "@/lib/keys"
 import { formatMMSS, takesLabel } from "@/lib/format"
 import { labelCounts, labelOf, useLabels } from "@/lib/labels"
 import { isFalseStart } from "@/lib/evening"
-import { TAKE_FILLS } from "@/lib/takeScale"
+import { useShape } from "@/lib/shapes"
 import { rise, scrollBehavior } from "@/lib/motion"
 import { TakeTitle } from "@/components/TakeTitle"
 import { SongName } from "@/components/SongName"
@@ -25,10 +26,12 @@ import { takeButtonLabel, takeCloudStatus } from "@/components/TakeStrip"
 
 const NOT_NAMED = "Not named"
 
-/** How much of its row the longest take's bar takes. The rest is for its
- *  length and the cloud beside it, so the longest bar and a short one read
- *  on the same scale without the longest one pushing its label out. */
-const BAR_SHARE = 88
+/** The room after a wave, in rem: the length while it plays ("1:02 /
+ *  3:20", kept the same while it does not), the ✓ of a take sent and the
+ *  gaps. The longest take's wave has the rest, so every row's is to one
+ *  scale, which a share of the row could not promise with the length's
+ *  width fixed. */
+const AFTER_WAVE = 7.5
 
 /** The take playing in the overview, and where it is. */
 export type OverviewPlayback = {
@@ -52,26 +55,28 @@ export type OverviewPlayback = {
  * under 1 px lines, a take nobody named last of them. The evening's figures
  * are not here: the header says them, and it is in view with a take open too.
  *
- * Each take is a row: a bar drawn to scale — so the take that ran long or
- * stopped short is plain before anything is read — with its marks where
- * they fell, and every one of them listed under it: its label's name, then
- * its comment when it has one. The comments are usually why the rehearsal
- * was opened again at all: "this one is the take", "guitar drifts here".
+ * Each take is a row: its name, then its wave drawn to scale — so the take
+ * that ran long or stopped short is plain before anything is read, and
+ * where the band played loud or stopped — with its marks where they fell,
+ * and every one of them listed under it: its label's name, then its comment
+ * when it has one. The comments are usually why the rehearsal was opened
+ * again at all: "this one is the take", "guitar drifts here".
  *
- * Play on a row plays the take right here, with no player on screen: the bar
- * fills as it goes. The bar, or anywhere else on its row, opens the take in
- * the player, and a take that is playing carries on there from where it was.
- * A note opens its take at the spot it was left. ★, Rename, the cloud and
- * Delete show on the row under the mouse, ★ staying in view on a starred
- * take; Rename, the cloud and Delete are the same three the strip offers for
- * an open take.
+ * Play on a row plays the take right here, with no player on screen: the
+ * wave darkens as it goes, and a press on the wave plays it from there
+ * (`onPlayAt`). The name, or anywhere else on its row, opens the take in the
+ * player, and a take that is playing carries on there from where it was. A
+ * note opens its take at the spot it was left. ★ is on every row, faint on a
+ * take with none (owner's pick B, 2026-11-02); Rename, the cloud and Delete
+ * show on the row under the mouse, the same three the strip offers for an
+ * open take.
  *
  * It also stands in for the take strip while nothing is open, so a take
  * still waiting for the cloud says so here, as its pill did.
  *
  * It is where an evening is sorted, too, on the night or later in History:
  * a false start (shorter than `falseStartSec`, no ★, no marks) is drawn
- * grey with a dashed bar where it stands; and a take nobody named has the song
+ * grey with a pale wave where it stands; and a take nobody named has the song
  * pills under it, one click naming it (`onName`).
  */
 export function RehearsalOverview({
@@ -83,6 +88,7 @@ export function RehearsalOverview({
   onPlay,
   onOpen,
   onOpenAt,
+  onPlayAt,
   onRename,
   onStar,
   onShare,
@@ -105,6 +111,8 @@ export function RehearsalOverview({
   onPlay: (take: Take) => void
   onOpen: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
+  /** Plays a take here from a spot in it: a press on its wave. */
+  onPlayAt?: (take: Take, at: number) => void
   onRename?: (take: Take) => void
   onStar?: (take: Take, starred: boolean) => void
   onShare?: (take: Take) => void
@@ -113,7 +121,8 @@ export function RehearsalOverview({
   onOpenSong?: (title: string | null) => void
   /** Left out, no take is drawn as a false start. */
   falseStartSec?: number
-  /** The rehearsal's folder, for the songs a take could be named after. */
+  /** The rehearsal's folder: for the songs a take could be named after,
+   *  and for its takes' waves. */
   folder?: string
   /** Names a take after a song from its pills; left out, there are none. */
   onName?: (take: Take, title: string) => void
@@ -244,6 +253,8 @@ export function RehearsalOverview({
                     onPlay={onPlay}
                     onOpen={onOpen}
                     onOpenAt={onOpenAt}
+                    onPlayAt={onPlayAt}
+                    folder={folder}
                     onRename={onRename}
                     onStar={onStar}
                     onShare={onShare}
@@ -294,20 +305,8 @@ function NamePills({
 }
 
 /**
- * What a bar is filled with, `TAKE_FILLS` and what it does under the pointer:
- * it goes to the accent, in the dark theme too, where Button's ghost hover is
- * half strength; a starred bar keeps the card's fill and its tint deepens.
- * A false start and a take not on disk are both `quiet`.
- */
-const FILLS = {
-  rest: `${TAKE_FILLS.rest} hover:bg-accent dark:hover:bg-accent`,
-  starred: `${TAKE_FILLS.starred} hover:bg-card hover:from-signal/15 hover:to-signal/15 dark:hover:bg-card`,
-  quiet: `${TAKE_FILLS.quiet} hover:bg-accent dark:hover:bg-accent`,
-} as const
-
-/**
- * One take as a row: ▶, its bar to scale with its marks, its length, and the
- * buttons for it, with every mark's line under it. The rehearsal overview
+ * One take as a row: ▶, its name, its wave to scale with its marks, its
+ * length, and the buttons for it, with every mark's line under it. The rehearsal overview
  * draws one per take; a song's page, one per take of the song.
  *
  * On a song's page a row can be of a rehearsal whose folder is not on disk
@@ -324,9 +323,11 @@ export function TakeRow({
   here,
   missing = false,
   where,
+  folder,
   onPlay,
   onOpen,
   onOpenAt,
+  onPlayAt,
   onRename,
   onStar,
   onShare,
@@ -334,7 +335,7 @@ export function TakeRow({
 }: {
   take: Take
   unnamed: boolean
-  /** Drawn grey, its bar dashed, and said to be one after its length. */
+  /** Drawn grey, its wave pale, and said to be one after its length. */
   falseStart?: boolean
   longest: number
   cloudState?: SendState
@@ -342,11 +343,17 @@ export function TakeRow({
   here: OverviewPlayback | null
   missing?: boolean
   where?: string
+  /** Its rehearsal's folder, which its wave is asked for by: without it the
+   *  wave is a flat line. */
+  folder?: string
   onPlay: (take: Take) => void
-  /** Opens the take in the player. Left out, the row and its bar play it
+  /** Opens the take in the player. Left out, the row and its name play it
    *  where it is, as the rehearsal screen's earlier takes do. */
   onOpen?: (take: Take) => void
   onOpenAt: (take: Take, at: number) => void
+  /** Plays it here from a spot: a press on its wave. Left out, the press
+   *  opens it, as the rest of the row does. */
+  onPlayAt?: (take: Take, at: number) => void
   onRename?: (take: Take) => void
   onStar?: (take: Take, starred: boolean) => void
   onShare?: (take: Take) => void
@@ -357,17 +364,14 @@ export function TakeRow({
   const open = onOpen ?? onPlay
   const status = takeCloudStatus(take, cloudState, sendTo)
   // Why the copy failed, when it did and nothing is on its way, and the take
-  // is on disk: a row that is not found says that, not this, and the bar's
+  // is on disk: a row that is not found says that, not this, and the name's
   // description points only at what is drawn.
   const error = status && !missing && !cloudState ? sendError(take, sendTo) : undefined
   const shared = isUp(take, sendTo)
   const button = sendButton(take, sendTo)
   const starred = take.starred ?? false
   const length = take.duration_sec || here?.duration || 0
-  const along = (at: number) =>
-    length > 0 ? Math.min(98.5, Math.max(1, (at / length) * 100)) : 0
-  const played =
-    here && length > 0 ? Math.min(100, Math.max(0, (here.position / length) * 100)) : null
+  const shape = useShape(folder, take)
   const playing = here?.playing ?? false
   // Playing, its ▶ has Space while Settings › Keys has it on.
   const spaceKeys = useKeysOn("space")
@@ -376,18 +380,19 @@ export function TakeRow({
     <div
       data-take={take.take_number}
       data-false-start={falseStart || undefined}
-      className="flex flex-col gap-0.5"
+      className="@container/row flex flex-col gap-0.5"
     >
-      {/* The whole row opens the take, as its bar does: a short take's bar
-          is a small thing to aim at, and the row lights up under the mouse
-          all the way across. The buttons on it keep their own jobs. The bar
-          stays the one to reach with Tab. */}
+      {/* The whole row opens the take, as its name does: a short take's
+          name is a small thing to aim at, and the row lights up under the
+          mouse all the way across. The buttons on it keep their own jobs,
+          and a press on the wave plays from there. The name stays the one
+          to reach with Tab. */}
       <div
         onClick={(e) => {
-          if (!missing && !(e.target as HTMLElement).closest("button")) open(take)
+          if (!missing && !(e.target as HTMLElement).closest("button, [data-wave]")) open(take)
         }}
         className={cn(
-          "group -mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1 transition-colors",
+          "group relative -mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg px-2 py-1 transition-colors",
           missing
             ? "opacity-55"
             : "cursor-pointer hover:bg-accent/60 focus-within:bg-accent/60",
@@ -407,13 +412,13 @@ export function TakeRow({
           aria-keyshortcuts={here && spaceKeys ? "Space" : undefined}
         />
 
-        {/* Where the row has under 17rem for the bar, the length, the badge and
-            the rest, and they do not fit with the bar at its smallest, what
-            follows the bar goes under it, rather than out over the edge of
-            the screen: the buttons at the right keep their place, and at a
-            large scale in a narrow window that leaves nothing else. The bar
-            asks for 6rem and has the rest of the line up to its share, so
-            that it is the first to give way. */}
+        {/* The name, then the wave, to scale, and the length right after
+            it (owner's pick A, 2026-11-02, as the band service has them).
+            Where the row has under 17rem for all that, the name has a line
+            of its own and the wave and the rest go under it, rather than
+            out over the edge of the screen: the buttons at the right keep
+            their place, and at a large scale in a narrow window that leaves
+            nothing else. */}
         <div className="@container min-w-0">
           <div className="flex items-center gap-x-2.5 gap-y-1 @max-[17rem]:flex-wrap">
             <Button
@@ -425,113 +430,97 @@ export function TakeRow({
               aria-describedby={error ? why : undefined}
               onClick={() => open(take)}
               disabled={missing}
+              data-take-name
               data-starred={starred || undefined}
-              className={cn(
-                "relative h-8 min-w-24 flex-[1_1_6rem] justify-start gap-2 overflow-hidden rounded-sm px-2.5 py-0 text-left whitespace-nowrap disabled:opacity-100",
-                missing || falseStart ? FILLS.quiet : starred ? FILLS.starred : FILLS.rest
-              )}
-              style={{ maxWidth: `${(take.duration_sec / longest) * BAR_SHARE}%` }}
+              className="h-auto w-30 shrink-0 justify-start gap-2 rounded-sm p-0 text-left font-normal whitespace-nowrap hover:bg-transparent disabled:opacity-100 @max-[17rem]:basis-full dark:hover:bg-transparent"
             >
-              {/* In this order, so each is over the one before: the ticks, then
-                  the number and the name on their backing, which a mark in a
-                  take's first seconds would otherwise strike out, then the part
-                  played, which washes over the name, and the playhead, over
-                  everything. */}
-              {(take.markers ?? []).map((m) => (
-                <MarkTick
-                  key={m.at}
-                  colour={labelOf(labels, m.label_id).colour}
-                  at={along(m.at)}
-                  className="inset-y-[5px]"
-                />
-              ))}
+              <span className="tnum text-xs text-muted-foreground">
+                {String(take.take_number).padStart(2, "0")}
+              </span>
               <span
-                data-bar-title
-                className="relative -mx-1 flex min-w-0 items-center gap-2 rounded-sm px-1 [background:inherit]"
-              >
-                <span className="tnum text-xs text-muted-foreground">
-                  {String(take.take_number).padStart(2, "0")}
-                </span>
-                <span
-                  className={cn(
-                    "flex min-w-0 text-sm",
-                    (unnamed || falseStart) && "text-muted-foreground"
-                  )}
-                >
-                  <TakeTitle take={take} cut />
-                </span>
-              </span>
-              {played !== null && (
-                <span
-                  aria-hidden
-                  className="absolute inset-y-0 left-0 bg-primary/20"
-                  style={{ width: `${played}%` }}
-                />
-              )}
-              {played !== null && (
-                <span
-                  aria-hidden
-                  className="absolute inset-y-0 w-0.5 bg-primary"
-                  style={{ left: `${played}%` }}
-                />
-              )}
-            </Button>
-
-            {/* Nothing jumps (B4): the time played has its room kept before
-                the length, so the bar keeps its width and the length its place
-                while the take plays here. */}
-            <span className={cn("tnum grid shrink-0 justify-items-end text-sm", falseStart && "text-muted-foreground")}>
-              <span aria-hidden className="invisible col-start-1 row-start-1">
-                {formatMMSS(here ? here.duration || take.duration_sec : take.duration_sec)} /{" "}
-                {formatMMSS(take.duration_sec)}
-              </span>
-              <span className="col-start-1 row-start-1">
-                {here && (
-                  <>
-                    <span className="text-primary">{formatMMSS(here.position)}</span>
-                    {" / "}
-                  </>
+                className={cn(
+                  "flex min-w-0 text-sm",
+                  !missing && OPENS,
+                  (unnamed || falseStart || missing) && "text-muted-foreground"
                 )}
-                {formatMMSS(take.duration_sec)}
+              >
+                <TakeTitle take={take} cut />
               </span>
-            </span>
-            {falseStart && <Badge variant="warn">false start</Badge>}
-            {shared && (
-              <CloudCheck
-                data-in-cloud
-                aria-label={upLabel(sendTo)}
-                className="size-3.5 shrink-0 text-signal"
+            </Button>
+            <div className="flex min-w-0 flex-1 items-center gap-x-2.5 gap-y-1 @max-[17rem]:flex-wrap">
+              <TakeWave
+                shape={shape}
+                duration={length}
+                played={here && length > 0 ? Math.min(1, Math.max(0, here.position / length)) : null}
+                starred={starred}
+                quiet={missing || falseStart}
+                marks={(take.markers ?? []).map((m) => ({
+                  at: m.at,
+                  colour: labelOf(labels, m.label_id).colour,
+                }))}
+                onPress={missing ? undefined : (at) => (onPlayAt ? onPlayAt(take, at) : open(take))}
+                className="shrink"
+                // Of the room after the name less the length's and a ✓'s, so
+                // that every row's is to the one scale.
+                style={{ width: `calc((100% - ${AFTER_WAVE}rem) * ${Math.min(1, take.duration_sec / longest)})` }}
               />
-            )}
-            {status && !missing && (
-              error ? (
-                <>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="truncate text-xs text-destructive">{status}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>{error}</TooltipContent>
-                  </Tooltip>
-                  {/* The bar's description: the status in its name is the
-                      reason's heading. */}
-                  <span id={why} className="sr-only">
-                    {error}
-                  </span>
-                </>
-              ) : (
-                <span className="truncate text-xs text-muted-foreground">{status}</span>
-              )
-            )}
-            {/* Its rehearsal is what tells it from the others here, so the
-                bar gives way to it rather than it to the bar. */}
-            {where && (
-              <span className="max-w-1/2 shrink-0 truncate text-xs text-muted-foreground">
-                {where}
+
+              {/* Nothing jumps (B4): the time played has its room kept before
+                  the length, so the wave keeps its width and the length its
+                  place while the take plays here. */}
+              <span className={cn("tnum grid shrink-0 justify-items-end text-sm", falseStart && "text-muted-foreground")}>
+                <span aria-hidden className="invisible col-start-1 row-start-1">
+                  {formatMMSS(here ? here.duration || take.duration_sec : take.duration_sec)} /{" "}
+                  {formatMMSS(take.duration_sec)}
+                </span>
+                <span className="col-start-1 row-start-1">
+                  {here && (
+                    <>
+                      <span className="text-primary">{formatMMSS(here.position)}</span>
+                      {" / "}
+                    </>
+                  )}
+                  {formatMMSS(take.duration_sec)}
+                </span>
               </span>
-            )}
-            {missing && (
-              <span className="shrink-0 text-xs text-destructive">Not found on disk</span>
-            )}
+              {falseStart && <Badge variant="warn">false start</Badge>}
+              {shared && (
+                <CloudCheck
+                  data-in-cloud
+                  aria-label={upLabel(sendTo)}
+                  className="size-3.5 shrink-0 text-signal"
+                />
+              )}
+              {status && !missing && (
+                error ? (
+                  <>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="truncate text-xs text-destructive">{status}</span>
+                      </TooltipTrigger>
+                      <TooltipContent>{error}</TooltipContent>
+                    </Tooltip>
+                    {/* The name's description: the status in its label is
+                        the reason's heading. */}
+                    <span id={why} className="sr-only">
+                      {error}
+                    </span>
+                  </>
+                ) : (
+                  <span className="truncate text-xs text-muted-foreground">{status}</span>
+                )
+              )}
+              {/* Its rehearsal is what tells it from the others here, so the
+                  wave gives way to it rather than it to the wave. */}
+              {where && (
+                <span className="max-w-1/2 shrink-0 truncate text-xs text-muted-foreground">
+                  {where}
+                </span>
+              )}
+              {missing && (
+                <span className="shrink-0 text-xs text-destructive">Not found on disk</span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -539,22 +528,32 @@ export function TakeRow({
           <div />
         ) : (
           <div className="flex items-center gap-1">
-            {/* ★ stays in view on a starred take, so which ones they are reads
-                down the list; on the others it shows with the rest. */}
+            {/* ★ on every row (owner's pick B, 2026-11-02): which takes have
+                one reads down the list, and giving one needs no knowing that
+                it is there under the mouse. Faint on a take with none. */}
             {onStar && (
               <StarButton
                 take={take}
                 onStar={onStar}
                 className={cn(
                   !starred &&
-                    "opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+                    "text-muted-foreground/45 group-focus-within:text-muted-foreground group-hover:text-muted-foreground"
                 )}
               />
             )}
             {/* On the row under the mouse, or reached with Tab. Hidden, they
                 still hold their place, so the rows do not shift as it moves.
+                Where the row is under 36rem that place is the wave's room:
+                they come over the row's end instead, on the row's own
+                colour, and let a press through while they are hidden.
                 Delete is set apart from the others. */}
-            <div className="flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+            <div
+              className={cn(
+                "flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100",
+                "@max-[36rem]/row:pointer-events-none @max-[36rem]/row:absolute @max-[36rem]/row:inset-y-0 @max-[36rem]/row:right-[2.75rem] @max-[36rem]/row:rounded-md @max-[36rem]/row:bg-[color-mix(in_oklab,var(--accent)_60%,var(--card))] @max-[36rem]/row:pl-1",
+                "@max-[36rem]/row:group-focus-within:pointer-events-auto @max-[36rem]/row:group-hover:pointer-events-auto"
+              )}
+            >
               {onRename && (
                 <Button
                   variant="ghost"
@@ -611,7 +610,7 @@ export function TakeRow({
           onClick={() => onOpenAt(take, m.at)}
           className="ml-10 h-7 max-w-[calc(100%-2.5rem)] justify-start self-start px-2 text-left"
         >
-          <MarkLine label={labelOf(labels, m.label_id)} at={m.at} note={m.note} className="text-sm" />
+          <MarkLine label={labelOf(labels, m.label_id)} at={m.at} note={m.note} opens className="text-sm" />
         </Button>
       ))}
     </div>

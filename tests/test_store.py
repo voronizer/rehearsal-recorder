@@ -2262,6 +2262,66 @@ def main():
        and brought20["notes"][0].get("icon") == "keys")
     lib.close()
 
+    print("\n[21] A take's wave (migration 0012)")
+    # A take's row is drawn as its wave, made once from its files and kept, and made again
+    # when its length changes (a crop).
+    rec21 = tmp / "Waves"
+    rec21.mkdir()
+    db.open_engine(rec21, migrations_up_to(tmp, "0011")).dispose()
+    engine = db.make_engine(db.database_path(rec21))
+    with engine.begin() as c:
+        c.execute(text("INSERT INTO rehearsal (id, folder, name, created_at, samplerate, bit_depth) "
+                       "VALUES (1, 'Night', 'Night', '2026-10-01T19:00:00', 48000, 24)"))
+        c.execute(text("INSERT INTO take (id, rehearsal_id, take_number, duration_sec, cloud_skip, cloud_send, "
+                       "starred, click) VALUES (1, 1, 1, 180.0, 0, 0, 0, 0)"))
+        for i, (name21, file21, kind21) in enumerate([
+                ("Drums", "01/Drums.wav", "audio"), ("Drums", "01/Drums.mid", "midi"),
+                ("Backing", "01/Backing.wav", "backing")]):
+            c.execute(text("INSERT INTO take_file (take_id, position, name, file, kind) "
+                           "VALUES (1, :p, :n, :f, :k)"), {"p": i, "n": name21, "f": file21, "k": kind21})
+    engine.dispose()
+    engine = db.open_engine(rec21)
+    ok("a database at 0011 is moved on to the newest migration", db.current_revision(engine) == HEAD)
+    with engine.connect() as c:
+        drift21 = compare_metadata(MigrationContext.configure(c), Base.metadata)
+    engine.dispose()
+    ok("and it is then what models.py describes", drift21 == [])
+    ok("an old take has no wave yet", rows19(rec21, "SELECT shape FROM take") == [(None,)])
+
+    lib = Library(rec21)
+    night21 = rec21 / "Night"
+    asked21 = []
+    whole21 = [True]
+
+    def make21(paths):
+        asked21.append([str(p) for p in paths])
+        return [0.5] * 120, whole21[0]
+
+    first21 = lib.take_shapes([(night21, 1), (night21, 9), (rec21 / "Gone", 1)], make21)
+    ok("a wave is made for a take that has none, from its audio and its Backing track, not its notes",
+       asked21 == [[str(night21 / "01/Drums.wav"), str(night21 / "01/Backing.wav")]])
+    ok("and each item is answered in order, None for a take or a rehearsal not there",
+       first21 == [[0.5] * 120, None, None])
+    lib.take_shapes([(night21, 1)], make21)
+    ok("once made it is kept: the files are not read again", len(asked21) == 1)
+    lib.close()
+    lib = Library(rec21)
+    lib.take_shapes([(night21, 1)], make21)
+    ok("and it lasts across a restart", len(asked21) == 1)
+    lib.update_take(night21, 1, name="Viasna", duration_sec=180.0)
+    lib.take_shapes([(night21, 1)], make21)
+    ok("a take named, its length the same, keeps its wave", len(asked21) == 1)
+    lib.update_take(night21, 1, duration_sec=150.0)
+    lib.take_shapes([(night21, 1)], make21)
+    ok("a crop lets it go, and it is made again", len(asked21) == 2)
+    lib.update_take(night21, 1, duration_sec=120.0)
+    whole21[0] = False
+    lib.take_shapes([(night21, 1)], make21)
+    lib.take_shapes([(night21, 1)], make21)
+    ok("one made with a file missing is drawn, not kept: it is made again next time",
+       len(asked21) == 4 and rows19(rec21, "SELECT shape FROM take") == [(None,)])
+    lib.close()
+
     print()
     if problems:
         print(f"{len(problems)} problem(s):")

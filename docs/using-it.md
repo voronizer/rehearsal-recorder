@@ -41,7 +41,7 @@ The start screen, the one the app opens on, has one track per musician. A
 track is one musician's part of each take. It is recorded from an input: the
 numbered socket on the interface that their microphone or instrument plugs
 into. Beside **Recording with** is the interface, with how many inputs it
-has and the recording quality. Click it to open Settings.
+has and the recording quality. Click it to change them in Settings.
 
 - Type a name for the rehearsal in **Rehearsal name**, at the bottom beside
   the set and **Start rehearsal**, or keep the one with today's date. For
@@ -129,7 +129,8 @@ shows when something from it plays.
 take](#starring-a-take)), wherever you played it, and says which and when if
 it is not last time's last take. A song with no star plays its last take,
 which is usually the one you settled on. Listen to where you left off before
-you start.
+you start. Click a mark under a song to play its take from 5 seconds before
+the mark, so you hear the moment coming.
 
 Under it, **Earlier** lists the rehearsals before that. **Open**, or a
 rehearsal under **Earlier**, opens it in History. A soundcheck with no named
@@ -173,20 +174,26 @@ so, or ⌘Z on a Mac (Ctrl+Z elsewhere), puts it back where it was.
 ![A rehearsal played by the set Gig on the 25th: five takes grouped by song, a false start among them, and Send starred and Clear false starts over them; on the right the next take's name, the set and the other songs](screenshots/rehearsal.png)
 
 Press **Start rehearsal**, or Space. The rehearsal screen shows the takes
-recorded so far, grouped by song. Each take is a bar drawn to its length,
-with its marks on it and listed under it, so a take that ran long or
-stopped short stands out before you read anything.
+recorded so far, grouped by song. Each take is a row: its number and name,
+then its wave, drawn to its length, with its marks on it and listed under
+it, so a take that ran long or stopped short stands out before you read
+anything. The wave is the take's sound: loud parts tall, quiet parts low.
+
+Anything that opens or plays has a dotted line under it: a take's name, a
+song's, a mark's words. The line turns solid when you point at it.
 
 - **▶** at the start of a row plays the take right there. Space pauses and
   continues it, and Esc stops it.
-- Click anywhere on a take's row, the bar or past it, to open the take in
-  the player (see [Listening back](#listening-back)). If it is playing, it
+- Click the wave to play the take from that spot, right in the row.
+- Click a take's name, or its row past the wave, to open the take in the
+  player (see [Listening back](#listening-back)). If it is playing, it
   goes on playing from the same place.
 - Click a mark under a take to open the take at that spot.
-- Point at a row to star the take (★, see [Starring a
-  take](#starring-a-take)), rename it, send it to your cloud folder (see
+- Every take has its ★ (see [Starring a take](#starring-a-take)): green on
+  a starred take, faint on the others. Click it to star the take.
+- Point at a row to rename the take, send it to your cloud folder (see
   [Sending takes to the cloud](#sending-takes-to-the-cloud)) or delete it.
-  The ★ stays in view on a starred take.
+  In a narrow window these buttons come over the end of the row.
 
 You can sort out the rehearsal here as it goes, while everyone still
 remembers which take was the good one. None of this has to be done:
@@ -197,8 +204,8 @@ remembers which take was the good one. None of this has to be done:
   nobody has played yet, use the pencil.
 - A take shorter than 30 seconds, with no ★ and no marks, is a false
   start, such as a stop after eight bars, or a take that holds only the
-  count-in (the beats counted before the band comes in). Its bar is
-  dashed, its name and length are grey, and it says **false start**.
+  count-in (the beats counted before the band comes in). Its wave is
+  pale, its name and length are grey, and it says **false start**.
   **Clear false starts**, at the head of the songs, moves them all to the
   Trash (the Recycle Bin on Windows) at once, and their copies in the cloud
   go with them, as do the ones in a band service; **Undo** brings them back. See [Undo](#undo). How short a
@@ -221,12 +228,15 @@ metronome: see [The metronome](#the-metronome).
 
 The top of the window has the rehearsal's name and its figures so far:
 **Length**, how long its takes run; **Takes**, how many there are and of
-how many songs; **In the cloud**; and **On disk**, how much of the disk the
-rehearsal uses. **Show in Finder** (**Show in Explorer** on Windows) opens
-its folder. A long name wraps, with its pencil after its last word, and is
-never cut. When the name needs the room, the figures go one whole figure at
-a time: the size on disk first, then the cloud, then the takes, and the
-length last. Once one has gone, pointing at them shows them all. The button
+how many songs; **In the cloud** (**In the band service** when takes go
+there), how many of them are there; and **On disk**, how much of the disk
+the rehearsal uses. With no cloud folder and no band service set, or no
+takes yet, there is nothing to count and that figure is not shown.
+**Show in Finder** (**Show in Explorer** on Windows) opens its folder. A
+long name wraps, with its pencil after its last word, and is never cut.
+When the name needs the room, the figures go one whole figure at a time:
+the size on disk first, then what is sent, then the takes, and the length
+last. Once one has gone, pointing at them shows them all. The button
 always stays. The player in History has the same figures and button beside
 the rehearsal's name, which wraps there too, but no pencil.
 
@@ -676,11 +686,12 @@ label. A heading says how many marks are under it, and opens its rehearsal
 in Rehearsals, or its song's page.
 
 Each mark is a row: its comment, or the label's name when it has none, then
-the take and the moment, *Pałyn 4 · 1:51*. Then the take as a bar, drawn to
-the longest take in the list, with the mark as a tick in the label's colour.
+the take and the moment, *Pałyn 4 · 1:51*. Then the take's wave, drawn to
+the longest take in the list, with the mark on it in the label's colour.
 
 - **▶** plays the take right there, from 5 seconds before the mark, so you
   hear the moment coming. Press it again to pause.
+- Click the wave to play the take from that spot instead.
 - Clicking the row opens the take in the player at the mark. So does Enter
   on its comment, which Tab reaches. Esc comes back to the list, scrolled
   where you were.
@@ -1093,6 +1104,11 @@ The metronome is one row at the bottom left of the rehearsal screen, beside
 - The gear opens the click's settings (see [The click's
   settings](#the-clicks-settings)).
 
+In a small window, or at a large **Scale**, the row gives up room so that
+**Finish** and **Record take** keep theirs: first the beat's dots and the
+key letters on the buttons, then **Tap** and − +, then ▶. What has gone is
+under the gear, and its keys still work.
+
 The line under the row says where the tempo comes from, and what you can do
 next. With the switch off it says “Off: takes record without the click.”
 
@@ -1282,7 +1298,7 @@ The words in the row's corner say what the take is measured against:
   **Record take** was pressed with the switch off.
 - “Pałyn 128 bpm”: the song's tempo, for a take with no tempo of its own,
   such as one from before the app had a metronome.
-- “No tempo · middle 126 bpm”: the take's own middle, for a take of no
+- “No tempo set · about 126 bpm”: the take's own middle, for a take of no
   song or of a song with no tempo. Half its bars were faster than that, and
   half slower.
 
@@ -1290,7 +1306,8 @@ To find the beats, the app listens to the drums: the notes of the track
 with the drums icon when it records an e-kit, otherwise that track's sound.
 In a take with no drums icon, or when the drums give no beat to follow, it
 listens to all the tracks together, except one with the Backing track icon,
-and the words end “· from the mix”: the line is rougher then. Where the band stopped, the line breaks.
+and the words end “· from the whole band”: the line is rougher then.
+Where the band stopped, the line breaks.
 
 The tempo is worked out when you open a take, and a long one takes a
 moment: a spinner shows in the corner until it is done. A take shorter than

@@ -54,7 +54,7 @@ export function SetPicker({
     // Not modal: New set… opens a window as the menu closes, and a modal
     // menu closing would take the keyboard back to this button from it.
     <DropdownMenu modal={false}>
-      <WholeTip cut={cut} text={name}>
+      <WholeTip cut={cut} text={name ?? "No set"}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
@@ -74,6 +74,9 @@ export function SetPicker({
             <span
               ref={nameRef}
               data-set-name
+              // A footer short of room keeps the name for a screen reader
+              // only, and the tip says it whole, as for a name cut short.
+              data-squeeze-quiet="2"
               data-cut={cut || undefined}
               className="block min-w-0 truncate"
             >

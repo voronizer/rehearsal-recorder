@@ -3,6 +3,15 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
+/**
+ * What words that open or play something look like (owner's pick A,
+ * 2026-11-02), as in the band service: a grey dotted line under them,
+ * solid under the mouse. A song's name, a mark's words, a take's name, a
+ * link in a sentence: `link` below, and words inside a bigger button.
+ */
+const OPENS =
+  "underline decoration-muted-foreground/60 decoration-dotted decoration-1 underline-offset-4 hover:decoration-current hover:decoration-solid"
+
 /*
   Variants say what a button is for: `default` is the one main action (the
   accent), `strong` is the text's own colour (Stop is neutral, not blue),
@@ -39,7 +48,7 @@ const buttonVariants = cva(
           "border-transparent hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         // No frame: bare words sit flush with what is beside them, and a link
         // never swaps with a filled button, so it has no width to keep.
-        link: "border-0 text-foreground underline decoration-current/40 decoration-1 underline-offset-4 hover:decoration-current",
+        link: `border-0 text-foreground ${OPENS}`,
       },
       size: {
         default: "h-9 rounded-md px-4 py-2 has-[>svg]:px-3",
@@ -86,4 +95,4 @@ function Button({
   )
 }
 
-export { Button, buttonVariants }
+export { Button, buttonVariants, OPENS }

@@ -1,5 +1,5 @@
 import { ChevronRight, Star } from "lucide-react"
-import { memo, useEffect, useRef, useState, type ReactNode } from "react"
+import { Fragment, memo, useEffect, useRef, useState, type ReactNode } from "react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Item } from "@/components/ui/item"
@@ -19,6 +19,7 @@ import {
   takesLabel,
 } from "@/lib/format"
 import { labelOf, useLabels } from "@/lib/labels"
+import { playFrom } from "@/lib/marks"
 import { playLook } from "@/lib/playLook"
 import { cn } from "@/lib/utils"
 import { useKeysOn } from "@/lib/keys"
@@ -63,6 +64,7 @@ export const LastTime = memo(function LastTime({
   playback,
   problem,
   onPlay,
+  onPlayAt,
   onOpen,
   onOpenSong,
 }: {
@@ -71,6 +73,8 @@ export const LastTime = memo(function LastTime({
   /** Why what was asked for does not play. */
   problem?: string | null
   onPlay: (take: Take) => void
+  /** Plays a take from a mark: the mark's lines are pressed for it. */
+  onPlayAt?: (take: Take, at: number) => void
   onOpen: (folder: string) => void
   /** Opens a song's page in History's Songs view; null is Not named's. */
   onOpenSong?: (title: string | null) => void
@@ -131,6 +135,7 @@ export const LastTime = memo(function LastTime({
               playback={playback}
               problem={problem}
               onPlay={onPlay}
+              onPlayAt={onPlayAt}
               onOpenSong={onOpenSong}
             />
           ))}
@@ -145,6 +150,7 @@ export const LastTime = memo(function LastTime({
               playback={playback}
               problem={problem}
               onPlay={onPlay}
+              onPlayAt={onPlayAt}
               onOpenSong={onOpenSong}
             />
           )}
@@ -178,6 +184,7 @@ function SongRow({
   playback,
   problem,
   onPlay,
+  onPlayAt,
   onOpenSong,
 }: {
   name: string
@@ -192,6 +199,7 @@ function SongRow({
   playback: LastTimePlayback | null
   problem?: string | null
   onPlay: (take: Take) => void
+  onPlayAt?: (take: Take, at: number) => void
   onOpenSong?: (title: string | null) => void
 }) {
   const labels = useLabels()
@@ -201,7 +209,10 @@ function SongRow({
     plays ? plays.folder === folder && plays.take.take_number === t.take_number : t === lastGo
   // Said in words only when ▶ plays something the columns do not end on.
   const elsewhere = plays !== null && !isTarget(lastGo)
-  const here = playback?.take === target ? playback : null
+  // What plays from this row: its ▶'s take, or one of its takes played
+  // from a mark below. ▶ then pauses that one.
+  const here =
+    playback && (playback.take === target || takes.includes(playback.take)) ? playback : null
   const total = takes.reduce((sum, t) => sum + (t.duration_sec || 0), 0)
   // Every mark is listed, a plain one with nothing written included (spec D2).
   const notes = takes.flatMap((t) => (t.markers ?? []).map((m) => ({ take: t, marker: m })))
@@ -219,10 +230,16 @@ function SongRow({
       className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 border-t py-3"
     >
       <RowPlay
-        take={target}
+        take={here?.take ?? target}
         here={here}
         problem={problem}
-        label={unnamed ? target.name : playLabel(target, name)}
+        label={
+          here && here.take !== target
+            ? here.take.name
+            : unnamed
+              ? target.name
+              : playLabel(target, name)
+        }
         onPlay={onPlay}
       />
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -243,16 +260,34 @@ function SongRow({
             <StarMark /> <TakeTitle take={plays.take} /> · {formatDay(plays.created_at)}
           </span>
         )}
-        {notes.slice(0, NOTES_SHOWN).map(({ take, marker }) => (
-          <MarkLine
-            key={`${take.take_number}-${marker.at}`}
-            label={labelOf(labels, marker.label_id)}
-            at={marker.at}
-            note={marker.note}
-            take={<TakeTitle take={take} />}
-            className="text-xs"
-          />
-        ))}
+        {notes.slice(0, NOTES_SHOWN).map(({ take, marker }) => {
+          const line = (
+            <MarkLine
+              label={labelOf(labels, marker.label_id)}
+              at={marker.at}
+              note={marker.note}
+              take={<TakeTitle take={take} />}
+              opens={onPlayAt !== undefined}
+              className="text-xs"
+            />
+          )
+          // Pressed, it plays its take from a little before the mark, here,
+          // as History's Marks do.
+          return onPlayAt ? (
+            <Button
+              key={`${take.take_number}-${marker.at}`}
+              type="button"
+              variant="ghost"
+              data-mark-play
+              onClick={() => onPlayAt(take, playFrom(marker.at))}
+              className="-mx-1 h-auto max-w-[calc(100%+0.5rem)] justify-start self-start rounded-sm px-1 py-0.5 text-left font-normal"
+            >
+              {line}
+            </Button>
+          ) : (
+            <Fragment key={`${take.take_number}-${marker.at}`}>{line}</Fragment>
+          )
+        })}
         {notes.length > NOTES_SHOWN && (
           <span className="text-xs text-muted-foreground">
             and {notes.length - NOTES_SHOWN} more

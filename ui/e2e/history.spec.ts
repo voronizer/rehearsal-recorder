@@ -671,12 +671,12 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
   // Only the take already in the cloud folder says so on its row.
   await expect(page.locator("[data-take='2'] [data-in-cloud]")).toHaveCount(1)
   await expect(overview.locator("[data-in-cloud]")).toHaveCount(1)
-  // Every go on one scale: the four-minute Viasna is the longest bar.
+  // Every go on one scale: the four-minute Viasna is the longest wave.
   const widths = await page.evaluate(() =>
     Object.fromEntries(
       [...document.querySelectorAll<HTMLElement>("[data-take]")].map((r) => [
         r.dataset.take,
-        r.querySelector('button[aria-label^="Take "]')!.getBoundingClientRect().width,
+        r.querySelector("[data-wave]")!.getBoundingClientRect().width,
       ])
     )
   )
@@ -688,7 +688,8 @@ test("an open rehearsal with no take picked shows the evening", async ({ page })
   expect(said).not.toMatch(/\bplayed\b/)
   await expect(fact(page, "Length")).toHaveText("12 min")
   await expect(fact(page, "Takes")).toHaveText("4, 2 songs")
-  await expect(fact(page, "In the cloud")).toHaveText("1 of 4")
+  // No cloud folder is set, so the head counts nothing sent.
+  await expect(fact(page, "In the cloud")).toHaveCount(0)
 })
 
 // The facts in the pane's head, beside the rehearsal's name: the name has its
@@ -983,8 +984,9 @@ for (const [what, name, room] of WHILE_READING) {
     await expect.soft(group.locator("dt")).toHaveCount(0)
 
     await letGo(page, "get_rehearsal")
-    // The figures are read out whatever shows, and show when the name leaves room.
-    await expect(group.locator("dt")).toHaveCount(4)
+    // The figures are read out whatever shows, and show when the name leaves
+    // room: three, with no cloud folder to count what is in it.
+    await expect(group.locator("dt")).toHaveCount(3)
     await expect(group.locator(".sr-only")).toContainText("Length")
     if (room) await expect(fact(page, "Length")).toBeVisible()
     else await expect(fact(page, "Length")).toBeHidden()

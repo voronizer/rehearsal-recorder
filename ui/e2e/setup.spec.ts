@@ -839,7 +839,7 @@ test.describe("the track rows on the shared pieces", () => {
     await expect(figures.locator(".sr-only")).toHaveText("18 inputs · 48 kHz · 24 bit")
   })
 
-  test("a track's name is bare at rest, filled under the pointer, ringed while typing", async ({
+  test("a track's name has a faint line under it, brighter under the pointer, ring-coloured while typing", async ({
     page,
   }) => {
     await openApp(page)
@@ -848,17 +848,22 @@ test.describe("the track rows on the shared pieces", () => {
     const look = () =>
       place.evaluate((el) => {
         const s = getComputedStyle(el)
-        return { fill: s.backgroundColor, ring: s.boxShadow }
+        return { fill: s.backgroundColor, top: s.borderTopWidth, line: s.borderBottomColor, under: s.boxShadow }
       })
+    // No frame and no fill: a line under the name alone.
     await page.mouse.move(0, 0)
-    await expect.poll(look).toEqual({ fill: "rgba(0, 0, 0, 0)", ring: "none" })
+    const rest = await look()
+    expect(rest).toMatchObject({ fill: "rgba(0, 0, 0, 0)", top: "0px", under: "none" })
     await field.hover()
-    await expect.poll(async () => (await look()).fill).not.toBe("rgba(0, 0, 0, 0)")
+    await expect.poll(async () => (await look()).line).not.toBe(rest.line)
+    const height = (await place.boundingBox())!.height
     await field.focus()
     await page.mouse.move(0, 0)
-    // The shared focus ring, as every field has.
-    await expect.poll(async () => (await look()).ring).not.toBe("none")
-    await expect.poll(async () => (await look()).fill).toBe("rgba(0, 0, 0, 0)")
+    // The focus ring's colour, and twice as thick, the second line under the
+    // field: the name does not move.
+    await expect.poll(async () => (await look()).line).toBe(await colour(page, "--ring"))
+    await expect.poll(async () => (await look()).under).not.toBe("none")
+    expect((await place.boundingBox())!.height).toBe(height)
   })
 
   test("signal and notes are said with the one tick, notes in the text's colour", async ({ page }) => {

@@ -336,6 +336,11 @@ export function Recording({
   const column = useRef<HTMLDivElement>(null)
   const nameAndClock = useRef<HTMLDivElement>(null)
   const tilesRef = useRef<HTMLDivElement>(null)
+  // The name on one line, step 3 of the fit below, and the room the screen
+  // had when it was put there: it goes back to two once the window or the
+  // scale gives more.
+  const [oneLine, setOneLine] = useState(false)
+  const oneLineAt = useRef<{ width: number; height: number; rem: number } | null>(null)
 
   // What gives way in a window too short for everything, fitted as the
   // screen comes up and again only when the window, the scale or the name's
@@ -346,7 +351,9 @@ export function Recording({
   //    screen's air.
   // 2. While the tiles reach past the screen's bottom, the clock gives way,
   //    and the take's name over it with it (half its size), down to 3rem.
-  // 3. Then the tiles' least height gives way, from 12.5rem down to 6rem.
+  // 3. Then a name on two lines takes one, cut, its go kept, so that the
+  //    tiles keep their room and the tracks' names with it.
+  // 4. Then the tiles' least height gives way, from 12.5rem down to 6rem.
   // Only past that does the screen scroll.
   useLayoutEffect(() => {
     const el = column.current
@@ -358,9 +365,17 @@ export function Recording({
       const clock = el.querySelector<HTMLElement>("[role=timer]")
       const widest = el.querySelector<HTMLElement>("[data-clock-widest]")
       if (!block || !tiles || !clock || !widest) return
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
+      // More room than when the name went to one line: back to two, and
+      // fitted again once it has drawn them.
+      const at = oneLineAt.current
+      if (at && (main.clientWidth > at.width || main.clientHeight > at.height || rem < at.rem)) {
+        oneLineAt.current = null
+        setOneLine(false)
+        return
+      }
       el.style.removeProperty("--clock")
       tiles.style.removeProperty("--tile-min")
-      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
       const size = () => parseFloat(getComputedStyle(clock).fontSize)
 
       // 1. At a size f, the clock's box is "0:00", a·f wide and centred, and
@@ -404,7 +419,20 @@ export function Recording({
       if (over() > 0.5 && size() > clockFloor + 0.5)
         el.style.setProperty("--clock", `${clockFloor}px`)
 
-      // 3. The tiles stand at their least height when they reach past it.
+      // 3. The name on one line, and fitted again once it has drawn it.
+      const name = block.querySelector("h1")
+      if (
+        over() > 0.5 &&
+        !oneLineAt.current &&
+        name &&
+        name.getBoundingClientRect().height > parseFloat(getComputedStyle(name).fontSize) * 1.5
+      ) {
+        oneLineAt.current = { width: main.clientWidth, height: main.clientHeight, rem }
+        setOneLine(true)
+        return
+      }
+
+      // 4. The tiles stand at their least height when they reach past it.
       const by = over()
       const first = tiles.firstElementChild
       if (by > 0.5 && first) {
@@ -485,6 +513,8 @@ export function Recording({
                     lit={metronome.lit}
                     onSwitch={(on) => void switchClick(on)}
                     then={beat.backing.row ? takeSentence(beat) : null}
+                    // Only for a take with a file (BackingTakeRow): the
+                    // rehearsal screen says where to add one.
                     below={
                       beat.backing.row && (
                         <BackingTakeRow
@@ -514,16 +544,17 @@ export function Recording({
           {/* The name was the smallest thing here, grey in the corner, and it
               is what most often goes wrong: the band has moved on to another
               song and nobody changed it. Only shown — a field would invite a
-              keypress, and Space stops the take. Up to two lines, then cut
-              with the song's go kept, whole on hover; set before the take,
-              so it never moves. */}
+              keypress, and Space stops the take. Up to two lines (one in a
+              window too short for them, the fit's step 3), then cut with the
+              song's go kept, whole on hover; set before the take, so it
+              never moves. */}
           <div ref={nameAndClock} className="flex w-full flex-col items-center gap-1">
             <h1
               className="flex w-full justify-center pb-[0.08em] leading-none font-semibold tracking-tight"
               // design-ok(px-text): half the clock's size, so it follows the window's height too
               style={{ fontSize: `calc(${CLOCK} / 2)` }}
             >
-              <GoTitle title={takeName} go={takeGo} cut lines={2} />
+              <GoTitle title={takeName} go={takeGo} cut lines={oneLine ? 1 : 2} />
             </h1>
             {/* The clock grows to the left. Its box is as wide as "0:00",
                 centred under the name, and the figures stand at its right

@@ -218,6 +218,16 @@ test("while a take records: the switch, the file playing and the volume, no play
   expect(tiles.filter((t) => t?.includes("Backing"))).toEqual([])
 })
 
+test("while a take of a song with none records, nothing is said of a backing track", async ({ page }) => {
+  await bandRehearsal(page)
+  await nameNext(page, "Dym")
+  await expect(rowLine(page)).toBeVisible()
+  await record(page).click()
+  await expect(page.getByRole("button", { name: /^Stop/ })).toBeVisible()
+  await expect(row(page)).toHaveCount(0)
+  await expect(page.locator("footer")).not.toContainText("backing track")
+})
+
 // The take plays on past the file's end, silent, until Stop.
 test("while a take records past the file's end, its time stops at its length", async ({ page }) => {
   await bandRehearsal(page, "window.__BACKINGS__ = {Sonca: {name: 'Sonca pads.wav', seconds: 1, channels: 1, tempo: null, first_bar: 0}};")

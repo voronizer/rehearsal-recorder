@@ -1351,6 +1351,8 @@ class Library:
                         and row.song.tempo is None):
                     row.song.tempo, row.song.signature = row.tempo, row.signature
             if duration_sec is not None:
+                if float(duration_sec) != row.duration_sec:
+                    row.shape = None
                 row.duration_sec = float(duration_sec)
             if tracks is not None or notes is not None:
                 audio = ([f for f in row.files if f.kind != NOTES_FILE] if tracks is None
@@ -1398,6 +1400,41 @@ class Library:
             db.refresh(row)
             data = self._take_data(folder, row)
         return self._take_out(data, self._cloud_dir())
+
+    def take_shapes(self, items, make):
+        """
+        Each take's wave, as the lists draw it: `items` are (folder,
+        take_number), and the answer is a shape for each, in order, or None
+        for a take that is not there. One kept is given as it is; one not made
+        yet is made with make(audio file paths) -> (shape, whole), which reads
+        the files, and is kept when `whole`. It is made outside any
+        transaction, so reading the files holds up no other write, and kept
+        only if the take still has the length it was made at: a crop in the
+        meantime makes it another take.
+        """
+        out = [None] * len(items)
+        todo = []
+        with self._session.begin() as db:
+            for i, (folder, take_number) in enumerate(items):
+                row = self._find_take(db, Path(folder), int(take_number), selectinload(Take.files))
+                if row is None:
+                    continue
+                if row.shape is not None:
+                    out[i] = row.shape
+                    continue
+                where = self._folder(row.rehearsal.folder)
+                paths = [where / Path(f.file) for f in row.files if f.kind != NOTES_FILE]
+                todo.append((i, row.id, row.duration_sec, paths))
+        for i, take_id, duration_sec, paths in todo:
+            shape, whole = make(paths)
+            out[i] = shape
+            if not whole:
+                continue
+            with self._session.begin() as db:
+                row = db.get(Take, take_id)
+                if row is not None and row.shape is None and row.duration_sec == duration_sec:
+                    row.shape = shape
+        return out
 
     def delete_take(self, folder, take_number):
         """Returns how many takes the rehearsal has left, or None."""
@@ -1673,6 +1710,7 @@ class Library:
             kept = self._rewrite_markers(db, row, fn)
             had = self._cloud_dict(self._copy_data(row.cloud_copy), self._cloud_dir())
             row.duration_sec = float(duration_sec)
+            row.shape = None
             row.cloud_error = None
             row.cloud_copy = None
             return {"markers": kept, "cloud": had}

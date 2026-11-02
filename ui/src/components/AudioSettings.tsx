@@ -153,6 +153,7 @@ export function AudioSettings() {
               <DevicePicker
                 id="input-device"
                 label="Recording"
+                captions={["Driver", "Interface"]}
                 devices={inputs}
                 value={settings?.device_index ?? null}
                 disabled={rescanning}
@@ -267,6 +268,7 @@ export function AudioSettings() {
         <DevicePicker
           id="output-device"
           label="Playback output"
+          captions={["Driver", "Output"]}
           devices={outputs}
           value={settings?.output_device_index ?? null}
           disabled={rescanning}

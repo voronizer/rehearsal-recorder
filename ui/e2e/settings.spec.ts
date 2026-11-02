@@ -904,13 +904,12 @@ test.describe("Under the hood", () => {
     await expect(tooltip(page)).toHaveCount(0)
     expect(await tipLines(page, badges.first())).toEqual([])
 
-    // The shared box, ticked in the text's colour where the system's was blue.
+    // The shared box; a copy run from source does not check, so it is empty
+    // and greyed (ticked, it is in the text's colour: "a newer version").
     const updates = page.getByRole("checkbox", { name: "Check for new versions" })
     await expect(updates).toHaveAttribute("data-slot", "checkbox")
-    await expect(updates).toBeChecked()
-    expect(await style(updates, "background-color")).toEqual({
-      "background-color": await colour(page, "--foreground"),
-    })
+    await expect(updates).not.toBeChecked()
+    await expect(updates).toBeDisabled()
   })
 
   test("while the page is asked for, a spinner after a second, the words after ten", async ({ page }) => {
@@ -1415,7 +1414,7 @@ test.describe("a newer version", () => {
   test.use({ viewport: { width: 1180, height: 900 } })
 
   test("is said beside the version, with a dot on the way there", async ({ page }) => {
-    await openApp(page, { before: "window.__LATEST__ = {version: '0.3.0'};" })
+    await openApp(page, { before: "window.__BUILT__ = true; window.__LATEST__ = {version: '0.3.0'};" })
     const gear = page.getByRole("button", { name: /^Settings/ })
     await expect(gear).toHaveAccessibleName("Settings, a new version is out")
     await gear.click()
@@ -1434,9 +1433,13 @@ test.describe("a newer version", () => {
       .poll(async () => (await calls(page, "open_releases")).map((c) => c.args))
       .toEqual([[true]])
 
-    // Switched off, nothing is said, and the dot goes with it.
+    // Switched off, nothing is said, and the dot goes with it. The shared
+    // box, ticked in the text's colour where the system's was blue.
     const box = page.getByRole("checkbox", { name: "Check for new versions" })
     await expect(box).toBeChecked()
+    expect(await style(box, "background-color")).toEqual({
+      "background-color": await colour(page, "--foreground"),
+    })
     await box.uncheck()
     await expect
       .poll(async () => (await calls(page, "set_check_updates")).map((c) => c.args))
@@ -1658,7 +1661,14 @@ test.describe("a newer version", () => {
       const updates = page.getByRole("region", { name: "Updates" })
       await expect(updates).toContainText(said)
       await expect(updates).not.toContainText(/\d is out/)
-      await expect(page.getByRole("checkbox", { name: "Check for new versions" })).toBeChecked()
+      // A copy run from source does not check, and its box does not say it
+      // does: empty and greyed.
+      const box = page.getByRole("checkbox", { name: "Check for new versions" })
+      if (before) await expect(box).toBeChecked()
+      else {
+        await expect(box).not.toBeChecked()
+        await expect(box).toBeDisabled()
+      }
     })
   }
 })

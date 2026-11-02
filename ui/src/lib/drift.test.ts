@@ -124,14 +124,14 @@ describe("the tag", () => {
     expect(tagText(driftTag(counted({ from: "click" })))).toBe("Click 128 bpm · 4/4")
     expect(tagText(driftTag(counted({ from: "take" })))).toBe("No click · 128 bpm · 4/4")
     expect(tagText(driftTag(counted({ from: "song", song: "Pałyn" })))).toBe("Pałyn 128 bpm")
-    expect(tagText(driftTag(counted({ from: "middle", tempo: 126 })))).toBe("No tempo · middle 126 bpm")
+    expect(tagText(driftTag(counted({ from: "middle", tempo: 126 })))).toBe("No tempo set · about 126 bpm")
   })
 
   it("counts eighths in 6/8, and says when it listened to the mix", () => {
     expect(tagText(driftTag(counted({ from: "click", tempo: 198, signature: "6/8" })))).toBe("Click 198 ♪ · 6/8")
     expect(tagText(driftTag(counted({ from: "song", song: "Ahoń", tempo: 198, signature: "6/8" })))).toBe("Ahoń 198 ♪")
     expect(tagText(driftTag(counted({ from: "middle", tempo: 126 }, "mix")))).toBe(
-      "No tempo · middle 126 bpm · from the mix"
+      "No tempo set · about 126 bpm · from the whole band"
     )
   })
 })

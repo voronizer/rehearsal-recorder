@@ -296,7 +296,7 @@ const fact = (page: Page, label: string) =>
 
 test("the player's header says what the evening was, and opens its folder", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 820 })
-  await openGo(page)
+  await openGo(page, undefined, "window.__CLOUD_DIR__ = '/cloud';")
   await expect(fact(page, "Length")).toHaveText("12 min")
   await expect(fact(page, "Takes")).toHaveText("4, 2 songs")
   await expect(fact(page, "In the cloud")).toHaveText("1 of 4")
@@ -337,9 +337,22 @@ test("on Windows the button says Explorer", async ({ page }) => {
   await expect(facts(page).getByRole("button", { name: "Show in Explorer" })).toBeVisible()
 })
 
+test("the header counts what was sent only where takes go", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 820 })
+  // No cloud folder and no band service: there is nowhere to send to, so
+  // there is nothing to count.
+  await openGo(page)
+  await expect(fact(page, "Takes")).toHaveText("4, 2 songs")
+  await expect(fact(page, "In the cloud")).toHaveCount(0)
+  // Takes go to the band service: it counts what is there.
+  await openGo(page, undefined, "window.__SERVICE_KEY__ = 'band.example:secret';")
+  await expect(fact(page, "In the band service")).toHaveText(/^\d+ of 4$/)
+  await expect(fact(page, "In the cloud")).toHaveCount(0)
+})
+
 test("a narrow window keeps the most needed figures and the button", async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 760 })
-  await openGo(page)
+  await openGo(page, undefined, "window.__CLOUD_DIR__ = '/cloud';")
   // The figures give way to the name, the least needed first: the ones that
   // show are the front of this list, whatever the room.
   const order = ["Length", "Takes", "In the cloud", "On disk"]

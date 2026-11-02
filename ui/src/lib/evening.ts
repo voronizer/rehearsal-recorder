@@ -1,21 +1,23 @@
 import type { SendTo, Take } from "@/lib/api"
 import { formatDuration, songsLabel } from "@/lib/format"
+import { isIn } from "@/lib/sending"
 
 /** What the header says about an evening, counted from its takes. */
-export type EveningFacts = { seconds: number; takes: number; songs: number; inCloud: number }
+export type EveningFacts = { seconds: number; takes: number; songs: number; sent: number }
 
-/** Counted from the takes on screen, so a take kept, deleted or copied to
- *  the cloud changes the header at once. */
-export function eveningOf(takes: Take[]): EveningFacts {
+/** Counted from the takes on screen, so a take kept, deleted or sent
+ *  changes the header at once. `sent` is how many are where takes go,
+ *  the cloud folder or the band service (`place`). */
+export function eveningOf(takes: Take[], place: SendTo = "cloud"): EveningFacts {
   const songs = new Set<string>()
   let seconds = 0
-  let inCloud = 0
+  let sent = 0
   for (const take of takes) {
     seconds += take.duration_sec
     if (take.song) songs.add(take.song)
-    if (take.cloud?.mix || take.cloud?.tracks) inCloud += 1
+    if (isIn(take, place)) sent += 1
   }
-  return { seconds, takes: takes.length, songs: songs.size, inCloud }
+  return { seconds, takes: takes.length, songs: songs.size, sent }
 }
 
 /** "45 min"; an evening of a few seconds is "<1 min", not "0 min". */

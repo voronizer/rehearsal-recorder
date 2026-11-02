@@ -144,14 +144,21 @@ test("the labels are one group, each row on the shared pieces", async ({ page })
 
     for (const name of ["Note", "Keep this", "Went wrong", "Do again"]) {
       const at = row(page, name)
-      // The grip, the dot and the name are the shared Button, with no fill.
-      for (const what of [`Move ${name}`, `Colour of ${name}`, `Rename ${name}`]) {
+      // The grip and the dot are the shared Button, the dot in a frame so it
+      // reads as one that opens the colours; the name is in a field and
+      // Delete is there, as in the band service.
+      for (const [what, variant, size] of [
+        [`Move ${name}`, "ghost", "icon-tiny"],
+        [`Colour of ${name}`, "outline", "icon-row"],
+      ] as const) {
         const b = at.getByRole("button", { name: what, exact: true })
         expect(await b.evaluate((e) => e.tagName), what).toBe("BUTTON")
-        await expect(b, what).toHaveAttribute("data-variant", "ghost")
-        const size = what.startsWith("Rename") ? "row" : what.startsWith("Move") ? "icon-tiny" : "icon-row"
+        await expect(b, what).toHaveAttribute("data-variant", variant)
         await expect(b, what).toHaveAttribute("data-size", size)
       }
+      await expect(at.getByRole("textbox", { name: `Name of ${name}` })).toHaveValue(name)
+      await page.mouse.move(0, 0)
+      if (name !== "Note") await expect(at.getByRole("button", { name: `Delete ${name}` })).toHaveCSS("opacity", "1")
       // The grip 24 px, the dot's 32 px as Delete is (#17); in the dot's, the
       // shared 8 px dot, in the middle.
       for (const [what, px] of [[`Move ${name}`, 24], [`Colour of ${name}`, 32]] as const) {
@@ -232,7 +239,7 @@ test("the colour picker is a pick-one of eight, the label's colour chosen", asyn
   await expect(row(page, "Riff").locator("[data-colour]")).toHaveAttribute("data-colour", "violet")
 })
 
-test("a long label name at 960x680 and 150 % is cut, whole in its tip", async ({ page }) => {
+test("a long label name at 960x680 and 150 % stays whole in its field, one line", async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 680 })
   // In capitals, so the 40 letters a name may have are too wide for the row
   // in whichever sans-serif the machine draws with: Linux runners differ.
@@ -242,27 +249,15 @@ test("a long label name at 960x680 and 150 % is cut, whole in its tip", async ({
     scaled(1.5) +
       `window.__LABELS__ = [{id:1, name:'Note', colour:'grey'}, {id:2, name:${JSON.stringify(long)}, colour:'violet'}];`
   )
-  const rename = page.getByRole("button", { name: `Rename ${long}` })
-  const name = rename.getByText(long, { exact: true })
-  await expect(name).toHaveText(long)
-  expect(await name.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+  const field = page.getByRole("textbox", { name: `Name of ${long}` })
+  await expect(field).toHaveValue(long)
+  expect(await field.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
   // On one line, as tall as a short name's row.
   expect((await box(row(page, long))).height).toBeCloseTo((await box(row(page, "Note"))).height, 0)
-  // The shared tip, not the browser's own, on hover and on keyboard focus.
-  const tip = page.locator("[data-whole][data-state$='open']")
   await expect(page.locator("[data-tab-body] [title]")).toHaveCount(0)
-  await name.hover()
-  await expect(tip).toHaveText(long)
-  await page.mouse.move(0, 0, { steps: 8 })
-  await expect(tip).toHaveCount(0)
-  await page.getByRole("button", { name: `Colour of ${long}` }).focus()
-  await page.keyboard.press("Tab")
-  await expect(rename).toBeFocused()
-  await expect(tip).toHaveText(long)
-  await page.keyboard.press("Tab")
-  await expect(tip).toHaveCount(0)
   // Its count and Delete keep their room.
   await expect(row(page, long).getByText("1 mark", { exact: true })).toBeVisible()
+  await expect(row(page, long).getByRole("button", { name: `Delete ${long}` })).toBeVisible()
   const tab = page.locator("[data-tab-body]")
   expect(await tab.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
 })
@@ -290,18 +285,34 @@ test("a name another label has is refused, and says why", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "New label name" })).toHaveValue("keep THIS")
 })
 
-test("a label renamed with Enter; Escape leaves it as it was", async ({ page }) => {
+test("a label renamed in its field with Enter or by leaving it; Escape leaves it as it was", async ({ page }) => {
   await openMarks(page)
-  await page.getByRole("button", { name: "Rename Note" }).click()
-  await page.getByRole("textbox", { name: "Label name" }).fill("Idea")
-  await page.getByRole("textbox", { name: "Label name" }).press("Escape")
-  await expect(row(page, "Note")).toBeVisible()
+  const field = page.getByRole("textbox", { name: "Name of Note" })
+  await field.fill("Idea")
+  await field.press("Escape")
+  await expect(field).toHaveValue("Note")
+  await field.blur()
   expect(await callCount(page, "rename_label")).toBe(0)
-  await page.getByRole("button", { name: "Rename Note" }).click()
-  await page.getByRole("textbox", { name: "Label name" }).fill("Idea")
-  await page.getByRole("textbox", { name: "Label name" }).press("Enter")
+  await field.fill("Idea")
+  await field.press("Enter")
   await expect(row(page, "Idea")).toBeVisible()
   expect((await calls(page, "rename_label")).at(-1)?.args).toEqual([1, "Idea"])
+  const again = page.getByRole("textbox", { name: "Name of Idea" })
+  await again.fill("Thought")
+  await again.blur()
+  await expect(row(page, "Thought")).toBeVisible()
+  expect((await calls(page, "rename_label")).at(-1)?.args).toEqual([1, "Thought"])
+})
+
+test("a rename to a name another label has is refused, and leaving puts the name back", async ({ page }) => {
+  await openMarks(page)
+  const field = page.getByRole("textbox", { name: "Name of Note" })
+  await field.fill("keep THIS")
+  await field.press("Enter")
+  await expect(page.getByText("There is already a label called Keep this")).toBeVisible()
+  await expect(field).toHaveValue("keep THIS")
+  await field.blur()
+  await expect(field).toHaveValue("Note")
 })
 
 test("a label recoloured recolours its marks, in the overview and on the waveform", async ({

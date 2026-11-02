@@ -179,6 +179,10 @@ class Take(Base):
     tempo: Mapped[int | None] = mapped_column(Integer, nullable=True)
     signature: Mapped[str | None] = mapped_column(String, nullable=True)
     click: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Its wave as the lists draw it (audio/waveform.take_shape, migration
+    # 0012): made from its files the first time it is shown, then kept, and
+    # let go when its length changes (a crop, or one undone). None until made.
+    shape: Mapped[list | None] = mapped_column(JSON(none_as_null=True), nullable=True)
 
     rehearsal: Mapped[Rehearsal] = relationship(back_populates="takes")
     song: Mapped["Song | None"] = relationship()

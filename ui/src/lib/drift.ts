@@ -236,13 +236,13 @@ export type DriftTag = {
 export function driftTag(drift: Extract<TakeDrift, { ok: true }>): DriftTag {
   const { tempo, signature, from, song } = drift.aim
   const lead =
-    from === "click" ? "Click" : from === "take" ? "No click ·" : from === "song" ? (song ?? "") : "No tempo · middle"
+    from === "click" ? "Click" : from === "take" ? "No click ·" : from === "song" ? (song ?? "") : "No tempo set · about"
   return {
     lead,
     tempo,
     signature,
     meter: from === "click" || from === "take",
-    tail: drift.source === "mix" ? " · from the mix" : "",
+    tail: drift.source === "mix" ? " · from the whole band" : "",
   }
 }
 

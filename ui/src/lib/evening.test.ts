@@ -25,11 +25,17 @@ function take(n: number, song: string | null, seconds: number, inCloud = false):
 describe("eveningOf", () => {
   it("adds up the takes, the songs and what is in the cloud", () => {
     const takes = [take(1, "Pałyn", 60, true), take(2, "Pałyn", 90), take(3, null, 30)]
-    expect(eveningOf(takes)).toEqual({ seconds: 180, takes: 3, songs: 1, inCloud: 1 })
+    expect(eveningOf(takes)).toEqual({ seconds: 180, takes: 3, songs: 1, sent: 1 })
   })
   it("counts a take whose tracks alone are in the cloud", () => {
     const t = { ...take(1, null, 10), cloud: { tracks: "Jam/Take 1" } }
-    expect(eveningOf([t]).inCloud).toBe(1)
+    expect(eveningOf([t]).sent).toBe(1)
+  })
+  it("counts what is in the band service when takes go there", () => {
+    const up: Take = { ...take(1, "Pałyn", 60), service: { up: true, flac: false, error: null } }
+    const failed: Take = { ...take(2, "Pałyn", 60, true), service: { up: false, flac: false, error: "Gone" } }
+    expect(eveningOf([up, failed], "service").sent).toBe(1)
+    expect(eveningOf([up, failed]).sent).toBe(1)
   })
 })
 
@@ -43,11 +49,11 @@ describe("lengthLabel", () => {
 
 describe("takesLine", () => {
   it("is the takes and how many songs they are", () => {
-    expect(takesLine({ seconds: 0, takes: 11, songs: 4, inCloud: 0 })).toBe("11, 4 songs")
-    expect(takesLine({ seconds: 0, takes: 2, songs: 1, inCloud: 0 })).toBe("2, 1 song")
+    expect(takesLine({ seconds: 0, takes: 11, songs: 4, sent: 0 })).toBe("11, 4 songs")
+    expect(takesLine({ seconds: 0, takes: 2, songs: 1, sent: 0 })).toBe("2, 1 song")
   })
   it("is the takes alone when none has a song", () => {
-    expect(takesLine({ seconds: 0, takes: 2, songs: 0, inCloud: 0 })).toBe("2")
+    expect(takesLine({ seconds: 0, takes: 2, songs: 0, sent: 0 })).toBe("2")
   })
 })
 

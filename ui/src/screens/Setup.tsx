@@ -3,6 +3,7 @@ import {
   Activity,
   AudioLines,
   Check,
+  ChevronRight,
   History,
   PanelLeftOpen,
   Plus,
@@ -178,7 +179,7 @@ export function Setup({
   // song, to listen to before starting. Takes from several rehearsals, so
   // two takes 2 are told apart by their files.
   const [lastTime, setLastTime] = useState<LastTimeData | null>(null)
-  const { cued, playInOverview, uncue, player } = useTakeStripPlayer(byFiles)
+  const { cued, playInOverview, cueAt, uncue, player } = useTakeStripPlayer(byFiles)
   // In a window too narrow for it beside the setup (lib/wide), Last time is
   // a panel from the left, opened by its button in the header (Q4). The
   // player is the screen's, not the panel's: a take plays on as it closes.
@@ -770,6 +771,10 @@ export function Setup({
     if (checking) void stopCheck()
     playInOverview(take)
   })
+  const playLastTimeAt = useSteady((take: Take, at: number) => {
+    if (checking) void stopCheck()
+    cueAt(take, at)
+  })
   const openRehearsal = useSteady((folder: string) => onOpenRehearsal(folder))
   const openSong = useSteady((title: string | null) => onOpenSong?.(title))
   const pastPlayback = useMemo(
@@ -876,7 +881,9 @@ export function Setup({
   // last thing filled in before starting.
   const nameField = (
     <div className="flex items-center gap-3">
-      <Label htmlFor="rehearsal-name" className="shrink-0">
+      {/* The last to go in a footer short of room: the name in the field
+          says what it is. */}
+      <Label htmlFor="rehearsal-name" data-squeeze-quiet="3" className="shrink-0">
         Rehearsal name
       </Label>
       <Input
@@ -884,7 +891,9 @@ export function Setup({
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Rehearsal"
-        className="max-w-sm"
+        // Squeezed past this, the footer gives up the set's name instead
+        // (FooterRow's squeeze): a name field showing "Rehears" looks broken.
+        className="max-w-sm min-w-48"
       />
     </div>
   )
@@ -940,6 +949,9 @@ export function Setup({
             tip={false}
             className="tnum text-right text-xs text-muted-foreground"
           />
+          {/* It opens Settings, as a row in a list of places does: without
+              it the box reads as a field to look at. */}
+          <ChevronRight className="-mr-1 size-4 shrink-0 self-center text-muted-foreground" />
         </Button>
       </WholeTip>
       {!device && missing ? (
@@ -978,7 +990,7 @@ export function Setup({
         </div>
       ) : (
         <p className="col-start-2 text-xs text-muted-foreground">
-          Change it in Settings. It belongs to the room, not to one rehearsal.
+          Click to change it in Settings. It belongs to the room, not to one rehearsal.
         </p>
       )}
     </div>
@@ -1211,6 +1223,7 @@ export function Setup({
       playback={pastPlayback}
       problem={cued ? player.loadError : null}
       onPlay={playLastTime}
+      onPlayAt={playLastTimeAt}
       onOpen={openRehearsal}
       onOpenSong={onOpenSong ? openSong : undefined}
     />
@@ -1284,7 +1297,7 @@ export function Setup({
       className={cn("p-0", wide && "flex overflow-hidden")}
       footer={
         <div className="animate-rise" style={rise(2)}>
-          <FooterRow rule left={nameField}>
+          <FooterRow rule squeeze={3} left={nameField}>
             <div className="flex items-center gap-3">
               <SetPicker
                 sets={sets.sets}

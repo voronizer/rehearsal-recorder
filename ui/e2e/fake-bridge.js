@@ -326,6 +326,22 @@ async function labelsAsSent() {
   });
 }
 
+// A take's wave, made up: the same take always looks the same. A song is
+// quiet in its first seconds, has two loud parts and dies away; a take under
+// half a minute is one short burst. Each value is jittered by the take's own
+// seed, so two takes of one song differ.
+function fakeShape(key, seconds) {
+  let seed = 0;
+  for (const c of key) seed = (seed * 31 + c.charCodeAt(0)) % 233280;
+  const next = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const loud = (x) => seconds < 30
+    ? 0.35 + 0.6 * Math.sin(Math.PI * Math.min(1, x * 1.2))
+    : x < 0.05 ? 0.25 : x < 0.3 ? 0.55 : x < 0.45 ? 0.9 : x < 0.62 ? 0.6 : x < 0.82 ? 0.95 : x < 0.94 ? 0.65 : 0.3;
+  const out = Array.from({length: 120}, (_, i) => loud(i / 120) * (0.7 + 0.3 * next()));
+  const top = Math.max(...out);
+  return out.map(v => Math.round((v / top) * 100) / 100);
+}
+
 function pastRehearsal(folder) {
   if (folder === '/rec/quiet') {
     const takes = [
@@ -1896,6 +1912,20 @@ window.__MAKE_API__ = () => ({
               ...midiPortInfo(name, all.filter(n => n === name).length > 1 ? i + 1 : 0), notes: notes(name)})))};
   }),
   midi_activity: async () => midiActivity(true),
+  // Each take's wave for the lists, as api.take_shapes answers: 120 values
+  // made up from where the take is (fakeShape), None for a take not there.
+  // window.__SHAPES__ = false answers [] for every take: nothing to draw yet.
+  take_shapes: track('take_shapes', async (items) => {
+    await held('take_shapes');
+    const all = await libraryNow();
+    return {ok: true, shapes: (items || []).map(({folder, take_number: n}) => {
+      const takes = session && folder === session.folder ? session.takes
+        : all.find(r => r.folder === folder)?.takes ?? pastRehearsal(folder).takes;
+      const take = takes.find(t => t.take_number === n);
+      if (!take) return null;
+      return window.__SHAPES__ === false ? [] : fakeShape(`${folder}#${n}`, take.duration_sec);
+    })};
+  }),
   // The notes of a take's tracks, a kit pattern for the drums and a keyboard
   // line for the rest, as long as the take (api.take_notes). Each answer, an
   // error too, carries the file's icon, as take_media's does: the one the

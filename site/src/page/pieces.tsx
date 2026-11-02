@@ -194,6 +194,7 @@ function Goes({ last, song, only }: { last: RehearsalDetail; song: string; only?
     <RehearsalOverview
       takes={takes}
       songs={songs}
+      folder={last.folder}
       playback={null}
       onPlay={nothing}
       onOpen={nothing}

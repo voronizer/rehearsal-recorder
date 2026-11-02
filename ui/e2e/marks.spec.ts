@@ -860,12 +860,12 @@ test.describe("Marks in History", () => {
     await chooseLabel(page, 3, "Went wrong")
     const gone = row(page, GONE)
     await expect(gone).toHaveAttribute("data-missing", "true")
-    // Said in red, as everywhere a folder is gone, and its take's bar is the
-    // dashed one.
+    // Said in red, as everywhere a folder is gone, and its take's wave is the
+    // pale one.
     const said = gone.getByText("Not found on disk", { exact: true })
     await expect(said).toBeVisible()
     expect((await style(said, "color")).color).toBe(await colour(page, "--destructive"))
-    expect((await style(gone.locator("[data-take-bar]"), "border-top-style"))["border-top-style"]).toBe("dashed")
+    await expect(gone.locator("[data-wave]")).toHaveAttribute("data-wave", "quiet")
     await expect(gone.getByRole("button", { name: "Pałyn 8 from 0:55 is not on disk" })).toBeDisabled()
     const reads = (await calls(page, "get_rehearsal")).length
     await gone.locator("[data-line='comment']").click()
@@ -1029,7 +1029,7 @@ test.describe("Marks in History", () => {
     expect(Math.min(at.x, said.x) - box.x).toBeGreaterThanOrEqual(24 * 1.5 - 0.5)
     expect(box.x + box.width - (at.x + at.width)).toBeCloseTo(24 * 1.5, 0)
     expect(said.height).toBeCloseTo(parseFloat((await style(words, "line-height"))["line-height"]), 0)
-    // Where the rows are narrow, the bars go under the take's line, so a
+    // Where the rows are narrow, the waves go under the take's line, so a
     // comment keeps 10rem at least.
     const room = await group
       .locator("[data-line='comment']")
@@ -1037,11 +1037,11 @@ test.describe("Marks in History", () => {
     expect(room).toBeGreaterThanOrEqual(10 * 16 * 1.5)
     // The takes are drawn to one scale in rem: the longest 7.5rem, none
     // under 6 px.
-    const bars = await group
-      .locator("[data-take-bar]")
+    const waves = await group
+      .locator("[data-wave]")
       .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width))
-    expect(Math.max(...bars)).toBeCloseTo(7.5 * 16 * 1.5, 0)
-    expect(Math.min(...bars)).toBeGreaterThanOrEqual(6)
+    expect(Math.max(...waves)).toBeCloseTo(7.5 * 16 * 1.5, 0)
+    expect(Math.min(...waves)).toBeGreaterThanOrEqual(6)
 
     // The long rehearsal's title takes two lines, then is cut, whole in its
     // tip; its count stays beside it.

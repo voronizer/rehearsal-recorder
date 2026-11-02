@@ -98,3 +98,42 @@ def wav_peaks(path, buckets=DEFAULT_BUCKETS, start_sec=None, end_sec=None):
         frames,
         samplerate,
     )
+
+
+# A take's wave in a list (take_shape): this many values, as the band
+# service draws its own (service/worker/takes/shape.ts), from this many
+# peaks of each track, which is what РЭХА sends it (sending/service_files.py).
+SHAPE = 120
+SHAPE_PEAKS = 1200
+
+
+def take_shape(paths):
+    """
+    A take's wave as a row of the lists draws it: SHAPE values in 0..1, at
+    each moment the loudest of its tracks, scaled to the take's own loudest,
+    so a quiet take still shows its shape. The band service makes the same
+    from the peaks РЭХА sends it, so a take looks the same in both.
+
+    Returns (shape, whole): `whole` is False when a file could not be read
+    (not there, a drive away), and the shape is then of the rest, or [] with
+    none; it is drawn but not kept, so it is made again once the files are
+    back. A take with no audio at all is [] and whole.
+    """
+    rows = []
+    whole = True
+    for path in paths:
+        try:
+            peaks, _, _ = wav_peaks(path, buckets=SHAPE_PEAKS)
+        except Exception as e:
+            whole = False
+            print(f"[waveform] {getattr(path, 'name', path)}: {e}")
+            continue
+        if peaks:
+            rows.append(np.max(np.asarray(peaks, dtype=np.float32), axis=0))
+    if not rows:
+        return [], whole
+    joined = np.max(np.stack(rows), axis=0).reshape(SHAPE, -1).max(axis=1)
+    top = float(joined.max())
+    if top <= 0:
+        return [0.0] * SHAPE, whole
+    return [round(float(v) / top, 2) for v in joined], whole

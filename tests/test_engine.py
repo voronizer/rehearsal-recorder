@@ -14659,6 +14659,41 @@ def main():
     a91.set_take_star(folder91, 7, True)
     ok("a star in an older rehearsal sends nothing", 7 not in cloud91.states(folder91))
 
+    print("\n[92] A take's wave in the lists")
+    # A take's row is drawn as its wave: at each moment the loudest of its
+    # tracks, scaled to the take's own loudest, as the band service draws it.
+    from rehearsal_recorder.audio.waveform import SHAPE, take_shape
+    tmp92 = Path(tempfile.mkdtemp())
+    for name92, first92, second92 in (("early.wav", 4000, 0), ("late.wav", 0, 8000)):
+        with wave.open(str(tmp92 / name92), "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(SR)
+            w.writeframes(struct.pack("<h", first92) * SR)
+            w.writeframes(struct.pack("<h", second92) * SR)
+    shape92, whole92 = take_shape([tmp92 / "early.wav", tmp92 / "late.wav"])
+    ok("a take's wave has 120 values", whole92 and len(shape92) == SHAPE == 120)
+    ok("each half is the loudest track there, scaled to the take's loudest",
+       shape92[0] == 0.5 and shape92[-1] == 1.0)
+    missing92, whole92 = take_shape([tmp92 / "early.wav", tmp92 / "gone.wav"])
+    ok("with a file missing it is drawn from the rest, and said not to be whole",
+       not whole92 and missing92[0] == 1.0)
+    ok("with no file at all it is empty", take_shape([]) == ([], True))
+
+    root92 = Path(tempfile.mkdtemp())
+    _, a92 = fresh_api(root92)
+    a92.start_rehearsal("Evening", None, SR, [{"name": "A", "channel": 1}], 16)
+    folder92 = a92._session["folder"]
+    d92 = root92 / "draft 1"
+    write_wav(d92 / "A.wav", 1000)
+    a92.keep_take(1, str(d92), "Polyn", 2.0, [{"name": "A", "file": str(d92 / "A.wav")}], [], None)
+    asked92 = a92.take_shapes([{"folder": folder92, "take_number": 1},
+                               {"folder": folder92, "take_number": 5},
+                               {"folder": str(root92 / "elsewhere"), "take_number": 1},
+                               {"take_number": 1}])
+    ok("the interface gets a wave for a kept take, None for one that is not there",
+       asked92["ok"] and len(asked92["shapes"][0]) == 120 and asked92["shapes"][1:] == [None, None, None])
+
     print("\n" + "=" * 60)
     if problems:
         print("PROBLEMS:")

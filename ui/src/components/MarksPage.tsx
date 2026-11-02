@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription } from "@/components/ui/empty"
 import { Item } from "@/components/ui/item"
-import { LabelDot, MarkTick } from "@/components/ui/mark"
+import { LabelDot } from "@/components/ui/mark"
+import { TakeWave } from "@/components/ui/take-wave"
 import { PlayButton } from "@/components/ui/play-button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { useCut, Whole, WholeTip } from "@/components/ui/whole"
@@ -19,7 +20,8 @@ import {
 } from "@/lib/marks"
 import { rise } from "@/lib/motion"
 import { playLook } from "@/lib/playLook"
-import { drawnLength, TAKE_FILLS } from "@/lib/takeScale"
+import { drawnLength } from "@/lib/takeScale"
+import { useShape } from "@/lib/shapes"
 import { PaneHead } from "@/components/PaneHead"
 import { NameLink, SongName } from "@/components/SongName"
 
@@ -59,8 +61,9 @@ export type MarkPlayback = {
  *
  * Under the head, one group: "Group by" in its head row, then a part per
  * rehearsal or song, split by lines; one list is one part with no title.
- * ▶ plays a mark's take here from just before it; the comment, or a click on
- * the row, opens the take in the player at the mark. A mark of a rehearsal
+ * ▶ plays a mark's take here from just before it, and a press on its wave
+ * from there; the comment, or a click on the row, opens the take in the
+ * player at the mark. A mark of a rehearsal
  * not on disk is listed, greyed, with nothing to play or open.
  */
 export function MarksPage({
@@ -70,6 +73,7 @@ export function MarksPage({
   onGrouping,
   playing,
   onPlay,
+  onPlayAt,
   onOpen,
   onOpenSong,
   onOpenRehearsal,
@@ -80,6 +84,8 @@ export function MarksPage({
   onGrouping: (grouping: MarksGrouping) => void
   playing: MarkPlayback | null
   onPlay: (mark: MarkHit) => void
+  /** Plays a mark's take here from a spot: a press on its wave. */
+  onPlayAt?: (mark: MarkHit, at: number) => void
   onOpen: (mark: MarkHit) => void
   onOpenSong: (title: string | null) => void
   onOpenRehearsal: (folder: string) => void
@@ -161,6 +167,7 @@ export function MarksPage({
                     longest={longest}
                     here={playing && playing.key === markKey(m) ? playing : null}
                     onPlay={onPlay}
+                    onPlayAt={onPlayAt}
                     onOpen={onOpen}
                     onOpenSong={onOpenSong}
                   />
@@ -212,6 +219,7 @@ function MarkRow({
   longest,
   here,
   onPlay,
+  onPlayAt,
   onOpen,
   onOpenSong,
 }: {
@@ -221,6 +229,7 @@ function MarkRow({
   longest: number
   here: MarkPlayback | null
   onPlay: (mark: MarkHit) => void
+  onPlayAt?: (mark: MarkHit, at: number) => void
   onOpen: (mark: MarkHit) => void
   onOpenSong: (title: string | null) => void
 }) {
@@ -228,9 +237,8 @@ function MarkRow({
   const said = m.note.trim()
   const comment = said || label.name
   const length = m.duration_sec || 0
-  // The mark is kept off the bar's very ends, where its frame would hide it.
-  const along = (sec: number) => (length > 0 ? Math.min(98.5, Math.max(1, (100 * sec) / length)) : 0)
-  const played = here && length > 0 ? Math.min(100, Math.max(0, (100 * here.position) / length)) : null
+  const played = here && length > 0 ? Math.min(1, Math.max(0, here.position / length)) : null
+  const shape = useShape(m.folder, m)
   // Playing, its ▶ has Space while Settings › Keys has it on.
   const spaceKeys = useKeysOn("space")
   return (
@@ -239,7 +247,7 @@ function MarkRow({
       data-mark={markKey(m)}
       data-missing={m.missing || undefined}
       onClick={(e) => {
-        if (!m.missing && !(e.target as HTMLElement).closest("button")) onOpen(m)
+        if (!m.missing && !(e.target as HTMLElement).closest("button, [data-wave]")) onOpen(m)
       }}
       className={cn(
         "-mx-2 grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-2 py-1.5",
@@ -296,29 +304,22 @@ function MarkRow({
       </div>
 
       <div className={cn("flex items-center gap-2.5", NARROW.bar)}>
-        {/* The bars line up in a column as wide as the longest. A picture:
-            the length beside it says it in words. */}
+        {/* The waves line up in a column as wide as the longest. A picture:
+            the length beside it says it in words. A press plays the take
+            from there. */}
         <span className="w-30">
-          <span
-            data-take-bar
-            aria-hidden
-            className={cn(
-              "relative block h-6 overflow-hidden rounded-sm border",
-              m.missing ? TAKE_FILLS.quiet : TAKE_FILLS.rest
-            )}
-            // Never under 6 px, as on a song's ladder; its least, 0.5rem, is
-            // 7.2 px at the 90 % scale.
-            style={{ width: `max(6px, ${drawnLength(length, longest, 7.5, 0.5)}rem)` }}
-          >
-            <MarkTick colour={label.colour} at={along(m.at)} className="inset-y-1" />
-            {played !== null && (
-              <span
-                data-playhead
-                className="absolute inset-y-px w-0.5 rounded-sm bg-foreground"
-                style={{ left: `${played}%` }}
-              />
-            )}
-          </span>
+          <TakeWave
+            shape={shape}
+            duration={length}
+            played={played}
+            quiet={m.missing}
+            marks={[{ at: m.at, colour: label.colour }]}
+            onPress={m.missing || !onPlayAt ? undefined : (at) => onPlayAt(m, at)}
+            className="h-6"
+            // Never under 2rem, TakeWave's least, so a short take's wave is
+            // still there to press; its length beside it says the rest.
+            style={{ width: `${drawnLength(length, longest, 7.5, 0.5)}rem` }}
+          />
         </span>
         <span className="tnum w-10 text-right text-xs">{formatClock(length)}</span>
       </div>
