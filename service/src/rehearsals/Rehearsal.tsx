@@ -8,8 +8,9 @@ import { TakeLine } from "../takes/parts"
 
 /**
  * A rehearsal's page: its takes by song, in the order they were played,
- * each song a fold with **The song** at its right. Takes nobody named a
- * song are under **Not named**, last. Each take has its marks under it.
+ * each song a fold with **Notes and files** at its right. Takes nobody
+ * named a song are under **Not named**, last. Each take has its marks
+ * under it.
  */
 export function Rehearsal() {
   const { uid } = useParams({ from: "/band/rehearsals/$uid" })
@@ -41,8 +42,9 @@ export function Rehearsal() {
             fold="open"
             action={
               id !== null && (
+                // Says what it opens: the song's panel, with what a rehearsal needs from it.
                 <Button variant="ghost" size="row" onClick={() => open({ kind: "song", id })}>
-                  The song
+                  Notes and files
                 </Button>
               )
             }

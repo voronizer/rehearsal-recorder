@@ -21,7 +21,7 @@ test("rehearsals come by month, and a rehearsal's takes by song", async ({ page 
   await expect(viasna12).toContainText("The bridge drags here")
   await expect(viasna12).toContainText("Fill too long?")
 
-  await page.getByRole("region", { name: "Viasna", exact: true }).getByRole("button", { name: "The song" }).click()
+  await page.getByRole("region", { name: "Viasna", exact: true }).getByRole("button", { name: "Notes and files" }).click()
   await expect(page.getByLabel("Panel").getByRole("heading", { level: 2 }).first()).toHaveText("Viasna")
   await page.getByRole("link", { name: "Rehearsals" }).first().click()
   await expect(page).toHaveURL("/rehearsals")
