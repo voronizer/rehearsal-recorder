@@ -58,6 +58,9 @@ opening.
   where you are, not on the server's clock, so one set at half past
   midnight no longer shows the day before. The same goes for a take put in
   the **Trash**.
+- **A rehearsal's page opens whole.** Opened from a link, it no longer
+  shows its takes for a moment without their songs' titles and then draws
+  them again.
 - **Smaller things.** A song's key can be changed on its page, next to its
   status. Each page names itself in the browser's tab, with РЭХА's icon. A
   page that cannot load says so, with **Try again**.

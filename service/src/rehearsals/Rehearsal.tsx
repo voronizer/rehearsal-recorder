@@ -19,9 +19,12 @@ export function Rehearsal() {
   const songs = useSongs()
   const { open } = usePanel()
   if (page.error) return <Trouble error={page.error} retry={() => void page.refetch()} />
-  if (!page.data) return null
+  if (songs.error) return <Trouble error={songs.error} retry={() => void songs.refetch()} />
+  // The takes go under their songs' titles. Drawn before the titles came,
+  // they would stand with no headings and be drawn again once they did.
+  if (!page.data || !songs.data) return null
   const { rehearsal, takes } = page.data
-  const titles = new Map((songs.data?.songs ?? []).map((s) => [s.id, s.title]))
+  const titles = new Map(songs.data.songs.map((s) => [s.id, s.title]))
   const ids = [...new Set(takes.map((t) => t.song_id).filter((id) => id !== null))]
   const groups: [number | null, TakeRow[]][] = ids.map((id) => [id, takes.filter((t) => t.song_id === id)])
   const loose = takes.filter((t) => t.song_id === null)
