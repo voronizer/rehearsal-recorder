@@ -727,6 +727,9 @@ export type PlayerState = {
   ok?: boolean
   error?: string
   playing?: boolean
+  /** Asked to play and not heard yet, while the files come (the band
+   *  service): the playhead stays where it is. Python never says it. */
+  waiting?: boolean
   position?: number
   duration?: number
   finished?: boolean

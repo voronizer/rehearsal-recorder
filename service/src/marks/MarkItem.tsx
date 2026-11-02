@@ -56,7 +56,7 @@ function LabelSelect({ value, onChange }: { value: number | undefined; onChange:
 }
 
 /** A mark's label and note, being written or changed. */
-function MarkForm({
+export function MarkForm({
   title,
   label,
   note,

@@ -1,9 +1,14 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { usePlayer } from "../takes/player/one"
 
-/** What the panel from the right holds: a take (with a new mark at `markAt`), a song, or one of the band's lists. */
+/**
+ * What the panel from the right holds: a take (with a new mark at
+ * `markAt`), one mark of a take (`id`) or a new one at `at`, a song, or one
+ * of the band's lists.
+ */
 export type Panel =
   | { kind: "take"; uid: string; markAt?: number }
+  | { kind: "mark"; uid: string; id?: number; at?: number }
   | { kind: "song"; id: number }
   | { kind: "labels" }
   | { kind: "statuses" }

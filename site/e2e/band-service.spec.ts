@@ -45,7 +45,7 @@ for (const theme of ["light", "dark"] as const) {
       expect(await img.evaluate((el: HTMLImageElement, theme) => [el.naturalWidth >= el.width, el.currentSrc.includes(`-${theme}-`)], theme)).toEqual([true, true])
     }
     // The caption names what to look at, and is the picture's name for a screen reader.
-    await expect(page.getByRole("img", { name: /^Viasna 12 with S pressed on the guitar's lane/ })).toBeVisible()
+    await expect(page.getByRole("img", { name: /^Viasna 12 on Ivan's phone: a row for each track with its level, M and S/ })).toBeVisible()
   })
 }
 

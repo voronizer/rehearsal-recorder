@@ -110,8 +110,11 @@ export function TakePlayer({
   goKeys = false,
   status,
   rising = false,
+  master = true,
 }: {
   player: MultitrackPlayer
+  /** Master's row under the tracks; the band's service leaves it out. */
+  master?: boolean
   /** The take's click: its tempo, its signature, and whether it was
    *  recorded to the click, for Master's button and stripes; and its files
    *  and song, for the band's tempo along Master's lane. */
@@ -183,6 +186,7 @@ export function TakePlayer({
       >
         <Timeline
           player={player}
+          master={master}
           take={take}
           drift={drift}
           markers={markers}
@@ -212,9 +216,10 @@ export function TakePlayer({
         {markers.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Marks</span>
-            {markers.map((m) => (
+            {/* In the band's service two people can mark the same second. */}
+            {markers.map((m, i) => (
               <MarkChip
-                key={m.at}
+                key={`${m.at}:${i}`}
                 marker={m}
                 onSeek={player.seek}
                 onEdit={onEditMarker}
