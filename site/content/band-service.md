@@ -29,7 +29,7 @@ Listen on the way home, while you still remember what you meant to play.
 
 Each of you has a track of your own in every take. Play yours alone to hear what you really did, or mute it and practise along with the band as it played that night.
 
-The levels are yours as well. Ivan turned his guitar up once, and now it is up in every take he plays, on his phone and on the computer at home. Only he hears it that way. Ira still hears the mix РЭХА sent, unless she turns her vocals up for herself. **РЭХА's levels** puts the mix back.
+The levels are yours as well. Turn a track up or down once, and it plays that way for you in every take with a track of that name, on the phone and on the computer. Only you hear it that way; for the others nothing changes. **РЭХА's levels** brings back the mix the take came with.
 
 ![Viasna 12 on Ivan's phone: a row for each track with its level, M and S, and the guitar turned all the way up. “Your levels. Only you hear them.”](lanes)
 
