@@ -329,20 +329,6 @@ export const star = sqliteTable(
   (table) => [primaryKey({ columns: [table.takeUid, table.memberId] })]
 )
 
-export const seen = sqliteTable(
-  "seen",
-  {
-    memberId: text("member_id")
-      .notNull()
-      .references(() => user.id),
-    takeUid: text("take_uid")
-      .notNull()
-      .references(() => take.uid, { onDelete: "cascade" }),
-    seenAt: text("seen_at").notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.memberId, table.takeUid] })]
-)
-
 /** The band chat's messages that may still take additions. */
 export const chat = sqliteTable("chat", {
   id: integer("id").primaryKey(),

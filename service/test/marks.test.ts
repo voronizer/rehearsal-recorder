@@ -10,7 +10,6 @@ import {
   markAt,
   member,
   named,
-  open,
   patch,
   post,
   read,
@@ -32,7 +31,6 @@ type Mark = {
   from_reha: boolean
   closed: boolean
   mine: boolean
-  is_new: boolean
   take: { uid: string; name: string; song_title: string | null }
   comments: { id: number; author: string; text: string; mine: boolean }[]
 }
@@ -135,28 +133,6 @@ test("comments under a mark: added by anyone, changed and deleted by who wrote t
   // A comment is not a mark, and a mark is not a comment.
   expect((await patch(`/api/marks/${said.id}`, { closed: true }, ivan)).status).toBe(404)
   expect((await patch(`/api/comments/${mark.id}`, { text: "x" }, ira)).status).toBe(404)
-})
-
-test("a mark set or commented on after you heard its take is new until you open it again", async () => {
-  const { owner, ira, ivan } = await band()
-  const uid = await shownTake()
-  const early = await markAt(ira, uid, 10, "Before Alex heard it")
-  await open(owner, uid)
-  expect((await takePage(owner, uid)).marks.map((m) => m.is_new)).toEqual([false])
-
-  const late = await markAt(ira, uid, 20, "After")
-  await commentOn(ivan, early.id, "Agreed")
-  await markAt(owner, uid, 30, "My own")
-  const marks = (await takePage(owner, uid)).marks
-  expect(marks.map((m) => [m.note, m.is_new])).toEqual([
-    ["Before Alex heard it", true],
-    ["After", true],
-    ["My own", false],
-  ])
-  expect(late.id).toBeGreaterThan(early.id)
-
-  await open(owner, uid)
-  expect((await takePage(owner, uid)).marks.map((m) => m.is_new)).toEqual([false, false, false])
 })
 
 test("the Marks section lists open, closed or all, with their counts and takes", async () => {

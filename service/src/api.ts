@@ -203,9 +203,6 @@ export const useStar = () =>
     data(on ? client.api.takes[":uid"].star.$post({ param: { uid } }) : client.api.takes[":uid"].star.$delete({ param: { uid } }))
   )
 
-/** The member opened or played the take: it and its marks are no longer new for them. */
-export const useSeen = () => useChange((uid: string) => data(client.api.takes[":uid"].seen.$post({ param: { uid } })))
-
 export const useAddMark = () =>
   useChange(({ uid, ...json }: { uid: string; at: number; label_id?: number; note: string }) =>
     data(client.api.takes[":uid"].marks.$post({ param: { uid }, json }))

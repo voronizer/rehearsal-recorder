@@ -2,12 +2,12 @@ import { env } from "cloudflare:workers"
 import { expect, test } from "vitest"
 import type { Bindings } from "../worker/shared/env"
 import { trash } from "../worker/takes/store"
-import { answer, call, del, member, open, patch, post, read, shownTake, signInOwner, starIt } from "./helpers"
+import { answer, call, del, member, patch, post, read, shownTake, signInOwner, starIt } from "./helpers"
 
 const bindings = env as unknown as Bindings
 const put = (path: string, body: unknown, cookie: string) => call(path, { method: "PUT", body: JSON.stringify(body) }, cookie)
 
-type TakeRow = { uid: string; name: string; duration_sec: number; is_new: boolean }
+type TakeRow = { uid: string; name: string; duration_sec: number }
 type SongItem = {
   id: number
   title: string
@@ -20,7 +20,6 @@ type SongItem = {
   length: number | null
   best: TakeRow | null
   best_why: "most stars" | "latest" | null
-  has_new: boolean
 }
 type Songs = { statuses: { id: number; name: string; songs: number }[]; songs: SongItem[]; not_named: TakeRow[] }
 type SongPage = { song: SongItem & { notes: string }; takes: TakeRow[]; files: FileView[] }
@@ -33,12 +32,10 @@ test("the songs table: every song with its status, takes, length and best take",
   const owner = await signInOwner()
   const ira = await member(owner, "ira@example.com")
   const one = await shownTake({ number: 1, name: "Viasna 1", duration_sec: 245, date: "2025-10-23", tempo: 120 })
-  const two = await shownTake({ number: 2, name: "Viasna 2", duration_sec: 250, date: "2025-10-30" })
+  await shownTake({ number: 2, name: "Viasna 2", duration_sec: 250, date: "2025-10-30" })
   await shownTake({ song: "Pałyn", number: 1, name: "Pałyn 1", duration_sec: 200, date: "2025-10-30" })
   await shownTake({ song: null, number: 7, name: "Take 7", date: "2025-10-30" })
   await starIt(ira.cookie, one)
-  await open(owner, one)
-  await open(owner, two)
 
   const list = await songs(owner)
   expect(list.statuses.map((s) => [s.name, s.songs])).toEqual([
@@ -56,11 +53,10 @@ test("the songs table: every song with its status, takes, length and best take",
     last_date: "2025-10-30",
     length: 245,
     best_why: "most stars",
-    has_new: false,
   })
   expect(viasna.best!.uid).toBe(one)
   const palyn = list.songs.find((s) => s.title === "Pałyn")!
-  expect(palyn).toMatchObject({ best_why: "latest", has_new: true, length: 200 })
+  expect(palyn).toMatchObject({ best_why: "latest", length: 200 })
   expect(list.not_named.map((t) => t.name)).toEqual(["Take 7"])
 })
 

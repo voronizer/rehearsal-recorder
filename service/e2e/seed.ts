@@ -160,8 +160,6 @@ export default async function seed() {
   // Deleted in РЭХА: it waits in the trash.
   await send.del(`/api/reha/takes/${takes["Viasna 4"]}`)
 
-  // Paŭlik opens Viasna 12 before the others mark it.
-  await paulik.post(`/api/takes/${takes["Viasna 12"]}/seen`)
   const ok = async (res: Awaited<ReturnType<APIRequestContext["fetch"]>>) => {
     if (!res.ok()) throw new Error(`${res.url()}: ${res.status()} ${await res.text()}`)
     return (await res.json()) as { id: number }

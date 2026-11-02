@@ -11,13 +11,12 @@ import { member, reha } from "../e2e/seed"
   routes, as in the page tests (e2e/seed.ts), but with takes of a song's
   length and waveforms shaped like a band's.
 
-  Who plays what, and who sees what:
+  Who plays what, and whose pictures:
     Vik      drums.
     Alex     bass; the owner.
     Ivan     guitar. The pictures of a take, a song and the marks are
-             his: he has heard everything, and marked Viasna 12.
-    Ira      vocals. The first page is hers: she has not opened this
-             week's takes yet, and the others marked takes she had heard.
+             his; he marked Viasna 12.
+    Ira      vocals. The first page is hers.
 */
 
 export const STATE = new URL("./.state/", import.meta.url)
@@ -179,30 +178,23 @@ export default async function seed() {
     (await ok(await api.post(`/api/takes/${takes[take]}/marks`, { data: { at, label_id: label(name), note } }))).id
   /** A comment under a mark. */
   const talk = (api: APIRequestContext, id: number, text: string) => api.post(`/api/marks/${id}/comments`, { data: { text } }).then(ok)
-  const see = async (api: APIRequestContext, names: string[]) => {
-    for (const name of names) await api.post(`/api/takes/${takes[name]}/seen`)
-  }
   const star = (api: APIRequestContext, take: string) => api.post(`/api/takes/${takes[take]}/star`)
 
-  // The three rehearsals before this week's, heard by everyone.
+  // The three rehearsals before this week's.
   const earlier = TAKES.filter((t) => t.back > 0)
   for (const [n, t] of earlier.entries()) await sendTake(t, n)
   const bridge = await mark(ira, "Viasna 3", 104, "Keep this", "The bridge, finally! Let's play it like this every time.")
   await talk(owner, bridge, "Same tempo next week, then.")
-  for (const api of band) await see(api, Object.keys(takes))
   await star(ira, "Viasna 3")
   await star(owner, "Viasna 3")
   await star(vik, "Viasna 8")
   await star(ira, "Pałyn 2")
-  // Written after Ira had heard those takes: new for her.
   await mark(vik, "Viasna 8", 130, "Do again", "Let's take this bit faster next time.")
   await mark(owner, "Kupalle 1", 280, "Note", "The ending is long. Two bars less?")
 
-  // This week's rehearsal. Ira has not opened it yet; the others have.
+  // This week's rehearsal.
   const now = TAKES.filter((t) => t.back === 0)
   for (const [n, t] of now.entries()) await sendTake(t, earlier.length + n)
-  const tonight = now.map((t) => `${t.song} ${t.number}`)
-  for (const api of [owner, vik, ivan]) await see(api, tonight)
   const drags = await mark(ivan, "Viasna 12", 102, "Went wrong", "The bridge drags here.")
   await talk(vik, drags, "Not the drums. I soloed them.")
   await talk(owner, drags, "It's the bass. Sorry.")

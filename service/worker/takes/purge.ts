@@ -25,7 +25,7 @@ export async function deleteFiles(env: Bindings, prefix: string, drop: (key: str
 
 /**
  * Once a day, from the Cron Trigger: takes in the trash for more than 30
- * days are deleted for good, with their files, comments, stars and seen,
+ * days are deleted for good, with their files, comments and stars,
  * the longest there first and 20 at most.
  */
 export async function purgeTrash(env: Bindings): Promise<number> {

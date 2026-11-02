@@ -21,9 +21,11 @@ A band service is your band's own page for its takes. РЭХА sends them there 
 
 ## The takes are on your phone the same evening
 
-Listen on the way home, while you still remember what you meant to play.
+Listen on the way home, while you still remember what you meant to play. **Home** opens on the rehearsal you have just played, its takes in the order you played them.
 
-![Home on Ira's phone: how many takes she has not heard yet, each song with its best take, and the band's latest marks](new-takes)
+The phone loads a take as you listen, half a minute ahead of where you are, so a take you stop early costs only what you heard and half a minute more of your mobile data.
+
+![Home on Ira's phone: Thursday's rehearsal on top, its takes in the order the band played them, then each song with its best take](new-takes)
 
 ## Hear your own part
 
@@ -37,13 +39,13 @@ The levels are yours as well. Turn a track up or down once, and it plays that wa
 
 Instead of “the bit after the second chorus” in the chat, you put a mark at 1:42, and everyone hears the same moment. The band talks under the mark, and the talk stays with the take instead of getting lost among the memes.
 
-![Viasna 12's marks: the one at 1:42, and the band's talk under it. Tap a mark's time to put the playhead there](mark)
+![Viasna 12's marks: the one at 1:42, and the band's talk under it, each with who wrote it. Tap ▶ 1:42 to play from there](mark)
 
 ## Green to keep, red to fix
 
-A mark has a label, and each label its colour: green for what to keep, red for what went wrong, amber for what to do again, grey for a plain note. Marks set in РЭХА come here too, under the same labels. **Marks** lists the open ones by song, so on the way to Thursday's rehearsal Ivan sees what is still to fix. Once a place is fixed, anyone presses **Close**.
+A mark has a label, and each label its colour: green for what to keep, red for what went wrong, amber for what to do again, grey for a plain note. Marks set in РЭХА come here too, under the same labels. **Marks** lists what is still to do, by song, so on the way to Thursday's rehearsal Ivan sees what is left to fix. Once a place is fixed, anyone presses **Done**.
 
-![Marks on Ivan's phone: the open marks on Viasna, each with its label's colour, and the talk under them](colours)
+![Marks on Ivan's phone: what is still to do on Viasna and Kupalle, a mark to a line in its label's colour, with how many comments it has](colours)
 
 ## Know which take you're aiming for
 

@@ -38,6 +38,8 @@ const shell = createRoute({
     const me = await queryClient.ensureQueryData(meQuery).catch(() => undefined)
     if (me && !me.name) throw redirect({ to: "/name", search: { redirect: location.href }, replace: true })
   },
+  // ?panel= is the panel open over the page (shell/panel.tsx).
+  validateSearch: (search: Record<string, unknown>): { panel?: string } => (typeof search.panel === "string" ? { panel: search.panel } : {}),
   component: Shell,
 })
 const home = createRoute({ getParentRoute: () => shell, path: "/", component: Home })

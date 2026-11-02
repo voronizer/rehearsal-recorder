@@ -2,8 +2,9 @@ import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAddMark, useTake } from "../api"
 import { usePanel } from "../shell/panel"
-import { Note, Rows } from "../shell/parts"
-import { clock } from "../shell/words"
+import { Note, Rows, Trouble, Waiting } from "../shell/parts"
+import { clock, longDay } from "../shell/words"
+import { TakeLink } from "../takes/parts"
 import { MarkForm, MarkItem } from "./MarkItem"
 
 /**
@@ -16,8 +17,8 @@ export function MarkPanel({ uid, id, at }: { uid: string; id?: number; at?: numb
   const { open, close } = usePanel()
   const take = useTake(uid)
   const add = useAddMark()
-  if (take.error) return <Note>{take.error.message}</Note>
-  if (!take.data) return null
+  if (take.error) return <Trouble error={take.error} retry={() => void take.refetch()} />
+  if (!take.data) return <Waiting />
   const mark = id === undefined ? undefined : take.data.marks.find((m) => m.id === id)
   // Deleted, here or by somebody else: nothing left to show.
   if (id !== undefined && !mark) return <Note>This mark is no longer there.</Note>
@@ -32,6 +33,12 @@ export function MarkPanel({ uid, id, at }: { uid: string; id?: number; at?: numb
           <X />
         </Button>
       </div>
+      {/* Whose mark it is, since the panel may cover the take: its take opens in the panel. */}
+      <p className="-mt-4 flex flex-wrap items-baseline gap-x-1.5 text-xs text-muted-foreground">
+        <span>On</span>
+        <TakeLink take={take.data} />
+        <span>· {longDay(take.data.date)}</span>
+      </p>
       {mark ? (
         <Rows>
           <MarkItem mark={mark} />
@@ -49,7 +56,7 @@ export function MarkPanel({ uid, id, at }: { uid: string; id?: number; at?: numb
           button="Add mark"
           done={close}
           submit={(label_id, note) =>
-            add.mutate({ uid, at: moment, label_id, note }, { onSuccess: (made) => open({ kind: "mark", uid, id: made.id }) })
+            add.mutate({ uid, at: moment, label_id, note }, { onSuccess: (made) => open({ kind: "mark", uid, id: made.id }, { replace: true }) })
           }
         />
       )}

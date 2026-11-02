@@ -74,6 +74,30 @@ test("a stretch's wave is the loudest sample in each slice, read as it is decode
   expect(wave.map((v) => Math.round(v * 1000) / 1000)).toEqual([0.032, 0.042, 0.053, 0.063])
 })
 
+test("a file comes a piece at a time, only as far as it is wanted", async () => {
+  withDecoder()
+  const file = fixture("t1.mp3")
+  const asked: string[] = []
+  vi.stubGlobal("fetch", async (_url: string, init: { headers: Record<string, string> }) => {
+    const range = init.headers.Range
+    asked.push(range)
+    const [from, to] = /bytes=(\d+)-(\d+)/.exec(range)!.slice(1).map(Number)
+    const last = Math.min(to, file.length - 1)
+    return new Response(file.slice(from, last + 1), { status: 206, headers: { "Content-Range": `bytes ${from}-${last}/${file.length}` } })
+  })
+  // Pieces of about a second; two seconds past the playhead.
+  const p = new Player([{ url: "t1.mp3", gain: 1 }], { aheadSec: 2, pieceBytes: 16 * 1024 })
+  await p.stretch(0, 0, 1, 4)
+  expect(asked).toEqual(["bytes=0-16383", "bytes=16384-32767"])
+
+  // Moved on to the end, it goes on from where it stopped and no further.
+  await p.stretch(0, 0, 60, 4)
+  expect(asked).toHaveLength(Math.ceil(file.length / (16 * 1024)))
+  expect(asked.at(-1)).toBe(`bytes=${9 * 16 * 1024}-${file.length - 1}`)
+  p.setLoop(2, 12)
+  expect(p.repeat).toEqual({ a: 2, b: T1_END })
+})
+
 test("a stretch no longer wanted gives up waiting for its file", async () => {
   withDecoder()
   vi.stubGlobal("fetch", () => new Promise(() => {}))

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Outlet, useRouterState } from "@tanstack/react-router"
-import { Menu } from "lucide-react"
+import { ChevronLeft, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useFrame, useMe } from "../api"
@@ -19,7 +19,7 @@ import { useSize } from "./size"
 
 /** The panel from the right, as the app's Sheet: 28 rem, over the page, no veil, so the page stays live. */
 function PanelView() {
-  const { panel } = usePanel()
+  const { panel, back } = usePanel()
   const size = useSize()
   if (!panel) return null
   return (
@@ -31,6 +31,13 @@ function PanelView() {
         size === "phone" ? "w-full border-l-0" : "w-[28rem] max-w-[calc(100%-3rem)]"
       )}
     >
+      {back && (
+        // Opened from another panel: one step back to it, as Back does.
+        <button type="button" onClick={back} className="mb-3 flex items-center gap-1 self-start text-muted-foreground hover:text-foreground">
+          <ChevronLeft className="size-4" />
+          Back
+        </button>
+      )}
       <InPanel>
         {panel.kind === "take" && <TakePanel uid={panel.uid} markAt={panel.markAt} />}
         {panel.kind === "mark" && <MarkPanel uid={panel.uid} id={panel.id} at={panel.at} />}
@@ -51,12 +58,11 @@ function PanelView() {
 function Frame() {
   const size = useSize()
   const bar = !!useFrame().data?.has_takes
-  const { close } = usePanel()
   const [menu, setMenu] = useState(false)
-  // A panel belongs to the page it was opened on.
+  // A panel belongs to the page it was opened on: it is in that page's
+  // address, so going to another page leaves it behind by itself.
   const path = useRouterState({ select: (s) => s.location.pathname })
   useEffect(() => {
-    close()
     setMenu(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path])
@@ -69,7 +75,9 @@ function Frame() {
           </Button>
           <BandName small />
         </header>
-        <div className="relative min-h-0 flex-1">
+        {/* Clipped, not scrolled: a panel sliding in from beyond the edge, or a box
+            in it taking the focus, must not make the page wider than the phone. */}
+        <div className="relative min-h-0 flex-1 overflow-clip">
           <main className="h-full overflow-y-auto bg-background px-4 py-5 text-sm">
             <Outlet />
           </main>
@@ -88,7 +96,7 @@ function Frame() {
     )
   return (
     <div className="flex h-full flex-col">
-      <div className="relative flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 overflow-clip">
         <Side />
         <main className={cn("min-w-0 flex-1 overflow-y-auto bg-background text-sm", size === "wide" ? "p-8" : "px-6 py-6")}>
           <Outlet />

@@ -4,8 +4,7 @@ import { database } from "../shared/db"
 import { fail } from "../shared/errors"
 import { errors, json, newApp, Ok } from "../shared/openapi"
 import { loadMarks, MarkView } from "../marks/view"
-import { rehearsal, seen, song, star, take, user } from "../shared/schema"
-import { iso } from "../shared/time"
+import { rehearsal, song, star, take, user } from "../shared/schema"
 import { needMember } from "../signin/guards"
 import { bare, initial, shownName, takeRows, TakeRow } from "./rows"
 import { fillShapes } from "./shape"
@@ -169,34 +168,13 @@ export const takeRoutes = newApp()
   )
   .openapi(
     createRoute({
-      method: "post",
-      path: "/api/takes/{uid}/seen",
-      description: "The member opened or played the take: it and its marks are no longer new for them.",
-      middleware: [needMember] as const,
-      request: { params: Uid },
-      responses: { 200: json(Ok), ...errors(401, 404) },
-    }),
-    async (c) => {
-      const db = database(c.env)
-      const uid = c.req.valid("param").uid
-      if (!(await shown(db, uid, true))) return fail(c, 404, NO_TAKE)
-      const at = iso()
-      await db
-        .insert(seen)
-        .values({ memberId: c.var.member.id, takeUid: uid, seenAt: at })
-        .onConflictDoUpdate({ target: [seen.memberId, seen.takeUid], set: { seenAt: at } })
-      return c.json({ ok: true as const }, 200)
-    }
-  )
-  .openapi(
-    createRoute({
       method: "get",
       path: "/api/trash",
       middleware: [needMember] as const,
       responses: { 200: json(z.array(TakeRow.extend({ trashed_at: z.string() }))), ...errors(401) },
     }),
     async (c) => {
-      const rows = await takeRows(c.env, c.var.member.id, isNotNull(take.trashedAt))
+      const rows = await takeRows(c.env, isNotNull(take.trashedAt))
       return c.json(
         rows
           .sort((a, b) => b.trashed_at!.localeCompare(a.trashed_at!))

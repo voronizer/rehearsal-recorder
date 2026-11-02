@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useParams, useSearch } from "@tanstack/react-router"
+import { Link, useParams, useSearch } from "@tanstack/react-router"
 import { RotateCcw } from "lucide-react"
 import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
 import { Badge } from "@/components/ui/badge"
@@ -11,13 +11,13 @@ import { labelsChanged } from "@/lib/labels"
 import { useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
 import { usePanel } from "../shell/panel"
-import { Back, Group, Groups, Note, Page, Tile } from "../shell/parts"
+import { Back, Group, Groups, OPENS, Page, Tile, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, count, longDay } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Downloads } from "./Downloads"
-import { CANNOT_PLAY, useHeardAgain, usePlayer } from "./player/one"
+import { CANNOT_PLAY, usePlayer } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
 import { StarButton, TakeName } from "./parts"
 import { TakePlayer } from "./TakePanel"
@@ -34,15 +34,14 @@ export function Take() {
   const { uid } = useParams({ from: "/band/takes/$uid" })
   const { at, mark, comment } = useSearch({ from: "/band/takes/$uid" })
   const take = useTake(uid)
+  useTitle(take.data?.name)
   const p = usePlayer()
   const size = useSize()
   const { open } = usePanel()
   const [shown, setShown] = useState("")
-  useHeardAgain(take.data)
   const ready = !!take.data
   useEffect(() => {
     if (!ready) return
-    p.heard(uid)
     p.cue(uid, at ?? 0)
     // Once a take's page has come; the player's own changes are not a reason to cue again.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -55,9 +54,9 @@ export function Take() {
     if (!about || shown === link) return
     setShown(link)
     if (size === "phone") document.querySelector(`[data-mark="${about.id}"]`)?.scrollIntoView({ block: "center" })
-    else open({ kind: "mark", uid, id: about.id })
+    else open({ kind: "mark", uid, id: about.id }, { replace: true })
   }, [take.data, mark, comment, uid, size, shown, open])
-  if (take.error) return <Note>{take.error.message}</Note>
+  if (take.error) return <Trouble error={take.error} retry={() => void take.refetch()} />
   if (!take.data) return null
   return <TakeView take={take.data} />
 }
@@ -140,6 +139,8 @@ function Full({ take }: { take: TakePage }) {
           markers={markers}
           onAddMarker={(at) => open({ kind: "mark", uid: take.uid, at })}
           onEditMarker={talk}
+          // A talk sign and how many comments, where РЭХА has its pencil (Alex's pick B, 2026-11-02).
+          talkOf={(m) => markOf(m)?.comments.length ?? 0}
           spaceKey
         />
       </div>
@@ -193,7 +194,14 @@ function TakeView({ take }: { take: TakePage }) {
           </span>
         </span>
       }
-      sub={`${longDay(take.date)} · ${clock(take.duration_sec)} · ${count(take.tracks.length, "track")}`}
+      sub={
+        <>
+          <Link to="/rehearsals/$uid" params={{ uid: take.rehearsal.uid }} className={OPENS}>
+            {longDay(take.date)}
+          </Link>
+          {` · ${clock(take.duration_sec)} · ${count(take.tracks.length, "track")}`}
+        </>
+      }
     >
       {take.trashed_at && <InTrash uid={take.uid} />}
       {phone && !cannot ? (

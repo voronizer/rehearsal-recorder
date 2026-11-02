@@ -5,6 +5,60 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **The band service opens on the last rehearsal.** **Home** starts with
+  the evening the band played last, its takes in the order you played them;
+  press its day for the rehearsal's page. Songs in the last status, such as
+  Archive, leave **Home**, and the favourites there are the latest five.
+- **A mark's talk reads like a chat.** The mark's words and each comment
+  under it show who wrote them, with their letter in a circle, and the day.
+  The box for your comment is always open: **Send** comes with your words,
+  and Ctrl+Enter (⌘Enter on a Mac) sends too. Your own mark's or comment's
+  **Edit** and **Delete** are under ⋯, and deleting a comment now asks
+  first.
+- **Leaving a comment half written asks first.** Closing the panel or going
+  to another page with a comment or a new mark not sent asks “Discard what
+  you wrote?”, and **Keep writing** takes you back to it.
+- **A mark's Close is now Done.** Once its place is fixed, press **Done**
+  on the mark; **Not done yet** brings it back. **Marks** shows **To do**,
+  **Done** or **All**, a mark to a line with how many comments it has;
+  press one to open it with its talk.
+- **Less mobile data on a phone.** A take's tracks come as you listen, half
+  a minute ahead, so a take you stop early costs only what you heard and
+  half a minute more.
+- **No more “new” in the band service.** Takes and marks are no longer
+  marked new, and nothing counts what you have not heard.
+- **What opens has a dotted line under it.** A take's or a song's name, a
+  day, a mark's words: anything that opens a page or the panel.
+- **M and S before ▶.** In a take's panel, **M** and **S** work before the
+  take plays, and it plays the way you set them.
+- **The panel is in the page's address.** The browser's back button and a
+  phone's back gesture close it, a link can open it, and a reload keeps it.
+  A panel opened from another one has **Back** to that one.
+- **Song notes save themselves.** They save as you write, as the band's
+  name does, with no button to press.
+- **The bar steps aside on a take's own page.** On a computer, while the
+  bar at the bottom holds the take whose page is open, it hides: the page's
+  own player has ▶ and **Mark**. A mark's chip there shows how many
+  comments it has.
+- **A take's number stays in sight.** A long song title gives way and the
+  number stays. Stars from two people with the same first letter show two
+  letters, Ivan “Iv” and Ira “Ir”.
+- **Members asks before removing a key for РЭХА.** **Copy** says
+  **Copied**, and the band's name says when it is saved.
+- **The line in a phone's bar moves the playhead.** Press anywhere on it.
+  A panel no longer makes the page wider than the screen.
+- **Rehearsals opens on the latest month.** The months before stay folded,
+  under one head for the table.
+- **Days count where you are.** A mark or a comment shows the day it was
+  where you are, not on the server's clock, so one set at half past
+  midnight no longer shows the day before. The same goes for a take put in
+  the **Trash**.
+- **Smaller things.** A song's key can be changed on its page, next to its
+  status. Each page names itself in the browser's tab, with РЭХА's icon. A
+  page that cannot load says so, with **Try again**.
+
 ## 0.19.0
 
 - **РЭХА's own player on a take's page in the band service.** On a

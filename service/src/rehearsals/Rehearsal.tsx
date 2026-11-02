@@ -1,9 +1,9 @@
 import { useParams } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { useRehearsal, useSongs, type TakeRow } from "../api"
-import { Back, Group, Groups, Note, Page, Rows } from "../shell/parts"
+import { Back, Group, Groups, Page, Rows, Trouble, useTitle } from "../shell/parts"
 import { usePanel } from "../shell/panel"
-import { clock, count, longDay } from "../shell/words"
+import { clock, count, day, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 
 /**
@@ -14,9 +14,10 @@ import { TakeLine } from "../takes/parts"
 export function Rehearsal() {
   const { uid } = useParams({ from: "/band/rehearsals/$uid" })
   const page = useRehearsal(uid)
+  useTitle(page.data ? day(page.data.rehearsal.date) : undefined)
   const songs = useSongs()
   const { open } = usePanel()
-  if (page.error) return <Note>{page.error.message}</Note>
+  if (page.error) return <Trouble error={page.error} retry={() => void page.refetch()} />
   if (!page.data) return null
   const { rehearsal, takes } = page.data
   const titles = new Map((songs.data?.songs ?? []).map((s) => [s.id, s.title]))

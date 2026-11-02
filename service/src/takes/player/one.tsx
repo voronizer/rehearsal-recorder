@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { playLook, type PlayLook } from "@/lib/playLook"
-import { useLevels, useSeen, useTake, type TakePage } from "../../api"
+import { useLevels, useTake, type TakePage } from "../../api"
 import { levelOf } from "./levels"
 import { Player, wakeSound } from "./player"
 
@@ -55,15 +55,17 @@ type PlayerApi = {
   seek: (uid: string, at: number) => void
   /** Puts a take in the player at `at` without playing, unless one plays. */
   cue: (uid: string, at: number) => void
-  /** The take is heard or opened: it is no longer new for you. Told once a page load, unless `again`. */
-  heard: (uid: string, again?: boolean) => void
-  muted: number[]
-  solo: number | null
-  mute: (i: number) => void
-  soloOne: (i: number) => void
-  /** Whether track `i` of the take in the player is heard. */
-  sounds: (i: number) => boolean
+  /** A take's M and S. They work whether the take plays or not: a take not in the player keeps them for its first ▶. */
+  deskOf: (uid: string) => Desk
+  mute: (uid: string, i: number) => void
+  soloOne: (uid: string, i: number) => void
+  /** Whether track `i` of the take is heard. */
+  sounds: (uid: string, i: number) => boolean
 }
+
+/** A take's M and S: the tracks muted, the one soloed. */
+export type Desk = { muted: number[]; solo: number | null }
+const NO_DESK: Desk = { muted: [], solo: null }
 
 const PlayerCtx = createContext<PlayerApi | null>(null)
 export const usePlayer = () => useContext(PlayerCtx)!
@@ -108,11 +110,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const player = useRef<Player | null>(null)
   const pending = useRef<{ at: number; play: boolean } | null>(null)
   const [, redraw] = useState(0)
-  const [muted, setMuted] = useState<number[]>([])
-  const [solo, setSolo] = useState<number | null>(null)
+  // Each take's M and S, kept while the service is open (Alex, 2026-11-02).
+  const [desks, setDesks] = useState<Record<string, Desk>>({})
+  const desksNow = useRef(desks)
+  desksNow.current = desks
+  const setDesk = (u: string, change: (d: Desk) => Desk) => setDesks((all) => ({ ...all, [u]: change(all[u] ?? NO_DESK) }))
   const [started, setStarted] = useState(false)
-  const seen = useSeen()
-  const once = useRef(new Set<string>())
   const key = take.data ? `${take.data.uid}/${take.data.gen}` : ""
   const yours = useLevels().data?.levels
   const yoursNow = useRef(yours)
@@ -120,15 +123,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   /** The take and generation of player.current. */
   const held = useRef<{ uid: string; gen: number } | null>(null)
   const setups = useRef(new Map<string, () => Setup>())
-
-  const heard = useCallback(
-    (u: string, again = false) => {
-      if (once.current.has(u) && !again) return
-      once.current.add(u)
-      seen.mutate(u)
-    },
-    [seen]
-  )
 
   useEffect(() => {
     const t = take.data
@@ -139,11 +133,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       redraw((n) => n + 1)
     }
     p.onEnd = () => redraw((n) => n + 1)
-    // As the take's page left it: its repeat, M and S.
-    const setup = setups.current.get(t.uid)?.()
-    if (setup?.loop) p.setLoop(setup.loop.a, setup.loop.b)
-    for (const i of setup?.muted ?? []) p.setMute(i, true)
-    if (setup && setup.solo !== null) p.setSolo(setup.solo, true)
+    // As the take's page left it: its repeat, M and S; else the M and S pressed in its panel.
+    const setup: Setup = setups.current.get(t.uid)?.() ?? { loop: null, ...(desksNow.current[t.uid] ?? NO_DESK) }
+    if (setup.loop) p.setLoop(setup.loop.a, setup.loop.b)
+    for (const i of setup.muted) p.setMute(i, true)
+    if (setup.solo !== null) p.setSolo(setup.solo, true)
     const go = pending.current
     pending.current = null
     const at = go?.at ?? (clock.uid === t.uid ? clock.time : 0)
@@ -155,8 +149,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } else setStarted(false)
     player.current = p
     held.current = { uid: t.uid, gen: t.gen }
-    setMuted(setup?.muted ?? [])
-    setSolo(setup?.solo ?? null)
+    setDesk(t.uid, () => ({ muted: setup.muted, solo: setup.solo }))
     redraw((n) => n + 1)
     return () => {
       p.close()
@@ -207,7 +200,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }
 
   const play = (u: string, at?: number) => {
-    heard(u)
     const now = player.current
     if (u !== uid || !now) return load(u, at ?? 0, true)
     setStarted(true)
@@ -217,7 +209,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }
 
   const seek = (u: string, at: number) => {
-    heard(u)
     const now = player.current
     if (u !== uid || !now) return load(u, at, true)
     tick(u, at)
@@ -232,21 +223,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } else load(u, at, false)
   }
 
-  const mute = (i: number) =>
-    setMuted((m) => {
-      const on = !m.includes(i)
-      player.current?.setMute(i, on)
-      return on ? [...m, i] : m.filter((x) => x !== i)
-    })
+  /** The take's Player, while it is the take in the player. */
+  const heldOf = (u: string) => (held.current?.uid === u ? player.current : null)
+  const deskOf = (u: string) => desks[u] ?? NO_DESK
 
-  const soloOne = (i: number) =>
-    setSolo((s) => {
-      const on = s !== i
-      player.current?.setSolo(i, on)
-      return on ? i : null
-    })
+  const mute = (u: string, i: number) => {
+    const on = !deskOf(u).muted.includes(i)
+    heldOf(u)?.setMute(i, on)
+    setDesk(u, (d) => ({ ...d, muted: on ? [...new Set([...d.muted, i])] : d.muted.filter((x) => x !== i) }))
+  }
 
-  const sounds = (i: number) => (solo !== null ? solo === i : !muted.includes(i))
+  const soloOne = (u: string, i: number) => {
+    const on = deskOf(u).solo !== i
+    heldOf(u)?.setSolo(i, on)
+    setDesk(u, (d) => ({ ...d, solo: on ? i : null }))
+  }
+
+  const sounds = (u: string, i: number) => {
+    const d = deskOf(u)
+    return d.solo !== null ? d.solo === i : !d.muted.includes(i)
+  }
 
   // The latest of everything above, for the take page's sound to call at any time.
   const latest = useRef({ uid, play, cue })
@@ -270,7 +266,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const now = mine(u)
         if (!now) return
         now.setMute(i, on)
-        setMuted((m) => (on ? (m.includes(i) ? m : [...m, i]) : m.filter((x) => x !== i)))
+        setDesk(u, (d) => ({ ...d, muted: on ? [...new Set([...d.muted, i])] : d.muted.filter((x) => x !== i) }))
       },
       setSolo: (u, i) => {
         const now = mine(u)
@@ -278,7 +274,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const was = now.soloed
         if (i !== null) now.setSolo(i, true)
         else if (was !== null) now.setSolo(was, false)
-        setSolo(i)
+        setDesk(u, (d) => ({ ...d, solo: i }))
       },
       ready: (u, setup) => {
         setups.current.set(u, setup)
@@ -290,24 +286,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <PlayerCtx.Provider value={{ uid, take: take.data, supported, look, play, seek, cue, heard, muted, solo, mute, soloOne, sounds }}>
+    <PlayerCtx.Provider value={{ uid, take: take.data, supported, look, play, seek, cue, deskOf, mute, soloOne, sounds }}>
       <OneCtx.Provider value={one}>{children}</OneCtx.Provider>
     </PlayerCtx.Provider>
   )
 }
 
 export const CANNOT_PLAY = "This browser cannot play the takes. Try Chrome, Edge or Safari, updated."
-
-/**
- * A take's page or panel that shows marks new for you hears the take again,
- * so they stop being new without a reload: a mark set after you heard it.
- */
-export function useHeardAgain(take: { uid: string; marks: { is_new: boolean }[] } | undefined) {
-  const p = usePlayer()
-  const fresh = !!take?.marks.some((m) => m.is_new)
-  useEffect(() => {
-    if (take && fresh) p.heard(take.uid, true)
-    // Once each time something new shows up on it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [take?.uid, fresh])
-}

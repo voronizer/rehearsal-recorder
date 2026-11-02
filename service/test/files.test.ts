@@ -24,6 +24,11 @@ test("files need a session and answer a range", async () => {
   expect(part.status).toBe(206)
   expect(part.headers.get("Content-Range")).toBe("bytes 10-19/1000")
   expect(new Uint8Array(await part.arrayBuffer())).toEqual(file.slice(10, 20))
+  // The player asks for a piece before it knows the size: one past the end is the rest.
+  const tail = await call(`/files/${uid}/1/1.mp3`, { headers: { Range: "bytes=990-262143" } }, owner)
+  expect(tail.status).toBe(206)
+  expect(tail.headers.get("Content-Range")).toBe("bytes 990-999/1000")
+  expect(new Uint8Array(await tail.arrayBuffer())).toEqual(file.slice(990))
 
   expect((await call(`/files/${uid}/1/9.mp3`, {}, owner)).status).toBe(404)
   // A take the band does not see yet has no files to hand out.

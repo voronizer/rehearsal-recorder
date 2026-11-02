@@ -2,12 +2,12 @@ import { env } from "cloudflare:workers"
 import { expect, test } from "vitest"
 import type { Bindings } from "../worker/shared/env"
 import { putTake, trash } from "../worker/takes/store"
-import { call, commentOn, markAt, member, named, open, post, read, shownTake, signInOwner, starIt, takeMeta } from "./helpers"
+import { call, commentOn, markAt, member, named, post, read, shownTake, signInOwner, starIt, takeMeta } from "./helpers"
 
 const bindings = env as unknown as Bindings
 
 type Star = { member_id: string; initial: string; name: string }
-type TakeRow = { uid: string; name: string; stars: Star[]; starred_at_rehearsal: boolean; is_new: boolean }
+type TakeRow = { uid: string; name: string; stars: Star[]; starred_at_rehearsal: boolean }
 
 const songId = async (cookie: string, title = "Viasna") =>
   (await read<{ songs: { id: number; title: string }[] }>("/api/songs", cookie)).songs.find((s) => s.title === title)!.id
@@ -15,19 +15,15 @@ const song = (cookie: string, id: number) => read<{ song: { best: TakeRow | null
 const unstar = async (cookie: string, uid: string) =>
   expect((await call(`/api/takes/${uid}/star`, { method: "DELETE" }, cookie)).status).toBe(200)
 
-test("a new take is new until opened; one not shown or in the trash is not there", async () => {
+test("a take not shown or in the trash is not there", async () => {
   const owner = await signInOwner()
-  const uid = await shownTake()
+  await shownTake()
   await putTake(bindings, crypto.randomUUID(), takeMeta({ number: 13, name: "Viasna 13" }) as never)
   const gone = await shownTake({ number: 14, name: "Viasna 14" })
   await trash(bindings, gone)
 
   const before = await song(owner, await songId(owner))
-  expect(before.takes.map((t) => [t.name, t.is_new])).toEqual([["Viasna 12", true]])
-  expect((await read<{ unheard: number }>("/api/home", owner)).unheard).toBe(1)
-  await open(owner, uid)
-  expect((await song(owner, await songId(owner))).takes[0].is_new).toBe(false)
-  expect((await read<{ unheard: number }>("/api/home", owner)).unheard).toBe(0)
+  expect(before.takes.map((t) => t.name)).toEqual(["Viasna 12"])
 })
 
 test("the best take is the most starred, newest on a tie", async () => {

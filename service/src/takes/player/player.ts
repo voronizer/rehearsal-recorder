@@ -15,10 +15,12 @@ import { Fold } from "./peaks"
   A seek stops every piece and starts again from the frame at that time,
   ten frames early so the decoder has warmed up by then; that warm-up is not
   heard. Before the first sound every track has a second ready, so they
-  start together. Each file comes whole, from its start: a seek past what
-  has come so far (a slow connection) waits there, and starts again once
-  there is a second more. The service would send a file from the middle
-  (`Range`), but the player does not ask for that yet.
+  start together. Each file comes in pieces (`Range`), from its start, and
+  only as far as half a minute past the playhead (Alex's pick B, 2026-11-02):
+  a take left after its first minute costs a phone a quarter of its files,
+  not all of them. A seek past what has come so far (a slow connection, or
+  a press far ahead) waits there, and starts again once there is a second
+  more.
 
   A piece on repeat, from a to b, plays without a gap: once a track's
   decoder has passed b, a new one starts ten frames before a, and its sound
@@ -27,6 +29,10 @@ import { Fold } from "./peaks"
 */
 
 const AHEAD_SEC = 5
+/** How far past the playhead the files are fetched. */
+const FETCH_AHEAD_SEC = 30
+/** A file comes in pieces of this many bytes: about 16 seconds at 128 kbps. */
+const PIECE_BYTES = 256 * 1024
 const CHUNK_SEC = 0.5
 const PREBUFFER_SEC = 1
 const WARM_UP_FRAMES = 10
@@ -40,6 +46,9 @@ const MIN_LOOP_SEC = 0.2
 const GLIDE_SEC = 0.01
 
 export type PlayerTrack = { url: string; gain: number }
+
+/** How the files come: how far past the playhead, in pieces of how many bytes. The tests ask for small ones. */
+export type Pace = { aheadSec: number; pieceBytes: number }
 
 /*
   One AudioContext for every take, made and woken by the first press of a
@@ -154,6 +163,11 @@ export class Player {
   private loop: { a: number; b: number } | null = null
   /** Told each time more of a file has come, or it failed. */
   private arrived = new Set<() => void>()
+  /** Told when the files may be wanted further: the playhead moved, or a wave asked. */
+  private hungry = new Set<() => void>()
+  /** How far a wave asked for the files, in seconds. */
+  private reach = 0
+  private readonly pace: Pace
   private lanes: Lane[] = []
   private from = 0
   private t0: number | null = null
@@ -172,7 +186,8 @@ export class Player {
     }
   }
 
-  constructor(tracks: PlayerTrack[]) {
+  constructor(tracks: PlayerTrack[], pace: Partial<Pace> = {}) {
+    this.pace = { aheadSec: FETCH_AHEAD_SEC, pieceBytes: PIECE_BYTES, ...pace }
     this.tracks = tracks
     this.levels = tracks.map((t) => t.gain)
     this.sources = tracks.map(() => ({ frames: [], sampleRate: 0, channels: 0, whole: false }))
@@ -245,6 +260,7 @@ export class Player {
     this.t0 = null
     this.wanted = true
     this.lanes = this.sources.map((source, index) => this.lane(index, source))
+    this.feed()
     if (!this.timer) this.timer = setInterval(() => this.pump(), TICK_MS)
     this.pump()
     this.changed()
@@ -260,6 +276,7 @@ export class Player {
     if (this.wanted) this.play(at)
     else {
       this.from = Math.max(0, at)
+      this.feed()
       this.changed()
     }
   }
@@ -310,7 +327,9 @@ export class Player {
   async stretch(i: number, from: number, to: number, buckets: number, signal?: AbortSignal): Promise<number[] | null> {
     const source = this.sources[i]
     if (!source || typeof AudioDecoder === "undefined") return null
+    this.reach = Math.max(this.reach, to)
     this.fetch()
+    this.feed()
     const has = () =>
       this.broken || this.shut || source.whole || (source.sampleRate > 0 && (source.frames.length * FRAME) / source.sampleRate >= to)
     while (!has() && !signal?.aborted)
@@ -369,9 +388,10 @@ export class Player {
     this.master?.disconnect()
     for (const meter of this.meters) meter.disconnect()
     this.context = null
-    // A wave still waiting for its stretch gets none.
+    // A wave still waiting for its stretch gets none; a file waiting to go on stops.
     this.shut = true
     this.told()
+    this.feed()
   }
 
   private open() {
@@ -422,6 +442,18 @@ export class Player {
     for (const f of waiting) f()
   }
 
+  /** The files may be wanted further: each one waiting looks again. */
+  private feed() {
+    const waiting = [...this.hungry]
+    this.hungry.clear()
+    for (const f of waiting) f()
+  }
+
+  /** How far into the take the files are wanted now. */
+  private horizon(): number {
+    return Math.max(this.time() + this.pace.aheadSec, this.reach)
+  }
+
   /** The take's end: its longest track, once every file has come. */
   private end(): number {
     if (!this.sources.every((s) => s.whole)) return Infinity
@@ -432,17 +464,34 @@ export class Player {
     if (this.fetching) return
     this.fetching = new AbortController()
     const signal = this.fetching.signal
-    this.tracks.forEach(async (track, i) => {
-      const source = this.sources[i]
-      try {
-        const res = await fetch(track.url, { signal })
-        if (!res.ok || !res.body) throw new Error(`${track.url}: ${res.status}`)
+    this.tracks.forEach((track, i) => void this.pull(track.url, this.sources[i], signal))
+  }
+
+  /** A track's file, a piece at a time while it is wanted further than it has come; whole once its end is in. */
+  private async pull(url: string, source: Source, signal: AbortSignal) {
+    let offset = 0
+    let size = Infinity
+    let rest = new Uint8Array(0)
+    let first = true
+    const has = () => (source.sampleRate ? (source.frames.length * FRAME) / source.sampleRate : 0)
+    try {
+      while (offset < size) {
+        while (!signal.aborted && !this.shut && has() >= this.horizon()) await new Promise<void>((go) => this.hungry.add(go))
+        if (signal.aborted || this.shut) return
+        const last = Math.min(offset + this.pace.pieceBytes, size) - 1
+        const res = await fetch(url, { signal, headers: { Range: `bytes=${offset}-${last}` } })
+        // Asked from past the end: what came was all there is.
+        if (res.status === 416) break
+        if (!res.ok || !res.body) throw new Error(`${url}: ${res.status}`)
+        // 206 is the piece asked for; 200, a server that sends the whole file at once.
+        const piece = res.status === 206
+        if (piece) size = Number(/\/(\d+)$/.exec(res.headers.get("Content-Range") ?? "")?.[1] ?? Infinity) || Infinity
         const reader = res.body.getReader()
-        let rest = new Uint8Array(0)
-        let first = true
+        let got = 0
         for (;;) {
           const { done, value } = await reader.read()
           if (done) break
+          got += value.length
           const bytes = new Uint8Array(rest.length + value.length)
           bytes.set(rest)
           bytes.set(value, rest.length)
@@ -456,18 +505,20 @@ export class Player {
           rest = bytes.slice(found.used)
           this.told()
         }
-        if (!source.sampleRate) throw new Error(`${track.url}: no MP3 frames`)
-        source.whole = true
-        this.told()
-      } catch (e) {
-        if (signal.aborted) return
-        console.error(e)
-        this.broken = true
-        this.halt()
-        this.changed()
-        this.told()
+        offset += got
+        if (!piece || got === 0) break
       }
-    })
+      if (!source.sampleRate) throw new Error(`${url}: no MP3 frames`)
+      source.whole = true
+      this.told()
+    } catch (e) {
+      if (signal.aborted) return
+      console.error(e)
+      this.broken = true
+      this.halt()
+      this.changed()
+      this.told()
+    }
   }
 
   private lane(index: number, source: Source): Lane {
@@ -542,6 +593,8 @@ export class Player {
 
   private pump() {
     if (!this.wanted) return
+    // The playhead has moved on: the files go on as far as it needs.
+    this.feed()
     const now = this.time()
     if (!this.loop && now >= this.end()) {
       this.halt()
