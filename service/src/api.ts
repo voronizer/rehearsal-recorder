@@ -264,6 +264,8 @@ export const useBandPicture = () =>
   useChange((file: File | null) => (file ? send("/api/band/picture", "PUT", file) : data(client.api.band.picture.$delete())))
 
 export const useRestore = () => useChange((uid: string) => data(client.api.trash[":uid"].restore.$post({ param: { uid } })))
+export const useRestoreSong = () => useChange((n: number) => data(client.api.trash.songs[":id"].restore.$post({ param: id(n) })))
+export const useDeleteTake = () => useChange((uid: string) => data(client.api.takes[":uid"].$delete({ param: { uid } })))
 
 export function useSaveName() {
   const qc = useQueryClient()

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { as, band } from "./band"
+import { as, band, HEADERS } from "./band"
 
 test.describe("as Alex", () => {
   test.use({ storageState: as("alex") })
@@ -274,5 +274,37 @@ test.describe("as Dzima", () => {
     // The panel is in the page's address: a reload keeps it open.
     await page.reload()
     await expect(page.getByLabel("Panel").locator("[data-mark]").getByText("Turn the vocal up")).toBeVisible()
+  })
+})
+
+test.describe("deleting a take, as Alex", () => {
+  test.use({ storageState: as("alex") })
+
+  /** ⋯ › Delete take, and yes to the question. */
+  async function deleteTake(page: import("@playwright/test").Page, where: import("@playwright/test").Locator, name: string) {
+    await where.getByRole("button", { name: `What to do with ${name}`, exact: true }).click()
+    await page.getByRole("menuitem", { name: "Delete take" }).click()
+    await page.getByRole("dialog").getByRole("button", { name: "Delete take" }).click()
+  }
+
+  test("deleting the open take closes its panel", async ({ page }) => {
+    const uid = band().takes["Pałyn 3"]
+    await page.goto(`/?panel=take:${uid}`)
+    const panel = page.getByLabel("Panel")
+    await deleteTake(page, panel, "Pałyn 3")
+    await expect(panel).toHaveCount(0)
+    await expect(page.getByText("This screen could not open.")).toHaveCount(0)
+    expect((await page.request.post(`/api/trash/${uid}/restore`, { headers: HEADERS })).ok()).toBe(true)
+  })
+
+  test("deleting a take on its page goes to its rehearsal", async ({ page }) => {
+    const uid = band().takes["Pałyn 3"]
+    await page.goto(`/takes/${uid}`)
+    await deleteTake(page, page.getByRole("main"), "Pałyn 3")
+    await expect(page).toHaveURL(new RegExp(`/rehearsals/${band().rehearsals.first}$`))
+    await expect(page.getByText("This screen could not open.")).toHaveCount(0)
+    await expect(page.locator('[data-take="Viasna 5"]').first()).toBeVisible()
+    await expect(page.locator('[data-take="Pałyn 3"]')).toHaveCount(0)
+    expect((await page.request.post(`/api/trash/${uid}/restore`, { headers: HEADERS })).ok()).toBe(true)
   })
 })
