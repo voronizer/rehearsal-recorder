@@ -785,6 +785,10 @@ Whoever runs it gives you a key, and РЭХА sends the takes there. What a band
 service does, and how to get one for your band, is on
 [reha.stream/band-service](https://reha.stream/band-service).
 
+A take plays there at the levels its tracks have in РЭХА's player. In the
+service each of you can turn a track up or down for yourself: only you hear
+it that way, and nothing comes back to РЭХА.
+
 ### The key
 
 A key is one line of text: the service's address and a secret, such as

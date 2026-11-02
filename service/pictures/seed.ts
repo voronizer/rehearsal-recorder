@@ -153,7 +153,8 @@ export default async function seed() {
       gen: 1,
       cut_start: 0,
       starred: t.starred ?? false,
-      balance: { Vocals: 0.8 },
+      // As the band's mix in РЭХА had it: the guitar and the vocals down a little.
+      balance: { Guitar: 0.8, Vocals: 0.8 },
       tracks,
       notes: [],
       marks: t.marks ?? [],

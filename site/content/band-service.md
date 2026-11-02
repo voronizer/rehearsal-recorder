@@ -27,15 +27,17 @@ Listen on the way home, while you still remember what you meant to play.
 
 ## Hear your own part
 
-Each of you has a lane of your own in every take. Play yours alone to hear what you really did, or mute it and practise along with the band as it played that night.
+Each of you has a track of your own in every take. Play yours alone to hear what you really did, or mute it and practise along with the band as it played that night.
 
-![Viasna 12 with S pressed on the guitar's lane: the guitar plays alone, and the other lanes are crossed out until S is pressed again](lanes)
+The levels are yours as well. Ivan turned his guitar up once, and now it is up in every take he plays, on his phone and on the computer at home. Only he hears it that way. Ira still hears the mix РЭХА sent, unless she turns her vocals up for herself. **РЭХА's levels** puts the mix back.
+
+![Viasna 12 on Ivan's phone: a row for each track with its level, M and S, and the guitar turned all the way up. “Your levels. Only you hear them.”](lanes)
 
 ## Point at the second
 
 Instead of “the bit after the second chorus” in the chat, you put a mark at 1:42, and everyone hears the same moment. The band talks under the mark, and the talk stays with the take instead of getting lost among the memes.
 
-![Viasna 12 with a mark at 1:42 on every lane, and the band's talk under it. Tap a mark's time to put the playhead there](mark)
+![Viasna 12's marks: the one at 1:42, and the band's talk under it. Tap a mark's time to put the playhead there](mark)
 
 ## Green to keep, red to fix
 
@@ -53,13 +55,13 @@ The band stars the good ones, and a song opens on the favourite. You come to the
 
 Every take the band sends is there, by song, including the Viasna from three weeks ago when the bridge finally worked. A take deleted in РЭХА waits in the **Trash** for 30 days, and anyone in the band can press **Restore**.
 
-![Viasna 3, from three weeks before, with the band's mark on its bridge and what they said about it](three-weeks-ago)
+![Viasna 3, from three weeks before, with the band's green mark on its bridge](three-weeks-ago)
 
 ## Take your track home
 
 At home, download the tracks as they were recorded and open them in your recording program, the DAW, on the computer. Then record new takes of your part over the band as it played that night.
 
-![A take's page on a computer: Download tracks gives each track in FLAC, the full-quality file РЭХА recorded](downloads)
+![A take's page on a computer: РЭХА's own player, and under it Download tracks, each track in FLAC, the full-quality file РЭХА recorded](downloads)
 
 ## How to start
 

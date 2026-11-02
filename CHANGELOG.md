@@ -5,6 +5,19 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **РЭХА's own player on a take's page in the band service.** On a
+  computer, a take's page plays through the same player as РЭХА: a lane
+  per track with its level, **M** and **S**, zoom, **Repeat** over a part,
+  and the marks as chips. Press a chip to read and answer the talk under it
+  in the panel on the right; **Mark** opens a new mark there. On a phone,
+  each track has a row with its level, **M** and **S**.
+- **Your own levels in the band service.** Turn a track up or down once,
+  and every take with a track of that name plays it that way for you, on
+  the phone and on the computer. Only you hear it, and nothing goes back to
+  РЭХА. **РЭХА's levels** brings back the mix the take came with.
+
 ## 0.18.0
 
 - **A home for the band in the band service.** The service opens on

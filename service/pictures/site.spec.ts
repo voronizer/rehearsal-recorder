@@ -37,25 +37,34 @@ const scrollTo = (heading: string) => async (page: Page) => {
   })
 }
 
+/** Scrolls the page to its end. */
+const toEnd = async (page: Page) => {
+  await page.locator("main").evaluate((m) => m.scrollTo(0, m.scrollHeight))
+}
+
 const SHOTS: Record<string, Shot> = {
   "new-takes": { who: "ira", path: () => "/" },
+  // Ivan turns his guitar up, past where РЭХА's mix had it: his levels, which only he hears.
   lanes: {
     who: "ivan",
     path: () => `/takes/${pictured().takes["Viasna 12"]}?at=102`,
-    then: (page) => page.getByRole("button", { name: "Solo Guitar" }).click(),
+    then: async (page) => {
+      await page.getByRole("slider", { name: "Guitar volume" }).press("End")
+      await page.getByText("Your levels. Only you hear them.").waitFor()
+    },
   },
   mark: {
     who: "ivan",
     path: () => `/takes/${pictured().takes["Viasna 12"]}?at=102`,
-    // The lanes with the mark on them, then the mark with the band's talk under it.
-    then: scrollTo("Tracks"),
+    // The mark with the band's talk under it.
+    then: scrollTo("Marks"),
   },
   colours: { who: "ivan", path: () => "/marks" },
   song: { who: "ivan", path: () => `/songs/${pictured().songs["Viasna"]}` },
   "three-weeks-ago": { who: "ivan", path: () => `/takes/${pictured().takes["Viasna 3"]}?at=104` },
-  // On the computer at home, for the recording program: the lanes, and every
-  // track to download under them.
-  downloads: { who: "ivan", path: () => `/takes/${pictured().takes["Kupalle 2"]}`, on: COMPUTER, then: scrollTo("Tracks") },
+  // On the computer at home, for the recording program: РЭХА's player with a
+  // lane per track, and every track to download under it.
+  downloads: { who: "ivan", path: () => `/takes/${pictured().takes["Kupalle 2"]}`, on: COMPUTER, then: toEnd },
   "sign-in": {
     who: null,
     path: () => "/signin",
