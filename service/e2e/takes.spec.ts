@@ -4,41 +4,45 @@ import { as, band } from "./band"
 test.describe("as Alex", () => {
   test.use({ storageState: as("alex") })
 
-  test("a take page has a lane per track with M and S", async ({ page }) => {
+  test("a take page has REHA's player: a lane per track with M and S, no Master", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
     await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 6 tracks$/)).toBeVisible()
-    const lanes = page.getByRole("main").getByRole("group")
+    const player = page.locator("[data-take-player]")
+    const lanes = player.locator("[data-lane-row]")
     await expect(lanes).toHaveCount(6)
     for (const [i, name] of ["Drums", "Bass", "Guitar", "Keys", "Vocals", "Shaker"].entries())
-      await expect(lanes.nth(i)).toHaveAccessibleName(name)
+      await expect(lanes.nth(i)).toHaveAttribute("data-lane-row", name)
+    // The service has no click and no master level.
+    await expect(player.locator("[data-master-group]")).toHaveCount(0)
+    // РЭХА's balance came with the take.
+    await expect(player.getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
+    await expect(player.getByRole("slider", { name: "Bass volume" })).toHaveAttribute("aria-valuetext", "100%")
 
-    const vocals = page.getByRole("group", { name: "Vocals" })
-    await vocals.getByRole("button", { name: "Mute Vocals" }).click()
-    await expect(vocals.getByRole("button", { name: "Mute Vocals" })).toHaveAttribute("aria-pressed", "true")
-    await expect(vocals).toHaveAttribute("data-heard", "false")
-
-    const bass = page.getByRole("group", { name: "Bass" })
-    await bass.getByRole("button", { name: "Solo Bass" }).click()
-    await expect(bass).toHaveAttribute("data-heard", "true")
-    await expect(page.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "false")
-    await bass.getByRole("button", { name: "Solo Bass" }).click()
-    await expect(page.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "true")
-    await expect(vocals).toHaveAttribute("data-heard", "false")
+    const mute = player.getByRole("button", { name: "Mute Vocals" })
+    await mute.click()
+    await expect(mute).toHaveAttribute("aria-pressed", "true")
+    const solo = player.getByRole("button", { name: "Solo Bass" })
+    await solo.click()
+    await expect(solo).toHaveAttribute("aria-pressed", "true")
+    await solo.click()
+    await expect(solo).toHaveAttribute("aria-pressed", "false")
+    await expect(mute).toHaveAttribute("aria-pressed", "true")
   })
 
-  test("a take plays and its time moves", async ({ page }) => {
+  test("a take plays, its time moves, and a press on the lanes moves the playhead", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
-    const main = page.getByRole("main")
-    const clock = main.getByTestId("clock")
-    await expect(clock).toHaveText("0:00 / 0:10")
-    await main.getByRole("button", { name: "Play “Viasna 12”" }).click()
-    await expect(clock).toHaveText("0:02 / 0:10", { timeout: 10_000 })
-    await main.getByRole("button", { name: "Pause “Viasna 12”" }).click()
-    // Tapping a lane moves the playhead there.
-    const lane = page.getByRole("group", { name: "Drums" }).getByTestId("wave")
-    const box = (await lane.boundingBox())!
-    await lane.click({ position: { x: box.width * 0.8, y: box.height / 2 } })
-    await expect(clock).toHaveText("0:08 / 0:10")
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    const time = transport.getByText(/^\d:\d\d \/ 0:10$/)
+    await expect(time).toHaveText("0:00 / 0:10")
+    await transport.getByRole("button", { name: "Play", exact: true }).click()
+    await expect(time).toHaveText(/^0:0[2-9] \/ 0:10$/, { timeout: 10_000 })
+    // The bar at the bottom plays the same take.
+    await expect(page.getByLabel("Player").getByTestId("bar-time")).not.toHaveText("0:00")
+    await transport.getByRole("button", { name: "Pause", exact: true }).click()
+    const lanes = page.getByRole("group", { name: "Take timeline" })
+    const box = (await lanes.boundingBox())!
+    await lanes.click({ position: { x: box.width * 0.8, y: box.height - 20 } })
+    await expect(time).toHaveText("0:08 / 0:10")
   })
 
   test("download tracks says which originals are still coming", async ({ page }) => {
@@ -71,10 +75,49 @@ test.describe("as Alex on a phone", () => {
     expect(box.width).toBeGreaterThan(0)
     expect(box.height).toBeGreaterThan(0)
   })
+
+  test("a take page on a phone has a row per track as on the desk, and no lanes", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const tracks = page.getByRole("main").getByRole("region", { name: "Tracks" })
+    const rows = tracks.locator("[data-desk-row]")
+    await expect(rows).toHaveCount(6)
+    await expect(rows.nth(4)).toHaveAttribute("data-desk-row", "Vocals")
+    await expect(page.locator("[data-lane-row]")).toHaveCount(0)
+    await expect(page.getByRole("toolbar", { name: "Transport" })).toHaveCount(0)
+    const mute = tracks.getByRole("button", { name: "Mute Drums" })
+    await mute.click()
+    await expect(mute).toHaveAttribute("aria-pressed", "true")
+    await expect(tracks.getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
+  })
 })
 
 test.describe("as Ira", () => {
   test.use({ storageState: as("ira") })
+
+  test("a level moved is yours after a reload, and the way back is the balance", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const player = page.locator("[data-take-player]")
+    const line = page.locator("[data-levels]")
+    await expect(line).toContainText("Levels as РЭХА sent them.")
+    await expect(line.getByRole("button", { name: "РЭХА's levels" })).toBeDisabled()
+    const guitar = player.getByRole("slider", { name: "Guitar volume" })
+    await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    await guitar.focus()
+    for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft")
+    await expect(guitar).toHaveAttribute("aria-valuetext", "95%")
+    await expect(line).toContainText("Your levels. Only you hear them.")
+
+    await page.reload()
+    await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "95%")
+    // A track not moved stays at the take's balance.
+    await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
+
+    await page.locator("[data-levels]").getByRole("button", { name: "РЭХА's levels" }).click()
+    await expect(page.locator("[data-levels]")).toContainText("Levels as РЭХА sent them.")
+    await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
+    await page.reload()
+    await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
+  })
 
   test("a star shows at once and stays after a reload", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 3"]}`)
@@ -106,7 +149,10 @@ test.describe("as Dzima", () => {
     await expect(mine).toContainText("0:05")
     await expect(mine).toContainText("Dzima")
     await page.reload()
-    const kept = page.getByRole("main").locator("[data-mark]").filter({ hasText: "Bass comes in late" })
+    // On the page it is a chip in the player; pressed, its talk is in the panel.
+    await page.locator("[data-take-player]").getByRole("button", { name: "Bass comes in late" }).click()
+    await expect(page.getByLabel("Panel")).toContainText("Mark at 0:05")
+    const kept = page.getByLabel("Panel").locator("[data-mark]").filter({ hasText: "Bass comes in late" })
     await expect(kept).toContainText("0:05")
     // Deleting your mark says what goes with it.
     await kept.getByRole("button", { name: "Comment", exact: true }).click()
@@ -120,16 +166,32 @@ test.describe("as Dzima", () => {
     await ask.getByRole("button", { name: "Cancel" }).click()
   })
 
-  test("a mark gets a comment, is closed and opened again", async ({ page }) => {
-    await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
-    const marks = page.getByRole("main").getByRole("region", { name: "Marks" }).locator("[data-mark]")
-    // A mark from РЭХА and Ira's, by their moment. РЭХА's follows РЭХА: no Edit or Delete.
-    await expect(marks).toHaveCount(2)
-    await expect(marks.nth(0)).toContainText("Count it in")
-    await expect(marks.nth(0)).toContainText("Set in РЭХА")
-    await expect(marks.nth(0).getByRole("button", { name: "Edit" })).toHaveCount(0)
+  test("Mark on the take page opens a new mark in the panel", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}?at=8`)
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    await expect(transport.getByText(/^\d:\d\d \/ /)).toHaveText(/^0:08 /)
+    await transport.getByRole("button", { name: "Add mark" }).click()
+    const panel = page.getByLabel("Panel")
+    await expect(panel).toContainText("New mark at 0:08")
+    await panel.getByLabel("Note").fill("Guitar too loud")
+    await panel.getByRole("button", { name: "Add mark" }).click()
+    await expect(panel).toContainText("Mark at 0:08")
+    await expect(panel.locator("[data-mark]")).toContainText("Dzima")
+    await expect(page.locator("[data-take-player]").getByRole("button", { name: "Guitar too loud" })).toBeVisible()
+  })
 
-    const quiet = marks.filter({ hasText: "Too quiet here" })
+  test("a mark chip opens its talk: a comment, closed and opened again", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
+    const player = page.locator("[data-take-player]")
+    const panel = page.getByLabel("Panel")
+    // A mark from РЭХА follows РЭХА: no Edit or Delete. A chip has no ✕.
+    await player.getByRole("button", { name: "Count it in" }).click()
+    await expect(panel.locator("[data-mark]")).toContainText("Set in РЭХА")
+    await expect(panel.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0)
+    await expect(player.getByRole("button", { name: /^Remove mark/ })).toHaveCount(0)
+
+    await player.getByRole("button", { name: "Too quiet here" }).click()
+    const quiet = panel.locator("[data-mark]").filter({ hasText: "Too quiet here" })
     await quiet.getByRole("button", { name: "Comment", exact: true }).click()
     await quiet.getByLabel("Your comment").fill("Turn the vocal up")
     await quiet.getByRole("button", { name: "Send" }).click()
@@ -139,6 +201,7 @@ test.describe("as Dzima", () => {
     await quiet.getByRole("button", { name: "Open again" }).click()
     await expect(quiet).toHaveAttribute("data-closed", "false")
     await page.reload()
-    await expect(page.locator("[data-mark]").filter({ hasText: "Too quiet here" })).toContainText("Dzima: Turn the vocal up")
+    await page.locator("[data-take-player]").getByRole("button", { name: "Too quiet here" }).click()
+    await expect(page.getByLabel("Panel").locator("[data-mark]")).toContainText("Dzima: Turn the vocal up")
   })
 })

@@ -48,9 +48,9 @@ test("a label renamed shows on its marks", async ({ page }) => {
   await names.nth(5).press("Enter")
   await expect(panel.getByRole("button", { name: "Delete “Great”" })).toBeVisible()
 
-  // The mark from РЭХА with no note shows its label's name.
+  // The mark from РЭХА with no note shows its label's name, on its chip in РЭХА's player too.
   await page.goto(`/takes/${band().takes["Viasna 12"]}`)
-  await expect(page.getByRole("main").getByRole("region", { name: "Marks" }).locator("[data-mark]").first()).toContainText("Great")
+  await expect(page.locator("[data-take-player]").getByRole("button", { name: "Great", exact: true })).toBeVisible()
 })
 
 test("a label dragged by its grip to the top is the first", async ({ page }) => {
