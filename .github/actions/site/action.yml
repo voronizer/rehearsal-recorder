@@ -8,6 +8,12 @@
 # The picture a chat shows for a link to the site, og.png, is drawn here
 # from the build (npm run og, after the build and before the tests), so it
 # shows the app as the build has it.
+#
+# The job runs in Playwright's own image (mcr.microsoft.com/playwright),
+# which has the browser and everything it needs, as an ordinary user: so
+# nothing here installs a browser, and nothing uses apt. The job's
+# container line says which image; see `which release` in release.yml and
+# `what changed` in checks.yml.
 
 name: The site, built and tested
 description: Builds and tests reha.stream, draws its link picture and lays the build out for Vercel.
@@ -31,7 +37,7 @@ runs:
 
     - uses: actions/setup-node@v7
       with:
-        node-version: "22"
+        node-version: "26"
         cache: npm
         cache-dependency-path: |
           ui/package-lock.json
@@ -55,21 +61,18 @@ runs:
       working-directory: site
       run: npm run build
 
-    - name: Install the browser
-      shell: bash
-      working-directory: site
-      run: npx playwright install --with-deps chromium
-
     # The app in the link picture draws in the computer's own font, which
-    # the runner does not have: Inter stands in for it, as when the picture
-    # was chosen (site/scripts/og-fonts.conf). The browser's step has just
-    # updated apt's lists. A stuck mirror fails it after five minutes rather
-    # than hold the job.
+    # Linux does not have: Inter stands in for it, as when the picture was
+    # chosen (site/scripts/og-fonts.conf). Its files are in
+    # site/scripts/fonts/, the four weights the app draws in, given to this
+    # user's fonts rather than the system's: there is no apt or root here.
+    # The tests after it see the same fonts.
     - name: Fonts for the link picture
       shell: bash
       run: |
-        timeout 300 sudo apt-get install -y --no-install-recommends fonts-inter
-        sudo cp site/scripts/og-fonts.conf /etc/fonts/conf.d/56-og-fonts.conf
+        mkdir -p "$HOME/.local/share/fonts" "$HOME/.config/fontconfig"
+        cp site/scripts/fonts/*.otf "$HOME/.local/share/fonts/"
+        cp site/scripts/og-fonts.conf "$HOME/.config/fontconfig/fonts.conf"
         fc-match -f '%{family}\n' -- -apple-system | grep -q '^Inter' ||
           { echo "::error::The link picture would not be in Inter."; exit 1; }
 
@@ -93,18 +96,19 @@ runs:
     # addresses Web Analytics and Speed Insights load their scripts from
     # (/_vercel/insights/, /_vercel/speed-insights/): a build uploaded
     # ready-made (vercel deploy --prebuilt, until 0.11.1) served neither.
+    # Written with Node, since Playwright's image has no jq.
     - name: Lay out the build for Vercel
       shell: bash
       run: |
         mkdir -p site/vercel-upload
         cp -R site/dist/. site/vercel-upload/
-        routes='[]'
-        if [ -f site/vercel-config.json ]; then
-          routes=$(jq '.routes' site/vercel-config.json)
-        fi
-        jq -n --argjson routes "$routes" \
-          '{framework: null, installCommand: "", buildCommand: "", outputDirectory: ".", routes: $routes}' \
-          > site/vercel-upload/vercel.json
+        node -e '
+        const fs = require("fs")
+        const config = "site/vercel-config.json"
+        const routes = fs.existsSync(config) ? JSON.parse(fs.readFileSync(config, "utf8")).routes ?? null : []
+        const out = { framework: null, installCommand: "", buildCommand: "", outputDirectory: ".", routes }
+        fs.writeFileSync("site/vercel-upload/vercel.json", JSON.stringify(out, null, 2) + "\n")
+        '
 
     - uses: actions/upload-artifact@v7
       with:
