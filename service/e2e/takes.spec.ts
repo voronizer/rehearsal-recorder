@@ -102,10 +102,18 @@ test.describe("as Ira", () => {
     await expect(line.getByRole("button", { name: "РЭХА's levels" })).toBeDisabled()
     const guitar = player.getByRole("slider", { name: "Guitar volume" })
     await expect(guitar).toHaveAttribute("aria-valuetext", "100%")
+    // The page is read again only once the last turn has reached the service.
+    const kept = page.waitForResponse(
+      (r) =>
+        r.request().method() === "PUT" &&
+        r.url().endsWith("/api/me/levels") &&
+        Math.round(r.request().postDataJSON().levels.Guitar * 100) === 95
+    )
     await guitar.focus()
     for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft")
     await expect(guitar).toHaveAttribute("aria-valuetext", "95%")
     await expect(line).toContainText("Your levels. Only you hear them.")
+    await kept
 
     await page.reload()
     await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "95%")

@@ -21,17 +21,19 @@ afterEach(() => {
 test("levels kept in quick turns end as the last turn left them", async () => {
   const { answers, sent } = service()
   const first = keepLevels({ Bass: 0.3 })
-  const second = keepLevels({ Bass: 0.5 })
-  await vi.waitFor(() => expect(answers.length).toBeGreaterThan(0))
+  await vi.waitFor(() => expect(answers).toHaveLength(1))
+  const second = keepLevels({ Guitar: 0.4 })
+  const third = keepLevels({ Bass: 0.5 })
   await new Promise((done) => setTimeout(done, 20))
-  // The second goes only once the first is answered, so their answers cannot cross.
+  // The next goes only once the first is answered, so their answers cannot cross.
   expect(sent).toHaveLength(1)
   answers[0]({ Bass: 0.3 })
   await vi.waitFor(() => expect(answers).toHaveLength(2))
-  answers[1]({ Bass: 0.5 })
-  await Promise.all([first, second])
-  expect(sent).toEqual([{ levels: { Bass: 0.3 } }, { levels: { Bass: 0.5 } }])
-  expect(queryClient.getQueryData(levelsQuery.queryKey)).toEqual({ levels: { Bass: 0.5 } })
+  answers[1]({ Bass: 0.5, Guitar: 0.4 })
+  await Promise.all([first, second, third])
+  // The turns that waited go together, so the last one reaches the service soon.
+  expect(sent).toEqual([{ levels: { Bass: 0.3 } }, { levels: { Guitar: 0.4, Bass: 0.5 } }])
+  expect(queryClient.getQueryData(levelsQuery.queryKey)).toEqual({ levels: { Bass: 0.5, Guitar: 0.4 } })
 })
 
 test("a read of the levels from before a turn does not undo it", async () => {

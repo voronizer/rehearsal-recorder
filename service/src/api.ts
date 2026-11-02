@@ -126,23 +126,35 @@ export const useLevels = () => useQuery(levelsQuery)
 
 const KEEP_LEVELS = ["keep-levels"]
 
+/** Levels turned while an earlier change was on its way, not yet sent. */
+let unsent: Record<string, number | null> = {}
+
 /**
  * Keeps the member's levels; a level of null forgets that track's. Nothing
  * else in the band changes, so only the levels are read again, from the
  * answer. A change waits for the one before it, so their answers cannot
- * cross, and it is a mutation, so a lapsed session goes to sign-in.
+ * cross, and it is a mutation, so a lapsed session goes to sign-in. The
+ * changes that waited go in one, so the last turn is kept soon.
  */
 export function keepLevels(levels: Record<string, number | null>) {
+  unsent = { ...unsent, ...levels }
   return new MutationObserver(queryClient, {
     mutationKey: KEEP_LEVELS,
     scope: { id: "levels" },
-    mutationFn: (levels: Record<string, number | null>) => data(client.api.me.levels.$put({ json: { levels } })),
+    mutationFn: async () => {
+      const levels = unsent
+      unsent = {}
+      // An earlier change already took these levels with it.
+      if (!Object.keys(levels).length) return null
+      return data(client.api.me.levels.$put({ json: { levels } }))
+    },
     onSuccess: async (after) => {
+      if (!after) return
       // A read asked before this change would put the old levels back.
       await queryClient.cancelQueries({ queryKey: levelsQuery.queryKey })
       queryClient.setQueryData(levelsQuery.queryKey, after)
     },
-  }).mutate(levels)
+  }).mutate()
 }
 
 /** Why your levels were not kept the last time, or null if they were. */
