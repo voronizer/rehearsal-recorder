@@ -523,8 +523,9 @@ test.describe("the screen", () => {
       expect(scroll, name).toBeLessThanOrEqual(client)
     }
     // The panel is 22.5 rem of the scale's 24 px, the window being under
-    // 1100 px of rem.
-    expect(Math.abs((await box(panel(page))).width - 540)).toBeLessThan(0.5)
+    // 1100 px of rem, but never more than 40 % of the window: the takes keep
+    // the rest.
+    expect(Math.abs((await box(panel(page))).width - 960 * 0.4)).toBeLessThan(0.5)
     // The long name still wraps, whole, with its pencil on its last line.
     const seen = await holdsName(title(page))
     expect(seen.lines).toBeGreaterThan(1)
@@ -537,12 +538,10 @@ test.describe("the screen", () => {
     }
   })
 
-  // What follows a bar goes under it only where there is no room for it beside
-  // the bar at its smallest (the test above): before that the longest take's
-  // bar is the first to give way. In a window of 880 the column has 12.75rem,
-  // too little for the badge of a false start, which goes under its bar, and
-  // enough for the length of every other take.
-  test("a take's length stays beside its bar, whose width gives way first, at 100 percent in an 880 by 680 window", async ({ page }) => {
+  // A take's name has a line of its own, and its wave and length go under
+  // it, only where the row has no room for them all: in a window of 880 at
+  // 100 % every take's length stays beside its wave.
+  test("a take's length stays beside its wave at 100 percent in an 880 by 680 window", async ({ page }) => {
     await page.setViewportSize({ width: 880, height: 680 })
     await openBandApp(page, { stress: "rehearsal" })
     await startRehearsal(page, 33)
@@ -552,13 +551,13 @@ test.describe("the screen", () => {
       all
         .filter((row) => {
           const middle = (el: Element) => el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2
-          const bar = row.querySelector("[data-bar-title]")!
+          const wave = row.querySelector("[data-wave]")!
           const length = row.querySelector("span.tnum.grid")!
-          return Math.abs(middle(length) - middle(bar)) >= 4
+          return Math.abs(middle(length) - middle(wave)) >= 4
         })
         .map((row) => (row as HTMLElement).dataset.take)
     )
-    expect(under, "takes whose length is not beside their bar").toEqual([])
+    expect(under, "takes whose length is not beside their wave").toEqual([])
     expect(await rows.count()).toBeGreaterThan(20)
   })
 })

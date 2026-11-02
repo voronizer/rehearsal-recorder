@@ -16,6 +16,9 @@ import { clampTempo, parseTempo, tempoRange } from "@/lib/metronome"
  *
  * `onChange` gets each new tempo; the field shows `tempo`, what Python
  * holds, the moment it is not being typed in.
+ *
+ * In a footer short of room (FooterRow's squeeze) − and + and the unit go
+ * at its second step, and the number stays.
  */
 export function TempoField({
   tempo,
@@ -46,6 +49,7 @@ export function TempoField({
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
+          data-squeeze="2"
           variant="ghost"
           size="icon-tiny"
           aria-label={label}
@@ -90,7 +94,9 @@ export function TempoField({
         className="tnum h-8 w-10 px-1 text-center font-semibold"
       />
       {step("Faster", 1, <Plus />, tempo === null || tempo >= max)}
-      <TempoUnit signature={signature} className="ml-1 text-sm" />
+      <span data-squeeze="2" className="contents">
+        <TempoUnit signature={signature} className="ml-1 text-sm" />
+      </span>
     </div>
   )
 }

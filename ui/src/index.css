@@ -298,3 +298,29 @@ html[data-recording]
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* A footer short of room gives things up, least needed first (FooterRow's
+   squeeze, owner's pick B, 2026-11-02). From step 1: the key chips and the
+   buttons' kept room. Each step: what is marked for it, gone, or there for
+   a screen reader only (quiet). Outside any layer, so these win over the
+   utilities that place the same things. */
+[data-tight] [data-slot="kbd"],
+[data-tight] [data-squeeze="1"],
+[data-tight="2"] [data-squeeze="2"],
+[data-tight="3"] [data-squeeze="2"],
+[data-tight="3"] [data-squeeze="3"] {
+  display: none;
+}
+[data-tight] [data-footer-actions] {
+  min-width: 0;
+}
+[data-tight="2"] [data-squeeze-quiet="2"],
+[data-tight="3"] [data-squeeze-quiet="2"],
+[data-tight="3"] [data-squeeze-quiet="3"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

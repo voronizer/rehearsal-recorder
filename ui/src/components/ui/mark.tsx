@@ -1,5 +1,6 @@
 import type * as React from "react"
 import type { Label, LabelColour } from "@/lib/api"
+import { OPENS } from "@/components/ui/button"
 import { formatMMSS } from "@/lib/format"
 import { labelLook, markText } from "@/lib/labels"
 import { cn } from "@/lib/utils"
@@ -30,13 +31,15 @@ function LabelDot({ colour, className }: { colour: LabelColour; className?: stri
  * line is read away from it, then its label and what was written. The
  * words are cut at the end of the room; the dot and the time never are. Its
  * text size is the caller's. It does nothing when pressed: a place that
- * opens the take at the mark puts it in its button.
+ * opens or plays the take at the mark puts it in its button and says so
+ * with `opens`, which draws its words as words that open (OPENS).
  */
 function MarkLine({
   label,
   at,
   note,
   take,
+  opens = false,
   className,
 }: {
   label: Label
@@ -45,6 +48,7 @@ function MarkLine({
   note: string
   /** The take it is on (its TakeTitle), where the line is not under it. */
   take?: React.ReactNode
+  opens?: boolean
   className?: string
 }) {
   return (
@@ -53,7 +57,7 @@ function MarkLine({
       <span className="tnum shrink-0 text-muted-foreground">{formatMMSS(at)}</span>
       <span className="truncate">
         {take != null && <span className="text-muted-foreground">{take} · </span>}
-        {markText(label, note)}
+        {opens ? <span className={OPENS}>{markText(label, note)}</span> : markText(label, note)}
       </span>
     </span>
   )

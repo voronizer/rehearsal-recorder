@@ -325,9 +325,12 @@ function Updates({ hood, update }: { hood: Hood; update: UpdateStatus }) {
           off. See updates.py. */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-3">
+          {/* A copy run from source never checks (updates.py): the box
+              is greyed and empty there, so it does not say it does. */}
           <Checkbox
             id="check-updates"
-            checked={update.on}
+            checked={update.on && hood.running_as === "built"}
+            disabled={hood.running_as !== "built"}
             onCheckedChange={(on) => void switchUpdates(on === true)}
           />
           <Label htmlFor="check-updates">Check for new versions</Label>

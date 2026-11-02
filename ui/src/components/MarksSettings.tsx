@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { GripVertical, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +12,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { WholeTip, useCut } from "@/components/ui/whole"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { SettingsGroup } from "@/components/SettingsGroup"
 import { SortableList } from "@/components/SortableList"
@@ -154,10 +153,11 @@ export function MarksSettings() {
 }
 
 /**
- * A label's row: its grip, its dot, which opens the eight colours, and its
- * name, which turns into a field to rename it; how many marks have it, and
- * Delete, which shows on hover or focus. The name is cut at the end of its
- * room, and whole in the shared tip on hover and on keyboard focus (B6).
+ * A label's row: its grip, its dot in a frame, which opens the eight
+ * colours, and its name in a field; how many marks have it, and Delete.
+ * Each looks like what it does, as in the band service: the name is
+ * renamed where it stands (Enter or leaving the field keeps it, Escape puts
+ * it back), and Delete is always there.
  */
 function LabelRow({
   label,
@@ -174,12 +174,24 @@ function LabelRow({
   onRecolour: (colour: LabelColour) => Promise<void>
   onDelete: () => void
 }) {
-  const [editing, setEditing] = useState<string | null>(null)
+  // What the field says while it differs from the name; null when it does
+  // not, so a rename from elsewhere shows.
+  const [typed, setTyped] = useState<string | null>(null)
   const [palette, setPalette] = useState(false)
-  const [nameRef, cut] = useCut<HTMLSpanElement>()
+  // A name refused (another label has it) is said in a notice: after Enter
+  // the field keeps it to be put right, and leaving it puts the name back.
+  const keep = async (leaving: boolean) => {
+    if (typed === null) return
+    if (typed.trim() === "" || typed.trim() === label.name) return setTyped(null)
+    if ((await onRename(typed)) || leaving) setTyped(null)
+  }
+  // Escape leaves a field before the field hears it (useSpacebar's
+  // stepOutOfField), so leaving keeps the name only once the key, if it was
+  // Escape, has had its say.
+  const escaped = useRef(false)
 
   return (
-    <div data-label={label.name} className="group flex items-center gap-3 py-1">
+    <div data-label={label.name} className="flex items-center gap-3 py-1">
       <Button
         ref={handleRef}
         variant="ghost"
@@ -195,7 +207,7 @@ function LabelRow({
       <Popover open={palette} onOpenChange={setPalette}>
         <PopoverTrigger asChild>
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon-row"
             aria-label={`Colour of ${label.name}`}
             data-colour={label.colour}
@@ -233,42 +245,30 @@ function LabelRow({
         </PopoverContent>
       </Popover>
 
-      {editing !== null ? (
-        <Input
-          autoFocus
-          aria-label="Label name"
-          value={editing}
-          maxLength={40}
-          onChange={(e) => setEditing(e.target.value)}
-          // Leaving the field is Escape: only Enter renames.
-          onBlur={() => setEditing(null)}
-          onKeyDown={async (e) => {
-            if (e.key === "Escape") {
-              e.preventDefault()
-              setEditing(null)
-            }
-            if (e.key === "Enter") {
-              e.preventDefault()
-              if (editing.trim() === label.name || (await onRename(editing))) setEditing(null)
-            }
-          }}
-          className="h-8 max-w-64"
-        />
-      ) : (
-        <WholeTip cut={cut} text={label.name}>
-          <Button
-            variant="ghost"
-            size="row"
-            aria-label={`Rename ${label.name}`}
-            onClick={() => setEditing(label.name)}
-            className="min-w-0 shrink justify-start"
-          >
-            <span ref={nameRef} className="block min-w-0 truncate">
-              {label.name}
-            </span>
-          </Button>
-        </WholeTip>
-      )}
+      <Input
+        aria-label={`Name of ${label.name}`}
+        value={typed ?? label.name}
+        maxLength={40}
+        onChange={(e) => setTyped(e.target.value)}
+        onBlur={() =>
+          window.setTimeout(() => {
+            if (!escaped.current) void keep(true)
+            escaped.current = false
+          })
+        }
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault()
+            escaped.current = true
+            setTyped(null)
+          }
+          if (e.key === "Enter") {
+            e.preventDefault()
+            void keep(false)
+          }
+        }}
+        className="h-8 max-w-64 min-w-0 flex-1"
+      />
 
       <span className="tnum ml-auto shrink-0 text-xs text-muted-foreground">
         {marksLabel(label.marks)}
@@ -280,7 +280,7 @@ function LabelRow({
           size="icon-row"
           aria-label={`Delete ${label.name}`}
           onClick={onDelete}
-          className="text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 hover:text-destructive"
+          className="text-muted-foreground hover:text-destructive"
         >
           <Trash2 />
         </Button>

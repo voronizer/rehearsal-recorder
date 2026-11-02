@@ -74,7 +74,7 @@ test("Viasna, to the click: its stripes dimmed under the line", async ({ page })
 
 test("Take 4, of no song, against its own middle", async ({ page }) => {
   await bandTake(page, "Take 4")
-  await expect(tag(page)).toHaveText("No tempo · middle 126 bpm")
+  await expect(tag(page)).toHaveText("No tempo set · about 126 bpm")
   await expect(line(page)).toBeVisible()
 })
 
@@ -94,7 +94,7 @@ test("a take while it counts: nothing for a second, a spinner, then words", asyn
   await page.clock.runFor(9000)
   await expect(tag(page)).toHaveText("Counting the tempo…")
   await letGo(page, "take_drift")
-  await expect(tag(page)).toHaveText("No tempo · middle 120 bpm · from the mix")
+  await expect(tag(page)).toHaveText("No tempo set · about 120 bpm · from the whole band")
 })
 
 for (const [why, said] of [

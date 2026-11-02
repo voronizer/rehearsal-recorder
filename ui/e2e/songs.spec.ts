@@ -1241,7 +1241,7 @@ test("the ladder's labels and part titles have no capitals", async ({ page }) =>
   await chooseSong(page, "Pałyn")
   const ladder = page.getByRole("region", { name: "Every take" })
   // F7: as written, at one of the five sizes (F5).
-  for (const label of ["Rehearsal", "Takes, to scale", "Takes"]) {
+  for (const label of ["Rehearsal", "Takes, by length", "Takes"]) {
     expect(
       await style(
         ladder.getByText(label, { exact: true }),

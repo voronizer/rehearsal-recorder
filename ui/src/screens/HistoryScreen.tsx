@@ -29,7 +29,7 @@ import { useTakeSending } from "@/components/sending/useTakeSending"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useAfter } from "@/hooks/useAfter"
 import { useSongChoices } from "@/hooks/useSongChoices"
-import { useEveningSettings } from "@/hooks/useEveningSettings"
+import { sendPlace, useEveningSettings } from "@/hooks/useEveningSettings"
 import { useTakeStripPlayer } from "@/hooks/useTakeStripPlayer"
 import { goesByTime } from "@/lib/songTabs"
 import { useEscape, useKey, usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
@@ -584,13 +584,15 @@ export function HistoryScreen({
   }
 
   /** ▶ on a mark: its take plays here from just before the mark, or, when
-   *  it is the mark playing, pauses. Its rehearsal is read for the take,
-   *  and an answer that comes back after another ▶ is dropped. A take that
-   *  could not be opened is tried again, from this mark. */
+   *  it is the mark playing, pauses. A press on its wave (`from`) plays it
+   *  from there. Its rehearsal is read for the take, and an answer that
+   *  comes back after another ▶ is dropped. A take that could not be opened
+   *  is tried again, from this mark. */
   const cueing = useRef(0)
-  const playMark = async (m: MarkHit) => {
+  const playMark = async (m: MarkHit, from?: number) => {
     const ticket = ++cueing.current
     if (
+      from === undefined &&
       playingMark &&
       markKey(playingMark) === markKey(m) &&
       cued?.folder === m.folder &&
@@ -608,7 +610,7 @@ export function HistoryScreen({
       return
     }
     setPlayingMark(m)
-    cueAt(placed(m.folder, take), playFrom(m.at))
+    cueAt(placed(m.folder, take), from ?? playFrom(m.at))
   }
 
   /** Another label, from the list. What was playing stops, as it does for
@@ -1045,6 +1047,7 @@ export function HistoryScreen({
             takes={opened.takes}
             bytes={rehearsals?.find((r) => r.folder === opened.folder)?.disk_bytes ?? null}
             folder={opened.folder}
+            send={sendPlace(evening)}
           />
         }
       >
@@ -1103,6 +1106,7 @@ export function HistoryScreen({
         takes={opened?.folder === current ? opened.takes : null}
         bytes={summary.disk_bytes}
         folder={summary.folder}
+        send={sendPlace(evening)}
         withFolder={false}
       />
     ) : null
@@ -1232,6 +1236,7 @@ export function HistoryScreen({
                   onPlay={playInOverview}
                   onOpen={(take) => void openGo(take)}
                   onOpenAt={(take, at) => void openGo(take, at)}
+                  onPlayAt={cueAt}
                   onRename={setTakeToRename}
                   onStar={(take, starred) => void starTake(take, starred)}
                   onShare={sending.share}
@@ -1275,6 +1280,7 @@ export function HistoryScreen({
                       : null
                   }
                   onPlay={(m) => void playMark(m)}
+                  onPlayAt={(m, at) => void playMark(m, at)}
                   onOpen={(m) => {
                     // Played in the player and still going after Escape,
                     // the take shows in this row.
@@ -1405,6 +1411,7 @@ export function HistoryScreen({
                     onPlay={(take) => playInOverview(placed(opened.folder, take))}
                     onOpen={(take) => select(placed(opened.folder, take))}
                     onOpenAt={(take, at) => openAt(placed(opened.folder, take), at)}
+                    onPlayAt={(take, at) => cueAt(placed(opened.folder, take), at)}
                     onRename={(take) => setTakeToRename(placed(opened.folder, take))}
                     onStar={(take, starred) => void starTake(placed(opened.folder, take), starred)}
                     onShare={(take) => sending.share(placed(opened.folder, take))}

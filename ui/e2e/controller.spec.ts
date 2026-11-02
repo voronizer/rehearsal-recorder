@@ -26,8 +26,8 @@ test("Controls settings shows a disabled controller without opening ports", asyn
   await openApp(page)
   await page.getByRole("button", {name:"Settings", exact:true}).click()
   await page.getByRole("button", {name:"Controls", exact:true}).first().click()
-  await expect(page.getByRole("combobox", {name:"Controller", exact:true})).toHaveText("Disabled")
-  await expect(page.getByText("Controller disabled", {exact:true})).toBeVisible()
+  await expect(page.getByRole("combobox", {name:"Controller", exact:true})).toHaveText("None")
+  await expect(page.getByText("Pick the controller above once it is paired.", {exact:true})).toBeVisible()
 })
 
 test("externally started and stopped rehearsals update the setup/rehearsal screens", async ({ page }) => {
@@ -112,8 +112,8 @@ test("picking a controller saves immediately and survives leaving Settings", asy
   await expect(page.getByRole("combobox", { name: "Controller feedback output" })).toHaveText("Other output")
   await expect.poll(async () => (await calls(page, "set_controller")).at(-1)?.args).toEqual([controllerPorts.inputs[0], controllerPorts.outputs[1]])
   await page.getByRole("combobox", { name: "Controller", exact: true }).click()
-  await page.getByRole("option", { name: "Disabled", exact: true }).click()
-  await expect(page.getByText("Controller disabled", { exact: true })).toBeVisible()
+  await page.getByRole("option", { name: "None", exact: true }).click()
+  await expect(page.getByText("Pick the controller above once it is paired.", { exact: true })).toBeVisible()
   expect((await calls(page, "set_controller")).at(-1)?.args).toEqual([null, null])
 })
 

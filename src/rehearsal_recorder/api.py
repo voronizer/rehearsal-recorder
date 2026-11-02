@@ -84,7 +84,7 @@ from rehearsal_recorder.metronome import ANOTHER_ASIO, Metronome
 from rehearsal_recorder.backing import Backing
 from rehearsal_recorder.audio.monitor import LevelMonitor
 from rehearsal_recorder.audio.player import TakePlayer
-from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, wav_peaks
+from rehearsal_recorder.audio.waveform import DEFAULT_BUCKETS, take_shape, wav_peaks
 from rehearsal_recorder.midi.notes import read_notes
 from rehearsal_recorder import activity as activitymod
 from rehearsal_recorder.sending import Sending
@@ -4038,6 +4038,34 @@ class Api:
             "name": display_name,
             "takes": takes,
         }
+
+    # ---------- waves ----------
+
+    def take_shapes(self, items):
+        """
+        The waves the lists draw takes as: `items` are [{"folder",
+        "take_number"}], the answer {"ok", "shapes"}, a shape for each in
+        order (Library.take_shapes): 120 values in 0..1, [] for a take with
+        nothing to draw yet, None for a take that is not there. A wave not
+        made yet is made here from the take's files and kept, so the
+        interface asks for a few at a time and each row's comes in as soon as
+        it is made.
+        """
+        wanted = []
+        for item in items or []:
+            try:
+                folder = Path(item["folder"])
+                number = int(item["take_number"])
+            except (KeyError, TypeError, ValueError):
+                wanted.append(None)
+                continue
+            wanted.append((folder, number) if self._inside_recordings(folder) else None)
+        asked = [w for w in wanted if w is not None]
+        try:
+            made = iter(self._lib.take_shapes(asked, take_shape))
+        except LibraryUnavailable as e:
+            return {"ok": False, "error": str(e)}
+        return {"ok": True, "shapes": [None if w is None else next(made) for w in wanted]}
 
     # ---------- stars ----------
 

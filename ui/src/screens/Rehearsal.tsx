@@ -15,7 +15,7 @@ import { ConfirmDialog, PromptDialog, RenameTakeDialog } from "@/components/Conf
 import { useTakeSending } from "@/components/sending/useTakeSending"
 import { MarkerDialog } from "@/components/MarkerDialog"
 import { useSongChoices } from "@/hooks/useSongChoices"
-import { useEveningSettings } from "@/hooks/useEveningSettings"
+import { sendPlace, useEveningSettings } from "@/hooks/useEveningSettings"
 import { TakeNameField, type TakeNameFieldHandle } from "@/components/TakeNameField"
 import { PanelParts, SetCard, SongRows } from "@/components/NextTakeSongs"
 import { SHORT, otherSongs, rowsFor, shortList, songOf, useListOpen } from "@/lib/setSongs"
@@ -76,6 +76,7 @@ export function Rehearsal({
     openAt,
     move,
     playInOverview,
+    cueAt,
     player,
   } = useTakeStripPlayer()
   // A take open in the player, or playing in the overview: either way Space
@@ -461,6 +462,7 @@ export function Rehearsal({
           takes={session.takes}
           bytes={session.disk_bytes ?? null}
           folder={session.folder}
+          send={sendPlace(evening)}
         />
       }
       // The next take's name, the set and the band's other songs, in a panel
@@ -473,7 +475,9 @@ export function Rehearsal({
           data-next-take-panel
           className={cn(
             "shrink-0 overflow-y-auto border-l bg-panel px-8 py-8",
-            wide ? "w-[26rem]" : "w-[22.5rem]"
+            // Never more than 40 % of the window: at 150 % in the smallest one
+            // the takes keep most of it.
+            wide ? "w-[26rem]" : "w-[22.5rem] max-w-[40vw]"
           )}
         >
           <div className="animate-rise" style={rise(1)}>
@@ -530,7 +534,7 @@ export function Rehearsal({
         </aside>
       }
       footer={
-        <FooterRow left={<MetronomeRow name={nextName} />}>
+        <FooterRow squeeze={3} left={<MetronomeRow name={nextName} />}>
           <div className="flex items-center gap-3">
             {/* Escape finishes only with no take in hand; with one, it puts
                 the take away — see useEscape above. */}
@@ -638,6 +642,7 @@ export function Rehearsal({
               onPlay={playInOverview}
               onOpen={select}
               onOpenAt={openAt}
+              onPlayAt={cueAt}
               onRename={setToRename}
               onStar={starTake}
               onShare={sending.share}

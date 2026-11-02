@@ -1407,7 +1407,7 @@ test("a take without the click", async ({ page }) => {
   await expect(page.getByRole("tooltip")).toHaveText("This take was recorded without the click")
   // The lane has the band's tempo instead (drift spec Part 6), against the
   // take's own middle: it has no song with a tempo.
-  await expect(clickTag(page)).toHaveText("No tempo · middle 120 bpm · from the mix")
+  await expect(clickTag(page)).toHaveText("No tempo set · about 120 bpm · from the whole band")
   await expect(clickLines(page)).toHaveCount(0)
 })
 

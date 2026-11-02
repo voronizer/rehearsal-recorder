@@ -199,14 +199,22 @@ the shared one when it is redone.
   (the accent, the one main action), `strong` (Stop), `destructive` (what
   cannot be brought back; full red in the dark theme too, where 60% read as
   switched off), `outline`, `ghost`, and `link` (the text's colour with a
-  thin underline). Sizes say where it goes: `default`,
+  dotted underline). Sizes say where it goes: `default`,
   `row`, `footer`, `footer-aside`, `icon`, `icon-row`, `icon-tiny` and
-  `player`. The foot of a screen is one row, `FooterRow`: what the screen
+  `player`. `link` and whatever opens or plays where it stands (a take's,
+  a song's or a mark's words) wear `OPENS`, as the band service does: a
+  grey dotted line under them, solid under the pointer (owner's pick A,
+  2026-11-02). The foot of a screen is one row, `FooterRow`: what the screen
   has to say at the left, its buttons at the right, the main one rightmost,
-  so that it is in the same place on every screen. The main one is `footer`
-  (56 px): Start rehearsal, Record take, Stop, Save take and Recover, which
-  is Recover all while more than one take is listed or a run goes on. The
-  ones beside it are `footer-aside`: Finish, Discard and Decide later.
+  so that it is in the same place on every screen. In a window with no room
+  for both, the left half gives way in steps (`squeeze`, owner's pick B,
+  2026-11-02): what is marked `data-squeeze="1"` goes first, with the keys'
+  letters, then 2, then 3, and the buttons keep their size; the metronome
+  shows what went under its gear, and its keys still work. The main one is
+  `footer` (56 px): Start rehearsal, Record take, Stop, Save take and
+  Recover, which is Recover all while more than one take is listed or a run
+  goes on. The ones beside it are `footer-aside`: Finish, Discard and
+  Decide later.
   A take's own Recover in Drafts is `outline`, so the footer's stays the
   screen's one blue button (F2). A line between the two halves
   (`rule`) is for a left half that is a field, as the start screen's name
@@ -364,11 +372,15 @@ the shared one when it is redone.
   on the card's fill, each tile on a well of its own (C7), and reha.stream
   shows them so. A take drawn as a bar is as tall as it ran against the
   longest, through `drawnLength` (`lib/takeScale.ts`), never under a few
-  pixels. The bars of an evening's takes, on the rehearsal screen and in
-  History, of a song's ladder and of the Marks page are filled alike, from
-  `TAKE_FILLS` beside it: the plain fill, the starred one and the quiet one (a
-  false start, or a take not on disk). Each place adds only what its bars do
-  under the pointer. "Selected" has two looks instead of seven: the white
+  pixels. A take in a list (the rehearsal screen, History, a song's takes,
+  the Marks page) is its name and then its wave, `TakeWave`, as in the band
+  service (owner's pick A, 2026-11-02): 120 bars of its sound, the loudest
+  track at each moment, made once in Python and kept with the take; green
+  when starred, pale when quiet; a press plays from there. Every take's ★
+  shows, faint on one with none (owner's pick B); the row's other buttons
+  are under the pointer. The bars of a song's ladder are filled from
+  `TAKE_FILLS` beside it: the plain fill, the starred one and the quiet one
+  (a take not on disk). "Selected" has two looks instead of seven: the white
   plate inside a switch, and a grey fill for a row, pill, tab or toggle that
   is on. The full table, with every place each piece is built today, is C8 in
   the spec.
@@ -378,7 +390,11 @@ The other shared components, each with its stories:
 - **Input**, `input.tsx`: a text field, with the shared focus ring and a red
   frame when `aria-invalid`: the rehearsal's name on the start screen, the
   rename dialogs, a mark's note, a label's and a set's name, the folders in
-  Settings.
+  Settings. A label's name in Settings › Marks is always its field, and
+  its dot an `outline` button, as in the band service. A track's name on
+  the start screen (`NameField`) has no frame, which in a band's rows would
+  read as a form, but a faint line under it, brighter under the pointer
+  and in the ring's colour while typed in (owner's pick C, 2026-11-02).
 - **Label**, `label.tsx`: the name over or beside a field, on the start
   screen, in Settings and its Sets and Under the hood, and in New set. It is
   regular weight, as the system's own form labels are.

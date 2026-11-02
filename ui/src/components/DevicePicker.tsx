@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   Select,
   SelectContent,
@@ -35,6 +35,7 @@ export function DevicePicker<D extends Device>({
   detail,
   unavailable,
   disabled = false,
+  captions,
 }: {
   id: string
   /** The device list's name, for a screen reader: the group it is in says
@@ -63,6 +64,11 @@ export function DevicePicker<D extends Device>({
   /** While the list is being rebuilt: an index picked now may mean another
    *  device a moment later. */
   disabled?: boolean
+  /** The two lists' names on screen, left of each, where both show: on
+   *  Windows two boxes reading "ASIO" and "X18/XR18" left the reader to
+   *  guess which was which. As Rate and Depth are named beside their
+   *  switches below them. */
+  captions?: [driver: string, device: string]
 }) {
   const drivers = useMemo(
     () => [...new Set(devices.map((d) => d.host_api))],
@@ -97,74 +103,93 @@ export function DevicePicker<D extends Device>({
   // The saved device, when it can no longer be picked here: why.
   const savedWhy = !missing && current && inShown ? (unavailable?.(current) ?? null) : null
 
-  return (
-    <div className="flex flex-col gap-2">
-      {several && (
-        <Select value={driver ?? ""} onValueChange={setDriver} disabled={disabled}>
-          <SelectTrigger
-            id={`${id}-driver`}
-            aria-label="Driver"
-            className="w-full"
-          >
-            <SelectValue placeholder="Pick a driver" />
-          </SelectTrigger>
-          <SelectContent>
-            {drivers.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-      <Select
-        value={selected}
-        onValueChange={(v) => onChange(v === SYSTEM ? null : Number(v))}
-        disabled={disabled}
+  const named = several && captions !== undefined
+  // A list with its name on its left, where it has one.
+  const row = (caption: string | undefined, htmlFor: string, list: ReactNode) =>
+    named ? (
+      <div className="flex items-center gap-x-4">
+        <label htmlFor={htmlFor} className="min-w-20 shrink-0 text-sm">
+          {caption}
+        </label>
+        <div className="min-w-0 flex-1">{list}</div>
+      </div>
+    ) : (
+      list
+    )
+
+  const driverList = (
+    <Select value={driver ?? ""} onValueChange={setDriver} disabled={disabled}>
+      <SelectTrigger
+        id={`${id}-driver`}
+        aria-label="Driver"
+        className="w-full"
       >
-        <SelectTrigger
-          id={id}
-          aria-label={label}
-          aria-describedby={savedWhy ? `${id}-why` : undefined}
-          className="w-full"
-        >
-          <SelectValue placeholder={devicePlaceholder}>
-            {savedWhy && current ? `${current.name}${detail ? detail(current) : ""}` : undefined}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {systemDefault && <SelectItem value={SYSTEM}>{systemLabel}</SelectItem>}
-          {shown.map((d) => {
-            const why = unavailable?.(d) ?? null
-            if (why === null) {
-              return (
-                <SelectItem key={d.index} value={String(d.index)}>
-                  {d.name}
-                  {detail ? detail(d) : ""}
-                </SelectItem>
-              )
-            }
-            // Greyed by its words, not by fading the whole row: the reason
-            // has to stay readable.
+        <SelectValue placeholder="Pick a driver" />
+      </SelectTrigger>
+      <SelectContent>
+        {drivers.map((name) => (
+          <SelectItem key={name} value={name}>
+            {name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+  const deviceList = (
+    <Select
+      value={selected}
+      onValueChange={(v) => onChange(v === SYSTEM ? null : Number(v))}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        id={id}
+        aria-label={label}
+        aria-describedby={savedWhy ? `${id}-why` : undefined}
+        className="w-full"
+      >
+        <SelectValue placeholder={devicePlaceholder}>
+          {savedWhy && current ? `${current.name}${detail ? detail(current) : ""}` : undefined}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {systemDefault && <SelectItem value={SYSTEM}>{systemLabel}</SelectItem>}
+        {shown.map((d) => {
+          const why = unavailable?.(d) ?? null
+          if (why === null) {
             return (
-              <SelectItem
-                key={d.index}
-                value={String(d.index)}
-                disabled
-                className="data-[disabled]:opacity-100"
-              >
-                <span className="flex flex-col items-start text-muted-foreground">
-                  <span>
-                    {d.name}
-                    {detail ? detail(d) : ""}
-                  </span>
-                  <span className="text-xs">{why}</span>
-                </span>
+              <SelectItem key={d.index} value={String(d.index)}>
+                {d.name}
+                {detail ? detail(d) : ""}
               </SelectItem>
             )
-          })}
-        </SelectContent>
-      </Select>
+          }
+          // Greyed by its words, not by fading the whole row: the reason
+          // has to stay readable.
+          return (
+            <SelectItem
+              key={d.index}
+              value={String(d.index)}
+              disabled
+              className="data-[disabled]:opacity-100"
+            >
+              <span className="flex flex-col items-start text-muted-foreground">
+                <span>
+                  {d.name}
+                  {detail ? detail(d) : ""}
+                </span>
+                <span className="text-xs">{why}</span>
+              </span>
+            </SelectItem>
+          )
+        })}
+      </SelectContent>
+    </Select>
+  )
+
+  return (
+    <div className="flex flex-col gap-2">
+      {several && row(captions?.[0], `${id}-driver`, driverList)}
+      {row(captions?.[1], id, deviceList)}
       {savedWhy && (
         <p id={`${id}-why`} className="text-xs text-muted-foreground">
           {savedWhy}

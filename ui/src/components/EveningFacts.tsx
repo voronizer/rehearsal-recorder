@@ -3,7 +3,7 @@ import { FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { FigureLine, WholeTip, useFitted } from "@/components/ui/whole"
-import type { Take } from "@/lib/api"
+import type { SendTo, Take } from "@/lib/api"
 import { eveningOf, lengthLabel, takesLine } from "@/lib/evening"
 import { fitFigures, joinFigures } from "@/lib/figures"
 import { showFolder } from "@/lib/folder"
@@ -26,12 +26,15 @@ function Fact({ label, value, hidden }: { label: string; value: string; hidden?:
 /**
  * What there is to know about a rehearsal, in the window's header beside
  * its name: how long its takes run, how many and of how many songs, how
- * many are in the cloud, how much of the disk it uses, and a button to its
- * folder. Counted from the takes on screen, so it follows a take kept,
- * deleted or copied at once; only the size on disk comes from Python.
+ * many are where takes go (the cloud folder or the band service, `send`),
+ * how much of the disk it uses, and a button to its folder. The count of
+ * those sent is said once there are takes and somewhere to send them: an
+ * "In the cloud 0 of 0" said nothing. Counted from the takes on screen, so
+ * it follows a take kept, deleted or sent at once; only the size on disk
+ * comes from Python.
  *
  * The facts take the room the name leaves (B6), and give way to it whole
- * fact by whole fact, least needed first: On disk, then In the cloud, then
+ * fact by whole fact, least needed first: On disk, then what is sent, then
  * Takes, and Length last, as it says how long the evening has run. Pointing
  * at them says all four, as one line, once any has given way; a screen
  * reader is read that line whatever shows. The folder button never gives
@@ -47,22 +50,34 @@ export function EveningFacts({
   takes,
   bytes,
   folder,
+  send,
   withFolder = true,
 }: {
   takes: Take[] | null
   bytes: number | null
   folder: string
+  /** Where takes go, from Settings (hooks/useEveningSettings, sendPlace);
+   *  null while nowhere is set. */
+  send: SendTo | null
   /** The button to the folder, after the facts. */
   withFolder?: boolean
 }) {
-  const f = takes && eveningOf(takes)
+  const f = takes && eveningOf(takes, send ?? "cloud")
   const { folderButton } = words(useSystem())
   // In the order they stand; `keep` says which goes first (lowest first).
   const facts = f
     ? [
         { label: "Length", value: lengthLabel(f.seconds), keep: 3 },
         { label: "Takes", value: takesLine(f), keep: 2 },
-        { label: "In the cloud", value: `${f.inCloud} of ${f.takes}`, keep: 1 },
+        ...(send && f.takes > 0
+          ? [
+              {
+                label: send === "service" ? "In the band service" : "In the cloud",
+                value: `${f.sent} of ${f.takes}`,
+                keep: 1,
+              },
+            ]
+          : []),
         ...(bytes !== null ? [{ label: "On disk", value: formatBytes(bytes), keep: 0 }] : []),
       ]
     : []

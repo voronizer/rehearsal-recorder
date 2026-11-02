@@ -34,6 +34,8 @@ type Handlers = {
   onPlay: (take: PlacedTake) => void
   onOpen: (take: PlacedTake) => void
   onOpenAt: (take: PlacedTake, at: number) => void
+  /** Plays a take where it is from a spot: a press on its wave. */
+  onPlayAt?: (take: PlacedTake, at: number) => void
   onRename: (take: PlacedTake) => void
   onStar: (take: PlacedTake, starred: boolean) => void
   onShare: (take: PlacedTake) => void
@@ -81,7 +83,7 @@ export function SongLadder({
       <div aria-hidden className={cn(COLUMNS, "-mx-2 px-2 text-xs text-muted-foreground")}>
         <span />
         <span>Rehearsal</span>
-        <span className={NARROW.label}>Takes, to scale</span>
+        <span className={NARROW.label}>Takes, by length</span>
         <span className="text-right">Takes</span>
       </div>
       {rungs.map((rung) => (
@@ -114,6 +116,7 @@ function RungRow({
   onPlay,
   onOpen,
   onOpenAt,
+  onPlayAt,
   onRename,
   onStar,
   onShare,
@@ -210,6 +213,8 @@ function RungRow({
             onPlay={(t) => onPlay(at(t))}
             onOpen={(t) => onOpen(at(t))}
             onOpenAt={(t, sec) => onOpenAt(at(t), sec)}
+            onPlayAt={onPlayAt && ((t, sec) => onPlayAt(at(t), sec))}
+            folder={rung.folder}
             onRename={(t) => onRename(at(t))}
             onStar={(t, starred) => onStar(at(t), starred)}
             onShare={(t) => onShare(at(t))}
@@ -265,7 +270,9 @@ function Bar({
           className="inset-y-1"
         />
       ))}
-      <span className="tnum relative pl-1.5 text-xs text-muted-foreground">
+      {/* On the bar's own fill from its left edge (TAKE_FILLS), so a mark at
+          the very start is not drawn against the number as a "|2". */}
+      <span className="tnum relative flex items-center self-stretch pr-1 pl-1.5 text-xs text-muted-foreground [background:inherit]">
         {unnamed ? take.take_number : (take.go ?? take.take_number)}
       </span>
     </span>

@@ -54,6 +54,7 @@ export function SongPage({
   onPlay,
   onOpen,
   onOpenAt,
+  onPlayAt,
   onRename,
   onStar,
   onShare,
@@ -72,6 +73,8 @@ export function SongPage({
   onPlay: (take: PlacedTake) => void
   onOpen: (take: PlacedTake) => void
   onOpenAt: (take: PlacedTake, at: number) => void
+  /** Plays a take where it is from a spot: a press on its wave. */
+  onPlayAt?: (take: PlacedTake, at: number) => void
   onRename: (take: PlacedTake) => void
   onStar: (take: PlacedTake, starred: boolean) => void
   onShare: (take: PlacedTake) => void
@@ -131,6 +134,8 @@ export function SongPage({
               onPlay={(t) => onPlay(placed(go.folder, t))}
               onOpen={(t) => onOpen(placed(go.folder, t))}
               onOpenAt={(t, sec) => onOpenAt(placed(go.folder, t), sec)}
+              onPlayAt={onPlayAt && ((t, sec) => onPlayAt(placed(go.folder, t), sec))}
+              folder={go.folder}
               onRename={(t) => onRename(placed(go.folder, t))}
               onStar={(t, on) => onStar(placed(go.folder, t), on)}
               onShare={(t) => onShare(placed(go.folder, t))}
@@ -176,6 +181,7 @@ export function SongPage({
           onPlay={onPlay}
           onOpen={onOpen}
           onOpenAt={onOpenAt}
+          onPlayAt={onPlayAt}
           onRename={onRename}
           onStar={onStar}
           onShare={onShare}
@@ -368,7 +374,7 @@ function Note({
         onClick={onOpen}
         className="h-auto w-full justify-start px-2 py-1 text-sm font-normal"
       >
-        <MarkLine label={label} at={marker.at} note={marker.note} take={<TakeTitle take={go.take} />} />
+        <MarkLine label={label} at={marker.at} note={marker.note} take={<TakeTitle take={go.take} />} opens />
       </Button>
     </WholeTip>
   )

@@ -11,10 +11,11 @@ import { cn } from "@/lib/utils"
  * beside it, unseen, so the browser grows it as it wraps: nothing is measured
  * by a script, and nothing jumps when it is first drawn.
  *
- * Bare at rest: a frame round every name in a band's rows would read as a
- * form. A light fill shows under the pointer, and the shared focus ring while
- * it is typed in. Both reach 8 px past the words on each side, so the words
- * stay where a bare name's are.
+ * No frame: one round every name in a band's rows would read as a form. A
+ * faint line under it says it can be written in (owner's pick C,
+ * 2026-11-02); it is brighter under the pointer, and the focus ring's
+ * colour, twice as thick, while it is typed in. The thicker line grows
+ * under the field, not into it, so nothing moves.
  */
 export function NameField({
   label,
@@ -35,8 +36,8 @@ export function NameField({
   return (
     <div
       className={cn(
-        "-mx-2 grid min-w-0 flex-1 rounded-md px-2 transition-colors hover:bg-accent/60",
-        "focus-within:bg-transparent focus-within:ring-[3px] focus-within:ring-ring/50",
+        "grid min-w-0 flex-1 border-b border-muted-foreground/35 transition-colors hover:border-muted-foreground",
+        "focus-within:border-ring focus-within:shadow-[0_1px_0_0_var(--color-ring)]",
         className
       )}
     >

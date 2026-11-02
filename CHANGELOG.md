@@ -5,8 +5,45 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.20.0
 
+- **Takes show their waves in РЭХА.** A take in a list is its name and then
+  its wave, drawn to its length, as in the band service: on the rehearsal
+  screen, in History, on a song's page and in **Marks**. Click the wave to
+  play the take from that spot, right in the row. An older take's wave is
+  made the first time you see it, so it comes a moment later; after that it
+  is kept.
+- **Every take shows its ★.** It is faint on a take with none: click it to
+  star the take. Rename, send and delete are still there when you point at
+  the row.
+- **The bottom row fits a small window.** In a small window, or at a large
+  **Scale**, the metronome no longer runs under **Finish** and **Record
+  take**. The beat's dots and the keys' letters go first, then **Tap** and
+  − +, then ▶; what went is under the gear, and its keys still work. On the
+  start screen the rehearsal's name keeps its room, and the set shows as
+  its icon.
+- **Marks in Last time play.** Click a mark under a song to hear its take
+  from 5 seconds before it.
+- **Easier to see what to press.** A track's name on the start screen has a
+  faint line under it, so you can see you can type there. **Recording
+  with** has an arrow, and the line under it says to click. In **Settings ›
+  Marks** a label's name is a field you rename it in, its colour is in a
+  frame, and **Delete** is always there.
+- **No word of a missing backing track during a take.** The rehearsal
+  screen still says where to add one.
+- **Clearer words.** A take played without a tempo says “No tempo set ·
+  about 126 bpm” on Master, and “from the whole band” where it said “from
+  the mix”. **Settings › Audio** names the driver and the interface, and
+  **Settings › Controls** says **None** and what to do. The header counts
+  the takes in the band service when takes go there, and says nothing of
+  the cloud with nowhere to send to.
+- **More room in a small window.** The **Next take** panel takes no more
+  than 40 % of the window, and where the takes are narrow a take's wave goes
+  under its name. On the recording screen a long song name takes one line
+  in a short window, so the tracks' names show.
+- **Smaller things.** In a copy run from source, which never checks for
+  updates, the box for it is greyed. A song's page says “Takes, by length”,
+  and a mark at the very start of a take no longer runs into its number.
 - **The band service opens on the last rehearsal.** **Home** starts with
   the evening the band played last, its takes in the order you played them;
   press its day for the rehearsal's page. Songs in the last status, such as
@@ -29,8 +66,9 @@ opening.
   half a minute more.
 - **No more “new” in the band service.** Takes and marks are no longer
   marked new, and nothing counts what you have not heard.
-- **What opens has a dotted line under it.** A take's or a song's name, a
-  day, a mark's words: anything that opens a page or the panel.
+- **What opens has a dotted line under it.** In the band service and in
+  РЭХА: a take's or a song's name, a day, a mark's words, anything that
+  opens a page or the panel or plays from a spot.
 - **M and S before ▶.** In a take's panel, **M** and **S** work before the
   take plays, and it plays the way you set them.
 - **M and S light up.** A pressed **M** is blue and a pressed **S** yellow,

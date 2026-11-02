@@ -27,6 +27,13 @@ export function reloadEveningSettings(): Promise<void> {
     .catch(() => {})
 }
 
+/** Where the evening's takes go, or null while nowhere is set: no cloud
+ *  folder, and no band service picked in Settings › Folders. */
+export function sendPlace(s: EveningSettings | null): SendTo | null {
+  if (!s) return null
+  return s.sendTo === "service" || s.cloudDir ? s.sendTo : null
+}
+
 /**
  * The false-start limit and the cloud folder, read from Settings when the
  * screen opens. The limit changes only on the Settings page, which no screen

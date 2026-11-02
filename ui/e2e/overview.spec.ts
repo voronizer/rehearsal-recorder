@@ -8,7 +8,6 @@ import {
   settled,
   style,
   test,
-  themed,
   TONIGHT,
 } from "./app.ts"
 
@@ -19,13 +18,11 @@ import {
 // Viasna 0:12 with a mark at 4 s, take 4 Pałyn 0:12 (a false start).
 
 const row = (overview: Locator, n: number) => overview.locator(`[data-take="${n}"]`)
-/** The take's bar: the button that opens it, and the way in by the keys. */
+/** The take's name: the button that opens it, and the way in by the keys. */
 const bar = (overview: Locator, n: number) =>
   row(overview, n).getByRole("button", { name: new RegExp(`^Take ${n} `) })
 const play = (overview: Locator, n: number) =>
   row(overview, n).getByRole("button", { name: /^(Play|Pause|Could not load) / })
-/** What the bar's number and name sit on. */
-const titleOf = (it: Locator) => it.locator("[data-bar-title]")
 /** A take's length as its row draws it: with the time played before it while it plays. */
 const lengthOf = (it: Locator, text: string) => row(it, 1).locator(".tnum").filter({ hasText: text })
 
@@ -37,15 +34,6 @@ function expectSame(now: Box, was: Box, what: string) {
   for (const k of ["x", "y", "width", "height"] as const) {
     expect(Math.abs(now[k] - was[k]), `${what} ${k}: ${now[k]} against ${was[k]}`).toBeLessThan(0.25)
   }
-}
-
-/** How much of a colour shows: 1 for a solid one. The browser writes a colour
- *  with some see-through as `oklch(… / 0.1)` or `rgba(…, 0.1)`. */
-function alphaOf(css: string): number {
-  const slash = /\/\s*([\d.]+)(%?)\s*\)/.exec(css)
-  if (slash) return Number(slash[1]) / (slash[2] ? 100 : 1)
-  const comma = /^rgba\(([^)]*)\)$/.exec(css)
-  return comma ? Number(comma[1].split(",")[3]) : 1
 }
 
 test.describe("the evening's songs", () => {
@@ -315,90 +303,60 @@ test.describe("the take row", () => {
   })
 })
 
-test.describe("the bar of a short take", () => {
-  test("a mark tick passes under a short take's name", async ({ page }) => {
+test.describe("the wave of a take", () => {
+  // Each take's row is its name, then its wave to scale, as the band service
+  // draws them (owner's pick A, 2026-11-02).
+  const wave = (overview: Locator, n: number) => row(overview, n).locator("[data-wave]")
+
+  test("each row draws its take's wave once it is in, to scale, with its marks", async ({ page }) => {
     const overview = await openEvening(page)
-    const short = bar(overview, 3)
-    const tick = short.locator("[data-mark-colour]")
-    await expect(tick).toHaveCount(1)
-    const title = titleOf(short)
-    await settled(page)
-
-    // The tick lands on the name: without that this proves nothing.
-    const tickAt = await box(tick)
-    const titleAt = await box(title)
-    const x = tickAt.x + tickAt.width / 2
-    expect(x, "the tick's x in the title's box").toBeGreaterThan(titleAt.x)
-    expect(x, "the tick's x in the title's box").toBeLessThan(titleAt.x + titleAt.width)
-
-    // The title sits on the bar's own fill, solid, so the tick does not
-    // strike it out.
-    const fill = ["background-color", "background-image"]
-    const barFill = await style(short, ...fill)
-    expect(await style(title, ...fill)).toEqual(barFill)
-    expect(alphaOf(barFill["background-color"])).toBe(1)
-    // Nothing of the tick shows at its middle: the title is over it.
-    const over = await tick.evaluate((el) => {
-      const r = el.getBoundingClientRect()
-      const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
-      return hit ? hit.closest("[data-mark-colour]") !== null : null
-    })
-    expect(over, "the tick is the topmost thing at its middle").toBe(false)
+    for (const n of [1, 2, 3, 4]) await expect(wave(overview, n)).toHaveAttribute("data-shaped", "true")
+    const long = await box(wave(overview, 1))
+    const short = await box(wave(overview, 2))
+    // 3:20 against 0:12, to a pixel either way, though no wave is under
+    // 2rem, as in the band service: a short take still has room to press.
+    expect(Math.abs(short.width - Math.max(32, (long.width * 12) / 200))).toBeLessThan(1.5)
+    await expect(wave(overview, 3).locator("[data-mark-colour]")).toHaveCount(1)
+    await expect(wave(overview, 1).locator("[data-mark-colour]")).toHaveCount(0)
+    // A picture, for the pointer: the name is what Tab reaches.
+    await expect(wave(overview, 1)).toHaveAttribute("aria-hidden", "true")
   })
 
-  test("the played part washes over the name while the take plays in place", async ({ page }) => {
+  test("a starred take's wave is green, a false start's pale", async ({ page }) => {
     const overview = await openEvening(page)
-    const short = bar(overview, 3)
-    const number = short.locator(".tnum").first()
-    await settled(page)
-    await play(overview, 3).click()
-    await expect(row(overview, 3).getByRole("button", { name: /^Pause / })).toBeVisible()
-    const length = row(overview, 3).locator(".tnum").filter({ hasText: "0:12" })
-    // Past 0:02, the wash reaches the number at the bar's left.
-    await expect.poll(() => length.innerText()).toMatch(/^0:(0[2-9]|1\d) \/ 0:12$/)
-    const at = await box(number)
-    const over = await number.evaluate((el) => {
-      const r = el.getBoundingClientRect()
-      const hit = document.elementFromPoint(r.x + 2, r.y + r.height / 2)
-      return hit ? { text: hit.textContent, hidden: hit.getAttribute("aria-hidden") } : null
-    })
-    expect(at.width).toBeGreaterThan(0)
-    // The wash is drawn after the name: what is on top there says nothing.
-    expect(over).toEqual({ text: "", hidden: "true" })
+    await expect(wave(overview, 1)).toHaveAttribute("data-wave", "starred")
+    await expect(wave(overview, 3)).toHaveAttribute("data-wave", "rest")
+    await expect(wave(overview, 4)).toHaveAttribute("data-wave", "quiet")
   })
 
-  for (const theme of ["dark", "light"] as const) {
-    test(`a starred short take's title keeps the bar's fill in the ${theme} theme`, async ({ page }) => {
-      const overview = await openEvening(page, themed(theme))
-      const starred = bar(overview, 2)
-      await expect(starred).toHaveAttribute("data-starred", "true")
-      const fill = ["background-color", "background-image"]
-      const barFill = await style(starred, ...fill)
-      expect(await style(titleOf(starred), ...fill)).toEqual(barFill)
-      expect(alphaOf(barFill["background-color"])).toBe(1)
-      // A flat tint over the card, not a see-through fill.
-      expect(barFill["background-color"]).toBe(await colour(page, "--card"))
-      expect(barFill["background-image"]).not.toBe("none")
-    })
-  }
+  test("a take with no wave yet is drawn flat, and the row does not move when it comes", async ({ page }) => {
+    // Held from the start, so the rows are drawn before any wave is in.
+    const overview = await openEvening(
+      page,
+      `window.__HOLD__ = {take_shapes: new Promise((r) => (window.__RELEASE__ = {take_shapes: r}))};`
+    )
+    await expect(wave(overview, 1)).not.toHaveAttribute("data-shaped", "true")
+    const before = await box(row(overview, 1))
+    await letGo(page, "take_shapes")
+    await expect(wave(overview, 1)).toHaveAttribute("data-shaped", "true")
+    expectSame(await box(row(overview, 1)), before, "the row")
+  })
 
-  test("a short take bar is opaque in every state", async ({ page }) => {
+  test("a press on the wave plays the take from there, where it is", async ({ page }) => {
     const overview = await openEvening(page)
-    // The bars' colours fade in together as the takes arrive (200 ms): read
-    // them once the false start's has.
-    const card = await colour(page, "--card")
-    const fill = async () => (await style(bar(overview, 4), "background-color"))["background-color"]
-    await expect.poll(fill).toBe(card)
-    const rest = await style(bar(overview, 3), "background-color", "background-image")
-    const starred = await style(bar(overview, 2), "background-color", "background-image")
-    const falseStart = await style(bar(overview, 4), "background-color", "background-image")
-    for (const [state, fill] of [["rest", rest], ["starred", starred], ["false start", falseStart]] as const) {
-      expect(alphaOf(fill["background-color"]), `${state} fill`).toBe(1)
-    }
-    expect(rest["background-color"]).toBe(await colour(page, "--muted"))
-    expect(starred["background-color"]).toBe(await colour(page, "--card"))
-    expect(falseStart["background-color"]).toBe(await colour(page, "--card"))
-    expect(rest["background-image"]).toBe("none")
-    expect(falseStart["background-image"]).toBe("none")
+    await expect(wave(overview, 1)).toHaveAttribute("data-shaped", "true")
+    const at = await box(wave(overview, 1))
+    await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2)
+    await expect(play(overview, 1)).toHaveAccessibleName(/^Pause /)
+    // From the middle of 3:20 on, here: the player is not opened.
+    await expect.poll(() => lengthOf(overview, "/ 3:20").innerText()).toMatch(/^1:(4\d|5\d) \/ 3:20$/)
+    await expect(row(overview, 1)).toBeVisible()
+    await expect(wave(overview, 1).locator("[data-playhead]")).toHaveCount(1)
+  })
+
+  test("the name opens the take", async ({ page }) => {
+    const overview = await openEvening(page)
+    await bar(overview, 3).click()
+    await expect(row(overview, 3)).toHaveCount(0)
   })
 })

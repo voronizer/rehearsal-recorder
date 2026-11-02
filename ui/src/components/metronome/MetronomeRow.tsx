@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { useErrorNotice } from "@/hooks/useErrorNotice"
+import { useFooterTight } from "@/hooks/useFooterTight"
 import { useMetronome } from "@/hooks/useMetronome"
 import { useTempoCount } from "@/hooks/useTempoCount"
 import { api, type MetronomeState, type Signature } from "@/lib/api"
@@ -44,6 +45,11 @@ const GEAR = "Click and backing track"
  *
  * `below` is the backing track's row, between this one and the status line,
  * which then goes on with `then`, its sentence (backing-track spec Part 5).
+ *
+ * In a footer short of room (FooterRow's squeeze) the row stays one line
+ * and gives things up, least needed first: the beat's dots and the keys'
+ * letters, then Tap and the tempo's − and +, then ▶. Tap's T still works.
+ * What has gone is in the gear, over the click's settings, while it is gone.
  */
 export function MetronomeRowView({
   state,
@@ -89,46 +95,67 @@ export function MetronomeRowView({
   // Opened from the keyboard, the focus goes into the settings; with the
   // pointer it stays on the gear, so Esc and Space are the screen's again.
   const byPointer = useRef(false)
+  const tight = useFooterTight()
+
+  const tempoField = (
+    <TempoField
+      tempo={tempo}
+      signature={signature}
+      disabled={off}
+      onChange={(next) => onTempo(next, signature)}
+    />
+  )
+  // The one in the row hears T, its copy in the gear does not: one key,
+  // one tap.
+  const tapButton = (key: boolean) => (
+    <TapButton
+      signature={signature}
+      disabled={off}
+      onTempo={(next) => onTempo(next, signature)}
+      onError={onTapError}
+      withKey={key}
+    />
+  )
+  const playButton = (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon-row"
+          aria-label={running ? "Stop the click" : "Play the click"}
+          disabled={off || tempo === null}
+          onClick={onPlay}
+        >
+          {running ? <Square className="fill-current" /> : <Play className="fill-current" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <span aria-hidden>{running ? "Stop the click" : "Play the click"}</span>
+      </TooltipContent>
+    </Tooltip>
+  )
 
   return (
     <section aria-label="Metronome" className="flex flex-col gap-1.5">
       <div className="flex items-center gap-1.5">
         <ClickSwitch on={state?.on ?? true} onChange={onSwitch} disabled={off} />
-        <TempoField
-          tempo={tempo}
-          signature={signature}
-          disabled={off}
-          onChange={(next) => onTempo(next, signature)}
-        />
+        {tempoField}
         <SignatureSelect
           value={signature}
           disabled={off}
           // The number stays, brought into the new signature's range.
           onChange={(next) => onTempo(tempo === null ? null : clampTempo(tempo, next), next)}
         />
-        <TapButton
-          signature={signature}
-          disabled={off}
-          onTempo={(next) => onTempo(next, signature)}
-          onError={onTapError}
-        />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon-row"
-              aria-label={running ? "Stop the click" : "Play the click"}
-              disabled={off || tempo === null}
-              onClick={onPlay}
-            >
-              {running ? <Square className="fill-current" /> : <Play className="fill-current" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <span aria-hidden>{running ? "Stop the click" : "Play the click"}</span>
-          </TooltipContent>
-        </Tooltip>
-        <BeatDots signature={signature} lit={running ? lit : null} />
+        {/* Hidden, not taken out: T is heard while the button is there. */}
+        <span data-squeeze="2" className="contents">
+          {tapButton(true)}
+        </span>
+        <span data-squeeze="3" className="contents">
+          {playButton}
+        </span>
+        <span data-squeeze="1" className="contents">
+          <BeatDots signature={signature} lit={running ? lit : null} />
+        </span>
         <Popover>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -157,6 +184,18 @@ export function MetronomeRowView({
               if (byPointer.current) e.preventDefault()
             }}
           >
+            {tight >= 2 && (
+              <div className="mb-4 flex flex-col gap-2 border-b pb-4">
+                <div className="flex items-center gap-1.5">
+                  {tempoField}
+                  {tapButton(false)}
+                  {tight >= 3 && playButton}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Here while the window has no room for them in the row.
+                </p>
+              </div>
+            )}
             {settings}
           </PopoverContent>
         </Popover>

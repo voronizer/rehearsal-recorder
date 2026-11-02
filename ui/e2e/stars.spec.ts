@@ -61,15 +61,18 @@ test("the starred take is the green one; a Keep this mark alone is not", async (
   await expect(overview).toContainText("this one is the take")
 })
 
-test("a starred take keeps its ★ in view; the others show it under the mouse", async ({
+test("every take's star is in view, faint on a take with none until its row is under the mouse", async ({
   page,
 }) => {
+  // Owner's pick B, 2026-11-02: giving a star needs no knowing it is there.
   const overview = await openEvening(page, "window.__STARRED__ = ['/rec/old#4'];")
-  await expect(star(overview, "Viasna 1")).toBeVisible()
   await expect(star(overview, "Viasna 1")).toHaveCSS("opacity", "1")
-  await expect(star(overview, "Pałyn 1")).toHaveCSS("opacity", "0")
-  await page.locator("[data-take='1']").hover()
   await expect(star(overview, "Pałyn 1")).toHaveCSS("opacity", "1")
+  const faint = (await star(overview, "Pałyn 1").evaluate((el) => getComputedStyle(el).color))
+  await page.locator("[data-take='1']").hover()
+  await expect
+    .poll(() => star(overview, "Pałyn 1").evaluate((el) => getComputedStyle(el).color))
+    .not.toBe(faint)
 })
 
 test("starring a take while it plays in the overview leaves it playing", async ({ page }) => {

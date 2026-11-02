@@ -160,14 +160,14 @@ export function ControllerSettings() {
           <Select value={input || "disabled"} disabled={busy || refreshing || !state} onValueChange={value => void save(value === "disabled" ? "" : value, "")}>
             <SelectTrigger id="controller-input"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="disabled">Disabled</SelectItem>
+              <SelectItem value="disabled">None</SelectItem>
               {state?.selected && input && !ports.inputs.some(p => JSON.stringify(p) === input) && <SelectItem value={input}>{state.selected.input.name} (not connected)</SelectItem>}
               {ports.inputs.map(p => <SelectItem key={JSON.stringify(p)} value={JSON.stringify(p)}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         {ports.bluetooth_setup && <Button variant="outline" className="self-start" onClick={() => void pair()}>Pair Bluetooth MIDI controller</Button>}
-        <p role="status" className="min-h-5 text-sm">{refreshSlow ? "Looking for controller ports…" : !state ? "" : !state.enabled ? "Controller disabled" : state.synchronized ? "Controller ready" : state.port_open ? "Waiting for the controller to respond" : "Connect the controller and check the selected MIDI ports"}</p>
+        <p role="status" className="min-h-5 text-sm">{refreshSlow ? "Looking for controller ports…" : !state ? "" : !state.enabled ? "Pick the controller above once it is paired." : state.synchronized ? "Controller ready" : state.port_open ? "Waiting for the controller to respond" : "Connect the controller and check the selected MIDI ports"}</p>
         {state?.last_action && <p className="text-xs text-muted-foreground">{state.last_action.ok ? "Last completed command: " : "Could not complete: "}{ACTION_LABELS[state.last_action.action] ?? "Controller command"}{!state.last_action.ok && `. ${state.last_action.error || "Check the recorder and try again."}`}</p>}
       </SettingsGroup>
       <SettingsGroup
