@@ -9,9 +9,11 @@ opening.
 
 - **РЭХА's own player on a take's page in the band service.** On a
   computer, a take's page plays through the same player as РЭХА: a lane
-  per track with its level, **M** and **S**, zoom, **Repeat** over a part,
-  and the marks as chips. Press a chip to read and answer the talk under it
-  in the panel on the right; **Mark** opens a new mark there. On a phone,
+  per track with its level, **M** and **S**, zoom, **Repeat** over a part
+  you select, and the take's marks on the waveform and under it. Press a
+  mark's words to read and answer the band's talk about it, in the panel on
+  the right. **Mark** puts a new mark at the playhead and opens it there;
+  near a mark the button says **Open mark** and opens that one. On a phone,
   each track has a row with its level, **M** and **S**.
 - **Your own levels in the band service.** Turn a track up or down once,
   and every take with a track of that name plays it that way for you, on

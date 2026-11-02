@@ -119,6 +119,37 @@ test.describe("as Ira", () => {
     await expect(page.locator("[data-take-player]").getByRole("slider", { name: "Guitar volume" })).toHaveAttribute("aria-valuetext", "100%")
   })
 
+  test("a level that could not be kept says so on the line", async ({ page }) => {
+    await page.route("**/api/me/levels", (route) =>
+      route.request().method() === "PUT"
+        ? route.fulfill({ status: 500, json: { error: "The band service is resting" } })
+        : route.fallback()
+    )
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const bass = page.locator("[data-take-player]").getByRole("slider", { name: "Bass volume" })
+    await bass.focus()
+    await page.keyboard.press("ArrowLeft")
+    await expect(page.locator("[data-levels]").getByRole("alert")).toHaveText("Your levels were not kept: The band service is resting")
+  })
+
+  test("Play shows Pause at once while the files come, and a second press pauses", async ({ page }) => {
+    // The take's files are held back until the test lets them through.
+    let letThrough = () => {}
+    const held = new Promise<void>((done) => (letThrough = done))
+    await page.route("**/*.mp3*", async (route) => {
+      await held
+      await route.fallback()
+    })
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const transport = page.getByRole("toolbar", { name: "Transport" })
+    await transport.getByRole("button", { name: "Play", exact: true }).click()
+    await expect(transport.getByRole("button", { name: "Pause", exact: true })).toBeVisible()
+    await expect(transport.getByText(/^\d:\d\d \/ 0:10$/)).toHaveText("0:00 / 0:10")
+    await transport.getByRole("button", { name: "Pause", exact: true }).click()
+    await expect(transport.getByRole("button", { name: "Play", exact: true })).toBeVisible()
+    letThrough()
+  })
+
   test("a star shows at once and stays after a reload", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 3"]}`)
     const main = page.getByRole("main")

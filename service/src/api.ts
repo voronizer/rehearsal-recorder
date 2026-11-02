@@ -1,4 +1,15 @@
-import { keepPreviousData, QueryCache, QueryClient, MutationCache, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  MutationCache,
+  MutationObserver,
+  QueryCache,
+  QueryClient,
+  queryOptions,
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { hc, type InferResponseType } from "hono/client"
 // Only the routes' types: no Worker code reaches the pages.
 import type { AppType } from "../worker/index"
@@ -113,15 +124,31 @@ export const useKeys = () => useQuery({ queryKey: ["keys"], queryFn: () => data(
 export const levelsQuery = queryOptions({ queryKey: ["levels"], queryFn: () => data(client.api.me.levels.$get()) })
 export const useLevels = () => useQuery(levelsQuery)
 
+const KEEP_LEVELS = ["keep-levels"]
+
 /**
  * Keeps the member's levels; a level of null forgets that track's. Nothing
  * else in the band changes, so only the levels are read again, from the
- * answer.
+ * answer. A change waits for the one before it, so their answers cannot
+ * cross, and it is a mutation, so a lapsed session goes to sign-in.
  */
-export async function keepLevels(levels: Record<string, number | null>) {
-  const after = await data(client.api.me.levels.$put({ json: { levels } }))
-  queryClient.setQueryData(levelsQuery.queryKey, after)
-  return after
+export function keepLevels(levels: Record<string, number | null>) {
+  return new MutationObserver(queryClient, {
+    mutationKey: KEEP_LEVELS,
+    scope: { id: "levels" },
+    mutationFn: (levels: Record<string, number | null>) => data(client.api.me.levels.$put({ json: { levels } })),
+    onSuccess: async (after) => {
+      // A read asked before this change would put the old levels back.
+      await queryClient.cancelQueries({ queryKey: levelsQuery.queryKey })
+      queryClient.setQueryData(levelsQuery.queryKey, after)
+    },
+  }).mutate(levels)
+}
+
+/** Why your levels were not kept the last time, or null if they were. */
+export function useLevelsTrouble(): string | null {
+  const last = useMutationState({ filters: { mutationKey: KEEP_LEVELS }, select: (m) => m.state.error }).at(-1)
+  return last instanceof Error ? last.message : null
 }
 
 export const takeQuery = (uid: string) =>

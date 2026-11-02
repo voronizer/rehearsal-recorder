@@ -1,6 +1,6 @@
-import { loopTime, passShift } from "./loop"
+import { FRAME, loopTime, passFrames, passShift } from "./loop"
 import { parseFrames } from "./mp3"
-import { peaksOf } from "./peaks"
+import { Fold } from "./peaks"
 
 /*
   A take's tracks played together, as tested on 24 October on Alex's Mac
@@ -26,7 +26,6 @@ import { peaksOf } from "./peaks"
   together. The clock runs on; time() works out where in the piece it is.
 */
 
-const FRAME = 1152
 const AHEAD_SEC = 5
 const CHUNK_SEC = 0.5
 const PREBUFFER_SEC = 1
@@ -196,6 +195,8 @@ export class Player {
 
   /** Where the playhead is, in seconds. */
   time(): number {
+    // Paused, the playhead is where it was put, even past the repeat: play starts the piece again.
+    if (this.t0 === null) return Math.min(this.end(), this.from)
     const raw = this.raw()
     return this.loop ? loopTime(raw, this.loop.a, this.loop.b) : Math.min(this.end(), raw)
   }
@@ -289,7 +290,9 @@ export class Player {
    */
   setLoop(a: number | null, b: number | null): void {
     const at = this.time()
-    this.loop = a !== null && b !== null && b - a >= MIN_LOOP_SEC ? { a: Math.max(0, a), b } : null
+    // No further than the files go, as in РЭХА: no silence at each turn.
+    const to = b === null ? null : Math.min(b, this.end())
+    this.loop = a !== null && to !== null && to - a >= MIN_LOOP_SEC ? { a: Math.max(0, a), b: to } : null
     if (this.wanted) this.play(at)
     else {
       if (this.loop && (this.from < this.loop.a || this.from >= this.loop.b)) this.from = this.loop.a
@@ -300,22 +303,28 @@ export class Player {
   /**
    * Track `i`'s wave from `from` to `to` seconds, as `buckets` numbers, from
    * the MP3 itself: the files are asked for if they were not, and it waits
-   * until that stretch of this one has come. Null if it cannot be had.
+   * until that stretch of this one has come. Only the wave is kept as the
+   * sound is decoded. Null if it cannot be had, or `signal` says it is no
+   * longer wanted.
    */
-  async stretch(i: number, from: number, to: number, buckets: number): Promise<number[] | null> {
+  async stretch(i: number, from: number, to: number, buckets: number, signal?: AbortSignal): Promise<number[] | null> {
     const source = this.sources[i]
     if (!source || typeof AudioDecoder === "undefined") return null
     this.fetch()
     const has = () =>
       this.broken || this.shut || source.whole || (source.sampleRate > 0 && (source.frames.length * FRAME) / source.sampleRate >= to)
-    while (!has()) await new Promise<void>((done) => this.arrived.add(done))
-    if (this.broken || this.shut || !source.sampleRate) return null
+    while (!has() && !signal?.aborted)
+      await new Promise<void>((done) => {
+        this.arrived.add(done)
+        signal?.addEventListener("abort", () => done(), { once: true })
+      })
+    if (this.broken || this.shut || signal?.aborted || !source.sampleRate) return null
     const { sampleRate, channels, frames } = source
     const start = Math.round(from * sampleRate)
     const stop = Math.round(to * sampleRate)
     const first = Math.max(0, Math.floor(start / FRAME) - WARM_UP_FRAMES)
     const last = Math.min(frames.length, Math.ceil(stop / FRAME) + 1)
-    const pieces: Float32Array[][] = []
+    const fold = new Fold(Math.max(0, stop - start), buckets)
     let cursor = first * FRAME
     const decoder = new AudioDecoder({
       output: (data) => {
@@ -325,26 +334,32 @@ export class Player {
         const lo = Math.max(0, start - cursor)
         const hi = Math.min(n, stop - cursor)
         cursor += n
-        if (hi > lo) pieces.push(p.map((c) => c.subarray(lo, hi)))
+        if (hi > lo) fold.add(p.map((c) => c.subarray(lo, hi)))
       },
       error: (e) => console.error(e),
     })
-    try {
-      decoder.configure({ codec: "mp3", sampleRate, numberOfChannels: channels })
-      for (let k = first; k < last; k++)
-        decoder.decode(new EncodedAudioChunk({ type: "key", timestamp: Math.round((k * FRAME * 1e6) / sampleRate), data: frames[k] }))
-      await decoder.flush()
-    } catch (e) {
-      console.error(e)
-      return null
-    } finally {
+    const shut = () => {
       try {
         decoder.close()
       } catch {
         // Already closed.
       }
     }
-    return peaksOf(pieces, buckets)
+    // A newer stretch is wanted: this decoder stops at once, and its flush fails.
+    signal?.addEventListener("abort", shut, { once: true })
+    try {
+      decoder.configure({ codec: "mp3", sampleRate, numberOfChannels: channels })
+      for (let k = first; k < last && !signal?.aborted; k++)
+        decoder.decode(new EncodedAudioChunk({ type: "key", timestamp: Math.round((k * FRAME * 1e6) / sampleRate), data: frames[k] }))
+      await decoder.flush()
+    } catch (e) {
+      if (!signal?.aborted) console.error(e)
+      return null
+    } finally {
+      signal?.removeEventListener("abort", shut)
+      shut()
+    }
+    return signal?.aborted ? null : fold.peaks
   }
 
   /** Lets go of the files and the decoders; the sound stays for the next take. */
@@ -543,8 +558,7 @@ export class Player {
       const { frames, sampleRate } = lane.source
       const shift = this.shift(lane.pass)
       // On repeat, a pass needs the frames up to the one b falls in, and one more.
-      const stop = this.stop(lane)
-      const last = Number.isFinite(stop) ? Math.min(frames.length, Math.ceil(stop / FRAME) + 1) : frames.length
+      const { last, all } = passFrames(this.stop(lane), frames.length, lane.source.whole)
       const ahead = (frame: number) => (frame * FRAME) / sampleRate + shift - raw
       while (lane.next < last && ahead(lane.next) < AHEAD_SEC && decoder.decodeQueueSize < QUEUE) {
         decoder.decode(
@@ -556,7 +570,7 @@ export class Player {
         )
         lane.next++
       }
-      const passed = lane.next >= last && (lane.source.whole || last < frames.length)
+      const passed = lane.next >= last && all
       if (passed && !lane.flushing) {
         lane.flushing = true
         decoder

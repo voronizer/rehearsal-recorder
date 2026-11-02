@@ -8,12 +8,13 @@ import { useMultitrackPlayer } from "@/hooks/useMultitrackPlayer"
 import { usePlayerKeys, useSpacebar } from "@/hooks/useSpacebar"
 import type { Label as RehaLabel, Marker } from "@/lib/api"
 import { labelsChanged } from "@/lib/labels"
-import { useLabels, useLevels, useRestore, useTake, type TakePage } from "../api"
+import { useLabels, useLevels, useLevelsTrouble, useRestore, useTake, type TakePage } from "../api"
 import { TakeMarks } from "../marks/MarkItem"
 import { usePanel } from "../shell/panel"
 import { Back, Group, Groups, Note, Page, Tile } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { clock, count, longDay } from "../shell/words"
+import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Downloads } from "./Downloads"
 import { CANNOT_PLAY, useHeardAgain, usePlayer } from "./player/one"
@@ -84,18 +85,30 @@ function useRehaLabels() {
 /** The line under the player: whose levels these are, and the way back to РЭХА's. */
 function Levels({ take, sound }: { take: TakePage; sound: ServiceSound }) {
   const yours = useLevels().data?.levels
+  const trouble = useLevelsTrouble()
   const mine = take.tracks.some((t) => yours?.[t.name] !== undefined)
   const [busy, setBusy] = useState(false)
   return (
     <div data-levels className="flex items-center gap-2 text-sm text-muted-foreground">
-      <span className="min-w-0 flex-1">{mine ? "Your levels. Only you hear them." : "Levels as РЭХА sent them."}</span>
+      {/* On the same line, so nothing under it moves. */}
+      {trouble ? (
+        <span role="alert" className="min-w-0 flex-1 text-destructive">
+          Your levels were not kept: {trouble}
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1">{mine ? "Your levels. Only you hear them." : "Levels as РЭХА sent them."}</span>
+      )}
       <Button
         variant="outline"
         size="row"
         disabled={!mine || busy}
         onClick={() => {
           setBusy(true)
-          void sound.backToReha().finally(() => setBusy(false))
+          // A failure is said on the line.
+          sound
+            .backToReha()
+            .catch(() => {})
+            .finally(() => setBusy(false))
         }}
       >
         <RotateCcw />
@@ -113,9 +126,9 @@ function Full({ take }: { take: TakePage }) {
   useRehaLabels()
   useSpacebar(player.toggle)
   usePlayerKeys(player.skip)
-  const markers: Marker[] = take.marks.map((m) => ({ at: m.at, label_id: m.label_id, note: m.note }))
+  const { markers, markOf } = chipsOf(take.marks)
   const talk = (m: Marker) => {
-    const k = take.marks.find((x) => x.at === m.at && x.note === m.note) ?? take.marks.find((x) => x.at === m.at)
+    const k = markOf(m)
     if (k) open({ kind: "mark", uid: take.uid, id: k.id })
   }
   return (

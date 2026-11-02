@@ -216,9 +216,10 @@ export function TakePlayer({
         {markers.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">Marks</span>
-            {markers.map((m) => (
+            {/* In the band's service two people can mark the same second. */}
+            {markers.map((m, i) => (
               <MarkChip
-                key={m.at}
+                key={`${m.at}:${i}`}
                 marker={m}
                 onSeek={player.seek}
                 onEdit={onEditMarker}

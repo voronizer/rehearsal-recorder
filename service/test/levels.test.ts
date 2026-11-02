@@ -40,6 +40,15 @@ test("a level is from 0 to 1, for a track with a name", async () => {
   expect(await levelsOf(owner)).toEqual({ levels: { Bass: 0 } })
 })
 
+test("64 levels are kept in one go", async () => {
+  const owner = await signInOwner()
+  const many = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`Track ${i}`, i / 64]))
+  expect((await put("/api/me/levels", { levels: many }, owner)).status).toBe(200)
+  expect(await levelsOf(owner)).toEqual({ levels: many })
+  const gone = Object.fromEntries(Object.keys(many).map((t) => [t, null]))
+  expect(await answer(put("/api/me/levels", { levels: gone }, owner))).toEqual({ status: 200, body: { levels: {} } })
+})
+
 test("levels need a member signed in", async () => {
   expect((await call("/api/me/levels")).status).toBe(401)
   expect((await put("/api/me/levels", { levels: { Bass: 0.5 } })).status).toBe(401)

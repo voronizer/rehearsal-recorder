@@ -14,6 +14,12 @@ import { askingPlayerClick, heardPlayerClick } from "@/hooks/usePlayerClick"
 
 export type MultitrackPlayer = ReturnType<typeof useMultitrackPlayer>
 
+/** Where the cursor runs on from between answers, from `now`: none while
+ *  the sound is asked for and not heard yet, so it waits with the sound. */
+export function anchorOf(position: number, waiting: boolean | undefined, now: number) {
+  return waiting ? null : { position, at: now }
+}
+
 /** How often the position is read back from Python while playing. */
 const STATE_POLL_MS = 120
 
@@ -134,6 +140,7 @@ export function useMultitrackPlayer(
   const applyState = useCallback(
     (s: {
       playing?: boolean
+      waiting?: boolean
       position?: number
       duration?: number
       muted?: string[]
@@ -156,7 +163,7 @@ export function useMultitrackPlayer(
       if (typeof s.playing === "boolean") setPlaying(s.playing)
       if (typeof s.position === "number") {
         setPosition(s.position)
-        anchor.current = { position: s.position, at: performance.now() }
+        anchor.current = anchorOf(s.position, s.waiting, performance.now())
       }
       if (typeof s.duration === "number" && s.duration > 0) setDuration(s.duration)
       if (s.muted) setMuted(s.muted)

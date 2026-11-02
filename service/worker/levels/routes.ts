@@ -60,15 +60,14 @@ export const levelRoutes = newApp()
       const given = Object.entries(c.req.valid("json").levels)
       const kept = given.filter((e): e is [string, number] => e[1] !== null)
       const forgot = given.filter(([, v]) => v === null).map(([track]) => track)
+      // One statement a level: D1 binds at most 100 values in a query.
       const writes = [
-        ...(kept.length
-          ? [
-              db
-                .insert(level)
-                .values(kept.map(([track, v]) => ({ memberId, track, level: v })))
-                .onConflictDoUpdate({ target: [level.memberId, level.track], set: { level: sql`excluded.level` } }),
-            ]
-          : []),
+        ...kept.map(([track, v]) =>
+          db
+            .insert(level)
+            .values({ memberId, track, level: v })
+            .onConflictDoUpdate({ target: [level.memberId, level.track], set: { level: sql`excluded.level` } })
+        ),
         ...(forgot.length
           ? [db.delete(level).where(and(eq(level.memberId, memberId), inArray(level.track, forgot)))]
           : []),

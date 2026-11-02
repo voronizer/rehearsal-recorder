@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react"
 import { playLook, type PlayLook } from "@/lib/playLook"
 import { useLevels, useSeen, useTake, type TakePage } from "../../api"
+import { levelOf } from "./levels"
 import { Player, wakeSound } from "./player"
 
 /*
@@ -93,9 +94,6 @@ export type One = {
 const OneCtx = createContext<One | null>(null)
 export const useOne = () => useContext(OneCtx)!
 
-/** A track's level: yours if you have kept one for its name, else РЭХА's balance, else 1. */
-export const levelOf = (yours: Record<string, number> | undefined, take: TakePage, name: string) =>
-  yours?.[name] ?? take.balance[name] ?? 1
 
 /** The look of a take's ▶ in a list: the player's own for the take in it. */
 export function useLookOf(uid: string): PlayLook {

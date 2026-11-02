@@ -2,7 +2,8 @@ import { useEffect, useMemo } from "react"
 import type { PlayerState, TrackFile, TrackMedia } from "@/lib/api"
 import type { PlayerSound } from "@/lib/playerSound"
 import { keepLevels, levelsQuery, peaksQuery, queryClient, type TakePage } from "../../api"
-import { levelOf, useOne, type One, type Setup } from "./one"
+import { levelOf } from "./levels"
+import { useOne, type One, type Setup } from "./one"
 
 /** As many points as РЭХА's take_media gives a zoomed wave (audio/waveform.py). */
 const BUCKETS = 900
@@ -37,6 +38,8 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
   let solo: number | null = null
   /** Levels turned and not kept yet. */
   let moved: Record<string, number> = {}
+  /** The zoom whose wave is being decoded: a newer one stops it. */
+  let zoom: AbortController | null = null
 
   const mine = () => one.playerOf(uid, gen)
   const levelHere = (name: string) => moved[name] ?? levelOf(yoursNow(), take, name)
@@ -52,8 +55,9 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       const loud = p.loudness()
       return {
         ...base,
-        // Not yet sounding while the files come: the playhead would run ahead and jump back.
-        playing: p.playing && !p.waiting,
+        // ⏸ at once; while the files come, the playhead waits with the sound.
+        playing: p.playing,
+        waiting: p.waiting,
         position,
         loop,
         muted: muted.map((i) => names[i]),
@@ -99,12 +103,14 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
     state,
 
     async media(_tracks, buckets = BUCKETS, from, to) {
+      zoom?.abort()
+      const wanted = (zoom = new AbortController())
       const zoomed = from !== undefined && to !== undefined
-      // Wide enough that `.peaks` has the points: no need to decode the MP3.
-      const fine = zoomed && (COARSE * (to - from)) / Math.max(take.duration_sec, 0.001) < buckets
+      // While `.peaks` has at least half the points it is drawn: decoding the MP3 would cost more than it shows.
+      const fine = zoomed && (COARSE * (to - from)) / Math.max(take.duration_sec, 0.001) < buckets / 2
       const p = fine ? mine() : null
       const media = take.tracks.map(async (t, i): Promise<TrackMedia> => {
-        const peaks = (p && (await p.stretch(i, from!, to!, buckets))) || (await coarse(t.peaks, from, to))
+        const peaks = (p && (await p.stretch(i, from!, to!, buckets, wanted.signal))) || (await coarse(t.peaks, from, to))
         return {
           name: t.name,
           ...(t.icon ? { icon: t.icon } : {}),
@@ -197,8 +203,14 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
 
     setup: () => ({ loop, muted, solo }),
 
-    // The bar at the bottom plays on after the page is left.
-    close: async () => ({ ok: true }),
+    // The bar at the bottom plays on after the page is left, with no repeat:
+    // it has no Repeat to stop one with.
+    async close() {
+      loop = null
+      zoom?.abort()
+      mine()?.setLoop(null, null)
+      return { ok: true }
+    },
   }
 }
 

@@ -66,7 +66,7 @@ describe("pythonSound", () => {
     expect(bridge.player_set_master).toHaveBeenCalledWith(0.8)
   })
 
-  it("keeps the levels in РЭХА's settings", async () => {
+  it("keeps the levels in the app's settings", async () => {
     await pythonSound.keepLevels({ Bass: 0.5 })
     expect(bridge.save_mix).toHaveBeenCalledWith({ Bass: 0.5 })
   })
