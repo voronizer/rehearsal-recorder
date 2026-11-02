@@ -58,7 +58,7 @@ runs:
     - name: Install the browser
       shell: bash
       working-directory: site
-      run: npx playwright install --with-deps chromium
+      run: npx playwright install chromium
 
     # The app in the link picture draws in the computer's own font, which
     # the runner does not have: Inter stands in for it, as when the picture
@@ -68,6 +68,7 @@ runs:
     - name: Fonts for the link picture
       shell: bash
       run: |
+        timeout 120 sudo apt-get update
         timeout 300 sudo apt-get install -y --no-install-recommends fonts-inter
         sudo cp site/scripts/og-fonts.conf /etc/fonts/conf.d/56-og-fonts.conf
         fc-match -f '%{family}\n' -- -apple-system | grep -q '^Inter' ||
