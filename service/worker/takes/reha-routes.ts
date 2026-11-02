@@ -1,6 +1,8 @@
 import { createRoute, z } from "@hono/zod-openapi"
+import { database } from "../shared/db"
 import { fail } from "../shared/errors"
 import { body, errors, json, newApp, Ok, RehaHeaders } from "../shared/openapi"
+import { take } from "../shared/schema"
 import { needKey } from "../signin/guards"
 import { TakeMeta } from "./meta"
 import { putTake, ready, trash } from "./store"
@@ -26,15 +28,45 @@ export const rehaRoutes = newApp()
     createRoute({
       method: "put",
       path: "/api/reha/takes/{uid}",
-      description: "A take's details: made, or brought up to date. A take in the trash comes out of it.",
+      description:
+        "A take's details: made, or brought up to date. A take РЭХА removed comes out of the trash; " +
+        "one the band deleted, or one that went with its song, only when sent `by_hand`. " +
+        "`in_trash` says it is still there.",
       middleware: [needKey] as const,
       security: rehaKey,
       request: { headers: RehaHeaders, params: Params, body: body(TakeMeta) },
-      responses: { 200: json(Ok), ...errors(400, 401, 426) },
+      responses: { 200: json(z.object({ ok: z.literal(true), in_trash: z.boolean() })), ...errors(400, 401, 426) },
     }),
     async (c) => {
-      await putTake(c.env, c.req.valid("param").uid, c.req.valid("json"))
-      return c.json({ ok: true as const }, 200)
+      const { inTrash } = await putTake(c.env, c.req.valid("param").uid, c.req.valid("json"))
+      return c.json({ ok: true as const, in_trash: inTrash }, 200)
+    }
+  )
+  .openapi(
+    createRoute({
+      method: "get",
+      path: "/api/reha/takes",
+      description:
+        "Every take the service has: whether it is in the trash, and which generation's MP3s and FLAC files are up. " +
+        "РЭХА asks when it starts and every hour, to learn what the band deleted or put back.",
+      middleware: [needKey] as const,
+      security: rehaKey,
+      request: { headers: RehaHeaders },
+      responses: {
+        200: json(
+          z.array(z.object({ uid: z.string(), trashed: z.boolean(), mp3_gen: z.number().nullable(), flac_gen: z.number().nullable() }))
+        ),
+        ...errors(401, 426),
+      },
+    }),
+    async (c) => {
+      const rows = await database(c.env)
+        .select({ uid: take.uid, trashedAt: take.trashedAt, shownGen: take.shownGen, flacGen: take.flacGen })
+        .from(take)
+      return c.json(
+        rows.map((t) => ({ uid: t.uid, trashed: t.trashedAt !== null, mp3_gen: t.shownGen, flac_gen: t.flacGen })),
+        200
+      )
     }
   )
   .openapi(

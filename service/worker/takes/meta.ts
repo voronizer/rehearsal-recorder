@@ -34,6 +34,10 @@ export const TakeMeta = z
     /** The song's beats per minute as РЭХА keeps it, null when it has none.
      *  Missing from РЭХА 0.17 and older: the song keeps what it had. */
     tempo: z.number().positive().max(999).nullable().optional(),
+    /** Sent with the cloud button or **Send starred**: a take the band
+     *  deleted comes out of the trash only then. Missing from РЭХА 0.20
+     *  and older. */
+    by_hand: z.boolean().optional(),
   })
   .openapi("TakeMeta")
 

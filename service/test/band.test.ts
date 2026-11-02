@@ -91,10 +91,10 @@ test("restore puts a take back in its song", async () => {
   await trash(bindings, uid)
 
   expect((await song(owner, id)).takes.map((t) => t.uid)).toEqual([kept])
-  expect(await read("/api/trash", owner)).toMatchObject([{ uid, trashed_at: expect.any(String) }])
+  expect(await read("/api/trash", owner)).toMatchObject({ songs: [], takes: [{ uid, trashed_at: expect.any(String), by: null }] })
 
   expect((await post(`/api/trash/${uid}/restore`, {}, owner)).status).toBe(200)
   expect((await song(owner, id)).takes.map((t) => t.uid)).toEqual([uid, kept])
-  expect(await read("/api/trash", owner)).toEqual([])
+  expect(await read("/api/trash", owner)).toEqual({ songs: [], takes: [] })
   expect((await post(`/api/trash/${uid}/restore`, {}, owner)).status).toBe(404)
 })

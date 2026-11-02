@@ -34,10 +34,10 @@ export function Trash() {
       )}
       {trash.error && <Trouble error={trash.error} retry={() => void trash.refetch()} />}
       {trash.data &&
-        (trash.data.length ? (
+        (trash.data.takes.length ? (
           <Group>
             <Rows>
-              {trash.data.map((t) => (
+              {trash.data.takes.map((t) => (
                 <div key={t.uid} className="flex items-center gap-3" data-take={t.name}>
                   <Play take={t} />
                   <div className="min-w-0 flex-1">

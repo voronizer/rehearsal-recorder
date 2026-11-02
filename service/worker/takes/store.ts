@@ -1,6 +1,6 @@
-import { and, eq, gt, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
+import { and, eq, gt, isNotNull, isNull, ne, or, sql, type SQL } from "drizzle-orm"
 import { tellChat } from "../chat/tell"
-import { database } from "../shared/db"
+import { database, type Database } from "../shared/db"
 import type { Bindings } from "../shared/env"
 import { firstStatus, labelsFor } from "../labels/match"
 import { comment, rehearsal, song, take } from "../shared/schema"
@@ -14,9 +14,10 @@ const markKey = (at: number) => Math.round(at * 100)
 
 /**
  * The song with this title, whatever its case, made with the first status
- * if there is none. The song's tempo is the one its newest take carries
- * (the latest rehearsal, then the highest number): an older take sent
- * again, from a computer whose РЭХА has an old tempo, leaves it.
+ * if there is none, and brought out of the trash if it is there. The song's
+ * tempo is the one its newest take carries (the latest rehearsal, then the
+ * highest number): an older take sent again, from a computer whose РЭХА has
+ * an old tempo, leaves it.
  */
 async function songId(env: Bindings, uid: string, meta: TakeMeta): Promise<number | null> {
   const { song: title, tempo } = meta
@@ -27,7 +28,8 @@ async function songId(env: Bindings, uid: string, meta: TakeMeta): Promise<numbe
     .values({ title, statusId: await firstStatus(db), createdAt: iso() })
     .onConflictDoNothing()
   const named = sql`${song.title} = ${title} COLLATE NOCASE`
-  const [row] = await db.select({ id: song.id }).from(song).where(named).limit(1)
+  const [row] = await db.select({ id: song.id, trashedAt: song.trashedAt }).from(song).where(named).limit(1)
+  if (row.trashedAt !== null) await db.batch(songBack(db, row.id))
   if (tempo === undefined) return row.id
   const { date } = meta.rehearsal
   const [newer] = await db
@@ -48,24 +50,30 @@ async function songId(env: Bindings, uid: string, meta: TakeMeta): Promise<numbe
 
 /**
  * A take РЭХА sent: made or brought up to date, with its rehearsal and song.
- * A take in the trash comes out of it. Marks from РЭХА replace the earlier
- * ones, matched by their moment, so replies to a mark still there stay; a
- * mark РЭХА no longer sends goes, unless the band talked under it.
+ * Marks from РЭХА replace the earlier ones, matched by their moment, so
+ * replies to a mark still there stay; a mark РЭХА no longer sends goes,
+ * unless the band talked under it.
+ *
+ * A take РЭХА removed comes out of the trash. One the band deleted, or one
+ * that went with its song, comes out only when it is sent by hand; until
+ * then it stays there, its details kept up to date, and the answer says so.
+ * It keeps its song meanwhile, so a rename makes no empty song.
  *
  * While a newer generation is on its way, the band still hears the older
  * one, so every comment stays in the older one's time: the new marks are
  * moved on by `cut_start` here, and all of them move back together when the
  * new generation's MP3s are ready.
  */
-export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promise<void> {
+export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promise<{ inTrash: boolean }> {
   const db = database(env)
   const [before] = await db.select().from(take).where(eq(take.uid, uid)).limit(1)
+  const stays = before?.trashedAt != null && (before.trashedBy !== null || before.withSong) && !meta.by_hand
   const pending = meta.gen > (before?.shownGen ?? 0)
   const cut = pending ? meta.cut_start : 0
   const fields = {
     rehearsalUid: meta.rehearsal.uid,
     number: meta.number,
-    songId: await songId(env, uid, meta),
+    songId: stays ? before.songId : await songId(env, uid, meta),
     name: meta.name,
     durationSec: meta.duration_sec,
     starredAtRehearsal: meta.starred,
@@ -74,7 +82,7 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
     notes: meta.notes,
     gen: meta.gen,
     pendingCut: cut,
-    trashedAt: null,
+    ...(!stays && { trashedAt: null, trashedBy: null, withSong: false }),
     updatedAt: iso(),
   }
 
@@ -122,6 +130,7 @@ export async function putTake(env: Bindings, uid: string, meta: TakeMeta): Promi
         : db.insert(comment).values({ ...row, takeUid: uid, at: m.at, fromReha: true, createdAt: iso() })
     }),
   ])
+  return { inTrash: stays }
 }
 
 /**
@@ -186,4 +195,28 @@ export async function trash(env: Bindings, uid: string): Promise<void> {
     .update(take)
     .set({ trashedAt: iso() })
     .where(and(eq(take.uid, uid), isNull(take.trashedAt)))
+}
+
+/**
+ * Takes someone deleted in the service go to the trash, at `at`; a take
+ * already there stays as it was. `withSong` marks the ones that went with
+ * their song, to come back with it.
+ */
+export function toTrash(db: Database, which: SQL | undefined, by: string, withSong: boolean, at = iso()) {
+  return db
+    .update(take)
+    .set({ trashedAt: at, trashedBy: by, withSong })
+    .where(and(which, isNull(take.trashedAt)))
+}
+
+/**
+ * A song comes out of the trash with one of its takes, the one restored or
+ * sent again. The takes that went with it stay in the trash, each on its
+ * own line from now on.
+ */
+export function songBack(db: Database, id: number) {
+  return [
+    db.update(song).set({ trashedAt: null, trashedBy: null }).where(eq(song.id, id)),
+    db.update(take).set({ withSong: false }).where(and(eq(take.songId, id), eq(take.withSong, true))),
+  ] as const
 }

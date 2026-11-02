@@ -222,6 +222,10 @@ export const song = sqliteTable(
     tempo: real("tempo"),
     notes: text("notes").notNull().default(""),
     createdAt: text("created_at"),
+    /** When someone deleted it, with its takes; null while the band has it. */
+    trashedAt: text("trashed_at"),
+    /** Who deleted it. */
+    trashedBy: text("trashed_by").references(() => user.id),
   },
   // Songs match by title whatever its case.
   (table) => [uniqueIndex("song_title_nocase").on(sql`${table.title} COLLATE NOCASE`)]
@@ -272,6 +276,10 @@ export const take = sqliteTable(
     pendingCut: real("pending_cut").notNull().default(0),
     shownAt: text("shown_at"),
     trashedAt: text("trashed_at"),
+    /** The member who deleted it in the service; null when РЭХА removed it. */
+    trashedBy: text("trashed_by").references(() => user.id),
+    /** It went to the trash with its song, and comes back with it. */
+    withSong: integer("with_song", { mode: "boolean" }).notNull().default(false),
     updatedAt: text("updated_at").notNull(),
     /** The wave a list draws (takes/shape.ts); null until it is made. */
     shape: text("shape", { mode: "json" }).$type<number[]>(),

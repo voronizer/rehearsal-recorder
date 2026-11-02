@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi"
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, isNull } from "drizzle-orm"
 import type { Context } from "hono"
 import { database, type Database } from "../shared/db"
 import { fail } from "../shared/errors"
@@ -101,7 +101,11 @@ export const songFileRoutes = newApp()
       const size = sizeOf(c)
       if (size === null) return fail(c, 400, "Send the file's size")
       if (size > MAX_FILE) return fail(c, 413, TOO_BIG)
-      const [s] = await db.select({ id: song.id }).from(song).where(eq(song.id, id)).limit(1)
+      const [s] = await db
+        .select({ id: song.id })
+        .from(song)
+        .where(and(eq(song.id, id), isNull(song.trashedAt)))
+        .limit(1)
       if (!s) return fail(c, 404, "No such song")
       const ext = name.toLowerCase().split(".").at(-1) ?? ""
       // Only the kinds that open in a tab keep a type; the rest download as bytes.

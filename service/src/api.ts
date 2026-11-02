@@ -73,7 +73,9 @@ export type Label = InferResponseType<typeof client.api.labels.$get, 200>[number
 export type Person = InferResponseType<typeof client.api.people.$get, 200>[number]
 export type Member = InferResponseType<typeof client.api.members.$get, 200>[number]
 export type Key = InferResponseType<typeof client.api.keys.$get, 200>[number]
-export type Trashed = InferResponseType<typeof client.api.trash.$get, 200>[number]
+export type TrashList = InferResponseType<typeof client.api.trash.$get, 200>
+export type Trashed = TrashList["takes"][number]
+export type TrashedSong = TrashList["songs"][number]
 export type Show = "open" | "closed" | "all"
 
 /** Where the page goes when the session is gone; set by routes.tsx. */
