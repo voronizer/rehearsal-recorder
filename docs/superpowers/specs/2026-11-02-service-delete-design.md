@@ -12,6 +12,8 @@ The mockup Alex picked from is https://claude.ai/artifact/ShyJMJSFtzX3jAhuM3VCDB
 (the service's own pages on answers recorded from a local Worker; source in
 /mnt/project-files/band-service/delete/q4-mock/).
 
+Alex approved this spec on 2 November at 23:29 («ок»).
+
 ## Alex's picks
 
 All on 2 November 2026, in the thread «Удалять тейки и песни в сервисе».
