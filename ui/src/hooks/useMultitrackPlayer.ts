@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { api, type TrackFile, type TrackMedia, poll as pollPython } from "@/lib/api"
+import { api, type TrackFile, type TrackMedia } from "@/lib/api"
+import { pythonSound, type PlayerSound } from "@/lib/playerSound"
 import {
   heard,
   keepListeningVolume,
@@ -59,11 +60,16 @@ export type Spot = {
  * opens, and after that as M on it was last left for that song, which is
  * kept with the song (backing-track spec Part 7). `song` says which song
  * and how it was left when the take was read.
+ *
+ * `sound` is what plays it: Python in РЭХА; the band service passes its own,
+ * which plays in the browser (lib/playerSound.ts). It is read as one thing
+ * for the life of the screen, so a caller passes the same one each time.
  */
 export function useMultitrackPlayer(
   tracks: TrackFile[] | null,
   fallbackDuration = 0,
-  song: TakeSong | null = null
+  song: TakeSong | null = null,
+  sound: PlayerSound = pythonSound
 ) {
   const [media, setMedia] = useState<TrackMedia[]>([])
   const [loading, setLoading] = useState(false)
@@ -185,7 +191,7 @@ export function useMultitrackPlayer(
     anchor.current = null
 
     if (!tracks || tracks.length === 0) {
-      void api().player_close()
+      void sound.close()
       return
     }
 
@@ -201,19 +207,19 @@ export function useMultitrackPlayer(
     ;(async () => {
       try {
         // The waveform is computed in Python and does not depend on playback.
-        const info = await api().take_media(tracks)
+        const info = await sound.media(tracks)
         if (cancelled) return
         const broken = info.find((m) => !m.url)
         if (broken) throw new Error(broken.error ?? `Missing file: ${broken.name}`)
         setMedia(info)
 
         const openAsked = askingPlayerClick()
-        const opened = await api().player_open(tracks, true)
+        const opened = await sound.open(tracks, true)
         if (cancelled) return
         if (!opened.ok) throw new Error(opened.error ?? "Could not open the take")
 
         openedRef.current = true
-        release = playerOpened((v) => void api().player_set_master(v))
+        release = playerOpened((v) => void sound.setMaster(v))
         setOutputWarning(opened.warning ?? null)
         applyState(opened, openAsked)
         // Its Backing track muted or heard as its song has it, before
@@ -224,7 +230,7 @@ export function useMultitrackPlayer(
           const heardNow = (of?.id != null ? heardBySong.get(of.id) : undefined) ?? of?.heard ?? false
           if ((opened.muted ?? []).includes(backing.name) === heardNow) {
             const muteAsked = askingPlayerClick()
-            const s = await api().player_set_muted(backing.name, !heardNow)
+            const s = await sound.setMuted(backing.name, !heardNow)
             if (cancelled) return
             applyState(s, muteAsked)
           }
@@ -244,7 +250,7 @@ export function useMultitrackPlayer(
       // stays open, paused.
       if (!playNow || cancelled) return
       const playAsked = askingPlayerClick()
-      const s = await api().player_play()
+      const s = await sound.play()
       if (!cancelled) applyState(s, playAsked)
     })()
 
@@ -254,10 +260,10 @@ export function useMultitrackPlayer(
       release()
       // Nothing of this take is coming out any more.
       heard({ level: 0 })
-      void api().player_close()
+      void sound.close()
     }
     // A new `attempt` opens the same take again.
-  }, [tracks, fallbackDuration, applyState, attempt])
+  }, [tracks, fallbackDuration, applyState, attempt, sound])
 
   // Poll the state while playing
   useEffect(() => {
@@ -269,7 +275,7 @@ export function useMultitrackPlayer(
       if (!alive) return
       try {
         const asked = askingPlayerClick()
-        const s = await pollPython("player_state")
+        const s = await sound.state()
         if (!alive) return
         const matches = !s.tracks || (s.tracks.length === tracks.length &&
           s.tracks.every((track, index) => track.file === tracks[index].file && track.name === tracks[index].name))
@@ -293,7 +299,7 @@ export function useMultitrackPlayer(
       alive = false
       window.clearTimeout(timer)
     }
-  }, [tracks, applyState])
+  }, [tracks, applyState, sound])
 
   // Smooth cursor movement between answers from Python
   useEffect(() => {
@@ -327,7 +333,7 @@ export function useMultitrackPlayer(
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const info = await api().take_media(
+          const info = await sound.media(
             tracks,
             undefined,
             want.from,
@@ -345,7 +351,7 @@ export function useMultitrackPlayer(
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [tracks, view, duration, peaksWindow])
+  }, [tracks, view, duration, peaksWindow, sound])
 
   const call = useCallback(
     async (fn: () => Promise<Record<string, unknown>>) => {
@@ -362,9 +368,9 @@ export function useMultitrackPlayer(
       const target = Math.max(0, Math.min(duration, seconds))
       setPosition(target)
       anchor.current = { position: target, at: performance.now() }
-      return call(() => api().player_seek(target))
+      return call(() => sound.seek(target))
     },
-    [call, duration]
+    [call, duration, sound]
   )
 
   const setView = useCallback(
@@ -398,10 +404,10 @@ export function useMultitrackPlayer(
 
   const applyLoop = useCallback(
     (next: { a: number | null; b: number | null }, enabled: boolean) => {
-      if (!enabled) return call(() => api().player_set_loop(null, null))
-      return call(() => api().player_set_loop(next.a ?? 0, next.b ?? duration))
+      if (!enabled) return call(() => sound.setLoop(null, null))
+      return call(() => sound.setLoop(next.a ?? 0, next.b ?? duration))
     },
-    [call, duration]
+    [call, duration, sound]
   )
 
   /**
@@ -437,9 +443,9 @@ export function useMultitrackPlayer(
       if (opening.current !== take) return
       await seek(at)
       if (opening.current !== take) return
-      if (kept.playing) await call(() => api().player_play())
+      if (kept.playing) await call(() => sound.play())
     },
-    [duration, applyLoop, setView, seek, call]
+    [duration, applyLoop, setView, seek, call, sound]
   )
 
   /** The take could not be opened: try once more, and play it once it is
@@ -475,12 +481,12 @@ export function useMultitrackPlayer(
     peaksWindow: peaksWindow.to > 0 ? peaksWindow : { from: 0, to: duration },
 
     // Pressed on a take that could not be opened, Play tries again.
-    toggle: () => (loadError ? tryAgain(true) : void call(() => api().player_toggle())),
-    play: () => void call(() => api().player_play()),
+    toggle: () => (loadError ? tryAgain(true) : void call(() => sound.toggle())),
+    play: () => void call(() => sound.play()),
     /** Opens a take that could not be opened once more, for a caller that
      *  says what to do once it is open. */
     openAgain: () => tryAgain(false),
-    pause: () => call(() => api().player_pause()),
+    pause: () => call(() => sound.pause()),
     restart: () => seek(region.a !== null && looping ? region.a : 0),
     skip: (delta: number) => seek(position + delta),
     seek,
@@ -512,7 +518,7 @@ export function useMultitrackPlayer(
     hasSolo: soloed !== null,
     toggleMute: (name: string) => {
       const heardNext = muted.includes(name)
-      void call(() => api().player_set_muted(name, !heardNext))
+      void call(() => sound.setMuted(name, !heardNext))
       // M on the Backing track is kept with its song.
       const id = songRef.current?.id
       if (id != null && tracks?.some((t) => t.name === name && t.kind === "backing")) {
@@ -521,7 +527,7 @@ export function useMultitrackPlayer(
       }
     },
     toggleSolo: (name: string) =>
-      void call(() => api().player_set_solo(soloed === name ? null : name)),
+      void call(() => sound.setSolo(soloed === name ? null : name)),
     getVolume: (name: string) => volumes[name] ?? 1,
     /** Each channel, 0..1, as it last came out of the mix; 0 while nothing
      *  plays. A stereo track's two sides are kept apart, as on the waveform:
@@ -529,10 +535,10 @@ export function useMultitrackPlayer(
     getLevels: (name: string) => levels[name] ?? [0],
     setVolume: (name: string, v: number) => {
       setVolumes((prev) => ({ ...prev, [name]: v }))
-      void api().player_set_volume(name, v)
+      void sound.setVolume(name, v)
     },
     persistVolumes: () => {
-      void api().save_mix(volumes)
+      void sound.keepLevels(volumes)
     },
     /** 0..1, how loud the whole take plays — for listening only. */
     master,

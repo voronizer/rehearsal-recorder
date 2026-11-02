@@ -86,8 +86,12 @@ export function Timeline({
   notesRead,
   take = null,
   drift = null,
+  master = true,
 }: {
   player: MultitrackPlayer
+  /** Master's row under the tracks. The band's service has no click and no
+   *  master level of its own, so its take page leaves the row out. */
+  master?: boolean
   /** The take's click, for Master's button and lane: its tempo and
    *  signature, and whether it was recorded to the click. */
   take?: TakeClick | null
@@ -664,7 +668,7 @@ export function Timeline({
           from the group's edges, so its stripes stand under the tracks'
           pictures over the same seconds. It follows the zoom and the region
           as they do, and a drag across it sets the region (spec Part 8). */}
-      {rows > 0 && (
+      {master && rows > 0 && (
         <div
           data-master-band
           className="sticky z-10 -mt-1 -mb-2 bg-background pt-1 pb-2"

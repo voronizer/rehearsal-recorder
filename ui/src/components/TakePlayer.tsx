@@ -110,8 +110,11 @@ export function TakePlayer({
   goKeys = false,
   status,
   rising = false,
+  master = true,
 }: {
   player: MultitrackPlayer
+  /** Master's row under the tracks; the band's service leaves it out. */
+  master?: boolean
   /** The take's click: its tempo, its signature, and whether it was
    *  recorded to the click, for Master's button and stripes; and its files
    *  and song, for the band's tempo along Master's lane. */
@@ -183,6 +186,7 @@ export function TakePlayer({
       >
         <Timeline
           player={player}
+          master={master}
           take={take}
           drift={drift}
           markers={markers}
