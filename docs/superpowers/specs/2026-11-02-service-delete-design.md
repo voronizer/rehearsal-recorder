@@ -27,6 +27,9 @@ All on 2 November 2026, in the thread «Удалять тейки и песни 
 - 23:14 **Delete take** sits in the take's panel, on its page, and on every
   take's line in the lists (card «B. На каждой строке»).
 - 23:15 On reha.stream, one sentence changes (card «Одна фраза»).
+- 23:28 РЭХА learns of a deletion from the service's answer and by asking
+  when it starts and then every hour, not every 5 minutes («давай "С",
+  только каждые 5 минут сделаем часом»).
 
 ## What the band sees
 
@@ -114,7 +117,7 @@ The take on the computer is untouched.
    the take in the Trash and answers that it is there. РЭХА marks it taken
    out at once. Only a take sent by hand (the cloud button, **Send
    starred**) comes out of the Trash.
-2. When it starts, and every 5 minutes while the band service is the
+2. When it starts, and every hour while the band service is the
    chosen place, РЭХА asks the service which of its takes are in the Trash
    and which are not. A take in the Trash is marked taken out. A take
    РЭХА has marked taken out that is back in the service (someone pressed
@@ -123,6 +126,8 @@ The take on the computer is untouched.
 
 The second also mends what happens today when a take taken out in РЭХА is
 restored in the service: until now РЭХА went on treating it as taken out.
+Alex picked this way on 2 November at 23:28 over two looser ones (РЭХА not
+told at all; told only in the answer to a change), with the check hourly.
 
 ## On reha.stream
 
@@ -205,10 +210,7 @@ Made by Claude, not asked:
    name of who did it; its takes have no lines of their own.
 5. The odd cases above: a take restored alone brings its song back; a new
    take from РЭХА brings a deleted song back.
-6. How РЭХА learns: from the answer to a change, and by asking every
-   5 minutes and at start. The same check mends today's case of a take
-   taken out in РЭХА and restored in the service.
-7. Only a take sent by hand comes out of the Trash; a rename, ★ or mark from
+6. Only a take sent by hand comes out of the Trash; a rename, ★ or mark from
    РЭХА leaves it there.
-8. The band's chat says nothing about deleting.
-9. ⋯ on a take's line holds only **Delete take** for now.
+7. The band's chat says nothing about deleting.
+8. ⋯ on a take's line holds only **Delete take** for now.
