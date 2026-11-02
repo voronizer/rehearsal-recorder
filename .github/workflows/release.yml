@@ -9,11 +9,11 @@
 #      Publish.
 #   3. This runs. build · macos and build · windows attach the zips to that
 #      release.
-#   4. Once both zips are attached, site and site · deploy put the website
-#      (reha.stream) up for that release, unless it is a pre-release: the
-#      page's buttons download the latest release, which a pre-release is
-#      not. service · deploy puts the band service up at the same moment,
-#      on the same terms.
+#   4. Once both zips are attached, which release, site and site · deploy
+#      put the website (reha.stream) up for that release, unless it is a
+#      pre-release: the page's buttons download the latest release, which a
+#      pre-release is not. service · deploy puts the band service up at the
+#      same moment, on the same terms.
 #
 # By hand (Actions -> Release -> Run workflow), it asks what to do:
 #   Rehearse the builds    both builds, left as workflow artifacts; nothing
@@ -166,8 +166,12 @@ jobs:
   # from the moment it is up and it shows the version people get; or by
   # hand, for the latest release, with both builds skipped. A job runs
   # after a skipped one only when its `if` says so, hence !cancelled().
-  site:
-    name: site
+  #
+  # First the release itself, and which Playwright its site has: the site's
+  # job runs in Playwright's image for that version (see the top of
+  # checks.yml), and a job's image has to be known before the job starts.
+  which:
+    name: which release
     needs: [build-macos, build-windows]
     if: >-
       !cancelled() && (
@@ -177,13 +181,11 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release.outputs.tag }}
+      playwright: ${{ steps.release.outputs.playwright }}
     steps:
       - uses: actions/checkout@v7
 
-      # The release the site is for: this one, or by hand the latest one. By
-      # hand this runs on a branch, so the site, the interface it draws with
-      # and CHANGELOG.md are put back as they were at that release, and
-      # nothing else: the action that builds them is this branch's.
+      # The release the site is for: this one, or by hand the latest one.
       - name: Which release
         id: release
         env:
@@ -193,15 +195,43 @@ jobs:
           tag="$TAG"
           if [ -z "$tag" ]; then
             tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-            git fetch --quiet --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
-            git restore --source="refs/tags/$tag" --worktree -- site ui CHANGELOG.md
           fi
-          echo "The site is for $tag."
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          git fetch --quiet --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+          v=$(git show "refs/tags/$tag:site/package-lock.json" |
+            jq -r '.packages["node_modules/@playwright/test"].version // empty')
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::No version of @playwright/test in $tag's site/package-lock.json."
+            exit 1
+          fi
+          echo "The site is for $tag, with Playwright $v."
+          { echo "tag=$tag"; echo "playwright=$v"; } >> "$GITHUB_OUTPUT"
+
+  site:
+    name: site
+    needs: which
+    if: ${{ !cancelled() && needs.which.result == 'success' }}
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.which.outputs.playwright }}-noble
+      options: --user 1001
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # By hand this runs on a branch, so the site, the interface it draws
+      # with and CHANGELOG.md are put back as they were at that release, and
+      # nothing else: the action that builds them is this branch's.
+      - name: The release's site
+        if: github.event_name != 'release'
+        env:
+          TAG: ${{ needs.which.outputs.tag }}
+        run: |
+          git fetch --quiet --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+          git restore --source="refs/tags/$TAG" --worktree -- site ui CHANGELOG.md
 
       - uses: ./.github/actions/site
         with:
-          version: ${{ steps.release.outputs.tag }}
+          version: ${{ needs.which.outputs.tag }}
 
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -221,7 +251,7 @@ jobs:
   # with Speed Insights, each switched on in the Vercel project.
   deploy:
     name: site · deploy
-    needs: site
+    needs: [which, site]
     if: ${{ !cancelled() && needs.site.result == 'success' }}
     runs-on: ubuntu-latest
     concurrency:
@@ -241,7 +271,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          TAG: ${{ needs.site.outputs.tag }}
+          TAG: ${{ needs.which.outputs.tag }}
         run: |
           if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
             echo "::error::Deploying needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID."
@@ -301,7 +331,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "26"
           cache: npm
           cache-dependency-path: |
             ui/package-lock.json

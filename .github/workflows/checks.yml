@@ -37,6 +37,13 @@
 # requires none of these checks today (its ruleset only stops it being
 # deleted or force-pushed), so a skipped one holds nothing up.
 #
+# `what changed` also reads which Playwright each of ui/, site/ and
+# service/ has in its lock file. The jobs with a browser run in Playwright's
+# own image for that version (mcr.microsoft.com/playwright:v<version>-noble,
+# noble being Ubuntu 24.04, as on the other machines), which has the
+# browser and everything it needs. Until 2026-11 (#93) each of them
+# installed those itself, and apt's part of that now and then hung.
+#
 # CodeQL also checks every pull request. It is GitHub's default setup
 # (Settings, Code security), not a file here.
 
@@ -70,6 +77,9 @@ jobs:
       site: ${{ steps.changes.outputs.site }}
       preview: ${{ steps.changes.outputs.preview }}
       service: ${{ steps.changes.outputs.service }}
+      playwright-ui: ${{ steps.playwright.outputs.ui }}
+      playwright-site: ${{ steps.playwright.outputs.site }}
+      playwright-service: ${{ steps.playwright.outputs.service }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -111,6 +121,25 @@ jobs:
           fi
           echo "app=$app site=$site preview=$preview service=$service"
           { echo "app=$app"; echo "site=$site"; echo "preview=$preview"; echo "service=$service"; } >> "$GITHUB_OUTPUT"
+
+      # The image each browser job runs in is the one made for the
+      # Playwright its package has, so a bump of @playwright/test
+      # (Dependabot's, say) takes the image along in the same pull request.
+      # Playwright puts out the image with each release; one not out yet
+      # stops the job at its start ("manifest unknown" under Initialize
+      # containers), and running it again later gets it.
+      - name: Playwright's versions
+        id: playwright
+        run: |
+          for p in ui site service; do
+            v=$(jq -r '.packages["node_modules/@playwright/test"].version // empty' "$p/package-lock.json")
+            if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::No version of @playwright/test in $p/package-lock.json."
+              exit 1
+            fi
+            echo "$p: $v"
+            echo "$p=$v" >> "$GITHUB_OUTPUT"
+          done
 
   # The app's Python suites on the two systems it is actually used on. They
   # need no sound card, screen or microphone (PortAudio is stubbed where the
@@ -171,7 +200,9 @@ jobs:
   # The interface: the Vitest files beside the code, and Playwright against
   # the built bundle, headless against a faked Python side. Nothing in them
   # depends on the system underneath, so they run once, on Linux, the
-  # quickest machine to get.
+  # quickest machine to get, inside Playwright's image (see the top of this
+  # file). As Playwright's own example has it, the job runs as the
+  # machine's user (1001), who owns the checkout, not as the image's root.
   #
   # The browser tests are nearly all of its time, and they keep all four of
   # a machine's cores busy, so more of them at once on one machine gains
@@ -191,6 +222,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    container: &interface-image
+      image: mcr.microsoft.com/playwright:v${{ needs.changes.outputs.playwright-ui }}-noble
+      options: --user 1001
     timeout-minutes: 30
     env:
       PART: 1
@@ -202,7 +236,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "26"
           cache: npm
           cache-dependency-path: ui/package-lock.json
 
@@ -226,22 +260,10 @@ jobs:
         run: npm test
 
       # The showcase: every component's stories, built. A story that imports
-      # something that is gone, or has a syntax error, fails here. Node only,
-      # so it runs before the browser install and does not depend on apt.
+      # something that is gone, or has a syntax error, fails here.
       - name: Showcase
         if: env.PART == '1'
         run: npm run build-storybook
-
-      # --with-deps: on Linux the browser needs system libraries and fonts.
-      # The apt step it runs sometimes hangs on a stuck mirror, so it gets
-      # a limit of its own. --only-shell: the tests run headless, in
-      # Chromium's headless shell, so the full browser is not fetched.
-      - name: Install the browser
-        timeout-minutes: 10
-        run: |
-          npx playwright install --only-shell chromium
-          fc-match sans-serif
-          fc-match -f '%{family}\n' system-ui
 
       - name: Playwright
         run: npm run test:e2e -- --shard="$PART/3"
@@ -258,6 +280,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    container: *interface-image
     timeout-minutes: 30
     env:
       PART: 2
@@ -271,6 +294,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    container: *interface-image
     timeout-minutes: 30
     env:
       PART: 3
@@ -282,12 +306,16 @@ jobs:
   # The website, built and tested as a release would build it, so an
   # interface change that breaks the page shows up here, not on the day of
   # a release. In a pull request the version is the newest one in
-  # CHANGELOG.md.
+  # CHANGELOG.md. In Playwright's image, as the interface's jobs are.
   site:
     name: site
     needs: changes
     if: needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.changes.outputs.playwright-site }}-noble
+      options: --user 1001
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -304,12 +332,16 @@ jobs:
   # runtime, the deploy script against a stand-in Wrangler, the build, and
   # its pages in a browser against the Worker run on this machine, with
   # stand-ins for letters and Telegram. Its pages import the interface's
-  # components and React from ui/, so ui/ is installed first.
+  # components and React from ui/, so ui/ is installed first. In
+  # Playwright's image, as the interface's jobs are.
   service:
     name: service
     needs: changes
     if: needs.changes.outputs.service == 'true'
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.changes.outputs.playwright-service }}-noble
+      options: --user 1001
     timeout-minutes: 30
     defaults:
       run:
@@ -319,7 +351,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "26"
           cache: npm
           cache-dependency-path: |
             ui/package-lock.json
@@ -341,14 +373,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      # As in the interface's jobs: the apt step sometimes hangs.
-      - name: Install the browser
-        timeout-minutes: 10
-        run: |
-          npx playwright install --only-shell chromium
-          fc-match sans-serif
-          fc-match -f '%{family}\n' system-ui
 
       - name: Playwright
         run: npx playwright test
