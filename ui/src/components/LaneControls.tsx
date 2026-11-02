@@ -218,6 +218,7 @@ export function LaneControls({
           <Toggle
             variant="outline"
             size="lane"
+            tone="mute"
             pressed={muted}
             onPressedChange={onToggleMute}
             aria-label={`Mute ${name}`}
@@ -228,6 +229,7 @@ export function LaneControls({
           <Toggle
             variant="outline"
             size="lane"
+            tone="solo"
             pressed={soloed}
             onPressedChange={onToggleSolo}
             aria-label={`Solo ${name}`}

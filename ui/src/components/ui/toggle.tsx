@@ -6,9 +6,12 @@ import { cn } from "@/lib/utils"
 
 /*
   A button that stays pressed (C8): Check signal, Stereo. On is the grey
-  `selected` fill, never the accent (F2). It is made like Button (C1): the
-  same weight and a 1 px frame in every look, clear when it has none to show,
-  so turning it on moves nothing beside it. Its sizes are Button's `row` and
+  `selected` fill, never the accent (F2), but for M and S: their `tone`
+  makes a pressed M the accent blue and a pressed S amber (Alex, 2 Nov
+  2026), so a muted or soloed track shows at a glance. It is made like
+  Button (C1): the same weight and a 1 px frame in every look, clear when
+  it has none to show, so turning it on moves nothing beside it. Its sizes
+  are Button's `row` and
   `icon-row`, and its own `lane`, the 20 px square of M and S on a track's
   plate.
 
@@ -29,10 +32,16 @@ const toggleVariants = cva(
         // M and S on a track's plate: a small thing, so 4 px.
         lane: "size-5 rounded-sm text-xs",
       },
+      tone: {
+        plain: "",
+        mute: "data-[state=on]:border-primary data-[state=on]:bg-primary data-[state=on]:text-primary-foreground",
+        solo: "data-[state=on]:border-warn data-[state=on]:bg-warn data-[state=on]:text-warn-foreground",
+      },
     },
     defaultVariants: {
       variant: "default",
       size: "row",
+      tone: "plain",
     },
   }
 )
@@ -41,13 +50,14 @@ function Toggle({
   className,
   variant,
   size,
+  tone,
   ...props
 }: React.ComponentProps<typeof TogglePrimitive.Root> &
   VariantProps<typeof toggleVariants>) {
   return (
     <TogglePrimitive.Root
       data-slot="toggle"
-      className={cn(toggleVariants({ variant, size, className }))}
+      className={cn(toggleVariants({ variant, size, tone, className }))}
       {...props}
     />
   )

@@ -40,10 +40,10 @@ export function Lanes({ take }: { take: TakePage }) {
         return (
           <div key={t.position} role="group" aria-label={t.name} data-heard={heard} className="flex items-center gap-3">
             <span className={cn("w-16 shrink-0 truncate", !heard && "text-muted-foreground line-through")}>{t.name}</span>
-            <Toggle size="lane" variant="outline" pressed={desk.muted.includes(i)} onPressedChange={() => p.mute(take.uid, i)} aria-label={`Mute ${t.name}`}>
+            <Toggle size="lane" variant="outline" tone="mute" pressed={desk.muted.includes(i)} onPressedChange={() => p.mute(take.uid, i)} aria-label={`Mute ${t.name}`}>
               M
             </Toggle>
-            <Toggle size="lane" variant="outline" pressed={desk.solo === i} onPressedChange={() => p.soloOne(take.uid, i)} aria-label={`Solo ${t.name}`}>
+            <Toggle size="lane" variant="outline" tone="solo" pressed={desk.solo === i} onPressedChange={() => p.soloOne(take.uid, i)} aria-label={`Solo ${t.name}`}>
               S
             </Toggle>
             <TrackWave take={take} peaks={t.peaks} heard={heard} />
