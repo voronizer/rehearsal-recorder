@@ -5,7 +5,7 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
-## Unreleased
+## 0.19.0
 
 - **РЭХА's own player on a take's page in the band service.** On a
   computer, a take's page plays through the same player as РЭХА: a lane
