@@ -5,7 +5,10 @@ test.use({ storageState: as("alex") })
 
 test("a take in the trash cannot be marked from the bar", async ({ page }) => {
   await page.goto(`/takes/${band().takes["Viasna 4"]}?at=2`)
-  const bar = page.getByLabel("Player")
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Viasna")
+  // On its own page the bar steps aside; on another page it holds the take.
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Trash" }).click()
+  const bar = page.getByLabel("Player", { exact: true })
   await expect(bar.getByTestId("bar-time")).toHaveText("0:02")
   await expect(bar.getByRole("button", { name: "Mark" })).toBeDisabled()
 })
