@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react"
 import {
   CircleAlert,
   Flag,
+  MessageSquare,
   Pencil,
   Pause,
   Play,
@@ -103,6 +104,7 @@ export function TakePlayer({
   markers = [],
   onAddMarker,
   onEditMarker,
+  talkOf,
   onRemoveMarker,
   onCrop,
   canCrop = true,
@@ -128,6 +130,10 @@ export function TakePlayer({
   markers?: Marker[]
   onAddMarker?: (seconds: number) => void
   onEditMarker?: (marker: Marker) => void
+  /** The band's service: a marker opens the band's talk about it, and this
+   *  says how many comments the talk has. The chip then shows a talk sign
+   *  and that number where РЭХА shows its pencil. */
+  talkOf?: (marker: Marker) => number
   onRemoveMarker?: (seconds: number) => void
   /** Trim the take down to the region, at once: the take as it was can be
    *  had back with the notice's Undo. Absent where that is not offered. */
@@ -223,6 +229,7 @@ export function TakePlayer({
                 marker={m}
                 onSeek={player.seek}
                 onEdit={onEditMarker}
+                talk={talkOf?.(m)}
                 onRemove={onRemoveMarker}
               />
             ))}
@@ -299,11 +306,14 @@ function MarkChip({
   marker,
   onSeek,
   onEdit,
+  talk,
   onRemove,
 }: {
   marker: Marker
   onSeek: (at: number) => void
   onEdit?: (marker: Marker) => void
+  /** How many comments the band's talk about it has, in the service. */
+  talk?: number
   onRemove?: (at: number) => void
 }) {
   const labels = useLabels()
@@ -340,7 +350,20 @@ function MarkChip({
           </span>
         </Button>
       </WholeTip>
-      {onEdit && (
+      {onEdit && talk !== undefined && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-tiny"
+          onClick={() => onEdit(marker)}
+          aria-label={`Talk on the mark at ${formatMMSS(marker.at)}${talk ? `, ${talk} ${talk === 1 ? "comment" : "comments"}` : ""}`}
+          className="tnum w-auto gap-0.5 px-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <MessageSquare />
+          {talk > 0 && <span className="font-medium text-foreground">{talk}</span>}
+        </Button>
+      )}
+      {onEdit && talk === undefined && (
         <Button
           type="button"
           variant="ghost"

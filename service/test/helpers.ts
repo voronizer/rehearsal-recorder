@@ -190,10 +190,6 @@ export async function answer<T = any>(res: Promise<Response>): Promise<{ status:
   return { status: r.status, body: (await r.json().catch(() => null)) as T }
 }
 
-/** The member opened the take. */
-export const open = async (cookie: string, uid: string) =>
-  expect((await post(`/api/takes/${uid}/seen`, {}, cookie)).status).toBe(200)
-
 export const starIt = async (cookie: string, uid: string) =>
   expect((await post(`/api/takes/${uid}/star`, {}, cookie)).status).toBe(200)
 

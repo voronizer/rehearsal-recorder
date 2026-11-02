@@ -22,7 +22,7 @@ export function NewSongPanel() {
         onSubmit={(e) => {
           e.preventDefault()
           if (!title.trim()) return
-          add.mutate(title.trim(), { onSuccess: (made) => open({ kind: "song", id: (made as { id: number }).id }) })
+          add.mutate(title.trim(), { onSuccess: (made) => open({ kind: "song", id: (made as { id: number }).id }, { replace: true }) })
         }}
       >
         <Label htmlFor="new-title">Title</Label>

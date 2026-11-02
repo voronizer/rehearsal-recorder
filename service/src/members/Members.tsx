@@ -20,7 +20,7 @@ import {
   type Key,
   type Member,
 } from "../api"
-import { Avatar, Group, Groups, Logo, Note, Page, Rows, Tile } from "../shell/parts"
+import { Avatar, Group, Groups, Logo, Page, Rows, Tile, Trouble, useFlash, useTitle } from "../shell/parts"
 import { count } from "../shell/words"
 
 const letter = (s: string) => (Array.from(s.trim())[0] ?? "?").toUpperCase()
@@ -42,9 +42,10 @@ function TheBand() {
   const pick = useRef<HTMLInputElement>(null)
   const saved = band.data?.name ?? ""
   const [name, setName] = useState(saved)
+  const [done, flash] = useFlash()
   useEffect(() => setName(saved), [saved])
   if (!band.data) return null
-  const save = () => name.trim() !== saved && rename.mutate(name.trim())
+  const save = () => name.trim() !== saved && rename.mutate(name.trim(), { onSuccess: flash })
   return (
     <Group title="The band">
       <Tile>
@@ -82,6 +83,11 @@ function TheBand() {
                 </Button>
               ) : (
                 <span className="text-xs text-muted-foreground">Without a picture the logo is the name's first letter.</span>
+              )}
+              {done && (
+                <span role="status" className="text-xs text-muted-foreground">
+                  Name saved
+                </span>
               )}
             </div>
             <Said error={rename.error ?? picture.error} />
@@ -171,7 +177,8 @@ function AddMember() {
     setEmail("")
   }
   return (
-    <Group title="Add a member" hint="Cloudflare sends them a letter to confirm the address; then they sign in here and give their name.">
+    <Group title="Add a member">
+      <p className="text-muted-foreground">Cloudflare sends them a letter to confirm the address; then they sign in here and give their name.</p>
       <form className="flex gap-2" onSubmit={submit}>
         <Input type="email" required aria-label="Email address" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
         <Button type="submit" disabled={add.isPending}>
@@ -189,6 +196,8 @@ function Keys({ keys }: { keys: Key[] }) {
   const remove = useRemoveKey()
   const [name, setName] = useState("")
   const [made, setMade] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<Key | null>(null)
+  const [copied, flash] = useFlash()
   async function submit(e: FormEvent) {
     e.preventDefault()
     const { key } = (await make.mutateAsync(name.trim())) as { key: string }
@@ -203,7 +212,7 @@ function Keys({ keys }: { keys: Key[] }) {
           {keys.map((k) => (
             <div key={k.id} className="flex items-center gap-3">
               <span className="min-w-0 flex-1 truncate">{k.name}</span>
-              <Button variant="ghost" size="row" disabled={remove.isPending} onClick={() => remove.mutate(k.id)}>
+              <Button variant="ghost" size="row" disabled={remove.isPending} onClick={() => setRemoving(k)}>
                 Remove
               </Button>
             </div>
@@ -219,8 +228,8 @@ function Keys({ keys }: { keys: Key[] }) {
             <code data-testid="new-key" className="min-w-0 flex-1 rounded-md bg-secondary px-2 py-1.5 font-mono text-xs break-all select-all">
               {made}
             </code>
-            <Button size="row" variant="outline" onClick={() => void navigator.clipboard.writeText(made).catch(() => {})}>
-              Copy
+            <Button size="row" variant="outline" className="min-w-20" onClick={() => void navigator.clipboard.writeText(made).then(flash, () => {})}>
+              {copied ? "Copied" : "Copy"}
             </Button>
           </span>
         </Tile>
@@ -239,6 +248,14 @@ function Keys({ keys }: { keys: Key[] }) {
         </Button>
       </form>
       <Said error={make.error ?? remove.error} />
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => !open && setRemoving(null)}
+        title={removing && `Remove the key “${removing.name}”?`}
+        description={removing && "РЭХА on that computer can no longer send takes here. To send again, make a new key and paste it there."}
+        actionLabel="Remove key"
+        onConfirm={() => removing && remove.mutate(removing.id)}
+      />
     </Group>
   )
 }
@@ -247,7 +264,7 @@ function Keys({ keys }: { keys: Key[] }) {
 function OwnersPage({ me }: { me: string }) {
   const members = useMembers()
   const keys = useKeys()
-  if (members.error) return <Note>{members.error.message}</Note>
+  if (members.error) return <Trouble error={members.error} retry={() => void members.refetch()} />
   if (!members.data || !keys.data) return null
   return (
     <Page title="Members" sub="Only you see the addresses, the buttons and the keys.">
@@ -264,7 +281,7 @@ function OwnersPage({ me }: { me: string }) {
 /** A member's page: who is in the band, names only. */
 function MembersPage() {
   const people = usePeople()
-  if (people.error) return <Note>{people.error.message}</Note>
+  if (people.error) return <Trouble error={people.error} retry={() => void people.refetch()} />
   if (!people.data) return null
   return (
     <Page title="Members" sub="Who is in the band.">
@@ -287,6 +304,7 @@ function MembersPage() {
 
 /** **Members**: everyone sees who is in the band; the owner also runs it from here. */
 export function Members() {
+  useTitle("Members")
   const me = useMe().data
   if (!me) return null
   return me.owner ? <OwnersPage me={me.id} /> : <MembersPage />

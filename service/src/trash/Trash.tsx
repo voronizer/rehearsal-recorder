@@ -1,8 +1,8 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { useRestore, useTrash, type Trashed } from "../api"
-import { Group, Note, Page, Rows, Tile } from "../shell/parts"
-import { count, day, longDay, quoted } from "../shell/words"
+import { Group, Page, Rows, Tile, Trouble, useTitle } from "../shell/parts"
+import { count, day, localDay, longDay, quoted } from "../shell/words"
 import { Play, TakeLink } from "../takes/parts"
 
 /** A take waits this many days in the trash. */
@@ -21,6 +21,7 @@ function left(t: Trashed, now = Date.now()) {
  * a take is deleted for good.
  */
 export function Trash() {
+  useTitle("Trash")
   const trash = useTrash()
   const restore = useRestore()
   const [back, setBack] = useState<string | null>(null)
@@ -31,7 +32,7 @@ export function Trash() {
           <span role="status">{back}</span>
         </Tile>
       )}
-      {trash.error && <Note>{trash.error.message}</Note>}
+      {trash.error && <Trouble error={trash.error} retry={() => void trash.refetch()} />}
       {trash.data &&
         (trash.data.length ? (
           <Group>
@@ -42,7 +43,7 @@ export function Trash() {
                   <div className="min-w-0 flex-1">
                     <TakeLink take={t} />
                     <div className="text-xs text-muted-foreground">
-                      {day(t.date)} · removed in РЭХА {day(t.trashed_at.slice(0, 10))} · {left(t)}
+                      {day(t.date)} · removed in РЭХА {day(localDay(t.trashed_at))} · {left(t)}
                     </div>
                   </div>
                   <Button

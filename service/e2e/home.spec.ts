@@ -1,15 +1,19 @@
 import { expect, test } from "@playwright/test"
-import { as, asMember, band } from "./band"
+import { as, band } from "./band"
 
-// Paŭlik opened Viasna 12 before the others marked it; nothing else.
+// Paŭlik, a member of the band.
 test.use({ storageState: as("paulik") })
 
 const NOTHING = "Press ▶ on a take to play it here."
 
-test("home says what is new and lists the songs with their best take", async ({ page }) => {
+test("home has the last rehearsal as played, then the songs with their best take", async ({ page }) => {
   await page.goto("/")
   await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible()
-  await expect(page.getByText("6 takes you have not heard yet · 2 new marks")).toBeVisible()
+
+  // The last rehearsal on top, its takes in the order they were played.
+  const last = page.getByRole("region", { name: "The last rehearsal" })
+  await expect(last).toContainText("the last rehearsal · 5 takes")
+  await expect(last.locator("[data-take]")).toHaveText([/Kupalle\s*2/, /Take\s*7/, /Pałyn\s*9/, /Viasna\s*11/, /Viasna\s*12/])
 
   // The song played last first; each with its best take.
   const songs = page.getByRole("region", { name: "Songs" }).locator("[data-song]")
@@ -17,7 +21,7 @@ test("home says what is new and lists the songs with their best take", async ({ 
   await expect(songs.nth(0)).toHaveAttribute("data-song", "Viasna")
   await expect(songs.nth(1)).toHaveAttribute("data-song", "Pałyn")
   await expect(songs.nth(2)).toHaveAttribute("data-song", "Kupalle")
-  await expect(songs.nth(0)).toContainText(/3 takes · last Thu 30 Oct( 2025)? · 2 not heard yet/)
+  await expect(songs.nth(0)).toContainText(/3 takes · last Thu 30 Oct( 2025)?/)
   await expect(songs.nth(0).locator("[data-take]")).toHaveAttribute("data-take", "Viasna 11")
 
   // The mark set or commented on last first, with the last word under it.
@@ -32,59 +36,29 @@ test("home says what is new and lists the songs with their best take", async ({ 
   await expect(page.getByLabel("Player")).toContainText(NOTHING)
 })
 
-test("play in a list plays the take in the bar, and it is heard", async ({ page }) => {
+test("the last rehearsal's day opens its page", async ({ page }) => {
+  await page.goto("/")
+  await page.getByRole("region", { name: "The last rehearsal" }).getByRole("link", { name: /Thursday, 30 October/ }).click()
+  await expect(page).toHaveURL(new RegExp(`/rehearsals/${band().rehearsals.second}`))
+})
+
+test("play in a list plays the take in the bar", async ({ page }) => {
   await page.goto("/")
   const palyn = page.locator('[data-song="Pałyn"]')
-  await expect(palyn).toContainText("2 not heard yet")
   await palyn.getByRole("button", { name: "Play “Pałyn 9”" }).click()
 
   const bar = page.getByLabel("Player")
   await expect(bar.getByRole("button", { name: "Pałyn 9", exact: true })).toBeVisible()
   await expect(bar.getByTestId("bar-time")).toHaveText("0:01", { timeout: 10_000 })
-  await expect(page.getByText("5 takes you have not heard yet · 2 new marks")).toBeVisible()
-  await expect(palyn).toContainText("1 not heard yet")
   await bar.getByRole("button", { name: "Pause “Pałyn 9”" }).click()
 })
 
-test("not heard yet opens the first take not heard, and opening it hears it", async ({ page }) => {
+test("a take's name opens its panel and does not play it", async ({ page }) => {
   await page.goto("/")
-  const viasna = page.locator('[data-song="Viasna"]')
-  await viasna.getByRole("button", { name: "2 not heard yet" }).click()
+  await page.getByRole("region", { name: "The last rehearsal" }).getByRole("button", { name: "Viasna 11", exact: true }).click()
   const panel = page.getByLabel("Panel")
-  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/Viasna\s*5/)
-  await expect(viasna).toContainText("1 not heard yet")
-  // Opening a take's panel does not play it.
+  await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText(/Viasna\s*11/)
   await expect(page.getByLabel("Player")).toContainText(NOTHING)
-})
-
-test("a mark set after you heard a take is new until you open the take again", async ({ page }) => {
-  const sub = page.getByRole("main").locator("p").filter({ hasText: /not heard yet|new mark|heard every take/ }).first()
-  const fresh = async () => Number(/(\d+) new marks?/.exec((await sub.textContent()) ?? "")?.[1] ?? 0)
-  const favourite = page.getByRole("region", { name: "The band's favourites" }).getByRole("button", { name: "Viasna 11", exact: true })
-  const panel = page.getByLabel("Panel")
-  await page.goto("/")
-  await favourite.click()
-  await expect(panel).toBeVisible()
-  await page.keyboard.press("Escape")
-  await expect(sub).toBeVisible()
-  const before = await fresh()
-
-  const dzima = await asMember("dzima")
-  const set = await dzima.post(`/api/takes/${band().takes["Viasna 11"]}/marks`, { data: { at: 3, note: "Late again" } })
-  expect(set.ok()).toBe(true)
-  const { id } = (await set.json()) as { id: number }
-  const sections = page.getByRole("navigation", { name: "Sections" })
-  await sections.getByRole("link", { name: "Songs" }).click()
-  await sections.getByRole("link", { name: "Home" }).click()
-  await expect.poll(fresh).toBe(before + 1)
-
-  // Opened again in the same tab, with no reload.
-  await favourite.click()
-  await expect(panel).toBeVisible()
-  await expect.poll(fresh).toBe(before)
-  // Gone again, so the tests after count the seed's marks.
-  expect((await dzima.delete(`/api/marks/${id}`)).ok()).toBe(true)
-  await dzima.dispose()
 })
 
 test("home says so when the service cannot answer", async ({ page }) => {

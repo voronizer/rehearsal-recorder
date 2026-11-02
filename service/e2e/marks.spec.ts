@@ -5,7 +5,7 @@ test.use({ storageState: as("alex") })
 
 type Marks = { counts: { open: number; closed: number; all: number }; marks: { id: number; note: string }[] }
 
-test("the marks switch counts open, closed and all", async ({ page }) => {
+test("the marks switch counts to do, done and all", async ({ page }) => {
   const alex = await asMember("alex")
   const all = (await (await alex.get("/api/marks?show=all")).json()) as Marks
   const fill = all.marks.find((k) => k.note === "Fill too long?")!
@@ -16,24 +16,26 @@ test("the marks switch counts open, closed and all", async ({ page }) => {
   await page.goto("/marks")
   const which = page.getByRole("radiogroup", { name: "Which marks" })
   await expect(which.getByRole("radio")).toHaveText([
-    new RegExp(`^Open\\s*${counts.open}$`),
-    new RegExp(`^Closed\\s*${counts.closed}$`),
+    new RegExp(`^To do\\s*${counts.open}$`),
+    new RegExp(`^Done\\s*${counts.closed}$`),
     new RegExp(`^All\\s*${counts.all}$`),
   ])
   const shown = page.locator("[data-mark]")
   await expect(shown).toHaveCount(counts.open)
   await expect(page.getByRole("region", { name: "Viasna", exact: true })).toBeVisible()
 
-  await which.getByRole("radio", { name: /^Closed/ }).click()
+  await which.getByRole("radio", { name: /^Done/ }).click()
   await expect(shown).toHaveCount(1)
   await expect(shown).toHaveAttribute("data-closed", "true")
   await expect(shown).toContainText("Fill too long?")
   await which.getByRole("radio", { name: /^All/ }).click()
   await expect(shown).toHaveCount(counts.all)
 
-  await which.getByRole("radio", { name: /^Closed/ }).click()
-  await shown.getByRole("button", { name: "Open again" }).click()
-  await expect(page.getByText("No mark is closed yet.")).toBeVisible()
+  // A line opens the mark in the panel, where Not done yet brings it back.
+  await which.getByRole("radio", { name: /^Done/ }).click()
+  await shown.getByRole("button", { name: "Fill too long?" }).click()
+  await page.getByLabel("Panel").getByRole("button", { name: "Not done yet" }).click()
+  await expect(page.getByText("No mark is done yet.")).toBeVisible()
 })
 
 test("a label renamed shows on its marks", async ({ page }) => {
@@ -65,7 +67,7 @@ test("a label dragged by its grip to the top is the first", async ({ page }) => 
   await page.mouse.move(target.x + 20, target.y + 2, { steps: 12 })
   await page.mouse.up()
   await expect.poll(() => names.evaluateAll((els) => els.slice(0, 2).map((e) => (e as HTMLInputElement).value))).toEqual(["Do again", "Note"])
+  // The panel is in the page's address: a reload keeps it open.
   await page.reload()
-  await page.getByRole("button", { name: "Labels" }).click()
   await expect(names.first()).toHaveValue("Do again")
 })

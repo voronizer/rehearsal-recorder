@@ -110,7 +110,7 @@ export const markRoutes = newApp()
     createRoute({
       method: "patch",
       path: "/api/marks/{id}",
-      description: "A mark's label and note, by who set it; **Close** and **Open again**, by anyone.",
+      description: "A mark's label and note, by who set it; **Done** and **Not done yet** (`closed`), by anyone.",
       middleware: [needMember] as const,
       request: {
         params: Id,

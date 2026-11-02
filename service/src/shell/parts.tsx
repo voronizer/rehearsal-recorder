@@ -1,6 +1,7 @@
-import { Children, createContext, Fragment, useContext, type ReactNode } from "react"
+import { Children, createContext, Fragment, useContext, useEffect, useRef, useState, type ReactNode } from "react"
 import { Link } from "@tanstack/react-router"
 import { ChevronLeft, ChevronRight } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { useSize } from "./size"
@@ -15,6 +16,8 @@ import { useSize } from "./size"
 type Surface = "page" | "card" | "panel"
 const SurfaceCtx = createContext<Surface>("page")
 export const InPanel = ({ children }: { children: ReactNode }) => <SurfaceCtx.Provider value="panel">{children}</SurfaceCtx.Provider>
+/** Whether this is drawn in the panel, not on the page. */
+export const useInPanel = () => useContext(SurfaceCtx) === "panel"
 
 /** A child's own key, so a row keeps its state when one is added above it; its place when it has none. */
 const keyOf = (c: ReturnType<typeof Children.toArray>[number], i: number) =>
@@ -51,13 +54,17 @@ export function Groups({ children, className }: { children: ReactNode; className
  */
 export function Group({
   title,
+  name,
   hint,
   action,
   fold,
   small,
   children,
 }: {
-  title?: string
+  /** A word, or something that opens, such as a day leading to its rehearsal. */
+  title?: ReactNode
+  /** What a screen reader calls the group when its title is not a word. */
+  name?: string
   hint?: ReactNode
   action?: ReactNode
   fold?: "open" | "closed"
@@ -68,12 +75,13 @@ export function Group({
   if (surface === "page")
     return (
       <Groups>
-        <Group title={title} hint={hint} action={action} fold={fold} small={small}>
+        <Group title={title} name={name} hint={hint} action={action} fold={fold} small={small}>
           {children}
         </Group>
       </Groups>
     )
   if (!title) return <section className="flex flex-col gap-3">{children}</section>
+  const label = typeof title === "string" ? title : name
   const heading = (
     <>
       <h2 className={cn("text-sm", small ? "font-medium" : "font-semibold")}>{title}</h2>
@@ -82,7 +90,7 @@ export function Group({
   )
   if (fold)
     return (
-      <Collapsible defaultOpen={fold === "open"} className="group/fold flex flex-col" role="region" aria-label={title}>
+      <Collapsible defaultOpen={fold === "open"} className="group/fold flex flex-col" role="region" aria-label={label}>
         <div className="flex min-h-8 items-center gap-2">
           <CollapsibleTrigger asChild>
             <button
@@ -99,7 +107,7 @@ export function Group({
       </Collapsible>
     )
   return (
-    <section aria-label={title} className="flex flex-col gap-3">
+    <section aria-label={label} className="flex flex-col gap-3">
       <div className="flex min-h-8 items-center gap-2">
         {heading}
         <span className="flex-1" />
@@ -110,19 +118,40 @@ export function Group({
   )
 }
 
-/** Rows of a list: no box of their own; a row lights up under the pointer. */
-export function Rows({ children, className }: { children: ReactNode; className?: string }) {
+/** Rows of a list: no box of their own; with `opens`, a row lights up under the pointer. */
+export function Rows({ children, className, opens }: { children: ReactNode; className?: string; opens?: boolean }) {
   const items = Children.toArray(children).filter(Boolean)
   return (
     <div role="list" className={cn("flex flex-col gap-0.5", className)}>
       {items.map((c, i) => (
-        <div role="listitem" key={keyOf(c, i)} className="-mx-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/60">
+        // Lit under the pointer only where the whole row opens something (`opens`).
+        <div role="listitem" key={keyOf(c, i)} className={cn("-mx-2 rounded-lg px-2 py-1.5", opens && "transition-colors hover:bg-accent/60")}>
           {c}
         </div>
       ))}
     </div>
   )
 }
+
+/**
+ * What a word that opens or plays something looks like (Alex's pick C,
+ * 2026-11-02): a grey dotted line under it, solid under the pointer, so a
+ * phone with no pointer shows it too. A take's or a song's name, a mark's
+ * words, a day that leads to its rehearsal, a file.
+ */
+export const OPENS =
+  "text-left underline decoration-muted-foreground/60 decoration-dotted underline-offset-4 hover:decoration-current hover:decoration-solid"
+
+/** The browser tab says which page this is: “Viasna · РЭХА”. */
+export function useTitle(name: string | undefined) {
+  useEffect(() => {
+    document.title = name ? `${name} · РЭХА` : "РЭХА"
+  }, [name])
+}
+
+/** A box for more than a line of words, drawn as the interface's Input. */
+export const TEXTAREA =
+  "w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
 
 /** Something that is not a list. `boxed`: a form or a notice, framed in a line. */
 export function Tile({ children, className, boxed }: { children: ReactNode; className?: string; boxed?: boolean }) {
@@ -208,11 +237,6 @@ export function Back({ label, ...to }: BackTo & { label: string }) {
   )
 }
 
-/** Something new for you: a take not heard yet, or a song or rehearsal with one. */
-export function Dot({ className }: { className?: string }) {
-  return <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-full bg-primary", className)} />
-}
-
 /** A member's first letter in a circle. */
 export function Avatar({ letter, className }: { letter: string; className?: string }) {
   return (
@@ -233,4 +257,48 @@ export function Logo({ name, picture, className }: { name: string; picture: stri
 /** A page's words while it loads, or what went wrong. */
 export function Note({ children }: { children: ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>
+}
+
+/**
+ * A panel whose take or song is still on its way: nothing for the first
+ * moment, so a quick answer does not flash, then a line that says it is coming.
+ */
+export function Waiting() {
+  const [late, setLate] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setLate(true), 300)
+    return () => clearTimeout(t)
+  }, [])
+  return late ? <p className="text-sm text-muted-foreground">Opening…</p> : null
+}
+
+/**
+ * What could not be read, said plainly, with **Try again**. A dropped
+ * connection reads “Failed to fetch” in the browser; it is said in words.
+ */
+export function Trouble({ error, retry }: { error: Error; retry: () => void }) {
+  const offline = error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(error.message)
+  return (
+    <div role="alert" className="flex flex-col items-start gap-3 text-sm">
+      <p className="text-muted-foreground">{offline ? "The band's service cannot be reached. Check the connection, then try again." : error.message}</p>
+      <Button variant="outline" size="row" onClick={retry}>
+        Try again
+      </Button>
+    </div>
+  )
+}
+
+/** A word that says it worked (“Saved”, “Copied”), shown for two seconds. */
+export function useFlash(): [boolean, () => void] {
+  const [on, setOn] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  return [
+    on,
+    () => {
+      setOn(true)
+      clearTimeout(timer.current)
+      timer.current = setTimeout(() => setOn(false), 2000)
+    },
+  ]
 }

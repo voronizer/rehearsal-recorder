@@ -1,22 +1,24 @@
 import { useParams } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { useRehearsal, useSongs, type TakeRow } from "../api"
-import { Back, Group, Groups, Note, Page, Rows } from "../shell/parts"
+import { Back, Group, Groups, Page, Rows, Trouble, useTitle } from "../shell/parts"
 import { usePanel } from "../shell/panel"
-import { clock, count, longDay } from "../shell/words"
+import { clock, count, day, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
 
 /**
  * A rehearsal's page: its takes by song, in the order they were played,
- * each song a fold with **The song** at its right. Takes nobody named a
- * song are under **Not named**, last. Each take has its marks under it.
+ * each song a fold with **Notes and files** at its right. Takes nobody
+ * named a song are under **Not named**, last. Each take has its marks
+ * under it.
  */
 export function Rehearsal() {
   const { uid } = useParams({ from: "/band/rehearsals/$uid" })
   const page = useRehearsal(uid)
+  useTitle(page.data ? day(page.data.rehearsal.date) : undefined)
   const songs = useSongs()
   const { open } = usePanel()
-  if (page.error) return <Note>{page.error.message}</Note>
+  if (page.error) return <Trouble error={page.error} retry={() => void page.refetch()} />
   if (!page.data) return null
   const { rehearsal, takes } = page.data
   const titles = new Map((songs.data?.songs ?? []).map((s) => [s.id, s.title]))
@@ -40,8 +42,9 @@ export function Rehearsal() {
             fold="open"
             action={
               id !== null && (
+                // Says what it opens: the song's panel, with what a rehearsal needs from it.
                 <Button variant="ghost" size="row" onClick={() => open({ kind: "song", id })}>
-                  The song
+                  Notes and files
                 </Button>
               )
             }

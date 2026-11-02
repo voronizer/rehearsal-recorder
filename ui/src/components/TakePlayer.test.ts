@@ -103,4 +103,21 @@ describe("the take's marks under the player", () => {
     )
     expect(out.match(/Edit mark at 0:02/g)).toHaveLength(2)
   })
+
+  it("show the band's talk and its comments in the service, where the app has its pencil", () => {
+    const out = renderToStaticMarkup(
+      createElement(TakePlayer, {
+        player,
+        onEditMarker: noop,
+        talkOf: (m) => (m.note === "Late" ? 2 : 0),
+        markers: [
+          { at: 2, label_id: 1, note: "Late" },
+          { at: 5, label_id: 1, note: "Early" },
+        ],
+      }),
+    )
+    expect(out).toContain("Talk on the mark at 0:02, 2 comments")
+    expect(out).toContain('aria-label="Talk on the mark at 0:05"')
+    expect(out).not.toContain("Edit mark at")
+  })
 })

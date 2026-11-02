@@ -368,11 +368,8 @@
           "steps": {
             "$ref": "#/components/schemas/FirstSteps"
           },
-          "unheard": {
-            "type": "number"
-          },
-          "new_marks": {
-            "type": "number"
+          "last_rehearsal": {
+            "$ref": "#/components/schemas/LastRehearsal"
           },
           "songs": {
             "type": "array",
@@ -391,15 +388,18 @@
             "items": {
               "$ref": "#/components/schemas/TakeRow"
             }
+          },
+          "favourite_count": {
+            "type": "number"
           }
         },
         "required": [
           "steps",
-          "unheard",
-          "new_marks",
+          "last_rehearsal",
           "songs",
           "latest_marks",
-          "favourites"
+          "favourites",
+          "favourite_count"
         ]
       },
       "FirstSteps": {
@@ -428,38 +428,29 @@
           "rehearsal"
         ]
       },
-      "HomeSong": {
-        "type": "object",
+      "LastRehearsal": {
+        "type": [
+          "object",
+          "null"
+        ],
         "properties": {
-          "id": {
-            "type": "number"
+          "uid": {
+            "type": "string"
           },
-          "title": {
+          "date": {
             "type": "string"
           },
           "takes": {
-            "type": "number"
-          },
-          "last_date": {
-            "type": "string"
-          },
-          "unheard": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/TakeRow"
             }
-          },
-          "best": {
-            "$ref": "#/components/schemas/TakeRow"
           }
         },
         "required": [
-          "id",
-          "title",
-          "takes",
-          "last_date",
-          "unheard",
-          "best"
+          "uid",
+          "date",
+          "takes"
         ]
       },
       "TakeRow": {
@@ -509,9 +500,6 @@
           },
           "starred_at_rehearsal": {
             "type": "boolean"
-          },
-          "is_new": {
-            "type": "boolean"
           }
         },
         "required": [
@@ -525,8 +513,7 @@
           "shape",
           "marks",
           "stars",
-          "starred_at_rehearsal",
-          "is_new"
+          "starred_at_rehearsal"
         ]
       },
       "MarkTick": {
@@ -573,6 +560,33 @@
           "member_id",
           "initial",
           "name"
+        ]
+      },
+      "HomeSong": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "title": {
+            "type": "string"
+          },
+          "takes": {
+            "type": "number"
+          },
+          "last_date": {
+            "type": "string"
+          },
+          "best": {
+            "$ref": "#/components/schemas/TakeRow"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "takes",
+          "last_date",
+          "best"
         ]
       },
       "Mark": {
@@ -627,9 +641,6 @@
             ]
           },
           "mine": {
-            "type": "boolean"
-          },
-          "is_new": {
             "type": "boolean"
           },
           "take": {
@@ -694,7 +705,6 @@
           "created_at",
           "updated_at",
           "mine",
-          "is_new",
           "take",
           "comments"
         ]
@@ -785,9 +795,6 @@
               },
               "marks": {
                 "type": "number"
-              },
-              "has_new": {
-                "type": "boolean"
               }
             },
             "required": [
@@ -795,8 +802,7 @@
               "not_named",
               "takes",
               "starred",
-              "marks",
-              "has_new"
+              "marks"
             ]
           }
         ]
@@ -909,9 +915,6 @@
               null
             ]
           },
-          "has_new": {
-            "type": "boolean"
-          },
           "created_at": {
             "type": [
               "string",
@@ -931,7 +934,6 @@
           "length",
           "best",
           "best_why",
-          "has_new",
           "created_at"
         ]
       },
@@ -4253,7 +4255,7 @@
     },
     "/api/marks/{id}": {
       "patch": {
-        "description": "A mark's label and note, by who set it; **Close** and **Open again**, by anyone.",
+        "description": "A mark's label and note, by who set it; **Done** and **Not done yet** (`closed`), by anyone.",
         "parameters": [
           {
             "schema": {
@@ -4737,54 +4739,6 @@
           },
           "401": {
             "description": "Not signed in, or the key does not work",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/takes/{uid}/seen": {
-      "post": {
-        "description": "The member opened or played the take: it and its marks are no longer new for them.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            },
-            "required": true,
-            "name": "uid",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Done",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Ok"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Not signed in, or the key does not work",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not there",
             "content": {
               "application/json": {
                 "schema": {

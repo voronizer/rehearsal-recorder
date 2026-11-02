@@ -1,4 +1,6 @@
+import { useRouterState } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { PlayButton } from "@/components/ui/play-button"
 import type { TakePage } from "../api"
 import { usePlayer, useTime } from "../takes/player/one"
@@ -51,18 +53,32 @@ function Line({ take, at }: { take: TakePage; at: number }) {
   )
 }
 
+/**
+ * The take's own page has РЭХА's player with its ▶ and **Mark**. While the
+ * bar holds that take, the bar steps aside (Alex's pick A, 2026-11-02), so
+ * the same buttons are not there twice; on another page it is back.
+ */
+function useOnItsPage(uid: string | undefined) {
+  const path = useRouterState({ select: (s) => s.location.pathname })
+  const p = usePlayer()
+  return !!uid && p.supported !== false && path === `/takes/${uid}`
+}
+
 /** The player along the bottom: ▶, the take and its day, the time, where it is, **Mark**, your ★. */
 export function PlayerBar() {
   const p = usePlayer()
   const take = p.take
   const at = useTime(p.uid)
+  const here = useOnItsPage(take?.uid)
+  if (here) return null
   return (
     <footer
       aria-label="Player"
       className="grid h-16 shrink-0 items-center gap-4 border-t bg-panel px-3"
       style={{ gridTemplateColumns: "13rem minmax(0,1fr) auto" }}
     >
-      <div className="flex min-w-0 items-center gap-3 pl-1">
+      {/* Before a take the words take the middle too, so they stay on one line. */}
+      <div className={cn("flex min-w-0 items-center gap-3 pl-1", !take && "col-span-2")}>
         <BarPlay take={take} />
         {take ? (
           <div className="min-w-0">
@@ -73,17 +89,15 @@ export function PlayerBar() {
           <span className="text-xs text-muted-foreground">{NOTHING}</span>
         )}
       </div>
-      <div className="flex min-w-0 items-center gap-3">
-        {take && (
-          <>
-            <span className="tnum text-xs text-muted-foreground" data-testid="bar-time">
-              {clock(at)}
-            </span>
-            <Line take={take} at={at} />
-            <span className="tnum text-xs text-muted-foreground">{clock(take.duration_sec)}</span>
-          </>
-        )}
-      </div>
+      {take && (
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="tnum text-xs text-muted-foreground" data-testid="bar-time">
+            {clock(at)}
+          </span>
+          <Line take={take} at={at} />
+          <span className="tnum text-xs text-muted-foreground">{clock(take.duration_sec)}</span>
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <MarkHere take={take} at={at} />
         {take && <StarButton take={take} disabled={!!take.trashed_at} />}
@@ -100,7 +114,20 @@ export function PhoneBar() {
   const length = take?.duration_sec || 1
   return (
     <footer aria-label="Player" className="relative shrink-0 border-t bg-panel">
-      {take && <div className="absolute -top-px left-0 h-0.5 bg-primary" style={{ width: `${(Math.min(at, length) / length) * 100}%` }} />}
+      {take && (
+        // The line is thin; the strip a finger presses to move is 24 px tall.
+        <div
+          data-testid="phone-line"
+          className="absolute inset-x-0 -top-3 z-10 h-6 cursor-pointer touch-none"
+          onPointerDown={(e) => {
+            const r = e.currentTarget.getBoundingClientRect()
+            p.seek(take.uid, Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * take.duration_sec)
+          }}
+        >
+          <div className="absolute inset-x-0 top-[11px] h-0.5 bg-muted" />
+          <div className="absolute top-[11px] left-0 h-0.5 bg-primary" style={{ width: `${(Math.min(at, length) / length) * 100}%` }} />
+        </div>
+      )}
       <div className="flex h-14 items-center gap-3 px-3">
         <BarPlay take={take} />
         {take ? (

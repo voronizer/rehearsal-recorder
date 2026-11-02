@@ -11,6 +11,18 @@ export const clock = (sec: number) => formatClock(sec)
 /** A rehearsal's day in a list: "Thu 30 Oct", with the year if it is not this one. */
 export const day = (date: string) => formatDayIn(date)
 
+/**
+ * The day of a moment the server wrote ("2026-11-02T22:30:00Z") where you
+ * are: a mark set at 01:30 in Minsk is on that day, not on the day before,
+ * as the server's own clock (UTC) would have it.
+ */
+export function localDay(stamp: string): string {
+  const t = new Date(stamp)
+  if (Number.isNaN(t.getTime())) return stamp.slice(0, 10)
+  const two = (n: number) => String(n).padStart(2, "0")
+  return `${t.getFullYear()}-${two(t.getMonth() + 1)}-${two(t.getDate())}`
+}
+
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",

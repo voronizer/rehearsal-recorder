@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link } from "@tanstack/react-router"
 import { ChevronDown, ChevronRight, Ellipsis, X } from "lucide-react"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
@@ -13,10 +13,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 import { KEYS } from "../../worker/shared/keys"
 import { MAX_FILE, TOO_BIG } from "../../worker/songs/limits"
 import { useAddFile, useChangeSong, useDeleteFile, useDeleteSong, useSong, useSongs, type SongFile, type SongPage } from "../api"
-import { Group, Groups, Note, Props, Rows, Tile } from "../shell/parts"
+import { Group, Groups, OPENS, Props, Rows, TEXTAREA, Tile, Trouble, useFlash, Waiting } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock } from "../shell/words"
 import { TakeLine, TakeName } from "../takes/parts"
@@ -64,7 +65,7 @@ export function KeySelect({ song }: { song: Song }) {
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="none">Not set</SelectItem>
+        <SelectItem value="none">No key</SelectItem>
         {KEYS.map((k) => (
           <SelectItem key={k} value={k}>
             {k}
@@ -81,44 +82,71 @@ export function BestTake({ song, big }: { song: Song; big?: boolean }) {
   return <TakeLine take={song.best} marks={big} />
 }
 
-/** The song's notes: words, the form, who starts. Anyone in the band edits them. */
+/**
+ * The song's notes: words, the form, who starts. Anyone in the band edits
+ * them, and they save themselves, as the band's name does (Alex, 2026-11-02):
+ * a second after the last key, on leaving the box, and when it closes.
+ */
 export function Notes({ song }: { song: Song }) {
+  return <NotesBox key={song.id} song={song} />
+}
+
+/** How long after the last key the notes save. */
+const PAUSE_MS = 1000
+
+function NotesBox({ song }: { song: Song }) {
   const change = useChangeSong()
-  const [edit, setEdit] = useState<string | null>(null)
-  if (edit !== null)
-    return (
-      <Tile>
-        <textarea
-          autoFocus
-          value={edit}
-          onChange={(e) => setEdit(e.target.value)}
-          rows={6}
-          maxLength={10000}
-          aria-label="Notes"
-          placeholder="Words, the form, who starts"
-          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        />
-        {change.error && (
-          <p role="alert" className="text-destructive">
-            {change.error.message}
-          </p>
-        )}
-        <div className="flex gap-2">
-          <Button size="row" disabled={change.isPending} onClick={() => change.mutate({ id: song.id, notes: edit }, { onSuccess: () => setEdit(null) })}>
-            Save notes
-          </Button>
-          <Button size="row" variant="ghost" onClick={() => setEdit(null)}>
-            Cancel
-          </Button>
-        </div>
-      </Tile>
-    )
+  const [text, setText] = useState(song.notes)
+  const [saved, flash] = useFlash()
+  /** What the band has, as far as this box knows. */
+  const sent = useRef(song.notes)
+  const writing = useRef(false)
+  // The latest, for the timer and the close to call.
+  const save = useRef<(now: string) => void>(() => {})
+  save.current = (now: string) => {
+    if (now === sent.current) return
+    sent.current = now
+    change.mutate({ id: song.id, notes: now }, { onSuccess: flash })
+  }
+  // Someone else's notes come in while you are not writing.
+  useEffect(() => {
+    if (writing.current || song.notes === sent.current) return
+    sent.current = song.notes
+    setText(song.notes)
+  }, [song.notes])
+  useEffect(() => {
+    const t = setTimeout(() => save.current(text), PAUSE_MS)
+    return () => clearTimeout(t)
+  }, [text])
+  const latest = useRef(text)
+  latest.current = text
+  // Closed with Esc or ✕, or another song opened: what is written goes too.
+  useEffect(() => () => save.current(latest.current), [])
   return (
     <Tile>
-      {song.notes ? <p className="whitespace-pre-line">{song.notes}</p> : <p className="text-muted-foreground">No notes yet.</p>}
-      <Button variant="outline" size="row" className="self-start" onClick={() => setEdit(song.notes)}>
-        Edit notes
-      </Button>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onFocus={() => (writing.current = true)}
+        onBlur={() => {
+          writing.current = false
+          save.current(text)
+        }}
+        rows={Math.min(14, Math.max(3, text.split("\n").length + 1))}
+        maxLength={10000}
+        aria-label="Notes"
+        placeholder="Words, the form, who starts"
+        className={TEXTAREA}
+      />
+      {change.error ? (
+        <p role="alert" className="text-destructive">
+          Not saved: {change.error.message}
+        </p>
+      ) : (
+        <span role="status" className="min-h-4 text-xs text-muted-foreground">
+          {change.isPending ? "Saving…" : saved ? "Saved" : ""}
+        </span>
+      )}
     </Tile>
   )
 }
@@ -148,7 +176,7 @@ export function Files({ song, files }: { song: Song; files: SongFile[] }) {
             {...(f.kind === "pdf" || f.kind === "picture" ? { target: "_blank", rel: "noreferrer" } : { download: f.name })}
             className="min-w-0 flex-1"
           >
-            <span className="block truncate hover:underline">{f.name}</span>
+            <span className={cn("block truncate", OPENS)}>{f.name}</span>
             <span className="block truncate text-xs text-muted-foreground">
               {KIND[f.kind][1]}
               {f.added_by && ` · added by ${f.added_by}`}
@@ -256,8 +284,8 @@ export function SongMenu({ song, onGone }: { song: Song; onGone: () => void }) {
 export function SongPanel({ id }: { id: number }) {
   const { close } = usePanel()
   const page = useSong(id)
-  if (page.error) return <Note>{page.error.message}</Note>
-  if (!page.data) return null
+  if (page.error) return <Trouble error={page.error} retry={() => void page.refetch()} />
+  if (!page.data) return <Waiting />
   const { song, files } = page.data
   return (
     <div className="flex flex-col gap-6" aria-label={song.title}>
@@ -265,7 +293,7 @@ export function SongPanel({ id }: { id: number }) {
         <h2 className="flex-1 truncate text-lg font-semibold">{song.title}</h2>
         <SongMenu song={song} onGone={close} />
         <Button asChild variant="outline" size="row">
-          <Link to="/songs/$id" params={{ id: String(id) }} onClick={close}>
+          <Link to="/songs/$id" params={{ id: String(id) }}>
             Song's page
             <ChevronRight />
           </Link>

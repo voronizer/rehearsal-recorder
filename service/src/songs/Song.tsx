@@ -1,9 +1,9 @@
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { useSong, type TakeRow } from "../api"
-import { Back, Columns, Group, Groups, Note, Page } from "../shell/parts"
+import { Back, Columns, Group, Groups, Page, Trouble, useTitle } from "../shell/parts"
 import { clock, count, longDay } from "../shell/words"
 import { TakeLine } from "../takes/parts"
-import { AddFile, BestTake, Files, Notes, SongMenu, StatusMenu, why } from "./parts"
+import { AddFile, BestTake, Files, KeySelect, Notes, SongMenu, StatusMenu, why } from "./parts"
 
 /** A song's takes by rehearsal, newest first, the newest rehearsal open. */
 function AllTakes({ takes }: { takes: TakeRow[] }) {
@@ -30,12 +30,12 @@ function AllTakes({ takes }: { takes: TakeRow[] }) {
 export function Song() {
   const { id } = useParams({ from: "/band/songs/$id" })
   const page = useSong(Number(id))
+  useTitle(page.data?.song.title)
   const navigate = useNavigate()
-  if (page.error) return <Note>{page.error.message}</Note>
+  if (page.error) return <Trouble error={page.error} retry={() => void page.refetch()} />
   if (!page.data) return null
   const { song, takes, files } = page.data
   const facts = [
-    song.key,
     song.tempo && `${Math.round(song.tempo)} bpm`,
     song.best && clock(song.best.duration_sec),
     takes.length ? `${count(takes.length, "take")} on ${count(song.rehearsals, "rehearsal")}` : "no takes yet",
@@ -49,6 +49,7 @@ export function Song() {
         <span className="flex items-center gap-3">
           {song.title}
           <StatusMenu song={song} />
+          <KeySelect song={song} />
           <SongMenu song={song} onGone={() => navigate({ to: "/songs" })} />
         </span>
       }

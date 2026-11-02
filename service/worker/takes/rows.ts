@@ -2,7 +2,7 @@ import { z } from "@hono/zod-openapi"
 import { and, asc, eq, isNotNull, isNull, type SQL } from "drizzle-orm"
 import { database } from "../shared/db"
 import type { Bindings } from "../shared/env"
-import { comment, rehearsal, seen, star, take, user } from "../shared/schema"
+import { comment, rehearsal, star, take, user } from "../shared/schema"
 import { fillShapes } from "./shape"
 
 /** A member's first letter, as the stars show it. */
@@ -34,7 +34,6 @@ export const TakeRow = z
     marks: z.array(MarkTick),
     stars: z.array(Star),
     starred_at_rehearsal: z.boolean(),
-    is_new: z.boolean(),
   })
   .openapi("TakeRow")
 
@@ -47,6 +46,9 @@ export type Loaded = TakeRow & { shown_at: string | null; trashed_at: string | n
 export const newest = (a: Loaded, b: Loaded) =>
   b.date.localeCompare(a.date) || b.number - a.number || (b.shown_at ?? "").localeCompare(a.shown_at ?? "")
 
+/** In the order they were played: РЭХА numbers a session's takes one after another. */
+export const played = (a: Loaded, b: Loaded) => a.number - b.number || (a.shown_at ?? "").localeCompare(b.shown_at ?? "")
+
 /** The take the band likes best: most members' stars, newest on a tie; with none, the newest. */
 export const best = (rows: Loaded[]) =>
   rows.length ? [...rows].sort((a, b) => b.stars.length - a.stars.length || newest(a, b))[0] : null
@@ -56,11 +58,8 @@ export const bestWhy = (top: Loaded | null) => (top === null ? null : top.stars.
 
 export const bare = ({ shown_at: _s, trashed_at: _t, ...row }: Loaded): TakeRow => row
 
-/**
- * The takes the band sees that `where` picks, newest first, as rows for
- * `me`: their stars, marks, and whether each is new for `me`.
- */
-export async function takeRows(env: Bindings, me: string, where?: SQL): Promise<Loaded[]> {
+/** The takes the band sees that `where` picks, newest first, as rows: their stars and marks. */
+export async function takeRows(env: Bindings, where?: SQL): Promise<Loaded[]> {
   const db = database(env)
   const takes = await db
     .select({
@@ -83,7 +82,7 @@ export async function takeRows(env: Bindings, me: string, where?: SQL): Promise<
     .where(and(isNotNull(take.shownGen), where))
   if (!takes.length) return []
   await fillShapes(env, db, takes.map((t) => Object.assign(t, { gen: t.gen! })))
-  const [stars, marks, mine] = await db.batch([
+  const [stars, marks] = await db.batch([
     db
       .select({ takeUid: star.takeUid, memberId: user.id, name: user.name, email: user.email })
       .from(star)
@@ -94,7 +93,6 @@ export async function takeRows(env: Bindings, me: string, where?: SQL): Promise<
       .from(comment)
       .where(isNull(comment.parentId))
       .orderBy(asc(comment.at), asc(comment.id)),
-    db.select({ takeUid: seen.takeUid }).from(seen).where(eq(seen.memberId, me)),
   ])
   const starsOf = new Map<string, z.infer<typeof Star>[]>()
   for (const s of stars)
@@ -108,7 +106,6 @@ export async function takeRows(env: Bindings, me: string, where?: SQL): Promise<
       ...(marksOf.get(m.takeUid) ?? []),
       { id: m.id, at: Math.max(0, m.at), label_id: m.labelId ?? 0, note: m.text, closed: m.closed },
     ])
-  const opened = new Set(mine.map((s) => s.takeUid))
   return takes
     .map((t) => ({
       uid: t.uid,
@@ -122,7 +119,6 @@ export async function takeRows(env: Bindings, me: string, where?: SQL): Promise<
       marks: marksOf.get(t.uid) ?? [],
       stars: starsOf.get(t.uid) ?? [],
       starred_at_rehearsal: t.starredAtRehearsal,
-      is_new: !opened.has(t.uid),
       shown_at: t.shownAt,
       trashed_at: t.trashedAt,
     }))

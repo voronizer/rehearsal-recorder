@@ -36,8 +36,8 @@ test.describe("as Alex", () => {
     await expect(time).toHaveText("0:00 / 0:10")
     await transport.getByRole("button", { name: "Play", exact: true }).click()
     await expect(time).toHaveText(/^0:0[2-9] \/ 0:10$/, { timeout: 10_000 })
-    // The bar at the bottom plays the same take.
-    await expect(page.getByLabel("Player").getByTestId("bar-time")).not.toHaveText("0:00")
+    // The bar at the bottom holds the same take, so it steps aside here.
+    await expect(page.getByLabel("Player", { exact: true })).toHaveCount(0)
     await transport.getByRole("button", { name: "Pause", exact: true }).click()
     const lanes = page.getByRole("group", { name: "Take timeline" })
     const box = (await lanes.boundingBox())!
@@ -69,8 +69,8 @@ test.describe("as Alex on a phone", () => {
     const files = main.getByRole("region", { name: "Download tracks" })
     const top = async (l: typeof marks) => (await l.boundingBox())!.y
     expect(await top(marks)).toBeLessThan(await top(files))
-    // The dot that says the label: it has a size, not only a title.
-    const dot = marks.locator("[data-mark]").first().locator("span[title] > *")
+    // The dot beside the label's name: it has a size.
+    const dot = marks.locator("[data-mark]").first().locator("[data-label] > *").first()
     const box = (await dot.boundingBox())!
     expect(box.width).toBeGreaterThan(0)
     expect(box.height).toBeGreaterThan(0)
@@ -158,6 +158,21 @@ test.describe("as Ira", () => {
     letThrough()
   })
 
+  test("M and S in a take panel work before the take plays, and stay when it does", async ({ page }) => {
+    await page.goto(`/?panel=take:${band().takes["Pałyn 3"]}`)
+    const panel = page.getByLabel("Panel")
+    await panel.getByRole("button", { name: /^Tracks/ }).click()
+    const solo = panel.getByRole("button", { name: "Solo Bass" })
+    await expect(solo).toBeEnabled()
+    await solo.click()
+    await expect(solo).toHaveAttribute("aria-pressed", "true")
+    await expect(panel.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "false")
+    await panel.getByRole("button", { name: /^Play “Pałyn 3”/ }).click()
+    await expect(panel.getByRole("button", { name: /^Pause “Pałyn 3”/ })).toBeVisible()
+    await expect(solo).toHaveAttribute("aria-pressed", "true")
+    await expect(panel.getByRole("group", { name: "Drums" })).toHaveAttribute("data-heard", "false")
+  })
+
   test("a star shows at once and stays after a reload", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 3"]}`)
     const main = page.getByRole("main")
@@ -176,7 +191,9 @@ test.describe("as Dzima", () => {
   test.use({ storageState: as("dzima") })
 
   test("Mark in the bar sets a mark where the take is", async ({ page }) => {
+    // The take's page puts it in the player at 0:05; on its song's page the bar has it.
     await page.goto(`/takes/${band().takes["Pałyn 9"]}?at=5`)
+    await page.getByRole("main").getByRole("link", { name: "Pałyn" }).first().click()
     const bar = page.getByLabel("Player")
     await expect(bar.getByTestId("bar-time")).toHaveText("0:05")
     await bar.getByRole("button", { name: "Mark" }).click()
@@ -187,19 +204,21 @@ test.describe("as Dzima", () => {
     const mine = panel.locator("[data-mark]").filter({ hasText: "Bass comes in late" })
     await expect(mine).toContainText("0:05")
     await expect(mine).toContainText("Dzima")
-    await page.reload()
-    // On the page it is a chip in the player; pressed, its talk is in the panel.
+    // On the take's page it is a chip in the player; pressed, its talk is in the panel.
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
     await page.locator("[data-take-player]").getByRole("button", { name: "Bass comes in late" }).click()
     await expect(page.getByLabel("Panel")).toContainText("Mark at 0:05")
     const kept = page.getByLabel("Panel").locator("[data-mark]").filter({ hasText: "Bass comes in late" })
     await expect(kept).toContainText("0:05")
-    // Deleting your mark says what goes with it.
-    await kept.getByRole("button", { name: "Comment", exact: true }).click()
-    await kept.getByLabel("Your comment").fill("Or the drums are early")
+    // The box for a comment is open; Send comes with the words.
+    await expect(kept.getByRole("button", { name: "Send" })).toHaveCount(0)
+    await kept.getByRole("textbox", { name: "Your comment" }).fill("Or the drums are early")
     await kept.getByRole("button", { name: "Send" }).click()
-    await expect(kept).toContainText("Or the drums are early")
-    // The mark's own Delete comes after its comments'.
-    await kept.getByRole("button", { name: "Delete", exact: true }).last().click()
+    await expect(kept.getByText("Or the drums are early")).toBeVisible()
+    await expect(kept.getByRole("textbox", { name: "Your comment" })).toHaveValue("")
+    // Deleting your mark, under its ⋯, says what goes with it.
+    await kept.getByRole("button", { name: "What to do with the mark at 0:05" }).click()
+    await page.getByRole("menuitem", { name: "Delete" }).click()
     const ask = page.getByRole("dialog")
     await expect(ask).toContainText("Its comment goes with it.")
     await ask.getByRole("button", { name: "Cancel" }).click()
@@ -219,28 +238,41 @@ test.describe("as Dzima", () => {
     await expect(page.locator("[data-take-player]").getByRole("button", { name: "Guitar too loud" })).toBeVisible()
   })
 
+  test("closing a mark with words not sent asks first", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
+    await page.locator("[data-take-player]").getByRole("button", { name: "Count it in" }).click()
+    const panel = page.getByLabel("Panel")
+    await panel.getByRole("textbox", { name: "Your comment" }).fill("Half a thou")
+    await panel.getByRole("button", { name: "Close", exact: true }).click()
+    const ask = page.getByRole("dialog", { name: "Discard what you wrote?" })
+    await ask.getByRole("button", { name: "Keep writing" }).click()
+    await expect(panel.getByRole("textbox", { name: "Your comment" })).toHaveValue("Half a thou")
+    await panel.getByRole("button", { name: "Close", exact: true }).click()
+    await ask.getByRole("button", { name: "Discard" }).click()
+    await expect(panel).toHaveCount(0)
+  })
+
   test("a mark chip opens its talk: a comment, closed and opened again", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
     const player = page.locator("[data-take-player]")
     const panel = page.getByLabel("Panel")
-    // A mark from РЭХА follows РЭХА: no Edit or Delete. A chip has no ✕.
+    // A mark from РЭХА follows РЭХА: no ⋯ with Edit or Delete. A chip has no ✕.
     await player.getByRole("button", { name: "Count it in" }).click()
     await expect(panel.locator("[data-mark]")).toContainText("Set in РЭХА")
-    await expect(panel.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0)
+    await expect(panel.getByRole("button", { name: /^What to do with/ })).toHaveCount(0)
     await expect(player.getByRole("button", { name: /^Remove mark/ })).toHaveCount(0)
 
     await player.getByRole("button", { name: "Too quiet here" }).click()
     const quiet = panel.locator("[data-mark]").filter({ hasText: "Too quiet here" })
-    await quiet.getByRole("button", { name: "Comment", exact: true }).click()
-    await quiet.getByLabel("Your comment").fill("Turn the vocal up")
-    await quiet.getByRole("button", { name: "Send" }).click()
-    await expect(quiet).toContainText("Dzima: Turn the vocal up")
-    await quiet.getByRole("button", { name: "Close", exact: true }).click()
+    await quiet.getByRole("textbox", { name: "Your comment" }).fill("Turn the vocal up")
+    await quiet.getByRole("textbox", { name: "Your comment" }).press("Control+Enter")
+    await expect(quiet.getByText("Turn the vocal up")).toBeVisible()
+    await quiet.getByRole("button", { name: "Done", exact: true }).click()
     await expect(quiet).toHaveAttribute("data-closed", "true")
-    await quiet.getByRole("button", { name: "Open again" }).click()
+    await quiet.getByRole("button", { name: "Not done yet" }).click()
     await expect(quiet).toHaveAttribute("data-closed", "false")
+    // The panel is in the page's address: a reload keeps it open.
     await page.reload()
-    await page.locator("[data-take-player]").getByRole("button", { name: "Too quiet here" }).click()
-    await expect(page.getByLabel("Panel").locator("[data-mark]")).toContainText("Dzima: Turn the vocal up")
+    await expect(page.getByLabel("Panel").locator("[data-mark]").getByText("Turn the vocal up")).toBeVisible()
   })
 })

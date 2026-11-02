@@ -5,8 +5,8 @@ import { LabelDot } from "@/components/ui/mark"
 import { PlayButton } from "@/components/ui/play-button"
 import { labelLook } from "@/lib/labels"
 import { cn } from "@/lib/utils"
-import { useFrame, useLabels, useMe, useStar, type Label } from "../api"
-import { Dot } from "../shell/parts"
+import { useFrame, useLabels, useMe, usePeople, useStar, type Label } from "../api"
+import { OPENS } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock, quoted } from "../shell/words"
 import { useLookOf, usePlayer, useTime } from "./player/one"
@@ -19,7 +19,6 @@ export type TakeLike = {
   duration_sec: number
   shape: number[]
   stars: { member_id: string; initial: string; name: string }[]
-  is_new?: boolean
   marks: { id: number; at: number; label_id: number; note: string; closed: boolean }[]
 }
 
@@ -32,15 +31,19 @@ export function useLabelOf() {
 /** A label's colour as CSS, for what is drawn in SVG. */
 export const colourCss = (l: Label) => `var(${labelLook(l.colour).cssVar})`
 
-/** “Viasna 12” as РЭХА writes a take: the song's title, then the number a shade lighter. `short`: the number alone. */
+/**
+ * “Viasna 12” as РЭХА writes a take: the song's title, then the number a
+ * shade lighter. `short`: the number alone. A long title gives way and the
+ * number stays, so two takes of one song never read the same.
+ */
 export function TakeName({ take, short, className }: { take: { name: string; number: number }; short?: boolean; className?: string }) {
   const end = ` ${take.number}`
   const title = take.name.endsWith(end) ? take.name.slice(0, -end.length) : take.name
   const split = title !== take.name
   return (
-    <span className={cn("inline-flex items-baseline gap-1", className)}>
-      {!(short && split) && title}
-      {split && <span className="tnum text-muted-foreground">{take.number}</span>}
+    <span className={cn("inline-flex min-w-0 max-w-full items-baseline gap-1", className)}>
+      {!(short && split) && <span className="min-w-0 truncate">{title}</span>}
+      {split && <span className="tnum shrink-0 text-muted-foreground">{take.number}</span>}
     </span>
   )
 }
@@ -54,10 +57,9 @@ export function TakeLink({ take, short, className }: { take: TakeLike; short?: b
       title={take.name}
       aria-label={take.name}
       onClick={() => open({ kind: "take", uid: take.uid })}
-      className={cn("inline-flex min-w-0 items-center gap-1.5 truncate text-left underline-offset-4 hover:underline", className)}
+      className={cn("inline-flex min-w-0 max-w-full items-center gap-1.5", OPENS, className)}
     >
       <TakeName take={take} short={short} />
-      {take.is_new && <Dot />}
     </button>
   )
 }
@@ -69,13 +71,34 @@ export function Play({ take, className }: { take: { uid: string; name: string };
   return <PlayButton look={look} name={quoted(take.name)} disabled={p.supported === false} onClick={() => p.play(take.uid)} className={className} />
 }
 
+/**
+ * The letters a member's star shows: the first letter of their name, or the
+ * first two where someone else in the band starts with the same one (Ivan
+ * “Iv”, Ira “Ir”), so a phone, which has no tooltips, still tells them apart.
+ */
+export function useInitials() {
+  const people = usePeople().data ?? []
+  const first = (name: string) => Array.from(name.trim())[0]?.toUpperCase() ?? "?"
+  return (member: string, name: string, initial: string) => {
+    const clash = people.some((p) => p.id !== member && first(p.name) === initial)
+    if (!clash) return initial
+    const [a = "?", b = ""] = Array.from(name.trim())
+    return a.toUpperCase() + b.toLowerCase()
+  }
+}
+
 function Initials({ stars }: { stars: TakeLike["stars"] }) {
+  const letters = useInitials()
   if (!stars.length) return null
   return (
     <span className="flex -space-x-1">
       {stars.map((s) => (
-        <span key={s.member_id} title={s.name} className="flex size-5 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold ring-2 ring-background">
-          {s.initial}
+        <span
+          key={s.member_id}
+          title={s.name}
+          className="flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-semibold ring-2 ring-background"
+        >
+          {letters(s.member_id, s.name, s.initial)}
         </span>
       ))}
     </span>
@@ -170,7 +193,8 @@ export function Wave({
                   ? "fill-signal"
                   : "fill-foreground/70"
                 : starred
-                  ? "fill-signal/55"
+                  ? // On a dark card the lighter green would sink into it.
+                    "fill-signal/55 dark:fill-signal/80"
                   : "fill-muted-foreground/45"
             }
           />
@@ -215,14 +239,14 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
     <div className="flex flex-col gap-0.5" data-take={take.name}>
       <div className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3">
         <Play take={take} />
-        <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5 overflow-x-clip">
           <TakeLink take={take} short={short} className="w-24 shrink-0" />
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <Wave
               take={take}
               height={28}
               starred={take.stars.length > 0}
-              className="min-w-12"
+              className="min-w-8"
               style={{ width: `${(Math.min(take.duration_sec, longest) / longest) * SHARE}%` }}
             />
             <span className="tnum shrink-0 text-sm text-muted-foreground">{clock(take.duration_sec)}</span>
@@ -241,7 +265,7 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
           >
             <LabelDot colour={labelOf(k.label_id).colour} />
             <span className="tnum shrink-0 text-muted-foreground">{clock(k.at)}</span>
-            <span className="truncate">{k.note || labelOf(k.label_id).name}</span>
+            <span className={cn("truncate", OPENS)}>{k.note || labelOf(k.label_id).name}</span>
           </button>
         ))}
     </div>

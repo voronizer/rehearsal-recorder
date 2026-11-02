@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router"
 import { cn } from "@/lib/utils"
 import { useFrame, useRehearsals, type RehearsalItem } from "../api"
-import { Dot, Empty, Group, Groups, Note, Page, Rows } from "../shell/parts"
+import { Empty, Group, Groups, OPENS, Page, Rows, Trouble, useTitle } from "../shell/parts"
 import { useSize } from "../shell/size"
 import { count, day, dayMonth, month } from "../shell/words"
 
@@ -32,8 +32,7 @@ function RehearsalRow({ r, table }: { r: RehearsalItem; table: boolean }) {
   const go = () => navigate({ to: "/rehearsals/$uid", params: { uid: r.uid } })
   const date = (
     <span className="flex items-center gap-2">
-      {day(r.date)}
-      {r.has_new && <Dot />}
+      <span className={OPENS}>{day(r.date)}</span>
     </span>
   )
   if (table)
@@ -68,11 +67,12 @@ function RehearsalRow({ r, table }: { r: RehearsalItem; table: boolean }) {
   )
 }
 
-/** **Rehearsals**: a table by month, newest first, each month a fold. */
+/** **Rehearsals**: a table by month, newest first, each month a fold; only the latest is open. */
 export function Rehearsals() {
+  useTitle("Rehearsals")
   const list = useRehearsals()
   const table = useSize() === "wide"
-  if (list.error) return <Note>{list.error.message}</Note>
+  if (list.error) return <Trouble error={list.error} retry={() => void list.refetch()} />
   if (!list.data) return null
   const all = list.data
   if (!all.length) return <Empty title="Rehearsals" text="No rehearsals yet. A rehearsal appears here when РЭХА sends its first take." />
@@ -80,21 +80,23 @@ export function Rehearsals() {
   const takes = all.reduce((n, r) => n + r.takes.length, 0)
   return (
     <Page title="Rehearsals" sub={`${count(all.length, "rehearsal")} since ${dayMonth(all[all.length - 1].date)} · ${count(takes, "take")}`}>
+      {table && (
+        // One head for the whole table, above the months.
+        <div className={cn("-mb-4 grid gap-3 px-6 text-xs text-muted-foreground", COLUMNS)}>
+          <span>Date</span>
+          <span>Songs</span>
+          <span>Takes</span>
+          <span>Starred</span>
+          <span>Marks</span>
+        </div>
+      )}
       <Groups>
-        {months.map((m) => {
+        {months.map((m, i) => {
           const rows = all.filter((r) => r.date.startsWith(m))
+          // The latest month open, the ones before folded: half a year is a short list of months.
           return (
-            <Group key={m} title={month(`${m}-01`)} hint={count(rows.length, "rehearsal")} fold="open">
-              {table && (
-                <div className={cn("grid gap-3 text-xs text-muted-foreground", COLUMNS)}>
-                  <span>Date</span>
-                  <span>Songs</span>
-                  <span>Takes</span>
-                  <span>Starred</span>
-                  <span>Marks</span>
-                </div>
-              )}
-              <Rows>
+            <Group key={m} title={month(`${m}-01`)} hint={count(rows.length, "rehearsal")} fold={i === 0 ? "open" : "closed"}>
+              <Rows opens>
                 {rows.map((r) => (
                   <RehearsalRow key={r.uid} r={r} table={table} />
                 ))}

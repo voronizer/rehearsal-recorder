@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
-import { CalendarDays, Diamond, House, Music, Trash2, Users, type LucideIcon } from "lucide-react"
+import { CalendarDays, Diamond, Ellipsis, House, Music, Trash2, Users, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
@@ -47,7 +47,9 @@ function You() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="h-10 justify-start gap-2 px-2">
           <Avatar letter={(Array.from(me.name.trim())[0] ?? "?").toUpperCase()} />
-          <span className="min-w-0 truncate">{me.name}</span>
+          <span className="min-w-0 flex-1 truncate text-left">{me.name}</span>
+          {/* Your name, Change your name and Sign out are behind it: ⋯ says there is more. */}
+          <Ellipsis className="text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-52">

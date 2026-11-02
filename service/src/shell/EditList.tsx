@@ -77,7 +77,8 @@ export function EditRow({
           <GripVertical className="size-4" />
         </button>
         {swatch && (
-          <Button variant="ghost" size="icon-row" aria-label={`Colour of “${name}”`} aria-expanded={palette} onClick={() => setPalette(!palette)}>
+          // Framed, so it reads as a button that opens the colours, not as a sign.
+          <Button variant="outline" size="icon-row" aria-label={`Colour of “${name}”`} aria-expanded={palette} onClick={() => setPalette(!palette)}>
             {swatch}
           </Button>
         )}
@@ -92,7 +93,7 @@ export function EditRow({
             if (e.key === "Enter") e.currentTarget.blur()
             if (e.key === "Escape") setText(name)
           }}
-          className="h-8 flex-1 border-transparent bg-transparent shadow-none hover:border-input"
+          className="h-8 flex-1"
         />
         <span className="shrink-0 text-xs text-muted-foreground">{count}</span>
         {canDelete && (

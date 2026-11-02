@@ -56,8 +56,9 @@ export const fileRoutes = newApp().openapi(
     const size = object.size
     if (ranged && object.range) {
       const r = object.range as { offset?: number; length?: number; suffix?: number }
-      const length = r.suffix !== undefined ? Math.min(r.suffix, size) : (r.length ?? size - (r.offset ?? 0))
-      const start = r.suffix !== undefined ? size - length : (r.offset ?? 0)
+      const start = r.suffix !== undefined ? size - Math.min(r.suffix, size) : (r.offset ?? 0)
+      // R2 sends fewer bytes when more are asked than the file has after `start`: say so.
+      const length = Math.min(r.suffix ?? r.length ?? size - start, size - start)
       headers.set("Content-Range", `bytes ${start}-${start + length - 1}/${size}`)
       headers.set("Content-Length", String(length))
       return new Response(object.body, { status: 206, headers })

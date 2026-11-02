@@ -5,7 +5,7 @@ import { fail } from "../shared/errors"
 import { errors, json, newApp } from "../shared/openapi"
 import { rehearsal, song, take } from "../shared/schema"
 import { needMember } from "../signin/guards"
-import { bare, live, takeRows, TakeRow, type Loaded } from "../takes/rows"
+import { bare, live, played, takeRows, TakeRow } from "../takes/rows"
 
 const Rehearsal = z.object({ uid: z.string(), name: z.string(), date: z.string() }).openapi("Rehearsal")
 
@@ -18,12 +18,7 @@ const RehearsalItem = Rehearsal.extend({
   takes: z.array(z.object({ uid: z.string(), duration_sec: z.number(), starred: z.boolean() })),
   starred: z.number(),
   marks: z.number(),
-  /** A take you have not heard. */
-  has_new: z.boolean(),
 }).openapi("RehearsalItem")
-
-/** In the order they were played. */
-const played = (a: Loaded, b: Loaded) => a.number - b.number || (a.shown_at ?? "").localeCompare(b.shown_at ?? "")
 
 /** The Rehearsals table and a rehearsal's page. */
 export const rehearsalRoutes = newApp()
@@ -38,7 +33,7 @@ export const rehearsalRoutes = newApp()
     async (c) => {
       const db = database(c.env)
       const [rows, rehearsals, songs] = await Promise.all([
-        takeRows(c.env, c.var.member.id, live()),
+        takeRows(c.env, live()),
         db.select().from(rehearsal),
         db.select({ id: song.id, title: song.title }).from(song),
       ])
@@ -55,7 +50,6 @@ export const rehearsalRoutes = newApp()
             takes: takes.map((t) => ({ uid: t.uid, duration_sec: t.duration_sec, starred: t.stars.length > 0 })),
             starred: takes.filter((t) => t.stars.length > 0).length,
             marks: takes.reduce((n, t) => n + t.marks.length, 0),
-            has_new: takes.some((t) => t.is_new),
           }
         })
         .filter((r) => r.takes.length > 0)
@@ -75,7 +69,7 @@ export const rehearsalRoutes = newApp()
     async (c) => {
       const { uid } = c.req.valid("param")
       const [r] = await database(c.env).select().from(rehearsal).where(eq(rehearsal.uid, uid)).limit(1)
-      const takes = r ? await takeRows(c.env, c.var.member.id, and(live(), eq(take.rehearsalUid, uid))) : []
+      const takes = r ? await takeRows(c.env, and(live(), eq(take.rehearsalUid, uid))) : []
       if (!r || !takes.length) return fail(c, 404, "No such rehearsal")
       return c.json({ rehearsal: { uid: r.uid, name: r.name, date: r.date }, takes: takes.sort(played).map(bare) }, 200)
     }

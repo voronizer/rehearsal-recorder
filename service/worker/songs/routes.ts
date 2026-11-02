@@ -38,7 +38,6 @@ export const SongItem = z
     length: z.number().nullable(),
     best: TakeRow.nullable(),
     best_why: z.enum(["most stars", "latest"]).nullable(),
-    has_new: z.boolean(),
     created_at: z.string().nullable(),
   })
   .openapi("SongItem")
@@ -60,18 +59,17 @@ function item(s: SongRowDb, rows: Loaded[], first: number): z.infer<typeof SongI
     length: top?.duration_sec ?? null,
     best: top && bare(top),
     best_why: bestWhy(top),
-    has_new: rows.some((r) => r.is_new),
     created_at: s.createdAt,
   }
 }
 
 /** Every song as the table lists it, by status; the last played first, then the newest made. */
-export async function songItems(env: Bindings, me: string) {
+export async function songItems(env: Bindings) {
   const db = database(env)
   const [songs, statuses, rows] = await Promise.all([
     db.select().from(song),
     db.select().from(status).orderBy(asc(status.position)),
-    takeRows(env, me, isNull(take.trashedAt)),
+    takeRows(env, isNull(take.trashedAt)),
   ])
   const first = statuses[0].id
   const items = songs
@@ -101,7 +99,7 @@ export const songRoutes = newApp()
       },
     }),
     async (c) => {
-      const { items, statuses, rows } = await songItems(c.env, c.var.member.id)
+      const { items, statuses, rows } = await songItems(c.env)
       return c.json(
         {
           statuses: statuses.map((s) => ({ ...s, songs: items.filter((i) => i.status_id === s.id).length })),
@@ -151,7 +149,7 @@ export const songRoutes = newApp()
       const [s] = await db.select().from(song).where(eq(song.id, id)).limit(1)
       if (!s) return fail(c, 404, NO_SONG)
       const [rows, first, files] = await Promise.all([
-        takeRows(c.env, c.var.member.id, and(isNull(take.trashedAt), eq(take.songId, id))),
+        takeRows(c.env, and(isNull(take.trashedAt), eq(take.songId, id))),
         firstStatus(db),
         fileViews(db, id),
       ])

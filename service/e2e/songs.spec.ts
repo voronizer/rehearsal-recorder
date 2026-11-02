@@ -18,10 +18,11 @@ test("a song's panel sets its status, key and notes, and takes a file", async ({
   await page.getByRole("option", { name: "A minor" }).click()
   await expect(panel.getByRole("combobox", { name: "Key" })).toHaveText("A minor")
 
-  await panel.getByRole("button", { name: "Edit notes" }).click()
+  // Notes save themselves, with no button to press.
   await panel.getByRole("textbox", { name: "Notes" }).fill("Ira starts, then the bass")
-  await panel.getByRole("button", { name: "Save notes" }).click()
-  await expect(panel).toContainText("Ira starts, then the bass")
+  await expect(panel.getByRole("status").filter({ hasText: "Saved" })).toBeVisible()
+  await page.reload()
+  await expect(page.getByLabel("Panel").getByRole("textbox", { name: "Notes" })).toHaveValue("Ira starts, then the bass")
 
   await panel.locator('input[type="file"]').setInputFiles({
     name: "Viasna chart.pdf",
@@ -49,7 +50,7 @@ test("a new song is refused for a title the band has in another case", async ({ 
   await panel.getByLabel("Title").fill("Zorka")
   await panel.getByRole("button", { name: "Add song" }).click()
   await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Zorka")
-  await expect(page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Zorka", exact: true })).toContainText("No takes yet")
+  await expect(page.getByRole("region", { name: "Learning" }).locator('[data-song="Zorka"]')).toContainText("No takes yet")
 })
 
 test("a song page puts the best take on top", async ({ page }) => {

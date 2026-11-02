@@ -1,7 +1,7 @@
 import { z } from "@hono/zod-openapi"
 import { aliasedTable, and, asc, eq, isNotNull, isNull, type SQL } from "drizzle-orm"
 import type { Database } from "../shared/db"
-import { comment, rehearsal, seen, song, take, user } from "../shared/schema"
+import { comment, rehearsal, song, take, user } from "../shared/schema"
 import { initial, shownName } from "../takes/rows"
 
 /** A comment under a mark. */
@@ -38,8 +38,6 @@ export const MarkView = z
     updated_at: z.string().nullable(),
     /** Yours: you can change it and delete it. */
     mine: z.boolean(),
-    /** Set or commented on by someone else after you last opened its take. */
-    is_new: z.boolean(),
     take: z.object({
       uid: z.string(),
       name: z.string(),
@@ -64,13 +62,12 @@ export const lastWord = (m: MarkView) => [m.created_at, ...m.comments.map((c) =>
  */
 export async function loadMarks(db: Database, me: string, where?: SQL): Promise<MarkView[]> {
   const rows = await db
-    .select({ mark: comment, take, date: rehearsal.date, title: song.title, name: user.name, email: user.email, seenAt: seen.seenAt })
+    .select({ mark: comment, take, date: rehearsal.date, title: song.title, name: user.name, email: user.email })
     .from(comment)
     .innerJoin(take, eq(comment.takeUid, take.uid))
     .innerJoin(rehearsal, eq(take.rehearsalUid, rehearsal.uid))
     .leftJoin(song, eq(take.songId, song.id))
     .leftJoin(user, eq(comment.memberId, user.id))
-    .leftJoin(seen, and(eq(seen.takeUid, comment.takeUid), eq(seen.memberId, me)))
     .where(and(isNull(comment.parentId), isNotNull(take.shownGen), where))
   if (!rows.length) return []
   const writer = aliasedTable(user, "writer")
@@ -81,9 +78,8 @@ export async function loadMarks(db: Database, me: string, where?: SQL): Promise<
     // Every comment: a band's are few, and D1 takes 100 values a query at most.
     .where(isNotNull(comment.parentId))
     .orderBy(asc(comment.createdAt), asc(comment.id))
-  const others = (at: string, by: string | null, seenAt: string | null) => seenAt !== null && at > seenAt && by !== me
   return rows
-    .map(({ mark, take: t, date, title, name, email, seenAt }) => {
+    .map(({ mark, take: t, date, title, name, email }) => {
       const comments = under.filter((u) => u.c.parentId === mark.id)
       const reha = mark.fromReha || name === null
       return {
@@ -102,8 +98,6 @@ export async function loadMarks(db: Database, me: string, where?: SQL): Promise<
         created_at: mark.createdAt,
         updated_at: mark.updatedAt,
         mine: !mark.fromReha && mark.memberId === me,
-        is_new:
-          others(mark.createdAt, mark.memberId, seenAt) || comments.some((u) => others(u.c.createdAt, u.c.memberId, seenAt)),
         take: {
           uid: t.uid,
           name: t.name,

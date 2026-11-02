@@ -15,6 +15,8 @@ const ui = (path: string) => fileURLToPath(new URL(`../ui/${path}`, import.meta.
 // `jsx` says.
 export default defineConfig({
   plugins: [tailwindcss(), cloudflare()],
+  // РЭХА's icon for the browser's tab and a phone's home screen, as the site has it.
+  publicDir: ui("public"),
   resolve: {
     alias: {
       "@": ui("src"),
