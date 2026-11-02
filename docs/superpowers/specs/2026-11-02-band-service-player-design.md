@@ -135,27 +135,28 @@ screen and its sound:
 
 ```ts
 export type PlayerSound = {
-  open(tracks: TrackFile[]): Promise<{ media: TrackMedia[]; state: PlayerState; warning?: string }>
-  /** The tracks' waves for a stretch of the take, for zoom. */
-  media(tracks: TrackFile[], from: number, to: number): Promise<TrackMedia[]>
+  open(tracks: TrackFile[], reuse?: boolean): Promise<PlayerState>
+  /** The tracks' waves, for the whole take or, zoomed in, a stretch of it. */
+  media(tracks: TrackFile[], buckets?: number, from?: number, to?: number): Promise<TrackMedia[]>
   state(): Promise<PlayerState>
   play(): Promise<PlayerState>
   pause(): Promise<PlayerState>
   toggle(): Promise<PlayerState>
   seek(seconds: number): Promise<PlayerState>
-  setLoop(a: number | null, b: number | null): Promise<void>
-  setMuted(name: string, muted: boolean): Promise<void>
-  setSolo(name: string | null): Promise<void>
-  setVolume(name: string, volume: number): Promise<void>
-  setMaster(volume: number): Promise<void>
+  setLoop(a: number | null, b: number | null): Promise<PlayerState>
+  setMuted(name: string, muted: boolean): Promise<PlayerState>
+  setSolo(name: string | null): Promise<PlayerState>
+  setVolume(name: string, volume: number): Promise<unknown>
+  setMaster(volume: number): Promise<unknown>
   /** Where the levels are kept: РЭХА's settings, or the member's in the service. */
-  keepLevels(volumes: Record<string, number>): Promise<void>
-  close(): Promise<void>
+  keepLevels(volumes: Record<string, number>): Promise<unknown>
+  close(): Promise<unknown>
 }
 ```
 
 `TrackFile`, `TrackMedia` and `PlayerState` are the types `lib/api.ts`
-has now. `pythonSound` in the same file answers each call with the bridge
+has now, and each call answers in the shape its bridge call does, so the
+hook changes by name only. `pythonSound` in the same file answers each call with the bridge
 call it stands for (`player_open`, `take_media`, `player_state` by the same
 poll as now, `save_mix`, and so on).
 
