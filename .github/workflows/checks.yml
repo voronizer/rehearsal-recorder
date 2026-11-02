@@ -191,6 +191,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --user 1001
     timeout-minutes: 30
     env:
       PART: 1
@@ -236,9 +239,11 @@ jobs:
       # The apt step it runs sometimes hangs on a stuck mirror, so it gets
       # a limit of its own. --only-shell: the tests run headless, in
       # Chromium's headless shell, so the full browser is not fetched.
-      - name: Install the browser
-        timeout-minutes: 10
-        run: npx playwright install --with-deps --only-shell chromium
+      - name: Trial - what the image has
+        run: |
+          npx playwright --version
+          fc-match sans-serif
+          fc-match -f '%{family}\n' system-ui
 
       - name: Playwright
         run: npm run test:e2e -- --shard="$PART/3"
@@ -255,6 +260,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --user 1001
     timeout-minutes: 30
     env:
       PART: 2
@@ -268,6 +276,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --user 1001
     timeout-minutes: 30
     env:
       PART: 3
@@ -307,6 +318,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.service == 'true'
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --user 1001
     timeout-minutes: 30
     defaults:
       run:
@@ -340,9 +354,11 @@ jobs:
         run: npm run build
 
       # As in the interface's jobs: the apt step sometimes hangs.
-      - name: Install the browser
-        timeout-minutes: 10
-        run: npx playwright install --with-deps --only-shell chromium
+      - name: Trial - what the image has
+        run: |
+          npx playwright --version
+          fc-match sans-serif
+          fc-match -f '%{family}\n' system-ui
 
       - name: Playwright
         run: npx playwright test
