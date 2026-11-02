@@ -16,6 +16,7 @@ import { takeRoutes } from "./takes/band-routes"
 import { bandRoutes } from "./band/routes"
 import { homeRoutes } from "./home/routes"
 import { labelRoutes } from "./labels/routes"
+import { levelRoutes } from "./levels/routes"
 import { markRoutes } from "./marks/routes"
 import { rehearsalRoutes } from "./rehearsals/routes"
 import { songFileRoutes } from "./songs/files"
@@ -85,6 +86,7 @@ const routes = app
   .route("/", songRoutes)
   .route("/", songFileRoutes)
   .route("/", labelRoutes)
+  .route("/", levelRoutes)
   .route("/", markRoutes)
   .route("/", takeRoutes)
   .route("/", fileRoutes)

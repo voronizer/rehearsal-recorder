@@ -3,12 +3,15 @@ import { calls, hold, letGo, expect, openApp, openHistory, startRehearsal, setFa
 test("external recording and stop/save navigate the recorder screens", async ({ page }) => {
   await openApp(page, { before: "window.__CONTROLLER_ENABLED__ = true;" })
   await startRehearsal(page)
+  // What the controller's take is called is in place before it starts: the
+  // screen takes the name from the first state that says recording, and a
+  // poll between the two would find the fake's own name instead.
+  await setFake(page, "__CONTROL_STATE__", {state:"recording", busy:false, error:null, pending_take:null,
+    take_number:1, take_name:"Remote song", take_go:1, playback_take_number:null})
   await page.evaluate(async () => {
     const win = window as unknown as { pywebview: { api: { control_command(a: string): Promise<unknown> } } }
     await win.pywebview.api.control_command("start")
   })
-  await setFake(page, "__CONTROL_STATE__", {state:"recording", busy:false, error:null, pending_take:null,
-    take_number:1, take_name:"Remote song", take_go:1, playback_take_number:null})
   await expect(page.getByRole("button", { name:/^Stop/ })).toBeVisible()
   await expect(page.getByRole("heading", {level:1})).toHaveText("Remote song 1")
   await page.evaluate(async () => {

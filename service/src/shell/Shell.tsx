@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useFrame, useMe } from "../api"
 import { LabelsPanel } from "../marks/LabelsPanel"
+import { MarkPanel } from "../marks/MarkPanel"
 import { NewSongPanel } from "../songs/NewSongPanel"
 import { SongPanel } from "../songs/parts"
 import { StatusesPanel } from "../songs/StatusesPanel"
@@ -32,6 +33,7 @@ function PanelView() {
     >
       <InPanel>
         {panel.kind === "take" && <TakePanel uid={panel.uid} markAt={panel.markAt} />}
+        {panel.kind === "mark" && <MarkPanel uid={panel.uid} id={panel.id} at={panel.at} />}
         {panel.kind === "song" && <SongPanel id={panel.id} />}
         {panel.kind === "labels" && <LabelsPanel />}
         {panel.kind === "statuses" && <StatusesPanel />}
