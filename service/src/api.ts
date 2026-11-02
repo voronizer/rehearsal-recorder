@@ -131,8 +131,8 @@ export const takeQuery = (uid: string) =>
 export const useTake = (uid: string) => useQuery({ ...takeQuery(uid), enabled: uid !== "" })
 
 /** A track's waveform, as РЭХА drew it: never changes for a generation. */
-export const usePeaks = (path: string) =>
-  useQuery({
+export const peaksQuery = (path: string) =>
+  queryOptions({
     queryKey: ["peaks", path],
     staleTime: Infinity,
     queryFn: async () => {
@@ -142,6 +142,7 @@ export const usePeaks = (path: string) =>
       return ((await res.json()) as { peaks: number[] }).peaks
     },
   })
+export const usePeaks = (path: string) => useQuery(peaksQuery(path))
 
 /**
  * A change to the band: once the service has it, every page of the band is
