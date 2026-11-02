@@ -26,6 +26,23 @@ describe("Toggle", () => {
     expect(toggleVariants({ size: "icon-row" })).toContain("size-8")
   })
 
+  it("lights M up in the accent and S in amber when on, and nothing else", () => {
+    const on = (tone: "mute" | "solo") =>
+      renderToStaticMarkup(createElement(Toggle, { size: "lane", variant: "outline", tone, pressed: true }, "M"))
+        .match(/class="([^"]*)"/)![1]
+        .split(" ")
+    expect(on("mute")).toContain("data-[state=on]:bg-primary")
+    expect(on("mute")).toContain("data-[state=on]:text-primary-foreground")
+    expect(on("solo")).toContain("data-[state=on]:bg-warn")
+    expect(on("solo")).toContain("data-[state=on]:text-warn-foreground")
+    // The grey of every other toggle gives way, so the two never fight.
+    for (const tone of ["mute", "solo"] as const) {
+      expect(on(tone)).not.toContain("data-[state=on]:bg-selected")
+      expect(on(tone)).not.toContain("data-[state=on]:text-foreground")
+    }
+    expect(toggleVariants({})).toContain("data-[state=on]:bg-selected")
+  })
+
   it("has a lane size, 20 px with a 4 px corner, for M and S on a plate", () => {
     const css = toggleVariants({ size: "lane" })
     expect(css).toContain("size-5")

@@ -54,7 +54,9 @@ showcase and reha.stream all import. A screen uses the names (`bg-primary`,
   text's colours; notes coming in from MIDI are grey; notes played in the
   player's notes lane stay in the accent, as what plays. Whatever is blue
   today for "selected" or "on" turns neutral as each screen is redone, and
-  so do the MIDI notes.
+  so do the MIDI notes. M and S are the exception (Alex, 2 November 2026):
+  pressed, M is the accent blue and S amber, so a muted or soloed track
+  shows at a glance (C6).
 - **F3. A mark's label is one of eight colours, and blue is orange.** A blue
   mark disappeared into the played part of a waveform, which is the accent;
   now cobalt is the only blue in the app. The stored key stays `"blue"`, so
@@ -279,8 +281,10 @@ the shared one when it is redone.
   at its end shows whole on hover and on keyboard focus (`Whole reach`).
   Under it is the fader, with M and S after it. M and S are
   `Toggle size="lane"`: 20 px, 12 px text and 4 px corners, 6 px apart,
-  which keeps their 24 px touch areas apart (WCAG 2.5.8), and grey when on.
-  Master's click button after its name is the same toggle.
+  which keeps their 24 px touch areas apart (WCAG 2.5.8). Pressed, M is the
+  accent blue with a white letter and S amber with a dark one (`tone="mute"`
+  and `tone="solo"`, F2). Master's click button after its name is the same
+  toggle, grey when on.
   The fader shows keyboard focus on its thumb, in the shared ring, wherever
   a player stands (Review, the rehearsal screen, History): the browser's own
   outline would go round the whole track.
@@ -426,8 +430,9 @@ The other shared components, each with its stories:
   `default` and `outline`, sized as Button's `row` (32 px) and `icon-row`,
   and `lane`, the 20 px square of M and S on a track's plate (C6), with 12 px
   text and 4 px corners. On is the grey `selected` fill, never the accent
-  (F2), and it has the same weight and 1 px frame on or off, so pressing it
-  moves nothing. C8's on/off buttons: Stereo, the strip's Songs, the
+  (F2), but for M and S: `tone="mute"` makes a pressed M the accent blue,
+  `tone="solo"` a pressed S amber (C6). It has the same weight and 1 px
+  frame on or off, so pressing it moves nothing. C8's on/off buttons: Stereo, the strip's Songs, the
   player's Repeat, and M and S. Check signal says what pressing it does
   ("Check signal", "Stop checking"), and a toggle's name must not change
   with it, so it is a Button, grey while the check runs.

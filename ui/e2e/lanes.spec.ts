@@ -844,10 +844,13 @@ test.describe("M and S at the fader", () => {
   })
 
   for (const theme of ["dark", "light"] as const) {
-    test(`M and S are grey when on, not amber or the accent, in the ${theme} theme`, async ({ page }) => {
+    test(`a pressed M is the accent blue and a pressed S amber, in the ${theme} theme`, async ({ page }) => {
       await review(page, band(2), themed(theme))
-      const grey = await colour(page, "--selected")
-      for (const label of ["Mute", "Solo"]) {
+      const tones = [
+        ["Mute", await colour(page, "--primary"), await colour(page, "--primary-foreground")],
+        ["Solo", await colour(page, "--warn"), await colour(page, "--warn-foreground")],
+      ] as const
+      for (const [label, fill, letter] of tones) {
         const button = plate(page, "Drums").getByRole("button", { name: `${label} Drums` })
         await expect(button).toHaveAttribute("aria-pressed", "false")
         await button.click()
@@ -855,9 +858,11 @@ test.describe("M and S at the fader", () => {
         // The fill fades in, so it is read once it has settled.
         await expect
           .poll(async () => (await style(button, "background-color"))["background-color"], label)
-          .toBe(grey)
+          .toBe(fill)
         // The pointer is still on it: an "on" button keeps its fill.
-        expect((await style(button, "background-color"))["background-color"]).toBe(grey)
+        const on = await style(button, "background-color", "color")
+        expect(on["background-color"], label).toBe(fill)
+        expect(on.color, label).toBe(letter)
       }
     })
 

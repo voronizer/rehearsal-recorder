@@ -33,6 +33,9 @@ opening.
   day, a mark's words: anything that opens a page or the panel.
 - **M and S before ▶.** In a take's panel, **M** and **S** work before the
   take plays, and it plays the way you set them.
+- **M and S light up.** A pressed **M** is blue and a pressed **S** yellow,
+  in РЭХА and in the band service, so you see at a glance which tracks you
+  muted or soloed.
 - **The panel is in the page's address.** The browser's back button and a
   phone's back gesture close it, a link can open it, and a reload keeps it.
   A panel opened from another one has **Back** to that one.

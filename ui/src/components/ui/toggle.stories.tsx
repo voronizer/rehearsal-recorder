@@ -113,17 +113,18 @@ export const Sizes: Story = {
 }
 
 /** M and S as a track's plate has them: 20 px, 4 px corners, 6 px apart, the
- *  letter in 12 px semibold. On is the grey fill, never amber or the accent. */
+ *  letter in 12 px semibold. Pressed, M is the accent blue and S amber. */
 export const Lane: Story = {
   render: (args) => (
     <div className="flex gap-1.5">
-      <Toggle {...args} size="lane" variant="outline" className="font-semibold" aria-label="Mute">
+      <Toggle {...args} size="lane" variant="outline" tone="mute" className="font-semibold" defaultPressed aria-label="Mute">
         M
       </Toggle>
       <Toggle
         {...args}
         size="lane"
         variant="outline"
+        tone="solo"
         className="font-semibold"
         defaultPressed
         aria-label="Solo"

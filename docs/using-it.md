@@ -398,9 +398,10 @@ rehearsal into the next.
   on a darker background of its own. A name too long for its place is cut, and
   shows whole when you point at it or reach it with Tab.
 - Balance the band with the fader under each track name. **M**, after the
-  fader, mutes a track, and **S**, after **M**, plays it on its own; each is
-  grey while it is on. Volumes are remembered by track name, so the next
-  take starts with the same balance.
+  fader, mutes a track, and **S**, after **M**, plays it on its own. A
+  pressed **M** is blue and a pressed **S** yellow, so you see at a glance
+  which tracks you muted or soloed. Volumes are remembered by track name, so
+  the next take starts with the same balance.
 - Turn the whole take up or down with **Master** under the tracks. It only
   changes how loud you hear it. The balance and the copy sent to the cloud
   stay as they are. The app remembers it for the next take. Its meter shows
