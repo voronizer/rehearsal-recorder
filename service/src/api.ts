@@ -109,6 +109,21 @@ export const useTrash = () => useQuery({ queryKey: ["trash"], queryFn: () => dat
 export const useMembers = () => useQuery({ queryKey: ["members"], queryFn: () => data(client.api.members.$get()) })
 export const useKeys = () => useQuery({ queryKey: ["keys"], queryFn: () => data(client.api.keys.$get()) })
 
+/** The member's own levels for tracks, by name: only they hear them. */
+export const levelsQuery = queryOptions({ queryKey: ["levels"], queryFn: () => data(client.api.me.levels.$get()) })
+export const useLevels = () => useQuery(levelsQuery)
+
+/**
+ * Keeps the member's levels; a level of null forgets that track's. Nothing
+ * else in the band changes, so only the levels are read again, from the
+ * answer.
+ */
+export async function keepLevels(levels: Record<string, number | null>) {
+  const after = await data(client.api.me.levels.$put({ json: { levels } }))
+  queryClient.setQueryData(levelsQuery.queryKey, after)
+  return after
+}
+
 export const takeQuery = (uid: string) =>
   queryOptions({ queryKey: ["take", uid], queryFn: () => data(client.api.takes[":uid"].$get({ param: { uid } })) })
 

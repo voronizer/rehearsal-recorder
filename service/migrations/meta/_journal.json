@@ -15,6 +15,13 @@
       "when": 1793562840033,
       "tag": "0001_part_2",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793580944152,
+      "tag": "0002_levels",
+      "breakpoints": true
     }
   ]
 }

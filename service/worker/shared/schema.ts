@@ -359,3 +359,20 @@ export const failureNotice = sqliteTable("failure_notice", {
   what: text("what").primaryKey(),
   toldAt: text("told_at").notNull(),
 })
+
+/**
+ * A member's own level for a track, by the track's name, in any take: what
+ * they last set on the take's page. Only they hear it; a track with no row
+ * plays at the take's balance.
+ */
+export const level = sqliteTable(
+  "level",
+  {
+    memberId: text("member_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    track: text("track").notNull(),
+    level: real("level").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.memberId, table.track] })]
+)
