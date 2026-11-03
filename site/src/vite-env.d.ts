@@ -1,8 +1,11 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  /** The release's tag, in a release's build; unset in a pull request's. */
+  /** The latest release's tag; unset in a local build, or where there is
+   *  no release, and the newest version in CHANGELOG.md stands in. */
   readonly VITE_SITE_VERSION?: string
+  /** 1: the blocks that wait for a newer version are in too. */
+  readonly VITE_SITE_ALL_BLOCKS?: string
   /** The site's token in Cloudflare Web Analytics; unset, nothing is counted. */
   readonly VITE_WEB_ANALYTICS_TOKEN?: string
 }

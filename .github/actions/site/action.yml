@@ -1,9 +1,9 @@
 # The website, reha.stream (site/ in this repository), built and tested,
-# and laid out as the files that go up to Cloudflare, left as the artifact
-# `site`. A pull request's check (checks.yml) and a release (release.yml)
-# both build it here; only the release's deploy job and a pull request's
-# preview put it on Cloudflare. The job checks out first, and uploads the
-# Playwright report itself if a step fails.
+# and laid out as the files that go up to Cloudflare, left as an artifact
+# (`site` unless said otherwise). Every build of it is site.yml's: a pull
+# request's, and the one before each deploy. Only that file's deploy job and
+# a pull request's preview put it on Cloudflare. The job checks out first,
+# and uploads the Playwright report itself if a step fails.
 #
 # The picture a chat shows for a link to the site, og.png, is drawn here
 # from the build (npm run og, after the build and before the tests), so it
@@ -12,50 +12,53 @@
 # The job runs in Playwright's own image (mcr.microsoft.com/playwright),
 # which has the browser and everything it needs, as an ordinary user: so
 # nothing here installs a browser, and nothing uses apt. The job's
-# container line says which image; see `which release` in release.yml and
-# `what changed` in checks.yml.
+# container line says which image; see `which release` in site.yml.
 
 name: The site, built and tested
 description: Builds and tests reha.stream, draws its link picture and lays the build out for Cloudflare.
 
 inputs:
   version:
-    description: The release's tag; empty in a pull request, where the build takes the newest version in CHANGELOG.md
+    description: The latest release's tag; empty where there is no release, and the build takes the newest version in CHANGELOG.md
     required: false
     default: ""
   analytics-token:
     description: The site's token in Cloudflare Web Analytics (the repository's variable WEB_ANALYTICS_TOKEN); empty, the page counts nothing
     required: false
     default: ""
+  all-blocks:
+    description: "\"true\": the blocks that wait for a newer version are in too, as after the next release"
+    required: false
+    default: ""
+  artifact:
+    description: The name of the artifact the build is left as
+    required: false
+    default: site
 
 runs:
   using: composite
   steps:
-    # A release from before 0.21.0 has a site made for Vercel, with no
-    # wrangler.jsonc: by hand, Put the site up again stops here for one,
-    # rather than put up half a site.
-    - name: Made for Cloudflare
-      shell: bash
-      run: |
-        if [ ! -f site/wrangler.jsonc ]; then
-          echo "::error::This release's site was made for Vercel, which no longer serves reha.stream. Put the site up with a newer release."
-          exit 1
-        fi
-
-    # For the build, and for the tests, which check the page against it.
+    # For the build, and for the tests, which check the page against it. A
+    # tag is digits and dots (0.21.0), or a v and those; anything else could
+    # not go into $GITHUB_ENV safely.
     - name: Which version
       if: inputs.version != ''
       shell: bash
       env:
         VERSION: ${{ inputs.version }}
-      run: echo "VITE_SITE_VERSION=$VERSION" >> "$GITHUB_ENV"
+      run: |
+        if ! [[ "$VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::The latest release's tag, $VERSION, is not a version like 0.21.0."
+          exit 1
+        fi
+        echo "VITE_SITE_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-    # A release's site without the token would go up counting nothing, and
-    # it would only show weeks later as no visits at all.
-    - name: Counter's token, in a release
-      if: inputs.version != '' && inputs.analytics-token == ''
+    # A pull request's preview shows the site as it will be after the next
+    # release: the blocks that wait for it are in.
+    - name: Every block
+      if: inputs.all-blocks == 'true'
       shell: bash
-      run: echo "::warning::The repository variable WEB_ANALYTICS_TOKEN is not set, so reha.stream will count no visits."
+      run: echo "VITE_SITE_ALL_BLOCKS=1" >> "$GITHUB_ENV"
 
     # For the build, which puts it into the page's counter, and for the
     # tests, which check the counter carries it on reha.stream
@@ -146,6 +149,6 @@ runs:
 
     - uses: actions/upload-artifact@v7
       with:
-        name: site
+        name: ${{ inputs.artifact }}
         path: site/upload/
         if-no-files-found: error

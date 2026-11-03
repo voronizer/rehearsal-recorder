@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest"
 import changelog from "../../../CHANGELOG.md?raw"
-import { content, ITEMS, readContent, STEPS } from "./index"
-import { leadAndBeats } from "./markdown"
+import { readdirSync, readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import story from "../../content/story.md?raw"
+import { PAGE_FILES } from "./files"
+import { content, ITEMS, readContent, shows, STEPS } from "./index"
+import { leadAndBeats, parseDoc } from "./markdown"
 import { changelogHead, displayVersion, latestNews, latestVersion } from "./changelog"
 
 // What the build reads: the release's part of CHANGELOG.md (vite.config.ts).
 const head = changelogHead(changelog, import.meta.env.VITE_SITE_VERSION || undefined)
+
+// The story items this build leaves out, as they wait for a newer version.
+const allBlocks = import.meta.env.VITE_SITE_ALL_BLOCKS === "1"
+const waiting = parseDoc(story, { release: allBlocks ? null : content.version }).waiting.map((w) => w.id)
 
 // The words in site/content/, as the page will use them. An id spelt wrong
 // there fails here, naming the file, rather than leaving a tile blank.
@@ -23,7 +31,9 @@ describe("the site's content", () => {
 
   it("has each step's items, in order: its tiles, then its cards", () => {
     for (const [i, step] of content.story.steps.entries())
-      expect(step.items.map((item) => item.id), step.id).toEqual([...ITEMS[STEPS[i]]])
+      expect(step.items.map((item) => item.id), step.id).toEqual(
+        ITEMS[STEPS[i]].filter((id) => !waiting.includes(id))
+      )
     // 31 picked: these 29, and the controller's block and its fourth line;
     // then the backing track's and the lineups'.
     expect(content.story.steps.flatMap((s) => s.items)).toHaveLength(31)
@@ -116,6 +126,20 @@ describe("the site's content", () => {
     const tagged = readContent("v1.0.0")
     expect(tagged.version).toBe("1.0.0")
     expect(tagged.tag).toBe("v1.0.0")
+  })
+
+  it("shows every block of its own version", () => {
+    expect(shows(content.version)).toBe(true)
+    expect(shows("999.0.0")).toBe(allBlocks)
+  })
+
+  it("has {from} marks only in the files the main page reads", () => {
+    const dir = fileURLToPath(new URL("../../content/", import.meta.url))
+    const files = readdirSync(dir, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith(".md"))
+    const marked = files.filter((f) =>
+      /^#{2,3} .*\{[^}]*\bfrom\b[^}]*\}\s*$/m.test(readFileSync(`${dir}${f}`, "utf8"))
+    )
+    for (const file of marked) expect(PAGE_FILES, file).toContain(file)
   })
 
   it("still builds for a version CHANGELOG.md has no section for, with the newest news there is", () => {
