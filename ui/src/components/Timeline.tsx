@@ -86,12 +86,12 @@ export function Timeline({
   notesRead,
   take = null,
   drift = null,
-  master = true,
+  click = true,
 }: {
   player: MultitrackPlayer
-  /** Master's row under the tracks. The band's service has no click and no
-   *  master level of its own, so its take page leaves the row out. */
-  master?: boolean
+  /** Master's click: its button after the name and its lane. The band's
+   *  service plays no click, so its Master row is the plate alone. */
+  click?: boolean
   /** The take's click, for Master's button and lane: its tempo and
    *  signature, and whether it was recorded to the click. */
   take?: TakeClick | null
@@ -668,7 +668,7 @@ export function Timeline({
           from the group's edges, so its stripes stand under the tracks'
           pictures over the same seconds. It follows the zoom and the region
           as they do, and a drag across it sets the region (spec Part 8). */}
-      {master && rows > 0 && (
+      {rows > 0 && (
         <div
           data-master-band
           className="sticky z-10 -mt-1 -mb-2 bg-background pt-1 pb-2"
@@ -691,26 +691,29 @@ export function Timeline({
                 level={player.masterLevel}
                 onVolume={player.setMaster}
                 onVolumeCommit={player.persistMaster}
-                click={<MasterClick take={take} />}
+                click={click ? <MasterClick take={take} /> : undefined}
               />
             </div>
             {/* A press here is one on the tracks: the surface above takes
                 the pointer from it (onPointerDown captures it there), so a
-                drag sets the region and a click moves the playhead. */}
-            <div
-              className="min-w-0 cursor-crosshair py-[3px] select-none"
-              style={{ touchAction: "none" }}
-              onPointerDown={onPointerDown}
-            >
-              <MasterClickLane
-                from={from}
-                to={to}
-                position={displayPosition}
-                region={band}
-                take={take}
-                drift={drift}
-              />
-            </div>
+                drag sets the region and a click moves the playhead. With no
+                click, the group's fill: nothing to draw there. */}
+            {click && (
+              <div
+                className="min-w-0 cursor-crosshair py-[3px] select-none"
+                style={{ touchAction: "none" }}
+                onPointerDown={onPointerDown}
+              >
+                <MasterClickLane
+                  from={from}
+                  to={to}
+                  position={displayPosition}
+                  region={band}
+                  take={take}
+                  drift={drift}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

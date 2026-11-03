@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { request, type APIRequestContext } from "@playwright/test"
 import { BASE, confirm, HEADERS, signIn } from "../e2e/band"
-import { member, reha } from "../e2e/seed"
+import { member, reha, smf } from "../e2e/seed"
 
 /*
   The band the pictures on reha.stream/band-service show: four people, named
@@ -12,7 +12,8 @@ import { member, reha } from "../e2e/seed"
   length and waveforms shaped like a band's.
 
   Who plays what, and whose pictures:
-    Vik      drums.
+    Vik      drums, on a kit that sends its notes too: each take has
+             a .mid of them.
     Alex     bass; the owner.
     Ivan     guitar. The pictures of a take, a song and the marks are
              his; he marked Viasna 12.
@@ -80,6 +81,31 @@ const TAKES: Seeded[] = [
 const seconds = (length: string) => {
   const [m, s] = length.split(":").map(Number)
   return m * 60 + s
+}
+
+/** Vik's kit over a take, as its .mid: 120 a minute in 4/4 from the 2 s
+ *  the waveform's drums come in at, kick on 1 and 3, snare on 2 and 4,
+ *  the hi-hat in eighths, a crash at the start of every eight bars and a
+ *  fill of toms at their end. */
+function kit(length: number): Uint8Array {
+  const notes: [number, number, number, number][] = []
+  const hit = (at: number, note: number) => {
+    if (at < length - 1) notes.push([at, 0.1, note, 9])
+  }
+  for (let bar = 0, t = 2; t < length - 1; bar++, t += 2) {
+    const fill = bar % 8 === 7
+    for (let e = 0; e < 8; e++) {
+      if (e === 0 && bar % 8 === 0) hit(t, 49)
+      else if (fill && e >= 4) hit(t + e / 4, [48, 47, 45, 43][e - 4])
+      else hit(t + e / 4, 42)
+    }
+    hit(t, 36)
+    hit(t + 1, 36)
+    hit(t + 1.25, 36)
+    hit(t + 0.5, 38)
+    if (!fill) hit(t + 1.5, 38)
+  }
+  return smf(notes)
 }
 
 /** A made-up waveform for a part over a take: 1200 numbers from 0 to 1, a
@@ -155,7 +181,7 @@ export default async function seed() {
       // As the band's mix in РЭХА had it: the guitar and the vocals down a little.
       balance: { Guitar: 0.8, Vocals: 0.8 },
       tracks,
-      notes: [],
+      notes: [{ position: TRACKS.length + 1, name: "Drums", file: `${TRACKS.length + 1}.mid` }],
       marks: t.marks ?? [],
     })
     // The pictures play nothing, so the page tests' short tracks stand in for the sound.
@@ -163,6 +189,7 @@ export default async function seed() {
       await send.file(uid, `${k.position}.mp3`, mp3(k.position))
       await send.file(uid, `${k.position}.peaks`, peaks(TRACKS[k.position - 1].name, length, n))
     }
+    await send.file(uid, `${TRACKS.length + 1}.mid`, kit(length))
     await send.post(`/api/reha/takes/${uid}/ready`, { gen: 1, what: "mp3" })
     for (const k of tracks) await send.file(uid, `${k.position}.flac`, "fLaC made up")
     await send.post(`/api/reha/takes/${uid}/ready`, { gen: 1, what: "flac" })

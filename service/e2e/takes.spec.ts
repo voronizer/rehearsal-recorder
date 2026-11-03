@@ -4,16 +4,25 @@ import { as, band, HEADERS } from "./band"
 test.describe("as Alex", () => {
   test.use({ storageState: as("alex") })
 
-  test("a take page has REHA's player: a lane per track with M and S, no Master", async ({ page }) => {
+  test("a take page has REHA's player: a lane per track with M and S, the drums' notes, and Master", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Viasna 12"]}`)
     await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 6 tracks$/)).toBeVisible()
     const player = page.locator("[data-take-player]")
     const lanes = player.locator("[data-lane-row]")
-    await expect(lanes).toHaveCount(6)
-    for (const [i, name] of ["Drums", "Bass", "Guitar", "Keys", "Vocals", "Shaker"].entries())
+    await expect(lanes).toHaveCount(7)
+    for (const [i, name] of ["Drums", "Drums", "Bass", "Guitar", "Keys", "Vocals", "Shaker"].entries())
       await expect(lanes.nth(i)).toHaveAttribute("data-lane-row", name)
-    // The service has no click and no master level.
-    await expect(player.locator("[data-master-group]")).toHaveCount(0)
+    // The drums' notes under their sound, read from the .mid on the page, a row each for the kit.
+    await expect(lanes.nth(1)).toHaveAttribute("data-paired", "true")
+    await expect(lanes.nth(1).locator("[data-notes-plate]")).toContainText("Saved as .mid, not played here")
+    const kit = player.locator('[data-notes-lane="Drums"]')
+    for (const row of ["Hi-hat", "Snare", "Kick"]) await expect(kit.getByText(row, { exact: true })).toBeVisible()
+    await expect(kit).not.toContainText("Notes file")
+    // Master: how loud the take plays here, and no click, which the service does not play.
+    const master = player.locator("[data-master-group]")
+    await expect(master.getByRole("slider", { name: "Master volume" })).toBeVisible()
+    await expect(master.getByRole("meter", { name: "Master level" })).toBeVisible()
+    await expect(page.getByRole("button", { name: "Click with the take" })).toHaveCount(0)
     // РЭХА's balance came with the take.
     await expect(player.getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
     await expect(player.getByRole("slider", { name: "Bass volume" })).toHaveAttribute("aria-valuetext", "100%")
@@ -35,6 +44,9 @@ test.describe("as Alex", () => {
     const time = transport.getByText(/^\d:\d\d \/ 0:10$/)
     await expect(time).toHaveText("0:00 / 0:10")
     await transport.getByRole("button", { name: "Play", exact: true }).click()
+    // Master's meter shows the whole take coming out.
+    const meter = page.getByRole("meter", { name: "Master level" })
+    await expect.poll(async () => Number(await meter.getAttribute("aria-valuenow")), { timeout: 10_000 }).toBeGreaterThan(0)
     await expect(time).toHaveText(/^0:0[2-9] \/ 0:10$/, { timeout: 10_000 })
     // The bar at the bottom holds the same take, so it steps aside here.
     await expect(page.getByLabel("Player", { exact: true })).toHaveCount(0)
@@ -43,6 +55,32 @@ test.describe("as Alex", () => {
     const box = (await lanes.boundingBox())!
     await lanes.click({ position: { x: box.width * 0.8, y: box.height - 20 } })
     await expect(time).toHaveText("0:08 / 0:10")
+  })
+
+  test("a track of notes alone has a lane of its own, after the tracks of sound", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    // The keys are one of its tracks.
+    await expect(page.getByText(/^Thursday, 30 October( 2025)? · 0:10 · 3 tracks$/)).toBeVisible()
+    const lanes = page.locator("[data-take-player] [data-lane-row]")
+    await expect(lanes).toHaveCount(3)
+    await expect(lanes.nth(2)).toHaveAttribute("data-lane-row", "Keys")
+    await expect(lanes.nth(2)).not.toHaveAttribute("data-paired")
+    await expect(lanes.nth(2).locator("[data-notes-plate]")).toContainText("Keys")
+    // A chord in the octave of middle C.
+    const keys = page.locator('[data-notes-lane="Keys"]')
+    await expect(keys.getByText("C4", { exact: true })).toBeVisible()
+    await expect(keys).not.toContainText("Notes file")
+  })
+
+  test("Master's level is kept on this device for the next take", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const master = page.getByRole("slider", { name: "Master volume" })
+    await expect(master).toHaveAttribute("aria-valuetext", "100%")
+    await master.focus()
+    for (let k = 0; k < 10; k++) await page.keyboard.press("ArrowLeft")
+    await expect(master).toHaveAttribute("aria-valuetext", "90%")
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    await expect(page.getByRole("slider", { name: "Master volume" })).toHaveAttribute("aria-valuetext", "90%")
   })
 
   test("download tracks says which originals are still coming", async ({ page }) => {
@@ -56,6 +94,13 @@ test.describe("as Alex", () => {
     await page.goto(`/takes/${band().takes["Kupalle 2"]}`)
     await expect(page.getByRole("region", { name: "Download tracks" })).not.toContainText("still coming")
     await expect(page.getByRole("link", { name: "Drums FLAC" })).toHaveAttribute("href", /\/1\.flac\?download=1$/)
+
+    // A track of sound and notes is one row, with both.
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    const rows = page.getByRole("region", { name: "Download tracks" }).locator("[data-download]")
+    await expect(rows).toHaveCount(6)
+    await expect(rows.first().getByRole("link", { name: "Drums MP3" })).toHaveAttribute("href", /\/1\.mp3\?download=1$/)
+    await expect(rows.first().getByRole("link", { name: "Drums MIDI" })).toHaveAttribute("href", /\/7\.mid\?download=1$/)
   })
 })
 
@@ -82,12 +127,27 @@ test.describe("as Alex on a phone", () => {
     const rows = tracks.locator("[data-desk-row]")
     await expect(rows).toHaveCount(6)
     await expect(rows.nth(4)).toHaveAttribute("data-desk-row", "Vocals")
+    // The MIDI sign on the drums, which sent their notes too; Master after the tracks.
+    await expect(rows.nth(0).getByRole("img", { name: "MIDI notes too" })).toBeVisible()
+    await expect(rows.nth(1).getByRole("img", { name: "MIDI notes too" })).toHaveCount(0)
+    await expect(tracks.locator("[data-master-plate]")).toBeVisible()
+    await expect(tracks.getByRole("slider", { name: "Master volume" })).toBeVisible()
     await expect(page.locator("[data-lane-row]")).toHaveCount(0)
     await expect(page.getByRole("toolbar", { name: "Transport" })).toHaveCount(0)
     const mute = tracks.getByRole("button", { name: "Mute Drums" })
     await mute.click()
     await expect(mute).toHaveAttribute("aria-pressed", "true")
     await expect(tracks.getByRole("slider", { name: "Vocals volume" })).toHaveAttribute("aria-valuetext", "70%")
+  })
+  test("on a phone, a track of notes alone has a row that says so, after the tracks of sound", async ({ page }) => {
+    await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
+    const tracks = page.getByRole("main").getByRole("region", { name: "Tracks" })
+    await expect(tracks).toContainText(/^Tracks\s*3/)
+    const rows = tracks.locator("[data-desk-row]")
+    await expect(rows).toHaveCount(3)
+    await expect(rows.nth(2)).toHaveAttribute("data-desk-row", "Keys")
+    await expect(rows.nth(2)).toContainText("Saved as .mid, not played here")
+    await expect(rows.nth(2).getByRole("slider")).toHaveCount(0)
   })
 })
 

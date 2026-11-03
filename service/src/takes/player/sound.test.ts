@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import type { TakePage } from "../../api"
 import type { One } from "./one"
 import type { Player } from "./player"
@@ -19,6 +19,9 @@ vi.mock("../../api", () => ({
 }))
 // The page's hooks are not used here: only the sound itself.
 vi.mock("./one", () => ({ useOne: () => null }))
+// Master's level on this device.
+const device = vi.hoisted(() => ({ kept: [] as number[] }))
+vi.mock("./master", () => ({ keepMaster: (v: number) => void device.kept.push(v) }))
 
 const { serviceSound } = await import("./sound")
 
@@ -44,6 +47,7 @@ const player = (over: Partial<Record<keyof Player, unknown>> = {}) =>
     isMuted: () => false,
     gain: () => 1,
     loudness: () => [0, 0],
+    mixLoudness: () => 0,
     setGain: vi.fn(),
     setLoop: vi.fn(),
     seek: vi.fn(),
@@ -60,12 +64,53 @@ const one = (p: Player | null): One => ({
   cue: vi.fn(),
   setMute: vi.fn(),
   setSolo: vi.fn(),
+  master: () => 0.6,
+  setMaster: vi.fn(),
   ready: () => () => {},
 })
 
 beforeEach(() => {
   api.yours = {}
   api.keepLevels.mockClear()
+  device.kept = []
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+/** A kick at the start, let go half a second later: 960 ticks to the beat at 120. */
+const KICK = new Uint8Array([
+  ...[0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 0x03, 0xc0],
+  ...[0x4d, 0x54, 0x72, 0x6b, 0, 0, 0, 13],
+  ...[0x00, 0x99, 36, 100, 0x87, 0x40, 0x89, 36, 0, 0x00, 0xff, 0x2f, 0],
+])
+
+test("a take's notes are read on the page from its .mid", async () => {
+  const asked: string[] = []
+  vi.stubGlobal("fetch", async (url: string) => {
+    asked.push(url)
+    return new Response(KICK)
+  })
+  const notes = await serviceSound(take, one(null)).notes([{ name: "Drums", file: "/files/t1/1/3.mid", icon: "drums" }])
+  expect(asked).toEqual(["/files/t1/1/3.mid"])
+  expect(notes).toEqual([{ name: "Drums", icon: "drums", drums: true, rows: ["Crash", "Ride", "Hi-hat", "Toms", "Snare", "Kick"], notes: [[0, 0.5, 5, 100]] }])
+})
+
+test("a .mid that is not there, or is no .mid, says so in its lane", async () => {
+  vi.stubGlobal("fetch", async (url: string) =>
+    url.endsWith("3.mid") ? new Response("gone", { status: 404 }) : new Response("<html>a page</html>")
+  )
+  const notes = await serviceSound(take, one(null)).notes([
+    { name: "Drums", file: "/files/t1/1/3.mid" },
+    { name: "Keys", file: "/files/t1/1/4.mid" },
+    { name: "Pads", file: null },
+  ])
+  expect(notes).toEqual([
+    { name: "Drums", error: "Notes file not found" },
+    { name: "Keys", error: "Notes file not readable" },
+    { name: "Pads", error: "Notes file not found" },
+  ])
 })
 
 test("while the files come, the take shows as playing and its playhead waits", async () => {
@@ -142,4 +187,19 @@ test("repeat, M and S set while another take plays go with the take when it play
   await sound.setSolo("Guitar")
   expect(sound.setup()).toEqual({ loop: { a: 2, b: 5 }, muted: [0], solo: 1 })
   expect(await sound.state()).toMatchObject({ position: 2, loop: { a: 2, b: 5 }, muted: ["Bass"], soloed: "Guitar" })
+})
+
+test("Master is the one player's, on every take, and its meter is the whole mix as it goes out", async () => {
+  const o = one(player({ playing: true, loudness: () => [0.3, 0.4], mixLoudness: () => 0.55 }))
+  const sound = serviceSound(take, o)
+  expect(await sound.state()).toMatchObject({ master: 0.6, master_level: 0.55 })
+  expect(await sound.setMaster(0.3)).toEqual({ ok: true })
+  expect(o.setMaster).toHaveBeenCalledWith(0.3)
+  // Another take in the player: the level is the same one, and nothing comes out of this take.
+  expect(await serviceSound(take, one(null)).state()).toMatchObject({ master: 0.6, master_level: 0 })
+})
+
+test("Master's level is kept on this device when it is let go", async () => {
+  expect(await serviceSound(take, one(player())).keepMaster(0.35)).toEqual({ ok: true })
+  expect(device.kept).toEqual([0.35])
 })

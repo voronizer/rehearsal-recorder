@@ -1,19 +1,34 @@
-import { LaneControls } from "@/components/LaneControls"
+import { InstrumentIcon } from "@/components/InstrumentIcon"
+import { LaneControls, MasterControls } from "@/components/LaneControls"
+import { MidiGlyph } from "@/components/midi/MidiGlyph"
+import { LanePlate } from "@/components/ui/lane-plate"
+import { Whole } from "@/components/ui/whole"
 import type { MultitrackPlayer } from "@/hooks/useMultitrackPlayer"
+import type { NotesFile } from "@/lib/api"
 import type { TakePage } from "../api"
 
-/** On a phone: a row per track as РЭХА's desk draws it, its name, its level, M and S; no wave. */
-export function Desk({ take, player }: { take: TakePage; player: MultitrackPlayer }) {
+const ROW = "h-14 rounded-lg bg-card"
+
+/**
+ * On a phone: a row per track as РЭХА's desk draws it, its name, its level,
+ * M and S; no wave. A track that recorded its notes too has the MIDI sign
+ * after its name; one that recorded notes alone has a row that says so,
+ * after the tracks of sound. Master is the last row, as on a desk.
+ */
+export function Desk({ take, player, notes }: { take: TakePage; player: MultitrackPlayer; notes: NotesFile[] }) {
+  const sound = new Set(take.tracks.map((t) => t.name))
+  const withNotes = new Set(notes.map((n) => n.name))
   return (
     <div data-desk className="flex flex-col gap-1">
       {take.tracks.map((t) => {
         const muted = player.isMuted(t.name)
         const soloed = player.isSoloed(t.name)
         return (
-          <div key={t.position} data-desk-row={t.name} className="h-14 rounded-lg bg-card">
+          <div key={t.position} data-desk-row={t.name} className={ROW}>
             <LaneControls
               name={t.name}
               icon={t.icon ?? undefined}
+              midi={withNotes.has(t.name)}
               channels={1}
               muted={muted}
               soloed={soloed}
@@ -28,6 +43,30 @@ export function Desk({ take, player }: { take: TakePage; player: MultitrackPlaye
           </div>
         )
       })}
+      {notes
+        .filter((n) => !sound.has(n.name))
+        .map((n) => (
+          <div key={n.file} data-desk-row={n.name} data-desk-notes className={ROW}>
+            {/* As a track's plate: the name on its line, and under it what the notes are. */}
+            <LanePlate grouped className="gap-1">
+              <div className="flex h-4 items-center gap-2">
+                <InstrumentIcon icon={n.icon} className="size-4 shrink-0 text-muted-foreground" />
+                <Whole text={n.name} reach className="min-w-0 flex-1 truncate text-sm leading-4" />
+                <MidiGlyph className="size-4 shrink-0 text-muted-foreground" />
+              </div>
+              <span className="flex h-5 items-center text-xs text-muted-foreground">Saved as .mid, not played here</span>
+            </LanePlate>
+          </div>
+        ))}
+      <div className={ROW}>
+        <MasterControls
+          grouped
+          volume={player.master}
+          level={player.masterLevel}
+          onVolume={player.setMaster}
+          onVolumeCommit={player.persistMaster}
+        />
+      </div>
     </div>
   )
 }

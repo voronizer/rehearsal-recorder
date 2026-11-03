@@ -59,20 +59,24 @@ const player = {
   persistMaster: noop,
 } as unknown as MultitrackPlayer
 
-const timeline = (master?: boolean) =>
-  renderToStaticMarkup(createElement(Timeline, { player, master }))
+const timeline = (click?: boolean) =>
+  renderToStaticMarkup(createElement(Timeline, { player, click }))
 
 describe("the timeline's Master row", () => {
-  it("is under the tracks by default", () => {
+  it("is under the tracks, with the click's button and lane, by default", () => {
     const out = timeline()
     expect(out).toContain("data-master-group")
+    expect(out).toContain("data-master-click")
+    expect(out).toContain("data-master-lane")
     expect(out).toContain("Bass")
   })
 
-  it("is left out where the player has no master", () => {
+  it("with no click, as in the band's service, is Master's level and meter alone", () => {
     const out = timeline(false)
-    expect(out).not.toContain("data-master-group")
-    expect(out).not.toContain("data-master-band")
-    expect(out).toContain("Bass")
+    expect(out).toContain("data-master-group")
+    expect(out).toContain('aria-label="Master volume"')
+    expect(out).toContain('aria-label="Master level"')
+    expect(out).not.toContain("data-master-click")
+    expect(out).not.toContain("data-master-lane")
   })
 })

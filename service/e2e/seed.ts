@@ -31,6 +31,8 @@ const ICONS = ["drums", "bass", "guitar", "keys", "vocals", "shaker"]
 const LENGTH = 10.032
 
 type Mark = { at: number; label: string; colour: string; note: string }
+/** A note of a .mid: when it starts and how long it lasts, in seconds, its note, and its channel from 0. */
+type Note = [at: number, length: number, note: number, channel?: number]
 type Seeded = {
   name: string
   song: string | null
@@ -38,7 +40,8 @@ type Seeded = {
   rehearsal: keyof typeof REHEARSALS
   tracks: number
   starred?: boolean
-  notes?: boolean
+  /** The tracks that recorded notes, and theirs. */
+  notes?: { name: string; notes: Note[] }[]
   flac?: boolean
   marks?: Mark[]
   balance?: Record<string, number>
@@ -51,13 +54,44 @@ const TAKES: Seeded[] = [
   { name: "Kupalle 2", song: "Kupalle", number: 2, rehearsal: "second", tracks: 2, starred: true, flac: true,
     marks: [{ at: 2, label: "Again", colour: "red", note: "Count it in" }] },
   { name: "Take 7", song: null, number: 7, rehearsal: "second", tracks: 1 },
-  { name: "Pałyn 9", song: "Pałyn", number: 9, rehearsal: "second", tracks: 2, notes: true },
+  // The keys recorded only their notes: a chord a bar.
+  { name: "Pałyn 9", song: "Pałyn", number: 9, rehearsal: "second", tracks: 2,
+    notes: [{ name: "Keys", notes: [0, 2, 4, 6, 8].flatMap((at) => [60, 64, 67].map((n): Note => [at, 1.8, n])) }] },
   { name: "Viasna 11", song: "Viasna", number: 11, rehearsal: "second", tracks: 2 },
+  // The kit sent its notes as well as its sound: kick, snare and hi-hat on channel 10.
   { name: "Viasna 12", song: "Viasna", number: 12, rehearsal: "second", tracks: 6, balance: { Vocals: 0.7 },
-    marks: [{ at: 1.5, label: "Good", colour: "green", note: "" }] },
+    marks: [{ at: 1.5, label: "Good", colour: "green", note: "" }],
+    notes: [{ name: "Drums", notes: Array.from({ length: 20 }, (_, k): Note[] => [[k / 2, 0.1, 42, 9], [k / 2, 0.1, k % 2 ? 38 : 36, 9]]).flat() }] },
 ]
 
 const mp3 = (i: number) => new Uint8Array(readFileSync(new URL(`../test/fixtures/t${i}.mp3`, import.meta.url)))
+
+/** A number as a .mid's variable-length quantity. */
+function vlq(n: number): number[] {
+  const out = [n & 0x7f]
+  for (n >>= 7; n > 0; n >>= 7) out.unshift((n & 0x7f) | 0x80)
+  return out
+}
+
+/** A .mid as РЭХА writes a take's: one track, 960 ticks to the beat at 120 a minute, so 1920 to a second. */
+export function smf(notes: Note[]): Uint8Array {
+  const events: [number, number[]][] = notes.flatMap(([at, length, note, channel = 0]): [number, number[]][] => [
+    [Math.round(at * 1920), [0x90 | channel, note, 100]],
+    [Math.round((at + length) * 1920), [0x80 | channel, note, 0]],
+  ])
+  // A release before a strike on the same tick.
+  events.sort((a, b) => a[0] - b[0] || a[1][0] - b[1][0])
+  const body: number[] = []
+  let last = 0
+  for (const [tick, bytes] of events) {
+    body.push(...vlq(tick - last), ...bytes)
+    last = tick
+  }
+  body.push(0, 0xff, 0x2f, 0)
+  const n = body.length
+  const head = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, 960 >> 8, 960 & 0xff]
+  return new Uint8Array([...head, 0x4d, 0x54, 0x72, 0x6b, n >>> 24, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff, ...body])
+}
 
 /** A waveform as РЭХА draws it: 1200 numbers from 0 to 1. */
 const peaks = (seed: number) =>
@@ -130,7 +164,8 @@ export default async function seed() {
       icon: ICONS[i],
       files: [`${i + 1}.mp3`, `${i + 1}.flac`, `${i + 1}.peaks`],
     }))
-    const notes = t.notes ? [{ position: t.tracks + 1, name: "Keys", file: `${t.tracks + 1}.mid` }] : []
+    // Numbered on from the tracks of sound, as РЭХА numbers them.
+    const notes = (t.notes ?? []).map((n, i) => ({ position: t.tracks + 1 + i, name: n.name, file: `${t.tracks + 1 + i}.mid` }))
     await send.put(`/api/reha/takes/${uid}`, {
       rehearsal: REHEARSALS[t.rehearsal],
       number: t.number,
@@ -150,7 +185,7 @@ export default async function seed() {
       await send.file(uid, `${k.position}.mp3`, mp3(k.position))
       await send.file(uid, `${k.position}.peaks`, peaks(k.position))
     }
-    for (const n of notes) await send.file(uid, n.file, "MThd made up")
+    for (const [i, n] of notes.entries()) await send.file(uid, n.file, smf(t.notes![i].notes))
     await send.post(`/api/reha/takes/${uid}/ready`, { gen: 1, what: "mp3" })
     if (t.flac) {
       for (const k of tracks) await send.file(uid, `${k.position}.flac`, "fLaC made up")

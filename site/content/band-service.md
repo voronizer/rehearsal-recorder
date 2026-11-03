@@ -63,7 +63,9 @@ Every take the band sends is there, by song, including the Viasna from three wee
 
 At home, download the tracks as they were recorded and open them in your recording program, the DAW, on the computer. Then record new takes of your part over the band as it played that night.
 
-![A take's page on a computer: РЭХА's own player, and under it Download tracks, each track in FLAC, the full-quality file РЭХА recorded](downloads)
+If a track recorded MIDI too, the notes an electronic kit or keyboard sends, the player draws those notes without playing them, and **Download tracks** has them as a .mid file. In the DAW each note moves on its own, so a hit that ran ahead goes back into place without dragging the rest of the kit along.
+
+![A take's page on a computer: РЭХА's own player with the notes of Vik's kit under its sound, and under it Download tracks, each track in FLAC, the full-quality file РЭХА recorded, and the kit's notes as MIDI](downloads)
 
 ## How to start
 

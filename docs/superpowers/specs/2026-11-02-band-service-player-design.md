@@ -59,8 +59,14 @@ Only you hear them.” once you have moved one, with **РЭХА's levels** on it
 right to go back. Then **Download tracks**, as in part 2.
 
 What РЭХА's player has and the service does not, it does not show: the
-Master row (no click, no master level), the metronome, the band's tempo
-along the take, MIDI lanes, **Crop**.
+click on Master's row, the metronome, the band's tempo along the take,
+**Crop**.
+
+Added on 2026-11-03, at Alex's word: a track's notes, read on the page from
+the .mid РЭХА sent, in the same lane as РЭХА's, under the track's sound or in
+a lane of its own; on a phone, the MIDI sign after the track's name and a
+row for a track of notes alone. And the Master row, its level and meter
+without the click; its level is kept on the device.
 
 A take in the Trash shows its player as any other, under the line with
 **Restore**.
@@ -234,8 +240,8 @@ suites once on CI.
 
 ## Not in this part
 
-Slowing a take down (#105), comparing two takes (#104), a master level in
-the service, **Repeat** and zoom on a phone, MIDI lanes.
+Slowing a take down (#105), comparing two takes (#104), **Repeat** and
+zoom on a phone.
 
 ## Calls to review
 
@@ -247,7 +253,8 @@ the service, **Repeat** and zoom on a phone, MIDI lanes.
 3. **РЭХА's levels** forgets your levels only for this take's tracks.
 4. Levels never go back to РЭХА; the mix to download stays as РЭХА made it.
 5. No Master row on the take's page: the service has no click, and its
-   master level is the device's volume.
+   master level is the device's volume. Overturned on 2026-11-03: Alex
+   picked the Master row, without the click.
 6. A mark chip has no ✕; marks are deleted in their panel by who wrote them.
 7. **Mark** on the take's page opens the panel with a new mark, as the
    bar's **Mark** does.

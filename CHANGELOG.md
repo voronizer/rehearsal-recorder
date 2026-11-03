@@ -5,6 +5,18 @@ versioning](https://semver.org/): until 1.0 the shape of things can still
 move, though recordings on disk are never left behind — old rehearsals keep
 opening.
 
+## Unreleased
+
+- **The band service shows a track's MIDI notes.** A track that recorded
+  MIDI has its notes in the take's player, as in РЭХА: under its sound, or
+  in a lane of its own for a track that recorded notes only. They are not
+  played. On a phone, the track's row has the MIDI sign. **Download tracks**
+  now has a track's sound and its notes on one row.
+- **Master in the band service.** Under the tracks, **Master** turns the
+  whole take up or down and shows how loud it all comes out. The level is
+  kept on that phone or computer for the next take, and nobody else hears
+  it. The service has no click, so Master has no click button.
+
 ## 0.21.0
 
 - **Delete takes and songs in the band service.** ⋯ › **Delete take** is on
