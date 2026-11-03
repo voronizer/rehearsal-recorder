@@ -245,10 +245,11 @@ jobs:
   # the owner's Cloudflare account (site/wrangler.jsonc), made of the files
   # the site job laid out. Cloudflare serves them as they are; the short
   # links /mac and /windows and a year's cache for the build's hashed files
-  # are the build's _redirects and _headers. The deploy gives reha.stream to
-  # the Worker, replacing whatever DNS record the name had: wrangler does
-  # that by itself when it runs here, with no one to ask. www.reha.stream is
-  # not here: a redirect rule in Cloudflare sends it to reha.stream.
+  # are the build's _redirects and _headers. The deploy keeps reha.stream on
+  # the Worker. Cloudflare gives a name to a Worker only while no DNS record
+  # of its own holds it: 0.21.0's first deploy stopped on the old record for
+  # Vercel, which was deleted by hand. www.reha.stream is not here: a
+  # redirect rule in Cloudflare sends it to reha.stream.
   #
   # --env="" names the site's own Worker out loud; the environment
   # "preview" is pull requests' (checks.yml). It needs the repository
