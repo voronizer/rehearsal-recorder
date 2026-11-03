@@ -3,7 +3,7 @@ import { api, type TrackFile, type TrackMedia } from "@/lib/api"
 import { pythonSound, type PlayerSound } from "@/lib/playerSound"
 import {
   heard,
-  keepListeningVolume,
+  listeningVolume,
   playerOpened,
   turnListeningVolume,
   useListeningVolume,
@@ -469,6 +469,8 @@ export function useMultitrackPlayer(
 
   return {
     media,
+    /** Reads a take's notes from its .mid files, through the same sound. */
+    readNotes: sound.notes,
     loading,
     loadError,
     settled,
@@ -552,6 +554,8 @@ export function useMultitrackPlayer(
     /** 0..1, the whole mix as it last went out; 0 while nothing plays. */
     masterLevel,
     setMaster: turnListeningVolume,
-    persistMaster: keepListeningVolume,
+    persistMaster: () => {
+      void sound.keepMaster(listeningVolume())
+    },
   }
 }

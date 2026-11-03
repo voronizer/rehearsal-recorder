@@ -46,6 +46,9 @@ export function usePlaybackMuted(): boolean {
   return useSyncExternalStore(subscribe, () => muted)
 }
 
+/** 0..1, how loud takes play, as it is now: for a handler, outside a render. */
+export const listeningVolume = () => volume
+
 /** 0..1, the whole mix as it last went out; 0 while nothing plays. */
 export function useMixLevel(): number {
   return useSyncExternalStore(subscribe, () => level)

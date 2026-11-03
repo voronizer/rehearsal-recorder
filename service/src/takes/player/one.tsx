@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyn
 import { playLook, type PlayLook } from "@/lib/playLook"
 import { useLevels, useTake, type TakePage } from "../../api"
 import { levelOf } from "./levels"
+import { keptMaster } from "./master"
 import { Player, wakeSound } from "./player"
 
 /*
@@ -89,6 +90,12 @@ export type One = {
   cue: (uid: string, at: number) => void
   setMute: (uid: string, i: number, on: boolean) => void
   setSolo: (uid: string, i: number | null) => void
+  /** Master's level, 0 to 1: how loud every take plays on this device. */
+  master: () => number
+  /** Master's level, heard at once on the take in the player and on every take after it. */
+  setMaster: (volume: number) => void
+  /** How loud the take in the player comes out, 0 to 1, after Master; 0 while none plays. */
+  mixLoudness: () => number
   /** What a new Player of the take starts with; returns the way to stop. */
   ready: (uid: string, setup: () => Setup) => () => void
 }
@@ -123,11 +130,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   /** The take and generation of player.current. */
   const held = useRef<{ uid: string; gen: number } | null>(null)
   const setups = useRef(new Map<string, () => Setup>())
+  // Read from the browser's storage once, not on every render.
+  const [kept] = useState(keptMaster)
+  const master = useRef(kept)
 
   useEffect(() => {
     const t = take.data
     if (!t || !supported) return
     const p = new Player(t.tracks.map((k) => ({ url: k.mp3, gain: levelOf(yoursNow.current, t, k.name) })))
+    p.setMaster(master.current)
     p.onChange = () => {
       tick(t.uid, p.time())
       redraw((n) => n + 1)
@@ -275,6 +286,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (i !== null) now.setSolo(i, true)
         else if (was !== null) now.setSolo(was, false)
         setDesk(u, (d) => ({ ...d, solo: i }))
+      },
+      master: () => master.current,
+      mixLoudness: () => player.current?.mixLoudness() ?? 0,
+      setMaster: (v) => {
+        master.current = Math.min(1, Math.max(0, v))
+        player.current?.setMaster(master.current)
       },
       ready: (u, setup) => {
         setups.current.set(u, setup)

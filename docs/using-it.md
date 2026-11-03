@@ -799,7 +799,10 @@ service does, and how to get one for your band, is on
 
 A take plays there at the levels its tracks have in РЭХА's player. In the
 service each of you can turn a track up or down for yourself: only you hear
-it that way, and nothing comes back to РЭХА.
+it that way, and nothing comes back to РЭХА. **Master** under the tracks
+turns the whole take up or down on that phone or computer only. On a
+computer, a track that recorded MIDI shows its notes as in РЭХА's player, and
+they are not played; on a phone its row has the MIDI sign.
 
 ### The key
 
