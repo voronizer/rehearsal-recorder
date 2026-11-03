@@ -48,7 +48,10 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
 
   const state = async (): Promise<PlayerState> => {
     const p = mine()
-    const base = { ok: true, open: true, tracks, duration: take.duration_sec, master: one.master() }
+    // Master is the device's, on every take: its meter is what the one player puts out,
+    // whichever take that is. Its level comes with open() alone, so a poll never moves the
+    // fader from under a hand that turned it before the take was open.
+    const base = { ok: true, open: true, tracks, duration: take.duration_sec, master_level: one.mixLoudness() }
     if (p) {
       position = p.time()
       loop = p.repeat
@@ -66,7 +69,6 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
         soloed: solo === null ? null : names[solo],
         volumes: Object.fromEntries(names.map((n, i) => [n, p.gain(i)])),
         levels: Object.fromEntries(names.map((n, i) => [n, [loud[i]]])),
-        master_level: p.mixLoudness(),
       }
     }
     const coming = one.comingOf(uid)
@@ -79,7 +81,6 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       soloed: solo === null ? null : names[solo],
       volumes: Object.fromEntries(names.map((n) => [n, levelHere(n)])),
       levels: {},
-      master_level: 0,
     }
   }
 
@@ -101,7 +102,7 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
 
   return {
     tracks,
-    open: () => state(),
+    open: async () => ({ ...(await state()), master: one.master() }),
     state,
 
     // Each .mid read here in the page, as РЭХА's take_notes reads it, with
@@ -202,7 +203,9 @@ export function serviceSound(take: TakePage, one: One): ServiceSound {
       one.setMaster(volume)
       return { ok: true }
     },
+    // Also on the one player: a level turned before the take was open never reached it.
     async keepMaster(volume) {
+      one.setMaster(volume)
       keepMaster(volume)
       return { ok: true }
     },

@@ -5,6 +5,10 @@ import { parseMidi } from "midi-file"
   rows for a kit, a piano roll for anything else. The rules are РЭХА's own
   (src/rehearsal_recorder/midi/notes.py and smf.read_events), so a take looks
   the same on the band's page as in РЭХА; midi-file only takes the file apart.
+  One file РЭХА reads and this does not: one with a system message, such as a
+  clock tick, inside a track, which midi-file gives up on. РЭХА never writes
+  one; a .mid saved again by another program might have it, and its lane
+  then says the file is not readable.
 */
 
 /** The rows of the drum grid, top to bottom; the row after the last is Other. */
@@ -37,9 +41,10 @@ type Hit = { kind: "on" | "off"; channel: number; note: number; velocity: number
 const micro = (seconds: number) => Math.round(seconds * 1e6) / 1e6
 
 /**
- * Throws unless every chunk the file has is all there and it has as many
- * tracks as its header says: midi-file reads past the end of a file cut short
- * as if it were empty, where РЭХА's reader refuses it.
+ * Throws unless the file has as many tracks as its header says, each one all
+ * there: midi-file reads past the end of a file cut short as if it were
+ * empty, where РЭХА's reader refuses it. What comes after the last of them,
+ * such as a program's padding, is not looked at, as РЭХА's reader does not.
  */
 function whole(bytes: Uint8Array) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
@@ -47,7 +52,7 @@ function whole(bytes: Uint8Array) {
   if (bytes.length < 14 || id(0) !== "MThd" || view.getUint32(4) < 6) throw new Error("Not a .mid")
   const tracks = view.getUint16(10)
   let found = 0
-  for (let at = 0; at < bytes.length; ) {
+  for (let at = 0; at < bytes.length && found < tracks; ) {
     if (at + 8 > bytes.length) throw new Error("The .mid is cut short")
     const next = at + 8 + view.getUint32(at + 4)
     if (next > bytes.length) throw new Error("The .mid is cut short")
@@ -142,11 +147,17 @@ export function readNotes(bytes: Uint8Array, drumsIcon: boolean): Notes {
     return { drums: true, rows: notes.some((n) => n[2] === OTHER) ? [...DRUM_ROWS, "Other"] : [...DRUM_ROWS], notes }
   }
   if (!notes.length) return { drums: false, low: 60, high: 71, notes }
-  const pitches = notes.map((n) => n[2])
+  // A loop, not Math.min(...): a long take has more notes than a call takes arguments.
+  let lowest = 127
+  let highest = 0
+  for (const n of notes) {
+    lowest = Math.min(lowest, n[2])
+    highest = Math.max(highest, n[2])
+  }
   return {
     drums: false,
-    low: Math.floor(Math.min(...pitches) / 12) * 12,
-    high: Math.min(Math.floor(Math.max(...pitches) / 12) * 12 + 11, 127),
+    low: Math.floor(lowest / 12) * 12,
+    high: Math.min(Math.floor(highest / 12) * 12 + 11, 127),
     notes,
   }
 }

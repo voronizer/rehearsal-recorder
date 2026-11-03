@@ -98,7 +98,14 @@ function Frame() {
     <div className="flex h-full flex-col">
       <div className="relative flex min-h-0 flex-1 overflow-clip">
         <Side />
-        <main className={cn("min-w-0 flex-1 overflow-y-auto bg-background text-sm", size === "wide" ? "p-8" : "px-6 py-6")}>
+        {/* --screen-pad-y is the padding above and below, as in РЭХА's Shell: Master's row, stuck at the
+            window's foot, reaches down past it so no lane shows under it (Timeline). */}
+        <main
+          className={cn(
+            "min-w-0 flex-1 overflow-y-auto bg-background py-(--screen-pad-y) text-sm",
+            size === "wide" ? "px-8 [--screen-pad-y:2rem]" : "px-6 [--screen-pad-y:1.5rem]"
+          )}
+        >
           <Outlet />
         </main>
         <PanelView />

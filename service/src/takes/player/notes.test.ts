@@ -167,6 +167,18 @@ test("bytes that are not a .mid are an error", () => {
   expect(() => readNotes(whole.subarray(0, whole.length - 3), false)).toThrow(Error)
 })
 
+test("a long take of keys reads in full: more notes than a browser takes as arguments", () => {
+  const roll = Array.from({ length: 130_000 }, (_, k) => on(k * 0.02, 40 + (k % 30)))
+  const got = take(roll)
+  expect(got.notes).toHaveLength(130_000)
+  expect(got).toMatchObject({ drums: false, low: 36, high: 71 })
+})
+
+test("bytes after the last track, as some programs pad a file, are passed over as РЭХА's reader does", () => {
+  const padded = file([track([[0, [0x90, 60, 100]], [960, [0x80, 60, 0]]])])
+  expect(readNotes(new Uint8Array([...padded, 0, 0]), false).notes).toEqual([[0, 0.5, 60, 100]])
+})
+
 test("an hour of 40000 notes reads in full", () => {
   const hour = Array.from({ length: 40000 }, (_, k) => [on(k * 0.09, 36 + (k % 40), 1 + (k % 127), 9), off(k * 0.09 + 0.05, 36 + (k % 40), 0, 9)]).flat()
   const got = take(hour)

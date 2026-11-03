@@ -1,6 +1,6 @@
 import { expect, test } from "vitest"
 import type { TakePage } from "../../api"
-import { notesOf } from "./lanes"
+import { notesAlone, notesOf } from "./lanes"
 
 /** A take as its page has it: Drums and Keys recorded sound, the drums and a pad their notes too. */
 const take = {
@@ -29,4 +29,8 @@ test("a take with no notes has no lanes of them, and one of notes alone has them
   expect(notesOf({ ...take, files: take.files.slice(0, 2) })).toEqual([])
   const midiOnly = { ...take, tracks: [], files: [{ position: 1, name: "Pads", mp3: false, flac: false, mid: true }] }
   expect(notesOf(midiOnly)).toEqual([{ name: "Pads", file: "/files/t1/2/1.mid", port: "", after: null, place: 1 }])
+})
+
+test("the lanes of notes alone are the ones with no track of sound of their name", () => {
+  expect(notesAlone(take, notesOf(take)).map((n) => n.name)).toEqual(["Pads"])
 })

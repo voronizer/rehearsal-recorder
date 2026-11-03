@@ -17,7 +17,7 @@ import { clock, count, longDay } from "../shell/words"
 import { chipsOf } from "./chips"
 import { Desk } from "./Desk"
 import { Downloads } from "./Downloads"
-import { notesOf } from "./player/lanes"
+import { notesAlone, notesOf } from "./player/lanes"
 import { CANNOT_PLAY, usePlayer } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
 import { StarButton, TakeName } from "./parts"
@@ -193,7 +193,7 @@ function TakeView({ take }: { take: TakePage }) {
   const cannot = p.supported === false
   const notes = useNotes(take)
   // A track of notes alone is one of the band's tracks too, as in a lineup.
-  const tracks = take.tracks.length + notes.filter((n) => n.after !== n.name).length
+  const tracks = take.tracks.length + notesAlone(take, notes).length
   return (
     <Page
       head={song ? <Back to="/songs/$id" params={{ id: String(song.id) }} label={song.title} /> : <Back to="/songs" label="Songs" />}

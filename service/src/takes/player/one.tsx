@@ -94,6 +94,8 @@ export type One = {
   master: () => number
   /** Master's level, heard at once on the take in the player and on every take after it. */
   setMaster: (volume: number) => void
+  /** How loud the take in the player comes out, 0 to 1, after Master; 0 while none plays. */
+  mixLoudness: () => number
   /** What a new Player of the take starts with; returns the way to stop. */
   ready: (uid: string, setup: () => Setup) => () => void
 }
@@ -128,7 +130,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   /** The take and generation of player.current. */
   const held = useRef<{ uid: string; gen: number } | null>(null)
   const setups = useRef(new Map<string, () => Setup>())
-  const master = useRef(keptMaster())
+  // Read from the browser's storage once, not on every render.
+  const [kept] = useState(keptMaster)
+  const master = useRef(kept)
 
   useEffect(() => {
     const t = take.data
@@ -284,6 +288,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         setDesk(u, (d) => ({ ...d, solo: i }))
       },
       master: () => master.current,
+      mixLoudness: () => player.current?.mixLoudness() ?? 0,
       setMaster: (v) => {
         master.current = Math.min(1, Math.max(0, v))
         player.current?.setMaster(master.current)

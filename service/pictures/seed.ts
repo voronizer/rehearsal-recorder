@@ -84,7 +84,7 @@ const seconds = (length: string) => {
 }
 
 /** Vik's kit over a take, as its .mid: 120 a minute in 4/4 from the 2 s
- *  the waveform's drums come in at, kick on 1 and 3, snare on 2 and 4,
+ *  the waveform's drums come in at, kick on 1, 3 and the "and" of 3, snare on 2 and 4,
  *  the hi-hat in eighths, a crash at the start of every eight bars and a
  *  fill of toms at their end. */
 function kit(length: number): Uint8Array {

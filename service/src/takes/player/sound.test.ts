@@ -47,7 +47,6 @@ const player = (over: Partial<Record<keyof Player, unknown>> = {}) =>
     isMuted: () => false,
     gain: () => 1,
     loudness: () => [0, 0],
-    mixLoudness: () => 0,
     setGain: vi.fn(),
     setLoop: vi.fn(),
     seek: vi.fn(),
@@ -55,8 +54,8 @@ const player = (over: Partial<Record<keyof Player, unknown>> = {}) =>
     ...over,
   }) as unknown as Player
 
-/** The one player, with this take in it or not. */
-const one = (p: Player | null): One => ({
+/** The one player, with this take in it or not, and how loud it all comes out. */
+const one = (p: Player | null, out = 0): One => ({
   playerOf: () => p,
   comingOf: () => null,
   play: vi.fn(),
@@ -66,6 +65,7 @@ const one = (p: Player | null): One => ({
   setSolo: vi.fn(),
   master: () => 0.6,
   setMaster: vi.fn(),
+  mixLoudness: () => out,
   ready: () => () => {},
 })
 
@@ -189,17 +189,27 @@ test("repeat, M and S set while another take plays go with the take when it play
   expect(await sound.state()).toMatchObject({ position: 2, loop: { a: 2, b: 5 }, muted: ["Bass"], soloed: "Guitar" })
 })
 
-test("Master is the one player's, on every take, and its meter is the whole mix as it goes out", async () => {
-  const o = one(player({ playing: true, loudness: () => [0.3, 0.4], mixLoudness: () => 0.55 }))
-  const sound = serviceSound(take, o)
-  expect(await sound.state()).toMatchObject({ master: 0.6, master_level: 0.55 })
-  expect(await sound.setMaster(0.3)).toEqual({ ok: true })
-  expect(o.setMaster).toHaveBeenCalledWith(0.3)
-  // Another take in the player: the level is the same one, and nothing comes out of this take.
-  expect(await serviceSound(take, one(null)).state()).toMatchObject({ master: 0.6, master_level: 0 })
+test("Master's level comes with the take as it opens, and a poll leaves the fader where the hand has it", async () => {
+  const sound = serviceSound(take, one(player({ playing: true })))
+  expect(await sound.open(sound.tracks)).toMatchObject({ master: 0.6 })
+  expect(await sound.state()).not.toHaveProperty("master")
 })
 
-test("Master's level is kept on this device when it is let go", async () => {
-  expect(await serviceSound(take, one(player())).keepMaster(0.35)).toEqual({ ok: true })
+test("Master is the one player's, on every take: turned, it is heard on the take that plays", async () => {
+  const o = one(null)
+  expect(await serviceSound(take, o).setMaster(0.3)).toEqual({ ok: true })
+  expect(o.setMaster).toHaveBeenCalledWith(0.3)
+})
+
+test("Master's meter is what comes out, whichever take plays", async () => {
+  // Another take in the player: this one's tracks are quiet, and Master shows the other.
+  expect(await serviceSound(take, one(null, 0.4)).state()).toMatchObject({ levels: {}, master_level: 0.4 })
+  expect(await serviceSound(take, one(player({ playing: true }), 0.55)).state()).toMatchObject({ master_level: 0.55 })
+})
+
+test("Master's level let go is kept on this device and on the take that plays, opened or not", async () => {
+  const o = one(null)
+  expect(await serviceSound(take, o).keepMaster(0.35)).toEqual({ ok: true })
   expect(device.kept).toEqual([0.35])
+  expect(o.setMaster).toHaveBeenCalledWith(0.35)
 })

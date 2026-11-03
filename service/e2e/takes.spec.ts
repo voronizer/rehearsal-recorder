@@ -57,6 +57,21 @@ test.describe("as Alex", () => {
     await expect(time).toHaveText("0:08 / 0:10")
   })
 
+  test("stuck at the foot of the window, Master covers the lanes that go on under it", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 600 })
+    await page.goto(`/takes/${band().takes["Viasna 12"]}`)
+    await expect(page.locator('[data-notes-lane="Drums"]').getByText("Kick", { exact: true })).toBeVisible()
+    const master = page.locator("[data-master-band]")
+    // Its foot is the window's, so no strip of a lane shows under it.
+    const foot = await master.evaluate((b) => {
+      const main = b.closest("main")!.getBoundingClientRect()
+      const hit = document.elementFromPoint(main.left + main.width / 2, main.bottom - 3)
+      return { gap: main.bottom - b.getBoundingClientRect().bottom, master: !!hit && b.contains(hit) }
+    })
+    expect(Math.abs(foot.gap)).toBeLessThan(1)
+    expect(foot.master).toBe(true)
+  })
+
   test("a track of notes alone has a lane of its own, after the tracks of sound", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
     // The keys are one of its tracks.
@@ -141,7 +156,7 @@ test.describe("as Alex on a phone", () => {
   })
   test("on a phone, a track of notes alone has a row that says so, after the tracks of sound", async ({ page }) => {
     await page.goto(`/takes/${band().takes["Pałyn 9"]}`)
-    const tracks = page.getByRole("main").getByRole("region", { name: "Tracks" })
+    const tracks = page.getByRole("main").getByRole("region", { name: "Tracks", exact: true })
     await expect(tracks).toContainText(/^Tracks\s*3/)
     const rows = tracks.locator("[data-desk-row]")
     await expect(rows).toHaveCount(3)

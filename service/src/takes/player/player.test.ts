@@ -126,6 +126,7 @@ class FakeNode {
 /** Web Audio as far as Master needs it: every gain made, and where each goes. */
 class FakeSound {
   static made: FakeNode[] = []
+  static meters: FakeNode[] = []
   readonly destination = { speakers: true }
   currentTime = 0
   async resume() {}
@@ -135,7 +136,9 @@ class FakeSound {
     return g
   }
   createAnalyser() {
-    return new FakeNode()
+    const m = new FakeNode()
+    FakeSound.meters.push(m)
+    return m
   }
 }
 
@@ -158,7 +161,8 @@ test("Master's level is on the whole take as it goes out: set before it plays, a
   expect(out.gain.value).toBe(1)
   p.setMaster(-1)
   expect(p.masterVolume).toBe(0)
-  // No sound has come: the whole mix reads 0, as a meter at rest does.
+  // The whole mix's meter is after Master; with no sound come yet, it reads 0, as a meter at rest does.
+  expect(out.to.some((n) => FakeSound.meters.includes(n as FakeNode))).toBe(true)
   expect(p.mixLoudness()).toBe(0)
   p.close()
 })

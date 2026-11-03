@@ -2,8 +2,9 @@
   Master's level in the service: how loud this phone or computer plays the
   takes, as РЭХА keeps its own in the app's settings. It is the device's,
   not the member's: a phone and a laptop want different levels, and the
-  band never hears it. Kept in the browser's storage; where the browser
-  keeps none, takes play at full.
+  band never hears it. Kept in the browser's storage, so another browser on
+  the same computer has its own; where the browser keeps none, takes play
+  at full.
 */
 
 const KEY = "reha.master"
