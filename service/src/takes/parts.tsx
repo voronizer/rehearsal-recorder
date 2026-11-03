@@ -10,6 +10,7 @@ import { OPENS } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock, quoted } from "../shell/words"
 import { useLookOf, usePlayer, useTime } from "./player/one"
+import { TakeMenu } from "./TakeMenu"
 
 /** What every take is drawn from, in a list and on its own. */
 export type TakeLike = {
@@ -253,7 +254,10 @@ export function TakeLine({ take, marks, short, after }: { take: TakeLike; marks?
             {after}
           </div>
         </div>
-        <StarButton take={take} />
+        <span className="flex items-center gap-1">
+          <StarButton take={take} />
+          <TakeMenu take={take} />
+        </span>
       </div>
       {marks &&
         take.marks.map((k) => (

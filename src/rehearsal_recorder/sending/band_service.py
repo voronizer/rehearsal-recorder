@@ -15,6 +15,13 @@ keeps the later.
 What changes in РЭХА after a take went up follows it: its details go again
 (a rename, a ★, a mark), or its files too (a crop, as a new generation). A
 take deleted in РЭХА goes to the service's trash once its Undo has passed.
+
+A take someone in the band deleted in the service is, here, a take taken
+out with Remove from the band service: it stays on this computer, nothing of
+it goes, and its cloud button sends it again. РЭХА learns of it from the
+service's answer to a change, and by asking which takes the service has
+when it starts and then every hour, which also finds a take put back there
+with Restore, and one deleted there for good.
 """
 
 import math
@@ -82,6 +89,8 @@ class BandService:
     id = "service"
     # A take that met no internet is tried again after this long.
     RETRY_SEC = 30
+    # How often РЭХА asks the service which of its takes it has.
+    CHECK_SEC = 3600
 
     def __init__(self, api, client_factory=ServiceClient):
         self.api = api
@@ -97,6 +106,8 @@ class BandService:
         self._later = {}
         # Deletions the service turned down: not tried again in this run.
         self._refused = set()
+        # When to ask the service which takes it has: at once, the first time.
+        self._next_check = 0.0
         self._active = None
         # Files are being made: the names pass waits, since it moves folders.
         self.making = False
@@ -156,7 +167,13 @@ class BandService:
         """
         row = self._lib.service_row(folder, take_number)
         if row is not None and row["removed"]:
-            return  # taken out by hand: nothing of it goes until it is sent again
+            # Taken out: nothing of it goes until it is back. A crop still
+            # makes a new generation, so the take goes up as cropped then,
+            # with the band's comments moved back by it.
+            if cut_start is not None:
+                self._lib.change_service_row(row["take_id"], lambda r: {
+                    "gen": r["gen"] + 1, "pending_cut": float(r["pending_cut"] or 0) + float(cut_start)})
+            return
         if row is None:
             session = self.api._session
             if session is not None and Path(session["folder"]) == Path(folder):
@@ -224,7 +241,7 @@ class BandService:
             return refused
         if not any(Path(t.get("file", "")).exists() for t in take["tracks"]):
             return {"ok": False, "error": "The take has no files left on disk"}
-        self._queue(folder, take_number, take)
+        self._queue(folder, take_number, take, by_hand=True)
         return {"ok": True, "queued": True, "take": self._lib.take(folder, take_number)}
 
     def send_starred(self, folder):
@@ -261,14 +278,30 @@ class BandService:
             return refused
         row = self._lib.service_row(folder, take_number)
         if row is not None and not row["removed"]:
-            with self._lock:
-                self._edits[row["take_id"]] = self._edits.get(row["take_id"], 0) + 1
-                self._lib.change_service_row(row["take_id"], lambda r: {
-                    "removed": True, "due": False, "error": None, "sent": None,
-                    "mp3_gen": None, "flac_gen": None})
-            self._lib.drop_service_files(row["take_id"])
+            # The delete first, so the hourly check never reads the take as
+            # taken out with no delete on its way and sends it again.
+            self._lib.add_service_delete(row["uid"], take["name"])
+            self._taken_out(row["take_id"])
             self._to_trash(row["take_id"], row["uid"], take["name"])
         return {"ok": True, "take": self._lib.take(folder, take_number)}
+
+    def _taken_out(self, take_id):
+        """The take is out of the service, as Remove from the band service
+        leaves it: nothing of it goes until it is sent by hand, and then all
+        its files go, since the trash may have been emptied meanwhile. A pass
+        sending it stops at its next part. Nothing is asked of the service."""
+        with self._lock:
+            self._edits[take_id] = self._edits.get(take_id, 0) + 1
+            row = self._lib.change_service_row(take_id, lambda r: {
+                "removed": True, "due": False, "error": None, "sent": None,
+                "mp3_gen": None, "flac_gen": None, "by_hand": False})
+            entry = self._entries.pop(take_id, None)
+        if entry is not None:
+            entry.discard()
+        if row is None:
+            return
+        self._lib.drop_service_files(take_id)
+        shutil.rmtree(staging_root() / row["uid"], ignore_errors=True)
 
     def retry(self, entry_id):
         """A take the service turned down, sent again."""
@@ -496,11 +529,14 @@ class BandService:
             self._entries[key] = entry
             return entry
 
-    def _queue(self, folder, take_number, take=None):
+    def _queue(self, folder, take_number, take=None, by_hand=False):
         """The take on its way. One taken out by hand keeps its uid, and if
-        it has not reached the service's trash yet, it is not sent there."""
+        it has not reached the service's trash yet, it is not sent there.
+        One sent `by_hand` comes out of the service's trash whoever put it
+        there."""
         row = self._lib.add_service_row(folder, take_number, str(uuid.uuid4()),
-                                        due=True, error=None, removed=False)
+                                        due=True, error=None, removed=False,
+                                        **({"by_hand": True} if by_hand else {}))
         if row is None:
             return None
         self._lib.drop_service_delete(row["uid"])
@@ -548,6 +584,10 @@ class BandService:
             return False
         self._tidy()
         now = time.monotonic()
+        if now >= self._next_check:
+            self._next_check = now + self.CHECK_SEC
+            self._compare()
+            return True
         for d in self._deletes():
             if self._later.get(("delete", d["uid"]), 0) <= now:
                 return self._delete(d)
@@ -580,6 +620,51 @@ class BandService:
             if not ran:
                 self._wake.wait(1.0)
                 self._wake.clear()
+
+    def _compare(self):
+        """
+        Which of its takes the service has, against what РЭХА holds of them.
+        A take the band deleted there, or the service deleted for good, is
+        taken out here. A take РЭХА had taken out that is back there (someone
+        pressed Restore) is sent again: only what of it is not up goes, and
+        its changes follow from then on. A take the service has without the
+        MP3s РЭХА sent has them sent again. A take whose delete has not
+        reached the service yet is left as it is. No internet asks again soon; a
+        service that turned the question down is asked again in an hour.
+        """
+        try:
+            listed = self._client().takes()
+        except Offline:
+            self._next_check = time.monotonic() + self.RETRY_SEC
+            return
+        except (Refused, Gone):
+            return
+        there = {t["uid"]: t for t in listed}
+        # The rows first, then the deletes: Remove from the band service
+        # writes its delete down before a row can read as taken out.
+        rows = self._lib.service_rows()
+        on_the_way = {d["uid"] for d in self._lib.service_deletes()}
+        for row in rows:
+            if row["uid"] in on_the_way:
+                continue
+            t = there.get(row["uid"])
+            if t is None or t.get("trashed"):
+                # Gone for good there only once it was ever up: one on its
+                # first way has not reached the service yet. One just sent
+                # by hand comes out of the trash with its details.
+                if not row["removed"] and not row["by_hand"] and (t is not None or row["mp3_gen"] is not None):
+                    self._taken_out(row["take_id"])
+            elif row["removed"] or (row["mp3_gen"] or 0) > (t.get("mp3_gen") or 0):
+                # Back in the service, or there without the MP3s РЭХА sent:
+                # what of it is not up goes (again).
+                if row["take_id"] == self._active:
+                    continue  # a pass is sending it now, and knows better
+                with self._lock:
+                    self._edits[row["take_id"]] = self._edits.get(row["take_id"], 0) + 1
+                    self._lib.change_service_row(row["take_id"], lambda r, t=t: {
+                        "removed": False, "due": True, "error": None,
+                        "mp3_gen": t.get("mp3_gen"), "flac_gen": t.get("flac_gen")})
+                self._line(row["take_id"], row["folder"], row["take_number"])
 
     def _delete(self, d):
         uid = d["uid"]
@@ -673,7 +758,13 @@ class BandService:
         tempo = lib.song_tempos().get(take.get("song") or "", (None, None))[0]
         meta = service_files.meta(take, rehearsal, lib.labels(),
                                   self.api._config.get("volumes", {}), gen, cut, tempo)
-        client.put_take(uid, meta)
+        answer = client.put_take(uid, {**meta, "by_hand": bool(row["by_hand"])})
+        if row["by_hand"]:
+            lib.change_service_row(take_id, lambda r: {"by_hand": False})
+        if isinstance(answer, dict) and answer.get("in_trash"):
+            # Someone in the band deleted it there: taken out here too.
+            self._taken_out(take_id)
+            raise _Changed()
 
         mp3s = len(service_files.plan(take, {"mp3"}))
         if row["mp3_gen"] != gen or row["flac_gen"] != gen:

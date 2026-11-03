@@ -1,14 +1,14 @@
-import { and, eq, isNotNull, lt } from "drizzle-orm"
+import { and, eq, isNotNull, lt, notExists } from "drizzle-orm"
 import { database } from "../shared/db"
 import type { Bindings } from "../shared/env"
-import { take } from "../shared/schema"
+import { song, songFile, take } from "../shared/schema"
 import { iso, now } from "../shared/time"
 
-/** A take stays in the trash 30 days. */
+/** A take or a song stays in the trash 30 days. */
 const TRASH_DAYS = 30
-/** Takes deleted in one day's run. Each is a few calls to the files and
- *  the database, and one run of a Worker may make only so many; the rest
- *  wait for the next day. */
+/** Takes and songs deleted in one day's run. Each is a few calls to the
+ *  files and the database, and one run of a Worker may make only so many;
+ *  the rest wait for the next day. */
 const PER_RUN = 20
 const DAY = 24 * 60 * 60 * 1000
 
@@ -25,8 +25,10 @@ export async function deleteFiles(env: Bindings, prefix: string, drop: (key: str
 
 /**
  * Once a day, from the Cron Trigger: takes in the trash for more than 30
- * days are deleted for good, with their files, comments and stars,
- * the longest there first and 20 at most.
+ * days are deleted for good, with their files, comments and stars, the
+ * longest there first and 20 at most. Then songs 30 days in the trash go
+ * the same way with their files, once none of their takes is left.
+ * Answers how many takes and songs went.
  */
 export async function purgeTrash(env: Bindings): Promise<number> {
   const db = database(env)
@@ -43,5 +45,15 @@ export async function purgeTrash(env: Bindings): Promise<number> {
     await deleteFiles(env, `takes/${uid}/`)
     await db.delete(take).where(eq(take.uid, uid))
   }
-  return old.length
+  const songs = await db
+    .select({ id: song.id })
+    .from(song)
+    .where(and(isNotNull(song.trashedAt), lt(song.trashedAt, before), notExists(db.select().from(take).where(eq(take.songId, song.id)))))
+    .orderBy(song.trashedAt)
+    .limit(PER_RUN - old.length)
+  for (const { id } of songs) {
+    await deleteFiles(env, `songs/${id}/`)
+    await db.batch([db.delete(songFile).where(eq(songFile.songId, id)), db.delete(song).where(eq(song.id, id))])
+  }
+  return old.length + songs.length
 }

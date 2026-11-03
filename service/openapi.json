@@ -280,6 +280,9 @@
             ],
             "exclusiveMinimum": 0,
             "maximum": 999
+          },
+          "by_hand": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -1236,6 +1239,76 @@
           "flac_coming",
           "trashed_at"
         ]
+      },
+      "Trash": {
+        "type": "object",
+        "properties": {
+          "songs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "takes": {
+                  "type": "number"
+                },
+                "trashed_at": {
+                  "type": "string"
+                },
+                "by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "takes",
+                "trashed_at",
+                "by"
+              ]
+            }
+          },
+          "takes": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/TakeRow"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "trashed_at": {
+                      "type": "string"
+                    },
+                    "by": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "trashed_at",
+                    "by"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "songs",
+          "takes"
+        ]
       }
     },
     "parameters": {}
@@ -1817,7 +1890,7 @@
     },
     "/api/reha/takes/{uid}": {
       "put": {
-        "description": "A take's details: made, or brought up to date. A take in the trash comes out of it.",
+        "description": "A take's details: made, or brought up to date. A take РЭХА removed comes out of the trash; one the band deleted, or one that went with its song, only when sent `by_hand`. `in_trash` says it is still there.",
         "security": [
           {
             "rehaKey": []
@@ -1859,7 +1932,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Ok"
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "in_trash": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "in_trash"
+                  ]
                 }
               }
             }
@@ -1940,6 +2028,88 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "РЭХА is too old for the service",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reha/takes": {
+      "get": {
+        "description": "Every take the service has: whether it is in the trash, and which generation's MP3s and FLAC files are up. РЭХА asks when it starts and every hour, to learn what the band deleted or put back.",
+        "security": [
+          {
+            "rehaKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "0.17.0"
+            },
+            "required": true,
+            "name": "x-reha-version",
+            "in": "header"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "uid": {
+                        "type": "string"
+                      },
+                      "trashed": {
+                        "type": "boolean"
+                      },
+                      "mp3_gen": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "flac_gen": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "uid",
+                      "trashed",
+                      "mp3_gen",
+                      "flac_gen"
+                    ]
+                  }
                 }
               }
             }
@@ -2978,10 +3148,18 @@
                           "properties": {
                             "notes": {
                               "type": "string"
+                            },
+                            "trashed_takes": {
+                              "type": "number"
+                            },
+                            "coming_takes": {
+                              "type": "number"
                             }
                           },
                           "required": [
-                            "notes"
+                            "notes",
+                            "trashed_takes",
+                            "coming_takes"
                           ]
                         }
                       ]
@@ -3139,7 +3317,7 @@
         }
       },
       "delete": {
-        "description": "**Delete song**: only a song with no takes, the trash's included.",
+        "description": "**Delete song**: a song with takes, in the trash or not, goes to the trash with the ones that are not; one that never had a take is deleted at once, with its files.",
         "parameters": [
           {
             "schema": {
@@ -3158,16 +3336,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Ok"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Not as the service expects",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -4666,6 +4834,52 @@
             }
           }
         }
+      },
+      "delete": {
+        "description": "**Delete take**: the take goes to the trash, as one deleted in РЭХА does; in РЭХА it stays.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "uid",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/takes/{uid}/star": {
@@ -4752,31 +4966,14 @@
     },
     "/api/trash": {
       "get": {
+        "description": "The trash, newest first: songs deleted with their takes, and takes on their own. A take that went with its song has no line of its own while the song is there.",
         "responses": {
           "200": {
             "description": "Done",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/TakeRow"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "trashed_at": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "trashed_at"
-                        ]
-                      }
-                    ]
-                  }
+                  "$ref": "#/components/schemas/Trash"
                 }
               }
             }
@@ -4796,7 +4993,7 @@
     },
     "/api/trash/{uid}/restore": {
       "post": {
-        "description": "**Restore**: the take goes back in its song as it was.",
+        "description": "**Restore**: the take goes back in its song as it was, and brings back its song if that is in the trash.",
         "parameters": [
           {
             "schema": {
@@ -4805,6 +5002,54 @@
             },
             "required": true,
             "name": "uid",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in, or the key does not work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not there",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trash/songs/{id}/restore": {
+      "post": {
+        "description": "**Restore** on a song: it comes back with every take that went to the trash with it.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true,
+            "name": "id",
             "in": "path"
           }
         ],

@@ -1,7 +1,6 @@
 import { env } from "cloudflare:workers"
 import { expect, test } from "vitest"
 import type { Bindings } from "../worker/shared/env"
-import { trash } from "../worker/takes/store"
 import { answer, call, del, member, patch, post, read, shownTake, signInOwner, starIt } from "./helpers"
 
 const bindings = env as unknown as Bindings
@@ -94,21 +93,6 @@ test("any member sets a song's status, key and notes; a key is one of the 24", a
   expect((await patch(`/api/songs/${id}`, { key: "H major" }, ira)).status).toBe(400)
   expect((await patch(`/api/songs/${id}`, { status_id: 9999 }, ira)).status).toBe(400)
   expect((await patch(`/api/songs/9999`, { notes: "" }, ira)).status).toBe(404)
-})
-
-test("a song with no takes can be deleted, one with takes cannot", async () => {
-  const owner = await signInOwner()
-  const id = (await answer(post("/api/songs", { title: "Kupalle" }, owner))).body.id
-  const gone = await shownTake({ song: "Viasna", number: 1, name: "Viasna 1" })
-  await trash(bindings, gone)
-  const viasna = (await songs(owner)).songs.find((s) => s.title === "Viasna")!
-
-  expect(await answer(del(`/api/songs/${viasna.id}`, owner))).toEqual({
-    status: 400,
-    body: { error: "A song with takes cannot be deleted" },
-  })
-  expect((await del(`/api/songs/${id}`, owner)).status).toBe(200)
-  expect((await songs(owner)).songs.map((s) => s.title)).toEqual(["Viasna"])
 })
 
 test("statuses: renamed, ordered and deleted, their songs moved; the last one stays", async () => {

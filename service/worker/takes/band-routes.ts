@@ -6,7 +6,8 @@ import { errors, json, newApp, Ok } from "../shared/openapi"
 import { loadMarks, MarkView } from "../marks/view"
 import { rehearsal, song, star, take, user } from "../shared/schema"
 import { needMember } from "../signin/guards"
-import { bare, initial, shownName, takeRows, TakeRow } from "./rows"
+import { bare, initial, shownName, takeRows, TakeRow, type Loaded } from "./rows"
+import { songBack, toTrash } from "./store"
 import { fillShapes } from "./shape"
 
 const NO_TAKE = "No such take"
@@ -45,6 +46,27 @@ const TakePage = z
   })
   .openapi("TakePage")
 
+const Trash = z
+  .object({
+    songs: z.array(
+      z.object({
+        id: z.number(),
+        title: z.string(),
+        /** The takes that went with it. */
+        takes: z.number(),
+        trashed_at: z.string(),
+        /** Who deleted it. */
+        by: z.string().nullable(),
+      })
+    ),
+    /** `by` is null for a take removed in РЭХА. */
+    takes: z.array(TakeRow.extend({ trashed_at: z.string(), by: z.string().nullable() })),
+  })
+  .openapi("Trash")
+
+/** Who deleted it, by the name the band sees; null for РЭХА. */
+const who = (u: { name: string | null; email: string | null }) => (u.email === null ? null : shownName(u.name ?? "", u.email))
+
 /** A take the band sees, or undefined. */
 async function shown(db: ReturnType<typeof database>, uid: string, alsoTrashed = false) {
   const [row] = await db
@@ -55,7 +77,7 @@ async function shown(db: ReturnType<typeof database>, uid: string, alsoTrashed =
   return row
 }
 
-/** A take: its page, stars, opening it, the trash. */
+/** A take: its page, stars, opening it, deleting it, the trash. */
 export const takeRoutes = newApp()
   .openapi(
     createRoute({
@@ -109,7 +131,8 @@ export const takeRoutes = newApp()
           number: t.number,
           date: r.date,
           rehearsal: r,
-          song: songs[0] ? { id: songs[0].id, title: songs[0].title } : null,
+          // A song in the trash has no page to go to.
+          song: songs[0] && !songs[0].trashedAt ? { id: songs[0].id, title: songs[0].title } : null,
           duration_sec: t.durationSec,
           shape: filled.shape ?? [],
           gen,
@@ -168,17 +191,66 @@ export const takeRoutes = newApp()
   )
   .openapi(
     createRoute({
-      method: "get",
-      path: "/api/trash",
+      method: "delete",
+      path: "/api/takes/{uid}",
+      description: "**Delete take**: the take goes to the trash, as one deleted in РЭХА does; in РЭХА it stays.",
       middleware: [needMember] as const,
-      responses: { 200: json(z.array(TakeRow.extend({ trashed_at: z.string() }))), ...errors(401) },
+      request: { params: Uid },
+      responses: { 200: json(Ok), ...errors(401, 404) },
     }),
     async (c) => {
-      const rows = await takeRows(c.env, isNotNull(take.trashedAt))
+      const db = database(c.env)
+      const uid = c.req.valid("param").uid
+      if (!(await shown(db, uid, true))) return fail(c, 404, NO_TAKE)
+      await toTrash(db, eq(take.uid, uid), c.var.member.id, false)
+      return c.json({ ok: true as const }, 200)
+    }
+  )
+  .openapi(
+    createRoute({
+      method: "get",
+      path: "/api/trash",
+      description:
+        "The trash, newest first: songs deleted with their takes, and takes on their own. " +
+        "A take that went with its song has no line of its own while the song is there.",
+      middleware: [needMember] as const,
+      responses: { 200: json(Trash), ...errors(401) },
+    }),
+    async (c) => {
+      const db = database(c.env)
+      const [rows, takes, songs] = await Promise.all([
+        takeRows(c.env, isNotNull(take.trashedAt)),
+        db
+          .select({ uid: take.uid, withSong: take.withSong, name: user.name, email: user.email })
+          .from(take)
+          .leftJoin(user, eq(take.trashedBy, user.id))
+          .where(isNotNull(take.trashedAt)),
+        db
+          .select({ id: song.id, title: song.title, trashedAt: song.trashedAt, name: user.name, email: user.email })
+          .from(song)
+          .leftJoin(user, eq(song.trashedBy, user.id))
+          .where(isNotNull(song.trashedAt)),
+      ])
+      // A take put back between the two reads is in one and not the other.
+      const nobody = { withSong: false, name: null, email: null }
+      const of = (uid: string) => takes.find((t) => t.uid === uid) ?? nobody
+      const inSong = (r: Loaded) => r.song_id !== null && of(r.uid).withSong && songs.some((s) => s.id === r.song_id)
       return c.json(
-        rows
-          .sort((a, b) => b.trashed_at!.localeCompare(a.trashed_at!))
-          .map((r) => ({ ...bare(r), trashed_at: r.trashed_at! })),
+        {
+          songs: songs
+            .map((s) => ({
+              id: s.id,
+              title: s.title,
+              takes: rows.filter((r) => r.song_id === s.id && inSong(r)).length,
+              trashed_at: s.trashedAt!,
+              by: who(s),
+            }))
+            .sort((a, b) => b.trashed_at.localeCompare(a.trashed_at)),
+          takes: rows
+            .filter((r) => !inSong(r))
+            .sort((a, b) => b.trashed_at!.localeCompare(a.trashed_at!))
+            .map((r) => ({ ...bare(r), trashed_at: r.trashed_at!, by: who(of(r.uid)) })),
+        },
         200
       )
     }
@@ -187,18 +259,53 @@ export const takeRoutes = newApp()
     createRoute({
       method: "post",
       path: "/api/trash/{uid}/restore",
-      description: "**Restore**: the take goes back in its song as it was.",
+      description: "**Restore**: the take goes back in its song as it was, and brings back its song if that is in the trash.",
       middleware: [needMember] as const,
       request: { params: Uid },
       responses: { 200: json(Ok), ...errors(401, 404) },
     }),
     async (c) => {
-      const back = await database(c.env)
-        .update(take)
-        .set({ trashedAt: null })
-        .where(and(eq(take.uid, c.req.valid("param").uid), isNotNull(take.trashedAt)))
-        .returning({ uid: take.uid })
-      if (!back.length) return fail(c, 404, "This take is not in the trash")
+      const db = database(c.env)
+      const uid = c.req.valid("param").uid
+      const [t] = await db
+        .select({ songId: take.songId, songTrashed: song.trashedAt })
+        .from(take)
+        .leftJoin(song, eq(take.songId, song.id))
+        .where(and(eq(take.uid, uid), isNotNull(take.trashedAt)))
+        .limit(1)
+      if (!t) return fail(c, 404, "This take is not in the trash")
+      await db.batch([
+        db.update(take).set({ trashedAt: null, trashedBy: null, withSong: false }).where(eq(take.uid, uid)),
+        ...(t.songId !== null && t.songTrashed !== null ? songBack(db, t.songId) : []),
+      ])
+      return c.json({ ok: true as const }, 200)
+    }
+  )
+  .openapi(
+    createRoute({
+      method: "post",
+      path: "/api/trash/songs/{id}/restore",
+      description: "**Restore** on a song: it comes back with every take that went to the trash with it.",
+      middleware: [needMember] as const,
+      request: { params: z.object({ id: z.coerce.number().int().min(1) }) },
+      responses: { 200: json(Ok), ...errors(401, 404) },
+    }),
+    async (c) => {
+      const db = database(c.env)
+      const { id } = c.req.valid("param")
+      const [s] = await db
+        .select({ id: song.id })
+        .from(song)
+        .where(and(eq(song.id, id), isNotNull(song.trashedAt)))
+        .limit(1)
+      if (!s) return fail(c, 404, "This song is not in the trash")
+      await db.batch([
+        db.update(song).set({ trashedAt: null, trashedBy: null }).where(eq(song.id, id)),
+        db
+          .update(take)
+          .set({ trashedAt: null, trashedBy: null, withSong: false })
+          .where(and(eq(take.songId, id), eq(take.withSong, true), isNotNull(take.trashedAt))),
+      ])
       return c.json({ ok: true as const }, 200)
     }
   )

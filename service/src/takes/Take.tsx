@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Link, useParams, useSearch } from "@tanstack/react-router"
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router"
 import { RotateCcw } from "lucide-react"
 import { TakePlayer as RehaPlayer } from "@/components/TakePlayer"
 import { Badge } from "@/components/ui/badge"
@@ -20,6 +20,7 @@ import { Downloads } from "./Downloads"
 import { CANNOT_PLAY, usePlayer } from "./player/one"
 import { useServiceSound, type ServiceSound } from "./player/sound"
 import { StarButton, TakeName } from "./parts"
+import { TakeMenu } from "./TakeMenu"
 import { TakePlayer } from "./TakePanel"
 
 /**
@@ -173,6 +174,7 @@ function Phone({ take }: { take: TakePage }) {
 
 function TakeView({ take }: { take: TakePage }) {
   const p = usePlayer()
+  const navigate = useNavigate()
   const size = useSize()
   const song = take.song
   const phone = size === "phone"
@@ -192,6 +194,13 @@ function TakeView({ take }: { take: TakePage }) {
           <span className="text-sm font-normal">
             <StarButton take={take} who disabled={!!take.trashed_at} />
           </span>
+          {!take.trashed_at && (
+            <TakeMenu
+              take={take}
+              // Its rehearsal's page, where the take was, in place of its own.
+              onGone={() => void navigate({ to: "/rehearsals/$uid", params: { uid: take.rehearsal.uid }, replace: true })}
+            />
+          )}
         </span>
       }
       sub={

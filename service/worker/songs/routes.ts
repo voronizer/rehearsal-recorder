@@ -1,5 +1,5 @@
 import { createRoute, z } from "@hono/zod-openapi"
-import { and, asc, eq, isNull, sql } from "drizzle-orm"
+import { and, asc, count, eq, isNotNull, isNull, sql } from "drizzle-orm"
 import { firstStatus } from "../labels/match"
 import { isOrder, ORDER } from "../labels/routes"
 import { database, type Database } from "../shared/db"
@@ -12,6 +12,7 @@ import { song, songFile, status, take } from "../shared/schema"
 import { iso } from "../shared/time"
 import { needMember } from "../signin/guards"
 import { deleteFiles } from "../takes/purge"
+import { toTrash } from "../takes/store"
 import { bare, best, bestWhy, takeRows, TakeRow, type Loaded } from "../takes/rows"
 import { FileView, fileViews } from "./files"
 
@@ -63,11 +64,11 @@ function item(s: SongRowDb, rows: Loaded[], first: number): z.infer<typeof SongI
   }
 }
 
-/** Every song as the table lists it, by status; the last played first, then the newest made. */
+/** Every song as the table lists it, by status; the last played first, then the newest made. Songs in the trash are left out. */
 export async function songItems(env: Bindings) {
   const db = database(env)
   const [songs, statuses, rows] = await Promise.all([
-    db.select().from(song),
+    db.select().from(song).where(isNull(song.trashedAt)),
     db.select().from(status).orderBy(asc(status.position)),
     takeRows(env, isNull(take.trashedAt)),
   ])
@@ -84,7 +85,19 @@ export async function songItems(env: Bindings) {
 }
 
 const titleTaken = async (db: Database, title: string, except?: number) =>
-  (await db.select({ id: song.id, title: song.title }).from(song)).find((s) => s.id !== except && same(s.title, title))
+  (await db.select({ id: song.id, title: song.title, trashedAt: song.trashedAt }).from(song)).find(
+    (s) => s.id !== except && same(s.title, title)
+  )
+
+/** The song the band has, or undefined: one in the trash is not there. */
+export async function liveSong(db: Database, id: number) {
+  const [s] = await db
+    .select()
+    .from(song)
+    .where(and(eq(song.id, id), isNull(song.trashedAt)))
+    .limit(1)
+  return s
+}
 
 /** The Songs section, a song, its status, key and notes, and the band's statuses. */
 export const songRoutes = newApp()
@@ -123,6 +136,7 @@ export const songRoutes = newApp()
       const db = database(c.env)
       const { title } = c.req.valid("json")
       const clash = await titleTaken(db, title)
+      if (clash?.trashedAt) return fail(c, 409, `“${clash.title}” is in the Trash. Restore it there.`)
       if (clash) return fail(c, 409, `There is already a song called “${clash.title}”.`)
       const [made] = await db
         .insert(song)
@@ -139,21 +153,44 @@ export const songRoutes = newApp()
       middleware: [needMember] as const,
       request: { params: Id },
       responses: {
-        200: json(z.object({ song: SongItem.extend({ notes: z.string() }), takes: z.array(TakeRow), files: z.array(FileView) })),
+        200: json(
+          z.object({
+            /** Its takes in the trash, and its takes whose MP3s are still on their way:
+             *  Delete song's question counts on them. */
+            song: SongItem.extend({ notes: z.string(), trashed_takes: z.number(), coming_takes: z.number() }),
+            takes: z.array(TakeRow),
+            files: z.array(FileView),
+          })
+        ),
         ...errors(401, 404),
       },
     }),
     async (c) => {
       const db = database(c.env)
       const { id } = c.req.valid("param")
-      const [s] = await db.select().from(song).where(eq(song.id, id)).limit(1)
+      const s = await liveSong(db, id)
       if (!s) return fail(c, 404, NO_SONG)
-      const [rows, first, files] = await Promise.all([
+      const [rows, first, files, [trashed], [coming]] = await Promise.all([
         takeRows(c.env, and(isNull(take.trashedAt), eq(take.songId, id))),
         firstStatus(db),
         fileViews(db, id),
+        db
+          .select({ n: count() })
+          .from(take)
+          .where(and(eq(take.songId, id), isNotNull(take.shownGen), isNotNull(take.trashedAt))),
+        db
+          .select({ n: count() })
+          .from(take)
+          .where(and(eq(take.songId, id), isNull(take.shownGen), isNull(take.trashedAt))),
       ])
-      return c.json({ song: { ...item(s, rows, first), notes: s.notes }, takes: rows.map(bare), files }, 200)
+      return c.json(
+        {
+          song: { ...item(s, rows, first), notes: s.notes, trashed_takes: trashed.n, coming_takes: coming.n },
+          takes: rows.map(bare),
+          files,
+        },
+        200
+      )
     }
   )
   .openapi(
@@ -178,8 +215,7 @@ export const songRoutes = newApp()
       const db = database(c.env)
       const { id } = c.req.valid("param")
       const { status_id, key, notes } = c.req.valid("json")
-      const [s] = await db.select({ id: song.id }).from(song).where(eq(song.id, id)).limit(1)
-      if (!s) return fail(c, 404, NO_SONG)
+      if (!(await liveSong(db, id))) return fail(c, 404, NO_SONG)
       if (status_id !== undefined && !(await db.select().from(status).where(eq(status.id, status_id))).length)
         return fail(c, 400, NO_STATUS)
       const change = {
@@ -195,18 +231,30 @@ export const songRoutes = newApp()
     createRoute({
       method: "delete",
       path: "/api/songs/{id}",
-      description: "**Delete song**: only a song with no takes, the trash's included.",
+      description:
+        "**Delete song**: a song with takes, in the trash or not, goes to the trash with the ones that are not; " +
+        "one that never had a take is deleted at once, with its files.",
       middleware: [needMember] as const,
       request: { params: Id },
-      responses: { 200: json(Ok), ...errors(400, 401, 404) },
+      responses: { 200: json(Ok), ...errors(401, 404) },
     }),
     async (c) => {
       const db = database(c.env)
       const { id } = c.req.valid("param")
-      const [s] = await db.select({ id: song.id }).from(song).where(eq(song.id, id)).limit(1)
+      const [s] = await db.select({ id: song.id, trashedAt: song.trashedAt }).from(song).where(eq(song.id, id)).limit(1)
       if (!s) return fail(c, 404, NO_SONG)
+      // Someone whose page was behind pressed it again.
+      if (s.trashedAt) return c.json({ ok: true as const }, 200)
       const [one] = await db.select({ uid: take.uid }).from(take).where(eq(take.songId, id)).limit(1)
-      if (one) return fail(c, 400, "A song with takes cannot be deleted")
+      if (one) {
+        const at = iso()
+        const me = c.var.member.id
+        await db.batch([
+          db.update(song).set({ trashedAt: at, trashedBy: me }).where(eq(song.id, id)),
+          toTrash(db, eq(take.songId, id), me, true, at),
+        ])
+        return c.json({ ok: true as const }, 200)
+      }
       await db.batch([db.delete(songFile).where(eq(songFile.songId, id)), db.delete(song).where(eq(song.id, id))])
       await deleteFiles(c.env, `songs/${id}/`, () => true)
       return c.json({ ok: true as const }, 200)
@@ -290,13 +338,18 @@ export const songRoutes = newApp()
       if (all.length === 1) return fail(c, 400, "The band needs at least one status")
       const first = all[0].id
       // A song with no status is in the first.
-      const mine = id === first ? sql`${song.statusId} = ${id} OR ${song.statusId} IS NULL` : eq(song.statusId, id)
-      const [used] = await db.select({ id: song.id }).from(song).where(mine).limit(1)
+      const mine = id === first ? sql`(${song.statusId} = ${id} OR ${song.statusId} IS NULL)` : eq(song.statusId, id)
+      // Songs in the trash are not counted; they go to the status named, or the first left.
+      const [used] = await db
+        .select({ id: song.id })
+        .from(song)
+        .where(and(mine, isNull(song.trashedAt)))
+        .limit(1)
       const target = all.find((s) => s.id === to && s.id !== id)
       if (used && !target) return fail(c, 400, "Say which status its songs get")
       const rest = all.filter((s) => s.id !== id)
       await db.batch([
-        ...(target ? [db.update(song).set({ statusId: target.id }).where(mine)] : []),
+        db.update(song).set({ statusId: (target ?? rest[0]).id }).where(mine),
         db.delete(status).where(eq(status.id, id)),
         ...rest.map((s, position) => db.update(status).set({ position }).where(eq(status.id, s.id))),
       ] as never)

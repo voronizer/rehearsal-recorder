@@ -73,7 +73,9 @@ export type Label = InferResponseType<typeof client.api.labels.$get, 200>[number
 export type Person = InferResponseType<typeof client.api.people.$get, 200>[number]
 export type Member = InferResponseType<typeof client.api.members.$get, 200>[number]
 export type Key = InferResponseType<typeof client.api.keys.$get, 200>[number]
-export type Trashed = InferResponseType<typeof client.api.trash.$get, 200>[number]
+export type TrashList = InferResponseType<typeof client.api.trash.$get, 200>
+export type Trashed = TrashList["takes"][number]
+export type TrashedSong = TrashList["songs"][number]
 export type Show = "open" | "closed" | "all"
 
 /** Where the page goes when the session is gone; set by routes.tsx. */
@@ -262,6 +264,8 @@ export const useBandPicture = () =>
   useChange((file: File | null) => (file ? send("/api/band/picture", "PUT", file) : data(client.api.band.picture.$delete())))
 
 export const useRestore = () => useChange((uid: string) => data(client.api.trash[":uid"].restore.$post({ param: { uid } })))
+export const useRestoreSong = () => useChange((n: number) => data(client.api.trash.songs[":id"].restore.$post({ param: id(n) })))
+export const useDeleteTake = () => useChange((uid: string) => data(client.api.takes[":uid"].$delete({ param: { uid } })))
 
 export function useSaveName() {
   const qc = useQueryClient()

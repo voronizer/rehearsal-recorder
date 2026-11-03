@@ -19,7 +19,7 @@ import { MAX_FILE, TOO_BIG } from "../../worker/songs/limits"
 import { useAddFile, useChangeSong, useDeleteFile, useDeleteSong, useSong, useSongs, type SongFile, type SongPage } from "../api"
 import { Group, Groups, OPENS, Props, Rows, TEXTAREA, Tile, Trouble, useFlash, Waiting } from "../shell/parts"
 import { usePanel } from "../shell/panel"
-import { clock } from "../shell/words"
+import { clock, count, quoted } from "../shell/words"
 import { TakeLine, TakeName } from "../takes/parts"
 
 type Song = SongPage["song"]
@@ -240,13 +240,21 @@ export function AddFile({ song }: { song: Song }) {
 }
 
 /**
- * ⋯ › **Delete song**, for a song with no takes: one made by **New song**
- * by mistake. A song with takes has its title from РЭХА and stays.
+ * ⋯ › **Delete song**. A song with takes, here or in the Trash, goes to
+ * the Trash with them, so the button is the accent; one that never had a
+ * take (made by **New song** by mistake) goes at once, on the red button.
  */
 export function SongMenu({ song, onGone }: { song: Song; onGone: () => void }) {
   const remove = useDeleteSong()
   const [asking, setAsking] = useState(false)
-  if (song.takes > 0) return null
+  // Any take at all, in the Trash or still on its way from РЭХА, sends the song to the Trash.
+  const trashed = song.takes > 0 || song.trashed_takes > 0 || song.coming_takes > 0
+  const said =
+    song.takes > 0
+      ? `It goes to the Trash with its ${count(song.takes, "take")}, notes and files, where anyone in the band can put it back for 30 days. In РЭХА the takes stay as they are.`
+      : trashed
+        ? "It goes to the Trash with its notes and files, where anyone in the band can put it back for 30 days."
+        : "Its notes and files go with it."
   return (
     <>
       <DropdownMenu>
@@ -267,9 +275,10 @@ export function SongMenu({ song, onGone }: { song: Song; onGone: () => void }) {
       <ConfirmDialog
         open={asking}
         onOpenChange={setAsking}
-        title={asking ? `Delete “${song.title}”?` : null}
-        description={asking ? "Its notes and files go with it." : null}
+        title={asking ? `Delete ${quoted(song.title)}?` : null}
+        description={asking ? said : null}
         actionLabel="Delete song"
+        destructive={!trashed}
         // Away from the song first, so its panel or page does not ask for it once it is gone.
         onConfirm={() => {
           onGone()

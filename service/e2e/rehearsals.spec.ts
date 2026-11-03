@@ -47,3 +47,11 @@ test("a rehearsal opened by its link shows its takes only with their songs' titl
   await expect(viasna.locator('[data-take="Viasna 11"]')).toBeVisible()
   await expect(page.locator("[data-take]")).toHaveCount(5)
 })
+
+test("a rehearsal with no takes left opens Rehearsals", async ({ page }) => {
+  // As after Delete take on its last take: the service has no such rehearsal any more.
+  await page.goto(`/rehearsals/${crypto.randomUUID()}`)
+  await expect(page).toHaveURL(/\/rehearsals$/)
+  await expect(page.getByRole("heading", { level: 1, name: "Rehearsals" })).toBeVisible()
+  await expect(page.getByText("No such rehearsal")).toHaveCount(0)
+})

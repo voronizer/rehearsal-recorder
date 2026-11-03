@@ -10,6 +10,7 @@ import { usePanel } from "../shell/panel"
 import { clock, longDay } from "../shell/words"
 import { usePlayer, useTime } from "./player/one"
 import { Play, StarButton, TakeName, Wave } from "./parts"
+import { TakeMenu } from "./TakeMenu"
 
 /** A track's own wave from РЭХА's 1200 numbers, at the 120 a lane draws. */
 function TrackWave({ take, peaks, heard }: { take: TakePage; peaks: string; heard: boolean }) {
@@ -90,6 +91,7 @@ export function TakePanel({ uid, markAt }: { uid: string; markAt?: number }) {
             <ChevronRight />
           </Link>
         </Button>
+        {!t.trashed_at && <TakeMenu take={t} onGone={close} />}
         <Button variant="ghost" size="icon-row" aria-label="Close" onClick={close}>
           <X />
         </Button>

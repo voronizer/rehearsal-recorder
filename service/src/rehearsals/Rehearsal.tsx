@@ -1,6 +1,7 @@
-import { useParams } from "@tanstack/react-router"
+import { useEffect } from "react"
+import { useNavigate, useParams } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
-import { useRehearsal, useSongs, type TakeRow } from "../api"
+import { Refused, useRehearsal, useSongs, type TakeRow } from "../api"
 import { Back, Group, Groups, Page, Rows, Trouble, useTitle } from "../shell/parts"
 import { usePanel } from "../shell/panel"
 import { clock, count, day, longDay } from "../shell/words"
@@ -10,7 +11,8 @@ import { TakeLine } from "../takes/parts"
  * A rehearsal's page: its takes by song, in the order they were played,
  * each song a fold with **Notes and files** at its right. Takes nobody
  * named a song are under **Not named**, last. Each take has its marks
- * under it.
+ * under it. A rehearsal with no takes left, its last one deleted, opens
+ * **Rehearsals** in its place.
  */
 export function Rehearsal() {
   const { uid } = useParams({ from: "/band/rehearsals/$uid" })
@@ -18,6 +20,12 @@ export function Rehearsal() {
   useTitle(page.data ? day(page.data.rehearsal.date) : undefined)
   const songs = useSongs()
   const { open } = usePanel()
+  const navigate = useNavigate()
+  const empty = page.error instanceof Refused && page.error.status === 404
+  useEffect(() => {
+    if (empty) void navigate({ to: "/rehearsals", replace: true })
+  }, [empty, navigate])
+  if (empty) return null
   if (page.error) return <Trouble error={page.error} retry={() => void page.refetch()} />
   if (songs.error) return <Trouble error={songs.error} retry={() => void songs.refetch()} />
   // The takes go under their songs' titles. Drawn before the titles came,

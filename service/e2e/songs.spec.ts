@@ -110,11 +110,11 @@ test("a file and a song with no takes go only after asking", async ({ page }) =>
   await expect(panel).toHaveCount(0)
   await expect(page.getByRole("main").getByRole("button", { name: "Kalyhanka", exact: true })).toHaveCount(0)
 
-  // A song with takes has no such menu: its title comes from РЭХА. Its row opens by keyboard too.
+  // A song with takes has the menu too, to send it to the Trash with them. Its row opens by keyboard.
   await page.getByRole("region", { name: "Learning" }).getByRole("button", { name: "Pałyn", exact: true }).focus()
   await page.keyboard.press("Enter")
   await expect(panel.getByRole("heading", { level: 2 }).first()).toHaveText("Pałyn")
-  await expect(panel.getByRole("button", { name: "What to do with Pałyn" })).toHaveCount(0)
+  await expect(panel.getByRole("button", { name: "What to do with Pałyn", exact: true })).toBeVisible()
 })
 
 test("a status dragged by its grip moves its group on Songs", async ({ page }) => {

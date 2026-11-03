@@ -861,6 +861,14 @@ tempo](#a-songs-tempo)), and the song's page in the service shows it. A
 take you delete goes to the service's **Trash** once its **Undo** notice
 has gone, with the band's marks and stars.
 
+Anyone in the band can delete a take in the service too, with ⋯ › **Delete
+take**, or a song with all its takes, with ⋯ › **Delete song**. They wait in
+the service's **Trash** for 30 days. On this computer the takes stay as they
+are, but what you change in them no longer goes up. The cloud button sends a
+take again and brings it out of the Trash, with the band's marks and stars.
+If someone presses **Restore** in the service, РЭХА finds out within an
+hour, or when it next starts, and sends the take's changes again.
+
 ### Following the sending
 
 Each take says where it is: “Waiting for the band service”, “Sending to the
