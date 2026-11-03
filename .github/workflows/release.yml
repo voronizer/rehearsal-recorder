@@ -19,10 +19,10 @@
 #   Rehearse the builds    both builds, left as workflow artifacts; nothing
 #                          is attached or deployed. The default.
 #   Put the site up again  the latest release's website, to reha.stream
-#                          again, without building the apps: after switching
-#                          something on in the Vercel project (only a
-#                          deployment made after that serves it), or when
-#                          setting up the domain.
+#                          again, without building the apps: when something
+#                          went wrong with the release's own deploy. A
+#                          release from before 0.21.0 has a site made for
+#                          Vercel, and the site job stops for it.
 #   Put the service up again
 #                          the latest release's band service, to Cloudflare
 #                          again, without building the apps: when setting it
@@ -232,6 +232,7 @@ jobs:
       - uses: ./.github/actions/site
         with:
           version: ${{ needs.which.outputs.tag }}
+          analytics-token: ${{ vars.WEB_ANALYTICS_TOKEN }}
 
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -240,15 +241,22 @@ jobs:
           path: site/playwright-report/
           if-no-files-found: ignore
 
-  # The one place anything goes to reha.stream. The project on Vercel has no
-  # Git connection: this uploads the files the site job laid out, and Vercel
-  # makes the deployment from them (see .github/actions/site). It needs three
-  # repository secrets: VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID.
-  # What Vercel does with an address before serving a file (the short links
-  # /mac and /windows, a year's cache for the build's hashed files) is in
-  # site/vercel-config.json. One deploy at a time, and none is cut short.
-  # The page counts visits with Vercel's Web Analytics and how fast it loads
-  # with Speed Insights, each switched on in the Vercel project.
+  # The one place anything goes to reha.stream: the Worker reha-stream on
+  # the owner's Cloudflare account (site/wrangler.jsonc), made of the files
+  # the site job laid out. Cloudflare serves them as they are; the short
+  # links /mac and /windows and a year's cache for the build's hashed files
+  # are the build's _redirects and _headers. The deploy gives reha.stream to
+  # the Worker, replacing whatever DNS record the name had: wrangler does
+  # that by itself when it runs here, with no one to ask. www.reha.stream is
+  # not here: a redirect rule in Cloudflare sends it to reha.stream.
+  #
+  # --env="" names the site's own Worker out loud; the environment
+  # "preview" is pull requests' (checks.yml). It needs the repository
+  # secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, the band
+  # service's too; without them the release is red, since the site must go
+  # up with it. The page counts visits with Cloudflare Web Analytics (see
+  # site/src/page/analytics.ts). One deploy at a time, and none is cut
+  # short.
   deploy:
     name: site · deploy
     needs: [which, site]
@@ -266,20 +274,25 @@ jobs:
           name: site
           path: site
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+
       - name: Deploy
+        working-directory: site
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: "false"
           TAG: ${{ needs.which.outputs.tag }}
         run: |
-          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_ORG_ID" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
-            echo "::error::Deploying needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and VERCEL_PROJECT_ID."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Deploying needs the repository secret CLOUDFLARE_API_TOKEN (and CLOUDFLARE_ACCOUNT_ID)."
             exit 1
           fi
-          url=$(npx --yes vercel@65.2.0 deploy site --prod --token "$VERCEL_TOKEN")
-          echo "Deployed $TAG to $url"
-          echo "The site for $TAG is at $url" >> "$GITHUB_STEP_SUMMARY"
+          npx --yes "wrangler@$(cat wrangler-version)" deploy --env=""
+          echo "Deployed $TAG to https://reha.stream"
+          echo "The site for $TAG is at https://reha.stream" >> "$GITHUB_STEP_SUMMARY"
 
   # The band service (service/) on the owner's Cloudflare account, for the
   # same release as the site and after the same builds; or by hand, for the

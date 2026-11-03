@@ -29,7 +29,7 @@ updates:
 
   # The band service and the website keep lockfiles of their own. Their
   # pull requests run only their own checks, and the website's gets no
-  # preview on Vercel (checks.yml).
+  # preview on Cloudflare (checks.yml).
   - package-ecosystem: "npm"
     directory: "/service"
     schedule:

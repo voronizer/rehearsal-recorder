@@ -3,7 +3,7 @@
 # One of the two workflows here, named by when it runs; the other,
 # release.yml, runs when a release is published, builds the apps and puts
 # the website up. Nothing in this one hands anything to people, apart from
-# a pull request's preview of the site on Vercel.
+# a pull request's preview of the site on Cloudflare.
 #
 # The first job, `what changed`, reads the pull request's own diff once and
 # says which of the rest it needs; every other job asks it rather than
@@ -320,6 +320,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/site
+        with:
+          analytics-token: ${{ vars.WEB_ANALYTICS_TOKEN }}
 
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -384,14 +386,23 @@ jobs:
           path: service/playwright-report/
           if-no-files-found: ignore
 
-  # A pull request's build on Vercel as a preview, never production: the
-  # pull request shows it as "View deployment", and it opens after logging
-  # in to Vercel, with Vercel's toolbar for comments on the page. Only a pull
-  # request that changes the site itself gets one (Alex, 2026-10-11). Secrets
-  # reach a pull request only from a branch of this repository, so one from
-  # a fork or from Dependabot is built and tested and gets no preview. It
-  # needs the repository secrets VERCEL_TOKEN, VERCEL_ORG_ID and
-  # VERCEL_PROJECT_ID, as the release's deploy does.
+  # A pull request's build as a preview on Cloudflare, never reha.stream:
+  # the Worker reha-stream-preview (the environment "preview" in
+  # site/wrangler.jsonc), which has no address of its own. Each pull request
+  # gets a version of it at an address of its own,
+  # pr-<number>-reha-stream-preview.<the account's subdomain>.workers.dev,
+  # open to anyone with the link; the pull request shows it as "View
+  # deployment". Every wrangler command here says --env preview, so nothing
+  # in a pull request reaches the site's own Worker. The first deploy makes
+  # the preview Worker and turns its version addresses on; later ones only
+  # make it the pull request's build, which nobody sees there.
+  #
+  # Only a pull request that changes the site itself gets one (Alex,
+  # 2026-10-11). Secrets reach a pull request only from a branch of this
+  # repository, so one from a fork or from Dependabot is built and tested
+  # and gets no preview. It needs the repository secrets
+  # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, as the release's deploy
+  # does.
   preview:
     name: site · preview
     needs: [changes, site]
@@ -410,13 +421,31 @@ jobs:
           name: site
           path: site
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+
       - name: Deploy
         id: deploy
+        working-directory: site
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: "false"
+          PR: ${{ github.event.pull_request.number }}
         run: |
-          url=$(npx --yes vercel@65.2.0 deploy site --token "$VERCEL_TOKEN")
+          wrangler="wrangler@$(cat wrangler-version)"
+          npx --yes "$wrangler" deploy --env preview
+          WRANGLER_OUTPUT_FILE_PATH="$RUNNER_TEMP/wrangler.ndjson" \
+            npx --yes "$wrangler" versions upload --env preview --preview-alias "pr-$PR"
+          url=$(node -e '
+          const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n").filter(Boolean)
+          const upload = lines.map((l) => JSON.parse(l)).find((e) => e.type === "version-upload")
+          console.log(upload?.preview_alias_url ?? "")
+          ' "$RUNNER_TEMP/wrangler.ndjson")
+          if [ -z "$url" ]; then
+            echo "::error::Cloudflare gave the preview no address: the Cloudflare account has no workers.dev subdomain yet."
+            exit 1
+          fi
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "This pull request's site is at $url" >> "$GITHUB_STEP_SUMMARY"
